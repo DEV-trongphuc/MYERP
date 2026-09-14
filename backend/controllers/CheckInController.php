@@ -208,9 +208,15 @@ class CheckInController {
                                      u.avatar_url as user_avatar, u.email as user_email,
                                      TIME_FORMAT(TIME(r.start_date), '%H:%i') as start_time,
                                      TIME_FORMAT(TIME(r.end_date), '%H:%i') as end_time,
-                                     r.total_days, r.reason
+                                     r.total_days, r.reason,
+                                     r.approver_id, app1.full_name as approver_name, app1.avatar_url as approver_avatar,
+                                     r.approver_id_2, app2.full_name as approver_name_2, app2.avatar_url as approver_avatar_2,
+                                     NULL as approver_id_3, '' as approver_name_3,
+                                     r.status_level_1, r.status_level_2, 'none' as status_level_3, r.related_user_ids
                               FROM hrm_leave_requests r 
                               JOIN users u ON r.user_id = u.id 
+                              LEFT JOIN users app1 ON r.approver_id = app1.id
+                              LEFT JOIN users app2 ON r.approver_id_2 = app2.id
                               WHERE r.leave_type = 'overtime' AND r.status != 'rejected' AND YEAR(r.start_date) = ? AND MONTH(r.start_date) = ?";
                     $otParams = [$year, $month];
                     if ($userIdFilter !== null) {
@@ -228,9 +234,15 @@ class CheckInController {
                                      TIME_FORMAT(TIME(r.end_date), '%H:%i') as end_time,
                                      r.total_days, r.unpaid_days, r.salary_rate, r.reason, r.status, r.created_at,
                                      IF(r.status = 'approved', 1, IF(r.status = 'pending', 0, -1)) as approved,
+                                     r.approver_id, app1.full_name as approver_name, app1.avatar_url as approver_avatar,
+                                     r.approver_id_2, app2.full_name as approver_name_2, app2.avatar_url as approver_avatar_2,
+                                     NULL as approver_id_3, '' as approver_name_3,
+                                     r.status_level_1, r.status_level_2, 'none' as status_level_3, r.related_user_ids,
                                      u.full_name as user_name, u.avatar_url as user_avatar, u.email as user_email
                               FROM hrm_leave_requests r 
                               JOIN users u ON r.user_id = u.id 
+                              LEFT JOIN users app1 ON r.approver_id = app1.id
+                              LEFT JOIN users app2 ON r.approver_id_2 = app2.id
                               WHERE r.leave_type != 'overtime' AND r.status != 'rejected' 
                                 AND (YEAR(r.start_date) = ? AND MONTH(r.start_date) = ? OR YEAR(r.end_date) = ? AND MONTH(r.end_date) = ?)";
                     $lvParams = [$year, $month, $year, $month];
@@ -299,9 +311,15 @@ class CheckInController {
                                      u.avatar_url as user_avatar, u.email as user_email,
                                      TIME_FORMAT(TIME(r.start_date), '%H:%i') as start_time,
                                      TIME_FORMAT(TIME(r.end_date), '%H:%i') as end_time,
-                                     r.total_days, r.reason
+                                     r.total_days, r.reason,
+                                     r.approver_id, app1.full_name as approver_name, app1.avatar_url as approver_avatar,
+                                     r.approver_id_2, app2.full_name as approver_name_2, app2.avatar_url as approver_avatar_2,
+                                     NULL as approver_id_3, '' as approver_name_3,
+                                     r.status_level_1, r.status_level_2, 'none' as status_level_3, r.related_user_ids
                               FROM hrm_leave_requests r 
                               JOIN users u ON r.user_id = u.id 
+                              LEFT JOIN users app1 ON r.approver_id = app1.id
+                              LEFT JOIN users app2 ON r.approver_id_2 = app2.id
                               WHERE r.leave_type = 'overtime' AND r.status != 'rejected' AND DATE(r.start_date) BETWEEN ? AND ?";
                     $otParams = [$from, $to];
                     if ($userIdFilter !== null) {
@@ -319,9 +337,15 @@ class CheckInController {
                                      TIME_FORMAT(TIME(r.end_date), '%H:%i') as end_time,
                                      r.total_days, r.unpaid_days, r.salary_rate, r.reason, r.status, r.created_at,
                                      IF(r.status = 'approved', 1, IF(r.status = 'pending', 0, -1)) as approved,
+                                     r.approver_id, app1.full_name as approver_name, app1.avatar_url as approver_avatar,
+                                     r.approver_id_2, app2.full_name as approver_name_2, app2.avatar_url as approver_avatar_2,
+                                     NULL as approver_id_3, '' as approver_name_3,
+                                     r.status_level_1, r.status_level_2, 'none' as status_level_3, r.related_user_ids,
                                      u.full_name as user_name, u.avatar_url as user_avatar, u.email as user_email
                               FROM hrm_leave_requests r 
                               JOIN users u ON r.user_id = u.id 
+                              LEFT JOIN users app1 ON r.approver_id = app1.id
+                              LEFT JOIN users app2 ON r.approver_id_2 = app2.id
                               WHERE r.leave_type != 'overtime' AND r.status != 'rejected' 
                                 AND (DATE(r.start_date) <= ? AND DATE(r.end_date) >= ?)";
                     $lvParams = [$to, $from];
@@ -683,13 +707,15 @@ class CheckInController {
         $userRole = strtolower($auth['role'] ?? '');
         $isLeaderOrManager = in_array($userRole, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'leader', 'truongphong', 'head_of_department'], true);
         if (!$isLeaderOrManager) {
-            $stmtIsLeader = $this->db->prepare("
-                SELECT 1 FROM users WHERE id = ? AND is_team_leader = 1
-                UNION
-                SELECT 1 FROM teams WHERE leader_id = ? OR FIND_IN_SET(?, COALESCE(co_leader_ids, ''))
-            ");
-            $stmtIsLeader->execute([$auth['user_id'], $auth['user_id'], $auth['user_id']]);
-            $isLeaderOrManager = (bool)$stmtIsLeader->fetch();
+            try {
+                $stmtIsLeader = $this->db->prepare("
+                    SELECT 1 FROM teams WHERE leader_id = ? OR FIND_IN_SET(?, COALESCE(co_leader_ids, '')) LIMIT 1
+                ");
+                $stmtIsLeader->execute([$auth['user_id'], $auth['user_id']]);
+                $isLeaderOrManager = (bool)$stmtIsLeader->fetch();
+            } catch (\Throwable $e) {
+                $isLeaderOrManager = false;
+            }
         }
 
         $status = ($isSupplementary && !$isLeaderOrManager) ? 'pending_approval' : 'approved';
@@ -1223,13 +1249,15 @@ class CheckInController {
             $userRole = strtolower($auth['role'] ?? '');
             $isLeaderOrManager = in_array($userRole, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'leader', 'truongphong', 'head_of_department'], true);
             if (!$isLeaderOrManager) {
-                $stmtIsLeader = $this->db->prepare("
-                    SELECT 1 FROM users WHERE id = ? AND is_team_leader = 1
-                    UNION
-                    SELECT 1 FROM teams WHERE leader_id = ? OR FIND_IN_SET(?, COALESCE(co_leader_ids, ''))
-                ");
-                $stmtIsLeader->execute([$userId, $userId, $userId]);
-                $isLeaderOrManager = (bool)$stmtIsLeader->fetch();
+                try {
+                    $stmtIsLeader = $this->db->prepare("
+                        SELECT 1 FROM teams WHERE leader_id = ? OR FIND_IN_SET(?, COALESCE(co_leader_ids, '')) LIMIT 1
+                    ");
+                    $stmtIsLeader->execute([$userId, $userId]);
+                    $isLeaderOrManager = (bool)$stmtIsLeader->fetch();
+                } catch (\Throwable $e) {
+                    $isLeaderOrManager = false;
+                }
             }
 
             // Nếu là Trưởng phòng/Quản lý: người duyệt Bước 2 mặc định là chính họ (tự duyệt)

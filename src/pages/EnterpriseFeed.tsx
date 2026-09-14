@@ -938,12 +938,15 @@ export const EnterpriseFeed: React.FC = () => {
   });
 
   return (
-    <div style={{
-      maxWidth: '1380px',
-      margin: '0 auto',
-      padding: '2rem 1.5rem',
-      fontFamily: "'Outfit', 'Inter', sans-serif"
-    }}>
+    <div 
+      className="feed-container"
+      style={{
+        maxWidth: '1380px',
+        margin: '0 auto',
+        padding: '2rem 1.5rem',
+        fontFamily: "'Outfit', 'Inter', sans-serif"
+      }}
+    >
       <style>{`
         .feed-layout {
           display: grid;
@@ -977,6 +980,11 @@ export const EnterpriseFeed: React.FC = () => {
           }
           .feed-sidebar {
             display: none;
+          }
+        }
+        @media (max-width: 768px) {
+          .feed-container {
+            padding: 1rem 0.75rem 120px 0.75rem !important;
           }
         }
       `}</style>
@@ -1034,7 +1042,6 @@ export const EnterpriseFeed: React.FC = () => {
           border: '1px solid var(--color-border-light)'
         }}>
           <div style={{ position: 'relative', display: 'flex', alignItems: 'center', flex: 1 }}>
-            <Search size={14} style={{ position: 'absolute', left: '10px', color: 'var(--color-text-muted)' }} />
             <input 
               type="text" 
               placeholder={t('Tìm bài viết, tác giả...')} 
@@ -1044,12 +1051,14 @@ export const EnterpriseFeed: React.FC = () => {
                 width: '100%',
                 border: 'none',
                 background: 'transparent',
-                paddingLeft: '32px',
-                fontSize: '0.8rem',
+                padding: '0 32px 0 10px',
+                fontSize: '0.85rem',
                 height: '32px',
-                outline: 'none'
+                outline: 'none',
+                color: 'var(--color-text)'
               }}
             />
+            <Search size={14} style={{ position: 'absolute', right: '10px', color: 'var(--color-text-muted)', pointerEvents: 'none' }} />
           </div>
           <div className="icon-only-select">
             <CustomSelect

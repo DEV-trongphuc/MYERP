@@ -717,12 +717,6 @@ export const TaskGroupSection: React.FC<TaskGroupSectionProps> = ({
             display: 'flex',
             alignItems: 'center'
           }}>
-            <Search size={13} style={{ 
-              position: 'absolute', 
-              left: '8px', 
-              color: isLightText ? 'rgba(255, 255, 255, 0.75)' : '#94a3b8', 
-              pointerEvents: 'none' 
-            }} />
             <input
               type="text"
               value={searchQuery}
@@ -730,7 +724,7 @@ export const TaskGroupSection: React.FC<TaskGroupSectionProps> = ({
               placeholder={t('Tìm nhóm...')}
               className={isLightText ? 'task-group-search-translucent' : ''}
               style={{
-                padding: '4px 22px 4px 26px',
+                padding: '4px 26px 4px 10px',
                 borderRadius: '8px',
                 border: isLightText ? '1px solid rgba(255, 255, 255, 0.25)' : '1px solid #e2e8f0',
                 background: isLightText ? 'rgba(255, 255, 255, 0.15)' : '#ffffff',
@@ -760,6 +754,12 @@ export const TaskGroupSection: React.FC<TaskGroupSectionProps> = ({
                 if (!isMobile && !searchQuery) e.currentTarget.style.width = '135px';
               }}
             />
+            <Search size={13} style={{ 
+              position: 'absolute', 
+              right: '8px', 
+              color: isLightText ? 'rgba(255, 255, 255, 0.75)' : '#94a3b8', 
+              pointerEvents: 'none' 
+            }} />
             {searchQuery && (
               <button
                 type="button"

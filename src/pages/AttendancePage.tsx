@@ -19,6 +19,7 @@ import { useUIStore } from '../store/uiStore';
 import type { Period, DateRange } from '../components/ui/PeriodFilter';
 import { motion } from 'framer-motion';
 import { canSelectAttendanceUser, canApproveAttendance, canApproveShifts as checkCanApproveShifts, isRegularEmployee, isHR, isExecutive } from '../utils/roleUtils';
+import { isItemAtMyStepToApprove } from '../utils/approvalPermissions';
 import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 import { VietnameseMonthInput } from '../components/ui/VietnameseMonthInput';
 import { formatDateVN, formatDateTimeVN, formatMonthYearVN } from '../utils/dateUtils';
@@ -182,6 +183,23 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         label: u.full_name || u.name,
         avatar: resolveAttachmentUrl(u.avatar_url || u.avatar)
       }));
+  }, [usersList]);
+
+  const usersMap = useMemo(() => {
+    const map = new Map<number, any>();
+    usersList.forEach(u => {
+      if (u.id) map.set(Number(u.id), u);
+    });
+    return map;
+  }, [usersList]);
+
+  const usersByNameMap = useMemo(() => {
+    const map = new Map<string, any>();
+    usersList.forEach(u => {
+      const name = (u.full_name || u.name || '').toLowerCase().trim();
+      if (name) map.set(name, u);
+    });
+    return map;
   }, [usersList]);
   const [leaveBalance, setLeaveBalance] = useState<any>(null);
 
@@ -603,14 +621,18 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     const items: any[] = [];
 
     // 1. Leaves & WFH
-    const dayLeaves = calendarLeaves.filter(l => l.start_date_only <= selectedDateForDetail && l.end_date_only >= selectedDateForDetail);
+    const dayLeaves = calendarLeaves.filter(l => {
+      const s = l.start_date_only || (l.start_date ? String(l.start_date).slice(0, 10) : '');
+      const e = l.end_date_only || (l.end_date ? String(l.end_date).slice(0, 10) : '');
+      return s <= selectedDateForDetail && e >= selectedDateForDetail;
+    });
     dayLeaves.forEach(lv => {
       const isHalfDay = Number(lv.total_days) === 0.5;
       let sessionLabel = t('Cả ngày');
       if (isHalfDay) {
         sessionLabel = (lv.start_time && lv.start_time < '12:00') ? t('Nửa buổi sáng') : t('Nửa buổi chiều');
       } else if (Number(lv.total_days) > 1) {
-        sessionLabel = `${lv.total_days} ${t('ngày')} (${lv.start_date_only} → ${lv.end_date_only})`;
+        sessionLabel = `${lv.total_days} ${t('ngày')} (${lv.start_date_only || String(lv.start_date).slice(0, 10)} → ${lv.end_date_only || String(lv.end_date).slice(0, 10)})`;
       }
 
       const isWFH = lv.leave_type === 'remote_work';
@@ -647,11 +669,24 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         id: `leave-${lv.id}`,
         originalId: lv.id,
         category: 'leave',
+        type: lv.leave_type || 'leave',
         subType: lv.leave_type,
         user_id: lv.user_id,
         user_name: lv.user_name,
         user_avatar: lv.user_avatar,
         user_email: lv.user_email,
+        employee_name: lv.user_name,
+        approver_id: lv.approver_id,
+        approver_name: lv.approver_name,
+        approver_id_2: lv.approver_id_2,
+        approver_name_2: lv.approver_name_2,
+        approver_id_3: lv.approver_id_3,
+        approver_name_3: lv.approver_name_3,
+        status_level_1: lv.status_level_1,
+        status_level_2: lv.status_level_2,
+        status_level_3: lv.status_level_3,
+        related_user_ids: lv.related_user_ids,
+        related_users: lv.related_users,
         typeName,
         typeColor,
         typeBg,
@@ -664,28 +699,69 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       });
     });
 
-    // 2. Check-ins with Supplementary / Work Update requests
+    // 2. Check-ins with Supplementary / Work Update requests or Late arrivals
     const dayCIns = calendarCheckIns.filter(c => c.check_in_date === selectedDateForDetail);
     dayCIns.forEach(c => {
-      // Chỉ nhận diện các bản ghi Bổ sung công / Cập nhật công thực tế (không có ảnh selfie và có lý do hoặc đang chờ duyệt)
       const isSupplementary = !c.selfie_url && (Boolean(c.reason) || c.status === 'pending_approval');
+      const isPending = c.status === 'pending_approval';
+      const isLateWithReason = Number(c.late_minutes || 0) > 0 && Boolean(c.reason);
 
-      if (isSupplementary) {
+      if (isSupplementary || isPending || isLateWithReason) {
+        const targetUser = usersMap.get(Number(c.user_id));
+        let approverId = c.approver_id;
+        let approverName = c.approver_name;
+        if (!approverId && targetUser?.team_id) {
+          const team = teamsList.find((t: any) => Number(t.id) === Number(targetUser.team_id));
+          if (team && team.leader_id) {
+            approverId = team.leader_id;
+            const leadU = usersMap.get(Number(team.leader_id));
+            approverName = leadU?.full_name || leadU?.name || '';
+          }
+        }
+
+        const isLate = Number(c.late_minutes || 0) > 0 || c.check_in_time > (c.work_start_time || '08:00');
+        let typeName = t('Bổ sung công / Cập nhật công');
+        let typeColor = '#8b5cf6';
+        let typeBg = 'rgba(139, 92, 246, 0.1)';
+        let typeBorder = 'rgba(139, 92, 246, 0.25)';
+
+        if (!isSupplementary && (isLate || isPending)) {
+          typeName = c.status === 'pending_approval' ? t('Giải trình đi trễ (Chờ duyệt)') : t('Báo cáo đi trễ');
+          typeColor = '#f59e0b';
+          typeBg = 'rgba(245, 158, 11, 0.1)';
+          typeBorder = 'rgba(245, 158, 11, 0.25)';
+        }
+
+        const hrUser = usersList.find((u: any) => ['hr'].includes(String(u.role).toLowerCase()));
+
         items.push({
           id: `supp-${c.id}`,
           originalId: c.id,
           category: 'supplementary',
-          subType: 'supplementary',
+          type: 'checkin',
+          subType: isSupplementary ? 'supplementary' : 'late_early',
           user_id: c.user_id,
           user_name: c.user_name,
           user_avatar: c.user_avatar,
           user_email: c.user_email,
-          typeName: t('Bổ sung công / Cập nhật công'),
-          typeColor: '#8b5cf6',
-          typeBg: 'rgba(139, 92, 246, 0.1)',
-          typeBorder: 'rgba(139, 92, 246, 0.25)',
-          detailTime: `${t('Giờ đề xuất')}: ${c.check_in_time || '08:00'}${c.check_out_time ? ` → ${c.check_out_time.length > 8 ? c.check_out_time.substring(11, 16) : c.check_out_time.substring(0, 5)}` : ''}`,
-          reason: c.reason || t('Yêu cầu cập nhật bổ sung công'),
+          employee_name: c.user_name,
+          approver_id: approverId,
+          approver_name: approverName,
+          approver_id_2: c.approver_id_2,
+          approver_name_2: c.approver_name_2,
+          approver_id_3: c.approver_id_3,
+          approver_name_3: c.approver_name_3,
+          status_level_1: c.status_level_1 || (c.status === 'approved' ? 'approved' : 'pending'),
+          status_level_2: c.status_level_2,
+          status_level_3: c.status_level_3,
+          related_user_ids: c.related_user_ids || (hrUser ? [hrUser.id] : []),
+          related_users: c.related_users,
+          typeName,
+          typeColor,
+          typeBg,
+          typeBorder,
+          detailTime: `${isSupplementary ? t('Giờ đề xuất') : t('Giờ vào')}: ${c.check_in_time || '08:00'}${c.check_out_time ? ` → ${c.check_out_time.length > 8 ? c.check_out_time.substring(11, 16) : c.check_out_time.substring(0, 5)}` : ''}`,
+          reason: c.reason || (isLate ? t('Đi muộn') : t('Yêu cầu cập nhật bổ sung công')),
           status: c.status,
           created_at: c.created_at,
           raw: c
@@ -706,11 +782,24 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         id: `ot-${s.id}`,
         originalId: s.id,
         category: 'overtime',
+        type: 'overtime',
         subType: 'overtime',
         user_id: s.user_id,
         user_name: s.user_name,
         user_avatar: s.user_avatar,
         user_email: s.user_email,
+        employee_name: s.user_name,
+        approver_id: s.approver_id,
+        approver_name: s.approver_name,
+        approver_id_2: s.approver_id_2,
+        approver_name_2: s.approver_name_2,
+        approver_id_3: s.approver_id_3,
+        approver_name_3: s.approver_name_3,
+        status_level_1: s.status_level_1,
+        status_level_2: s.status_level_2,
+        status_level_3: s.status_level_3,
+        related_user_ids: s.related_user_ids,
+        related_users: s.related_users,
         typeName: t('Đăng ký Tăng ca (OT)'),
         typeColor: '#7c3aed',
         typeBg: 'rgba(124, 58, 237, 0.1)',
@@ -733,6 +822,217 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     if (exceptionFilter === 'overtime') return dayExceptions.filter(e => e.category === 'overtime');
     return dayExceptions;
   }, [dayExceptions, exceptionFilter]);
+
+  const renderWorkflowStepsAndWatchers = (item: any) => {
+    interface StepInfo {
+      stepIndex: number;
+      title: string;
+      userId?: number;
+      userName?: string;
+      status: 'approved' | 'rejected' | 'pending' | 'waiting';
+    }
+
+    const steps: StepInfo[] = [];
+    const overall = (item.status || 'pending').toLowerCase();
+    const isDraft = overall === 'draft' || Boolean(item.is_draft);
+    const s1 = String(item.status_level_1 || (overall === 'level1_approved' || overall === 'approved' ? 'approved' : overall === 'rejected' ? 'rejected' : 'pending')).toLowerCase();
+    const s2 = String(item.status_level_2 || 'none').toLowerCase();
+    const s3 = String(item.status_level_3 || 'none').toLowerCase();
+
+    // Step 1
+    const app1Id = Number(item.approver_id || item.manager_id || 0);
+    const app1Name = item.approver_name || '';
+    if (app1Id > 0 || app1Name || item.approver_id_2) {
+      let stepStatus: StepInfo['status'] = 'pending';
+      if (isDraft) stepStatus = 'waiting';
+      else if (s1 === 'approved' || overall === 'approved' || overall === 'level1_approved') stepStatus = 'approved';
+      else if (s1 === 'rejected' || (overall === 'rejected' && s1 !== 'approved')) stepStatus = 'rejected';
+      else stepStatus = 'pending';
+
+      steps.push({
+        stepIndex: 1,
+        title: t('Cấp 1'),
+        userId: app1Id,
+        userName: app1Name,
+        status: stepStatus
+      });
+    }
+
+    // Step 2
+    const app2Id = Number(item.approver_id_2 || 0);
+    const app2Name = item.approver_name_2 || '';
+    if (app2Id > 0 || (app2Name && app2Name.trim() !== '')) {
+      let stepStatus: StepInfo['status'] = 'waiting';
+      if (isDraft) stepStatus = 'waiting';
+      else if (s2 === 'approved') stepStatus = 'approved';
+      else if (s2 === 'rejected') stepStatus = 'rejected';
+      else if (s1 === 'approved' && s2 !== 'approved' && s2 !== 'rejected') stepStatus = 'pending';
+      else stepStatus = 'waiting';
+
+      steps.push({
+        stepIndex: 2,
+        title: t('Cấp 2'),
+        userId: app2Id,
+        userName: app2Name,
+        status: stepStatus
+      });
+    }
+
+    // Step 3
+    const app3Id = Number(item.approver_id_3 || 0);
+    const app3Name = item.approver_name_3 || '';
+    if (app3Id > 0 || (app3Name && app3Name.trim() !== '')) {
+      let stepStatus: StepInfo['status'] = 'waiting';
+      if (isDraft) stepStatus = 'waiting';
+      else if (s3 === 'approved') stepStatus = 'approved';
+      else if (s3 === 'rejected') stepStatus = 'rejected';
+      else if (s1 === 'approved' && (s2 === 'approved' || s2 === 'none') && s3 !== 'approved' && s3 !== 'rejected') stepStatus = 'pending';
+      else stepStatus = 'waiting';
+
+      steps.push({
+        stepIndex: 3,
+        title: t('Cấp 3'),
+        userId: app3Id,
+        userName: app3Name,
+        status: stepStatus
+      });
+    }
+
+    if (steps.length === 0) {
+      steps.push({
+        stepIndex: 1,
+        title: t('Duyệt'),
+        userId: Number(item.approver_id || 0),
+        userName: item.approver_name || '',
+        status: isDraft ? 'waiting' : (overall === 'approved' ? 'approved' : overall === 'rejected' ? 'rejected' : 'pending')
+      });
+    }
+
+    // Related Watchers
+    let relIds: number[] = [];
+    const rawWatchers = item.related_user_ids || item.related_users;
+    if (Array.isArray(rawWatchers)) {
+      relIds = rawWatchers.map((id: any) => Number(typeof id === 'object' && id !== null ? (id.id || id.user_id) : id)).filter((id: number) => id > 0);
+    } else if (typeof rawWatchers === 'string') {
+      const trimmed = rawWatchers.trim();
+      if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) {
+            relIds = parsed.map((id: any) => Number(typeof id === 'object' && id !== null ? (id.id || id.user_id) : id)).filter((id: number) => id > 0);
+          }
+        } catch {
+          relIds = trimmed.slice(1, -1).split(',').map((id: string) => Number(id.trim().replace(/^['"]|['"]$/g, ''))).filter((id: number) => id > 0);
+        }
+      } else {
+        relIds = trimmed.split(',').map((id: string) => Number(id.trim())).filter((id: number) => id > 0);
+      }
+    }
+
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        {/* Step Approvers Chain */}
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+          {steps.map((st, idx) => {
+            let uObj = st.userId ? usersMap.get(st.userId) : null;
+            if (!uObj && st.userName) {
+              uObj = usersByNameMap.get(st.userName.toLowerCase().trim());
+            }
+            const displayName = uObj?.full_name || uObj?.name || st.userName || st.title;
+            const avatarUrl = resolveAttachmentUrl(uObj?.avatar_url || uObj?.avatar);
+
+            const isStepApproved = !isDraft && st.status === 'approved';
+            const isStepRejected = !isDraft && st.status === 'rejected';
+            const isStepPending = !isDraft && st.status === 'pending';
+
+            const borderColor = isStepApproved ? '#10b981' : isStepRejected ? '#ef4444' : isStepPending ? '#f59e0b' : '#cbd5e1';
+            const statusText = isStepApproved ? t('Đã duyệt') : isStepRejected ? t('Từ chối') : isStepPending ? t('Đang chờ duyệt') : isDraft ? t('Dự kiến duyệt') : t('Chưa đến lượt');
+
+            return (
+              <React.Fragment key={`step-${st.stepIndex}`}>
+                {idx > 0 && (
+                  <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', margin: '0 1px' }}>➔</span>
+                )}
+                <div 
+                  title={`${st.title}: ${displayName} (${statusText})`}
+                  style={{
+                    position: 'relative',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <div style={{
+                    borderRadius: '50%',
+                    padding: '2px',
+                    display: 'inline-flex',
+                    border: `2px solid ${borderColor}`,
+                    boxShadow: isStepPending ? '0 0 0 2px rgba(245, 158, 11, 0.2)' : 'none',
+                    transition: 'all 0.2s ease'
+                  }}>
+                    <Avatar src={avatarUrl} name={displayName} size={24} />
+                  </div>
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '-2px',
+                    right: '-2px',
+                    width: '12px',
+                    height: '12px',
+                    borderRadius: '50%',
+                    background: isStepApproved ? '#10b981' : isStepRejected ? '#ef4444' : isStepPending ? '#f59e0b' : '#94a3b8',
+                    border: '1.5px solid #ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#ffffff',
+                    fontSize: '8px',
+                    fontWeight: 800
+                  }}>
+                    {isStepApproved ? '✓' : isStepRejected ? '✕' : isStepPending ? '•' : st.stepIndex}
+                  </div>
+                </div>
+              </React.Fragment>
+            );
+          })}
+        </div>
+
+        {/* Related Watchers Avatars */}
+        {relIds.length > 0 && (
+          <div 
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '3px',
+              marginLeft: '4px',
+              paddingLeft: '6px',
+              borderLeft: '1px solid var(--color-border)'
+            }}
+            title={`${t('Người liên quan')} (${relIds.length}): ${relIds.map(id => usersMap.get(id)?.full_name || usersMap.get(id)?.name || id).join(', ')}`}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', color: 'var(--color-text-muted)', marginRight: '1px' }}>
+              <Eye size={12} />
+            </div>
+            {relIds.slice(0, 3).map(id => {
+              const relU = usersMap.get(id);
+              return (
+                <Avatar
+                  key={`rel-${id}`}
+                  src={resolveAttachmentUrl(relU?.avatar_url || relU?.avatar)}
+                  name={relU?.full_name || relU?.name || `ID ${id}`}
+                  size={20}
+                />
+              );
+            })}
+            {relIds.length > 3 && (
+              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                +{relIds.length - 3}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // Track if explicit tab was set to avoid useEffect overriding it
   const skipAutoTabRef = useRef(false);
@@ -4740,7 +5040,6 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                 >
                   <div style={{ position: 'sticky', top: 0, background: 'var(--color-surface)', zIndex: 10, paddingBottom: '4px' }}>
                     <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                      <Search size={13} style={{ position: 'absolute', left: '8px', color: 'var(--color-text-muted)', pointerEvents: 'none' }} />
                       <input
                         type="text"
                         placeholder={t('Tìm người liên quan...')}
@@ -4749,7 +5048,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                         onClick={(e) => e.stopPropagation()}
                         style={{
                           width: '100%',
-                          padding: '6px 8px 6px 26px',
+                          padding: '6px 28px 6px 10px',
                           fontSize: '0.75rem',
                           borderRadius: '6px',
                           border: '1px solid var(--color-border)',
@@ -4760,6 +5059,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                         }}
                         autoFocus
                       />
+                      <Search size={13} style={{ position: 'absolute', right: '8px', color: 'var(--color-text-muted)', pointerEvents: 'none' }} />
                     </div>
                   </div>
                   {usersList
@@ -6779,55 +7079,100 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                               );
                             })()}
 
-                            {row.status === 'pending_approval' && canApprove && (
-                              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '4px' }}>
-                                <button
-                                  disabled={actionSubmittingId === row.id}
-                                  onClick={() => {
-                                    showConfirm({
-                                      title: t('Phê duyệt đi trễ'),
-                                      message: t('Bạn có chắc chắn muốn phê duyệt yêu cầu đi trễ này?'),
-                                      optionalPromptInput: true,
-                                      promptPlaceholder: t('Nhập lưu ý/nội dung phê duyệt (tùy chọn)...'),
-                                      confirmText: t('Phê duyệt'),
-                                      cancelText: t('Hủy'),
-                                      onConfirm: (reason) => {
-                                        return handleUpdateStatus(row.id, 'approved', reason ? reason.trim() : undefined);
-                                      }
-                                    });
-                                  }}
-                                  className="btn success sm"
-                                  style={{ padding: '3px 10px', fontSize: '0.7rem', height: 'auto', borderRadius: '6px', opacity: actionSubmittingId === row.id ? 0.6 : 1 }}
-                                >
-                                  {actionSubmittingId === row.id ? <RefreshCw size={12} className="spin" /> : <Check size={12} />} {t('Phê duyệt')}
-                                </button>
-                                <button
-                                  disabled={actionSubmittingId === row.id}
-                                  onClick={() => {
-                                    showConfirm({
-                                      title: t('Từ chối chấm công'),
-                                      message: t('Vui lòng nhập lý do từ chối chấm công này:'),
-                                      requirePromptInput: true,
-                                      promptPlaceholder: t('Nhập lý do từ chối...'),
-                                      confirmText: t('Từ chối'),
-                                      cancelText: t('Hủy'),
-                                      isDanger: true,
-                                      onConfirm: (reason) => {
-                                        if (reason && reason.trim()) {
-                                          return handleUpdateStatus(row.id, 'rejected', reason.trim());
-                                        } else {
-                                          toast.error(t('Lý do từ chối là bắt buộc'));
-                                        }
-                                      }
-                                    });
-                                  }}
-                                  className="btn danger sm"
-                                  style={{ padding: '3px 10px', fontSize: '0.7rem', height: 'auto', borderRadius: '6px', opacity: actionSubmittingId === row.id ? 0.6 : 1 }}
-                                >
-                                  {actionSubmittingId === row.id ? <RefreshCw size={12} className="spin" /> : <X size={12} />} {t('Từ chối')}
-                                </button>
-                              </div>
-                            )}
+                            {(() => {
+                              const targetUser = usersMap.get(Number(row.user_id));
+                              let approverId = row.approver_id;
+                              let approverName = row.approver_name;
+                              if (!approverId && targetUser?.team_id) {
+                                const team = teamsList.find((t: any) => Number(t.id) === Number(targetUser.team_id));
+                                if (team && team.leader_id) {
+                                  approverId = team.leader_id;
+                                  const leadU = usersMap.get(Number(team.leader_id));
+                                  approverName = leadU?.full_name || leadU?.name || '';
+                                }
+                              }
+
+                              const hrUser = usersList.find((u: any) => ['hr'].includes(String(u.role).toLowerCase()));
+
+                              const checkInItem = {
+                                id: row.id,
+                                type: 'checkin',
+                                user_id: row.user_id,
+                                employee_name: row.user_name,
+                                approver_id: approverId,
+                                approver_name: approverName,
+                                approver_id_2: row.approver_id_2,
+                                approver_name_2: row.approver_name_2,
+                                approver_id_3: row.approver_id_3,
+                                approver_name_3: row.approver_name_3,
+                                status_level_1: row.status_level_1 || (row.status === 'approved' ? 'approved' : 'pending'),
+                                status: row.status,
+                                related_user_ids: row.related_user_ids || (hrUser ? [hrUser.id] : [])
+                              };
+
+                              const isRowPending = row.status === 'pending_approval';
+                              const canIApprove = !isSales && !isViewingSelf && isRowPending && isItemAtMyStepToApprove(checkInItem, user, usersByNameMap);
+
+                              return (
+                                <>
+                                  {isRowPending && (
+                                    <div style={{ paddingTop: '4px', borderTop: '1px dashed var(--color-border)' }}>
+                                      {renderWorkflowStepsAndWatchers(checkInItem)}
+                                    </div>
+                                  )}
+
+                                  {canIApprove && (
+                                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '4px' }}>
+                                      <button
+                                        disabled={actionSubmittingId === row.id}
+                                        onClick={() => {
+                                          showConfirm({
+                                            title: t('Phê duyệt đi trễ'),
+                                            message: t('Bạn có chắc chắn muốn phê duyệt yêu cầu đi trễ này?'),
+                                            optionalPromptInput: true,
+                                            promptPlaceholder: t('Nhập lưu ý/nội dung phê duyệt (tùy chọn)...'),
+                                            confirmText: t('Phê duyệt'),
+                                            cancelText: t('Hủy'),
+                                            onConfirm: (reason) => {
+                                              return handleUpdateStatus(row.id, 'approved', reason ? reason.trim() : undefined);
+                                            }
+                                          });
+                                        }}
+                                        className="btn success sm"
+                                        style={{ padding: '3px 10px', fontSize: '0.7rem', height: 'auto', borderRadius: '6px', opacity: actionSubmittingId === row.id ? 0.6 : 1 }}
+                                      >
+                                        {actionSubmittingId === row.id ? <RefreshCw size={12} className="spin" /> : <Check size={12} />} {t('Phê duyệt')}
+                                      </button>
+                                      <button
+                                        disabled={actionSubmittingId === row.id}
+                                        onClick={() => {
+                                          showConfirm({
+                                            title: t('Từ chối chấm công'),
+                                            message: t('Vui lòng nhập lý do từ chối chấm công này:'),
+                                            requirePromptInput: true,
+                                            promptPlaceholder: t('Nhập lý do từ chối...'),
+                                            confirmText: t('Từ chối'),
+                                            cancelText: t('Hủy'),
+                                            isDanger: true,
+                                            onConfirm: (reason) => {
+                                              if (reason && reason.trim()) {
+                                                return handleUpdateStatus(row.id, 'rejected', reason.trim());
+                                              } else {
+                                                toast.error(t('Lý do từ chối là bắt buộc'));
+                                              }
+                                            }
+                                          });
+                                        }}
+                                        className="btn danger sm"
+                                        style={{ padding: '3px 10px', fontSize: '0.7rem', height: 'auto', borderRadius: '6px', opacity: actionSubmittingId === row.id ? 0.6 : 1 }}
+                                      >
+                                        {actionSubmittingId === row.id ? <RefreshCw size={12} className="spin" /> : <X size={12} />} {t('Từ chối')}
+                                      </button>
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()}
                           </div>
                         );
                       })
@@ -7212,8 +7557,13 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                               </div>
                             )}
 
-                            {/* Action Buttons for Manager / Admin */}
-                            {(!isSales && !isViewingSelf && isPending) && (
+                            {/* Workflow Steps & Watchers Chain */}
+                            <div style={{ paddingTop: '2px' }}>
+                              {renderWorkflowStepsAndWatchers(item)}
+                            </div>
+
+                            {/* Action Buttons for Manager / Admin: Only shown if current user is at active approval step */}
+                            {(!isSales && !isViewingSelf && isPending && isItemAtMyStepToApprove(item, user, usersByNameMap)) && (
                               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', paddingTop: '4px', borderTop: '1px dashed var(--color-border)' }}>
                                 <button
                                   type="button"
@@ -8191,7 +8541,6 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                 >
                   <div style={{ position: 'sticky', top: 0, background: 'var(--color-surface)', zIndex: 10, paddingBottom: '4px' }}>
                     <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                      <Search size={13} style={{ position: 'absolute', left: '8px', color: 'var(--color-text-muted)', pointerEvents: 'none' }} />
                       <input
                         type="text"
                         placeholder={t('Tìm người liên quan...')}
@@ -8200,7 +8549,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                         onClick={(e) => e.stopPropagation()}
                         style={{
                           width: '100%',
-                          padding: '6px 8px 6px 26px',
+                          padding: '6px 28px 6px 10px',
                           fontSize: '0.75rem',
                           borderRadius: '6px',
                           border: '1px solid var(--color-border)',
@@ -8211,6 +8560,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                         }}
                         autoFocus
                       />
+                      <Search size={13} style={{ position: 'absolute', right: '8px', color: 'var(--color-text-muted)', pointerEvents: 'none' }} />
                     </div>
                   </div>
                   {usersList

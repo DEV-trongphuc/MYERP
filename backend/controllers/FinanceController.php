@@ -729,6 +729,37 @@ class FinanceController
             $params[] = (int)$companyId;
             $params[] = (int)$companyId;
         }
+
+        $search = trim($_GET['search'] ?? '');
+        if ($search !== '') {
+            $cleanSearch = ltrim($search, '#');
+            $cleanSearchId = preg_replace('/[^0-9]/', '', $search);
+            $searchWildcard = "%{$search}%";
+            $cleanWildcard = "%{$cleanSearch}%";
+
+            $where[] = "(
+                e.title LIKE ? 
+                OR e.title LIKE ? 
+                OR e.notes LIKE ? 
+                OR e.recipient_name LIKE ? 
+                OR e.vendor_name LIKE ? 
+                OR e.category LIKE ? 
+                OR CAST(e.id AS CHAR) = ? 
+                OR CAST(e.id AS CHAR) LIKE ? 
+                OR EXISTS (SELECT 1 FROM users u_s WHERE u_s.id = e.created_by AND u_s.full_name LIKE ?)
+                OR EXISTS (SELECT 1 FROM expense_entities ee JOIN contacts c_s ON ee.entity_type = 'contact' AND ee.entity_id = c_s.id WHERE ee.expense_id = e.id AND c_s.full_name LIKE ?)
+            )";
+            $params[] = $searchWildcard;
+            $params[] = $cleanWildcard;
+            $params[] = $searchWildcard;
+            $params[] = $searchWildcard;
+            $params[] = $searchWildcard;
+            $params[] = $searchWildcard;
+            $params[] = $cleanSearchId !== '' ? $cleanSearchId : '-1';
+            $params[] = $cleanSearchId !== '' ? "%{$cleanSearchId}%" : $searchWildcard;
+            $params[] = $searchWildcard;
+            $params[] = $searchWildcard;
+        }
         $w = implode(' AND ', $where);
 
         $simple = ($_GET['simple'] ?? '') === '1';
@@ -736,7 +767,7 @@ class FinanceController
             $stmt = $this->db->prepare("
                 SELECT e.id, e.amount, e.date, e.title, e.category, e.vendor_name, e.status
                 FROM expenses e 
-                WHERE $w ORDER BY e.date DESC LIMIT $limit OFFSET $offset
+                WHERE $w ORDER BY e.date DESC, e.id DESC LIMIT $limit OFFSET $offset
             ");
             $stmt->execute($params);
             $rows = $stmt->fetchAll();
@@ -760,7 +791,7 @@ class FinanceController
             LEFT JOIN users u3 ON e.refunder_id = u3.id
             LEFT JOIN users u4 ON e.approver_id_2 = u4.id
             LEFT JOIN users u5 ON e.approver_id_3 = u5.id
-            WHERE $w ORDER BY e.date DESC LIMIT $limit OFFSET $offset
+            WHERE $w ORDER BY e.date DESC, e.id DESC LIMIT $limit OFFSET $offset
         ");
         $stmt->execute($params);
         $rows = $stmt->fetchAll();

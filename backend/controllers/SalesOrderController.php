@@ -70,7 +70,13 @@ class SalesOrderController {
         }
 
         if (!empty($search)) {
-            $where[] = "(so.so_number LIKE :search OR c.name LIKE :search OR comp.name LIKE :search)";
+            $where[] = "(
+                so.so_number LIKE :search 
+                OR c.full_name LIKE :search 
+                OR comp.name LIKE :search 
+                OR so.notes LIKE :search 
+                OR EXISTS (SELECT 1 FROM users u_so WHERE u_so.id = so.created_by AND u_so.full_name LIKE :search)
+            )";
             $params[':search'] = "%{$search}%";
         }
 

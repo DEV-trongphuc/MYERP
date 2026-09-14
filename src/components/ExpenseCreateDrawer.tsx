@@ -104,9 +104,36 @@ export interface ExpenseItemRow {
 
 const formatNumberWithDots = (val: string | number) => {
   if (val === undefined || val === null || val === '') return '';
-  const numStr = String(val).replace(/\D/g, '');
+  if (typeof val === 'number') {
+    if (isNaN(val)) return '';
+    return new Intl.NumberFormat('vi-VN').format(Math.round(val));
+  }
+  let cleanStr = String(val).trim();
+  if (cleanStr.includes('.') && !cleanStr.includes(',')) {
+    const parsed = parseFloat(cleanStr);
+    if (!isNaN(parsed)) {
+      return new Intl.NumberFormat('vi-VN').format(Math.round(parsed));
+    }
+  }
+  if (cleanStr.includes(',') && cleanStr.lastIndexOf(',') > cleanStr.lastIndexOf('.')) {
+    const integerPart = cleanStr.split(',')[0].replace(/\D/g, '');
+    if (integerPart) return new Intl.NumberFormat('vi-VN').format(Number(integerPart));
+  }
+  const numStr = cleanStr.replace(/\D/g, '');
   if (!numStr) return '';
   return new Intl.NumberFormat('vi-VN').format(Number(numStr));
+};
+
+const normalizeFileUrl = (u: string) => {
+  if (!u) return '';
+  return u.replace(/^https?:\/\/[^\/]+/i, '')
+          .replace(/^\/?backend\/?/i, '')
+          .replace(/^\/+/, '')
+          .split('?')[0];
+};
+
+const getFileNameFromUrl = (u: string) => {
+  return normalizeFileUrl(u).split('/').pop() || '';
 };
 
 const formatApprovalCurrency = (amount: number | string, currency: string = 'VND') => {
@@ -250,8 +277,14 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
   }, [expenseItems]);
 
   const itemsTotalVat = useMemo(() => {
-    return expenseItems.reduce((acc, it) => acc + (Number(it.quantity) || 1) * (Number(it.price) || 0) * (Number(it.vat) || 0) / 100, 0);
-  }, [expenseItems]);
+    return expenseItems.reduce((acc, it) => {
+      const lineBase = (Number(it.quantity) || 1) * (Number(it.price) || 0);
+      const lineVat = currencyType === 'VND'
+        ? Math.round(lineBase * (Number(it.vat) || 0) / 100)
+        : (lineBase * (Number(it.vat) || 0) / 100);
+      return acc + lineVat;
+    }, 0);
+  }, [expenseItems, currencyType]);
 
   const itemsGrandTotal = useMemo(() => {
     return itemsTotalBeforeTax + itemsTotalVat;
@@ -643,16 +676,26 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
         prevEditItemRef.current = editItem;
 
         if (editItem) {
-          // Extract existing images
+          // Extract existing images with strict deduplication
           const existingImages: string[] = [];
-          if (editItem.image_url) {
+          const isDuplicateImg = (candidate: string) => {
+            const norm = normalizeFileUrl(candidate);
+            const name = getFileNameFromUrl(candidate);
+            return existingImages.some(img => {
+              const existingNorm = normalizeFileUrl(img);
+              const existingName = getFileNameFromUrl(img);
+              return (norm && existingNorm && norm === existingNorm) || (name && existingName && name === existingName);
+            });
+          };
+
+          if (editItem.image_url && !isDuplicateImg(editItem.image_url)) {
             existingImages.push(editItem.image_url);
           }
           if (editItem.notes) {
             const matches = editItem.notes.matchAll(/([^\n\r(•]+)\s*\((https?:\/\/[^\s)]+|\/backend\/[^\s)]+|uploads\/[^\s)]+)\)/gi);
             for (const m of matches) {
               const url = m[2].trim();
-              if (url && !existingImages.includes(url)) {
+              if (url && !isDuplicateImg(url)) {
                 existingImages.push(url);
               }
             }
@@ -731,29 +774,51 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
               id: it.id || Date.now() + idx,
               content: it.content || it.name || '',
               quantity: Number(it.quantity) || 1,
-              price: Number(it.price) || 0,
+              price: Math.round(Number(it.price) || 0),
               vat: Number(it.vat !== undefined ? it.vat : 10)
             })));
           } else {
             const rawNotes = editItem.notes || editItem.description || '';
             const itemMatches = Array.from(rawNotes.matchAll(/[•\-*]?\s*\[?(\d+)\]?\s*([^\-\n]+?)\s*-\s*SL:\s*(\d+(?:\.\d+)?)\s*-\s*Đơn giá:\s*([0-9.,]+)[^\-]*-\s*VAT:\s*(\d+)%/gi));
             if (itemMatches.length > 0) {
-              const parsed = itemMatches.map((m: any, idx: number) => ({
-                id: Date.now() + idx,
-                content: m[2].trim(),
-                quantity: Number(m[3]) || 1,
-                price: Number(m[4].replace(/\D/g, '')) || 0,
-                vat: Number(m[5]) || 0
-              }));
+              const parsed = itemMatches.map((m: any, idx: number) => {
+                let parsedPrice = String(m[4] || '').trim();
+                let p = 0;
+                if (parsedPrice.includes('.') && !parsedPrice.includes(',')) {
+                  p = Math.round(parseFloat(parsedPrice) || 0);
+                } else if (parsedPrice.includes(',') && parsedPrice.lastIndexOf(',') > parsedPrice.lastIndexOf('.')) {
+                  const integerPart = parsedPrice.split(',')[0].replace(/\D/g, '');
+                  p = Number(integerPart) || 0;
+                } else {
+                  p = Number(parsedPrice.replace(/\D/g, '')) || 0;
+                }
+                return {
+                  id: Date.now() + idx,
+                  content: m[2].trim(),
+                  quantity: Number(m[3]) || 1,
+                  price: p,
+                  vat: Number(m[5]) || 0
+                };
+              });
               setExpenseItems(parsed);
             } else {
+              const amt = Math.round(Number(editItem.amount) || 0);
+              const vatAmt = Math.round(Number(editItem.vat_amount) || 0);
+              let vatPct = 10;
+              let netPrice = amt;
+              if (vatAmt > 0 && amt > 0) {
+                netPrice = Math.round(amt - vatAmt);
+                const calcPct = Math.round((vatAmt / netPrice) * 100);
+                vatPct = [0, 5, 8, 10].includes(calcPct) ? calcPct : Math.round((vatAmt / amt) * 100);
+                if (![0, 5, 8, 10].includes(vatPct)) vatPct = 8;
+              }
               setExpenseItems([
                 {
                   id: Date.now(),
                   content: initialSuffix || editItem.title || '',
                   quantity: 1,
-                  price: Number(editItem.amount) || 0,
-                  vat: editItem.vat_amount ? 10 : 0
+                  price: Math.round(netPrice > 0 ? netPrice : amt),
+                  vat: vatPct
                 }
               ]);
             }
@@ -930,14 +995,22 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
       // Deduplicate images
       const uniqueImages: string[] = [];
       for (const img of images) {
-        if (img && !uniqueImages.includes(img)) {
+        if (!img) continue;
+        const norm = normalizeFileUrl(img);
+        const name = getFileNameFromUrl(img);
+        const already = uniqueImages.some(u => normalizeFileUrl(u) === norm || getFileNameFromUrl(u) === name);
+        if (!already) {
           uniqueImages.push(img);
         }
       }
 
       if (uniqueImages.length > 0) {
-        const baseUrl = import.meta.env.VITE_API_URL || '/backend';
-        const attsStr = uniqueImages.map(url => `• ${url.split('/').pop()} (${baseUrl}/${url.replace(/^\/?(backend\/)?/, '')})`).join('\n');
+        const baseUrl = (import.meta.env.VITE_API_URL || '/backend').replace(/\/+$/, '');
+        const attsStr = uniqueImages.map(url => {
+          const normPath = normalizeFileUrl(url);
+          const fileName = getFileNameFromUrl(url) || 'Tài liệu';
+          return `• ${fileName} (${baseUrl}/${normPath})`;
+        }).join('\n');
         finalNotes = `${finalNotes}\n\n[Tài liệu đính kèm (${uniqueImages.length} tệp)]:\n${attsStr}`.trim();
       }
 
@@ -957,7 +1030,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
         vat_amount: Number(itemsTotalVat),
         has_vat_invoice: invoiceType.startsWith('vat_'),
         is_vat_inclusive: true,
-        image_url: uniqueImages[0] || null,
+        image_url: uniqueImages.length > 0 ? normalizeFileUrl(uniqueImages[0]) : null,
         notes: finalNotes,
         items: expenseItems,
         entities: payloadEntities

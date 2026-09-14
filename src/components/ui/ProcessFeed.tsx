@@ -58,6 +58,7 @@ interface ProcessFeedProps {
   loadingComments?: boolean;
   loadingHistory?: boolean;
   currentUser: any;
+  users?: any[];
   onAddComment: (text: string, attachments?: any[]) => Promise<void> | void;
   onDeleteComment?: (id: string | number) => Promise<void> | void;
   showAttachments?: boolean;
@@ -70,6 +71,7 @@ export const ProcessFeed: React.FC<ProcessFeedProps> = ({
   loadingComments = false,
   loadingHistory = false,
   currentUser,
+  users,
   onAddComment,
   onDeleteComment,
   showAttachments = true,
@@ -429,6 +431,7 @@ export const ProcessFeed: React.FC<ProcessFeedProps> = ({
               <MentionInput
                 value={commentText}
                 onChange={(e: any) => setCommentText(e.target.value)}
+                users={users}
                 placeholder={t('Viết bình luận... Gõ @ để nhắc tên')}
                 style={{ 
                   width: '100%', 

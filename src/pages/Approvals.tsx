@@ -378,9 +378,100 @@ const formatApprovalCurrency = (amount: number | string, currency: string = 'VND
 
 const formatNumberWithDots = (val: string | number) => {
   if (val === undefined || val === null || val === '') return '';
-  const numStr = String(val).replace(/\D/g, '');
+  if (typeof val === 'number') {
+    if (isNaN(val)) return '';
+    return new Intl.NumberFormat('vi-VN').format(Math.round(val));
+  }
+  let cleanStr = String(val).trim();
+  if (cleanStr.includes('.') && !cleanStr.includes(',')) {
+    const parsed = parseFloat(cleanStr);
+    if (!isNaN(parsed)) {
+      return new Intl.NumberFormat('vi-VN').format(Math.round(parsed));
+    }
+  }
+  if (cleanStr.includes(',') && cleanStr.lastIndexOf(',') > cleanStr.lastIndexOf('.')) {
+    const integerPart = cleanStr.split(',')[0].replace(/\D/g, '');
+    if (integerPart) return new Intl.NumberFormat('vi-VN').format(Number(integerPart));
+  }
+  const numStr = cleanStr.replace(/\D/g, '');
   if (!numStr) return '';
   return new Intl.NumberFormat('vi-VN').format(Number(numStr));
+};
+
+const normalizeFileUrl = (u: string) => {
+  if (!u) return '';
+  return u.replace(/^https?:\/\/[^\/]+/i, '')
+          .replace(/^\/?backend\/?/i, '')
+          .replace(/^\/+/, '')
+          .split('?')[0];
+};
+
+const getFileNameFromUrl = (u: string) => {
+  return normalizeFileUrl(u).split('/').pop() || '';
+};
+
+const parseExpenseLineItems = (text: string, directItems?: any) => {
+  if (Array.isArray(directItems) && directItems.length > 0) {
+    return directItems;
+  }
+  if (typeof directItems === 'string' && directItems.trim().startsWith('[')) {
+    try {
+      const parsed = JSON.parse(directItems);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    } catch (e) {}
+  }
+  if (!text) return null;
+  const jsonMatch = text.match(/\[JSON_ITEMS\]:\s*(\[[\s\S]*?\])(?=\n\n|\n\[|$)/i);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[1]);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    } catch (e) {}
+  }
+  const blockMatch = text.match(/\[Bảng chi tiết thanh toán\]:\s*([\s\S]*?)(?=\n\n\[|\n\[|$)/i);
+  if (blockMatch) {
+    const lines = blockMatch[1].split('\n').map(l => l.trim()).filter(Boolean);
+    const parsedItems: any[] = [];
+    for (const line of lines) {
+      if (/^Tổng cộng/i.test(line)) continue;
+      const m = line.match(/^(\d+)[\.\)]\s*(.*?)(?:\s*\(SL:\s*([\d\.,]+)\s*x\s*([\d\.,]+)\s*đ\s*=\s*([\d\.,]+)\s*đ\))?$/i);
+      if (m) {
+        const stt = parseInt(m[1]);
+        const name = m[2].trim();
+        const qty = m[3] ? parseFloat(m[3].replace(/\./g, '').replace(',', '.')) : 1;
+        const price = m[4] ? Math.round(parseFloat(m[4].replace(/\./g, '').replace(',', '.'))) : 0;
+        const amt = m[5] ? Math.round(parseFloat(m[5].replace(/\./g, '').replace(',', '.'))) : 0;
+        parsedItems.push({ stt, name, content: name, quantity: qty, unit_price: price, price, amount: amt, total: amt });
+      }
+    }
+    if (parsedItems.length > 0) return parsedItems;
+  }
+  const expBlockMatch = text.match(/\[Chi tiết các khoản chi\]:\s*([\s\S]*?)(?=\n\n\[|\n\[|$)/i);
+  if (expBlockMatch) {
+    const lines = expBlockMatch[1].split('\n').map(l => l.trim()).filter(Boolean);
+    const parsedItems: any[] = [];
+    for (const line of lines) {
+      const m = line.match(/[•\-*]?\s*(?:\[\d+\])?\s*(.*?)\s*-\s*SL:\s*([\d\.,]+)\s*-\s*Đơn giá:\s*([\d\.,]+)[^\-]*-\s*VAT:\s*(\d+)%/i);
+      if (m) {
+        const name = m[1].trim();
+        const qty = parseFloat(m[2].replace(/\./g, '').replace(',', '.')) || 1;
+        let parsedPrice = String(m[3] || '').trim();
+        let p = 0;
+        if (parsedPrice.includes('.') && !parsedPrice.includes(',')) {
+          p = Math.round(parseFloat(parsedPrice) || 0);
+        } else if (parsedPrice.includes(',') && parsedPrice.lastIndexOf(',') > parsedPrice.lastIndexOf('.')) {
+          const integerPart = parsedPrice.split(',')[0].replace(/\D/g, '');
+          p = Number(integerPart) || 0;
+        } else {
+          p = Number(parsedPrice.replace(/\D/g, '')) || 0;
+        }
+        const vat = m[4] ? parseInt(m[4]) : 10;
+        parsedItems.push({ name, content: name, quantity: qty, unit_price: p, price: p, vat });
+      }
+    }
+    if (parsedItems.length > 0) return parsedItems;
+  }
+  return null;
 };
 
 function docSoTiengViet(num: number): string {
@@ -1762,23 +1853,52 @@ export default function Approvals() {
 
         let finalDesc = infoParts.join('\n\n');
         if (attachments.length > 0) {
-          const baseUrl = import.meta.env.VITE_API_URL || '/backend';
-          const attsStr = attachments.map(a => `• ${a.name} (${baseUrl}/${a.url})`).join('\n');
-          finalDesc += `\n\n[Tài liệu đính kèm (${attachments.length} tệp)]:\n${attsStr}`;
+          // Deduplicate attachments
+          const uniqueAtts: any[] = [];
+          for (const a of attachments) {
+            if (!a || !a.url) continue;
+            const norm = normalizeFileUrl(a.url);
+            const name = a.name || getFileNameFromUrl(a.url);
+            const already = uniqueAtts.some(u => normalizeFileUrl(u.url) === norm || (u.name && u.name === name));
+            if (!already) {
+              uniqueAtts.push(a);
+            }
+          }
+
+          const baseUrl = (import.meta.env.VITE_API_URL || '/backend').replace(/\/+$/, '');
+          const attsStr = uniqueAtts.map(a => {
+            const norm = normalizeFileUrl(a.url);
+            const fileName = a.name || getFileNameFromUrl(a.url) || 'Tài liệu';
+            return `• ${fileName} (${baseUrl}/${norm})`;
+          }).join('\n');
+          finalDesc += `\n\n[Tài liệu đính kèm (${uniqueAtts.length} tệp)]:\n${attsStr}`;
         }
+
+        const calcTotalAmt = expenseItems.reduce((acc, it) => {
+          const lineBase = (Number(it.quantity) || 1) * (Number(it.price) || 0);
+          const lineVat = currencyType === 'VND' 
+            ? Math.round(lineBase * (Number(it.vat) || 0) / 100) 
+            : (lineBase * (Number(it.vat) || 0) / 100);
+          return acc + lineBase + lineVat;
+        }, 0);
+        const calcVatAmt = expenseItems.reduce((acc, it) => {
+          const lineBase = (Number(it.quantity) || 1) * (Number(it.price) || 0);
+          return acc + (currencyType === 'VND' ? Math.round(lineBase * (Number(it.vat) || 0) / 100) : (lineBase * (Number(it.vat) || 0) / 100));
+        }, 0);
+
         if (editingItemId && (editingItemType === 'expense' || formType === 'expense')) {
           await api.put(`/expenses/${editingItemId}`, {
             title: getFullWorkflowTitle(),
             description: finalDesc,
             notes: finalDesc,
-            amount: expenseItems.reduce((acc, it) => acc + (it.quantity * it.price) * (1 + it.vat / 100), 0),
-            vat_amount: expenseItems.reduce((acc, it) => acc + (it.quantity * it.price) * (it.vat / 100), 0),
+            amount: calcTotalAmt,
+            vat_amount: calcVatAmt,
             approver_id: appVal1 || finalApproverId,
             approver_id_2: appVal2,
             approver_id_3: appVal3,
             related_user_ids: relatedUserIds,
             currency: currencyType,
-            image_url: attachments[0]?.url || null,
+            image_url: attachments.length > 0 ? normalizeFileUrl(attachments[0].url) : null,
             bank_name: paymentBankName || null,
             bank_account_number: paymentBankAccount || null,
             bank_account_name: paymentAccountName || null,
@@ -1790,15 +1910,15 @@ export default function Approvals() {
             title: getFullWorkflowTitle(),
             description: finalDesc,
             notes: finalDesc,
-            amount: expenseItems.reduce((acc, it) => acc + (it.quantity * it.price) * (1 + it.vat / 100), 0),
-            vat_amount: expenseItems.reduce((acc, it) => acc + (it.quantity * it.price) * (it.vat / 100), 0),
+            amount: calcTotalAmt,
+            vat_amount: calcVatAmt,
             status: 'pending',
             approver_id: appVal1 || finalApproverId,
             approver_id_2: appVal2,
             approver_id_3: appVal3,
             related_user_ids: relatedUserIds,
             currency: currencyType,
-            image_url: attachments[0]?.url || null,
+            image_url: attachments.length > 0 ? normalizeFileUrl(attachments[0].url) : null,
             bank_name: paymentBankName || null,
             bank_account_number: paymentBankAccount || null,
             bank_account_name: paymentAccountName || null,
@@ -3936,17 +4056,18 @@ export default function Approvals() {
         else setInvoiceType('vat_10');
 
         // 7. BẢNG CHI TIẾT THANH TOÁN (expenseItems)
-        if (Array.isArray(expData.items) && expData.items.length > 0) {
-          setExpenseItems(expData.items.map((it: any, i: number) => ({
+        const parsedItemsFromNotes = parseExpenseLineItems(notes, expData.items);
+        if (Array.isArray(parsedItemsFromNotes) && parsedItemsFromNotes.length > 0) {
+          setExpenseItems(parsedItemsFromNotes.map((it: any, i: number) => ({
             id: it.id || Date.now() + i,
             content: it.content || it.name || cleanSuffix || 'Nội dung chi tiêu',
             quantity: Number(it.quantity) || 1,
-            price: Number(it.price) || 0,
+            price: Math.round(Number(it.unit_price || it.price) || 0),
             vat: it.vat !== undefined ? Number(it.vat) : 10
           })));
         } else {
-          const amt = Number(expData.amount) || 0;
-          const vatAmt = Number(expData.vat_amount) || 0;
+          const amt = Math.round(Number(expData.amount) || 0);
+          const vatAmt = Math.round(Number(expData.vat_amount) || 0);
           let vatPct = 10;
           let netPrice = amt;
           if (vatAmt > 0 && amt > 0) {
@@ -3961,7 +4082,7 @@ export default function Approvals() {
               id: Date.now(),
               content: itemContent,
               quantity: 1,
-              price: netPrice > 0 ? netPrice : amt,
+              price: Math.round(netPrice > 0 ? netPrice : amt),
               vat: vatPct
             }
           ]);
@@ -3987,9 +4108,19 @@ export default function Approvals() {
 
         // 10. Attachments
         const parsedAtts: any[] = [];
-        if (expData.image_url) {
+        const isDuplicateAtt = (candidateUrl: string, candidateName?: string) => {
+          const norm = normalizeFileUrl(candidateUrl);
+          const name = candidateName || getFileNameFromUrl(candidateUrl);
+          return parsedAtts.some(a => {
+            const aNorm = normalizeFileUrl(a.url);
+            const aName = a.name || getFileNameFromUrl(a.url);
+            return (norm && aNorm && norm === aNorm) || (name && aName && name === aName);
+          });
+        };
+
+        if (expData.image_url && !isDuplicateAtt(expData.image_url)) {
           parsedAtts.push({
-            name: expData.image_url.split('?')[0].split('/').pop() || 'Tài liệu',
+            name: getFileNameFromUrl(expData.image_url) || 'Tài liệu',
             url: expData.image_url
           });
         }
@@ -3998,7 +4129,7 @@ export default function Approvals() {
           for (const m of attMatches) {
             const aName = m[1].trim();
             const aUrl = m[2].trim();
-            if (!parsedAtts.some(a => a.url === aUrl || a.name === aName)) {
+            if (!isDuplicateAtt(aUrl, aName)) {
               parsedAtts.push({ name: aName, url: aUrl });
             }
           }
@@ -4526,9 +4657,21 @@ export default function Approvals() {
 
   const currentList = useMemo(() => {
     return currentRawList.filter(item => {
-      const matchesSearch = listSearchText === '' ||
-        (item.title && item.title.toLowerCase().includes(listSearchText.toLowerCase())) ||
-        (item.description && item.description.toLowerCase().includes(listSearchText.toLowerCase()));
+      const searchLower = listSearchText.toLowerCase().trim();
+      const displayTitle = getApprovalDisplayTitle(item).toLowerCase();
+      const creatorName = String(item.employee_name || (item as any).user_name || (item as any).creator_name || usersMap.get(Number(item.user_id))?.full_name || '').toLowerCase();
+      const poNum = String((item as any).po_number || (item as any).so_number || (item as any).code || (item as any).ref_no || '').toLowerCase();
+      const itemIdStr = String(item.id || '');
+      const cleanSearchNum = searchLower.replace(/[^0-9]/g, '');
+
+      const matchesSearch = searchLower === '' ||
+        (item.title && item.title.toLowerCase().includes(searchLower)) ||
+        (item.description && item.description.toLowerCase().includes(searchLower)) ||
+        displayTitle.includes(searchLower) ||
+        creatorName.includes(searchLower) ||
+        (Boolean(poNum) && poNum.includes(searchLower)) ||
+        (cleanSearchNum !== '' && itemIdStr === cleanSearchNum) ||
+        itemIdStr.includes(searchLower);
       
       const rawStatus = (item.status || 'pending').toLowerCase();
       const isItemDraft = rawStatus === 'draft' || !!item.is_draft;
@@ -5157,9 +5300,27 @@ export default function Approvals() {
                         fontWeight: 700,
                         color: 'var(--color-text)',
                         lineHeight: 1.35,
-                        WebkitTextSizeAdjust: '100%'
+                        WebkitTextSizeAdjust: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: '6px'
                       }}>
-                        {getApprovalDisplayTitle(item)}
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          padding: '1px 6px',
+                          borderRadius: '5px',
+                          background: 'var(--color-bg-secondary, #f1f5f9)',
+                          border: '1px solid var(--color-border)',
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          color: 'var(--color-text-muted)',
+                          lineHeight: '1.2'
+                        }}>
+                          #{item.id}
+                        </span>
+                        <span>{getApprovalDisplayTitle(item)}</span>
                       </div>
                       {item.description && (
                         <div style={{
@@ -5366,7 +5527,23 @@ export default function Approvals() {
                               {getTypeIcon(item.type)}
                             </div>
                             <div>
-                              <div style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--color-text)', WebkitTextSizeAdjust: '100%' }}>{getApprovalDisplayTitle(item)}</div>
+                              <div style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--color-text)', WebkitTextSizeAdjust: '100%', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                <span style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  padding: '1px 6px',
+                                  borderRadius: '5px',
+                                  background: 'var(--color-bg-secondary, #f1f5f9)',
+                                  border: '1px solid var(--color-border)',
+                                  fontSize: '0.72rem',
+                                  fontWeight: 700,
+                                  color: 'var(--color-text-muted)',
+                                  lineHeight: '1.2'
+                                }}>
+                                  #{item.id}
+                                </span>
+                                <span>{getApprovalDisplayTitle(item)}</span>
+                              </div>
                               <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: '2px', WebkitTextSizeAdjust: '100%' }}>{item.description}</div>
                             </div>
                           </div>
@@ -5904,8 +6081,14 @@ export default function Approvals() {
         });
 
         // Dynamic table calculations
-        const itemsTotalBeforeTax = expenseItems.reduce((acc, it) => acc + (it.quantity * it.price), 0);
-        const itemsTotalVat = expenseItems.reduce((acc, it) => acc + (it.quantity * it.price) * (it.vat / 100), 0);
+        const itemsTotalBeforeTax = expenseItems.reduce((acc, it) => acc + ((Number(it.quantity) || 1) * (Number(it.price) || 0)), 0);
+        const itemsTotalVat = expenseItems.reduce((acc, it) => {
+          const lineBase = (Number(it.quantity) || 1) * (Number(it.price) || 0);
+          const lineVat = currencyType === 'VND' 
+            ? Math.round(lineBase * (Number(it.vat) || 0) / 100) 
+            : (lineBase * (Number(it.vat) || 0) / 100);
+          return acc + lineVat;
+        }, 0);
         const itemsGrandTotal = itemsTotalBeforeTax + itemsTotalVat;
 
         // Custom template selection default timeline mapping
@@ -11592,7 +11775,6 @@ export default function Approvals() {
                             >
                               <div style={{ position: 'sticky', top: 0, background: 'var(--color-surface)', zIndex: 10, paddingBottom: '4px' }}>
                                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                                  <Search size={13} style={{ position: 'absolute', left: '8px', color: 'var(--color-text-muted)', pointerEvents: 'none' }} />
                                   <input
                                     type="text"
                                     placeholder={t('Tìm người liên quan...')}
@@ -11601,7 +11783,7 @@ export default function Approvals() {
                                     onClick={(e) => e.stopPropagation()}
                                     style={{
                                       width: '100%',
-                                      padding: '6px 8px 6px 26px',
+                                      padding: '6px 28px 6px 10px',
                                       fontSize: '0.75rem',
                                       borderRadius: '6px',
                                       border: '1px solid var(--color-border)',
@@ -11612,6 +11794,7 @@ export default function Approvals() {
                                     }}
                                     autoFocus
                                   />
+                                  <Search size={13} style={{ position: 'absolute', right: '8px', color: 'var(--color-text-muted)', pointerEvents: 'none' }} />
                                 </div>
                               </div>
                               {users
@@ -13187,46 +13370,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         .trim();
     };
 
-    const parseExpenseLineItems = (text: string, directItems?: any) => {
-      if (Array.isArray(directItems) && directItems.length > 0) {
-        return directItems;
-      }
-      if (typeof directItems === 'string' && directItems.trim().startsWith('[')) {
-        try {
-          const parsed = JSON.parse(directItems);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        } catch (e) {}
-      }
-      if (!text) return null;
-      // 1. Check [JSON_ITEMS]: [...]
-      const jsonMatch = text.match(/\[JSON_ITEMS\]:\s*(\[[\s\S]*?\])(?=\n\n|\n\[|$)/i);
-      if (jsonMatch) {
-        try {
-          const parsed = JSON.parse(jsonMatch[1]);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        } catch (e) {}
-      }
-      // 2. Check [Bảng chi tiết thanh toán]:
-      const blockMatch = text.match(/\[Bảng chi tiết thanh toán\]:\s*([\s\S]*?)(?=\n\n\[|\n\[|$)/i);
-      if (blockMatch) {
-        const lines = blockMatch[1].split('\n').map(l => l.trim()).filter(Boolean);
-        const parsedItems: any[] = [];
-        for (const line of lines) {
-          if (/^Tổng cộng/i.test(line)) continue;
-          const m = line.match(/^(\d+)[\.\)]\s*(.*?)(?:\s*\(SL:\s*([\d\.,]+)\s*x\s*([\d\.,]+)\s*đ\s*=\s*([\d\.,]+)\s*đ\))?$/i);
-          if (m) {
-            const stt = parseInt(m[1]);
-            const name = m[2].trim();
-            const qty = m[3] ? parseFloat(m[3].replace(/\./g, '').replace(',', '.')) : 1;
-            const price = m[4] ? parseFloat(m[4].replace(/\./g, '').replace(',', '.')) : 0;
-            const amt = m[5] ? parseFloat(m[5].replace(/\./g, '').replace(',', '.')) : 0;
-            parsedItems.push({ stt, name, quantity: qty, unit_price: price, amount: amt, total: amt });
-          }
-        }
-        if (parsedItems.length > 0) return parsedItems;
-      }
-      return null;
-    };
+
 
     const meetingData = parseMeetingInfo(rawDesc);
     const recurringData = parseRecurringInfo(rawDesc);

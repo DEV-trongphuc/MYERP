@@ -2394,29 +2394,32 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
   const handleImageClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
-    if (target.tagName === 'IMG') {
-      const src = (target as HTMLImageElement).src;
-      if (src && !target.closest('.avatar') && !target.closest('button')) {
-        const container = target.closest('.rich-comment-content') || target.closest('.rich-text-editor-content');
-        if (container) {
-          const allImgs = Array.from(container.querySelectorAll('img')) as HTMLImageElement[];
-          const imgItems: AttachmentItem[] = allImgs
-            .map(img => ({
-              url: img.src,
-              name: img.alt || 'Hình ảnh',
-              type: 'image' as const
-            }))
-            .filter(x => Boolean(x.url));
-
-          const clickedIdx = imgItems.findIndex(x => x.url === src);
-          setLightboxState({
-            isOpen: true,
-            items: imgItems.length > 0 ? imgItems : [{ url: src, name: 'Hình ảnh', type: 'image' }],
-            initialIndex: Math.max(0, clickedIdx)
-          });
-          return;
-        }
+    const imgEl = target.tagName === 'IMG' ? (target as HTMLImageElement) : target.querySelector('img');
+    if (imgEl && imgEl.src) {
+      if (imgEl.closest('.avatar') || imgEl.closest('.mention-avatar') || imgEl.hasAttribute('data-mention-avatar')) {
+        return;
       }
+      e.preventDefault();
+      e.stopPropagation();
+      const src = imgEl.src;
+      const container = imgEl.closest('.rich-comment-content') || imgEl.closest('.rich-text-editor-content') || imgEl.closest('[id^="workspace-comment-"]');
+      let imgItems: AttachmentItem[] = [];
+      if (container) {
+        const allImgs = Array.from(container.querySelectorAll('img:not(.mention-avatar):not([data-mention-avatar])')) as HTMLImageElement[];
+        imgItems = allImgs
+          .map(img => ({
+            url: img.src,
+            name: img.alt || 'Hình ảnh',
+            type: 'image' as const
+          }))
+          .filter(x => Boolean(x.url));
+      }
+      const clickedIdx = imgItems.findIndex(x => x.url === src);
+      setLightboxState({
+        isOpen: true,
+        items: imgItems.length > 0 ? imgItems : [{ url: src, name: imgEl.alt || 'Hình ảnh', type: 'image' }],
+        initialIndex: Math.max(0, clickedIdx)
+      });
     }
   };
 
@@ -2724,6 +2727,33 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
               </button>
             )}
 
+            {/* Delete task button - only for creator on PC */}
+            {!isMobileOrTablet && isCreator && task?.id && task.id !== 'new' && (
+              <button
+                type="button"
+                onClick={handleDeleteTask}
+                className="hover-lift"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-surface)',
+                  color: 'var(--color-danger, #ef4444)',
+                  cursor: 'pointer',
+                  boxShadow: 'var(--shadow-sm)',
+                  transition: 'all 0.2s',
+                  padding: 0
+                }}
+                title={t("Xóa công việc")}
+              >
+                <Trash2 size={18} />
+              </button>
+            )}
+
             {/* Hide task eye button */}
             {task?.id && task.id !== 'new' && (
               <button
@@ -2904,174 +2934,57 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                 .rich-text-editor-content a:hover {
                   opacity: 0.8 !important;
                 }
-                .rich-comment-content img {
-                  max-width: 150px !important;
-                  max-height: 120px !important;
+                .task-comment-body img:not(.mention-avatar):not([data-mention-avatar]):not(.inline-avatar),
+                .rich-comment-content img:not(.mention-avatar):not([data-mention-avatar]):not(.inline-avatar),
+                [id^="workspace-comment-"] .rich-text-editor-content img:not(.mention-avatar):not([data-mention-avatar]):not(.inline-avatar) {
+                  max-width: min(360px, 100%) !important;
+                  max-height: 220px !important;
+                  width: auto !important;
+                  height: auto !important;
                   border-radius: 8px !important;
-                  cursor: pointer !important;
-                  transition: transform 0.2s ease, max-width 0.25s ease, max-height 0.25s ease !important;
-                  object-fit: cover !important;
+                  cursor: zoom-in !important;
+                  transition: transform 0.15s ease, box-shadow 0.15s ease !important;
+                  object-fit: contain !important;
+                  background: rgba(0, 0, 0, 0.02) !important;
+                  border: 1px solid var(--color-border-light, #e2e8f0) !important;
                   display: block !important;
                   margin: 6px 0 !important;
+                  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06) !important;
                 }
-                .rich-comment-content img:hover {
-                  transform: scale(1.02) !important;
-                  box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+                .task-comment-body img:not(.mention-avatar):not([data-mention-avatar]):not(.inline-avatar):hover,
+                .rich-comment-content img:not(.mention-avatar):not([data-mention-avatar]):not(.inline-avatar):hover,
+                [id^="workspace-comment-"] .rich-text-editor-content img:not(.mention-avatar):not([data-mention-avatar]):not(.inline-avatar):hover {
+                  transform: scale(1.015) !important;
+                  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12) !important;
                 }
-                .rich-comment-content img.zoomed {
-                  max-width: 100% !important;
-                  max-height: 600px !important;
-                  object-fit: contain !important;
-                  box-shadow: 0 10px 30px rgba(0,0,0,0.2) !important;
+                .task-comment-body p,
+                .rich-comment-content p {
+                  margin: 3px 0 !important;
                 }
               `}</style>
               <label style={cardLabelStyle}>
                 {t('Mô tả chi tiết')}
               </label>
-              <div 
-                style={{ 
-                  borderRadius: '8px', 
-                  border: '1px solid var(--color-border)', 
-                  display: 'flex', 
-                  flexDirection: 'column',
-                  overflow: 'hidden',
-                  background: 'var(--color-surface)',
-                  minHeight: '260px'
+              <MentionInput
+                key={task.id}
+                value={erpMeta?.description || ''}
+                onChange={(e: any) => {
+                  const html = e.target.value;
+                  setErpMeta((prev: any) => ({ ...prev, description: html }));
                 }}
-              >
-                {/* Editor Toolbar */}
-                <div 
-                  style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '4px', 
-                    padding: '6px 8px', 
-                    background: 'var(--color-bg)', 
-                    borderBottom: '1px solid var(--color-border)',
-                    flexWrap: 'wrap',
-                    userSelect: 'none'
-                  }}
-                >
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => handleEditorCommand('bold')}
-                    style={{ padding: '6px 8px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text)' }}
-                    title={t('In đậm')}
-                  >
-                    <Bold size={15} />
-                  </button>
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => handleEditorCommand('italic')}
-                    style={{ padding: '6px 8px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text)' }}
-                    title={t('In nghiêng')}
-                  >
-                    <Italic size={15} />
-                  </button>
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => handleEditorCommand('underline')}
-                    style={{ padding: '6px 8px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text)' }}
-                    title={t('Gạch chân')}
-                  >
-                    <span style={{ textDecoration: 'underline', fontWeight: 'bold', fontSize: '14px', lineHeight: '1' }}>U</span>
-                  </button>
-                  <div style={{ width: '1px', height: '16px', background: 'var(--color-border)', margin: '0 4px' }} />
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={handleEditorAddLink}
-                    style={{ padding: '6px 8px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text)' }}
-                    title={t('Chèn liên kết')}
-                  >
-                    <Link2 size={15} />
-                  </button>
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={handleEditorUploadImage}
-                    style={{ padding: '6px 8px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text)' }}
-                    title={t('Tải ảnh lên')}
-                  >
-                    <ImageIcon size={15} />
-                  </button>
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => handleEditorCommand('insertUnorderedList')}
-                    style={{ padding: '6px 8px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text)' }}
-                    title={t('Danh sách dấu đầu dòng')}
-                  >
-                    <List size={15} />
-                  </button>
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => handleEditorCommand('insertOrderedList')}
-                    style={{ padding: '6px 8px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text)' }}
-                    title={t('Danh sách số')}
-                  >
-                    <ListOrdered size={15} />
-                  </button>
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => handleEditorCommand('removeFormat')}
-                    style={{ padding: '6px 8px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-muted)' }}
-                    title={t('Xóa định dạng')}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-
-                {/* contenteditable text area */}
-                <div
-                  key={task.id}
-                  ref={editorRef}
-                  contentEditable
-                  onFocus={() => {
-                    isFocusedRef.current = true;
-                  }}
-                  onBlur={(e) => {
-                    isFocusedRef.current = false;
-                    const html = e.currentTarget.innerHTML;
-                    const linkified = linkifyHtml(html);
-                    if (linkified !== html) {
-                      e.currentTarget.innerHTML = linkified;
-                    }
-                    setErpMeta((prev) => ({ ...prev, description: linkified }));
-                    handleSaveMeta({ ...erpMeta, description: linkified });
-                  }}
-                  onKeyDown={handleEditorKeyDown}
-                  onPaste={handleEditorPaste}
-                  onClick={(e) => {
-                    const target = e.target as HTMLElement;
-                    const link = target?.closest ? target.closest('a') : (target?.tagName === 'A' ? target : null);
-                    if (link) {
-                      e.preventDefault();
-                      const href = link.getAttribute('href');
-                      if (href) {
-                        window.open(href, '_blank', 'noopener,noreferrer');
-                      }
-                    }
-                  }}
-                  style={{
-                    padding: '12px 14px',
-                    minHeight: '200px',
-                    outline: 'none',
-                    fontSize: '0.85rem',
-                    lineHeight: '1.6',
-                    overflowY: 'auto',
-                    color: 'var(--color-text)',
-                    background: 'transparent',
-                    flex: 1
-                  }}
-                  className="rich-text-editor-content"
-                />
-              </div>
+                onBlur={() => {
+                  const html = erpMeta?.description || '';
+                  const linkified = linkifyHtml(html);
+                  if (linkified !== html) {
+                    setErpMeta((prev: any) => ({ ...prev, description: linkified }));
+                  }
+                  handleSaveMeta({ ...erpMeta, description: linkified });
+                }}
+                users={users}
+                placeholder={t('Nhập mô tả chi tiết công việc... Gõ @ để nhắc tên đồng nghiệp')}
+                style={{ minHeight: '220px', maxHeight: '520px' }}
+                disabled={currentUser?.role === 'viewer'}
+              />
             </div>
 
             {/* Checklist công việc con */}
@@ -3764,6 +3677,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                       <div 
                                         key={comment.id}
                                         id={`workspace-comment-${comment.id}`}
+                                        onClick={handleImageClick}
                                         style={{ 
                                           display: 'flex', 
                                           gap: '8px', 
@@ -3782,12 +3696,15 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                           </div>
                                           {comment.content && /<[a-z][\s\S]*>/i.test(comment.content) ? (
                                             <div 
-                                              className="rich-comment-content"
+                                              className="rich-comment-content task-comment-body"
                                               dangerouslySetInnerHTML={{ __html: linkifyHtml(comment.content) }}
-                                              style={{ fontSize: '0.78rem', color: 'var(--color-text-light)', margin: '2px 0 0', lineHeight: '1.4' }}
+                                              style={{ fontSize: '0.78rem', color: 'var(--color-text-light)', margin: '2px 0 0', lineHeight: '1.4', wordBreak: 'break-word' }}
                                             />
                                           ) : (
-                                            <div style={{ fontSize: '0.78rem', color: 'var(--color-text-light)', margin: '2px 0 0', lineHeight: '1.4', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                            <div 
+                                              className="task-comment-body"
+                                              style={{ fontSize: '0.78rem', color: 'var(--color-text-light)', margin: '2px 0 0', lineHeight: '1.4', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                                            >
                                               {renderCommentContent(comment.content)}
                                             </div>
                                           )}
@@ -3808,8 +3725,20 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                                 const isImg = name.match(/\.(jpg|jpeg|png|gif|webp|svg)/i);
                                                 if (isImg) {
                                                   return (
-                                                    <a key={aIdx} href={href} target="_blank" rel="noopener noreferrer" style={{ display: 'block', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--color-border-light)' }}>
-                                                      <img src={href} alt={name} style={{ maxHeight: '60px', maxWidth: '100px', objectFit: 'contain' }} />
+                                                    <a 
+                                                      key={aIdx} 
+                                                      href={href} 
+                                                      onClick={(e) => {
+                                                        e.preventDefault();
+                                                        setLightboxState({
+                                                          isOpen: true,
+                                                          items: [{ url: href, name: name, type: 'image' }],
+                                                          initialIndex: 0
+                                                        });
+                                                      }}
+                                                      style={{ display: 'block', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--color-border-light)', cursor: 'zoom-in' }}
+                                                    >
+                                                      <img src={href} alt={name} style={{ maxHeight: '70px', maxWidth: '120px', objectFit: 'contain', background: 'rgba(0,0,0,0.02)' }} />
                                                     </a>
                                                   );
                                                 }
@@ -3836,6 +3765,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                     <MentionInput
                                       value={newSubtaskCommentText}
                                       onChange={e => setNewSubtaskCommentText(e.target.value)}
+                                      users={users}
                                       onImagePaste={addLocalSubtaskCommentAttachment}
                                       onFilePaste={addLocalSubtaskCommentAttachment}
                                       placeholder={t('Viết bình luận việc con... (Dán ảnh Ctrl+V)')}
@@ -4610,6 +4540,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                         <MentionInput
                           value={newCommentText}
                           onChange={e => setNewCommentText(e.target.value)}
+                          users={users}
                           onImagePaste={addLocalTaskCommentAttachment}
                           onFilePaste={addLocalTaskCommentAttachment}
                           placeholder={t('Viết bình luận... (Dán ảnh trực tiếp Ctrl+V)')}
@@ -4689,6 +4620,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                               <div 
                                 key={comment.id} 
                                 id={`workspace-comment-${comment.id}`}
+                                onClick={handleImageClick}
                                 style={{ 
                                   display: 'flex', 
                                   gap: '12px', 
@@ -4710,12 +4642,15 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                   </div>
                                   {comment.content && /<[a-z][\s\S]*>/i.test(comment.content) ? (
                                     <div 
-                                      className="rich-text-editor-content"
+                                      className="rich-text-editor-content task-comment-body"
                                       dangerouslySetInnerHTML={{ __html: linkifyHtml(comment.content) }}
-                                      style={{ fontSize: isReply ? '0.78rem' : '0.825rem', color: 'var(--color-text-light)', margin: '6px 0 0', lineHeight: '1.45' }}
+                                      style={{ fontSize: isReply ? '0.78rem' : '0.825rem', color: 'var(--color-text-light)', margin: '6px 0 0', lineHeight: '1.45', wordBreak: 'break-word' }}
                                     />
                                   ) : (
-                                    <div style={{ fontSize: isReply ? '0.78rem' : '0.825rem', color: 'var(--color-text-light)', margin: '6px 0 0', lineHeight: '1.45', whiteSpace: 'pre-wrap' }}>
+                                    <div 
+                                      className="task-comment-body"
+                                      style={{ fontSize: isReply ? '0.78rem' : '0.825rem', color: 'var(--color-text-light)', margin: '6px 0 0', lineHeight: '1.45', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                                    >
                                       {renderCommentContent(comment.content)}
                                     </div>
                                   )}
@@ -4738,7 +4673,17 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                         if (isImage) {
                                           return (
                                             <div key={aIdx} style={{ marginTop: '4px', display: 'inline-block' }}>
-                                              <a href={href} target="_blank" rel="noreferrer">
+                                              <a 
+                                                href={href} 
+                                                onClick={(e) => {
+                                                  e.preventDefault();
+                                                  setLightboxState({
+                                                    isOpen: true,
+                                                    items: [{ url: href, name: name, type: 'image' }],
+                                                    initialIndex: 0
+                                                  });
+                                                }}
+                                              >
                                                 <img 
                                                   src={href} 
                                                   alt={name} 
@@ -4747,7 +4692,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                                     maxHeight: '160px', 
                                                     borderRadius: '8px', 
                                                     border: '1px solid var(--color-border-light)', 
-                                                    objectFit: 'cover',
+                                                    objectFit: 'contain',
+                                                    background: 'rgba(0, 0, 0, 0.02)',
                                                     cursor: 'zoom-in',
                                                     boxShadow: 'var(--shadow-sm)'
                                                   }} 
@@ -6548,39 +6494,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                 </div>
               )}
             </div>
-            {/* Nút xóa công việc ở dưới cùng */}
-            {canDelete && (
-              <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end' }}>
-                <button
-                  onClick={handleDeleteTask}
-                  style={{
-                    border: 'none',
-                    background: 'transparent',
-                    color: 'var(--color-danger)',
-                    fontSize: '0.78rem',
-                    fontWeight: 500,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    cursor: 'pointer',
-                    padding: '4px 8px',
-                    borderRadius: '6px',
-                    transition: 'all 0.15s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.textDecoration = 'underline';
-                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.04)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.textDecoration = 'none';
-                    e.currentTarget.style.background = 'transparent';
-                  }}
-                >
-                  <Trash2 size={13} />
-                  {t('Xóa công việc')}
-                </button>
-              </div>
-            )}
+
 
             {/* Bottom Spacer to prevent content from being flush against the bottom */}
             <div style={{ height: '5rem', flexShrink: 0 }} />

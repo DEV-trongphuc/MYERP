@@ -105,9 +105,17 @@ export const ExpensesPage: React.FC = () => {
   const [period, setPeriod] = useState<Period>(urlStatus ? 'all' : (location.state?.period || 'all'));
   const [dateRange, setDateRange] = useState<DateRange>(urlStatus ? getDateRange('all') : (location.state?.dateRange || getDateRange('all')));
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [catFilter, setCatFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState(urlStatus);
   const [creatorFilter, setCreatorFilter] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search.trim());
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   useEffect(() => {
     const s = searchParams.get('status');
@@ -269,7 +277,7 @@ export const ExpensesPage: React.FC = () => {
         to: dateRange.to, 
         status: statusFilter,
         category: catFilter,
-        search: search,
+        search: debouncedSearch,
         created_by: creatorFilter
       };
       const r = await api.get('/expenses', { params });
@@ -284,7 +292,7 @@ export const ExpensesPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, dateRange, statusFilter, catFilter, creatorFilter, search]);
+  }, [page, dateRange, statusFilter, catFilter, creatorFilter, debouncedSearch]);
 
   // Fetch users & contacts for dropdowns
   useEffect(() => {
@@ -1600,8 +1608,16 @@ export const ExpensesPage: React.FC = () => {
       <div className="card" style={{ padding: isMobile ? '8px 10px' : '0.875rem 1.25rem', marginBottom: '1rem', display: 'flex', gap: isMobile ? '8px' : '0.75rem', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
         <div className="filter-search" style={{ flex: 1, minWidth: 0 }}>
           <Search size={15} style={{ color: 'var(--color-text-muted)' }} />
-          <input placeholder="Tìm theo nội dung, người nhập..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
-          {search && <button onClick={() => setSearch('')}><X size={13} /></button>}
+          <input 
+            placeholder="Tìm theo #ID, nội dung, người nhập, NCC..." 
+            value={search} 
+            onChange={e => { setSearch(e.target.value); setPage(1); }} 
+          />
+          {search && (
+            <button onClick={() => { setSearch(''); setDebouncedSearch(''); setPage(1); }}>
+              <X size={13} />
+            </button>
+          )}
         </div>
 
         {isMobile ? (
@@ -1816,7 +1832,23 @@ export const ExpensesPage: React.FC = () => {
                     >
                       <td style={{ minWidth: 340 }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          <div style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--color-text)' }}>{exp.title}</div>
+                          <div style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              padding: '1px 6px',
+                              borderRadius: '5px',
+                              background: 'var(--color-bg-secondary, #f1f5f9)',
+                              border: '1px solid var(--color-border)',
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              color: 'var(--color-text-muted)',
+                              lineHeight: '1.2'
+                            }}>
+                              #{exp.id}
+                            </span>
+                            <span>{exp.title}</span>
+                          </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: 'var(--radius-full)', background: `${catInfo.color}12`, fontSize: '0.75rem', fontWeight: 600, color: catInfo.color }}>
                               <CatIcon size={10} color={catInfo.color} /> {exp.category}
@@ -3681,6 +3713,7 @@ export const ExpensesPage: React.FC = () => {
                             loadingComments={loadingComments}
                             loadingHistory={loadingHistory}
                             currentUser={user}
+                            users={users}
                             onAddComment={async (text, fileAttachments) => {
                               if ((!text.trim() && (!fileAttachments || fileAttachments.length === 0)) || !viewItem) return;
                               await api.post(`/expenses/${viewItem.id}/comments`, {

@@ -19,6 +19,7 @@ interface User {
 interface MentionInputProps {
   value: string;
   onChange: (e: any) => void;
+  onBlur?: () => void;
   users?: User[];
   onImagePaste?: (file: File) => void;
   onFilePaste?: (file: File) => void;
@@ -32,6 +33,7 @@ interface MentionInputProps {
 export const MentionInput: React.FC<MentionInputProps> = ({ 
   value, 
   onChange, 
+  onBlur,
   users: propUsers, 
   onImagePaste, 
   onFilePaste, 
@@ -106,18 +108,6 @@ export const MentionInput: React.FC<MentionInputProps> = ({
   }, [showDropdown]);
 
   useEffect(() => {
-    if (!showDropdown) return;
-    const handleScroll = (e: Event) => {
-      if (dropdownRef.current && dropdownRef.current.contains(e.target as Node)) {
-        return;
-      }
-      setShowDropdown(false);
-    };
-    window.addEventListener('scroll', handleScroll, true);
-    return () => window.removeEventListener('scroll', handleScroll, true);
-  }, [showDropdown]);
-
-  useEffect(() => {
     setSelectedIndex(0);
   }, [searchQuery, showDropdown]);
 
@@ -144,72 +134,127 @@ export const MentionInput: React.FC<MentionInputProps> = ({
     }
   }, [value]);
 
+  const checkMentionTrigger = () => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || !editorRef.current) {
+      setShowDropdown(false);
+      return;
+    }
+    const range = selection.getRangeAt(0);
+    if (!editorRef.current.contains(range.commonAncestorContainer)) {
+      setShowDropdown(false);
+      return;
+    }
+
+    let node: Node = range.startContainer;
+    let offset = range.startOffset;
+
+    // Handle when selection is in an Element node
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      const el = node as HTMLElement;
+      if (offset > 0 && el.childNodes.length >= offset) {
+        const prevChild = el.childNodes[offset - 1];
+        if (prevChild.nodeType === Node.TEXT_NODE) {
+          node = prevChild;
+          offset = (prevChild.textContent || '').length;
+        } else if (prevChild.lastChild && prevChild.lastChild.nodeType === Node.TEXT_NODE) {
+          node = prevChild.lastChild;
+          offset = (node.textContent || '').length;
+        }
+      } else if (el.firstChild && el.firstChild.nodeType === Node.TEXT_NODE) {
+        node = el.firstChild;
+        offset = 0;
+      }
+    }
+
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent || '';
+      const textBeforeCursor = text.slice(0, offset);
+
+      const match = textBeforeCursor.match(/@([^\s@]*)$/);
+      if (match) {
+        const query = match[1];
+        setSearchQuery(query.toLowerCase());
+        setShowDropdown(true);
+
+        const atIndex = textBeforeCursor.lastIndexOf('@');
+        mentionRangeRef.current = {
+          node,
+          startOffset: atIndex,
+          endOffset: offset
+        };
+
+        try {
+          // Measure the exact position of the '@' character
+          const atRange = document.createRange();
+          atRange.setStart(node, atIndex);
+          atRange.setEnd(node, Math.min(offset, atIndex + 1));
+          const atRect = atRange.getBoundingClientRect();
+          const fallbackRect = editorRef.current?.getBoundingClientRect();
+          const useRect = (atRect && atRect.bottom > 0 && atRect.left > 0) ? atRect : fallbackRect;
+
+          if (useRect) {
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+            const dropdownWidth = 280;
+            const dropdownHeight = 240;
+
+            const spaceBelow = viewportHeight - useRect.bottom;
+            const shouldOpenUpwards = spaceBelow < dropdownHeight && useRect.top > dropdownHeight;
+
+            let left = useRect.left;
+            if (left + dropdownWidth > viewportWidth - 16) {
+              left = Math.max(16, viewportWidth - dropdownWidth - 16);
+            }
+            if (left < 16) left = 16;
+
+            setDropdownPos({
+              top: shouldOpenUpwards ? undefined : Math.min(useRect.bottom + 4, viewportHeight - dropdownHeight - 10),
+              bottom: shouldOpenUpwards ? Math.max(10, viewportHeight - useRect.top + 4) : undefined,
+              left: left,
+              upwards: shouldOpenUpwards
+            });
+          }
+        } catch (err) {
+          setDropdownPos(null);
+        }
+        return;
+      }
+    }
+
+    setShowDropdown(false);
+  };
+
+  useEffect(() => {
+    if (!showDropdown) return;
+    const handleScroll = (e: Event) => {
+      const target = e.target as Node;
+      if (dropdownRef.current && dropdownRef.current.contains(target)) {
+        return;
+      }
+      if (editorRef.current && editorRef.current.contains(target)) {
+        return;
+      }
+      checkMentionTrigger();
+    };
+    window.addEventListener('scroll', handleScroll, true);
+    return () => window.removeEventListener('scroll', handleScroll, true);
+  }, [showDropdown]);
+
   const handleInput = () => {
     if (editorRef.current) {
       const html = editorRef.current.innerHTML;
       onChange({ target: { value: html } } as any);
       checkEmpty();
+      checkMentionTrigger();
     }
   };
 
   const handleKeyUp = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    const selection = window.getSelection();
-    if (selection && selection.rangeCount > 0) {
-      const range = selection.getRangeAt(0);
-      const node = range.startContainer;
-      
-      if (node.nodeType === Node.TEXT_NODE) {
-        const text = node.textContent || '';
-        const offset = range.startOffset;
-        const textBeforeCursor = text.slice(0, offset);
-        
-        const match = textBeforeCursor.match(/@([^\s]*)$/);
-        if (match) {
-          setSearchQuery(match[1].toLowerCase());
-          setShowDropdown(true);
-          mentionRangeRef.current = {
-            node,
-            startOffset: offset - match[0].length,
-            endOffset: offset
-          };
-          
-          try {
-            const rect = range.getBoundingClientRect();
-            const fallbackRect = editorRef.current?.getBoundingClientRect();
-            const useRect = (rect && rect.width > 0 && rect.bottom > 0) ? rect : fallbackRect;
-            
-            if (useRect) {
-              const viewportWidth = window.innerWidth;
-              const viewportHeight = window.innerHeight;
-              const dropdownWidth = 280;
-              const dropdownHeight = 260;
-
-              const spaceBelow = viewportHeight - useRect.bottom;
-              const shouldOpenUpwards = spaceBelow < dropdownHeight && useRect.top > dropdownHeight;
-
-              let left = useRect.left;
-              if (left + dropdownWidth > viewportWidth - 16) {
-                left = Math.max(16, viewportWidth - dropdownWidth - 16);
-              }
-              if (left < 16) left = 16;
-
-              setDropdownPos({
-                top: shouldOpenUpwards ? undefined : Math.min(useRect.bottom + 6, viewportHeight - dropdownHeight),
-                bottom: shouldOpenUpwards ? Math.max(12, viewportHeight - useRect.top + 6) : undefined,
-                left: left,
-                upwards: shouldOpenUpwards
-              });
-            }
-          } catch (err) {
-            setDropdownPos(null);
-          }
-        } else {
-          setShowDropdown(false);
-        }
-      } else {
-        setShowDropdown(false);
-      }
+    if (['ArrowDown', 'ArrowUp', 'Enter', 'Tab', 'Escape'].includes(e.key)) {
+      return;
     }
+    checkMentionTrigger();
   };
 
   const handleSelectUser = (user: User) => {
@@ -314,9 +359,11 @@ export const MentionInput: React.FC<MentionInputProps> = ({
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         setSelectedIndex(prev => (prev - 1 + filteredUsers.length) % filteredUsers.length);
-      } else if (e.key === 'Enter') {
+      } else if (e.key === 'Enter' || e.key === 'Tab') {
         e.preventDefault();
-        handleSelectUser(filteredUsers[selectedIndex]);
+        if (filteredUsers[selectedIndex]) {
+          handleSelectUser(filteredUsers[selectedIndex]);
+        }
       } else if (e.key === 'Escape') {
         e.preventDefault();
         setShowDropdown(false);
@@ -349,41 +396,48 @@ export const MentionInput: React.FC<MentionInputProps> = ({
     }
   };
 
-  const filteredUsers = users.filter(u => {
-    if (currentUser && u.id === currentUser.id) {
-      return false;
-    }
-    const name = u.full_name ? String(u.full_name).toLowerCase() : '';
-    const role = u.role ? String(u.role).toLowerCase() : '';
-    const username = (u as any).username ? String((u as any).username).toLowerCase() : '';
-    const email = (u as any).email ? String((u as any).email).toLowerCase() : '';
+  const filteredUsers = React.useMemo(() => {
     const cleanSearch = searchQuery.trim().toLowerCase();
     const noAccentSearch = removeAccents(cleanSearch);
-    const noAccentName = removeAccents(name);
-    const noAccentRole = removeAccents(role);
-    const noAccentUsername = removeAccents(username);
 
-    // Map common role names in Vietnamese
-    let viRole = role;
-    if (role === 'accountant') viRole = 'kế toán ke toan ke toan vien';
-    else if (role === 'admin' || role === 'superadmin' || role === 'super_admin') viRole = 'quản trị viên quan tri vien admin';
-    else if (role === 'director') viRole = 'giám đốc giam doc';
-    else if (role === 'manager') viRole = 'trưởng phòng truong phong quan ly';
-    else if (role === 'sale' || role === 'sales') viRole = 'kinh doanh tư vấn viên sale';
-    else if (role === 'hr') viRole = 'nhân sự nhan su hr';
+    const sortedUsers = [...users];
 
-    return (
-      name.includes(cleanSearch) ||
-      noAccentName.includes(noAccentSearch) ||
-      role.includes(cleanSearch) ||
-      noAccentRole.includes(noAccentSearch) ||
-      viRole.includes(cleanSearch) ||
-      viRole.includes(noAccentSearch) ||
-      username.includes(cleanSearch) ||
-      noAccentUsername.includes(noAccentSearch) ||
-      email.includes(cleanSearch)
-    );
-  });
+    if (!cleanSearch) {
+      return sortedUsers;
+    }
+
+    return sortedUsers.filter(u => {
+      if (!u || !u.id) return false;
+      const name = u.full_name ? String(u.full_name).toLowerCase() : '';
+      const role = u.role ? String(u.role).toLowerCase() : '';
+      const username = (u as any).username ? String((u as any).username).toLowerCase() : '';
+      const email = (u as any).email ? String((u as any).email).toLowerCase() : '';
+      const noAccentName = removeAccents(name);
+      const noAccentRole = removeAccents(role);
+      const noAccentUsername = removeAccents(username);
+
+      // Map common role names in Vietnamese
+      let viRole = role;
+      if (role === 'accountant') viRole = 'kế toán ke toan ke toan vien';
+      else if (role === 'admin' || role === 'superadmin' || role === 'super_admin') viRole = 'quản trị viên quan tri vien admin';
+      else if (role === 'director') viRole = 'giám đốc giam doc';
+      else if (role === 'manager') viRole = 'trưởng phòng truong phong quan ly';
+      else if (role === 'sale' || role === 'sales') viRole = 'kinh doanh tư vấn viên sale';
+      else if (role === 'hr') viRole = 'nhân sự nhan su hr';
+
+      return (
+        name.includes(cleanSearch) ||
+        noAccentName.includes(noAccentSearch) ||
+        role.includes(cleanSearch) ||
+        noAccentRole.includes(noAccentSearch) ||
+        viRole.includes(cleanSearch) ||
+        viRole.includes(noAccentSearch) ||
+        username.includes(cleanSearch) ||
+        noAccentUsername.includes(noAccentSearch) ||
+        email.includes(cleanSearch)
+      );
+    });
+  }, [users, searchQuery]);
 
   const formatFileSize = (bytes?: number) => {
     if (!bytes) return '';
@@ -435,7 +489,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
             const img = document.createElement('img');
             img.src = resolvedUrl;
             img.alt = file.name;
-            img.style.maxWidth = '100%';
+            img.style.maxWidth = 'min(360px, 100%)';
             img.style.maxHeight = '220px';
             img.style.width = 'auto';
             img.style.height = 'auto';
@@ -443,6 +497,10 @@ export const MentionInput: React.FC<MentionInputProps> = ({
             img.style.borderRadius = '8px';
             img.style.margin = '6px 0';
             img.style.display = 'block';
+            img.style.cursor = 'zoom-in';
+            img.style.border = '1px solid var(--color-border-light, #e2e8f0)';
+            img.style.backgroundColor = 'rgba(0, 0, 0, 0.02)';
+            img.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.06)';
             nodeToInsert = img;
           } else {
             const chip = document.createElement('a');
@@ -725,15 +783,19 @@ export const MentionInput: React.FC<MentionInputProps> = ({
         style={{ 
           display: 'flex', 
           alignItems: 'center', 
-          gap: '2px', 
+          gap: '3px', 
           padding: '4px 6px', 
           background: 'var(--color-bg, #f9fafb)', 
           borderBottom: '1px solid var(--color-border)',
-          flexWrap: 'wrap',
+          flexWrap: 'nowrap',
+          overflowX: 'auto',
+          scrollbarWidth: 'none',
+          WebkitOverflowScrolling: 'touch',
           userSelect: 'none',
           borderTopLeftRadius: '9px',
           borderTopRightRadius: '9px'
         }}
+        className="custom-scrollbar-hidden"
       >
         <button
           type="button"
@@ -858,6 +920,9 @@ export const MentionInput: React.FC<MentionInputProps> = ({
           onBlur={() => {
             isFocusedRef.current = false;
             handleInput();
+            if (onBlur) {
+              onBlur();
+            }
           }}
           style={editorStyle}
           className="rich-text-editor-content"
@@ -885,41 +950,41 @@ export const MentionInput: React.FC<MentionInputProps> = ({
                 boxShadow: '0 12px 36px rgba(0, 0, 0, 0.22), 0 4px 12px rgba(0, 0, 0, 0.1)',
                 maxHeight: '260px',
                 width: '280px',
-                zIndex: 9999999,
+                zIndex: 2147483647,
                 display: 'flex',
                 flexDirection: 'column',
                 overflow: 'hidden'
               }}
             >
-              {/* Search input header */}
+              {/* Mention header */}
               <div 
                 style={{ 
-                  padding: '8px 10px', 
+                  padding: '7px 12px', 
                   borderBottom: '1px solid var(--color-border-light, #e2e8f0)',
                   background: 'var(--color-bg-light, #f8fafc)',
                   position: 'sticky',
                   top: 0,
-                  zIndex: 10
+                  zIndex: 10,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  userSelect: 'none'
                 }}
                 onClick={e => e.stopPropagation()}
               >
-                <input
-                  type="text"
-                  placeholder="Gõ để tìm tên hoặc vai trò..."
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value.toLowerCase())}
-                  autoFocus
-                  style={{
-                    width: '100%',
-                    padding: '6px 10px',
-                    fontSize: '0.8rem',
-                    border: '1px solid var(--color-border, #cbd5e1)',
-                    borderRadius: '6px',
-                    outline: 'none',
-                    background: 'var(--color-surface, #ffffff)',
-                    color: 'var(--color-text, #1e293b)'
-                  }}
-                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                    Nhắc tên (@)
+                  </span>
+                  {searchQuery && (
+                    <span style={{ fontSize: '0.72rem', color: 'var(--color-primary)', fontWeight: 600 }}>
+                      "{searchQuery}"
+                    </span>
+                  )}
+                </div>
+                <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>
+                  ↑↓ • Enter
+                </span>
               </div>
 
               <div style={{ flex: 1, overflowY: 'auto', maxHeight: '200px' }}>

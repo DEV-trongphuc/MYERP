@@ -6305,96 +6305,98 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
                 {/* Top Right Actions */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-                  {/* Ô tìm kiếm chuyển lên trên cạnh Chế độ tập trung */}
-                  <div style={{ 
-                    position: 'relative', 
-                    width: isMobile ? '160px' : (isWsSearchFocused ? '400px' : '340px'),
-                    height: isMobile ? '32px' : '38px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    transition: 'width 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
-                    boxSizing: 'border-box'
-                  }}>
-                    <input
-                      type="text"
-                      className="ws-search-input"
-                      placeholder={t('Tìm theo tên, mô tả...')}
-                      value={wsSearch}
-                      onChange={e => setWsSearch(e.target.value)}
-                      onFocus={() => setIsWsSearchFocused(true)}
-                      onBlur={() => setIsWsSearchFocused(false)}
-                      style={{ 
-                        height: isMobile ? '32px' : '38px', 
-                        minHeight: isMobile ? '32px' : '38px',
-                        maxHeight: isMobile ? '32px' : '38px',
-                        lineHeight: isMobile ? '32px' : '38px',
-                        fontSize: '0.85rem', 
-                        padding: wsSearch ? '0 46px 0 14px' : '0 36px 0 14px', 
-                        borderRadius: '10px', 
-                        width: '100%',
-                        boxSizing: 'border-box',
-                        border: isWsSearchFocused 
-                          ? '1.5px solid var(--color-primary, #BD1D2D)' 
-                          : (wsBg ? '1px solid rgba(255, 255, 255, 0.4)' : '1px solid var(--color-border)'),
-                        background: wsBg 
-                          ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.1) 100%)' 
-                          : 'var(--color-surface)',
-                        color: wsBg ? '#ffffff' : 'var(--color-text)',
-                        textShadow: wsBg ? '0 1px 4px rgba(0,0,0,0.7)' : 'none',
-                        backdropFilter: wsBg ? 'blur(12px)' : 'none',
-                        WebkitBackdropFilter: wsBg ? 'blur(12px)' : 'none',
-                        boxShadow: wsBg ? '0 4px 16px rgba(0, 0, 0, 0.3)' : 'none',
-                        transition: 'all 0.2s ease',
-                        outline: 'none'
-                      }}
-                    />
-                    <Search 
-                      size={15} 
-                      style={{ 
-                        position: 'absolute', 
-                        right: wsSearch ? '28px' : '12px', 
-                        top: '50%', 
-                        transform: isWsSearchFocused 
-                          ? 'translateY(-50%) rotate(15deg) scale(1.15)' 
-                          : 'translateY(-50%) rotate(0deg) scale(1)', 
-                        color: wsBg ? '#ffffff' : 'var(--color-text-muted)', 
-                        pointerEvents: 'none',
-                        transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
-                        filter: wsBg ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none'
-                      }} 
-                    />
-                    {wsSearch && (
-                      <button
-                        type="button"
-                        onClick={() => setWsSearch('')}
-                        style={{
-                          position: 'absolute',
-                          right: '8px',
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                          background: 'none',
-                          border: 'none',
-                          padding: '2px',
-                          cursor: 'pointer',
-                          color: wsBg ? '#ffffff' : 'var(--color-text-muted)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          borderRadius: '50%',
-                          transition: 'transform 0.15s ease, color 0.15s ease'
+                  {/* Ô tìm kiếm chuyển lên trên cạnh Chế độ tập trung (Desktop only) */}
+                  {!isMobile && (
+                    <div style={{ 
+                      position: 'relative', 
+                      width: isWsSearchFocused ? '400px' : '340px',
+                      height: '38px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      transition: 'width 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+                      boxSizing: 'border-box'
+                    }}>
+                      <input
+                        type="text"
+                        className="ws-search-input"
+                        placeholder={t('Tìm theo tên, mô tả...')}
+                        value={wsSearch}
+                        onChange={e => setWsSearch(e.target.value)}
+                        onFocus={() => setIsWsSearchFocused(true)}
+                        onBlur={() => setIsWsSearchFocused(false)}
+                        style={{ 
+                          height: '38px', 
+                          minHeight: '38px',
+                          maxHeight: '38px',
+                          lineHeight: '38px',
+                          fontSize: '0.85rem', 
+                          padding: wsSearch ? '0 46px 0 14px' : '0 36px 0 14px', 
+                          borderRadius: '10px', 
+                          width: '100%',
+                          boxSizing: 'border-box',
+                          border: isWsSearchFocused 
+                            ? '1.5px solid var(--color-primary, #BD1D2D)' 
+                            : (wsBg ? '1px solid rgba(255, 255, 255, 0.4)' : '1px solid var(--color-border)'),
+                          background: wsBg 
+                            ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.1) 100%)' 
+                            : 'var(--color-surface)',
+                          color: wsBg ? '#ffffff' : 'var(--color-text)',
+                          textShadow: wsBg ? '0 1px 4px rgba(0,0,0,0.7)' : 'none',
+                          backdropFilter: wsBg ? 'blur(12px)' : 'none',
+                          WebkitBackdropFilter: wsBg ? 'blur(12px)' : 'none',
+                          boxShadow: wsBg ? '0 4px 16px rgba(0, 0, 0, 0.3)' : 'none',
+                          transition: 'all 0.2s ease',
+                          outline: 'none'
                         }}
-                        onMouseEnter={e => {
-                          e.currentTarget.style.color = 'var(--color-primary, #BD1D2D)';
-                          e.currentTarget.style.transform = 'translateY(-50%) scale(1.15)';
-                        }}
-                        onMouseLeave={e => {
-                          e.currentTarget.style.color = wsBg ? '#ffffff' : 'var(--color-text-muted)';
-                          e.currentTarget.style.transform = 'translateY(-50%) scale(1)';
-                        }}
-                      >
-                        <X size={14} />
-                      </button>
-                    )}
-                  </div>
+                      />
+                      <Search 
+                        size={15} 
+                        style={{ 
+                          position: 'absolute', 
+                          right: wsSearch ? '28px' : '12px', 
+                          top: '50%', 
+                          transform: isWsSearchFocused 
+                            ? 'translateY(-50%) rotate(15deg) scale(1.15)' 
+                            : 'translateY(-50%) rotate(0deg) scale(1)', 
+                          color: wsBg ? '#ffffff' : 'var(--color-text-muted)', 
+                          pointerEvents: 'none',
+                          transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+                          filter: wsBg ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none'
+                        }} 
+                      />
+                      {wsSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setWsSearch('')}
+                          style={{
+                            position: 'absolute',
+                            right: '8px',
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            background: 'none',
+                            border: 'none',
+                            padding: '2px',
+                            cursor: 'pointer',
+                            color: wsBg ? '#ffffff' : 'var(--color-text-muted)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            borderRadius: '50%',
+                            transition: 'transform 0.15s ease, color 0.15s ease'
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.color = 'var(--color-primary, #BD1D2D)';
+                            e.currentTarget.style.transform = 'translateY(-50%) scale(1.15)';
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.color = wsBg ? '#ffffff' : 'var(--color-text-muted)';
+                            e.currentTarget.style.transform = 'translateY(-50%) scale(1)';
+                          }}
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   {/* Nút Thống Kê Công Việc */}
                   <button
@@ -6519,6 +6521,86 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                   </button>
                 </div>
               </div>
+              
+              {/* Mobile Search Bar - Dedicated Full Width Row */}
+              {isMobile && (
+                <div style={{ 
+                  position: 'relative', 
+                  width: '100%',
+                  height: '36px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  boxSizing: 'border-box',
+                  marginTop: '4px'
+                }}>
+                  <input
+                    type="text"
+                    className="ws-search-input"
+                    placeholder={t('Tìm việc theo tên, mô tả...')}
+                    value={wsSearch}
+                    onChange={e => setWsSearch(e.target.value)}
+                    onFocus={() => setIsWsSearchFocused(true)}
+                    onBlur={() => setIsWsSearchFocused(false)}
+                    style={{ 
+                      height: '36px', 
+                      minHeight: '36px',
+                      maxHeight: '36px',
+                      lineHeight: '36px',
+                      fontSize: '0.825rem', 
+                      padding: wsSearch ? '0 44px 0 14px' : '0 34px 0 14px', 
+                      borderRadius: '10px', 
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      border: isWsSearchFocused 
+                        ? '1.5px solid var(--color-primary, #BD1D2D)' 
+                        : (wsBg ? '1px solid rgba(255, 255, 255, 0.4)' : '1px solid var(--color-border)'),
+                      background: wsBg 
+                        ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.1) 100%)' 
+                        : 'var(--color-surface)',
+                      color: wsBg ? '#ffffff' : 'var(--color-text)',
+                      textShadow: wsBg ? '0 1px 4px rgba(0,0,0,0.7)' : 'none',
+                      backdropFilter: wsBg ? 'blur(12px)' : 'none',
+                      WebkitBackdropFilter: wsBg ? 'blur(12px)' : 'none',
+                      boxShadow: wsBg ? '0 4px 16px rgba(0, 0, 0, 0.3)' : 'none',
+                      transition: 'all 0.2s ease',
+                      outline: 'none'
+                    }}
+                  />
+                  <Search 
+                    size={14} 
+                    style={{ 
+                      position: 'absolute', 
+                      right: wsSearch ? '28px' : '10px', 
+                      top: '50%', 
+                      transform: 'translateY(-50%)', 
+                      color: wsBg ? '#ffffff' : 'var(--color-text-muted)', 
+                      pointerEvents: 'none'
+                    }} 
+                  />
+                  {wsSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setWsSearch('')}
+                      style={{
+                        position: 'absolute',
+                        right: '8px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        padding: '2px',
+                        cursor: 'pointer',
+                        color: wsBg ? '#ffffff' : 'var(--color-text-muted)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        borderRadius: '50%'
+                      }}
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              )}
               
               {/* Row 2: Subtitle or Group Breadcrumb */}
               {((isAdminOrManager && wsTeamId && wsSubTab !== 'personal')) ? (
@@ -6849,9 +6931,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
             gap: '0.4rem',
             overflowX: 'auto',
             whiteSpace: 'nowrap',
+            WebkitOverflowScrolling: 'touch',
             flex: isMobile ? 'none' : '0 1 auto',
-            paddingBottom: isMobile ? '2px' : '0',
-            maxWidth: isMobile ? '100%' : 'calc(100% - 280px)'
+            paddingBottom: isMobile ? '4px' : '0',
+            maxWidth: isMobile ? '100%' : 'calc(100% - 280px)',
+            width: isMobile ? '100%' : 'auto'
           }} className="custom-scrollbar-hidden">
             {/* Tất cả Pill */}
             <div 

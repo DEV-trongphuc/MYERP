@@ -170,8 +170,9 @@ export function isItemAtMyStepToApprove(item: any, user: any, usersByNameMap?: M
     if (app1 || appName1) {
       return isUserMatch(app1, appName1);
     }
-    // Fallback nếu không chỉ định người duyệt cấp 1: các vai trò quản lý có thể duyệt
-    return ['manager', 'director', 'superadmin', 'super_admin', 'admin'].includes(currentRole) || isExecutive(user);
+    // Fallback nếu không chỉ định người duyệt cấp 1: vai trò quản lý trực tiếp duyệt, Director chỉ xem trừ khi được chỉ định đích danh
+    if (currentRole === 'director') return false;
+    return ['manager', 'superadmin', 'super_admin', 'admin'].includes(currentRole) || isExecutive(user);
   }
 
   // 2. Cấp 1 đã duyệt -> Chờ duyệt Cấp 2
@@ -210,6 +211,7 @@ export function isItemAtMyStepToApprove(item: any, user: any, usersByNameMap?: M
   if (app1 || appName1) {
     return isUserMatch(app1, appName1);
   }
+  if (currentRole === 'director') return false;
   return isExecutive(user);
 }
 

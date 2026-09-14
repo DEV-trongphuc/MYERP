@@ -55,6 +55,24 @@ class PurchaseOrderController {
             }
         }
 
+        $search = trim($_GET['search'] ?? '');
+        if ($search !== '') {
+            $where[] = "(
+                po.po_number LIKE ? 
+                OR po.notes LIKE ? 
+                OR CAST(po.id AS CHAR) = ? 
+                OR EXISTS (SELECT 1 FROM suppliers s_s WHERE s_s.id = po.supplier_id AND s_s.name LIKE ?)
+                OR EXISTS (SELECT 1 FROM users u_s WHERE u_s.id = po.created_by AND u_s.full_name LIKE ?)
+            )";
+            $searchWildcard = "%{$search}%";
+            $cleanSearchId = preg_replace('/[^0-9]/', '', $search);
+            $params[] = $searchWildcard;
+            $params[] = $searchWildcard;
+            $params[] = $cleanSearchId !== '' ? $cleanSearchId : $search;
+            $params[] = $searchWildcard;
+            $params[] = $searchWildcard;
+        }
+
         $whereClause = implode(' AND ', $where);
 
         $simple = ($_GET['simple'] ?? '') === '1';
