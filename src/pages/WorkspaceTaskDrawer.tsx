@@ -4499,7 +4499,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                 {activeTab === 'comments' ? (
                   <>
                     {/* Add comment input */}
-                    <div style={{ background: 'rgba(0, 0, 0, 0.015)', border: '1px solid var(--color-border-light)', padding: '12px', borderRadius: '14px', display: 'flex', flexDirection: 'column', gap: '10px', boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.01)' }}>
+                    <div className="workspace-task-comment-input-box" style={{ background: 'rgba(0, 0, 0, 0.015)', border: '1px solid var(--color-border-light)', padding: '12px', borderRadius: '14px', display: 'flex', flexDirection: 'column', gap: '10px', boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.01)' }}>
                       {replyTo && (
                         <div style={{ 
                           display: 'flex', 
@@ -4718,53 +4718,65 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                     const isCommentAuthor = currentUser?.id && String(currentUser.id) === String(comment.user_id);
                                     const canDeleteComment = isCurrentUserAdmin || isCommentAuthor;
 
-                                    if (!isReply || canDeleteComment) {
-                                      return (
-                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '6px', alignItems: 'center' }}>
-                                          {canDeleteComment && (
-                                            <button
-                                              onClick={() => setCommentToDelete(comment.id)}
-                                              style={{ 
-                                                background: 'none', 
-                                                border: 'none', 
-                                                color: 'var(--color-danger, #ef4444)', 
-                                                cursor: 'pointer', 
-                                                display: 'inline-flex', 
-                                                alignItems: 'center', 
-                                                padding: '4px' 
-                                              }}
-                                              className="hover-scale"
-                                              title={t('Xóa bình luận')}
-                                            >
-                                              <Trash2 size={12} />
-                                            </button>
-                                          )}
-                                          {!isReply && (
-                                            <button
-                                              onClick={() => setReplyTo({ id: comment.id, userName: commUser?.full_name || comment.user_name || 'Đồng nghiệp', avatar: comment.avatar_url || commUser?.avatar || commUser?.avatar_url })}
-                                              style={{ 
-                                                background: 'rgba(163, 20, 34, 0.05)', 
-                                                border: 'none', 
-                                                color: 'var(--color-primary)', 
-                                                fontSize: '0.7rem', 
-                                                padding: '4px 10px', 
-                                                borderRadius: '12px',
-                                                cursor: 'pointer', 
-                                                fontWeight: 700, 
-                                                display: 'flex', 
-                                                alignItems: 'center', 
-                                                gap: '4px' 
-                                              }}
-                                              className="hover-scale"
-                                            >
-                                              <MessageSquare size={11} />
-                                              <span>Phản hồi</span>
-                                            </button>
-                                          )}
-                                        </div>
-                                      );
-                                    }
-                                    return null;
+                                    return (
+                                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '6px', alignItems: 'center' }}>
+                                        {canDeleteComment && (
+                                          <button
+                                            onClick={() => setCommentToDelete(comment.id)}
+                                            style={{ 
+                                              background: 'none', 
+                                              border: 'none', 
+                                              color: 'var(--color-danger, #ef4444)', 
+                                              cursor: 'pointer', 
+                                              display: 'inline-flex', 
+                                              alignItems: 'center', 
+                                              padding: '4px' 
+                                            }}
+                                            className="hover-scale"
+                                            title={t('Xóa bình luận')}
+                                          >
+                                            <Trash2 size={12} />
+                                          </button>
+                                        )}
+                                        <button
+                                          onClick={() => {
+                                            const targetName = commUser?.full_name || comment.user_name || 'Đồng nghiệp';
+                                            const parentId = isReply ? (comment.parent_id || comment.id) : comment.id;
+                                            setReplyTo({ 
+                                              id: parentId, 
+                                              userName: targetName, 
+                                              avatar: comment.avatar_url || commUser?.avatar || commUser?.avatar_url 
+                                            });
+                                            if (targetName) {
+                                              const mentionTag = `<span class="mention" data-user-id="${comment.user_id || commUser?.id || ''}" contenteditable="false" style="color: #2563eb; font-weight: 700; background: rgba(37, 99, 235, 0.1); padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; margin: 0 2px;">@${targetName}</span>&nbsp;`;
+                                              setNewCommentText(prev => {
+                                                if (!prev || prev === '<p><br></p>' || prev.trim() === '') return `<p>${mentionTag}</p>`;
+                                                return prev.endsWith('</p>') ? prev.replace(/<\/p>$/, ` ${mentionTag}</p>`) : `${prev} ${mentionTag}`;
+                                              });
+                                            }
+                                            const inputEl = document.querySelector('.workspace-task-comment-input-box');
+                                            if (inputEl) inputEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                          }}
+                                          style={{ 
+                                            background: isReply ? 'rgba(37, 99, 235, 0.06)' : 'rgba(163, 20, 34, 0.05)', 
+                                            border: 'none', 
+                                            color: isReply ? '#2563eb' : 'var(--color-primary)', 
+                                            fontSize: '0.7rem', 
+                                            padding: '4px 10px', 
+                                            borderRadius: '12px', 
+                                            cursor: 'pointer', 
+                                            fontWeight: 700, 
+                                            display: 'flex', 
+                                            alignItems: 'center', 
+                                            gap: '4px' 
+                                          }}
+                                          className="hover-scale"
+                                        >
+                                          <MessageSquare size={11} />
+                                          <span>{t('Phản hồi')}</span>
+                                        </button>
+                                      </div>
+                                    );
                                   })()}
                                 </div>
                               </div>

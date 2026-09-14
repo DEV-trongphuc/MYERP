@@ -5,7 +5,7 @@ import api from '../../api/axios';
 import { useAuth } from '../../contexts/AuthContext';
 import { Avatar } from './Avatar';
 import { toast } from 'react-hot-toast';
-import { Bold, Italic, Underline as UnderlineIcon, Link2, ImageIcon, Paperclip, List, ListOrdered, Trash2, Smile } from 'lucide-react';
+import { Bold, Italic, Underline as UnderlineIcon, Link2, ImageIcon, Paperclip, List, ListOrdered, Trash2, Smile, Search, X } from 'lucide-react';
 import { StickerPickerModal } from './StickerPickerModal';
 
 interface User {
@@ -14,6 +14,8 @@ interface User {
   role: string;
   avatar_url?: string;
   avatar?: string;
+  email?: string;
+  username?: string;
 }
 
 interface MentionInputProps {
@@ -949,7 +951,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
                 borderRadius: '10px',
                 boxShadow: '0 12px 36px rgba(0, 0, 0, 0.22), 0 4px 12px rgba(0, 0, 0, 0.1)',
                 maxHeight: '260px',
-                width: '280px',
+                width: '310px',
                 zIndex: 2147483647,
                 display: 'flex',
                 flexDirection: 'column',
@@ -959,35 +961,77 @@ export const MentionInput: React.FC<MentionInputProps> = ({
               {/* Mention header */}
               <div 
                 style={{ 
-                  padding: '7px 12px', 
+                  padding: '6px 10px', 
                   borderBottom: '1px solid var(--color-border-light, #e2e8f0)',
                   background: 'var(--color-bg-light, #f8fafc)',
-                  position: 'sticky',
-                  top: 0,
-                  zIndex: 10,
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'space-between',
-                  userSelect: 'none'
+                  gap: '6px'
                 }}
                 onClick={e => e.stopPropagation()}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                    Nhắc tên (@)
+                <Search size={13} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setSelectedIndex(0);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      setSelectedIndex(prev => (prev + 1) % (filteredUsers.length || 1));
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setSelectedIndex(prev => (prev - 1 + (filteredUsers.length || 1)) % (filteredUsers.length || 1));
+                    } else if (e.key === 'Enter') {
+                      e.preventDefault();
+                      if (filteredUsers[selectedIndex]) {
+                        handleSelectUser(filteredUsers[selectedIndex]);
+                      }
+                    } else if (e.key === 'Escape') {
+                      setShowDropdown(false);
+                    }
+                  }}
+                  placeholder="Tìm theo tên hoặc email..."
+                  style={{
+                    border: 'none',
+                    outline: 'none',
+                    background: 'transparent',
+                    fontSize: '0.78rem',
+                    color: 'var(--color-text)',
+                    width: '100%',
+                    padding: '2px 0'
+                  }}
+                />
+                {searchQuery ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setSelectedIndex(0);
+                    }}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      color: 'var(--color-text-muted)',
+                      cursor: 'pointer',
+                      padding: 0,
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <X size={12} />
+                  </button>
+                ) : (
+                  <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
+                    ↑↓ • Enter
                   </span>
-                  {searchQuery && (
-                    <span style={{ fontSize: '0.72rem', color: 'var(--color-primary)', fontWeight: 600 }}>
-                      "{searchQuery}"
-                    </span>
-                  )}
-                </div>
-                <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>
-                  ↑↓ • Enter
-                </span>
+                )}
               </div>
 
-              <div style={{ flex: 1, overflowY: 'auto', maxHeight: '200px' }}>
+              <div style={{ flex: 1, overflowY: 'auto', maxHeight: '220px' }}>
                 {filteredUsers.length === 0 ? (
                   <div style={{ padding: '16px', fontSize: '0.8rem', color: 'var(--color-text-muted)', textAlign: 'center' }}>
                     Không tìm thấy kết quả
@@ -1017,11 +1061,16 @@ export const MentionInput: React.FC<MentionInputProps> = ({
                         }}
                         onMouseEnter={() => setSelectedIndex(idx)}
                       >
-                        <Avatar name={fullName} src={u.avatar_url || u.avatar} size={22} />
+                        <Avatar name={fullName} src={u.avatar_url || u.avatar} size={24} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: '0.82rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {fullName}
                           </div>
+                          {((u as any).email || (u as any).username) && (
+                            <div style={{ fontSize: '0.675rem', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '1px' }}>
+                              {(u as any).email || `@${(u as any).username}`}
+                            </div>
+                          )}
                         </div>
                         <div style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', background: 'var(--color-bg-light, #f1f5f9)', padding: '2px 6px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
                           {getRoleLabel(roleName)}

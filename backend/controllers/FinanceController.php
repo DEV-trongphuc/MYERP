@@ -741,7 +741,6 @@ class FinanceController
                 e.title LIKE ? 
                 OR e.title LIKE ? 
                 OR e.notes LIKE ? 
-                OR e.recipient_name LIKE ? 
                 OR e.vendor_name LIKE ? 
                 OR e.category LIKE ? 
                 OR CAST(e.id AS CHAR) = ? 
@@ -751,7 +750,6 @@ class FinanceController
             )";
             $params[] = $searchWildcard;
             $params[] = $cleanWildcard;
-            $params[] = $searchWildcard;
             $params[] = $searchWildcard;
             $params[] = $searchWildcard;
             $params[] = $searchWildcard;

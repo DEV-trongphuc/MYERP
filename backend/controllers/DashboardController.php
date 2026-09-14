@@ -654,12 +654,32 @@ class DashboardController {
         }
 
         // 1. Workspace Undone Tasks (Personal undone tasks on Workspace)
-        $taskWhere = "tenant_id = ? AND deleted_at IS NULL AND status NOT IN ('done', 'completed', 'cancelled') AND type IN ('task', 'meeting') AND (user_id = ? OR created_by = ? OR approver_id = ? OR FIND_IN_SET(?, participant_ids))";
+        $taskWhere = "a.tenant_id = ? AND a.deleted_at IS NULL AND a.status NOT IN ('done', 'completed', 'cancelled') AND (a.progress < 100 OR a.progress IS NULL) AND a.type IN ('task', 'meeting') AND (a.user_id = ? OR a.created_by = ? OR a.approver_id = ? OR FIND_IN_SET(?, a.participant_ids))";
         $taskParams = [$tid, $uid, $uid, $uid, (string)$uid];
 
-        $stmtTasks = $this->db->prepare("SELECT COUNT(1) FROM activities WHERE $taskWhere");
+        $stmtTasks = $this->db->prepare("SELECT a.id, a.body, a.progress FROM activities a WHERE $taskWhere");
         $stmtTasks->execute($taskParams);
-        $tasksCount = (int)$stmtTasks->fetchColumn();
+        $rawTasks = $stmtTasks->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $tasksCount = 0;
+        foreach ($rawTasks as $rt) {
+            if ((int)($rt['progress'] ?? 0) >= 100) continue;
+            $bStr = $rt['body'] ?? '';
+            if ($bStr && (strpos($bStr, 'checklist') !== false || strpos($bStr, 'erp_task') !== false)) {
+                $decoded = json_decode($bStr, true);
+                $chk = $decoded['erp_task']['checklist'] ?? $decoded['checklist'] ?? [];
+                if (!empty($chk) && is_array($chk)) {
+                    $allChecked = true;
+                    foreach ($chk as $c) {
+                        if (empty($c['checked']) && empty($c['is_done'])) {
+                            $allChecked = false;
+                            break;
+                        }
+                    }
+                    if ($allChecked) continue;
+                }
+            }
+            $tasksCount++;
+        }
 
         // 2. Pending Approvals (Leaves + Advances + Expenses + Checkins + Bulks)
         // Only count: (Đơn đang tới lượt tôi duyệt) + (Đơn do tôi tạo nhưng đang chờ duyệt)
