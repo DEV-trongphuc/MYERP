@@ -43,9 +43,9 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
           }} 
         />
         <picture>
-          <source srcSet="/ideas_bot_kling.webp?v=20260915_perfect" type="image/webp" />
+          <source srcSet="/ideas_bot_kling.webp?v=20260915_v3_clean" type="image/webp" />
           <img 
-            src="/ideas_bot_kling.gif?v=20260915_perfect" 
+            src="/ideas_bot_kling.gif?v=20260915_v3_clean" 
             alt="IDEAS AI Mascot" 
             style={{
               width: isFullPage ? '150px' : '115px',

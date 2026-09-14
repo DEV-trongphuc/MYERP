@@ -206,9 +206,9 @@ export const SplashPreviewPage: React.FC = () => {
                 {/* 3D Robot Mascot with dynamic halo */}
                 <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '16px' }}>
                   <picture>
-                    <source srcSet="/ideas_bot_kling.webp?v=20260915_perfect" type="image/webp" />
+                    <source srcSet="/ideas_bot_kling.webp?v=20260915_v3_clean" type="image/webp" />
                     <img
-                      src="/ideas_bot_kling.gif?v=20260915_perfect"
+                      src="/ideas_bot_kling.gif?v=20260915_v3_clean"
                       alt="IDEAS AI"
                       style={{
                         width: deviceView === 'mobile' ? '150px' : '175px',
@@ -322,9 +322,9 @@ export const SplashPreviewPage: React.FC = () => {
               <div style={{ zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
                 <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '20px' }}>
                   <picture>
-                    <source srcSet="/ideas_bot_kling.webp?v=20260915_perfect" type="image/webp" />
+                    <source srcSet="/ideas_bot_kling.webp?v=20260915_v3_clean" type="image/webp" />
                     <img
-                      src="/ideas_bot_kling.gif?v=20260915_perfect"
+                      src="/ideas_bot_kling.gif?v=20260915_v3_clean"
                       alt="IDEAS Mascot"
                       style={{
                         width: deviceView === 'mobile' ? '165px' : '190px',
@@ -433,9 +433,9 @@ export const SplashPreviewPage: React.FC = () => {
               <div style={{ zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
                 <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '20px' }}>
                   <picture>
-                    <source srcSet="/ideas_bot_kling.webp?v=20260915_perfect" type="image/webp" />
+                    <source srcSet="/ideas_bot_kling.webp?v=20260915_v3_clean" type="image/webp" />
                     <img
-                      src="/ideas_bot_kling.gif?v=20260915_perfect"
+                      src="/ideas_bot_kling.gif?v=20260915_v3_clean"
                       alt="IDEAS Mascot"
                       style={{
                         width: deviceView === 'mobile' ? '160px' : '185px',
