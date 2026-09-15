@@ -1368,7 +1368,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                                   disabled={isLocked || !canEditMilestones}
                                   onChange={val => handleUpdateMilestoneField(idx, 'expected_pay_date', val)}
                                   size="sm"
-                                  inputStyle={{ height: '34px', fontSize: '0.725rem', padding: '0 8px', borderRadius: '6px' }}
+                                  inputStyle={{ height: '34px', fontSize: '0.725rem', padding: '0 28px 0 8px', borderRadius: '6px' }}
                                 />
                               </div>
 

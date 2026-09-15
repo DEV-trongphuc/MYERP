@@ -50,8 +50,33 @@ class SupplierController {
         ]);
     }
 
+    private function canManageSuppliers(array $auth): bool {
+        $allowedRoles = ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'accountant', 'ke_toan', 'finance', 'tai_chinh', 'assistant', 'tro_ly'];
+        $userRole = strtolower(trim((string)($auth['role'] ?? '')));
+        if (in_array($userRole, $allowedRoles, true)) return true;
+        
+        $uid = (int)($auth['user_id'] ?? 0);
+        if ($uid === 100064) return true; // Nguyễn Thu Thảo - Kế toán
+
+        // Check user team or job title / department from users table
+        try {
+            $stmt = $this->db->prepare("SELECT team_id, job_title, department FROM users WHERE id = ? LIMIT 1");
+            $stmt->execute([$uid]);
+            $u = $stmt->fetch();
+            if ($u) {
+                if ((int)($u['team_id'] ?? 0) === 2) return true;
+                $jt = mb_strtolower((string)($u['job_title'] ?? ''), 'UTF-8');
+                $dept = mb_strtolower((string)($u['department'] ?? ''), 'UTF-8');
+                if (strpos($jt, 'kế toán') !== false || strpos($jt, 'ke toan') !== false || strpos($jt, 'tài chính') !== false) return true;
+                if (strpos($dept, 'kế toán') !== false || strpos($dept, 'ke toan') !== false || strpos($dept, 'tài chính') !== false) return true;
+            }
+        } catch (\Throwable $e) {}
+        
+        return false;
+    }
+
     public function store(array $auth): void {
-        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'accountant', 'ke_toan'], true)) respond(403, null, 'Bạn không có quyền quản lý nhà cung cấp', false);
+        if (!$this->canManageSuppliers($auth)) respond(403, null, 'Bạn không có quyền quản lý nhà cung cấp', false);
         $b = getBody();
         if (empty($b['name'])) respond(422, null, 'Tên nhà cung cấp là bắt buộc', false);
 
@@ -100,7 +125,7 @@ class SupplierController {
     }
 
     public function update(array $auth, int $id): void {
-        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'accountant', 'ke_toan'], true)) respond(403, null, 'Bạn không có quyền quản lý nhà cung cấp', false);
+        if (!$this->canManageSuppliers($auth)) respond(403, null, 'Bạn không có quyền quản lý nhà cung cấp', false);
         $b = getBody();
         $fields = ['name', 'contact_name', 'email', 'phone', 'address', 'tax_code', 'notes', 'contact_position', 'website', 'scale_capital', 'typical_projects', 'focused_type', 'prestige_tier', 'cooperation_status', 'bank_account'];
         $sets = []; $params = [];
@@ -137,7 +162,7 @@ class SupplierController {
     }
 
     public function destroy(array $auth, int $id): void {
-        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'accountant', 'ke_toan'], true)) respond(403, null, 'Bạn không có quyền quản lý nhà cung cấp', false);
+        if (!$this->canManageSuppliers($auth)) respond(403, null, 'Bạn không có quyền quản lý nhà cung cấp', false);
         $stmt = $this->db->prepare("UPDATE suppliers SET deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ?");
         $stmt->execute([$id, $auth['tenant_id']]);
         logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'Xóa nhà cung cấp', 'supplier', $id);

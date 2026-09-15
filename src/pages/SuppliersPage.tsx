@@ -310,6 +310,9 @@ export const SuppliersPage: React.FC = () => {
         try {
           await api.delete(`/suppliers/${id}`);
           setSuppliers(prev => prev.filter(s => s.id !== id));
+          if (selectedSupplier?.id === id) {
+            setShowModal(false);
+          }
           addToast('Đã xóa đối tác', 'success');
         } catch (e: any) {
           addToast('Lỗi khi xóa đối tác', 'error');
@@ -787,6 +790,41 @@ export const SuppliersPage: React.FC = () => {
                           </button>
                         )
                       )
+                    )}
+                    {canEdit && selectedSupplier?.id && (
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(selectedSupplier.id)}
+                        title="Xóa đối tác / Nhà cung cấp"
+                        style={isMobile ? {
+                          width: 36,
+                          height: 36,
+                          borderRadius: '10px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          background: 'rgba(239, 68, 68, 0.08)',
+                          color: '#ef4444',
+                          border: '1px solid rgba(239, 68, 68, 0.25)',
+                          cursor: 'pointer'
+                        } : {
+                          height: '36px',
+                          fontSize: '0.825rem',
+                          padding: '0 14px',
+                          borderRadius: '9px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          background: 'rgba(239, 68, 68, 0.1)',
+                          color: '#ef4444',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          fontWeight: 600,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <Trash2 size={16} />
+                        {!isMobile && <span>Xóa</span>}
+                      </button>
                     )}
                     <button 
                       className={styles.closeBtn} 

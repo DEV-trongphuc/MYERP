@@ -976,7 +976,12 @@ class ContactController {
             }
         }
 
-        $birthday = empty($b['birthday']) ? null : $b['birthday'];
+        $birthday = empty($b['birthday']) ? null : trim((string)$b['birthday']);
+        if ($birthday === '0000-00-00' || $birthday === '00/00/0000' || $birthday === 'null') {
+            $birthday = null;
+        } elseif ($birthday && preg_match('/^(\d{1,2})[-\/\.](\d{1,2})[-\/\.](\d{4})$/', $birthday, $dm)) {
+            $birthday = sprintf('%04d-%02d-%02d', $dm[3], $dm[2], $dm[1]);
+        }
         $last_contact = empty($b['last_contact']) ? null : $b['last_contact'];
 
         $assignedOwnerId = (in_array($auth['role'], ['sale', 'sales'], true)) ? (int)$auth['user_id'] : (!empty($b['owner_id']) ? (int)$b['owner_id'] : (int)$auth['user_id']);
@@ -1220,6 +1225,11 @@ class ContactController {
         $stmt->execute($p);
         $row = $stmt->fetch();
         if (!$row) respond(404, null, 'Không tìm thấy liên hệ', false);
+        foreach (['birthday', 'dob', 'admission_date'] as $dateCol) {
+            if (isset($row[$dateCol]) && ($row[$dateCol] === '0000-00-00' || $row[$dateCol] === '0000-00-00 00:00:00' || $row[$dateCol] === '00/00/0000')) {
+                $row[$dateCol] = null;
+            }
+        }
         $row['tags'] = json_decode($row['tags'] ?? '[]');
         $row['custom_fields'] = getCustomFields($this->db, $auth['tenant_id'], $id, 'contact');
         respond(200, $row);
@@ -1440,8 +1450,15 @@ class ContactController {
             if (array_key_exists($f, $b)) { 
                 $sets[] = "$f=?"; 
                 // Fix date string & numeric strict mode crashes
-                if (in_array($f, ['birthday', 'dob', 'last_contact', 'leave_start', 'leave_end', 'expected_decision_date', 'admission_date']) && ($b[$f] === '' || $b[$f] === null || $b[$f] === 'null')) {
-                    $params[] = null;
+                if (in_array($f, ['birthday', 'dob', 'last_contact', 'leave_start', 'leave_end', 'expected_decision_date', 'admission_date'])) {
+                    $val = trim((string)($b[$f] ?? ''));
+                    if ($val === '' || $val === 'null' || $val === '0000-00-00' || $val === '00/00/0000' || $b[$f] === null) {
+                        $params[] = null;
+                    } else if (preg_match('/^(\d{1,2})[-\/\.](\d{1,2})[-\/\.](\d{4})$/', $val, $dm)) {
+                        $params[] = sprintf('%04d-%02d-%02d', $dm[3], $dm[2], $dm[1]);
+                    } else {
+                        $params[] = $val;
+                    }
                 } else if (in_array($f, ['stage_id', 'project_id', 'campaign_id', 'owner_id', 'company_id']) && (empty($b[$f]) || $b[$f] === 0 || $b[$f] === '0' || $b[$f] === 'null')) {
                     $params[] = null;
                 } else if (in_array($f, ['budget', 'expected_revenue', 'win_probability']) && ($b[$f] === '' || $b[$f] === null || $b[$f] === 'null')) {
@@ -1758,6 +1775,11 @@ class ContactController {
         $stmt->execute([$id, $auth['tenant_id']]);
         $row = $stmt->fetch();
         if ($row) {
+            foreach (['birthday', 'dob', 'admission_date'] as $dateCol) {
+                if (isset($row[$dateCol]) && ($row[$dateCol] === '0000-00-00' || $row[$dateCol] === '0000-00-00 00:00:00' || $row[$dateCol] === '00/00/0000')) {
+                    $row[$dateCol] = null;
+                }
+            }
             $row['tags'] = json_decode($row['tags'] ?? '[]');
             $row['custom_fields'] = getCustomFields($this->db, $auth['tenant_id'], $id, 'contact');
             respond(200, $row);

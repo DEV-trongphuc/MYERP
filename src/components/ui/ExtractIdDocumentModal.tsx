@@ -54,8 +54,10 @@ const resolveAttachmentUrl = (url: string | null | undefined): string => {
 const formatDateToVi = (dateStr: string | null | undefined): string => {
   if (!dateStr) return '';
   const clean = dateStr.trim();
+  if (clean === '0000-00-00' || clean === '00/00/0000' || clean === 'null' || clean === 'undefined') return '';
   const m = clean.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/);
   if (m) {
+    if (m[1] === '0000' || m[2] === '00' || m[3] === '00') return '';
     const day = m[3].padStart(2, '0');
     const month = m[2].padStart(2, '0');
     return `${day}/${month}/${m[1]}`;

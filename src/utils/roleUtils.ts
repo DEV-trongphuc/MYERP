@@ -199,6 +199,16 @@ export function isHR(input: RoleInput, includeExec = true): boolean {
  * @param includeExec If true, Executive tier users also qualify.
  */
 export function isAccountant(input: RoleInput, includeExec = false): boolean {
+  if (!input) return false;
+  if (typeof input === 'object') {
+    const uid = Number(input.id);
+    if (uid === 100064) return true; // Nguyễn Thu Thảo - Kế toán
+    if (Number(input.team_id) === 2) return true; // Phòng ban Kế toán
+    const dept = String(input.department || '').toLowerCase();
+    const jt = String(input.job_title || input.title || '').toLowerCase();
+    if (dept.includes('kế toán') || dept.includes('ke toan') || dept.includes('tài chính') || dept.includes('tai chinh')) return true;
+    if (jt.includes('kế toán') || jt.includes('ke toan') || jt.includes('tài chính') || jt.includes('tai chinh')) return true;
+  }
   const role = normalizeRole(input);
   if (ROLE_GROUPS.FINANCE.includes(role as any)) return true;
   if (includeExec && isExecutive(input)) return true;

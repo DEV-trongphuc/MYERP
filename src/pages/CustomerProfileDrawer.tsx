@@ -44,6 +44,7 @@ import { decodeHtmlEntities, stripHtml } from '../utils/textUtils';
 import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 import { AppIcon } from '../components/common/AppIcons';
 import { parseTaskBody } from '../utils/taskBodyParser';
+import { parseVnDateToIso } from '../utils/dateUtils';
 
 const EditHistoryIndicator = ({ history }: { history: any }) => {
   const [showPopup, setShowPopup] = useState(false);
@@ -1590,7 +1591,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [remindTarget, setRemindTarget] = useState(2);
 
 
-  const [pendingPipelineTransition, setPendingPipelineTransition] = useState<{ targetId: string; targetLabel: string; note: string } | null>(null);
+  const [pendingPipelineTransition, setPendingPipelineTransition] = useState<{ targetId: string; targetLabel: string; note: string; notifyUserIds?: number[] } | null>(null);
   const pendingPipelineTransitionRef = React.useRef(pendingPipelineTransition);
   React.useEffect(() => {
     pendingPipelineTransitionRef.current = pendingPipelineTransition;
@@ -1899,6 +1900,20 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     ];
     const payload: Record<string, any> = {};
     allowedFields.forEach(f => { if (formData[f] !== undefined) payload[f] = formData[f]; });
+    if (formData.birthday !== undefined) {
+      if (!formData.birthday || formData.birthday === '0000-00-00' || formData.birthday === '00/00/0000') {
+        payload.birthday = null;
+      } else {
+        payload.birthday = parseVnDateToIso(formData.birthday) || formData.birthday;
+      }
+    }
+    if (formData.admission_date !== undefined) {
+      if (!formData.admission_date || formData.admission_date === '0000-00-00' || formData.admission_date === '00/00/0000') {
+        payload.admission_date = null;
+      } else {
+        payload.admission_date = parseVnDateToIso(formData.admission_date) || formData.admission_date;
+      }
+    }
     if (formData.mobile !== undefined || formData.phone2 !== undefined) {
       const sec = formData.mobile || formData.phone2 || null;
       payload.mobile = sec;
@@ -6487,6 +6502,15 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       return slug === 'application_completed' || order === 10 || id === '40' || id === '10' || name.includes('10') || name.includes('application completed') || targetId === '40' || targetId === 'application_completed';
     };
 
+    const isStage13 = (s: any) => {
+      if (!s) return false;
+      const slug = String(s.system_slug || '').toLowerCase();
+      const name = String(s.name || '').toLowerCase();
+      const order = Number(s.order_index) || 0;
+      const id = String(s.id || '');
+      return slug === 'deposit_tuition_payment' || slug === 'dat_coc' || slug === 'deposit' || order === 13 || id === '43' || id === '13' || name.includes('13') || name.includes('deposit') || name.includes('tuition') || targetId === 'deposit_tuition_payment' || targetId === '43';
+    };
+
     const isStage14 = (s: any) => {
       if (!s) return false;
       const slug = String(s.system_slug || '').toLowerCase();
@@ -6516,6 +6540,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     if (isStage14(targetStageObj)) {
       // Bất kì đâu lên 14: mặc định thông báo cả Mai Thị Nữ và Lê Thị Huyền Trâm
       defaultNotifyIds = [maiThiNuId, huyenTramId].filter(Boolean);
+    } else if (isStage13(targetStageObj)) {
+      // Bất kì đâu lên 13: mặc định thông báo cả Mai Thị Nữ và Đặng Khánh Linh
+      defaultNotifyIds = [maiThiNuId, saleAdminId].filter(Boolean);
     } else if (isStage09(currentStageObj) && isStage10(targetStageObj)) {
       // Từ 09 lên 10: mặc định fill Mai Thị Nữ
       defaultNotifyIds = [maiThiNuId].filter(Boolean);
@@ -9562,7 +9589,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           <div className="form-group">
                             <label className="form-label">Ngày sinh</label>
                             <VietnameseDateInput 
-                              value={formData.birthday || ''} 
+                              value={formData.birthday ? String(formData.birthday).slice(0, 10) : ''} 
                               onChange={val => setFormData((prev: any) => ({ ...prev, birthday: val }))}
                               placeholder="DD/MM/YYYY"
                             />
@@ -15668,6 +15695,31 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                       // Check Deposit / POS trigger for payment stages
                       if (targetId === 'dong_le_phi_ho_so' || targetId === 'deposit_tuition_payment' || targetId === 'hoc_vien' || targetId === 'enrolled') {
                         if (targetId === 'dong_le_phi_ho_so' || targetId === 'deposit_tuition_payment') {
+                          try {
+                            const targetStage = pipelineStages.find((s: any) => 
+                              String(s.system_slug) === String(targetId) || String(s.id) === String(targetId)
+                            );
+                            await api.put(`/contacts/${effectiveContactId}/move-stage`, {
+                              stage_id: targetStage?.id || targetId,
+                              pipeline_status: targetId,
+                              lead_status: pipelineModal.leadStatus,
+                              lead_temperature: pipelineModal.leadTemperature,
+                              next_action: pipelineModal.nextAction,
+                              next_followup_date: pipelineModal.nextFollowupDate || null,
+                              expected_decision_date: pipelineModal.expectedDecisionDate || null,
+                              expected_intake: pipelineModal.expectedIntake || null,
+                              from_stage_name: formData.stage_name || '',
+                              to_stage_name: targetLabel,
+                              note: note || '',
+                              notify_user_ids: pipelineModal.notifyUserIds || []
+                            });
+                            addToast(`Đã chuyển bước sang "${targetLabel}" và gửi thông báo thành công!`, 'success');
+                            window.dispatchEvent(new CustomEvent('contact-updated'));
+                            window.dispatchEvent(new CustomEvent('notification-trigger'));
+                          } catch (err: any) {
+                            console.error('Failed to move-stage before opening POS:', err);
+                          }
+
                           setDepositProjectId('');
                           setDepositUnitCode('');
                           const defaultPrice = String(formData.expected_revenue || contact?.expected_revenue || '');
@@ -15680,7 +15732,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             : 'Đợt 1 - Học phí / Cọc giữ chỗ';
                           setDepositMilestones([{ name: milestoneName, amount: '', expected_pay_date: '' }]);
                           setPipelineModal({ ...pipelineModal, isOpen: false });
-                          setPendingPipelineTransition({ targetId, targetLabel, note });
+                          setPendingPipelineTransition({ targetId, targetLabel, note, notifyUserIds: pipelineModal.notifyUserIds || [] });
                           useUIStore.getState().setShowPOS({
                             ...(contact || formData),
                             _targetPipelineStatus: targetId
@@ -17841,7 +17893,10 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
             if (extracted.full_name) updatePayload.full_name = extracted.full_name;
             if (extracted.citizen_id) updatePayload.citizen_id = extracted.citizen_id;
             if (extracted.passport) updatePayload.passport = extracted.passport;
-            if (extracted.birthday) updatePayload.birthday = extracted.birthday;
+            if (extracted.birthday) {
+              const isoBday = parseVnDateToIso(extracted.birthday);
+              updatePayload.birthday = isoBday || extracted.birthday;
+            }
             if (extracted.gender) updatePayload.gender = extracted.gender;
             // Nếu đã có địa chỉ thì giữ nguyên, chỉ điền khi chưa có địa chỉ
             if (extracted.address && !formData?.address?.trim()) {

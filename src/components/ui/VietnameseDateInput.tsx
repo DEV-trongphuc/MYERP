@@ -32,18 +32,28 @@ function isValidDate(y: number, m: number, d: number): boolean {
 export const isoToVn = (isoStr?: string | null): string => {
   if (!isoStr) return '';
   const clean = String(isoStr).trim().substring(0, 10);
+  if (clean === '0000-00-00' || clean === '00/00/0000' || clean === 'null' || clean === 'undefined') return '';
   const parts = clean.split('-');
   if (parts.length === 3 && parts[0].length === 4) {
+    if (parts[0] === '0000' || parts[1] === '00' || parts[2] === '00') return '';
     return `${parts[2].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[0]}`;
   }
-  return isoStr;
+  const vnMatch = clean.match(/^(\d{1,2})[-\/\.](\d{1,2})[-\/\.](\d{4})/);
+  if (vnMatch) {
+    const d = parseInt(vnMatch[1], 10);
+    const m = parseInt(vnMatch[2], 10);
+    const y = parseInt(vnMatch[3], 10);
+    if (d === 0 || m === 0 || y === 0) return '';
+    return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
+  }
+  return '';
 };
 
 // Convert multiple user inputs / clipboard texts to ISO 'YYYY-MM-DD'
 export const parseDateToIso = (rawStr: string): string | null => {
   if (!rawStr) return null;
   const trimmed = String(rawStr).trim();
-  if (!trimmed) return null;
+  if (!trimmed || trimmed === '0000-00-00' || trimmed === '00/00/0000' || trimmed === 'null' || trimmed === 'undefined') return null;
 
   // 1. ISO format: YYYY-MM-DD or YYYY/MM/DD or YYYY.MM.DD
   const isoMatch = trimmed.match(/^(\d{4})[-\/\.](\d{1,2})[-\/\.](\d{1,2})/);
@@ -258,7 +268,6 @@ export const VietnameseDateInput: React.FC<VietnameseDateInputProps> = ({
         style={{
           width: '100%',
           paddingLeft: showLeft ? '2.2rem' : (isSm ? '8px' : '12px'),
-          paddingRight: isSm ? '26px' : '34px',
           height: inputStyle?.height || defaultHeight,
           fontSize: inputStyle?.fontSize || defaultFontSize,
           fontWeight: 650,
@@ -266,7 +275,8 @@ export const VietnameseDateInput: React.FC<VietnameseDateInputProps> = ({
           border: '1px solid var(--color-border)',
           backgroundColor: disabled ? 'var(--color-bg-light)' : 'var(--color-surface)',
           color: 'var(--color-text)',
-          ...inputStyle
+          ...inputStyle,
+          paddingRight: inputStyle?.paddingRight || (isSm ? '28px' : '36px')
         }}
       />
       
@@ -284,8 +294,9 @@ export const VietnameseDateInput: React.FC<VietnameseDateInputProps> = ({
         style={{
           position: 'absolute',
           right: '2px',
-          top: '50%',
-          transform: 'translateY(-50%)',
+          top: 0,
+          bottom: 0,
+          margin: 'auto 0',
           width: isSm ? '24px' : '28px',
           height: isSm ? '24px' : '28px',
           opacity: 0,
@@ -304,14 +315,17 @@ export const VietnameseDateInput: React.FC<VietnameseDateInputProps> = ({
         style={{
           position: 'absolute',
           right: isSm ? '4px' : '8px',
-          top: '50%',
-          transform: 'translateY(-50%)',
+          top: 0,
+          bottom: 0,
+          margin: 'auto 0',
+          width: isSm ? '22px' : '26px',
+          height: isSm ? '22px' : '26px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           background: 'none',
           border: 'none',
-          padding: '4px',
+          padding: 0,
           color: 'var(--color-text-muted, #64748b)',
           cursor: disabled ? 'not-allowed' : 'pointer',
           zIndex: 1,
