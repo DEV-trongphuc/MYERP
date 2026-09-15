@@ -14199,64 +14199,158 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         </div>
 
         {/* Card: Bảng kê chi tiết chi phí (nếu có các dòng chi phí con) */}
-        {expenseItems && expenseItems.length > 0 && (
-          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '14px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', padding: isMobile ? '1.1rem' : '1.5rem', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)' }}>
-            <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Receipt size={15} />
-                <span>{t('Bảng kê chi tiết chi phí')} ({expenseItems.length} {t('dòng chi phí')})</span>
-              </span>
-              <span style={{ fontSize: '0.8rem', color: '#10b981', fontWeight: 800 }}>
-                {t('Tổng chi phí')}: {formatApprovalCurrency(
-                  expenseItems.reduce((sum: number, it: any) => sum + (Number(it.amount) || Number(it.total) || (Number(it.quantity || 1) * Number(it.unit_price || 0))), 0),
-                  detail?.currency || (item as any)?.currency || 'VND'
-                )}
-              </span>
-            </div>
+        {expenseItems && expenseItems.length > 0 && (() => {
+          const hasAnyVat = expenseItems.some((it: any) => Number(it.vat) > 0 || Number(it.vat_amount) > 0);
+          const curr = detail?.currency || (item as any)?.currency || 'VND';
+          const totalPreTax = expenseItems.reduce((sum: number, it: any) => {
+            const qty = Number(it.quantity || it.qty || 1);
+            const price = Number(it.unit_price || it.price || 0);
+            const amt = Number(it.amount);
+            return sum + (amt > 0 ? amt : (qty * price));
+          }, 0);
+          const totalVat = expenseItems.reduce((sum: number, it: any) => sum + (Number(it.vat_amount) || 0), 0);
+          const totalPostTax = expenseItems.reduce((sum: number, it: any) => {
+            const qty = Number(it.quantity || it.qty || 1);
+            const price = Number(it.unit_price || it.price || 0);
+            const tot = Number(it.total);
+            const amt = Number(it.amount) || (qty * price);
+            const vAmt = Number(it.vat_amount) || 0;
+            return sum + (tot > 0 ? tot : (amt + vAmt));
+          }, 0);
+          const finalSum = hasAnyVat ? totalPostTax : totalPreTax;
 
-            <div style={{ overflowX: 'auto', borderRadius: '10px', border: '1px solid var(--color-border-light)' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: isMobile ? '0.725rem' : '0.8125rem' }}>
-                <thead>
-                  <tr style={{ background: 'var(--color-bg-secondary)', borderBottom: '1px solid var(--color-border-light)', textAlign: 'left' }}>
-                    <th style={{ padding: '10px 12px', width: '40px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>#</th>
-                    <th style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>{t('Nội dung chi phí')}</th>
-                    <th style={{ padding: '10px 12px', width: '85px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>{t('Số lượng')}</th>
-                    <th style={{ padding: '10px 12px', width: '120px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>{t('Đơn giá')}</th>
-                    <th style={{ padding: '10px 12px', width: '130px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>{t('Thành tiền')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {expenseItems.map((it: any, idx: number) => {
-                    const qty = Number(it.quantity || it.qty || 1);
-                    const unitPrice = Number(it.unit_price || it.price || 0);
-                    const lineTotal = Number(it.amount) || Number(it.total) || (qty * unitPrice);
-                    return (
-                      <tr key={idx} style={{ borderBottom: idx < expenseItems.length - 1 ? '1px solid var(--color-border-light)' : 'none', background: idx % 2 === 0 ? 'var(--color-surface)' : 'var(--color-bg-secondary)' }}>
-                        <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
-                          {it.stt || (idx + 1)}
+          return (
+            <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '14px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', padding: isMobile ? '1.1rem' : '1.5rem', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Receipt size={15} />
+                  <span>{t('Bảng kê chi tiết chi phí')} ({expenseItems.length} {t('dòng chi phí')})</span>
+                  {hasAnyVat && (
+                    <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.1)', color: '#059669', border: '1px solid rgba(16, 185, 129, 0.2)', textTransform: 'none', fontWeight: 700 }}>
+                      ✓ {t('Có hóa đơn & Thuế GTGT')}
+                    </span>
+                  )}
+                </span>
+                <span style={{ fontSize: '0.82rem', color: '#10b981', fontWeight: 800 }}>
+                  {t('Tổng thanh toán')}: {formatApprovalCurrency(finalSum, curr)}
+                </span>
+              </div>
+
+              <div style={{ overflowX: 'auto', borderRadius: '10px', border: '1px solid var(--color-border-light)' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: isMobile ? '0.725rem' : '0.8125rem' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--color-bg-secondary)', borderBottom: '1px solid var(--color-border-light)', textAlign: 'left' }}>
+                      <th style={{ padding: '10px 12px', width: '38px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>#</th>
+                      <th style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>{t('Nội dung chi phí')}</th>
+                      <th style={{ padding: '10px 12px', width: '70px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>{t('Số lượng')}</th>
+                      <th style={{ padding: '10px 12px', width: '110px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>{t('Đơn giá')}</th>
+                      <th style={{ padding: '10px 12px', width: '115px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>{hasAnyVat ? t('Trước thuế') : t('Thành tiền')}</th>
+                      {hasAnyVat && (
+                        <>
+                          <th style={{ padding: '10px 12px', width: '75px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>% VAT</th>
+                          <th style={{ padding: '10px 12px', width: '105px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>{t('Tiền VAT')}</th>
+                          <th style={{ padding: '10px 12px', width: '125px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>{t('Sau thuế')}</th>
+                        </>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {expenseItems.map((it: any, idx: number) => {
+                      const qty = Number(it.quantity || it.qty || 1);
+                      const unitPrice = Number(it.unit_price || it.price || 0);
+                      const preVat = Number(it.amount) > 0 ? Number(it.amount) : (qty * unitPrice);
+                      const vatPct = Number(it.vat || 0);
+                      const vatVal = Number(it.vat_amount) > 0 ? Number(it.vat_amount) : (vatPct > 0 ? Math.round(preVat * vatPct / 100) : 0);
+                      const postVat = Number(it.total) > 0 ? Number(it.total) : (preVat + vatVal);
+                      const invNum = it.invoice_number || it.inv_num;
+                      const invCode = it.invoice_code || it.inv_code;
+                      const invDate = it.invoice_date || it.inv_date;
+
+                      return (
+                        <tr key={idx} style={{ borderBottom: idx < expenseItems.length - 1 ? '1px solid var(--color-border-light)' : 'none', background: idx % 2 === 0 ? 'var(--color-surface)' : 'var(--color-bg-secondary)' }}>
+                          <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+                            {it.stt || (idx + 1)}
+                          </td>
+                          <td style={{ padding: '10px 12px', fontWeight: 650, color: 'var(--color-text)' }}>
+                            <div>{it.name || it.description || 'Chi phí'}</div>
+                            {(invNum || invCode || invDate) && (
+                              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+                                {invNum && (
+                                  <span style={{ fontSize: '0.68rem', padding: '1px 6px', borderRadius: '4px', background: 'rgba(59, 130, 246, 0.08)', color: '#2563eb', fontWeight: 600 }}>
+                                    Số HĐ: {invNum}
+                                  </span>
+                                )}
+                                {invCode && (
+                                  <span style={{ fontSize: '0.68rem', padding: '1px 6px', borderRadius: '4px', background: 'rgba(107, 114, 128, 0.1)', color: '#4b5563', fontWeight: 600 }}>
+                                    Ký hiệu: {invCode}
+                                  </span>
+                                )}
+                                {invDate && (
+                                  <span style={{ fontSize: '0.68rem', padding: '1px 6px', borderRadius: '4px', background: 'rgba(107, 114, 128, 0.1)', color: '#4b5563', fontWeight: 600 }}>
+                                    Ngày: {String(invDate).split(' ')[0]}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                            <span style={{ padding: '2px 8px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.08)', color: '#2563eb', fontWeight: 700, fontSize: '0.75rem' }}>
+                              {qty}
+                            </span>
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--color-text-muted)', fontWeight: 600, fontFamily: 'monospace' }}>
+                            {formatApprovalCurrency(unitPrice, curr)}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: hasAnyVat ? 650 : 800, color: hasAnyVat ? 'var(--color-text)' : '#059669', fontFamily: 'monospace' }}>
+                            {formatApprovalCurrency(preVat, curr)}
+                          </td>
+                          {hasAnyVat && (
+                            <>
+                              <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                {vatPct > 0 ? (
+                                  <span style={{ padding: '2px 6px', borderRadius: '6px', background: 'rgba(245, 158, 11, 0.1)', color: '#d97706', fontWeight: 700, fontSize: '0.72rem' }}>
+                                    {vatPct}%
+                                  </span>
+                                ) : (
+                                  <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>0%</span>
+                                )}
+                              </td>
+                              <td style={{ padding: '10px 12px', textAlign: 'right', color: vatVal > 0 ? '#d97706' : 'var(--color-text-muted)', fontWeight: 650, fontFamily: 'monospace' }}>
+                                {formatApprovalCurrency(vatVal, curr)}
+                              </td>
+                              <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#059669', fontFamily: 'monospace' }}>
+                                {formatApprovalCurrency(postVat, curr)}
+                              </td>
+                            </>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  {hasAnyVat && (
+                    <tfoot>
+                      <tr style={{ background: 'var(--color-bg-secondary)', borderTop: '2px solid var(--color-border-light)' }}>
+                        <td colSpan={4} style={{ padding: '10px 12px', fontWeight: 700, textAlign: 'right', color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+                          {t('Tổng cộng trước thuế')}:
                         </td>
-                        <td style={{ padding: '10px 12px', fontWeight: 650, color: 'var(--color-text)' }}>
-                          {it.name || it.description || 'Chi phí'}
+                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text)', fontFamily: 'monospace' }}>
+                          {formatApprovalCurrency(totalPreTax, curr)}
                         </td>
-                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                          <span style={{ padding: '2px 8px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.08)', color: '#2563eb', fontWeight: 700, fontSize: '0.75rem' }}>
-                            {qty}
-                          </span>
+                        <td style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>—</td>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#d97706', fontFamily: 'monospace' }}>
+                          {formatApprovalCurrency(totalVat, curr)}
                         </td>
-                        <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--color-text-muted)', fontWeight: 600, fontFamily: 'monospace' }}>
-                          {formatApprovalCurrency(unitPrice, detail?.currency || (item as any)?.currency || 'VND')}
-                        </td>
-                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#059669', fontFamily: 'monospace' }}>
-                          {formatApprovalCurrency(lineTotal, detail?.currency || (item as any)?.currency || 'VND')}
+                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 900, color: '#059669', fontSize: '0.85rem', fontFamily: 'monospace' }}>
+                          {formatApprovalCurrency(totalPostTax, curr)}
                         </td>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {isPrintStampSend ? (
           <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '16px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)' }}>

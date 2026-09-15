@@ -1223,58 +1223,159 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                     border: '1px solid var(--color-border-light)',
                     boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)'
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Receipt size={16} style={{ color: 'var(--color-primary)' }} />
-                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          Bảng kê chi tiết chi phí ({expenseItems.length} dòng)
-                        </span>
-                      </div>
-                      <span style={{ fontSize: '0.78rem', color: '#10b981', fontWeight: 800 }}>
-                        Tổng: {FMT(expenseItems.reduce((sum: number, it: any) => sum + (Number(it.amount) || Number(it.total) || (Number(it.quantity || 1) * Number(it.unit_price || 0))), 0), viewItem.currency)}
-                      </span>
-                    </div>
-                    <div style={{ overflowX: 'auto', borderRadius: '10px', border: '1px solid var(--color-border-light)' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
-                        <thead>
-                          <tr style={{ background: 'var(--color-bg-light)', borderBottom: '1px solid var(--color-border-light)', textAlign: 'left' }}>
-                            <th style={{ padding: '8px 10px', width: '35px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>#</th>
-                            <th style={{ padding: '8px 10px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>Nội dung chi phí</th>
-                            <th style={{ padding: '8px 10px', width: '70px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>SL</th>
-                            <th style={{ padding: '8px 10px', width: '100px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>Đơn giá</th>
-                            <th style={{ padding: '8px 10px', width: '110px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>Thành tiền</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {expenseItems.map((it: any, idx: number) => {
-                            const qty = Number(it.quantity || it.qty || 1);
-                            const unitPrice = Number(it.unit_price || it.price || 0);
-                            const lineTotal = Number(it.amount) || Number(it.total) || (qty * unitPrice);
-                            return (
-                              <tr key={idx} style={{ borderBottom: idx < expenseItems.length - 1 ? '1px solid var(--color-border-light)' : 'none', background: idx % 2 === 0 ? 'var(--color-surface)' : 'var(--color-bg-light)' }}>
-                                <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>
-                                  {it.stt || (idx + 1)}
-                                </td>
-                                <td style={{ padding: '8px 10px', fontWeight: 650, color: 'var(--color-text)' }}>
-                                  {it.name || it.description || 'Chi phí'}
-                                </td>
-                                <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                                  <span style={{ padding: '2px 6px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.08)', color: '#2563eb', fontWeight: 700, fontSize: '0.72rem' }}>
-                                    {qty}
-                                  </span>
-                                </td>
-                                <td style={{ padding: '8px 10px', textAlign: 'right', color: 'var(--color-text-muted)', fontWeight: 600, fontFamily: 'monospace' }}>
-                                  {FMT(unitPrice, viewItem.currency)}
-                                </td>
-                                <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#059669', fontFamily: 'monospace' }}>
-                                  {FMT(lineTotal, viewItem.currency)}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
+                    {(() => {
+                      const hasAnyVat = expenseItems.some((it: any) => Number(it.vat) > 0 || Number(it.vat_amount) > 0);
+                      const curr = viewItem.currency || 'VND';
+                      const totalPreTax = expenseItems.reduce((sum: number, it: any) => {
+                        const qty = Number(it.quantity || it.qty || 1);
+                        const price = Number(it.unit_price || it.price || 0);
+                        const amt = Number(it.amount);
+                        return sum + (amt > 0 ? amt : (qty * price));
+                      }, 0);
+                      const totalVat = expenseItems.reduce((sum: number, it: any) => sum + (Number(it.vat_amount) || 0), 0);
+                      const totalPostTax = expenseItems.reduce((sum: number, it: any) => {
+                        const qty = Number(it.quantity || it.qty || 1);
+                        const price = Number(it.unit_price || it.price || 0);
+                        const tot = Number(it.total);
+                        const amt = Number(it.amount) || (qty * price);
+                        const vAmt = Number(it.vat_amount) || 0;
+                        return sum + (tot > 0 ? tot : (amt + vAmt));
+                      }, 0);
+                      const finalSum = hasAnyVat ? totalPostTax : totalPreTax;
+
+                      return (
+                        <>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <Receipt size={16} style={{ color: 'var(--color-primary)' }} />
+                              <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                Bảng kê chi tiết chi phí ({expenseItems.length} dòng)
+                              </span>
+                              {hasAnyVat && (
+                                <span style={{ fontSize: '0.68rem', padding: '1px 6px', borderRadius: '6px', background: 'rgba(16, 185, 129, 0.1)', color: '#059669', border: '1px solid rgba(16, 185, 129, 0.2)', fontWeight: 700 }}>
+                                  ✓ VAT
+                                </span>
+                              )}
+                            </div>
+                            <span style={{ fontSize: '0.78rem', color: '#10b981', fontWeight: 800 }}>
+                              Tổng thanh toán: {FMT(finalSum, curr)}
+                            </span>
+                          </div>
+                          <div style={{ overflowX: 'auto', borderRadius: '10px', border: '1px solid var(--color-border-light)' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+                              <thead>
+                                <tr style={{ background: 'var(--color-bg-light)', borderBottom: '1px solid var(--color-border-light)', textAlign: 'left' }}>
+                                  <th style={{ padding: '8px 10px', width: '35px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>#</th>
+                                  <th style={{ padding: '8px 10px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>Nội dung chi phí</th>
+                                  <th style={{ padding: '8px 10px', width: '60px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>SL</th>
+                                  <th style={{ padding: '8px 10px', width: '90px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>Đơn giá</th>
+                                  <th style={{ padding: '8px 10px', width: '100px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>{hasAnyVat ? 'Trước thuế' : 'Thành tiền'}</th>
+                                  {hasAnyVat && (
+                                    <>
+                                      <th style={{ padding: '8px 10px', width: '65px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>% VAT</th>
+                                      <th style={{ padding: '8px 10px', width: '90px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>Tiền VAT</th>
+                                      <th style={{ padding: '8px 10px', width: '105px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>Sau thuế</th>
+                                    </>
+                                  )}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {expenseItems.map((it: any, idx: number) => {
+                                  const qty = Number(it.quantity || it.qty || 1);
+                                  const unitPrice = Number(it.unit_price || it.price || 0);
+                                  const preVat = Number(it.amount) > 0 ? Number(it.amount) : (qty * unitPrice);
+                                  const vatPct = Number(it.vat || 0);
+                                  const vatVal = Number(it.vat_amount) > 0 ? Number(it.vat_amount) : (vatPct > 0 ? Math.round(preVat * vatPct / 100) : 0);
+                                  const postVat = Number(it.total) > 0 ? Number(it.total) : (preVat + vatVal);
+                                  const invNum = it.invoice_number || it.inv_num;
+                                  const invCode = it.invoice_code || it.inv_code;
+                                  const invDate = it.invoice_date || it.inv_date;
+
+                                  return (
+                                    <tr key={idx} style={{ borderBottom: idx < expenseItems.length - 1 ? '1px solid var(--color-border-light)' : 'none', background: idx % 2 === 0 ? 'var(--color-surface)' : 'var(--color-bg-light)' }}>
+                                      <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>
+                                        {it.stt || (idx + 1)}
+                                      </td>
+                                      <td style={{ padding: '8px 10px', fontWeight: 650, color: 'var(--color-text)' }}>
+                                        <div>{it.name || it.description || 'Chi phí'}</div>
+                                        {(invNum || invCode || invDate) && (
+                                          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '2px' }}>
+                                            {invNum && (
+                                              <span style={{ fontSize: '0.65rem', padding: '1px 4px', borderRadius: '4px', background: 'rgba(59, 130, 246, 0.08)', color: '#2563eb', fontWeight: 600 }}>
+                                                HĐ: {invNum}
+                                              </span>
+                                            )}
+                                            {invCode && (
+                                              <span style={{ fontSize: '0.65rem', padding: '1px 4px', borderRadius: '4px', background: 'rgba(107, 114, 128, 0.1)', color: '#4b5563', fontWeight: 600 }}>
+                                                Ký hiệu: {invCode}
+                                              </span>
+                                            )}
+                                            {invDate && (
+                                              <span style={{ fontSize: '0.65rem', padding: '1px 4px', borderRadius: '4px', background: 'rgba(107, 114, 128, 0.1)', color: '#4b5563', fontWeight: 600 }}>
+                                                {String(invDate).split(' ')[0]}
+                                              </span>
+                                            )}
+                                          </div>
+                                        )}
+                                      </td>
+                                      <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                        <span style={{ padding: '2px 6px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.08)', color: '#2563eb', fontWeight: 700, fontSize: '0.72rem' }}>
+                                          {qty}
+                                        </span>
+                                      </td>
+                                      <td style={{ padding: '8px 10px', textAlign: 'right', color: 'var(--color-text-muted)', fontWeight: 600, fontFamily: 'monospace' }}>
+                                        {FMT(unitPrice, curr)}
+                                      </td>
+                                      <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: hasAnyVat ? 650 : 800, color: hasAnyVat ? 'var(--color-text)' : '#059669', fontFamily: 'monospace' }}>
+                                        {FMT(preVat, curr)}
+                                      </td>
+                                      {hasAnyVat && (
+                                        <>
+                                          <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                            {vatPct > 0 ? (
+                                              <span style={{ padding: '1px 5px', borderRadius: '4px', background: 'rgba(245, 158, 11, 0.1)', color: '#d97706', fontWeight: 700, fontSize: '0.7rem' }}>
+                                                {vatPct}%
+                                              </span>
+                                            ) : (
+                                              <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>0%</span>
+                                            )}
+                                          </td>
+                                          <td style={{ padding: '8px 10px', textAlign: 'right', color: vatVal > 0 ? '#d97706' : 'var(--color-text-muted)', fontWeight: 650, fontFamily: 'monospace' }}>
+                                            {FMT(vatVal, curr)}
+                                          </td>
+                                          <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#059669', fontFamily: 'monospace' }}>
+                                            {FMT(postVat, curr)}
+                                          </td>
+                                        </>
+                                      )}
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                              {hasAnyVat && (
+                                <tfoot>
+                                  <tr style={{ background: 'var(--color-bg-light)', borderTop: '2px solid var(--color-border-light)' }}>
+                                    <td colSpan={4} style={{ padding: '8px 10px', fontWeight: 700, textAlign: 'right', color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>
+                                      Tổng trước thuế:
+                                    </td>
+                                    <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text)', fontFamily: 'monospace' }}>
+                                      {FMT(totalPreTax, curr)}
+                                    </td>
+                                    <td style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>—</td>
+                                    <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: '#d97706', fontFamily: 'monospace' }}>
+                                      {FMT(totalVat, curr)}
+                                    </td>
+                                    <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 900, color: '#059669', fontFamily: 'monospace' }}>
+                                      {FMT(totalPostTax, curr)}
+                                    </td>
+                                  </tr>
+                                </tfoot>
+                              )}
+                            </table>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 );
               })()}
