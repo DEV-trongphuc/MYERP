@@ -95,10 +95,11 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
   const [tempSharesData, setTempSharesData] = useState<any[]>([]);
   const [isEditingCommission, setIsEditingCommission] = useState(false);
   
-  const [autoRemindManage, setAutoRemindManage] = useState(deposit ? deposit.auto_remind !== 0 : true);
+  const [autoRemindManage, setAutoRemindManage] = useState(deposit ? Number(deposit.auto_remind) === 1 : false);
   const [remindDaysBeforeManage, setRemindDaysBeforeManage] = useState(deposit ? Number(deposit.remind_days_before) || 3 : 3);
   const [remindAtHourManage, setRemindAtHourManage] = useState(deposit ? Number(deposit.remind_at_hour) || 8 : 8);
   const [remindTargetManage, setRemindTargetManage] = useState(deposit ? Number(deposit.remind_target) || 2 : 2);
+  const [manualRemindTarget, setManualRemindTarget] = useState<number>(2);
 
   // Cancel transaction states
   const [isCancelOpen, setIsCancelOpen] = useState(false);
@@ -121,7 +122,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
       setTempExpectedCommission(Number(deposit.expected_commission) || 0);
       setTempSharesData([]);
       setIsEditingCommission(false);
-      setAutoRemindManage(deposit.auto_remind !== 0);
+      setAutoRemindManage(Number(deposit.auto_remind) === 1);
       setRemindDaysBeforeManage(Number(deposit.remind_days_before) || 3);
       setRemindAtHourManage(Number(deposit.remind_at_hour) || 8);
       setRemindTargetManage(Number(deposit.remind_target) || 2);
@@ -482,12 +483,13 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
     }
   };
 
-  const handleSendManualReminder = async (milestoneId: number) => {
+  const handleSendManualReminder = async (milestoneId: number, targetChoice: number = 2) => {
     if (sendingReminderId !== null) return;
     setSendingReminderId(milestoneId);
     try {
       const res = await fetchAPI(`deposits/${selectedDepForManage?.id}/milestones/${milestoneId}/remind`, {
-        method: 'POST'
+        method: 'POST',
+        body: JSON.stringify({ remind_target: targetChoice })
       });
       if (res.success) {
         addToast('Đã gửi thông báo nhắc lịch thanh toán thành công!', 'success');
@@ -611,7 +613,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
     return () => window.removeEventListener('keydown', handleEscape);
   }, [isOpen, isClosing]);
 
-  const baseZIndex = zIndex || 2000000;
+  const baseZIndex = Math.min(zIndex || 2000000, 2147483630);
 
   return createPortal(
     <>
@@ -1950,69 +1952,250 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
         </div>
       </CustomModal>
 
-      {/* Send manual reminder confirmation modal */}
+      {/* Send manual reminder confirmation modal with compiled HTML preview */}
       <CustomModal
         isOpen={!!previewReminderMilestone}
         onClose={() => setPreviewReminderMilestone(null)}
-        title="Xem trước thông báo nhắc nợ"
-        width="550px"
-        zIndex={baseZIndex + 50}
+        title="Xem trước & Gửi nhắc lịch thanh toán"
+        width="650px"
+        zIndex={Math.min(baseZIndex + 10, 2147483647)}
       >
         {previewReminderMilestone && (() => {
-          const sendToCaretaker = remindTargetManage === 2 || !selectedDepForManage.email;
           const caretakerUser = sharesData && sharesData.length > 0 ? sharesData[0] : null;
-          const recipientName = sendToCaretaker ? (caretakerUser?.name || 'Sale chăm sóc') : (selectedDepForManage.full_name || '').trim();
+          const saleName = caretakerUser?.name || selectedDepForManage.contact_owner_name || selectedDepForManage.creator_name || 'Sale chăm sóc';
+          const saleEmail = caretakerUser?.email || selectedDepForManage.contact_owner_email || selectedDepForManage.creator_email || '';
+          const custName = (selectedDepForManage.full_name || '').trim();
+          const custEmail = (selectedDepForManage.email || '').trim();
+
           const amountStr = (selectedDepForManage.currency !== 'VND' && previewReminderMilestone.original_amount !== null && previewReminderMilestone.original_amount !== undefined)
             ? `${formatMoney(previewReminderMilestone.original_amount, selectedDepForManage.currency)} (≈ ${formatMoney(previewReminderMilestone.expected_amount, 'VND')})`
             : formatMoney(previewReminderMilestone.expected_amount, 'VND');
           const payDateStr = previewReminderMilestone.expected_pay_date ? new Date(previewReminderMilestone.expected_pay_date).toLocaleDateString('vi-VN') : '—';
-          const custName = (selectedDepForManage.full_name || '').trim();
-          const subject = sendToCaretaker ? `[Nhắc lịch thanh toán] Khách hàng ${custName} - ${selectedDepForManage.project_name}` : `[Thông báo thanh toán] Căn hộ ${selectedDepForManage.unit_code} - ${selectedDepForManage.project_name}`;
+          const studentIdStr = selectedDepForManage.student_id || selectedDepForManage.unit_code || '—';
+
+          const isSendSale = manualRemindTarget === 2;
+          const isSendCustomer = manualRemindTarget === 1;
+          const isSendBoth = manualRemindTarget === 3;
+
+          const subject = isSendCustomer
+            ? `[IDEAS] Nhắc nhở lịch thanh toán: ${previewReminderMilestone.milestone_name}`
+            : `[IDEAS] Nhắc lịch thanh toán của học viên: ${custName}`;
 
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>Tiêu đề Email</label>
-                <div style={{ background: 'var(--color-bg-light)', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
-                  <span style={{ color: 'var(--color-text)', fontWeight: 700 }}>{subject}</span>
+              {/* Option Selector */}
+              <div>
+                <label style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block', marginBottom: '8px' }}>
+                  Chọn đối tượng nhận thông báo
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                  <div
+                    onClick={() => setManualRemindTarget(2)}
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: '10px',
+                      border: `1.5px solid ${isSendSale ? '#BD1D2D' : 'var(--color-border)'}`,
+                      background: isSendSale ? 'rgba(189, 29, 45, 0.05)' : 'var(--color-surface)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <input type="radio" checked={isSendSale} onChange={() => setManualRemindTarget(2)} style={{ accentColor: '#BD1D2D' }} />
+                      <span style={{ fontSize: '0.825rem', fontWeight: 700, color: isSendSale ? '#BD1D2D' : 'var(--color-text)' }}>
+                        Nhắc cho Sale
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', lineHeight: 1.25 }}>
+                      Mặc định: Gửi email nhắc tư vấn viên liên hệ
+                    </span>
+                  </div>
+
+                  <div
+                    onClick={() => setManualRemindTarget(1)}
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: '10px',
+                      border: `1.5px solid ${isSendCustomer ? '#BD1D2D' : 'var(--color-border)'}`,
+                      background: isSendCustomer ? 'rgba(189, 29, 45, 0.05)' : 'var(--color-surface)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <input type="radio" checked={isSendCustomer} onChange={() => setManualRemindTarget(1)} style={{ accentColor: '#BD1D2D' }} />
+                      <span style={{ fontSize: '0.825rem', fontWeight: 700, color: isSendCustomer ? '#BD1D2D' : 'var(--color-text)' }}>
+                        Gửi Học viên
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', lineHeight: 1.25 }}>
+                      Gửi trực tiếp hòm thư của học viên
+                    </span>
+                  </div>
+
+                  <div
+                    onClick={() => setManualRemindTarget(3)}
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: '10px',
+                      border: `1.5px solid ${isSendBoth ? '#BD1D2D' : 'var(--color-border)'}`,
+                      background: isSendBoth ? 'rgba(189, 29, 45, 0.05)' : 'var(--color-surface)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <input type="radio" checked={isSendBoth} onChange={() => setManualRemindTarget(3)} style={{ accentColor: '#BD1D2D' }} />
+                      <span style={{ fontSize: '0.825rem', fontWeight: 700, color: isSendBoth ? '#BD1D2D' : 'var(--color-text)' }}>
+                        Gửi cả hai
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', lineHeight: 1.25 }}>
+                      Gửi đồng thời cả Sale và Học viên
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>Nội dung Email</label>
-                <div style={{ 
-                  background: 'var(--color-surface)', 
-                  border: '1px solid var(--color-border)', 
-                  borderRadius: '8px', 
-                  padding: '16px', 
-                  fontSize: '0.85rem', 
-                  lineHeight: '1.5',
-                  color: 'var(--color-text)',
-                  fontFamily: 'system-ui, -apple-system, sans-serif'
+              {/* Recipient Info Bar */}
+              <div style={{ 
+                background: 'var(--color-bg-light, #f8fafc)', 
+                border: '1px solid var(--color-border)', 
+                borderRadius: '8px', 
+                padding: '8px 12px',
+                fontSize: '0.78rem',
+                color: 'var(--color-text)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <span style={{ fontWeight: 700, color: 'var(--color-text-muted)' }}>Người nhận:</span>
+                {isSendSale && (
+                  <span><strong>{saleName}</strong> {saleEmail ? `<${saleEmail}>` : '(Email Sale theo tài khoản)'}</span>
+                )}
+                {isSendCustomer && (
+                  <span>
+                    <strong>{custName}</strong> {custEmail ? `<${custEmail}>` : <span style={{ color: '#ef4444', fontWeight: 600 }}>(⚠️ Học viên chưa có email - sẽ gửi fallback về Sale)</span>}
+                  </span>
+                )}
+                {isSendBoth && (
+                  <span>
+                    Học viên: <strong>{custName}</strong> {custEmail ? `<${custEmail}>` : '(Chưa có email)'} &bull; Sale: <strong>{saleName}</strong> {saleEmail ? `<${saleEmail}>` : ''}
+                  </span>
+                )}
+              </div>
+
+              {/* Subject */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>Tiêu đề Email</span>
+                <div style={{ background: 'var(--color-bg-light)', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--color-border)', fontSize: '0.82rem', fontWeight: 600 }}>
+                  {subject}
+                </div>
+              </div>
+
+              {/* Compiled HTML Email Preview Box */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                  Xem trước nội dung Email (Compiled HTML)
+                </span>
+                <div style={{
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '10px',
+                  overflow: 'hidden',
+                  background: '#f8fafc',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                  maxHeight: '340px',
+                  overflowY: 'auto'
                 }}>
-                  {sendToCaretaker ? (
-                    <div>
-                      Chào <strong>{recipientName}</strong>,<br /><br />
-                      Hệ thống gửi thông báo nhắc lịch thanh toán của học viên <strong>{custName}</strong> (SĐT: {selectedDepForManage.phone || '—'}).<br /><br />
-                      Vui lòng chủ động liên hệ nhắc nhở khách hàng thanh toán đợt: <strong>{previewReminderMilestone.milestone_name}</strong>.<br />
-                      Số tiền cần thanh toán: <strong>{amountStr}</strong>.<br />
-                      Hạn thanh toán: <strong>{payDateStr}</strong>.<br />
-                      Chương trình: <strong>{selectedDepForManage.project_name}</strong>{selectedDepForManage.unit_code && selectedDepForManage.unit_code !== '—' && selectedDepForManage.unit_code !== '-' && selectedDepForManage.unit_code.trim() !== '' ? ` (Căn ${selectedDepForManage.unit_code})` : ''}.
+                  {/* Email Header */}
+                  <div style={{ background: 'linear-gradient(135deg, #BD1D2D, #8C111E)', padding: '16px 20px', textAlign: 'center' }}>
+                    <h2 style={{ color: '#ffffff', fontSize: '20px', margin: 0, fontWeight: 900, letterSpacing: '2px', fontFamily: 'system-ui, sans-serif' }}>
+                      IDEAS
+                    </h2>
+                    <p style={{ color: 'rgba(255,255,255,0.9)', fontSize: '10.5px', margin: '4px 0 0', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>
+                      THÔNG BÁO NHẮC LỊCH THANH TOÁN
+                    </p>
+                  </div>
+
+                  {/* Email Body Card */}
+                  <div style={{ padding: '20px', background: '#ffffff', margin: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    <div style={{ background: '#f8fafc', borderLeft: '4px solid #BD1D2D', padding: '14px 16px', borderRadius: '0 6px 6px 0', border: '1px solid #e2e8f0', borderLeftWidth: '4px', marginBottom: '14px' }}>
+                      <h4 style={{ color: '#0f172a', margin: '0 0 8px', fontSize: '14px', fontWeight: 700 }}>
+                        {isSendCustomer ? 'NHẮC NHỞ THANH TOÁN' : 'NHẮC NHỞ TƯ VẤN VIÊN CHĂM SÓC'}
+                      </h4>
+                      <p style={{ margin: '0 0 10px', color: '#334155', fontSize: '13px', lineHeight: 1.5 }}>
+                        Chào <strong>{isSendCustomer ? custName : saleName}</strong>,<br />
+                        {isSendCustomer ? (
+                          <>Đây là thông báo nhắc lịch thanh toán theo hợp đồng đào tạo cho đợt: <strong>{previewReminderMilestone.milestone_name}</strong>.</>
+                        ) : (
+                          <>Hệ thống gửi thông báo nhắc lịch thanh toán của học viên <strong>{custName}</strong> (SĐT: {selectedDepForManage.phone || '—'}). Vui lòng chủ động liên hệ nhắc nhở học viên thanh toán đúng tiến độ.</>
+                        )}
+                      </p>
+
+                      {/* Info Table */}
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+                        <tbody>
+                          <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                            <td style={{ padding: '5px 0', color: '#64748b', width: '130px' }}>Họ và tên:</td>
+                            <td style={{ padding: '5px 0', fontWeight: 600, color: '#0f172a' }}>{custName}</td>
+                          </tr>
+                          {studentIdStr && studentIdStr !== '—' && (
+                            <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                              <td style={{ padding: '5px 0', color: '#64748b' }}>Mã học viên:</td>
+                              <td style={{ padding: '5px 0', fontWeight: 600, color: '#0f172a' }}>{studentIdStr}</td>
+                            </tr>
+                          )}
+                          <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                            <td style={{ padding: '5px 0', color: '#64748b' }}>Chương trình:</td>
+                            <td style={{ padding: '5px 0', fontWeight: 600, color: '#0f172a' }}>{selectedDepForManage.project_name}</td>
+                          </tr>
+                          <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                            <td style={{ padding: '5px 0', color: '#64748b' }}>Đợt thanh toán:</td>
+                            <td style={{ padding: '5px 0', fontWeight: 600, color: '#0f172a' }}>{previewReminderMilestone.milestone_name}</td>
+                          </tr>
+                          <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                            <td style={{ padding: '5px 0', color: '#64748b' }}>Số tiền cần đóng:</td>
+                            <td style={{ padding: '5px 0', fontWeight: 800, color: '#BD1D2D', fontSize: '13.5px' }}>{amountStr}</td>
+                          </tr>
+                          <tr>
+                            <td style={{ padding: '5px 0', color: '#64748b' }}>Hạn thanh toán:</td>
+                            <td style={{ padding: '5px 0', fontWeight: 600, color: '#0f172a' }}>{payDateStr}</td>
+                          </tr>
+                        </tbody>
+                      </table>
                     </div>
-                  ) : (
-                    <div>
-                      Chào <strong>{custName}</strong>,<br /><br />
-                      Đây là thông báo nhắc lịch thanh toán cho đợt: <strong>{previewReminderMilestone.milestone_name}</strong>.<br /><br />
-                      Chương trình: <strong>{selectedDepForManage.project_name}</strong>{selectedDepForManage.unit_code && selectedDepForManage.unit_code !== '—' && selectedDepForManage.unit_code !== '-' && selectedDepForManage.unit_code.trim() !== '' ? ` (Căn ${selectedDepForManage.unit_code})` : ''}.<br />
-                      Số tiền cần đóng: <strong>{amountStr}</strong>.<br />
-                      Hạn thanh toán: <strong>{payDateStr}</strong>.<br /><br />
-                      Vui lòng hoàn tất thanh toán và tải hình ảnh Ủy nhiệm chi (UNC) lên hệ thống. Xin cảm ơn!
-                    </div>
-                  )}
+
+                    <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#64748b', lineHeight: 1.5 }}>
+                      Vui lòng hoàn tất thanh toán và gửi hình ảnh Ủy nhiệm chi (UNC) cho bộ phận phụ trách hoặc phản hồi email này.
+                    </p>
+
+                    {!isSendCustomer && (
+                      <div style={{ textAlign: 'center', margin: '14px 0 6px' }}>
+                        <span style={{ display: 'inline-block', background: '#BD1D2D', color: '#ffffff', padding: '8px 20px', borderRadius: '6px', fontWeight: 700, fontSize: '11.5px', textTransform: 'uppercase' }}>
+                          ĐĂNG NHẬP HỆ THỐNG
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Email Footer */}
+                  <div style={{ background: '#f8fafc', padding: '10px 16px', textAlign: 'center', borderTop: '1px solid #e2e8f0', color: '#94a3b8', fontSize: '11px' }}>
+                    &copy; 2026 IDEAS. All rights reserved.
+                  </div>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.25rem' }}>
                 <button 
                   type="button" 
                   className="btn secondary" 
@@ -2027,13 +2210,14 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                   disabled={sendingReminderId === previewReminderMilestone.id}
                   onClick={async () => {
                     const mid = previewReminderMilestone.id;
+                    const choice = manualRemindTarget;
                     setPreviewReminderMilestone(null);
-                    await handleSendManualReminder(mid);
+                    await handleSendManualReminder(mid, choice);
                   }}
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#BD1D2D', borderColor: '#BD1D2D' }}
                 >
-                  {sendingReminderId === previewReminderMilestone.id && <Loader2 size={14} className="spin" />}
-                  Xác nhận gửi
+                  {sendingReminderId === previewReminderMilestone.id ? <Loader2 size={14} className="spin" /> : <Send size={14} />}
+                  Xác nhận gửi thông báo
                 </button>
               </div>
             </div>

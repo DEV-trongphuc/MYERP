@@ -102,26 +102,51 @@ export interface ExpenseItemRow {
   vat: number;
 }
 
-const formatNumberWithDots = (val: string | number) => {
-  if (val === undefined || val === null || val === '') return '';
-  if (typeof val === 'number') {
-    if (isNaN(val)) return '';
-    return new Intl.NumberFormat('vi-VN').format(Math.round(val));
-  }
-  let cleanStr = String(val).trim();
-  if (cleanStr.includes('.') && !cleanStr.includes(',')) {
-    const parsed = parseFloat(cleanStr);
-    if (!isNaN(parsed)) {
-      return new Intl.NumberFormat('vi-VN').format(Math.round(parsed));
+export const parseMoneyVn = (raw: any): number => {
+  if (raw === null || raw === undefined || raw === '') return 0;
+  if (typeof raw === 'number') return isNaN(raw) ? 0 : Math.round(raw);
+  const s = String(raw).trim();
+  if (!s) return 0;
+
+  // If both dot and comma exist: determine which is decimal
+  if (s.includes('.') && s.includes(',')) {
+    if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
+      // 3.297.000,50 -> dot is thousand, comma is decimal
+      const intPart = s.split(',')[0].replace(/\D/g, '');
+      return Number(intPart) || 0;
+    } else {
+      // 3,297,000.50 -> comma is thousand, dot is decimal
+      const intPart = s.split('.')[0].replace(/\D/g, '');
+      return Number(intPart) || 0;
     }
   }
-  if (cleanStr.includes(',') && cleanStr.lastIndexOf(',') > cleanStr.lastIndexOf('.')) {
-    const integerPart = cleanStr.split(',')[0].replace(/\D/g, '');
-    if (integerPart) return new Intl.NumberFormat('vi-VN').format(Number(integerPart));
+
+  // If only dot exists: e.g. "3.297.000" or "500.000"
+  if (s.includes('.')) {
+    const dotParts = s.split('.');
+    // In VN currency, multiple dots or 3 digits at end = thousands separator
+    if (dotParts.length > 2 || dotParts[dotParts.length - 1].length === 3) {
+      return Number(s.replace(/\D/g, '')) || 0;
+    }
+    return Math.round(parseFloat(s) || 0);
   }
-  const numStr = cleanStr.replace(/\D/g, '');
-  if (!numStr) return '';
-  return new Intl.NumberFormat('vi-VN').format(Number(numStr));
+
+  // If only comma exists: e.g. "3,297,000" or "500,000" or "10,5"
+  if (s.includes(',')) {
+    const commaParts = s.split(',');
+    if (commaParts.length > 2 || commaParts[commaParts.length - 1].length === 3) {
+      return Number(s.replace(/\D/g, '')) || 0;
+    }
+    return Math.round(parseFloat(s.replace(',', '.')) || 0);
+  }
+
+  return Number(s.replace(/\D/g, '')) || 0;
+};
+
+const formatNumberWithDots = (val: string | number) => {
+  if (val === undefined || val === null || val === '') return '';
+  const num = parseMoneyVn(val);
+  return new Intl.NumberFormat('vi-VN').format(num);
 };
 
 const normalizeFileUrl = (u: string) => {
@@ -769,12 +794,22 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
           });
 
           // Expense items breakdown parsing
+          let loadedItems: any[] = [];
           if (Array.isArray(editItem.items) && editItem.items.length > 0) {
-            setExpenseItems(editItem.items.map((it: any, idx: number) => ({
+            loadedItems = editItem.items;
+          } else if (typeof editItem.items === 'string' && editItem.items.trim().startsWith('[')) {
+            try {
+              const parsed = JSON.parse(editItem.items);
+              if (Array.isArray(parsed) && parsed.length > 0) loadedItems = parsed;
+            } catch (e) {}
+          }
+
+          if (loadedItems.length > 0) {
+            setExpenseItems(loadedItems.map((it: any, idx: number) => ({
               id: it.id || Date.now() + idx,
               content: it.content || it.name || '',
               quantity: Number(it.quantity) || 1,
-              price: Math.round(Number(it.price) || 0),
+              price: parseMoneyVn(it.price !== undefined ? it.price : it.unit_price),
               vat: Number(it.vat !== undefined ? it.vat : 10)
             })));
           } else {
@@ -782,16 +817,8 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
             const itemMatches = Array.from(rawNotes.matchAll(/[•\-*]?\s*\[?(\d+)\]?\s*([^\-\n]+?)\s*-\s*SL:\s*(\d+(?:\.\d+)?)\s*-\s*Đơn giá:\s*([0-9.,]+)[^\-]*-\s*VAT:\s*(\d+)%/gi));
             if (itemMatches.length > 0) {
               const parsed = itemMatches.map((m: any, idx: number) => {
-                let parsedPrice = String(m[4] || '').trim();
-                let p = 0;
-                if (parsedPrice.includes('.') && !parsedPrice.includes(',')) {
-                  p = Math.round(parseFloat(parsedPrice) || 0);
-                } else if (parsedPrice.includes(',') && parsedPrice.lastIndexOf(',') > parsedPrice.lastIndexOf('.')) {
-                  const integerPart = parsedPrice.split(',')[0].replace(/\D/g, '');
-                  p = Number(integerPart) || 0;
-                } else {
-                  p = Number(parsedPrice.replace(/\D/g, '')) || 0;
-                }
+                const parsedPrice = String(m[4] || '').trim();
+                const p = parseMoneyVn(parsedPrice);
                 return {
                   id: Date.now() + idx,
                   content: m[2].trim(),

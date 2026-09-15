@@ -211,12 +211,12 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [entitySubtab, setEntitySubtab] = useState<'contact' | 'partner'>('contact');
   const [selectedContactId, setSelectedContactId] = useState('');
-  const [autoRemind, setAutoRemind] = useState(true);
+  const [autoRemind, setAutoRemind] = useState(false);
   const [remindDaysBefore, setRemindDaysBefore] = useState(3);
   const [remindAtHour, setRemindAtHour] = useState(8);
   const [remindTarget, setRemindTarget] = useState(2);
 
-  const [autoRemindManage, setAutoRemindManage] = useState(true);
+  const [autoRemindManage, setAutoRemindManage] = useState(false);
   const [remindDaysBeforeManage, setRemindDaysBeforeManage] = useState(3);
   const [remindAtHourManage, setRemindAtHourManage] = useState(8);
   const [remindTargetManage, setRemindTargetManage] = useState(2);
@@ -352,7 +352,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
       setTempExpectedCommission(Number(selectedDepForManage.expected_commission) || 0);
       setTempSharesData([]);
       setIsEditingCommission(false);
-      setAutoRemindManage(selectedDepForManage.auto_remind !== 0);
+      setAutoRemindManage(Number(selectedDepForManage.auto_remind) === 1);
       setRemindDaysBeforeManage(Number(selectedDepForManage.remind_days_before) || 3);
       setRemindAtHourManage(Number(selectedDepForManage.remind_at_hour) || 8);
       setRemindTargetManage(Number(selectedDepForManage.remind_target) || 2);

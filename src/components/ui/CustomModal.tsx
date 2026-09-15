@@ -93,11 +93,13 @@ export const CustomModal: React.FC<CustomModalProps> = ({
   const overlayClass = `${styles.overlay} ${fullScreenOnMobile ? styles.fullscreenOverlay : ''} ${centeredOnMobile ? styles.centeredMobileOverlay : ''}`;
   const modalClass = `${styles.modal} ${fullScreenOnMobile ? styles.fullScreenMobile : ''} ${centeredOnMobile ? styles.centeredMobileModal : ''} ${modalClassName || ''}`;
 
+  const resolvedZIndex = zIndex ? Math.min(zIndex, 2147483647) : 2000000000;
+
   const modalContent = (
     <AnimatePresence>
       {isOpen && (
         disableAnimation ? (
-          <div className={overlayClass} style={{ zIndex: zIndex || 2000000000 }}>
+          <div className={overlayClass} style={{ zIndex: resolvedZIndex }}>
             <div
               className={styles.backdrop}
               onClick={onClose}
@@ -133,7 +135,7 @@ export const CustomModal: React.FC<CustomModalProps> = ({
             </div>
           </div>
         ) : (
-          <div className={overlayClass} style={{ zIndex: zIndex || 2000000000 }}>
+          <div className={overlayClass} style={{ zIndex: resolvedZIndex }}>
             <motion.div
               className={styles.backdrop}
               initial={{ opacity: 0 }}

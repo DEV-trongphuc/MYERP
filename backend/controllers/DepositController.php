@@ -237,7 +237,7 @@ class DepositController {
                 }
             }
 
-            $autoRemind = isset($b['auto_remind']) ? (int)$b['auto_remind'] : 1;
+            $autoRemind = isset($b['auto_remind']) ? (int)$b['auto_remind'] : 0;
             $remindDaysBefore = isset($b['remind_days_before']) ? (int)$b['remind_days_before'] : 3;
             $remindAtHour = isset($b['remind_at_hour']) ? (int)$b['remind_at_hour'] : 8;
 
@@ -1370,11 +1370,52 @@ class DepositController {
 
         require_once __DIR__ . '/../mailer.php';
 
-        $remindTarget = (int)($row['remind_target'] ?? 2);
+        $input = getBody();
+        $remindTarget = isset($input['remind_target']) ? (int)$input['remind_target'] : (int)($row['remind_target'] ?? 2);
         $saleEmail = !empty($row['owner_email']) ? $row['owner_email'] : $row['creator_email'];
         $saleName = !empty($row['owner_name']) ? $row['owner_name'] : $row['creator_name'];
 
-        if ($remindTarget === 1) {
+        if ($remindTarget === 3) {
+            // Option 3: Gửi cho CẢ HAI (Học viên và Sale chăm sóc)
+            $hasEmail = !empty(trim($row['contact_email'] ?? ''));
+            if ($hasEmail) {
+                $emailSubject = "[IDEAS] Nhắc nhở lịch thanh toán: " . $row['milestone_name'];
+                $emailTitle = "NHẮC NHỞ THANH TOÁN";
+                $studentIdRow = !empty($studentId) 
+                    ? "<tr><td style=\"padding: 6px 0; color: #64748b; width: 150px;\">Mã học viên (Student ID):</td><td style=\"padding: 6px 0; font-weight: 600; color: #0f172a;\">" . htmlspecialchars($studentId) . "</td></tr>" 
+                    : "";
+                $emailContent = "Chào <strong>" . htmlspecialchars($custName) . "</strong>,<br/><br/>" .
+                                "Đây là thông báo nhắc lịch thanh toán theo hợp đồng đào tạo cho đợt: <strong>" . htmlspecialchars($row['milestone_name']) . "</strong>.<br/><br/>" .
+                                "<table style=\"width: 100%; border-collapse: collapse; font-size: 14px;\">" .
+                                "<tr><td style=\"padding: 6px 0; color: #64748b; width: 150px;\">Họ và tên:</td><td style=\"padding: 6px 0; font-weight: 600; color: #0f172a;\">" . htmlspecialchars($custName) . "</td></tr>" .
+                                $studentIdRow .
+                                "<tr><td style=\"padding: 6px 0; color: #64748b;\">Chương trình:</td><td style=\"padding: 6px 0; font-weight: 600; color: #0f172a;\">" . htmlspecialchars($programName) . "</td></tr>" .
+                                "<tr><td style=\"padding: 6px 0; color: #64748b;\">Ngày nhập học:</td><td style=\"padding: 6px 0; font-weight: 600; color: #0f172a;\">" . htmlspecialchars($admissionDateStr) . "</td></tr>" .
+                                "<tr><td style=\"padding: 6px 0; color: #64748b;\">Đợt thanh toán:</td><td style=\"padding: 6px 0; font-weight: 600; color: #0f172a;\">" . htmlspecialchars($row['milestone_name']) . "</td></tr>" .
+                                "<tr><td style=\"padding: 6px 0; color: #64748b;\">Số tiền cần đóng:</td><td style=\"padding: 6px 0; font-weight: 700; color: #BD1D2D; font-size: 15px;\">" . $amountStr . "</td></tr>" .
+                                "<tr><td style=\"padding: 6px 0; color: #64748b;\">Hạn thanh toán:</td><td style=\"padding: 6px 0; font-weight: 600; color: #0f172a;\">" . $payDateStr . "</td></tr>" .
+                                "</table><br/>" .
+                                "Vui lòng hoàn tất thanh toán và gửi hình ảnh Ủy nhiệm chi (UNC) cho bộ phận phụ trách hoặc phản hồi email này.<br/><br/>" .
+                                "Trân trọng cảm ơn Anh/Chị!";
+                sendEmailNotification($row['contact_email'], $emailSubject, $emailTitle, $emailContent, '', false, 0, true);
+            }
+            if (!empty($saleEmail)) {
+                $emailSubjectSale = "[IDEAS] Nhắc lịch thanh toán của học viên: " . $custName;
+                $emailTitleSale = "NHẮC NHỞ TƯ VẤN VIÊN CHĂM SÓC";
+                $emailContentSale = "Chào <strong>" . htmlspecialchars($saleName) . "</strong>,<br/><br/>" .
+                                    "Hệ thống gửi thông báo nhắc lịch thanh toán của học viên <strong>" . htmlspecialchars($custName) . "</strong> (SĐT: " . htmlspecialchars($row['contact_phone'] ?? '—') . ").<br/><br/>" .
+                                    "• Chương trình: <strong>" . htmlspecialchars($programName) . "</strong><br/>" .
+                                    "• Đợt thanh toán: <strong>" . htmlspecialchars($row['milestone_name']) . "</strong><br/>" .
+                                    "• Số tiền cần thanh toán: <strong>" . $amountStr . "</strong><br/>" .
+                                    "• Hạn thanh toán: <strong>" . $payDateStr . "</strong>.<br/><br/>" .
+                                    "Vui lòng chủ động liên hệ nhắc nhở học viên thanh toán đúng tiến độ.";
+                sendEmailNotification($saleEmail, $emailSubjectSale, $emailTitleSale, $emailContentSale, '', false, 0, false);
+            }
+            $stmtUpd = $this->db->prepare("UPDATE deposit_milestones SET last_reminded_at = CURRENT_TIMESTAMP WHERE id = ?");
+            $stmtUpd->execute([$milestoneId]);
+            logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'REMIND_BOTH', 'deposit', $id, "Gửi email nhắc nhở đợt {$row['milestone_name']} cho cả học viên $custName và Sale $saleName");
+            respond(200, null, 'Đã gửi email nhắc lịch thanh toán cho cả Học viên và Sale chăm sóc thành công');
+        } elseif ($remindTarget === 1) {
             // Option 1: Gửi trực tiếp cho Học viên (nếu không có email thì fallback về Sale)
             $hasEmail = !empty(trim($row['contact_email'] ?? ''));
             if ($hasEmail) {
@@ -1386,7 +1427,7 @@ class DepositController {
                     : "";
 
                 $emailContent = "Chào <strong>" . htmlspecialchars($custName) . "</strong>,<br/><br/>" .
-                                "Đây là thông báo nhắc lịch thanh toán tự động theo hợp đồng đào tạo cho đợt: <strong>" . htmlspecialchars($row['milestone_name']) . "</strong>.<br/><br/>" .
+                                "Đây là thông báo nhắc lịch thanh toán theo hợp đồng đào tạo cho đợt: <strong>" . htmlspecialchars($row['milestone_name']) . "</strong>.<br/><br/>" .
                                 "<table style=\"width: 100%; border-collapse: collapse; font-size: 14px;\">" .
                                 "<tr><td style=\"padding: 6px 0; color: #64748b; width: 150px;\">Họ và tên:</td><td style=\"padding: 6px 0; font-weight: 600; color: #0f172a;\">" . htmlspecialchars($custName) . "</td></tr>" .
                                 $studentIdRow .

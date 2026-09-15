@@ -37,7 +37,7 @@ import { PeriodFilter, getDateRange } from '../components/ui/PeriodFilter';
 import type { Period, DateRange } from '../components/ui/PeriodFilter';
 import { numberToVietnameseText } from '../utils/numberToText';
 import { AttachmentLightboxModal, type AttachmentItem } from '../components/ui/AttachmentLightboxModal';
-import { ExpenseCreateDrawer } from '../components/ExpenseCreateDrawer';
+import { ExpenseCreateDrawer, parseMoneyVn } from '../components/ExpenseCreateDrawer';
 import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 import { getSystemTitle } from '../config/env';
 
@@ -380,24 +380,8 @@ const formatApprovalCurrency = (amount: number | string, currency: string = 'VND
 
 const formatNumberWithDots = (val: string | number) => {
   if (val === undefined || val === null || val === '') return '';
-  if (typeof val === 'number') {
-    if (isNaN(val)) return '';
-    return new Intl.NumberFormat('vi-VN').format(Math.round(val));
-  }
-  let cleanStr = String(val).trim();
-  if (cleanStr.includes('.') && !cleanStr.includes(',')) {
-    const parsed = parseFloat(cleanStr);
-    if (!isNaN(parsed)) {
-      return new Intl.NumberFormat('vi-VN').format(Math.round(parsed));
-    }
-  }
-  if (cleanStr.includes(',') && cleanStr.lastIndexOf(',') > cleanStr.lastIndexOf('.')) {
-    const integerPart = cleanStr.split(',')[0].replace(/\D/g, '');
-    if (integerPart) return new Intl.NumberFormat('vi-VN').format(Number(integerPart));
-  }
-  const numStr = cleanStr.replace(/\D/g, '');
-  if (!numStr) return '';
-  return new Intl.NumberFormat('vi-VN').format(Number(numStr));
+  const num = parseMoneyVn(val);
+  return new Intl.NumberFormat('vi-VN').format(num);
 };
 
 const normalizeFileUrl = (u: string) => {
@@ -453,20 +437,11 @@ const parseExpenseLineItems = (text: string, directItems?: any) => {
     const lines = expBlockMatch[1].split('\n').map(l => l.trim()).filter(Boolean);
     const parsedItems: any[] = [];
     for (const line of lines) {
-      const m = line.match(/[•\-*]?\s*(?:\[\d+\])?\s*(.*?)\s*-\s*SL:\s*([\d\.,]+)\s*-\s*Đơn giá:\s*([\d\.,]+)[^\-]*-\s*VAT:\s*(\d+)%/i);
+      const m = line.match(/[•\-*]?\s*(?:\[\d+\])?\s*(.*?)\s*-\s*SL:\s*([\d\.,]+)\s*-\s*Đơn giá:\s*([0-9.,]+)[^\-]*-\s*VAT:\s*(\d+)%/i);
       if (m) {
         const name = m[1].trim();
         const qty = parseFloat(m[2].replace(/\./g, '').replace(',', '.')) || 1;
-        let parsedPrice = String(m[3] || '').trim();
-        let p = 0;
-        if (parsedPrice.includes('.') && !parsedPrice.includes(',')) {
-          p = Math.round(parseFloat(parsedPrice) || 0);
-        } else if (parsedPrice.includes(',') && parsedPrice.lastIndexOf(',') > parsedPrice.lastIndexOf('.')) {
-          const integerPart = parsedPrice.split(',')[0].replace(/\D/g, '');
-          p = Number(integerPart) || 0;
-        } else {
-          p = Number(parsedPrice.replace(/\D/g, '')) || 0;
-        }
+        const p = parseMoneyVn(m[3]);
         const vat = m[4] ? parseInt(m[4]) : 10;
         parsedItems.push({ name, content: name, quantity: qty, unit_price: p, price: p, vat });
       }
@@ -4085,7 +4060,7 @@ export default function Approvals() {
             id: it.id || Date.now() + i,
             content: it.content || it.name || cleanSuffix || 'Nội dung chi tiêu',
             quantity: Number(it.quantity) || 1,
-            price: Math.round(Number(it.unit_price || it.price) || 0),
+            price: parseMoneyVn(it.unit_price !== undefined ? it.unit_price : it.price),
             vat: it.vat !== undefined ? Number(it.vat) : 10
           })));
         } else {

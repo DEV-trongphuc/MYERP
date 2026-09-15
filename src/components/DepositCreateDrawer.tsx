@@ -210,7 +210,7 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
   const [depositProofImgUrl, setDepositProofImgUrl] = useState('');
   const [uploadingDepositProof, setUploadingDepositProof] = useState(false);
 
-  const [autoRemind, setAutoRemind] = useState(true);
+  const [autoRemind, setAutoRemind] = useState(false);
   const [remindDaysBefore, setRemindDaysBefore] = useState(3);
   const [remindAtHour, setRemindAtHour] = useState(8);
   const [remindTarget, setRemindTarget] = useState(2);
