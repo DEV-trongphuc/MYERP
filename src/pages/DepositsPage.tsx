@@ -360,7 +360,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
         .then(res => {
           const slips = res.data || res || [];
           if (slips.length > 0) {
-            const matchedSlip = slips.find((s: any) => Number(s.deposit_slip_id) === Number(selectedDepForManage.id)) || slips[0];
+            const matchedSlip = slips.find((s: any) => Number(s.deposit_slip_id) === Number(selectedDepForManage.id));
             if (matchedSlip && matchedSlip.shareholders) {
               setSharesData(matchedSlip.shareholders);
               setTempSharesData(matchedSlip.shareholders.map((sh: any) => ({ ...sh })));

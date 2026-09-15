@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 278;
+$targetVersion = 279;
 $currentVersion = 186;
 
 // Query current DB version
@@ -3299,8 +3299,22 @@ try {
         $logMsg("Nâng cấp lên phiên bản 278 hoàn tất.", "success");
     }
 
+    // --- PHIÊN BẢN 279: DỌN DẸP BÌNH LUẬN RÁC CŨ VÀ HỦY PHIẾU HỢP TÁC TỰ SINH SAI LỆCH ---
+    if ($currentVersion < 279) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 279: Dọn dẹp bình luận test cũ trên đơn và chuyển đơn SO về 100% cho Sale phụ trách...", "info");
+        try {
+            $conn->query("DELETE FROM comments WHERE entity_type = 'deposit' AND created_at < '2026-09-01'");
+            $conn->query("DELETE FROM cooperation_slips WHERE deposit_slip_id = 1");
+            $conn->query("UPDATE contacts SET collaborator_ids = NULL WHERE id = 1024706");
+            $logMsg("Dọn dẹp bình luận test cũ và cập nhật đơn SO phiên bản 279 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi nâng cấp v279: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 279 hoàn tất.", "success");
+    }
+
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '278') ON DUPLICATE KEY UPDATE setting_value = '278'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '279') ON DUPLICATE KEY UPDATE setting_value = '279'");
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
 

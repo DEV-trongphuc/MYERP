@@ -143,7 +143,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
         .then(res => {
           const slips = res.data || res || [];
           if (slips.length > 0) {
-            const matchedSlip = slips.find((s: any) => Number(s.deposit_slip_id) === Number(deposit.id)) || slips[0];
+            const matchedSlip = slips.find((s: any) => Number(s.deposit_slip_id) === Number(deposit.id));
             if (matchedSlip && matchedSlip.shareholders) {
               setSharesData(matchedSlip.shareholders);
               setTempSharesData(matchedSlip.shareholders.map((sh: any) => ({ ...sh })));

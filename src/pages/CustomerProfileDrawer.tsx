@@ -1606,7 +1606,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         .then(res => {
           const slips = res.data?.data || res.data || [];
           if (slips.length > 0) {
-            const matchedSlip = slips.find((s: any) => Number(s.deposit_slip_id) === Number(selectedDepForManage.id)) || slips[0];
+            const matchedSlip = slips.find((s: any) => Number(s.deposit_slip_id) === Number(selectedDepForManage.id));
             if (matchedSlip && matchedSlip.shareholders) {
               setSharesData(matchedSlip.shareholders);
               setTempSharesData(matchedSlip.shareholders.map((sh: any) => ({ ...sh })));
