@@ -6406,10 +6406,35 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                               if (isNaN(ih) || isNaN(im) || isNaN(oh) || isNaN(om)) {
                                 return <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>--</span>;
                               }
-                              let diff = (oh * 60 + om) - (ih * 60 + im);
-                              if (diff < 0) diff += 24 * 60;
-                              const h = Math.floor(diff / 60);
-                              const m = diff % 60;
+
+                              const startStr = String(row.work_start_time || '08:00').substring(0, 5);
+                              const endStr = String(row.work_end_time || '17:00').substring(0, 5);
+                              const [sh, sm] = startStr.split(':').map(Number);
+                              const [eh, em] = endStr.split(':').map(Number);
+                              const shiftStartMin = (!isNaN(sh) && !isNaN(sm)) ? sh * 60 + sm : 8 * 60;
+                              const shiftEndMin = (!isNaN(eh) && !isNaN(em)) ? eh * 60 + em : 17 * 60;
+
+                              const inTotalMin = ih * 60 + im;
+                              const outTotalMin = oh * 60 + om;
+
+                              // Neo mốc giờ bắt đầu và kết thúc vào khung ca làm việc (không tính đi sớm, không tính về muộn)
+                              const effectiveIn = Math.max(inTotalMin, shiftStartMin);
+                              const effectiveOut = Math.min(outTotalMin, shiftEndMin);
+
+                              // Trừ giờ nghỉ trưa (12:00 -> 13:00)
+                              const lunchStart = 12 * 60;
+                              const lunchEnd = 13 * 60;
+                              const lunchOverlap = Math.max(0, Math.min(effectiveOut, lunchEnd) - Math.max(effectiveIn, lunchStart));
+
+                              const netWorked = Math.max(0, (effectiveOut - effectiveIn) - lunchOverlap);
+
+                              // Giới hạn tối đa theo thời lượng ca (chuẩn 8h)
+                              const shiftLunchOverlap = Math.max(0, Math.min(shiftEndMin, lunchEnd) - Math.max(shiftStartMin, lunchStart));
+                              const maxShiftCap = Math.max(0, (shiftEndMin - shiftStartMin) - shiftLunchOverlap);
+                              const finalWorkMin = Math.min(netWorked, maxShiftCap > 0 ? maxShiftCap : 480);
+
+                              const h = Math.floor(finalWorkMin / 60);
+                              const m = finalWorkMin % 60;
                               const text = h === 0 ? `${m}p` : m === 0 ? `${h}h` : `${h}h ${m}p`;
                               return (
                                 <span style={{ fontWeight: 700, color: 'var(--color-text)', fontSize: '0.82rem' }}>

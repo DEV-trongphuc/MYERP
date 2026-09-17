@@ -408,36 +408,7 @@ class ActivityController {
         $isContactSpecific = ($relType === 'contact' && !empty($relId));
 
         if ($isContactSpecific) {
-            // Khi xem bên trong Customer Drawer: Cho phép xem và quản lý toàn bộ công việc / tương tác của khách hàng
-            $cId = (int)$relId;
-            $isManagerial = in_array($userRole, ['super_admin', 'superadmin', 'admin', 'director', 'manager', 'sale_admin', 'saleadmin'], true);
-            $isLeader = false;
-            if (!$isManagerial) {
-                $stmtIsLeader = $this->db->prepare("SELECT 1 FROM teams WHERE tenant_id = ? AND (leader_id = ? OR FIND_IN_SET(?, COALESCE(co_leader_ids, '')))");
-                $stmtIsLeader->execute([$tid, $auth['user_id'], $auth['user_id']]);
-                $isLeader = (bool)$stmtIsLeader->fetchColumn();
-            }
-
-            if (!$isManagerial && !$isLeader) {
-                // Nhân viên thường: chỉ xem được nếu là người phụ trách, cộng tác viên hoặc có phiếu phối hợp của khách hàng này
-                $where[] = 'EXISTS (
-                    SELECT 1 FROM contacts ct WHERE ct.id = ? AND ct.tenant_id = ? AND (
-                        ct.owner_id = ? 
-                        OR FIND_IN_SET(?, ct.collaborator_ids) 
-                        OR ct.id IN (
-                            SELECT contact_id FROM cooperation_slips 
-                            WHERE shares_json IS NOT NULL AND JSON_VALID(shares_json) AND JSON_CONTAINS(JSON_KEYS(shares_json), JSON_QUOTE(CAST(? AS CHAR)))
-                        )
-                    )
-                )';
-                $params[] = $cId;
-                $params[] = $tid;
-                $params[] = (int)$auth['user_id'];
-                $params[] = (string)$auth['user_id'];
-                $params[] = (int)$auth['user_id'];
-            }
-            // Không áp bộ lọc hạn chế của Bàn làm việc ở đây,
-            // để vào trong Drawer khách hàng là xem và quản lý được toàn bộ công việc của khách hàng!
+            // Khi xem bên trong Customer Drawer: Cho phép toàn bộ nhân viên (Sale, Tư vấn, Học vụ, Quản lý) xem được 100% dòng thời gian & nhật ký tương tác của khách hàng
         } else {
             // Ở Bàn làm việc (Workspace) và các trang danh sách chung:
             if ($hasBroadOversight) {

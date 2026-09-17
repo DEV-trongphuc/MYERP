@@ -29,6 +29,7 @@ import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 import { AttachmentLightboxModal, type AttachmentItem } from '../components/ui/AttachmentLightboxModal';
 import { parseTaskBody, convertTextToHtmlParagraphs, formatVietnameseDescription } from '../utils/taskBodyParser';
+import { formatCommentBody } from '../utils/commentFormatter';
 
 interface WorkspaceTaskDrawerProps {
   isOpen: boolean;
@@ -1177,13 +1178,9 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     if (task) {
       const isSaleRole = ['sale', 'sales'].includes(String(currentUser?.role || '').toLowerCase());
       const defaultUserId = task.user_id || (isSaleRole ? currentUser.id : null);
-      let initialDueDate = task.due_date;
-      if (task.id === 'new') {
-        if (!initialDueDate) {
-          initialDueDate = `${new Date().toISOString().slice(0, 10)} 18:00:00`;
-        } else if (initialDueDate.length === 10) {
-          initialDueDate = `${initialDueDate} 18:00:00`;
-        }
+      let initialDueDate = task.due_date || null;
+      if (initialDueDate && initialDueDate.length === 10) {
+        initialDueDate = `${initialDueDate} 18:00:00`;
       }
       const normalizedTask = {
         ...task,
@@ -1615,7 +1612,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
               : formData.due_date.length === 16 
                 ? `${formData.due_date}:00` 
                 : formData.due_date) 
-          : (new Date().toISOString().slice(0, 10) + ' 18:00:00'),
+          : null,
         user_id: formData.user_id ? Number(formData.user_id) : null,
         created_by: formData.created_by ? Number(formData.created_by) : null,
         require_approval: formData.require_approval || 0,
@@ -2321,6 +2318,43 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     }
   };
 
+  const handleSelectAllParticipants = () => {
+    const primaryUserId = Number(formData.user_id || 0);
+    const validIds = availableUsersForParticipantDropdown
+      .map((u: any) => Number(u.id))
+      .filter((id: number) => id && id !== primaryUserId);
+    
+    const current = getParticipantIds(formData.participant_ids).map(Number);
+    const combined = Array.from(new Set([...current, ...validIds])).map(String);
+    const nextString = combined.join(',');
+    setFormData((prev: any) => ({ ...prev, participant_ids: nextString }));
+    handleUpdateField('participant_ids', nextString);
+    toast.success(t('Đã thêm tất cả người liên quan'));
+  };
+
+  const handleDeselectAllParticipants = () => {
+    const assignedIds = new Set<string>();
+    erpMeta.checklist?.forEach((item: any) => {
+      if (item.assignee_id) {
+        String(item.assignee_id).split(',').forEach(id => {
+          const tId = id.trim();
+          if (tId) assignedIds.add(tId);
+        });
+      }
+    });
+
+    const current = getParticipantIds(formData.participant_ids);
+    const remaining = current.filter(id => assignedIds.has(id));
+    const nextString = remaining.join(',');
+    setFormData((prev: any) => ({ ...prev, participant_ids: nextString }));
+    handleUpdateField('participant_ids', nextString);
+    if (remaining.length > 0) {
+      toast(t('Đã bỏ chọn (ngoại trừ nhân sự có việc con)'), { icon: 'ℹ️' });
+    } else {
+      toast.success(t('Đã bỏ chọn tất cả người liên quan'));
+    }
+  };
+
   // Document body overflow handling
   useEffect(() => {
     if (isOpen && task && !embedMode) {
@@ -2755,13 +2789,18 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     </div>
                   )}
 
-                  {formData.due_date && (
+                  {formData.due_date ? (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--color-bg)', padding: '2px 8px', borderRadius: '6px', border: '1px solid var(--color-border-light)' }}>
                       <Clock size={12} style={{ color: 'var(--color-danger, #ef4444)' }} />
                       <span>{t('Hạn hoàn thành:')}</span>
                       <strong style={{ color: 'var(--color-text)' }}>
                         {new Date(formData.due_date.replace(/-/g, '/')).toLocaleDateString('vi-VN')} {new Date(formData.due_date.replace(/-/g, '/')).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
                       </strong>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--color-bg)', padding: '2px 8px', borderRadius: '6px', border: '1px solid var(--color-border-light)', color: 'var(--color-text-muted)' }}>
+                      <Clock size={12} style={{ color: 'var(--color-text-muted)' }} />
+                      <span style={{ fontStyle: 'italic', fontSize: '0.72rem' }}>{t('Không có thời hạn')}</span>
                     </div>
                   )}
 
@@ -3787,10 +3826,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                             <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text)' }}>{commUser?.full_name || comment.user_name || 'Đồng nghiệp'}</span>
                                             <span style={{ fontSize: '0.6rem', color: 'var(--color-text-muted)' }}>{new Date(comment.created_at.replace(/-/g, '/')).toLocaleString('vi-VN')}</span>
                                           </div>
-                                          {comment.content && /<[a-z][\s\S]*>/i.test(comment.content) ? (
+                                          {comment.content && (/<[a-z][\s\S]*>/i.test(comment.content) || /[📕📄📊📝📦🖼️📎]/.test(comment.content)) ? (
                                             <div 
                                               className="rich-comment-content task-comment-body"
-                                              dangerouslySetInnerHTML={{ __html: linkifyHtml(comment.content) }}
+                                              dangerouslySetInnerHTML={{ __html: linkifyHtml(formatCommentBody(comment.content)) }}
                                               style={{ fontSize: '0.78rem', color: 'var(--color-text-light)', margin: '2px 0 0', lineHeight: '1.4', wordBreak: 'break-word' }}
                                             />
                                           ) : (
@@ -4733,10 +4772,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                     <span style={{ fontSize: isReply ? '0.76rem' : '0.82rem', fontWeight: 800, color: 'var(--color-text)' }}>{commUser?.full_name || comment.user_name || 'Đồng nghiệp'}</span>
                                     <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>{new Date(comment.created_at.replace(/-/g, '/')).toLocaleString('vi-VN')}</span>
                                   </div>
-                                  {comment.content && /<[a-z][\s\S]*>/i.test(comment.content) ? (
+                                  {comment.content && (/<[a-z][\s\S]*>/i.test(comment.content) || /[📕📄📊📝📦🖼️📎]/.test(comment.content)) ? (
                                     <div 
                                       className="rich-text-editor-content task-comment-body"
-                                      dangerouslySetInnerHTML={{ __html: linkifyHtml(comment.content) }}
+                                      dangerouslySetInnerHTML={{ __html: linkifyHtml(formatCommentBody(comment.content)) }}
                                       style={{ fontSize: isReply ? '0.78rem' : '0.825rem', color: 'var(--color-text-light)', margin: '6px 0 0', lineHeight: '1.45', wordBreak: 'break-word' }}
                                     />
                                   ) : (
@@ -6259,6 +6298,54 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                               autoFocus
                             />
                           </div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 2px 4px 2px', borderBottom: '1px solid var(--color-border-light)' }}>
+                            <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
+                              {t('Đã chọn')} {participantIds.length}
+                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSelectAllParticipants();
+                                }}
+                                style={{
+                                  fontSize: '0.72rem',
+                                  fontWeight: 700,
+                                  color: 'var(--color-primary, #bd1d2d)',
+                                  background: 'none',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  padding: '2px 4px',
+                                  borderRadius: '4px'
+                                }}
+                                className="hover-bg-alt"
+                              >
+                                {t('Chọn tất cả')}
+                              </button>
+                              {participantIds.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeselectAllParticipants();
+                                  }}
+                                  style={{
+                                    fontSize: '0.72rem',
+                                    color: 'var(--color-text-muted)',
+                                    background: 'none',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    padding: '2px 4px',
+                                    borderRadius: '4px'
+                                  }}
+                                  className="hover-bg-alt"
+                                >
+                                  {t('Bỏ chọn')}
+                                </button>
+                              )}
+                            </div>
+                          </div>
                         </div>
                         {availableUsersForParticipantDropdown.map((u: any) => {
                             const isSelected = participantIds.includes(Number(u.id));
@@ -6423,62 +6510,120 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
               </div>
 
               <div className="card" style={{ ...cardStyle, padding: embedMode ? '10px 10px' : '14px 12px' }}>
-                <label style={{ ...cardLabelStyle, whiteSpace: 'nowrap' }}>
-                  {t('Hạn hoàn thành')}
-                </label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <VietnameseDateInput
-                      value={formData.due_date ? formData.due_date.substring(0, 10) : ''}
-                      onChange={(isoDate) => {
-                        if (!isoDate) {
-                          handleUpdateField('due_date', null);
-                          return;
-                        }
-                        let curTime = '18:00';
-                        if (formData.due_date && formData.due_date.length >= 16) {
-                          const timePart = formData.due_date.substring(11, 16);
-                          if (timePart) {
-                            curTime = timePart;
-                          }
-                        }
-                        handleUpdateField('due_date', `${isoDate} ${curTime}:00`);
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <label style={{ ...cardLabelStyle, margin: 0, whiteSpace: 'nowrap' }}>
+                    {t('Hạn hoàn thành')}
+                  </label>
+                  {formData.due_date ? (
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateField('due_date', null)}
+                      style={{
+                        fontSize: '0.68rem',
+                        fontWeight: 600,
+                        color: 'var(--color-danger, #ef4444)',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '2px',
+                        padding: '1px 4px',
+                        borderRadius: '4px'
                       }}
-                      style={{ height: '36px', width: '100%' }}
-                      inputStyle={{ padding: '0 8px', fontSize: '0.82rem' }}
+                      title={t('Xóa hạn hoàn thành')}
+                    >
+                      <X size={11} />
+                      <span>{t('Bỏ hạn chót')}</span>
+                    </button>
+                  ) : (
+                    <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                      {t('Vô thời hạn')}
+                    </span>
+                  )}
+                </div>
+                {formData.due_date ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <VietnameseDateInput
+                        value={formData.due_date ? formData.due_date.substring(0, 10) : ''}
+                        onChange={(isoDate) => {
+                          if (!isoDate) {
+                            handleUpdateField('due_date', null);
+                            return;
+                          }
+                          let curTime = '18:00';
+                          if (formData.due_date && formData.due_date.length >= 16) {
+                            const timePart = formData.due_date.substring(11, 16);
+                            if (timePart) {
+                              curTime = timePart;
+                            }
+                          }
+                          handleUpdateField('due_date', `${isoDate} ${curTime}:00`);
+                        }}
+                        style={{ height: '36px', width: '100%' }}
+                        inputStyle={{ padding: '0 8px', fontSize: '0.82rem' }}
+                      />
+                    </div>
+                    <input
+                      type="time"
+                      className="form-input"
+                      value={
+                        formData.due_date && formData.due_date.length >= 16 
+                          ? formData.due_date.substring(11, 16) 
+                          : '18:00'
+                      }
+                      onChange={(e) => {
+                        const newTime = e.target.value || '18:00';
+                        const curDate = formData.due_date && formData.due_date.length >= 10
+                          ? formData.due_date.substring(0, 10)
+                          : new Date().toISOString().substring(0, 10);
+                        handleUpdateField('due_date', `${curDate} ${newTime}:00`);
+                      }}
+                      style={{ 
+                        height: '36px', 
+                        padding: '0 6px', 
+                        fontSize: '0.82rem', 
+                        borderRadius: '8px',
+                        border: '1px solid var(--color-border)',
+                        background: 'var(--color-surface, #ffffff)',
+                        color: 'var(--color-text)',
+                        fontWeight: 600,
+                        width: '80px',
+                        flexShrink: 0,
+                        cursor: 'pointer'
+                      }}
+                      title={t('Chọn giờ hạn hoàn thành')}
                     />
                   </div>
-                  <input
-                    type="time"
-                    className="form-input"
-                    value={
-                      formData.due_date && formData.due_date.length >= 16 
-                        ? formData.due_date.substring(11, 16) 
-                        : '18:00'
-                    }
-                    onChange={(e) => {
-                      const newTime = e.target.value || '18:00';
-                      const curDate = formData.due_date && formData.due_date.length >= 10
-                        ? formData.due_date.substring(0, 10)
-                        : new Date().toISOString().substring(0, 10);
-                      handleUpdateField('due_date', `${curDate} ${newTime}:00`);
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const today = new Date().toISOString().substring(0, 10);
+                      handleUpdateField('due_date', `${today} 18:00:00`);
                     }}
-                    style={{ 
-                      height: '36px', 
-                      padding: '0 6px', 
-                      fontSize: '0.82rem', 
+                    style={{
+                      width: '100%',
+                      height: '36px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      border: '1px dashed var(--color-border)',
                       borderRadius: '8px',
-                      border: '1px solid var(--color-border)',
-                      background: 'var(--color-surface, #ffffff)',
-                      color: 'var(--color-text)',
+                      background: 'var(--color-bg, #f8fafc)',
+                      color: 'var(--color-text-muted)',
+                      fontSize: '0.78rem',
                       fontWeight: 600,
-                      width: '80px',
-                      flexShrink: 0,
                       cursor: 'pointer'
                     }}
-                    title={t('Chọn giờ hạn hoàn thành')}
-                  />
-                </div>
+                    className="hover-border-primary"
+                  >
+                    <Clock size={13} />
+                    <span>{t('+ Thiết lập hạn chót')}</span>
+                  </button>
+                )}
               </div>
             </div>
 

@@ -37,7 +37,7 @@ class DepositController {
         ";
         $params = [$tid, $tid, $tid, $tid];
 
-        $isAdminOrDirectorOrAccountant = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'accountant'], true);
+        $isAdminOrDirectorOrAccountant = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'accountant', 'marketing'], true);
 
         if (!$isAdminOrDirectorOrAccountant) {
             if ($auth['role'] === 'manager') {
@@ -1576,10 +1576,10 @@ class DepositController {
         $stmtDep->execute([$id]);
         $contactId = $stmtDep->fetchColumn();
 
-        if (!empty($mentions) && $contactId) {
+        if (!empty($mentions)) {
             try {
                 require_once __DIR__ . '/../NotificationService.php';
-                $targetLink = "/contacts?open_contact_id={$contactId}&highlight_activity_id=0&highlight_comment_id={$newId}";
+                $targetLink = "/deposits?open_id={$id}&highlight_comment_id={$newId}";
                 foreach ($mentions as $uid => $userRow) {
                     NotificationService::send($this->db, $auth['tenant_id'], 'MENTION_TAGGED', [
                         'user_id' => $uid,

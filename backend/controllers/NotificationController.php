@@ -96,10 +96,11 @@ class NotificationController {
                     }
                 }
 
-                // 5. Nếu regex chưa match, quét đối soát trực tiếp với danh sách tên nhân viên (từ tên dài nhất)
+                // 5. Nếu regex chưa match, quét đối soát tên nhân viên ở phần đầu thông báo (trước hành động)
                 if (!$actorName && !empty($userList)) {
+                    $headerSnippet = mb_substr($cleanBody, 0, 80);
                     foreach ($userList as $u) {
-                        if ($u['len'] >= 4 && mb_strpos($item['body'], $u['name']) !== false) {
+                        if ($u['len'] >= 4 && mb_stripos($headerSnippet, $u['name']) !== false) {
                             $actorName = $u['name'];
                             break;
                         }

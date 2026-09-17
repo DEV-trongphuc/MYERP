@@ -88,7 +88,7 @@ export const numberToVietnameseText = (number: number | string, currency: string
 
   let suffix = "đồng";
   if (currency === 'USD') suffix = "đô la Mỹ";
-  else if (currency === 'EURO') suffix = "Euro";
+  else if (currency === 'EURO' || currency === 'EUR') suffix = "Euro";
   else if (currency === 'CHF') suffix = "Franc Thụy Sĩ";
   
   return result + " " + suffix;

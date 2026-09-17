@@ -25,6 +25,7 @@ const WorkspaceTaskDrawer = lazy(() => import('./WorkspaceTaskDrawer').then(modu
 const ExpenseCreateDrawer = lazy(() => import('../components/ExpenseCreateDrawer').then(module => ({ default: module.ExpenseCreateDrawer })));
 const DepositDetailDrawer = lazy(() => import('../components/DepositDetailDrawer').then(module => ({ default: module.DepositDetailDrawer })));
 const TicketDrawer = lazy(() => import('./TicketDrawer').then(module => ({ default: module.TicketDrawer })));
+import { ReportDataModal } from '../components/ui/ReportDataModal';
 import { Skeleton, StatRowSkeleton } from '../components/ui/Skeleton';
 import { EmptyCard } from '../components/ui/EmptyCard';
 import { numberToText } from '../utils/numberToText';
@@ -1348,6 +1349,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const { user: currentUser } = useAuth();
   const { t } = useLanguage();
   const [isMobileOrTablet, setIsMobileOrTablet] = useState(window.innerWidth <= 1024);
+  const [showReportDataModal, setShowReportDataModal] = useState(false);
 
   useEffect(() => {
     const handleResize = () => setIsMobileOrTablet(window.innerWidth <= 1024);
@@ -1749,21 +1751,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [isEditingInitialNotes, setIsEditingInitialNotes] = useState(false);
 
   // Program & Admission Date state & suggestions
-  const [programSuggestions, setProgramSuggestions] = useState<string[]>([
-    'MBA High Quality',
-    'MBA Standard',
-    'MBA',
-    'Executive MBA',
-    'Mini MBA',
-    'DBA',
-    'BBA',
-    'MFB',
-    'MSTI',
-    'CEO',
-    'CFO',
-    'CHRO',
-    'CMO'
-  ]);
+  const [programSuggestions, setProgramSuggestions] = useState<string[]>([]);
   const [showProgramDropdown, setShowProgramDropdown] = useState(false);
   const [showBodyProgramDropdown, setShowBodyProgramDropdown] = useState(false);
   const programDropdownRef = useRef<HTMLDivElement>(null);
@@ -1810,14 +1798,10 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     if (isOpen) {
       api.get('/contacts/programs')
         .then(res => {
-          if (res.data?.data && Array.isArray(res.data.data) && res.data.data.length > 0) {
-            const vnRegex = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i;
+          if (res.data?.data && Array.isArray(res.data.data)) {
             const cleaned = res.data.data
-              .map((p: string) => {
-                const match = p.match(/\(([A-Za-z0-9\s\-]+)\)/);
-                return match ? match[1].trim() : p.trim();
-              })
-              .filter((p: string) => !vnRegex.test(p) && p.length > 0);
+              .map((p: string) => String(p || '').trim())
+              .filter((p: string) => p.length > 0);
             if (cleaned.length > 0) {
               setProgramSuggestions(Array.from(new Set([...cleaned])));
             }
@@ -3131,16 +3115,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           ...d,
           id: d.id,
           title: d.unit_code && d.unit_code !== '—' && d.unit_code !== '-' && d.unit_code.trim() !== '' 
-            ? `${d.project_name} - Căn ${d.unit_code}` 
+            ? `${d.project_name} - ${d.unit_code}` 
             : d.project_name,
           value: d.price,
           stage: (() => {
             if (d.status === 'pending_admin') {
               const hasPaidMilestone = d.milestones && Array.isArray(d.milestones) && d.milestones.some((m: any) => m.status === 'paid');
-              return hasPaidMilestone ? 'Chờ duyệt cọc' : 'Đang giao dịch';
+              return hasPaidMilestone ? 'Chờ duyệt thanh toán' : 'Đang giao dịch';
             }
-            if (d.status === 'approved') return 'Hoàn tất cọc';
-            if (d.status === 'cancelled') return 'Đã bể cọc';
+            if (d.status === 'approved') return 'Hoàn tất';
+            if (d.status === 'cancelled') return 'Đã hủy';
             return d.status;
           })(),
           stage_id: d.status,
@@ -4267,16 +4251,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           ...d,
           id: d.id,
           title: d.unit_code && d.unit_code !== '—' && d.unit_code !== '-' && d.unit_code.trim() !== '' 
-            ? `${d.project_name} - Căn ${d.unit_code}` 
+            ? `${d.project_name} - ${d.unit_code}` 
             : d.project_name,
           value: d.price,
           stage: (() => {
             if (d.status === 'pending_admin') {
               const hasPaidMilestone = d.milestones && Array.isArray(d.milestones) && d.milestones.some((m: any) => m.status === 'paid');
-              return hasPaidMilestone ? 'Chờ duyệt cọc' : 'Đang giao dịch';
+              return hasPaidMilestone ? 'Chờ duyệt thanh toán' : 'Đang giao dịch';
             }
-            if (d.status === 'approved') return 'Hoàn tất cọc';
-            if (d.status === 'cancelled') return 'Đã bể cọc';
+            if (d.status === 'approved') return 'Hoàn tất';
+            if (d.status === 'cancelled') return 'Đã hủy';
             return d.status;
           })(),
           stage_id: d.status,
@@ -5239,7 +5223,33 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
   const timeline = useMemo(() => {
     if (!effectiveContactId) return [];
-    let source = drawerActivities;
+    const source = [...drawerActivities];
+    
+    // Merge standalone notes from notes table if not already represented in drawerActivities
+    if (Array.isArray(notes) && notes.length > 0) {
+      notes.forEach((n: any) => {
+        const isDuplicate = source.some((a: any) => {
+          if (a.id === n.id && a.type === 'note') return true;
+          if (a.body && n.text && a.body.trim() === n.text.trim()) return true;
+          return false;
+        });
+        if (!isDuplicate) {
+          source.push({
+            id: `note-${n.id}`,
+            subject: n.note_type === 'pipeline_stage_change' ? 'Cập nhật giai đoạn' : 'Ghi chú',
+            body: n.text,
+            type: 'note',
+            status: 'done',
+            user_name: n.user,
+            avatar_url: n.user_avatar,
+            created_at: n.time,
+            due_date: n.time,
+            tags: n.stuck_tag || '',
+            comment_count: 0
+          });
+        }
+      });
+    }
     
     // Map activities first to normalize migrated call notes to type 'call'
     const mapped = source.map((a: any) => {
@@ -5299,7 +5309,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     }
 
     return filtered.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
-  }, [drawerActivities, effectiveContactId, timelineFilter]);
+  }, [drawerActivities, notes, effectiveContactId, timelineFilter]);
   const fullName = (formData.full_name || '').trim() || 'Chưa cập nhật tên';
   const ownerUser = users.find(u => u.full_name === formData.owner_name || u.name === formData.owner_name || u.username === formData.owner_name);
   const ownerAvatarUrl = ownerUser?.avatar_url || ownerUser?.avatar || undefined;
@@ -7796,43 +7806,69 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                       </div>
                     </div>
 
-                    {/* Actions Section */}
-                    <div className={styles.profileActionsSection}>
-                      {/* Lead Score inline card */}
-                      <div 
-                        onClick={() => {
-                          setActiveTab('scoring');
-                        }}
-                        style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                        title="Xem chi tiết Scoring"
-                      >
-                        <LeadScoreRing score={score} size={44} showLabel={true} />
-                      </div>
+                      {/* Actions Section */}
+                      <div className={styles.profileActionsSection}>
+                        {/* Lead Score inline card */}
+                        <div 
+                          onClick={() => {
+                            setActiveTab('scoring');
+                          }}
+                          style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                          title="Xem chi tiết Scoring"
+                        >
+                          <LeadScoreRing score={score} size={44} showLabel={true} />
+                        </div>
 
-                      <button
-                        disabled={isSubmitting}
-                        onClick={handleSave}
-                        className="btn primary"
-                        style={{ 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          gap: '8px', 
-                          padding: '8px 20px', 
-                          borderRadius: '10px', 
-                          height: '40px', 
-                          fontSize: '0.9rem',
-                          fontWeight: 700,
-                          background: 'var(--color-primary)',
-                          borderColor: 'var(--color-primary)',
-                          color: 'white',
-                          cursor: 'pointer',
-                          boxShadow: 'var(--shadow-sm)',
-                          transition: 'all 0.2s ease'
-                        }}
-                      >
-                        <Save size={14} /> Lưu thay đổi
-                      </button>
-                    </div>
+                        {/* Báo lỗi data button (cho dữ liệu phân bổ từ chiến dịch) */}
+                        <button
+                          type="button"
+                          onClick={() => setShowReportDataModal(true)}
+                          className="btn outline danger"
+                          style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '6px', 
+                            padding: '8px 14px', 
+                            borderRadius: '10px', 
+                            height: '40px', 
+                            fontSize: '0.85rem',
+                            fontWeight: 650,
+                            color: '#dc2626',
+                            borderColor: 'rgba(239, 68, 68, 0.35)',
+                            background: 'rgba(239, 68, 68, 0.05)',
+                            cursor: 'pointer',
+                            boxShadow: 'var(--shadow-sm)',
+                            transition: 'all 0.2s ease'
+                          }}
+                          title="Báo cáo số điện thoại ảo, sai thông tin hoặc trùng lặp để bù vòng"
+                        >
+                          <AlertTriangle size={15} /> Báo lỗi data
+                        </button>
+
+                        <button
+                          disabled={isSubmitting}
+                          onClick={handleSave}
+                          className="btn primary"
+                          style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '8px', 
+                            padding: '8px 20px', 
+                            borderRadius: '10px', 
+                            height: '40px', 
+                            fontSize: '0.9rem',
+                            fontWeight: 700,
+                            background: 'var(--color-primary)',
+                            borderColor: 'var(--color-primary)',
+                            color: 'white',
+                            cursor: 'pointer',
+                            boxShadow: 'var(--shadow-sm)',
+                            transition: 'all 0.2s ease'
+                          }}
+                        >
+                          <Save size={14} /> Lưu thay đổi
+                        </button>
+                      </div>
                   </div>
                 </div>
               )}
@@ -12566,20 +12602,48 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
                         <h3 style={{ fontWeight: 700, fontSize: '1.125rem' }}>Lịch thanh toán - {deals.length}</h3>
                         {!isViewer && (
-                          <button 
-                            className="btn primary sm" 
-                            onClick={() => {
-                              if (!isAtLeastDongLePhiHoSo) {
-                                addToast(<span>Chặn thao tác: Chỉ được tạo lịch thanh toán khi khách hàng ở bước <strong>Đóng lệ phí hồ sơ</strong> trở đi!</span>, 'warning');
-                                return;
-                              }
-                              useUIStore.getState().setShowPOS(contact || formData);
-                            }}
-                            style={!isAtLeastDongLePhiHoSo ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
-                            title={!isAtLeastDongLePhiHoSo ? 'Chỉ được tạo lịch thanh toán khi khách hàng ở bước Đóng lệ phí hồ sơ trở đi' : ''}
-                          >
-                            <Plus size={14} /> Tạo lịch thanh toán
-                          </button>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <button 
+                              type="button"
+                              className="btn sm hover-scale" 
+                              onClick={() => {
+                                if (!isAtLeastDongLePhiHoSo) {
+                                  addToast(<span>Chặn thao tác: Chỉ được tạo lịch thanh toán khi khách hàng ở bước <strong>Đóng lệ phí hồ sơ</strong> trở đi!</span>, 'warning');
+                                  return;
+                                }
+                                useUIStore.getState().setShowPOS({ ...(contact || formData), openAIImport: true });
+                              }}
+                              style={{
+                                background: 'linear-gradient(135deg, #BD1D2D 0%, #94101e 100%)',
+                                color: '#fff',
+                                border: 'none',
+                                fontWeight: 700,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                boxShadow: '0 2px 8px rgba(189, 29, 45, 0.25)',
+                                opacity: !isAtLeastDongLePhiHoSo ? 0.6 : 1,
+                                cursor: !isAtLeastDongLePhiHoSo ? 'not-allowed' : 'pointer',
+                              }}
+                              title={!isAtLeastDongLePhiHoSo ? 'Chỉ được tạo lịch thanh toán khi khách hàng ở bước Đóng lệ phí hồ sơ trở đi' : 'Tự động tạo lịch thanh toán và đính kèm hợp đồng bằng AI'}
+                            >
+                              <Sparkles size={14} /> AI Generate Lịch
+                            </button>
+                            <button 
+                              className="btn primary sm" 
+                              onClick={() => {
+                                if (!isAtLeastDongLePhiHoSo) {
+                                  addToast(<span>Chặn thao tác: Chỉ được tạo lịch thanh toán khi khách hàng ở bước <strong>Đóng lệ phí hồ sơ</strong> trở đi!</span>, 'warning');
+                                  return;
+                                }
+                                useUIStore.getState().setShowPOS(contact || formData);
+                              }}
+                              style={!isAtLeastDongLePhiHoSo ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
+                              title={!isAtLeastDongLePhiHoSo ? 'Chỉ được tạo lịch thanh toán khi khách hàng ở bước Đóng lệ phí hồ sơ trở đi' : ''}
+                            >
+                              <Plus size={14} /> Tạo lịch thanh toán
+                            </button>
+                          </div>
                         )}
                       </div>
                       {loadingRelated ? (
@@ -12592,7 +12656,49 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                         <div className="card-panel" style={{ textAlign: 'center', padding: '4rem 2rem', border: '2px dashed var(--color-border-light)', borderRadius: '24px' }}>
                           <CreditCard size={48} style={{ color: 'var(--color-border)', margin: '0 auto 1.5rem', opacity: 0.4 }} />
                           <h4 style={{ fontWeight: 800, color: 'var(--color-text)', marginBottom: '8px' }}>Chưa có lịch thanh toán</h4>
-                          <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', maxWidth: '240px', margin: '0 auto' }}>Đang không có lịch thanh toán nào cho khách hàng này.</p>
+                          <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', maxWidth: '240px', margin: '0 auto 1.5rem' }}>Đang không có lịch thanh toán nào cho khách hàng này.</p>
+                          {!isViewer && (
+                            <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <button 
+                                type="button"
+                                className="btn sm hover-scale" 
+                                onClick={() => {
+                                  if (!isAtLeastDongLePhiHoSo) {
+                                    addToast(<span>Chặn thao tác: Chỉ được tạo lịch thanh toán khi khách hàng ở bước <strong>Đóng lệ phí hồ sơ</strong> trở đi!</span>, 'warning');
+                                    return;
+                                  }
+                                  useUIStore.getState().setShowPOS({ ...(contact || formData), openAIImport: true });
+                                }}
+                                style={{
+                                  background: 'linear-gradient(135deg, #BD1D2D 0%, #94101e 100%)',
+                                  color: '#fff',
+                                  border: 'none',
+                                  fontWeight: 700,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  boxShadow: '0 2px 8px rgba(189, 29, 45, 0.25)',
+                                  opacity: !isAtLeastDongLePhiHoSo ? 0.6 : 1,
+                                  cursor: !isAtLeastDongLePhiHoSo ? 'not-allowed' : 'pointer',
+                                }}
+                              >
+                                <Sparkles size={14} /> AI Generate Lịch
+                              </button>
+                              <button 
+                                className="btn primary sm" 
+                                onClick={() => {
+                                  if (!isAtLeastDongLePhiHoSo) {
+                                    addToast(<span>Chặn thao tác: Chỉ được tạo lịch thanh toán khi khách hàng ở bước <strong>Đóng lệ phí hồ sơ</strong> trở đi!</span>, 'warning');
+                                    return;
+                                  }
+                                  useUIStore.getState().setShowPOS(contact || formData);
+                                }}
+                                style={!isAtLeastDongLePhiHoSo ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
+                              >
+                                <Plus size={14} /> Tạo lịch thanh toán
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem' }}>
@@ -17918,6 +18024,30 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                 addToast('Đã điền thông tin vào form (Vui lòng bấm nút Lưu để hoàn tất).', 'info');
               }
             }
+          }}
+        />
+      )}
+
+      {showReportDataModal && (
+        <ReportDataModal
+          isOpen={showReportDataModal}
+          onClose={() => setShowReportDataModal(false)}
+          contact={{
+            ...contact,
+            ...formData,
+            id: effectiveContactId,
+            full_name: fullName,
+            phone: formData?.phone || contact?.phone,
+            email: formData?.email || contact?.email,
+            round_name: contact?.round_name || formData?.round_name,
+            dl_round_id: contact?.dl_round_id || formData?.dl_round_id || contact?.round_id,
+            owner_name: contact?.owner_name || currentUser?.full_name || currentUser?.name,
+            lead_id: contact?.lead_id || formData?.lead_id || effectiveContactId
+          }}
+          onSuccess={() => {
+            setShowReportDataModal(false);
+            fetchData();
+            window.dispatchEvent(new CustomEvent('contact-updated'));
           }}
         />
       )}

@@ -39,7 +39,6 @@ const SUPPLIER_TABS = [
   { id: 'info', label: 'Thông tin', icon: Building2, color: '#eb4e3d' },
   { id: 'activities', label: 'Hoạt động / Tương tác', icon: History, color: '#f09a37' },
   { id: 'purchase_orders', label: 'Đơn mua (PO)', icon: FileBadge, color: '#2563eb' },
-  { id: 'sales_orders', label: 'Đơn bán (SO)', icon: FileText, color: '#10b981' },
   { id: 'stats', label: 'Thống kê', icon: BarChart3, color: '#8b5cf6' },
   { id: 'invoices_docs', label: 'Tài liệu & Hóa đơn', icon: Receipt, color: '#0ea5e9' },
 ];
@@ -79,9 +78,6 @@ export const SuppliersPage: React.FC = () => {
 
   const [purchaseOrders, setPurchaseOrders] = useState<any[]>([]);
   const [loadingPO, setLoadingPO] = useState(false);
-
-  const [salesOrders, setSalesOrders] = useState<any[]>([]);
-  const [loadingSO, setLoadingSO] = useState(false);
 
   const [invoices, setInvoices] = useState<any[]>([]);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
@@ -173,20 +169,6 @@ export const SuppliersPage: React.FC = () => {
     }
   };
 
-  const fetchSalesOrders = async (supplierId?: number) => {
-    const sId = supplierId || selectedSupplier?.id;
-    if (!sId) return;
-    setLoadingSO(true);
-    try {
-      const r = await api.get('/sales-orders', { params: { company_id: sId, limit: 100 } });
-      setSalesOrders(r.data.data?.orders || r.data.data?.items || r.data.data || []);
-    } catch {
-      setSalesOrders([]);
-    } finally {
-      setLoadingSO(false);
-    }
-  };
-
   const fetchInvoices = async (supplierId?: number) => {
     const sId = supplierId || selectedSupplier?.id;
     if (!sId) return;
@@ -205,7 +187,6 @@ export const SuppliersPage: React.FC = () => {
     if (showModal && selectedSupplier?.id) {
       if (activeTab === 'activities') fetchActivities();
       if (activeTab === 'purchase_orders' || activeTab === 'stats') fetchPurchaseOrders();
-      if (activeTab === 'sales_orders' || activeTab === 'stats') fetchSalesOrders();
       if (activeTab === 'invoices_docs' || activeTab === 'stats') fetchInvoices();
     }
   }, [activeTab, showModal, selectedSupplier?.id]);
@@ -256,7 +237,6 @@ export const SuppliersPage: React.FC = () => {
 
     if (s?.id) {
       fetchPurchaseOrders(s.id);
-      fetchSalesOrders(s.id);
       fetchInvoices(s.id);
       fetchActivities(s.id);
     }
@@ -854,7 +834,6 @@ export const SuppliersPage: React.FC = () => {
                         const IconComponent = tab.icon;
                         const count = tab.id === 'activities' ? activities.length
                                     : tab.id === 'purchase_orders' ? purchaseOrders.length
-                                    : tab.id === 'sales_orders' ? salesOrders.length
                                     : tab.id === 'invoices_docs' ? invoices.length
                                     : 0;
                         return (
@@ -954,7 +933,6 @@ export const SuppliersPage: React.FC = () => {
                           const IconComponent = tab.icon;
                           const count = tab.id === 'activities' ? activities.length
                                       : tab.id === 'purchase_orders' ? purchaseOrders.length
-                                      : tab.id === 'sales_orders' ? salesOrders.length
                                       : tab.id === 'invoices_docs' ? invoices.length
                                       : 0;
                           return (
@@ -984,9 +962,8 @@ export const SuppliersPage: React.FC = () => {
                                     {tab.id === 'info' ? 'Hồ sơ, liên hệ, tài khoản & dự án'
                                     : tab.id === 'activities' ? `${activities.length} hoạt động ghi nhận`
                                     : tab.id === 'purchase_orders' ? `${purchaseOrders.length} đơn đặt hàng / mua`
-                                    : tab.id === 'sales_orders' ? `${salesOrders.length} đơn bán liên quan`
                                     : tab.id === 'stats' ? 'Tổng chi phí & hiệu suất đối tác'
-                                    : `${invoices.length} chứng từ & hóa đơn`}
+                                    : `${invoices.length} chứng từ & tài liệu`}
                                   </div>
                                 </div>
                               </div>
@@ -1660,88 +1637,18 @@ export const SuppliersPage: React.FC = () => {
                         </div>
                       )}
 
-                      {/* TAB 4: ĐƠN BÁN HÀNG (SALES_ORDERS) */}
-                      {activeTab === 'sales_orders' && (
-                        <div className="animate-fade" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                            <div>
-                              <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--color-text)' }}>Danh sách Đơn bán hàng (SO) liên quan</h4>
-                              <p style={{ margin: '3px 0 0', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Các hợp đồng / đơn bán phân phối khóa học, dịch vụ liên kết với đối tác này</p>
-                            </div>
-                          </div>
-
-                          {loadingSO ? (
-                            <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
-                              <Loader2 size={26} className="spin" style={{ margin: '0 auto 8px' }} />
-                              <div style={{ fontSize: '0.825rem' }}>Đang tải đơn bán...</div>
-                            </div>
-                          ) : salesOrders.length === 0 ? (
-                            <div className="card-panel" style={{ textAlign: 'center', padding: '3rem 1.5rem', background: 'var(--color-surface)', borderRadius: '12px', border: '1px dashed var(--color-border)' }}>
-                              <FileText size={36} style={{ margin: '0 auto 12px', opacity: 0.4, color: 'var(--color-text-muted)' }} />
-                              <h4 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--color-text)', margin: '0 0 6px' }}>Chưa có đơn bán hàng (SO) nào</h4>
-                              <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: 0 }}>Khi có học viên đăng ký hoặc dự án bán liên kết qua đối tác, dữ liệu SO sẽ hiển thị tại đây.</p>
-                            </div>
-                          ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                              {salesOrders.map((so: any) => {
-                                const soTotal = Number(so.total_amount || so.total || 0);
-                                return (
-                                  <div 
-                                    key={so.id} 
-                                    className="card-panel" 
-                                    style={{ 
-                                      padding: '14px 16px', 
-                                      background: 'var(--color-surface)', 
-                                      borderRadius: '12px', 
-                                      border: '1px solid var(--color-border-light)',
-                                      boxShadow: '0 2px 6px rgba(0,0,0,0.02)',
-                                      display: 'flex',
-                                      justifyContent: 'space-between',
-                                      alignItems: 'center',
-                                      gap: '12px'
-                                    }}
-                                  >
-                                    <div>
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#10b981' }}>
-                                          {so.so_number || so.code || `SO-#${so.id}`}
-                                        </span>
-                                        <span className={`badge sm ${so.status === 'confirmed' || so.status === 'completed' ? 'success' : 'warning'}`}>
-                                          {so.status === 'confirmed' ? 'Đã xác nhận' : so.status === 'completed' ? 'Hoàn thành' : 'Đang xử lý'}
-                                        </span>
-                                      </div>
-                                      <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
-                                        Khách hàng: {so.customer_name || 'Khách lẻ'} • Ngày: {so.order_date ? new Date(so.order_date).toLocaleDateString('vi-VN') : '—'}
-                                      </div>
-                                    </div>
-                                    <div style={{ textAlign: 'right' }}>
-                                      <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-text)' }}>
-                                        {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(soTotal)}
-                                      </div>
-                                      <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-                                        {so.payment_status === 'paid' ? 'Đã thu tiền' : 'Chờ thu tiền'}
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* TAB 5: THỐNG KÊ (STATS) */}
+                      {/* TAB 4: THỐNG KÊ (STATS) */}
                       {activeTab === 'stats' && (() => {
                         const totalPOCost = purchaseOrders.filter(p => p.status !== 'cancelled').reduce((acc, curr) => acc + (Number(curr.total_amount || curr.total) || 0), 0);
-                        const totalSORevenue = salesOrders.filter(s => s.status !== 'cancelled').reduce((acc, curr) => acc + (Number(curr.total_amount || curr.total) || 0), 0);
                         const completedPOs = purchaseOrders.filter(p => p.status === 'completed' || p.status === 'approved').length;
                         const pendingPOs = purchaseOrders.filter(p => p.status === 'pending' || p.status === 'draft').length;
+                        const totalPOAmount = purchaseOrders.reduce((acc, curr) => acc + (Number(curr.total_amount || curr.total) || 0), 0);
                         
                         return (
                           <div className="animate-fade" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                             <div>
-                              <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--color-text)' }}>Hiệu suất & Thống kê Đối tác</h4>
-                              <p style={{ margin: '3px 0 0', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Tổng hợp số liệu mua hàng, phân phối và công nợ thực tế</p>
+                              <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--color-text)' }}>Hiệu suất & Thống kê Đối tác NCC</h4>
+                              <p style={{ margin: '3px 0 0', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Tổng hợp số liệu mua hàng (PO), tiến độ thực hiện và giao dịch cung ứng</p>
                             </div>
 
                             {/* 4 Glassmorphism Stat Cards */}
@@ -1772,7 +1679,7 @@ export const SuppliersPage: React.FC = () => {
                                 </div>
                               </div>
 
-                              {/* Card 2: Doanh thu bán SO */}
+                              {/* Card 2: Đơn mua hoàn tất */}
                               <div style={{
                                 padding: '1.25rem',
                                 borderRadius: '16px',
@@ -1785,20 +1692,20 @@ export const SuppliersPage: React.FC = () => {
                                 gap: '8px'
                               }}>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#166534', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Doanh thu bán (SO)</span>
+                                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#166534', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Đơn mua hoàn tất</span>
                                   <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <TrendingUp size={16} />
+                                    <FileBadge size={16} />
                                   </div>
                                 </div>
                                 <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#14532d', letterSpacing: '-0.02em' }}>
-                                  {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(totalSORevenue)}
+                                  {completedPOs}
                                 </div>
                                 <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                                  Doanh thu từ {salesOrders.length} đơn bán ra
+                                  Đã nghiệm thu / giao nhận xong
                                 </div>
                               </div>
 
-                              {/* Card 3: Số đơn mua PO */}
+                              {/* Card 3: Số đơn mua chờ duyệt */}
                               <div style={{
                                 padding: '1.25rem',
                                 borderRadius: '16px',
@@ -1811,20 +1718,20 @@ export const SuppliersPage: React.FC = () => {
                                 gap: '8px'
                               }}>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Đơn mua hàng</span>
+                                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Đơn mua chờ duyệt</span>
                                   <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(245, 158, 11, 0.1)', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <FileBadge size={16} />
+                                    <Clock size={16} />
                                   </div>
                                 </div>
                                 <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#78350f', letterSpacing: '-0.02em' }}>
-                                  {purchaseOrders.length}
+                                  {pendingPOs}
                                 </div>
                                 <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                                  {completedPOs} hoàn thành • {pendingPOs} chờ duyệt
+                                  Đang thẩm định / chờ ký duyệt
                                 </div>
                               </div>
 
-                              {/* Card 4: Số đơn bán SO */}
+                              {/* Card 4: Tổng chương trình liên kết */}
                               <div style={{
                                 padding: '1.25rem',
                                 borderRadius: '16px',
@@ -1837,16 +1744,16 @@ export const SuppliersPage: React.FC = () => {
                                 gap: '8px'
                               }}>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b21a8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Đơn bán hàng</span>
+                                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b21a8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Chương trình liên kết</span>
                                   <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <Receipt size={16} />
+                                    <Building2 size={16} />
                                   </div>
                                 </div>
                                 <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#581c87', letterSpacing: '-0.02em' }}>
-                                  {salesOrders.length}
+                                  {selectedProjects.length}
                                 </div>
                                 <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                                  Hợp đồng/đơn bán dịch vụ liên kết
+                                  Dự án & chương trình đào tạo phối hợp
                                 </div>
                               </div>
                             </div>
@@ -1882,26 +1789,26 @@ export const SuppliersPage: React.FC = () => {
                         );
                       })()}
 
-                      {/* TAB 6: TÀI LIỆU & HÓA ĐƠN (INVOICES_DOCS) */}
+                      {/* TAB 5: TÀI LIỆU & CHỨNG TỪ (INVOICES_DOCS) */}
                       {activeTab === 'invoices_docs' && (
                         <div className="animate-fade" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
                             <div>
-                              <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--color-text)' }}>Tài liệu & Hóa đơn chứng từ</h4>
-                              <p style={{ margin: '3px 0 0', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Quản lý hóa đơn GTGT, biên lai và chứng từ thanh toán đính kèm</p>
+                              <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--color-text)' }}>Tài liệu & Chứng từ NCC</h4>
+                              <p style={{ margin: '3px 0 0', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Quản lý chứng từ thanh toán, hóa đơn đầu vào và hợp đồng cung ứng</p>
                             </div>
                           </div>
 
                           {loadingInvoices ? (
                             <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
                               <Loader2 size={26} className="spin" style={{ margin: '0 auto 8px' }} />
-                              <div style={{ fontSize: '0.825rem' }}>Đang tải hóa đơn & chứng từ...</div>
+                              <div style={{ fontSize: '0.825rem' }}>Đang tải chứng từ...</div>
                             </div>
                           ) : invoices.length === 0 ? (
                             <div className="card-panel" style={{ textAlign: 'center', padding: '3rem 1.5rem', background: 'var(--color-surface)', borderRadius: '12px', border: '1px dashed var(--color-border)' }}>
                               <Receipt size={36} style={{ margin: '0 auto 12px', opacity: 0.4, color: 'var(--color-text-muted)' }} />
-                              <h4 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--color-text)', margin: '0 0 6px' }}>Chưa có hóa đơn hoặc chứng từ nào</h4>
-                              <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: 0 }}>Hóa đơn phát hành từ các đơn mua hàng (PO) hoặc đơn bán (SO) sẽ hiển thị tập trung tại đây.</p>
+                              <h4 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--color-text)', margin: '0 0 6px' }}>Chưa có chứng từ hoặc hóa đơn đầu vào nào</h4>
+                              <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: 0 }}>Hóa đơn hoặc chứng từ phát sinh từ các đơn mua hàng (PO) với nhà cung cấp sẽ hiển thị tại đây.</p>
                             </div>
                           ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>

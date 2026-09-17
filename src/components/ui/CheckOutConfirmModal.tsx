@@ -13,6 +13,7 @@ interface CheckOutConfirmModalProps {
   userName?: string;
   userRole?: string;
   checkInTime?: string;
+  shiftStartTime?: string;
   shiftEndTime?: string;
   address?: string;
   isEarly?: boolean;
@@ -29,6 +30,7 @@ export const CheckOutConfirmModal: React.FC<CheckOutConfirmModalProps> = ({
   userName,
   userRole,
   checkInTime,
+  shiftStartTime = '08:00',
   shiftEndTime = '17:00',
   address,
   isEarly = false,
@@ -57,7 +59,11 @@ export const CheckOutConfirmModal: React.FC<CheckOutConfirmModalProps> = ({
   const currentHM = now.toTimeString().substring(0, 5);
   const currentDateStr = now.toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
 
-  // Calculate worked duration if checkInTime is available, subtracting lunch break (12:00 -> 13:00)
+  // Calculate worked duration if checkInTime is available:
+  // - Đi sớm (check-in trước shiftStartTime) neo về shiftStartTime, không tính thời gian dôi ra.
+  // - Về muộn (check-out sau shiftEndTime) neo về shiftEndTime, không tính thời gian dôi ra.
+  // - Trừ thời gian nghỉ trưa (12:00 -> 13:00 = 60 phút).
+  // - Giới hạn tối đa bằng thời lượng ca chuẩn (ví dụ 8 tiếng = 480 phút).
   let durationStr = '';
   let lunchBreakDeductedMin = 0;
   if (checkInTime) {
@@ -66,15 +72,33 @@ export const CheckOutConfirmModal: React.FC<CheckOutConfirmModalProps> = ({
       const inTotalMin = inParts[0] * 60 + inParts[1];
       const curTotalMin = now.getHours() * 60 + now.getMinutes();
 
+      const [startH, startM] = (shiftStartTime || '08:00').substring(0, 5).split(':').map(Number);
+      const [endH, endM] = (shiftEndTime || '17:00').substring(0, 5).split(':').map(Number);
+      const shiftStartTotalMin = (!isNaN(startH) && !isNaN(startM)) ? startH * 60 + startM : 8 * 60;
+      const shiftEndTotalMin = (!isNaN(endH) && !isNaN(endM)) ? endH * 60 + endM : 17 * 60;
+
+      // Effective start & end clamped to shift boundaries
+      const effectiveInMin = Math.max(inTotalMin, shiftStartTotalMin);
+      const effectiveOutMin = Math.min(curTotalMin, shiftEndTotalMin);
+
       // Lunch break: 12:00 to 13:00 (60 minutes)
       const lunchStartMin = 12 * 60; // 12:00 (720 min)
       const lunchEndMin = 13 * 60;   // 13:00 (780 min)
-      const lunchOverlapMin = Math.max(0, Math.min(curTotalMin, lunchEndMin) - Math.max(inTotalMin, lunchStartMin));
+      const lunchOverlapMin = Math.max(0, Math.min(effectiveOutMin, lunchEndMin) - Math.max(effectiveInMin, lunchStartMin));
       lunchBreakDeductedMin = lunchOverlapMin;
 
-      const netDiff = Math.max(0, (curTotalMin - inTotalMin) - lunchOverlapMin);
-      const h = Math.floor(netDiff / 60);
-      const m = netDiff % 60;
+      // Net worked minutes within shift hours
+      const netDiff = Math.max(0, (effectiveOutMin - effectiveInMin) - lunchOverlapMin);
+
+      // Standard shift maximum capacity
+      const shiftLunchOverlap = Math.max(0, Math.min(shiftEndTotalMin, lunchEndMin) - Math.max(shiftStartTotalMin, lunchStartMin));
+      const maxShiftDurationMin = Math.max(0, (shiftEndTotalMin - shiftStartTotalMin) - shiftLunchOverlap);
+
+      // Final clamped work minutes (max 8h for standard 8h day)
+      const finalWorkMin = Math.min(netDiff, maxShiftDurationMin > 0 ? maxShiftDurationMin : 480);
+
+      const h = Math.floor(finalWorkMin / 60);
+      const m = finalWorkMin % 60;
       durationStr = `${h}h ${m < 10 ? '0' : ''}${m}m`;
     }
   }

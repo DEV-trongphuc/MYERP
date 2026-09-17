@@ -377,7 +377,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
   const [cancelReason, setCancelReason] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
-  const isAdmin = user && ['admin', 'superadmin', 'super_admin', 'assistant', 'manager', 'director', 'accountant'].includes(user.role);
+  const isAdmin = user && ['admin', 'superadmin', 'super_admin', 'assistant', 'manager', 'director', 'accountant', 'marketing'].includes(user.role);
   const canEditMilestones = isAdmin || (selectedDepForManage && (
     String(selectedDepForManage.created_by) === String(user?.id) ||
     String(selectedDepForManage.contact_owner_id) === String(user?.id)
@@ -1824,27 +1824,31 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                     >
                       {/* Client / Program */}
                       <td style={{ padding: '1rem', verticalAlign: 'middle' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <Avatar src={dep.avatar_url} name={dep.full_name || ''} size="sm" style={{ width: 24, height: 24, fontSize: 10 }} />
-                          <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                            {dep.full_name}
-                          </span>
-                        </div>
-                        <div style={{ fontWeight: 600, color: 'var(--color-text-light)', fontSize: '0.75rem', marginTop: '4px', paddingLeft: '32px' }}>
-                          <span>{dep.project_name}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <Avatar src={dep.avatar_url} name={dep.full_name || ''} size="md" style={{ width: 38, height: 38, fontSize: 13, flexShrink: 0 }} />
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+                            <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.25 }}>
+                              {dep.full_name}
+                            </span>
+                            <span style={{ fontWeight: 600, color: 'var(--color-text-light)', fontSize: '0.75rem', lineHeight: 1.2 }}>
+                              {dep.project_name}
+                            </span>
+                          </div>
                         </div>
                       </td>
 
                       {/* Sale / Date Created */}
                       <td style={{ padding: '1rem', verticalAlign: 'middle' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <Avatar src={dep.creator_avatar} name={dep.creator_name || 'Sale'} size="sm" style={{ width: 24, height: 24, fontSize: 10 }} />
-                          <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text)' }}>
-                            {dep.creator_name || '—'}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', marginTop: '4px', paddingLeft: '32px' }}>
-                          {new Date(dep.created_at).toLocaleDateString('vi-VN')} {new Date(dep.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <Avatar src={dep.creator_avatar} name={dep.creator_name || 'Sale'} size="md" style={{ width: 38, height: 38, fontSize: 13, flexShrink: 0 }} />
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+                            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text)', lineHeight: 1.25 }}>
+                              {dep.creator_name || '—'}
+                            </span>
+                            <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', lineHeight: 1.2 }}>
+                              {new Date(dep.created_at).toLocaleDateString('vi-VN')} {new Date(dep.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
                         </div>
                       </td>
 
@@ -1975,7 +1979,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                           {dep.status !== 'cancelled' && (() => {
                             const isCreator = String(dep.created_by) === String(user?.id);
                             const isOwner = String(dep.contact_owner_id) === String(user?.id);
-                            const isStaff = user && ['admin', 'superadmin', 'super_admin', 'assistant', 'manager', 'director', 'accountant'].includes(user.role);
+                            const isStaff = user && ['admin', 'superadmin', 'super_admin', 'assistant', 'manager', 'director', 'accountant', 'marketing'].includes(user.role);
                             
                             if (isStaff || isCreator || isOwner) {
                               return (
@@ -2552,13 +2556,13 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                       Vui lòng chủ động liên hệ nhắc nhở khách hàng thanh toán đợt: <strong>{previewReminderMilestone.milestone_name}</strong>.<br />
                       Số tiền cần thanh toán: <strong>{amountStr}</strong>.<br />
                       Hạn thanh toán: <strong>{payDateStr}</strong>.<br />
-                      Chương trình: <strong>{selectedDepForManage.project_name}</strong>{selectedDepForManage.unit_code && selectedDepForManage.unit_code !== '—' && selectedDepForManage.unit_code !== '-' && selectedDepForManage.unit_code.trim() !== '' ? ` (Căn ${selectedDepForManage.unit_code})` : ''}.
+                      Chương trình: <strong>{selectedDepForManage.project_name}</strong>{selectedDepForManage.unit_code && selectedDepForManage.unit_code !== '—' && selectedDepForManage.unit_code !== '-' && selectedDepForManage.unit_code.trim() !== '' ? ` (${selectedDepForManage.unit_code})` : ''}.
                     </div>
                   ) : (
                     <div>
                       Chào <strong>{custName}</strong>,<br /><br />
                       Đây là thông báo nhắc lịch thanh toán cho đợt: <strong>{previewReminderMilestone.milestone_name}</strong>.<br /><br />
-                      Chương trình: <strong>{selectedDepForManage.project_name}</strong>{selectedDepForManage.unit_code && selectedDepForManage.unit_code !== '—' && selectedDepForManage.unit_code !== '-' && selectedDepForManage.unit_code.trim() !== '' ? ` (Căn ${selectedDepForManage.unit_code})` : ''}.<br />
+                      Chương trình: <strong>{selectedDepForManage.project_name}</strong>{selectedDepForManage.unit_code && selectedDepForManage.unit_code !== '—' && selectedDepForManage.unit_code !== '-' && selectedDepForManage.unit_code.trim() !== '' ? ` (${selectedDepForManage.unit_code})` : ''}.<br />
                       Số tiền cần đóng: <strong>{amountStr}</strong>.<br />
                       Hạn thanh toán: <strong>{payDateStr}</strong>.<br /><br />
                       Vui lòng hoàn tất thanh toán và tải hình ảnh Ủy nhiệm chi (UNC) lên hệ thống. Xin cảm ơn!

@@ -5,24 +5,7 @@ import api from '../../api/axios';
 import { Avatar } from './Avatar';
 import { MentionInput } from './MentionInput';
 import { ConfirmModal } from './ConfirmModal';
-
-const formatFileSize = (bytes?: number) => {
-  if (!bytes) return '';
-  if (bytes < 1024) return bytes + ' B';
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-};
-
-const getFileIcon = (filename: string) => {
-  const ext = filename.split('.').pop()?.toLowerCase() || '';
-  if (['pdf'].includes(ext)) return '📕';
-  if (['doc', 'docx'].includes(ext)) return '📘';
-  if (['xls', 'xlsx', 'csv'].includes(ext)) return '📊';
-  if (['ppt', 'pptx'].includes(ext)) return '📙';
-  if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return '📦';
-  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) return '🖼️';
-  return '📄';
-};
+import { formatCommentBody, formatFileSize, getFileBadgeInfo } from '../../utils/commentFormatter';
 
 export interface ProcessFeedComment {
   id: string | number;
@@ -292,10 +275,10 @@ export const ProcessFeed: React.FC<ProcessFeedProps> = ({
                       <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)', fontWeight: 700 }}>{authorName}</strong>
                       <span style={{ fontSize: '0.675rem', color: 'var(--color-text-muted)' }}>{displayTime}</span>
                     </div>
-                    {bodyText && /<[a-z][\s\S]*>/i.test(bodyText) ? (
+                    {bodyText && (/<[a-z][\s\S]*>/i.test(bodyText) || /[📕📄📊📝📦🖼️📎]/.test(bodyText)) ? (
                       <div 
                         className="rich-comment-content text-left"
-                        dangerouslySetInnerHTML={{ __html: bodyText }}
+                        dangerouslySetInnerHTML={{ __html: formatCommentBody(bodyText) }}
                         style={{ fontSize: '0.8rem', color: 'var(--color-text-light)', margin: '2px 0 0', lineHeight: '1.45', textAlign: 'left' }}
                       />
                     ) : (
@@ -307,28 +290,33 @@ export const ProcessFeed: React.FC<ProcessFeedProps> = ({
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
                         {item.attachments.map((file: any, index: number) => {
                           const fileUrl = file.url || file.file_url || (typeof file === 'string' ? file : '');
+                          const fileName = file.name || 'Tệp đính kèm';
+                          const { label, cls } = getFileBadgeInfo(fileName);
                           return (
                             <a 
                               key={index} 
                               href={fileUrl || undefined}
                               target={fileUrl ? "_blank" : undefined}
                               rel="noopener noreferrer"
-                              download={file.name || true}
+                              download={fileName}
                               data-file-url={fileUrl}
-                              data-file-name={file.name || ''}
+                              data-file-name={fileName}
                               className="comment-attachment-chip"
                               style={{ margin: 0 }}
-                              title={fileUrl ? `Bấm để tải về: ${file.name || 'tệp tin'}` : undefined}
+                              title={fileUrl ? `Bấm để tải về / mở: ${fileName}` : undefined}
                             >
-                              <span>{getFileIcon(file.name || '')}</span>
-                              <span style={{ maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {file.name || 'Tệp đính kèm'}
+                              <span className={`file-doc-badge ${cls}`}>{label}</span>
+                              <span className="file-doc-name" style={{ maxWidth: '180px' }}>
+                                {fileName}
                               </span>
                               {file.size ? (
-                                <span style={{ fontSize: '0.68rem', opacity: 0.7 }}>
+                                <span className="file-doc-size">
                                   ({formatFileSize(file.size)})
                                 </span>
                               ) : null}
+                              <span className="file-doc-action-icon">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                              </span>
                             </a>
                           );
                         })}
@@ -457,30 +445,40 @@ export const ProcessFeed: React.FC<ProcessFeedProps> = ({
 
             {attachments.length > 0 && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', paddingTop: '2px' }}>
-                {attachments.map((file, index) => (
-                  <div key={index} style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '5px',
-                    background: 'var(--color-surface)',
-                    border: '1px solid var(--color-border-light)',
-                    padding: '3px 8px',
-                    borderRadius: '12px',
-                    fontSize: '0.72rem',
-                    color: 'var(--color-text)'
-                  }}>
-                    <span>📄</span>
-                    <span style={{ maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
-                      {file.name}
-                    </span>
-                    <button
-                      onClick={() => setAttachments(attachments.filter((_, i) => i !== index))}
-                      style={{ border: 'none', background: 'transparent', color: 'var(--color-danger)', cursor: 'pointer', fontSize: '0.8rem', padding: '0 2px', lineHeight: 1 }}
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
+                {attachments.map((file, index) => {
+                  const { label, cls } = getFileBadgeInfo(file.name);
+                  return (
+                    <div key={index} style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      background: 'var(--color-surface)',
+                      border: '1px solid var(--color-border-light)',
+                      padding: '4px 10px',
+                      borderRadius: '10px',
+                      fontSize: '0.75rem',
+                      color: 'var(--color-text)',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+                    }}>
+                      <span className={`file-doc-badge ${cls}`}>{label}</span>
+                      <span className="file-doc-name" style={{ maxWidth: '180px' }}>
+                        {file.name}
+                      </span>
+                      {file.size && (
+                        <span className="file-doc-size">
+                          ({formatFileSize(file.size)})
+                        </span>
+                      )}
+                      <button
+                        onClick={() => setAttachments(attachments.filter((_, i) => i !== index))}
+                        style={{ border: 'none', background: 'transparent', color: 'var(--color-danger)', cursor: 'pointer', fontSize: '0.9rem', padding: '0 2px', lineHeight: 1 }}
+                        title={t('Xóa tệp này')}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             )}
 

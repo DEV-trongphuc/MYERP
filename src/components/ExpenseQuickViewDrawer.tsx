@@ -17,7 +17,8 @@ import { CustomSelect } from './ui/CustomSelect';
 import { formatWaitDuration } from '../pages/Approvals';
 
 const FMT = (n: number, currency: string = 'VND') => {
-  const norm = currency === 'EURO' ? 'EUR' : (currency || 'VND');
+  const rawCurr = (currency || 'VND').toUpperCase().trim();
+  const norm = rawCurr === 'EURO' ? 'EUR' : rawCurr;
   if (norm === 'VND') {
     return Math.round(n || 0).toLocaleString('vi-VN') + ' đ';
   }
@@ -107,6 +108,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
   const [refundImgUrl, setRefundImgUrl] = useState('');
   const [uploadingRefund, setUploadingRefund] = useState(false);
   const [submittingRefund, setSubmittingRefund] = useState(false);
+  const [isDraggingRefund, setIsDraggingRefund] = useState(false);
 
   const [users, setUsers] = useState<any[]>([]);
   const [reminderTargetUser, setReminderTargetUser] = useState<any>(null);
@@ -1114,11 +1116,26 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                             </span>
                           )}
                         </div>
-                        <h1 style={{ fontSize: '1.75rem', fontWeight: 900, color: 'var(--color-text)', margin: 0 }}>
+                        <h1 style={{ fontSize: '1.75rem', fontWeight: 900, color: 'var(--color-text)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                           {FMT(viewItem.amount, viewItem.currency)}
+                          {viewItem.currency && viewItem.currency !== 'VND' && (
+                            <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '2px 8px', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                              {viewItem.currency}
+                            </span>
+                          )}
                         </h1>
                         <p style={{ fontSize: '0.75rem', fontWeight: 600, fontStyle: 'italic', color: 'var(--color-text-muted)', margin: 0, marginTop: '2px' }}>
                           Bằng chữ: {numberToVietnameseText(Number(viewItem.amount), viewItem.currency)}
+                          {viewItem.currency === 'CHF' && (
+                            <span style={{ marginLeft: '8px', fontStyle: 'normal', color: 'var(--color-primary)', fontWeight: 700 }}>
+                              (≈ {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(Number(viewItem.amount) * 33000)} — Tỷ giá MISA: 33.000 đ/CHF)
+                            </span>
+                          )}
+                          {viewItem.currency === 'USD' && (
+                            <span style={{ marginLeft: '8px', fontStyle: 'normal', color: 'var(--color-primary)', fontWeight: 700 }}>
+                              (≈ {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(Number(viewItem.amount) * 25000)} — Tỷ giá MISA: 25.000 đ/USD)
+                            </span>
+                          )}
                         </p>
                       </div>
                       <div style={{
@@ -1232,14 +1249,22 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                         const amt = Number(it.amount);
                         return sum + (amt > 0 ? amt : (qty * price));
                       }, 0);
-                      const totalVat = expenseItems.reduce((sum: number, it: any) => sum + (Number(it.vat_amount) || 0), 0);
+                      const totalVat = expenseItems.reduce((sum: number, it: any) => {
+                        const qty = Number(it.quantity || it.qty || 1);
+                        const price = Number(it.unit_price || it.price || 0);
+                        const preVat = Number(it.amount) > 0 ? Number(it.amount) : (qty * price);
+                        const vatPct = Number(it.vat || 0);
+                        const vatVal = Number(it.vat_amount) > 0 ? Number(it.vat_amount) : (vatPct > 0 ? Math.round(preVat * vatPct / 100) : 0);
+                        return sum + vatVal;
+                      }, 0);
                       const totalPostTax = expenseItems.reduce((sum: number, it: any) => {
                         const qty = Number(it.quantity || it.qty || 1);
                         const price = Number(it.unit_price || it.price || 0);
+                        const preVat = Number(it.amount) > 0 ? Number(it.amount) : (qty * price);
+                        const vatPct = Number(it.vat || 0);
+                        const vatVal = Number(it.vat_amount) > 0 ? Number(it.vat_amount) : (vatPct > 0 ? Math.round(preVat * vatPct / 100) : 0);
                         const tot = Number(it.total);
-                        const amt = Number(it.amount) || (qty * price);
-                        const vAmt = Number(it.vat_amount) || 0;
-                        return sum + (tot > 0 ? tot : (amt + vAmt));
+                        return sum + (tot > 0 ? tot : (preVat + vatVal));
                       }, 0);
                       const finalSum = hasAnyVat ? totalPostTax : totalPreTax;
 
@@ -1663,23 +1688,80 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                   <div style={{ display: 'flex', gap: '16px', alignItems: 'center', background: 'var(--color-bg-secondary)', padding: '12px', borderRadius: '10px', border: '1px solid var(--color-border-light)' }}>
                     <div 
                       onClick={() => document.getElementById('refund-image-upload-drawer')?.click()}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (!isDraggingRefund) setIsDraggingRefund(true);
+                      }}
+                      onDragEnter={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (!isDraggingRefund) setIsDraggingRefund(true);
+                      }}
+                      onDragLeave={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setIsDraggingRefund(false);
+                      }}
+                      onDrop={async (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setIsDraggingRefund(false);
+                        const file = e.dataTransfer.files?.[0];
+                        if (!file) return;
+                        setUploadingRefund(true);
+                        try {
+                          let fileToUpload: File = file;
+                          if (file.type.startsWith('image/')) {
+                            try {
+                              const webpBlob = await compressToWebP(file);
+                              fileToUpload = new File([webpBlob], 'refund_proof.webp', { type: 'image/webp' });
+                            } catch (cErr) {
+                              fileToUpload = file;
+                            }
+                          }
+                          const fd = new FormData();
+                          fd.append('file', fileToUpload);
+                          const res = await api.post('/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+                          if (res.data && res.data.data?.url) {
+                            setRefundImgUrl(res.data.data.url);
+                            addToast('Tải chứng từ UNC thành công', 'success');
+                          } else {
+                            addToast('Lỗi tải tệp', 'error');
+                          }
+                        } catch (err: any) {
+                          addToast('Lỗi tải tệp: ' + err.message, 'error');
+                        } finally {
+                          setUploadingRefund(false);
+                        }
+                      }}
                       style={{
                         width: '120px',
                         height: '120px',
-                        border: '2px dashed var(--color-border)',
+                        border: isDraggingRefund ? '2px dashed var(--color-primary)' : '2px dashed var(--color-border)',
                         borderRadius: '12px',
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        background: 'var(--color-surface)',
+                        background: isDraggingRefund ? 'rgba(189, 29, 45, 0.08)' : 'var(--color-surface)',
                         overflow: 'hidden',
                         position: 'relative',
-                        flexShrink: 0
+                        flexShrink: 0,
+                        transition: 'all 0.2s ease',
+                        transform: isDraggingRefund ? 'scale(1.02)' : 'none'
                       }}
                     >
                       {uploadingRefund ? (
-                        <Loader2 size={24} className="spin text-primary" />
+                        <div className="flex flex-col items-center gap-1 text-center" style={{ padding: '6px' }}>
+                          <Loader2 size={24} className="spin text-primary" />
+                          <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Đang tải lên...</span>
+                        </div>
+                      ) : isDraggingRefund ? (
+                        <div className="flex flex-col items-center gap-1 text-center" style={{ padding: '6px' }}>
+                          <Upload size={24} style={{ color: 'var(--color-primary)' }} />
+                          <span style={{ fontSize: '0.72rem', color: 'var(--color-primary)', fontWeight: 700 }}>Thả file vào đây</span>
+                        </div>
                       ) : refundImgUrl ? (
                         <div style={{ width: '100%', height: '100%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           {/\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i.test(refundImgUrl) ? (
@@ -1712,6 +1794,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                         <div className="flex flex-col items-center gap-1 text-center" style={{ padding: '6px' }}>
                           <Upload size={22} style={{ color: 'var(--color-text-muted)', marginBottom: '4px' }} />
                           <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', fontWeight: 700 }}>Tải tệp / UNC</span>
+                          <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>hoặc kéo thả vào</span>
                         </div>
                       )}
                       <input 
@@ -1738,6 +1821,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                             const res = await api.post('/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
                             if (res.data && res.data.data?.url) {
                               setRefundImgUrl(res.data.data.url);
+                              addToast('Tải chứng từ UNC thành công', 'success');
                             } else {
                               addToast('Lỗi tải tệp', 'error');
                             }
@@ -1752,7 +1836,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
                       <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
-                        {refundImgUrl ? 'Đã nhận chứng từ thành công.' : 'Vui lòng chọn chứng từ chuyển khoản để xác thực.'}
+                        {refundImgUrl ? 'Đã nhận chứng từ thành công.' : 'Vui lòng kéo thả hoặc chọn chứng từ chuyển khoản để xác thực.'}
                       </span>
                       <button 
                         className="btn success" 

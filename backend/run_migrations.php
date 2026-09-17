@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 279;
+$targetVersion = 281;
 $currentVersion = 186;
 
 // Query current DB version
@@ -3313,8 +3313,50 @@ try {
         $logMsg("Nâng cấp lên phiên bản 279 hoàn tất.", "success");
     }
 
+    // --- PHIÊN BẢN 280: ĐỒNG BỘ STAGE 14 (ENROLLED) CHO HỌC VIÊN ĐÃ NHẬP HỌC ---
+    if ($currentVersion < 280) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 280: Đồng bộ stage 14 (enrolled) cho học viên nhập học...", "info");
+        try {
+            $stEnrolled = 14;
+            $resSt = $conn->query("SELECT id FROM pipeline_stages WHERE system_slug = 'enrolled' OR order_index = 14 LIMIT 1");
+            if ($resSt && ($rowSt = $resSt->fetch_assoc())) {
+                $stEnrolled = (int)$rowSt['id'];
+            }
+            
+            $conn->query("UPDATE contacts SET stage_id = {$stEnrolled}, pipeline_status = 'enrolled', status = 'customer' WHERE phone IN ('0792318123', '792318123', '932452385', '0932452385') OR full_name LIKE '%HOÀNG BẢO TRÂN%' OR full_name LIKE '%NGUYỄN NGỌC PHƯƠNG%'");
+            $conn->query("UPDATE contacts SET stage_id = {$stEnrolled}, status = 'customer' WHERE pipeline_status = 'enrolled' AND (stage_id != {$stEnrolled} OR stage_id IS NULL)");
+            $conn->query("UPDATE contacts SET pipeline_status = 'enrolled', status = 'customer' WHERE stage_id = {$stEnrolled} AND (pipeline_status != 'enrolled' OR pipeline_status IS NULL)");
+            
+            $logMsg("Đồng bộ stage 14 cho học viên phiên bản 280 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi nâng cấp v280: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 280 hoàn tất.", "success");
+    }
+
+    // --- PHIÊN BẢN 281: ĐỒNG BỘ STAGE 14 VÀ TRẠNG THÁI HỌC VIÊN TOÀN DIỆN ---
+    if ($currentVersion < 281) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 281: Đồng bộ stage 14 cho Vũ Xuân Dũng, Lương Hồ Huyền Trân, Nguyễn Ngọc Minh Tâm...", "info");
+        try {
+            $stEnrolled = 14;
+            $resSt = $conn->query("SELECT id FROM pipeline_stages WHERE system_slug = 'enrolled' OR order_index = 14 LIMIT 1");
+            if ($resSt && ($rowSt = $resSt->fetch_assoc())) {
+                $stEnrolled = (int)$rowSt['id'];
+            }
+            
+            $conn->query("UPDATE contacts SET stage_id = {$stEnrolled}, pipeline_status = 'enrolled', status = 'customer' WHERE full_name LIKE '%VŨ XUÂN DŨNG%' OR full_name LIKE '%Vũ Xuân Dũng%' OR full_name LIKE '%LUONG HO HUYEN TRAN%' OR full_name LIKE '%Lương Hồ Huyền Trân%' OR full_name LIKE '%NGUYEN NGOC MINH TAM%' OR full_name LIKE '%Nguyễn Ngọc Minh Tâm%'");
+            $conn->query("UPDATE contacts SET stage_id = {$stEnrolled}, status = 'customer' WHERE pipeline_status = 'enrolled' AND (stage_id != {$stEnrolled} OR stage_id IS NULL)");
+            $conn->query("UPDATE contacts SET pipeline_status = 'enrolled', status = 'customer' WHERE stage_id = {$stEnrolled} AND (pipeline_status != 'enrolled' OR pipeline_status IS NULL)");
+            
+            $logMsg("Đồng bộ stage 14 cho học viên phiên bản 281 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi nâng cấp v281: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 281 hoàn tất.", "success");
+    }
+
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '279') ON DUPLICATE KEY UPDATE setting_value = '279'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '281') ON DUPLICATE KEY UPDATE setting_value = '281'");
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
 

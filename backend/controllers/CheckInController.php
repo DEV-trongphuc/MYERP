@@ -553,11 +553,6 @@ class CheckInController {
             }
 
             $currentHM = substr($currentTime, 0, 5);
-            if ($currentHM < $morningStart) {
-                respond(400, null, "Không thể chấm công Ra ca trước khi ca làm việc bắt đầu ({$morningStart}).", false);
-                return;
-            }
-
             $outTimeStr = $today . ' ' . $currentTime;
             $workEndStr = $today . ' ' . $afternoonEnd . ':00';
             

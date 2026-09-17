@@ -800,8 +800,9 @@ class CooperationController {
             $shares = json_decode($slip['shares_json'], true) ?: [];
             $emailSubject = "[IDEAS] Phiếu hợp tác #" . $id . " đã được phê duyệt thành công";
             $emailTitle = "PHÊ DUYỆT PHIẾU HỢP TÁC";
+            $approverName = !empty($auth['full_name']) ? $auth['full_name'] : (!empty($auth['name']) ? $auth['name'] : 'Ban Quản Trị');
             $emailContent = "Chào các thành viên,<br/><br/>" .
-                            "Phiếu hợp tác chia sẻ hoa hồng #" . $id . " đã được phê duyệt thành công bởi quản trị viên.<br/>" .
+                            "Phiếu hợp tác chia sẻ hoa hồng #" . $id . " đã được phê duyệt thành công bởi <strong>" . htmlspecialchars($approverName) . "</strong>.<br/>" .
                             "Vui lòng truy cập hệ thống để xem chi tiết.";
             $this->notifyShareholders($id, $shares, $emailSubject, $emailTitle, $emailContent);
 
@@ -1670,11 +1671,12 @@ class CooperationController {
 
                 // Notify all shareholders of the new slip
                 $shares = json_decode($sharesJson, true) ?: [];
+                $actorName = !empty($auth['full_name']) ? $auth['full_name'] : (!empty($auth['name']) ? $auth['name'] : 'Người quản lý');
                 $emailSubject = "[IDEAS] Duyệt yêu cầu chỉnh sửa & Yêu cầu ký xác nhận Phiếu điều chỉnh #" . $newSlipId;
                 $emailTitle = "KÝ XÁC NHẬN PHIẾU ĐIỀU CHỈNH HOA HỒNG";
                 $emailContent = "Chào các thành viên,<br/><br/>" .
-                                "Ban quản lý đã <strong>phê duyệt</strong> yêu cầu chỉnh sửa tỷ lệ hoa hồng cho khách hàng <strong>" . htmlspecialchars($slip['customer_name']) . "</strong>.<br/>" .
-                                (!empty($note) ? "<strong>Ghi chú từ quản lý:</strong> <em>" . htmlspecialchars($note) . "</em><br/><br/>" : "") .
+                                "<strong>" . htmlspecialchars($actorName) . "</strong> đã <strong>phê duyệt</strong> yêu cầu chỉnh sửa tỷ lệ hoa hồng cho khách hàng <strong>" . htmlspecialchars($slip['customer_name']) . "</strong>.<br/>" .
+                                (!empty($note) ? "<strong>Ghi chú:</strong> <em>" . htmlspecialchars($note) . "</em><br/><br/>" : "") .
                                 "Hệ thống đã tự động tạo Phiếu điều chỉnh mới với mã số <strong>#" . $newSlipId . "</strong>.<br/>" .
                                 "Vui lòng truy cập hệ thống để ký xác nhận lại tỷ lệ phân chia mới.";
                 $this->notifyShareholders($newSlipId, $shares, $emailSubject, $emailTitle, $emailContent);
@@ -1703,10 +1705,11 @@ class CooperationController {
                 $requester = $stmtReq->fetch(PDO::FETCH_ASSOC);
 
                 if ($requester) {
+                    $actorName = !empty($auth['full_name']) ? $auth['full_name'] : (!empty($auth['name']) ? $auth['name'] : 'Người quản lý');
                     $notifySubject = "[IDEAS] Từ chối yêu cầu chỉnh sửa tỷ lệ hoa hồng - Khách: " . $slip['customer_name'];
                     $notifyTitle = "TỪ CHỐI YÊU CẦU CHỈNH SỬA TỶ LỆ";
                     $notifyContent = "Chào <strong>" . htmlspecialchars($requester['full_name']) . "</strong>,<br/><br/>" .
-                                     "Yêu cầu chỉnh sửa tỷ lệ hoa hồng của bạn cho khách hàng <strong>" . htmlspecialchars($slip['customer_name']) . "</strong> (Phiếu hợp tác #" . $id . ") đã bị ban quản lý <strong>từ chối</strong>.<br/>" .
+                                     "Yêu cầu chỉnh sửa tỷ lệ hoa hồng của bạn cho khách hàng <strong>" . htmlspecialchars($slip['customer_name']) . "</strong> (Phiếu hợp tác #" . $id . ") đã bị <strong>" . htmlspecialchars($actorName) . "</strong> từ chối.<br/>" .
                                      (!empty($note) ? "<strong>Lý do/Ghi chú từ quản lý:</strong> <em>" . htmlspecialchars($note) . "</em><br/><br/>" : "") .
                                      "Vui lòng liên hệ ban quản lý để biết thêm chi tiết.";
                     

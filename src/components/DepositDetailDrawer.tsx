@@ -18,6 +18,7 @@ import { fetchAPI } from '../utils/api';
 import { useLanguage } from '../contexts/LanguageContext';
 import { numberToVietnameseText } from '../utils/numberToText';
 import { VietnameseDateInput } from './ui/VietnameseDateInput';
+import { formatCommentBody } from '../utils/commentFormatter';
 
 interface Deposit {
   id: number;
@@ -89,6 +90,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [loadingComments, setLoadingComments] = useState(false);
   const commentEndRef = useRef<HTMLDivElement>(null);
+  const commentsContainerRef = useRef<HTMLDivElement>(null);
 
   const [sharesData, setSharesData] = useState<any[]>([]);
   const [tempExpectedCommission, setTempExpectedCommission] = useState<number>(deposit?.expected_commission || 0);
@@ -106,7 +108,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
   const [cancelReason, setCancelReason] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
-  const isAdmin = user && ['admin', 'superadmin', 'super_admin', 'assistant', 'manager', 'director', 'accountant'].includes(user.role);
+  const isAdmin = user && ['admin', 'superadmin', 'super_admin', 'assistant', 'manager', 'director', 'accountant', 'marketing'].includes(user.role);
   const canEditExpectedCommission = user && ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'accountant'].includes(user.role);
   const canEditMilestones = isAdmin || (selectedDepForManage && (
     String(selectedDepForManage.created_by) === String(user?.id) ||
@@ -171,7 +173,11 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
             setActiveDrawerTab('comments');
           }
         }
-        setTimeout(() => commentEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+        setTimeout(() => {
+          if (commentsContainerRef.current) {
+            commentsContainerRef.current.scrollTop = 0;
+          }
+        }, 50);
       }
     } catch (err) {
       console.error("Error loading comments:", err);
@@ -218,7 +224,10 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
   }, [isOpen, selectedDepForManage?.id]);
 
   const handleAddComment = async () => {
-    const hasContent = newCommentText.includes('<img') || !!newCommentText.replace(/<[^>]*>/g, '').trim();
+    const hasContent = newCommentText.includes('<img') || 
+                       newCommentText.includes('comment-attachment-chip') || 
+                       newCommentText.includes('<a') ||
+                       !!newCommentText.replace(/<[^>]*>/g, '').trim();
     if (!hasContent || !selectedDepForManage?.id || isSubmittingComment) return;
     setIsSubmittingComment(true);
     try {
@@ -229,6 +238,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
       if (res.success) {
         setNewCommentText('');
         addToast('Gửi bình luận thành công!', 'success');
+        setActiveDrawerTab('comments');
         await Promise.all([loadComments(), loadHistory()]);
       } else {
         addToast(res.message || 'Lỗi gửi bình luận', 'error');
@@ -351,11 +361,14 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
       }
     };
 
+    const studentName = selectedDepForManage.full_name || selectedDepForManage.client_name || selectedDepForManage.contact_name || 'Khách hàng';
+    const payDateFormatted = m.expected_pay_date ? new Date(m.expected_pay_date).toLocaleDateString('vi-VN') : 'Chưa thiết lập';
+
     if (selectedDepForManage.currency && selectedDepForManage.currency !== 'VND') {
       const expectedVnd = m.expected_amount || 0;
       showConfirm({
         title: 'Ghi nhận thanh toán ngoại tệ',
-        message: `Đợt thanh toán này có giá trị ${formatMoney(m.original_amount || 0, selectedDepForManage.currency)} (Quy đổi tạm tính: ${formatMoney(expectedVnd, 'VND')}).\n\nVui lòng nhập đúng số tiền VND thực tế nhận được từ khách hàng:`,
+        message: `Xác nhận ghi nhận cho học viên: ${studentName}\n• Nội dung: ${m.milestone_name || 'Đợt thanh toán'}\n• Ngày thanh toán: ${payDateFormatted}\n• Giá trị ngoại tệ: ${formatMoney(m.original_amount || 0, selectedDepForManage.currency)} (Tạm tính: ${formatMoney(expectedVnd, 'VND')})\n\nVui lòng nhập đúng số tiền VND thực tế nhận được từ khách hàng:`,
         confirmText: 'Ghi nhận',
         cancelText: 'Hủy',
         requirePromptInput: true,
@@ -371,7 +384,16 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
         }
       });
     } else {
-      await performApproval();
+      const amountFormatted = formatMoney(m.expected_amount || 0, 'VND');
+      showConfirm({
+        title: 'Xác nhận ghi nhận thanh toán',
+        message: `Bạn có chắc chắn muốn ghi nhận đợt thanh toán này?\n\n• Nội dung: ${m.milestone_name || 'Đợt thanh toán'}\n• Học viên: ${studentName}\n• Ngày thanh toán: ${payDateFormatted}\n• Số tiền: ${amountFormatted}`,
+        confirmText: 'Xác nhận ghi nhận',
+        cancelText: 'Hủy bỏ',
+        onConfirm: async () => {
+          await performApproval();
+        }
+      });
     }
   };
 
@@ -704,7 +726,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                   {selectedDepForManage.status !== 'cancelled' && (() => {
                     const isCreator = String(selectedDepForManage.created_by) === String(user?.id);
                     const isOwner = String(selectedDepForManage.contact_owner_id) === String(user?.id);
-                    const isStaff = user && ['admin', 'superadmin', 'super_admin', 'assistant', 'manager', 'director', 'accountant'].includes(user.role);
+                    const isStaff = user && ['admin', 'superadmin', 'super_admin', 'assistant', 'manager', 'director', 'accountant', 'marketing'].includes(user.role);
                     if (isStaff || isCreator || isOwner) {
                       return (
                         <button
@@ -839,7 +861,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
               <div style={{ flex: 1, display: 'flex', flexDirection: isMobile ? 'column' : 'row', overflow: 'hidden' }}>
                 {/* Left Pane (Details & Milestones) */}
                 {(!isMobile || mobileDrawerTab === 'info') && (
-                <div className="custom-scrollbar" style={{ flex: isMobile ? 1 : 1.3, width: isMobile ? '100%' : 'auto', minWidth: 0, padding: isMobile ? '1rem 1rem 40px 1rem' : '1.5rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                <div className="custom-scrollbar" style={{ flex: isMobile ? 1 : 1.3, width: isMobile ? '100%' : 'auto', minWidth: 0, padding: isMobile ? '1rem 1rem 120px 1rem' : '1.5rem 1.5rem 150px 1.5rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                   <div style={{
                     display: 'flex',
                     flexDirection: 'column',
@@ -880,7 +902,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                         <span style={{ fontSize: '0.675rem', color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Chương trình</span>
                         <span style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--color-text)', wordBreak: 'break-word' }}>
                           {selectedDepForManage.unit_code && selectedDepForManage.unit_code !== '—' && selectedDepForManage.unit_code !== '-' && selectedDepForManage.unit_code.trim() !== ''
-                            ? `${selectedDepForManage.project_name} (Căn ${selectedDepForManage.unit_code})`
+                            ? `${selectedDepForManage.project_name} (${selectedDepForManage.unit_code})`
                             : selectedDepForManage.project_name}
                         </span>
                       </div>
@@ -1331,7 +1353,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                         <div style={{ textAlign: 'right' }}>Thao tác</div>
                       </div>
 
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '420px', overflowY: 'auto', paddingRight: 4 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                         {tempMilestones.map((m, idx) => {
                           const isLocked = m.status === 'approved' || m.status === 'paid';
                           return (
@@ -1660,7 +1682,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                   </div>
 
                   {/* Tab contents */}
-                  <div className="custom-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem', background: '#f8f9fa' }}>
+                  <div ref={commentsContainerRef} className="custom-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem', background: '#f8f9fa' }}>
                     {activeDrawerTab === 'comments' ? (
                       <>
                         {loadingComments ? (
@@ -1722,10 +1744,10 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                                       </div>
                                     </div>
                                     <div style={{ marginTop: '6px', textAlign: 'left' }}>
-                                      {c.body && /<[a-z][\s\S]*>/i.test(c.body) ? (
+                                      {c.body && (/<[a-z][\s\S]*>/i.test(c.body) || /[📕📄📊📝📦🖼️📎]/.test(c.body)) ? (
                                         <div 
                                           className="rich-comment-content"
-                                          dangerouslySetInnerHTML={{ __html: c.body }}
+                                          dangerouslySetInnerHTML={{ __html: formatCommentBody(c.body) }}
                                           style={{ fontSize: '0.825rem', color: 'var(--color-text-light)', lineHeight: '1.45', textAlign: 'left' }}
                                         />
                                       ) : (
@@ -1877,7 +1899,10 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                         />
                         <div style={{ display: 'flex', justifyContent: 'flex-start', paddingTop: '6px', borderTop: '1px dashed var(--color-border-light)' }}>
                           {(() => {
-                            const hasContent = newCommentText.includes('<img') || !!(newCommentText && newCommentText.replace(/<[^>]*>/g, '').trim());
+                            const hasContent = newCommentText.includes('<img') || 
+                                               newCommentText.includes('comment-attachment-chip') || 
+                                               newCommentText.includes('<a') ||
+                                               !!(newCommentText && newCommentText.replace(/<[^>]*>/g, '').trim());
                             return (
                               <button
                                 type="button"

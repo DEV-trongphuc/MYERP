@@ -217,8 +217,8 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
   const isBeforeMorningStart = curHM < morningShiftStart;
   const isAfterShiftEnd = !isTodayDayOff && curHM >= afternoonShiftEnd;
 
-  // Chặn ra ca trước khi ca sáng bắt đầu
-  const isBlockedEarlyCheckOut = isCheckOutMode && isBeforeMorningStart;
+  // Không chặn chấm công khi đi sớm - luôn cho phép ghi nhận bình thường
+  const isBlockedEarlyCheckOut = false;
   // Chặn vào ca sau khi đã quá giờ tan ca hôm nay (yêu cầu tạo phiếu giải trình / bổ sung)
   const isBlockedLateCheckIn = !isCheckOutMode && (!todayCheckIn || todayCheckIn.status === 'rejected') && isAfterShiftEnd;
 
@@ -644,49 +644,8 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
       modalClassName="checkin-modal-dark"
       zIndex={2000000000}
     >
-      {/* 1. Blocked Early Check-Out State */}
-      {isBlockedEarlyCheckOut && !isSuccessScreen ? (
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          minHeight: isMobile ? '70dvh' : 'auto',
-          gap: '1.5rem',
-          padding: '2rem 1.5rem',
-          textAlign: 'center'
-        }}>
-          <div style={{
-            width: '72px',
-            height: '72px',
-            borderRadius: '50%',
-            background: 'rgba(239, 68, 68, 0.12)',
-            color: 'var(--color-danger)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '2.5rem',
-            boxShadow: '0 8px 24px rgba(239, 68, 68, 0.15)'
-          }}>
-            <AlertTriangle size={38} color="#ef4444" />
-          </div>
-          <div>
-            <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--color-text)' }}>
-              {t('Chưa đến giờ bắt đầu ca làm việc')}
-            </h3>
-            <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', margin: '8px 0 0', lineHeight: 1.5 }}>
-              {t(`Bạn không thể thực hiện Chấm công Ra ca trước khi ca sáng bắt đầu (${morningShiftStart}). Vui lòng quay lại sau khi đã vào ca làm việc.`)}
-            </p>
-          </div>
-          <button 
-            className="btn outline" 
-            onClick={onClose} 
-            style={{ borderRadius: '24px', padding: '10px 32px', fontWeight: 700 }}
-          >
-            {t('Đã hiểu')}
-          </button>
-        </div>
-      ) : isBlockedLateCheckIn && !isSuccessScreen ? (
+      {/* Late Check-In State -> Prompt to Create Attendance Update */}
+      {isBlockedLateCheckIn && !isSuccessScreen ? (
         /* 2. Blocked Late Check-In State -> Prompt to Create Attendance Update */
         <div style={{
           display: 'flex',
@@ -1286,6 +1245,7 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
         userName={user?.name || consultantProfile?.name}
         userRole={consultantProfile?.department || user?.department || user?.role}
         checkInTime={todayCheckIn?.check_in_time}
+        shiftStartTime={morningShiftStart}
         shiftEndTime={afternoonShiftEnd}
         address={currentAddress}
         isEarly={isEarlyCheckOut}

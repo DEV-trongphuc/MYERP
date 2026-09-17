@@ -19,8 +19,13 @@ class CompanyController {
             $permissionsJson = json_decode($resQ['permissions_json'], true);
         }
 
-        if (in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'sale_admin', 'saleadmin', 'marketing', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'accountant', 'ke_toan', 'leader', 'team_lead', 'teamlead', 'marketing_lead'], true)) {
-            if (in_array(strtolower($auth['role'] ?? ''), ['marketing', 'accountant', 'ke_toan', 'leader', 'team_lead', 'teamlead', 'marketing_lead'], true) && $action === 'delete') {
+        $role = strtolower($auth['role'] ?? '');
+        if (in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'assistant', 'manager', 'sale_admin', 'saleadmin'], true)) {
+            return 'all';
+        }
+
+        if (in_array($role, ['marketing', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'accountant', 'ke_toan', 'leader', 'team_lead', 'teamlead', 'marketing_lead'], true)) {
+            if ($action === 'delete') {
                 return 'none';
             }
             return 'all';
@@ -34,24 +39,8 @@ class CompanyController {
         }
 
         // Fallbacks
-        $role = strtolower($auth['role'] ?? '');
-        if ($role === 'sale_admin' || $role === 'saleadmin') {
-            return 'all';
-        }
-        if ($role === 'director' || $role === 'assistant' || $role === 'leader' || $role === 'team_lead') {
-            return $action === 'delete' ? 'none' : 'all';
-        }
-        if ($role === 'sale' || $role === 'sales') {
-            return $action === 'read' ? 'all' : 'none'; // Sales can view all partners/agents, but cannot write/delete
-        }
-        if ($role === 'viewer') {
+        if ($role === 'sale' || $role === 'sales' || $role === 'viewer') {
             return $action === 'read' ? 'all' : 'none';
-        }
-        if ($role === 'accountant' || $role === 'ke_toan') {
-            return $action === 'delete' ? 'none' : 'all';
-        }
-        if ($role === 'marketing') {
-            return 'all';
         }
         return 'none';
     }
@@ -79,7 +68,23 @@ class CompanyController {
         if ($search) { $where[] = 'MATCH(c.name,c.email) AGAINST(? IN BOOLEAN MODE)'; $params[] = "$search*"; }
         if ($status) { $where[] = 'c.status=?'; $params[] = $status; }
         if ($stage)  { $where[] = 'c.stage_id=?'; $params[] = (int)$stage; }
-        if ($tier)   { $where[] = 'c.tier=?'; $params[] = $tier; }
+        if ($tier)   {
+            $tClean = strtolower(trim($tier));
+            if ($tClean === 'giang_vien') {
+                $where[] = "(c.tier IN ('giang_vien', 'f1', 'teacher') OR c.industry LIKE '%giảng viên%' OR c.focus_markets LIKE '%giảng viên%')";
+            } elseif ($tClean === 'chuyen_gia') {
+                $where[] = "(c.tier IN ('chuyen_gia', 'f2') OR c.industry LIKE '%chuyên gia%' OR c.focus_markets LIKE '%chuyên gia%')";
+            } elseif ($tClean === 'referrer') {
+                $where[] = "(c.tier IN ('referrer', 'nguoi_gioi_thieu', 'f3') OR c.focus_markets LIKE '%giới thiệu%')";
+            } elseif ($tClean === 'doanh_nghiep') {
+                $where[] = "(c.tier IN ('doanh_nghiep', 'ctv', 'b2b') OR c.industry LIKE '%doanh nghiệp%')";
+            } elseif ($tClean === 'ca_nhan') {
+                $where[] = "(c.tier IN ('ca_nhan') OR c.tier IS NULL OR c.tier = '')";
+            } else {
+                $where[] = 'c.tier=?';
+                $params[] = $tier;
+            }
+        }
 
         // Enforce Read Scope
         $scope = $this->getScope($auth, 'read');
@@ -438,12 +443,23 @@ class CompanyController {
             }
         }
 
+        // Safely unlink associated contacts & deals
+        try {
+            $unlinkContacts = $this->db->prepare("UPDATE contacts SET company_id = NULL WHERE company_id = ? AND tenant_id = ?");
+            $unlinkContacts->execute([$id, $auth['tenant_id']]);
+
+            $unlinkDeals = $this->db->prepare("UPDATE deals SET company_id = NULL WHERE company_id = ? AND tenant_id = ?");
+            $unlinkDeals->execute([$id, $auth['tenant_id']]);
+        } catch (Exception $e) {
+            error_log("Error unlinking company relations on destroy: " . $e->getMessage());
+        }
+
         $sql = "UPDATE companies SET deleted_at=NOW() WHERE id=? AND tenant_id=?";
         $p = [$id, $auth['tenant_id']];
         $stmt = $this->db->prepare($sql);
         $stmt->execute($p);
-        if (!$stmt->rowCount()) respond(404, null, 'Không tìm thấy đối tác', false);
-        logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'DELETE', 'company', $id, json_encode(['id' => $id]));
+        if (!$stmt->rowCount()) respond(404, null, 'Không tìm thấy đối tác hoặc đối tác đã bị xóa', false);
+        logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'DELETE', 'company', $id, json_encode(['id' => $id, 'name' => $oldCompany['name'] ?? '']));
         logInteraction($this->db, $auth['tenant_id'], $auth['user_id'], 'note', 'Xóa Đối tác', "Đại lý/Đối tác đã bị xóa.", 'company', $id);
         respond(200, null, 'Đã xóa đối tác thành công');
     }

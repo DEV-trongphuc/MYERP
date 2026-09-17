@@ -34,6 +34,12 @@ class SalesOrderController {
             $params[':company_id'] = $companyId;
         }
 
+        $supplierId = (int)($_GET['supplier_id'] ?? 0);
+        if ($supplierId > 0) {
+            // Suppliers do not have sales orders (SO is for customers)
+            $where[] = "1 = 0";
+        }
+
         $contactId = (int)($_GET['contact_id'] ?? 0);
         if ($contactId > 0) {
             $where[] = "so.contact_id = :contact_id";

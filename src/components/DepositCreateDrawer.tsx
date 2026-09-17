@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Building2, ChevronLeft, Plus, Trash2, Upload, X, AlertCircle, Loader2, Check, UserPlus, Bell, Search, FileText, Bookmark, FolderOpen } from 'lucide-react';
+import { User, Building2, ChevronLeft, Plus, Trash2, Upload, X, AlertCircle, Loader2, Check, UserPlus, Bell, Search, FileText, Bookmark, FolderOpen, Sparkles } from 'lucide-react';
 import { fetchAPI } from '../utils/api';
 import { compressToWebP } from '../utils/imageCompress';
 import { useAuth } from '../contexts/AuthContext';
@@ -12,6 +12,8 @@ import { PasteDropzoneArea } from './ui/PasteDropzoneArea';
 import { Avatar } from './ui/Avatar';
 import { DraftExitConfirmModal } from './ui/DraftExitConfirmModal';
 import { VietnameseDateInput } from './ui/VietnameseDateInput';
+import { AIContractImportModal } from './ui/AIContractImportModal';
+import type { ExtractedContractData } from '../utils/aiContractParser';
 import api from '../api/axios';
 
 interface DepositCreateDrawerProps {
@@ -58,6 +60,7 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
   const DEPOSIT_DRAFT_KEY = 'myerp_deposit_create_draft';
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [existingDraft, setExistingDraft] = useState<any>(null);
+  const [showAIImportModal, setShowAIImportModal] = useState(false);
 
   // Check for saved draft when opening
   useEffect(() => {
@@ -234,6 +237,91 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
   const [showDocPickerModal, setShowDocPickerModal] = useState(false);
   const [docSearchText, setDocSearchText] = useState('');
 
+  const handleApplyAIContract = (data: ExtractedContractData, uploadedUrl?: string, originalFile?: File) => {
+    // 1. Milestones
+    if (data.milestones && data.milestones.length > 0) {
+      setMilestonesInput(
+        data.milestones.map(m => ({
+          name: m.name,
+          amount: m.amount,
+          expected_pay_date: m.expected_pay_date
+        }))
+      );
+    }
+
+    // 2. Price / Total Amount
+    if (data.totalAmount) {
+      setPrice(String(data.totalAmount));
+    }
+
+    // 3. Match Contact in CRM (only if not already open for an existing student)
+    if (!defaultContact?.id && !selectedContactId) {
+      const phone = data.studentPhone?.replace(/\D/g, '');
+      const email = data.studentEmail?.toLowerCase();
+      const name = data.studentName?.toLowerCase();
+
+      const matched = contacts.find((c: any) => {
+        const cPhone = (c.phone || '').replace(/\D/g, '');
+        const cEmail = (c.email || '').toLowerCase();
+        const cName = (c.name || c.full_name || '').toLowerCase();
+
+        if (phone && cPhone && (phone.includes(cPhone) || cPhone.includes(phone))) return true;
+        if (email && cEmail && email === cEmail) return true;
+        if (name && cName && (name.includes(cName) || cName.includes(name))) return true;
+        return false;
+      });
+
+      if (matched) {
+        setEntitySubtab('contact');
+        setSelectedContactId(String(matched.id));
+      }
+    }
+
+    // 4. Match Project / Program
+    if (data.programName && projects.length > 0) {
+      const progLower = data.programName.toLowerCase();
+      const matchedProj = projects.find((p: any) => {
+        const pTitle = (p.title || p.name || '').toLowerCase();
+        const pCode = (p.code || '').toLowerCase();
+        return (
+          (progLower.includes('dba') && (pTitle.includes('dba') || pCode.includes('dba'))) ||
+          (progLower.includes('mba') && (pTitle.includes('mba') || pCode.includes('mba'))) ||
+          (progLower.includes('estiam') && pTitle.includes('estiam')) ||
+          pTitle.includes(progLower) ||
+          progLower.includes(pTitle)
+        );
+      });
+      if (matchedProj) {
+        setSelectedProjectId(String(matchedProj.id));
+      }
+    }
+
+    // 5. Contract Code & Notes
+    if (data.contractNumber) {
+      setUnitCode(data.contractNumber);
+    }
+    const noteLines: string[] = [];
+    if (data.contractNumber) noteLines.push(`Số HĐ: ${data.contractNumber}`);
+    if (data.studentName) noteLines.push(`Học viên: ${data.studentName}`);
+    if (data.studentPhone) noteLines.push(`SĐT: ${data.studentPhone}`);
+    if (data.studentEmail) noteLines.push(`Email: ${data.studentEmail}`);
+    if (data.studentIdCard) noteLines.push(`CCCD/Passport: ${data.studentIdCard}`);
+    if (data.studentAddress) noteLines.push(`Địa chỉ: ${data.studentAddress}`);
+    if (noteLines.length > 0) {
+      setNotes(prev => (prev ? `${prev}\n\n[Thông tin Hợp đồng AI]:\n${noteLines.join('\n')}` : `[Thông tin Hợp đồng AI]:\n${noteLines.join('\n')}`));
+    }
+
+    // 6. UNC Proof attachment on the right side
+    if (uploadedUrl) {
+      setDepositProofImgUrl(uploadedUrl);
+    }
+    if (originalFile) {
+      setDepositUncFile(originalFile);
+    }
+
+    addToast(`AI đã tự động trích xuất ${data.milestones.length} đợt thanh toán và gắn file hợp đồng vào SO!`, 'success');
+  };
+
   const isAdmin = user && ['admin', 'superadmin', 'super_admin', 'assistant', 'manager', 'director', 'accountant'].includes(user.role);
 
   // Load customer documents for UNC proof selection
@@ -374,6 +462,10 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
             { name: 'Đợt 1 - Thanh toán cọc', amount: '', expected_pay_date: new Date().toLocaleDateString('sv-SE') }
           ]);
         }
+
+        if (defaultContact.openAIImport) {
+          setShowAIImportModal(true);
+        }
       } else {
         setMilestonesInput([
           { name: 'Đợt 1 - Thanh toán cọc', amount: '', expected_pay_date: new Date().toLocaleDateString('sv-SE') }
@@ -419,9 +511,14 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
       if (defaultRevenue) {
         const rate = parseFloat(exchangeRate) || 1;
         const initialAmount = currency === 'VND' ? defaultRevenue : Math.round(Number(defaultRevenue) / rate);
-        setMilestonesInput([
-          { name: milestonesInput[0]?.name || 'Đợt 1 - Thanh toán cọc', amount: String(initialAmount), expected_pay_date: milestonesInput[0]?.expected_pay_date || '' }
-        ]);
+        setMilestonesInput(prev => {
+          if (prev.length > 1 || (prev.length === 1 && prev[0].amount && prev[0].amount !== '0' && prev[0].amount !== '')) {
+            return prev;
+          }
+          return [
+            { name: prev[0]?.name || 'Đợt 1 - Thanh toán cọc', amount: String(initialAmount), expected_pay_date: prev[0]?.expected_pay_date || '' }
+          ];
+        });
       }
     }
 
@@ -749,6 +846,31 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
                 <button
                   type="button"
+                  onClick={() => setShowAIImportModal(true)}
+                  style={{
+                    height: '38px',
+                    padding: '0 14px',
+                    borderRadius: '8px',
+                    background: 'linear-gradient(135deg, #BD1D2D 0%, #94101e 100%)',
+                    color: '#ffffff',
+                    border: 'none',
+                    fontWeight: 700,
+                    fontSize: '0.85rem',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 8px rgba(189, 29, 45, 0.25)',
+                    transition: 'all 0.15s ease'
+                  }}
+                  className="hover-scale"
+                  title="Tự động đọc file hợp đồng Word (.docx) hoặc PDF (.pdf) để lên lịch trình thanh toán và điền SO"
+                >
+                  <Sparkles size={16} />
+                  <span>AI Import Hợp Đồng</span>
+                </button>
+                <button
+                  type="button"
                   className="btn outline"
                   onClick={handleRequestClose}
                   disabled={isSaving}
@@ -787,7 +909,7 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
             </div>
 
             {/* Body */}
-            <div className="custom-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
+            <div className="custom-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', paddingBottom: '100px', display: 'flex', flexDirection: 'column' }}>
               <form id="create-deposit-form-drawer" onSubmit={handleCreateDeposit} style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
                 
                 {/* Draft Notification Banner */}
@@ -863,8 +985,59 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '1.5rem',
-                    padding: isMobile ? '0' : '1.5rem'
+                    padding: isMobile ? '0 0 100px 0' : '1.5rem 1.5rem 100px 1.5rem'
                   }}>
+                    {/* Quick AI Import Banner - Deep Brand Red */}
+                    <div
+                      onClick={() => setShowAIImportModal(true)}
+                      style={{
+                        background: 'linear-gradient(135deg, rgba(189, 29, 45, 0.05) 0%, rgba(148, 16, 30, 0.02) 100%)',
+                        border: '1.5px dashed rgba(189, 29, 45, 0.35)',
+                        borderRadius: '14px',
+                        padding: '12px 18px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        boxShadow: '0 2px 8px rgba(189, 29, 45, 0.06)'
+                      }}
+                      className="hover-border-glow hover-scale-subtle"
+                      title="Nhấn để tải lên file hợp đồng Word (.docx) hoặc PDF và tự động điền toàn bộ SO"
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div
+                          style={{
+                            width: '36px',
+                            height: '36px',
+                            borderRadius: '10px',
+                            background: 'linear-gradient(135deg, #BD1D2D 0%, #94101e 100%)',
+                            color: '#fff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            boxShadow: '0 2px 8px rgba(189, 29, 45, 0.3)'
+                          }}
+                        >
+                          <Sparkles size={18} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.875rem', fontWeight: 800, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span>AI Import Hợp Đồng Đào Tạo (Word / PDF)</span>
+                            <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px', borderRadius: '4px', background: 'var(--color-primary, #BD1D2D)', color: '#fff' }}>
+                              NEW
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                            Tự động trích xuất học viên, giá trị đơn hàng, bóc tách các đợt thanh toán chuẩn ngày & gắn file UNC
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-primary, #BD1D2D)' }}>
+                        <span>Tải tệp lên →</span>
+                      </div>
+                    </div>
                     
                     {/* General Info */}
                     <div className="card" style={{ padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--color-border-light)', display: 'flex', flexDirection: 'column', gap: '1rem', background: 'var(--color-surface)' }}>
@@ -1093,19 +1266,44 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
 
                     {/* Milestones */}
                     <div className="card" style={{ padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--color-border-light)', display: 'flex', flexDirection: 'column', gap: '1rem', background: 'var(--color-surface)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                         <div>
                           <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700, color: 'var(--color-text)' }}>Lịch trình thanh toán</h4>
                           <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)' }}>(Tổng các đợt không vượt quá Doanh thu dự kiến)</span>
                         </div>
-                        <button
-                          type="button"
-                          onClick={handleAddMilestoneInput}
-                          className="btn text sm"
-                          style={{ color: 'var(--color-primary)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}
-                        >
-                          <Plus size={14} /> Thêm đợt
-                        </button>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <button
+                            type="button"
+                            onClick={() => setShowAIImportModal(true)}
+                            className="btn sm hover-scale"
+                            style={{
+                              background: 'linear-gradient(135deg, #BD1D2D 0%, #94101e 100%)',
+                              color: '#ffffff',
+                              border: 'none',
+                              fontWeight: 700,
+                              fontSize: '0.78rem',
+                              padding: '5px 10px',
+                              borderRadius: '6px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              boxShadow: '0 2px 6px rgba(189, 29, 45, 0.25)',
+                              cursor: 'pointer'
+                            }}
+                            title="Tự động đọc hợp đồng Word để lên lịch thanh toán và đính kèm UNC"
+                          >
+                            <Sparkles size={13} />
+                            <span>AI Import HĐ</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleAddMilestoneInput}
+                            className="btn text sm"
+                            style={{ color: 'var(--color-primary)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}
+                          >
+                            <Plus size={14} /> Thêm đợt
+                          </button>
+                        </div>
                       </div>
 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -1183,16 +1381,24 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
                     </div>
                   </div>
 
-                  {/* Right Pane */}
-                  <div style={{
-                    flex: isMobile ? 'none' : 3,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '1.5rem',
-                    background: isMobile ? 'transparent' : 'var(--color-bg)',
-                    borderLeft: isMobile ? 'none' : '1px solid var(--color-border-light)',
-                    padding: isMobile ? '0' : '1.5rem'
-                  }}>
+                  {/* Right Pane - Sticky Scroll */}
+                  <div 
+                    style={{
+                      flex: isMobile ? 'none' : 3,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '1.5rem',
+                      background: isMobile ? 'transparent' : 'var(--color-bg)',
+                      borderLeft: isMobile ? 'none' : '1px solid var(--color-border-light)',
+                      padding: isMobile ? '0 0 110px 0' : '1.5rem 1.5rem 110px 1.5rem',
+                      position: isMobile ? 'static' : 'sticky',
+                      top: 0,
+                      alignSelf: 'flex-start',
+                      maxHeight: isMobile ? 'none' : 'calc(100vh - 85px)',
+                      overflowY: isMobile ? 'visible' : 'auto'
+                    }}
+                    className={isMobile ? '' : 'custom-scrollbar'}
+                  >
                     
                     {/* Approver & Creator */}
                     <div className="card" style={{ padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--color-border-light)', display: 'flex', flexDirection: 'column', gap: '1rem', background: 'var(--color-surface)' }}>
@@ -1824,6 +2030,16 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
               title="Lưu bản nháp phiếu thanh toán?"
               message="Bạn có các thông tin phiếu thanh toán đang nhập dở dang. Bạn có muốn lưu bản nháp để tiếp tục hoàn thiện sau không?"
               zIndex={baseZIndex + 50}
+            />
+
+            {/* AI Contract Import Modal */}
+            <AIContractImportModal
+              isOpen={showAIImportModal}
+              onClose={() => setShowAIImportModal(false)}
+              onApply={handleApplyAIContract}
+              contacts={contacts}
+              projects={projects}
+              zIndex={baseZIndex + 60}
             />
           </motion.div>
         </div>

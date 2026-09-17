@@ -46,7 +46,36 @@ class ContactController {
         $where  = ['c.tenant_id = ?', 'c.deleted_at IS NULL', 'c.owner_id IS NOT NULL'];
         $params = [$tid];
         $role = strtolower($auth['role'] ?? '');
-        if ($role === 'sale_admin' || $role === 'saleadmin') {
+        $isAcademicUser = in_array($role, ['academic', 'hoc_vu', 'hoc_thuat', 'tro_giang', 'teacher', 'giang_vien'], true);
+        if (!$isAcademicUser) {
+            $stmtDept = $this->db->prepare("SELECT department, job_title FROM users WHERE id = ? LIMIT 1");
+            $stmtDept->execute([$auth['user_id']]);
+            $uRow = $stmtDept->fetch();
+            if ($uRow) {
+                $comb = mb_strtolower(($uRow['department'] ?? '') . ' ' . ($uRow['job_title'] ?? ''));
+                if (strpos($comb, 'học vụ') !== false || strpos($comb, 'học thuật') !== false || strpos($comb, 'academic') !== false || strpos($comb, 'giảng viên') !== false || strpos($comb, 'trợ giảng') !== false) {
+                    $isAcademicUser = true;
+                }
+            }
+        }
+
+        if ($isAcademicUser) {
+            // Học vụ chỉ được xem danh sách học viên
+            $stmtStage = $this->db->prepare("SELECT order_index FROM pipeline_stages WHERE tenant_id = ? AND system_slug IN ('application_started', 'nop_ho_so') ORDER BY order_index ASC LIMIT 1");
+            $stmtStage->execute([$tid]);
+            $minOrderIndex = $stmtStage->fetchColumn();
+            if ($minOrderIndex === false) {
+                $minOrderIndex = 9;
+            }
+            $stListStmt = $this->db->prepare("SELECT id FROM pipeline_stages WHERE tenant_id = ? AND order_index >= ?");
+            $stListStmt->execute([$tid, (int)$minOrderIndex]);
+            $allowedStageIds = $stListStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+            if (!empty($allowedStageIds)) {
+                $where[] = "(c.stage_id IN (" . implode(',', array_map('intval', $allowedStageIds)) . ") OR c.status = 'customer' OR c.pipeline_status IN ('enrolled', 'hoc_vien', 'deposit_tuition_payment', 'dong_le_phi_ho_so', 'application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so'))";
+            } else {
+                $where[] = "(c.status = 'customer' OR c.pipeline_status IN ('enrolled', 'hoc_vien'))";
+            }
+        } elseif ($role === 'sale_admin' || $role === 'saleadmin') {
             $stmtStage = $this->db->prepare("SELECT order_index FROM pipeline_stages WHERE tenant_id = ? AND system_slug IN ('application_started', 'nop_ho_so') ORDER BY order_index ASC LIMIT 1");
             $stmtStage->execute([$tid]);
             $minOrderIndex = $stmtStage->fetchColumn();
@@ -125,38 +154,20 @@ class ContactController {
             if ($scope === 'all') {
                 // No filters
             } else if ($scope === 'team' || $scope === 'own') {
-                $teamMemberIds = [$auth['user_id']];
-                if ($scope === 'team') {
-                    $stmtTeam = $this->db->prepare("
-                        SELECT id FROM users 
-                        WHERE team_id IN (
-                            SELECT id FROM teams 
-                            WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))
-                        ) OR team_id = (SELECT team_id FROM users WHERE id = ?)
-                    ");
-                    $stmtTeam->execute([$auth['user_id'], $auth['user_id']]);
-                    $fetchedIds = $stmtTeam->fetchAll(PDO::FETCH_COLUMN);
-                    if ($fetchedIds) {
-                        foreach ($fetchedIds as $fid) {
-                            $teamMemberIds[] = (int)$fid;
-                        }
-                    }
-                    $teamMemberIds = array_unique($teamMemberIds);
-                }
-
+                $teamMemberIds = ($scope === 'team') ? $this->getTeamUserAndConsultantIds($auth) : $this->getUserAndConsultantIds($auth);
                 $idsClause = implode(',', $teamMemberIds);
                 
                 $collabChecks = [];
-                foreach ($teamMemberIds as $id) {
-                    $collabChecks[] = "FIND_IN_SET(" . (int)$id . ", c.collaborator_ids)";
+                foreach ($teamMemberIds as $idVal) {
+                    $collabChecks[] = "FIND_IN_SET(" . (int)$idVal . ", c.collaborator_ids)";
                 }
-                $collabClause = implode(' OR ', $collabChecks);
+                $collabClause = !empty($collabChecks) ? implode(' OR ', $collabChecks) : '1=0';
                 
                 $coopChecks = [];
-                foreach ($teamMemberIds as $id) {
-                    $coopChecks[] = "JSON_CONTAINS(JSON_KEYS(CASE WHEN (shares_json IS NOT NULL AND JSON_VALID(shares_json)) THEN shares_json ELSE '{}' END), JSON_QUOTE(CAST(" . (int)$id . " AS CHAR)))";
+                foreach ($teamMemberIds as $idVal) {
+                    $coopChecks[] = "JSON_CONTAINS(JSON_KEYS(CASE WHEN (shares_json IS NOT NULL AND JSON_VALID(shares_json)) THEN shares_json ELSE '{}' END), JSON_QUOTE(CAST(" . (int)$idVal . " AS CHAR)))";
                 }
-                $coopClause = implode(' OR ', $coopChecks);
+                $coopClause = !empty($coopChecks) ? implode(' OR ', $coopChecks) : '1=0';
 
                 $where[] = "(c.owner_id IN ($idsClause) OR c.created_by IN ($idsClause) OR ($collabClause) OR c.id IN (
                     SELECT contact_id FROM cooperation_slips WHERE $coopClause
@@ -1193,33 +1204,8 @@ class ContactController {
             WHERE c.id=? AND c.tenant_id=? AND c.deleted_at IS NULL";
         
         $p = [$id, $auth['tenant_id']];
-        $scope = $this->getScope($auth, 'leads', 'read');
-        if ($scope === 'all') {
-            // No filters
-        } else if ($scope === 'team') {
-            $sql .= " AND (c.owner_id=? OR c.owner_id IN (
-                SELECT id FROM users WHERE team_id IN (
-                    SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))
-                )
-            ) OR FIND_IN_SET(?, c.collaborator_ids) OR c.id IN (
-                SELECT contact_id FROM cooperation_slips 
-                WHERE JSON_CONTAINS(JSON_KEYS(CASE WHEN (shares_json IS NOT NULL AND JSON_VALID(shares_json)) THEN shares_json ELSE \"{}\" END), JSON_QUOTE(CAST(? AS CHAR)))
-            ))";
-            $p[] = $auth['user_id'];
-            $p[] = $auth['user_id'];
-            $p[] = $auth['user_id'];
-            $p[] = $auth['user_id'];
-        } else if ($scope === 'own') {
-            $sql .= " AND (c.owner_id=? OR FIND_IN_SET(?, c.collaborator_ids) OR c.id IN (
-                SELECT contact_id FROM cooperation_slips 
-                WHERE JSON_CONTAINS(JSON_KEYS(CASE WHEN (shares_json IS NOT NULL AND JSON_VALID(shares_json)) THEN shares_json ELSE '{}' END), JSON_QUOTE(CAST(? AS CHAR)))
-            ))";
-            $p[] = $auth['user_id'];
-            $p[] = $auth['user_id'];
-            $p[] = $auth['user_id'];
-        } else {
-            $sql .= ' AND 1=0';
-        }
+        // Allow all authenticated users within the same tenant to view contact details
+        // to support collaborative sales, interaction viewing, handovers, and academic workflows.
         
         $stmt = $this->db->prepare($sql);
         $stmt->execute($p);
@@ -1546,27 +1532,23 @@ class ContactController {
         $scope = $this->getScope($auth, 'leads', 'write');
         if ($scope === 'all') {
             // No extra filters
-        } else if ($scope === 'team') {
-            $permissionSql .= " AND (owner_id=? OR owner_id IN (
-                SELECT id FROM users WHERE team_id IN (
-                    SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))
-                )
-            ) OR FIND_IN_SET(?, collaborator_ids) OR id IN (
-                SELECT contact_id FROM cooperation_slips 
-                WHERE JSON_CONTAINS(JSON_KEYS(CASE WHEN (shares_json IS NOT NULL AND JSON_VALID(shares_json)) THEN shares_json ELSE \"{}\" END), JSON_QUOTE(CAST(? AS CHAR)))
-            ))";
-            $cp[] = $auth['user_id'];
-            $cp[] = $auth['user_id'];
-            $cp[] = $auth['user_id'];
-            $cp[] = $auth['user_id'];
-        } else if ($scope === 'own') {
-            $permissionSql .= ' AND (owner_id=? OR FIND_IN_SET(?, collaborator_ids) OR id IN (
-                SELECT contact_id FROM cooperation_slips 
-                WHERE JSON_CONTAINS(JSON_KEYS(CASE WHEN (shares_json IS NOT NULL AND JSON_VALID(shares_json)) THEN shares_json ELSE "{}" END), JSON_QUOTE(CAST(? AS CHAR)))
-            ))';
-            $cp[] = $auth['user_id'];
-            $cp[] = $auth['user_id'];
-            $cp[] = $auth['user_id'];
+        } else if ($scope === 'team' || $scope === 'own') {
+            $myIds = ($scope === 'team') ? $this->getTeamUserAndConsultantIds($auth) : $this->getUserAndConsultantIds($auth);
+            $idsClause = implode(',', $myIds);
+            
+            $collabChecks = [];
+            foreach ($myIds as $mid) {
+                $collabChecks[] = "FIND_IN_SET(" . (int)$mid . ", collaborator_ids)";
+            }
+            $collabClause = !empty($collabChecks) ? implode(' OR ', $collabChecks) : '1=0';
+
+            $coopChecks = [];
+            foreach ($myIds as $mid) {
+                $coopChecks[] = "JSON_CONTAINS(JSON_KEYS(CASE WHEN (shares_json IS NOT NULL AND JSON_VALID(shares_json)) THEN shares_json ELSE '{}' END), JSON_QUOTE(CAST(" . (int)$mid . " AS CHAR)))";
+            }
+            $coopClause = !empty($coopChecks) ? implode(' OR ', $coopChecks) : '1=0';
+
+            $permissionSql .= " AND (owner_id IN ($idsClause) OR created_by IN ($idsClause) OR ($collabClause) OR id IN (SELECT contact_id FROM cooperation_slips WHERE $coopClause))";
         } else {
             $permissionSql .= ' AND 1=0';
         }
@@ -1871,8 +1853,38 @@ class ContactController {
             $statusHierarchy[trim($statusName)] = $idxVal;
         }
 
-        $currIdx = $statusHierarchy[$currStatus] ?? 0;
-        $newIdx = $statusHierarchy[$newStatus] ?? 0;
+        $aliases = [
+            'dat_coc' => 'deposit_tuition_payment',
+            'coc' => 'deposit_tuition_payment',
+            '13' => 'deposit_tuition_payment',
+            'hoc_vien' => 'enrolled',
+            'nhap_hoc' => 'enrolled',
+            '14' => 'enrolled',
+            'new' => 'new_lead',
+            'lead_moi' => 'new_lead',
+            '1' => 'new_lead',
+            '01' => 'new_lead'
+        ];
+
+        $currStageRow = null;
+        if ($currStageId > 0) {
+            $stC = $this->db->prepare("SELECT id, order_index, system_slug FROM pipeline_stages WHERE id = ? AND tenant_id = ?");
+            $stC->execute([$currStageId, $auth['tenant_id']]);
+            $currStageRow = $stC->fetch();
+        }
+        $targetStageOrder = (int)($targetStageData['order_index'] ?? 0);
+        if ($targetStageOrder === 0 && !empty($targetStageData['id'])) {
+            $stT = $this->db->prepare("SELECT order_index FROM pipeline_stages WHERE id = ?");
+            $stT->execute([(int)$targetStageData['id']]);
+            $targetStageOrder = (int)$stT->fetchColumn();
+        }
+        $currStageOrder = (int)($currStageRow['order_index'] ?? 0);
+
+        $normCurr = $aliases[$currStatus] ?? $currStatus;
+        $normNew = $aliases[$newStatus] ?? $newStatus;
+
+        $currIdx = $statusHierarchy[$normCurr] ?? ($currStageOrder > 0 ? $currStageOrder - 1 : 0);
+        $newIdx = $statusHierarchy[$normNew] ?? ($targetStageOrder > 0 ? $targetStageOrder - 1 : 0);
 
         $allowBackward = (int)$this->getSetting('allow_pipeline_backward', '0') === 1;
         $allowSkip = (int)$this->getSetting('allow_pipeline_skip', '0') === 1;
@@ -1881,12 +1893,12 @@ class ContactController {
         $dealWonSetting = $stmtWonSetting ? $stmtWonSetting->fetchColumn() : 'deposit_tuition_payment';
         if (empty($dealWonSetting)) $dealWonSetting = 'deposit_tuition_payment';
 
-        $isFromDeposit = strpos(strtolower($currStatus), 'coc') !== false || strpos(strtolower($currStatus), 'deposit') !== false || $currStatus === 'dat_coc' || $currStatus === $dealWonSetting;
-        $isToSuccess = strpos(strtolower($newStatus), 'success') !== false || strpos(strtolower($newStatus), 'enrolled') !== false || strpos(strtolower($newStatus), 'thanh_cong') !== false || $newStatus === 'dong_deal' || $newStatus === 'thanh_cong';
+        $isFromDeposit = strpos(strtolower($currStatus), 'coc') !== false || strpos(strtolower($currStatus), 'deposit') !== false || $currStatus === 'dat_coc' || $currStatus === $dealWonSetting || $currStageId === 43 || $currStageOrder === 13;
+        $isToSuccess = strpos(strtolower($newStatus), 'success') !== false || strpos(strtolower($newStatus), 'enrolled') !== false || strpos(strtolower($newStatus), 'thanh_cong') !== false || $newStatus === 'dong_deal' || $newStatus === 'thanh_cong' || $stageId === 44 || $targetStageOrder === 14;
         $isCancellation = $isFromDeposit && !$isToSuccess;
 
         $userRole = strtolower($auth['role'] ?? '');
-        $isPrivileged = in_array($userRole, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'sale_admin', 'saleadmin'], true);
+        $isPrivileged = in_array($userRole, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu'], true);
 
         // Enforce forward-only (Sale Admin & Admins have full rights to transition state)
         if ($newIdx < $currIdx && $targetLeadStatus === 'active' && !$isPrivileged) {
@@ -1895,7 +1907,9 @@ class ContactController {
             }
         }
         // Enforce no skipping stages (Sale Admin & Admins have full rights to transition state)
-        if ($newIdx > $currIdx + 1 && $targetLeadStatus === 'active' && !$allowSkip && !$isPrivileged) {
+        // If moving from deposit (13) to enrolled (14), it is strictly sequential and always allowed!
+        $isDirectDepositToEnrolled = ($currStageOrder === 13 && $targetStageOrder === 14) || ($isFromDeposit && $isToSuccess);
+        if ($newIdx > $currIdx + 1 && !$isDirectDepositToEnrolled && $targetLeadStatus === 'active' && !$allowSkip && !$isPrivileged) {
             respond(400, null, "Không được phép nhảy cóc trạng thái từ '$currStatus' sang '$newStatus' (Phải đi tuần tự)", false);
         }
 
@@ -1911,28 +1925,42 @@ class ContactController {
         if ($lostReason !== null) { $sets[] = "lost_reason=?"; $params[] = $lostReason; }
         if ($lostStageId !== null) { $sets[] = "lost_stage_id=?"; $params[] = $lostStageId; }
 
+        // Check write permission
+        $scope = $this->getScope($auth, 'leads', 'write');
+        if ($scope !== 'all') {
+            $myIds = ($scope === 'team') ? $this->getTeamUserAndConsultantIds($auth) : $this->getUserAndConsultantIds($auth);
+            $idsClause = implode(',', $myIds);
+            
+            $collabChecks = [];
+            foreach ($myIds as $mid) {
+                $collabChecks[] = "FIND_IN_SET(" . (int)$mid . ", collaborator_ids)";
+            }
+            $collabClause = !empty($collabChecks) ? implode(' OR ', $collabChecks) : '1=0';
+
+            $coopChecks = [];
+            foreach ($myIds as $mid) {
+                $coopChecks[] = "JSON_CONTAINS(JSON_KEYS(CASE WHEN (shares_json IS NOT NULL AND JSON_VALID(shares_json)) THEN shares_json ELSE '{}' END), JSON_QUOTE(CAST(" . (int)$mid . " AS CHAR)))";
+            }
+            $coopClause = !empty($coopChecks) ? implode(' OR ', $coopChecks) : '1=0';
+
+            $checkPerm = $this->db->prepare("SELECT id FROM contacts WHERE id=? AND tenant_id=? AND (owner_id IN ($idsClause) OR created_by IN ($idsClause) OR ($collabClause) OR id IN (SELECT contact_id FROM cooperation_slips WHERE $coopClause))");
+            $checkPerm->execute([$id, $auth['tenant_id']]);
+            if (!$checkPerm->fetch()) {
+                respond(403, null, 'Bạn không có quyền di chuyển liên hệ này', false);
+            }
+        }
+
+        // If enrolled or hoc_vien or stage 14, also ensure status is customer
+        if ($newStatus === 'enrolled' || $newStatus === 'hoc_vien' || $stageId === 14) {
+            $sets[] = "status = 'customer'";
+        }
+
         $sql = "UPDATE contacts SET " . implode(', ', $sets) . " WHERE id=? AND tenant_id=?";
         $params[] = $id;
         $params[] = $auth['tenant_id'];
 
-        if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
-            $sql .= ' AND (owner_id=? OR id IN (
-                SELECT contact_id FROM cooperation_slips 
-                WHERE JSON_CONTAINS(JSON_KEYS(CASE WHEN (shares_json IS NOT NULL AND JSON_VALID(shares_json)) THEN shares_json ELSE "{}" END), JSON_QUOTE(CAST(? AS CHAR)))
-            ))';
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-        }
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);
-        if (!$stmt->rowCount()) {
-            // If row count is 0, check if contact exists and unchanged
-            $chkStill = $this->db->prepare("SELECT id FROM contacts WHERE id=? AND tenant_id=?");
-            $chkStill->execute([$id, $auth['tenant_id']]);
-            if (!$chkStill->fetch()) {
-                respond(403, null, 'Bạn không có quyền di chuyển liên hệ này', false);
-            }
-        }
 
         // Trigger CAPI / Security timer updates on status change
         if ($newStatus !== $currStatus) {
@@ -2490,6 +2518,52 @@ class ContactController {
         }
     }
 
+    private function getUserAndConsultantIds(array $auth): array {
+        $userId = (int)($auth['user_id'] ?? 0);
+        if (!$userId) return [];
+        $ids = [$userId];
+        try {
+            $stmt = $this->db->prepare("
+                SELECT id FROM consultants 
+                WHERE email = (SELECT email FROM users WHERE id = ?) 
+                   OR user_id = ? 
+                   OR name = (SELECT full_name FROM users WHERE id = ?)
+            ");
+            $stmt->execute([$userId, $userId, $userId]);
+            while ($cid = $stmt->fetchColumn()) {
+                if ($cid) $ids[] = (int)$cid;
+            }
+        } catch (\Throwable $e) {}
+        return array_values(array_unique(array_filter($ids)));
+    }
+
+    private function getTeamUserAndConsultantIds(array $auth): array {
+        $userId = (int)($auth['user_id'] ?? 0);
+        $allIds = $this->getUserAndConsultantIds($auth);
+        try {
+            $stmtTeam = $this->db->prepare("
+                SELECT id FROM users 
+                WHERE team_id IN (
+                    SELECT id FROM teams 
+                    WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))
+                ) OR team_id = (SELECT team_id FROM users WHERE id = ?)
+            ");
+            $stmtTeam->execute([$userId, $userId]);
+            $fetchedIds = $stmtTeam->fetchAll(PDO::FETCH_COLUMN) ?: [];
+            foreach ($fetchedIds as $fid) {
+                if ($fid) {
+                    $allIds[] = (int)$fid;
+                    $stmtC = $this->db->prepare("SELECT id FROM consultants WHERE email = (SELECT email FROM users WHERE id = ?) OR user_id = ? OR name = (SELECT full_name FROM users WHERE id = ?)");
+                    $stmtC->execute([$fid, $fid, $fid]);
+                    while ($cid = $stmtC->fetchColumn()) {
+                        if ($cid) $allIds[] = (int)$cid;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {}
+        return array_values(array_unique(array_filter($allIds)));
+    }
+
     private function getScope(array $auth, string $module, string $action): string {
         $permissionsJson = null;
         $stmtQ = $this->db->prepare("SELECT permissions_json FROM users WHERE id = ? LIMIT 1");
@@ -2515,12 +2589,27 @@ class ContactController {
             }
         }
 
-        if (in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'sale_admin', 'saleadmin', 'marketing', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true) || $isMarketing) {
+        $isAcademic = false;
+        if (in_array(strtolower($auth['role'] ?? ''), ['academic', 'hoc_vu', 'hoc_thuat', 'tro_giang', 'teacher', 'giang_vien'], true)) {
+            $isAcademic = true;
+        } else {
+            $stmtDept = $this->db->prepare("SELECT department, job_title FROM users WHERE id = ? LIMIT 1");
+            $stmtDept->execute([$auth['user_id']]);
+            $uRow = $stmtDept->fetch();
+            if ($uRow) {
+                $comb = mb_strtolower(($uRow['department'] ?? '') . ' ' . ($uRow['job_title'] ?? ''));
+                if (strpos($comb, 'học vụ') !== false || strpos($comb, 'học thuật') !== false || strpos($comb, 'academic') !== false || strpos($comb, 'giảng viên') !== false || strpos($comb, 'trợ giảng') !== false) {
+                    $isAcademic = true;
+                }
+            }
+        }
+
+        if (in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'sale_admin', 'saleadmin', 'marketing'], true) || $isMarketing || $isAcademic) {
             if (($isMarketing || strtolower($auth['role'] ?? '') === 'marketing') && $action === 'delete') {
                 return 'none';
             }
-            if (in_array(strtolower($auth['role'] ?? ''), ['academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true) && $action === 'delete') {
-                return 'own';
+            if ($isAcademic && $action === 'delete') {
+                return 'none';
             }
             return 'all';
         }
@@ -2837,55 +2926,26 @@ class ContactController {
     public function getPrograms(array $auth): void {
         try {
             $sql = "
-                SELECT DISTINCT TRIM(program) as name 
-                FROM contacts 
-                WHERE tenant_id = ? AND program IS NOT NULL AND TRIM(program) != ''
-                UNION
-                SELECT DISTINCT TRIM(name) as name
+                SELECT DISTINCT TRIM(name) as name 
                 FROM projects 
-                WHERE tenant_id = ? AND name IS NOT NULL AND TRIM(name) != ''
+                WHERE tenant_id = ? AND (status IS NULL OR status != 'deleted') AND name IS NOT NULL AND TRIM(name) != ''
                 ORDER BY name ASC
-                LIMIT 100
             ";
             $stmt = $this->db->prepare($sql);
-            $stmt->execute([$auth['tenant_id'], $auth['tenant_id']]);
+            $stmt->execute([$auth['tenant_id']]);
             $rows = $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
 
-            $defaults = [
-                'MBA High Quality',
-                'MBA Standard',
-                'MBA',
-                'Executive MBA',
-                'Mini MBA',
-                'DBA',
-                'BBA',
-                'MFB',
-                'MSTI',
-                'CEO',
-                'CFO',
-                'CHRO',
-                'CMO'
-            ];
-
-            $filteredRows = [];
+            $result = [];
             foreach ($rows as $r) {
-                $trimmed = trim($r);
-                if (empty($trimmed)) continue;
-                // Extract acronym inside parentheses if exists, e.g. "Thạc sĩ Quản trị Kinh doanh (MBA)" -> "MBA"
-                if (preg_match('/\(([A-Za-z0-9\s\-]+)\)/u', $trimmed, $m)) {
-                    $trimmed = trim($m[1]);
+                $trimmed = trim((string)$r);
+                if ($trimmed !== '') {
+                    $result[] = $trimmed;
                 }
-                // Discard any remaining entries containing Vietnamese letters / diacritics
-                if (preg_match('/[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/ui', $trimmed)) {
-                    continue;
-                }
-                $filteredRows[] = $trimmed;
             }
-
-            $combined = array_values(array_unique(array_filter(array_merge($defaults, $filteredRows))));
-            respond(200, $combined, 'Danh sách gợi ý chương trình');
+            $result = array_values(array_unique($result));
+            respond(200, $result, 'Danh sách chương trình');
         } catch (\Throwable $e) {
-            respond(500, null, 'Lỗi lấy gợi ý chương trình: ' . $e->getMessage(), false);
+            respond(500, null, 'Lỗi lấy danh sách chương trình: ' . $e->getMessage(), false);
         }
     }
 

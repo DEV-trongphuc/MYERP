@@ -19,7 +19,7 @@ import { canEditPartnerOrSupplier, isSales } from '../utils/roleUtils';
 const STATUSES = ['active', 'inactive', 'prospect'];
 const ST_LABEL: Record<string, string> = { active: 'Hoạt động', inactive: 'Ngừng', prospect: 'Tiềm năng' };
 const ST_CLASS: Record<string, string> = { active: 'success', inactive: 'danger', prospect: 'warning' };
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 12;
 
 export const CompaniesPage: React.FC = () => {
   const { user } = useAuth();
@@ -49,7 +49,7 @@ export const CompaniesPage: React.FC = () => {
   const [showImportExport, setShowImportExport] = useState(false);
   const [showFiltersMenu, setShowFiltersMenu] = useState(false);
   const [pageSize, setPageSize] = useState<number>(() => {
-    return Number(localStorage.getItem('Ideas_companies_page_size')) || 10;
+    return Number(localStorage.getItem('Ideas_companies_page_size')) || 12;
   });
 
   const fetchCompanies = useCallback(async () => {
@@ -129,20 +129,27 @@ export const CompaniesPage: React.FC = () => {
   };
 
   const confirmDelete = (co: any) => {
+    const contactCount = Number(co.contact_count) || 0;
+    const dealCount = Number(co.deal_count) || 0;
+    const hasHistory = contactCount > 0 || dealCount > 0;
+
     showConfirm({
-      title: 'Xóa đối tác?',
-      message: `Bạn có chắc chắn muốn xóa vĩnh viễn đối tác "${co.name}"? Thao tác này không thể hoàn tác.`,
+      title: `Xóa đối tác "${co.name}"?`,
+      message: hasHistory
+        ? `Đối tác này đang liên kết với ${contactCount} khách hàng/data giới thiệu${dealCount > 0 ? ` và ${dealCount} giao dịch/đơn hàng` : ''}. Khi xóa, hệ thống sẽ tự động gỡ liên kết các dữ liệu này an toàn.`
+        : `Bạn có chắc chắn muốn xóa đối tác "${co.name}"? Thao tác này sẽ gỡ đối tác khỏi danh sách.`,
       isDanger: true,
-      impactInfo: `Cảnh báo: Xóa đối tác sẽ gỡ bỏ liên kết với ${co.contact_count || 0} liên hệ liên quan.`,
+      impactInfo: hasHistory ? `Lưu ý: Dữ liệu khách hàng/data giới thiệu vẫn được giữ nguyên và chỉ chuyển về trạng thái không gắn đối tác.` : undefined,
       confirmText: 'Xác nhận xóa',
       onConfirm: async () => {
         try {
           setDeleting(true);
-          await api.delete(`/companies/${co.id}`);
-          addToast('Đã xóa đối tác thành công', 'success');
+          const res = await api.delete(`/companies/${co.id}`);
+          addToast(res.data?.message || 'Đã xóa đối tác thành công', 'success');
           fetchCompanies();
         } catch (e: any) {
-          addToast('Lỗi khi xóa đối tác', 'error');
+          const errMsg = e.response?.data?.message || e.message || 'Lỗi khi xóa đối tác';
+          addToast(errMsg, 'error');
         } finally {
           setDeleting(false);
           closeConfirm();
@@ -166,9 +173,18 @@ export const CompaniesPage: React.FC = () => {
     return t;
   };
 
+  const QUICK_TIER_FILTERS = [
+    { id: '', label: 'Tất cả' },
+    { id: 'giang_vien', label: 'Giảng viên' },
+    { id: 'referrer', label: 'Người giới thiệu' },
+    { id: 'doanh_nghiep', label: 'Doanh nghiệp' },
+    { id: 'ca_nhan', label: 'Cá nhân' },
+    { id: 'chuyen_gia', label: 'Chuyên gia' }
+  ];
+
   return (
     <div className="page-container anim-fade-up">
-      <div className="page-header" style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '8px', marginBottom: '1.5rem' }}>
+      <div className="page-header" style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '8px', marginBottom: '1.25rem' }}>
         <div>
           <h1 className="page-title" style={{ fontSize: isMobile ? '1.45rem' : '1.75rem' }}>Đối tác</h1>
           <p className="page-subtitle" style={{ fontSize: '0.8rem' }}>{loading ? '...' : `${total} đối tác`}</p>
@@ -193,6 +209,46 @@ export const CompaniesPage: React.FC = () => {
             {!isMobile && <span>Thêm đối tác</span>}
           </button>
         )}
+      </div>
+
+      {/* Quick Category Filter Pills */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        overflowX: 'auto',
+        paddingBottom: '4px',
+        marginBottom: '1rem',
+        scrollbarWidth: 'none'
+      }}>
+        {QUICK_TIER_FILTERS.map(f => {
+          const isActive = tierFilter === f.id;
+          return (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setTierFilter(f.id)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                padding: '6px 14px',
+                borderRadius: '20px',
+                fontSize: '0.8125rem',
+                fontWeight: isActive ? 600 : 500,
+                whiteSpace: 'nowrap',
+                cursor: 'pointer',
+                transition: 'all 0.18s ease',
+                border: isActive ? '1px solid #334155' : '1px solid var(--color-border-light, #e2e8f0)',
+                background: isActive ? '#334155' : 'var(--color-bg-light, #f8fafc)',
+                color: isActive ? '#ffffff' : 'var(--color-text-muted, #64748b)',
+                boxShadow: isActive ? '0 2px 6px rgba(51, 65, 85, 0.2)' : 'none'
+              }}
+              className="hover-lift"
+            >
+              <span>{f.label}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Filter Bar */}
@@ -409,8 +465,11 @@ export const CompaniesPage: React.FC = () => {
       {!loading && viewMode === 'card' && (
         <div style={{
           display: 'grid',
-          gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))',
-          gap: '1rem'
+          gridTemplateColumns: isMobile 
+            ? '1fr' 
+            : 'repeat(auto-fill, minmax(270px, 1fr))',
+          gap: '1.25rem',
+          alignItems: 'stretch'
         }}>
           <AnimatePresence>
             {companies.map(co => {
@@ -422,93 +481,122 @@ export const CompaniesPage: React.FC = () => {
                     padding: '1.25rem',
                     display: 'flex',
                     flexDirection: 'column',
+                    justifyContent: 'space-between',
                     borderRadius: '16px',
                     background: 'var(--color-surface)',
                     border: '1px solid var(--color-border-light)',
-                    boxShadow: 'var(--shadow-sm)',
-                    cursor: 'pointer'
+                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                    position: 'relative'
                   }}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95 }}
                   onClick={() => openEdit(co)}
                 >
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                    {/* Header: Avatar, Name, Tier, Actions */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1 }}>
-                        <Avatar name={co.name} src={co.logo_url} size={42} />
+                        <Avatar name={co.name} src={co.logo_url} size={44} />
                         <div style={{ minWidth: 0, flex: 1 }}>
-                          <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--color-text)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={co.name}>
+                          <h3 
+                            style={{ 
+                              fontSize: '0.95rem', 
+                              fontWeight: 800, 
+                              color: 'var(--color-text)', 
+                              margin: 0, 
+                              overflow: 'hidden', 
+                              textOverflow: 'ellipsis', 
+                              whiteSpace: 'nowrap',
+                              letterSpacing: '-0.01em'
+                            }} 
+                            title={co.name}
+                          >
                             {co.name}
                           </h3>
                           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
-                            <span className="badge sm" style={{ background: '#f3f4f6', color: '#6b7280', fontSize: '0.65rem', padding: '2px 6px' }}>
+                            <span 
+                              className="badge sm" 
+                              style={{ 
+                                background: '#f1f5f9', 
+                                color: '#475569', 
+                                border: '1px solid #e2e8f0',
+                                fontSize: '0.68rem', 
+                                fontWeight: 600, 
+                                padding: '2px 8px',
+                                borderRadius: '6px'
+                              }}
+                            >
                               {getTierLabel(co.tier)}
                             </span>
                             {co.parent_name && (
-                              <span className="badge sm" style={{ background: 'rgba(59, 130, 246, 0.12)', color: '#2563eb', fontSize: '0.65rem', padding: '2px 6px', fontWeight: 700 }}>
-                                Thuộc: {co.parent_name}
+                              <span 
+                                className="badge sm" 
+                                style={{ 
+                                  background: 'rgba(59, 130, 246, 0.08)', 
+                                  color: '#2563eb', 
+                                  fontSize: '0.68rem', 
+                                  padding: '2px 8px', 
+                                  fontWeight: 600,
+                                  borderRadius: '6px'
+                                }}
+                              >
+                                {co.parent_name}
                               </span>
                             )}
                           </div>
                         </div>
                       </div>
+
                       {canEdit && (
-                        <div style={{ display: 'flex', gap: '4px', marginLeft: '8px', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                          <button className="btn ghost sm" onClick={() => openEdit(co)} style={{ padding: '4px', borderRadius: '4px', width: '24px', height: '24px' }}><Pencil size={12} /></button>
-                          <button className="btn ghost sm text-danger" style={{ color: 'var(--color-danger)', padding: '4px', borderRadius: '4px', width: '24px', height: '24px' }} onClick={() => confirmDelete(co)}><Trash2 size={12} /></button>
+                        <div style={{ display: 'flex', gap: '2px', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                          <button 
+                            className="btn ghost sm" 
+                            onClick={() => openEdit(co)} 
+                            style={{ padding: '4px', borderRadius: '6px', width: '26px', height: '26px', color: 'var(--color-text-muted)' }}
+                            title="Chỉnh sửa"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          <button 
+                            className="btn ghost sm text-danger" 
+                            style={{ color: 'var(--color-danger, #ef4444)', padding: '4px', borderRadius: '6px', width: '26px', height: '26px' }} 
+                            onClick={() => confirmDelete(co)}
+                            title="Xóa đối tác"
+                          >
+                            <Trash2 size={13} />
+                          </button>
                         </div>
                       )}
                     </div>
 
-                    {/* Details Grid */}
+                    {/* Contact Info (SĐT & Email) */}
                     <div style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(2, 1fr)',
-                      gap: '8px 12px',
-                      padding: '0.75rem 0',
-                      borderTop: '1px solid var(--color-border-light)',
-                      marginTop: '0.5rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '6px',
+                      paddingTop: '0.75rem',
+                      borderTop: '1px solid var(--color-border-light)'
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--color-text-muted)', minWidth: 0 }}>
-                        <Phone size={12} style={{ opacity: 0.6, flexShrink: 0 }} />
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{co.phone || 'Chưa có SĐT'}</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--color-text-muted)', minWidth: 0 }}>
-                        <Mail size={12} style={{ opacity: 0.6, flexShrink: 0 }} />
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={co.email}>{co.email || 'Chưa có Email'}</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--color-text-muted)', minWidth: 0 }}>
-                        <MapPin size={12} style={{ opacity: 0.6, flexShrink: 0 }} />
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={co.address || co.city}>{co.address || co.city || 'Chưa có địa chỉ'}</span>
-                        {(co.address || co.city) && <CopyButton text={co.address || co.city} size={11} style={{ padding: '1px 4px', margin: 0, flexShrink: 0 }} />}
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--color-text-muted)', minWidth: 0 }}>
-                        <Users size={12} style={{ opacity: 0.6, flexShrink: 0 }} />
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{co.agent_count || 0} sales</span>
-                      </div>
-                      {co.focus_markets && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--color-text-muted)', minWidth: 0, gridColumn: 'span 2' }}>
-                          <span style={{ fontWeight: 700, fontSize: '0.65rem', background: 'rgba(163, 20, 34, 0.08)', color: 'var(--color-primary)', padding: '2px 6px', borderRadius: '4px', flexShrink: 0 }}>Thế mạnh</span>
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={co.focus_markets}>{co.focus_markets}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', color: 'var(--color-text)', minWidth: 0 }}>
+                        <div style={{ width: '20px', height: '20px', borderRadius: '6px', background: '#f1f5f9', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <Phone size={11} />
                         </div>
-                      )}
-                    </div>
-
-                    {/* Metadata Footer */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--color-border-light)', paddingTop: '0.5rem', marginTop: '0.25rem' }}>
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.65rem', color: 'var(--color-text-muted)' }} title="Người liên hệ">
-                          <Users size={11} />
-                          {co.contact_count || 0} liên hệ
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: co.phone ? 600 : 400, color: co.phone ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+                          {co.phone || 'Chưa có SĐT'}
                         </span>
                       </div>
-                      {co.dedicated_rep_id && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }} title={`Người phụ trách: ${co.rep_name || 'Chưa rõ'}`}>
-                          <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>Phụ trách:</span>
-                          <Avatar name={co.rep_name || 'CV'} src={co.rep_avatar} size={22} />
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', color: 'var(--color-text)', minWidth: 0 }}>
+                        <div style={{ width: '20px', height: '20px', borderRadius: '6px', background: '#f1f5f9', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <Mail size={11} />
                         </div>
-                      )}
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: co.email ? 'var(--color-text)' : 'var(--color-text-muted)' }} title={co.email}>
+                          {co.email || 'Chưa có Email'}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </motion.div>

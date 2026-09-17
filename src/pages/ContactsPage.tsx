@@ -27,6 +27,8 @@ import { fetchAPI } from '../utils/api';
 import { downloadExportFile } from '../utils/exportHelper';
 import { useDebounce } from '../hooks/useDebounce';
 import { useAuth } from '../contexts/AuthContext';
+import { isAcademic } from '../utils/roleUtils';
+import { ReportDataModal } from '../components/ui/ReportDataModal';
 
 const PAGE_SIZE = 10;
 
@@ -79,7 +81,7 @@ const isLeadUncontacted = (c: any) => {
   return true;
 };
 
-const renderInteractionInfo = (c: any) => {
+const renderInteractionInfo = (c: any, onReportClick?: (c: any) => void) => {
   const interactionTime = getInteractionTime(c.last_interaction_at, c.last_contact, c.created_at, c.distributed_at);
   const timeText = formatTimeAgo(interactionTime);
   const isUncontacted = isLeadUncontacted(c);
@@ -101,6 +103,8 @@ const renderInteractionInfo = (c: any) => {
       c.round_name?.toLowerCase().includes('nhắc lại')
     )
   );
+  const isReportedError = Boolean(c.is_error_ticket || c.report_status === 'pending' || c.report_status === 'approved' || c.report_status === 'approved_no_comp');
+  const isEligibleForReport = Boolean(c.log_id && c.dl_status !== 'databank_claim') || Boolean(c.round_name && c.dl_status !== 'databank_claim' && c.source !== 'ca_nhan' && c.source !== 'cold_call');
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
@@ -146,6 +150,49 @@ const renderInteractionInfo = (c: any) => {
           Nhắc lại
         </span>
       )}
+      {isReportedError ? (
+        <span style={{ 
+          fontSize: '0.625rem', 
+          fontWeight: 700, 
+          padding: '1px 5px', 
+          borderRadius: '4px', 
+          background: 'rgba(239, 68, 68, 0.15)', 
+          color: '#dc2626',
+          lineHeight: '1.2',
+          border: '1px solid rgba(239, 68, 68, 0.25)',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '2px'
+        }}>
+          <AlertCircle size={9} /> Đã báo lỗi
+        </span>
+      ) : isEligibleForReport && onReportClick ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onReportClick(c);
+          }}
+          title="Báo cáo data lỗi (sai số, rác, trùng) để bù vòng chia"
+          style={{
+            fontSize: '0.625rem',
+            fontWeight: 700,
+            padding: '1px 6px',
+            borderRadius: '4px',
+            background: 'rgba(239, 68, 68, 0.08)',
+            color: '#dc2626',
+            border: '1px solid rgba(239, 68, 68, 0.2)',
+            cursor: 'pointer',
+            lineHeight: '1.2',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '3px'
+          }}
+          className="hover-lift"
+        >
+          <AlertTriangle size={9} /> Báo lỗi
+        </button>
+      ) : null}
     </div>
   );
 };
@@ -494,7 +541,18 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     window.addEventListener('open-contact-drawer', handleOpenContactDrawer);
     return () => window.removeEventListener('open-contact-drawer', handleOpenContactDrawer);
   }, []);
-  const [segment, setSegment] = useState(defaultSegment);
+
+  const isUserAcademic = isAcademic(user);
+  const [segment, setSegment] = useState(() => {
+    if (isUserAcademic) return 'customer';
+    return searchParams.get('segment') || defaultSegment;
+  });
+
+  useEffect(() => {
+    if (isUserAcademic && segment !== 'customer') {
+      setSegment('customer');
+    }
+  }, [isUserAcademic, segment]);
 
   useEffect(() => {
     if (segment === 'customer') {
@@ -905,53 +963,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       .catch(() => {});
   }, []);
 
-  // Report data/Ticket states
-  const [reportModalOpen, setReportModalOpen] = useState(false);
-  const [selectedContactForReport, setSelectedContactForReport] = useState<any>(null);
-  const [reportReasonType, setReportReasonType] = useState('Số điện thoại không đúng / Thuê bao');
-  const [reportDetails, setReportDetails] = useState('');
-  const [submittingReport, setSubmittingReport] = useState(false);
-
-  const handleOpenReportModal = (contact: any) => {
-    setSelectedContactForReport(contact);
-    setReportReasonType('Số điện thoại không đúng / Thuê bao');
-    setReportDetails('');
-    setReportModalOpen(true);
-  };
-
-  const handleSubmitReport = async () => {
-    if (!selectedContactForReport || submittingReport) return;
-    setSubmittingReport(true);
-    try {
-      const finalReason = reportReasonType === 'Lý do khác...'
-        ? `Lý do khác: ${reportDetails}`
-        : reportReasonType;
-
-      const payload = {
-        lead_id: selectedContactForReport.lead_id,
-        sale_id: selectedContactForReport.owner_id,
-        round_id: selectedContactForReport.dl_round_id,
-        reason: finalReason
-      };
-
-      const res = await api.post('/api.php?action=submit_report', payload);
-      if (res.data.success) {
-        if (res.data.auto_approved) {
-          addToast('Báo cáo lỗi đã được HỆ THỐNG TỰ ĐỘNG PHÊ DUYỆT & ĐỀN BÙ thành công!', 'success');
-        } else {
-          addToast('Gửi báo lỗi data thành công! Đang chờ admin duyệt bù.', 'success');
-        }
-        setReportModalOpen(false);
-        fetchData();
-      } else {
-        addToast(res.data.message || 'Gửi báo lỗi thất bại', 'error');
-      }
-    } catch (err: any) {
-      addToast('Lỗi kết nối: ' + (err.message || ''), 'error');
-    } finally {
-      setSubmittingReport(false);
-    }
-  };
+  // Report data / Ticket states (Fair Share & Compensation)
+  const [reportingContact, setReportingContact] = useState<any | null>(null);
 
   const [total, setTotal] = useState(0);
 
@@ -3385,7 +3398,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                           <td style={{ width: isSale ? '250px' : '180px', maxWidth: isSale ? '280px' : '200px', padding: '0.85rem 0.6rem', borderBottom: '1px solid var(--color-border)' }}>
                             {isSale ? (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                {renderInteractionInfo(c)}
+                                {renderInteractionInfo(c, setReportingContact)}
                                 <div 
                                   className="custom-scrollbar"
                                   onClick={e => e.stopPropagation()}
@@ -3435,7 +3448,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                           (+{collabs.length})
                                         </span>
                                       </span>
-                                      {renderInteractionInfo(c)}
+                                      {renderInteractionInfo(c, setReportingContact)}
                                     </div>
                                   </div>
                                 );
@@ -3446,7 +3459,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                   <Avatar name={c.owner_name} src={c.owner_avatar} size={32} />
                                   <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                     <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)', whiteSpace: 'nowrap' }}>{c.owner_name}</span>
-                                    {renderInteractionInfo(c)}
+                                    {renderInteractionInfo(c, setReportingContact)}
                                   </div>
                                 </div>
                               );
@@ -3457,7 +3470,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                   <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Chưa giao</span>
-                                  {renderInteractionInfo(c)}
+                                  {renderInteractionInfo(c, setReportingContact)}
                                 </div>
                               </div>
                             )}
@@ -3466,10 +3479,41 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                         {columns.find(col => col.id === 'distribution')?.visible && (
                           <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }}>
                             {c.log_id && c.dl_status !== 'databank_claim' ? (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-primary)', whiteSpace: 'nowrap' }}>
-                                  {c.round_name || 'Chia data'}
-                                </span>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                  <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-primary)', whiteSpace: 'nowrap' }}>
+                                    {c.round_name || 'Chia data'}
+                                  </span>
+                                  {c.is_error_ticket || c.report_status === 'pending' || c.report_status === 'approved' ? (
+                                    <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.15)', color: '#dc2626', border: '1px solid rgba(239, 68, 68, 0.25)' }}>
+                                      {c.report_status === 'approved' ? 'Đã bù' : 'Đã báo lỗi'}
+                                    </span>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setReportingContact(c);
+                                      }}
+                                      style={{
+                                        fontSize: '0.65rem',
+                                        fontWeight: 650,
+                                        padding: '1px 6px',
+                                        borderRadius: '4px',
+                                        background: 'rgba(239, 68, 68, 0.08)',
+                                        color: '#dc2626',
+                                        border: '1px solid rgba(239, 68, 68, 0.2)',
+                                        cursor: 'pointer',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '3px'
+                                      }}
+                                      title="Báo cáo data lỗi để bù vòng"
+                                    >
+                                      <AlertTriangle size={10} /> Báo lỗi
+                                    </button>
+                                  )}
+                                </div>
                                 <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>
                                   {c.distributed_at ? new Date(c.distributed_at).toLocaleString('vi-VN') : '—'}
                                 </span>
@@ -3506,8 +3550,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                   </span>
                                 )}
                                 {(!c.report_status || c.report_status === 'rejected') && (
-                                  <button onClick={() => handleOpenReportModal(c)} className="btn sm danger" style={{ height: 28, padding: '0 8px', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                    <AlertCircle size={11} /> Báo lỗi
+                                  <button onClick={() => setReportingContact(c)} className="btn sm danger" style={{ height: 28, padding: '0 8px', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    <AlertTriangle size={11} /> Báo lỗi
                                   </button>
                                 )}
                               </div>
@@ -3920,7 +3964,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                   <div>
                                     <p style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--color-text-muted)', fontWeight: 700, marginBottom: '2px', letterSpacing: '0.02em' }}>Tương tác cuối</p>
                                     <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                                      {renderInteractionInfo(c)}
+                                      {renderInteractionInfo(c, setReportingContact)}
                                     </div>
                                   </div>
                                 </>
@@ -3989,72 +4033,15 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
         </Suspense>
       )}
       
-      {reportModalOpen && selectedContactForReport && (
-        <CustomModal
-          isOpen={reportModalOpen}
-          onClose={() => setReportModalOpen(false)}
-          title="Báo cáo dữ liệu lỗi / Trùng lặp"
-        >
-          <div style={{ padding: '0.5rem 0' }}>
-            <div className="form-group" style={{ marginBottom: '1.25rem' }}>
-              <label className="form-label" style={{ fontWeight: 700, marginBottom: '6px', display: 'block' }}>Lý do báo lỗi (Chọn mẫu có sẵn)</label>
-              <CustomSelect
-                options={[
-                  { value: 'Số điện thoại không đúng / Thuê bao', label: 'Số điện thoại không đúng / Thuê bao' },
-                  { value: 'Không có nhu cầu mua dự án nào (rác)', label: 'Không có nhu cầu mua dự án nào (rác)' },
-                  { value: 'Trùng số với Sale khác', label: 'Trùng số với Sale khác' },
-                  { value: 'Khách hàng từ chối làm việc ngay lập tức', label: 'Khách hàng từ chối làm việc ngay lập tức' },
-                  { value: 'Lý do khác...', label: 'Lý do khác...' }
-                ]}
-                value={reportReasonType}
-                onChange={(val) => setReportReasonType(String(val))}
-              />
-            </div>
-
-            <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-              <label className="form-label" style={{ fontWeight: 700, marginBottom: '6px', display: 'block' }}>Nội dung chi tiết báo cáo</label>
-              <textarea
-                className="form-input"
-                rows={4}
-                placeholder="Nhập chi tiết lý do báo lỗi, bằng chứng cuộc gọi/hình ảnh (nếu có)..."
-                value={reportDetails}
-                onChange={e => setReportDetails(e.target.value)}
-                style={{ resize: 'none', width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)' }}
-              />
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '1.5rem' }}>
-              <button
-                className="btn outline"
-                onClick={() => setReportModalOpen(false)}
-                disabled={submittingReport}
-                style={{ borderRadius: '8px', padding: '8px 16px' }}
-              >
-                Hủy
-              </button>
-              <button
-                className="btn primary"
-                onClick={handleSubmitReport}
-                disabled={submittingReport}
-                style={{
-                  background: 'var(--color-danger)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  padding: '8px 16px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                {submittingReport ? 'Đang gửi...' : 'Gửi báo cáo lỗi'}
-              </button>
-            </div>
-          </div>
-        </CustomModal>
-      )}
+      <ReportDataModal
+        isOpen={Boolean(reportingContact)}
+        contact={reportingContact}
+        onClose={() => setReportingContact(null)}
+        onSuccess={() => {
+          setReportingContact(null);
+          fetchData(true);
+        }}
+      />
 
       <ImportExportModal 
         isOpen={showImportExport} 

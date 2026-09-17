@@ -448,15 +448,15 @@ export const MentionInput: React.FC<MentionInputProps> = ({
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   };
 
-  const getFileIcon = (filename: string) => {
-    const ext = filename.split('.').pop()?.toLowerCase() || '';
-    if (['pdf'].includes(ext)) return '📕';
-    if (['doc', 'docx'].includes(ext)) return '📘';
-    if (['xls', 'xlsx', 'csv'].includes(ext)) return '📊';
-    if (['ppt', 'pptx'].includes(ext)) return '📙';
-    if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return '📦';
-    if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) return '🖼️';
-    return '📄';
+  const getFileBadgeInfo = (filename: string) => {
+    const ext = (filename || '').split('.').pop()?.toLowerCase() || '';
+    if (ext === 'pdf') return { label: 'PDF', cls: 'badge-pdf' };
+    if (['doc', 'docx'].includes(ext)) return { label: ext.toUpperCase(), cls: 'badge-docx' };
+    if (['xls', 'xlsx', 'csv'].includes(ext)) return { label: ext.toUpperCase(), cls: 'badge-xlsx' };
+    if (['ppt', 'pptx'].includes(ext)) return { label: ext.toUpperCase(), cls: 'badge-pptx' };
+    if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return { label: ext.toUpperCase(), cls: 'badge-zip' };
+    if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) return { label: 'IMG', cls: 'badge-img' };
+    return { label: ext ? ext.toUpperCase().slice(0, 4) : 'FILE', cls: 'badge-default' };
   };
 
   const handleUploadFiles = async (files: FileList | File[], initialRange: Range | null) => {
@@ -505,6 +505,11 @@ export const MentionInput: React.FC<MentionInputProps> = ({
             img.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.06)';
             nodeToInsert = img;
           } else {
+            const { label, cls } = getFileBadgeInfo(file.name);
+            const chipRow = document.createElement('div');
+            chipRow.className = 'comment-attachment-chip-row';
+            chipRow.contentEditable = 'false';
+
             const chip = document.createElement('a');
             chip.href = resolvedUrl;
             chip.target = '_blank';
@@ -514,35 +519,46 @@ export const MentionInput: React.FC<MentionInputProps> = ({
             chip.setAttribute('data-file-url', resolvedUrl);
             chip.setAttribute('data-file-name', file.name);
             chip.setAttribute('download', file.name);
-            chip.setAttribute('title', `Tải về: ${file.name}`);
-            chip.innerHTML = `<span style="font-size: 1rem;">${getFileIcon(file.name)}</span><span>${file.name}</span> <span style="font-size: 0.7rem; opacity: 0.7;">(${formatFileSize(file.size)})</span>`;
-            nodeToInsert = chip;
+            chip.setAttribute('title', `Tải về / Mở: ${file.name}`);
+            chip.innerHTML = `<span class="file-doc-badge ${cls}">${label}</span><span class="file-doc-name">${file.name}</span><span class="file-doc-size">(${formatFileSize(file.size)})</span><span class="file-doc-action-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>`;
+            
+            chipRow.appendChild(chip);
+            nodeToInsert = chipRow;
           }
 
           if (editorRef.current) {
             editorRef.current.focus();
-            const selection = window.getSelection();
-            if (selection) {
-              selection.removeAllRanges();
-              if (currentRange) {
-                selection.addRange(currentRange);
-              }
+            isFocusedRef.current = true;
+            let rangeToUse = currentRange;
+            const sel = window.getSelection();
+            if (!rangeToUse && sel && sel.rangeCount > 0 && editorRef.current.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+              rangeToUse = sel.getRangeAt(0);
             }
 
-            if (selection && selection.rangeCount > 0) {
-              const r = selection.getRangeAt(0);
-              r.deleteContents();
-              r.insertNode(nodeToInsert);
+            if (rangeToUse && editorRef.current.contains(rangeToUse.commonAncestorContainer)) {
+              rangeToUse.deleteContents();
+              rangeToUse.insertNode(nodeToInsert);
               const space = document.createTextNode(' ');
-              r.insertNode(space);
-              r.setStartAfter(space);
-              r.collapse(true);
-              selection.removeAllRanges();
-              selection.addRange(r);
-              currentRange = r.cloneRange();
+              rangeToUse.insertNode(space);
+              rangeToUse.setStartAfter(space);
+              rangeToUse.collapse(true);
+              if (sel) {
+                sel.removeAllRanges();
+                sel.addRange(rangeToUse);
+              }
+              currentRange = rangeToUse.cloneRange();
             } else {
               editorRef.current.appendChild(nodeToInsert);
-              editorRef.current.appendChild(document.createTextNode(' '));
+              const space = document.createTextNode(' ');
+              editorRef.current.appendChild(space);
+              if (sel) {
+                const newRange = document.createRange();
+                newRange.setStartAfter(space);
+                newRange.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(newRange);
+                currentRange = newRange.cloneRange();
+              }
             }
 
             const html = editorRef.current.innerHTML;
@@ -689,7 +705,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
   const triggerFileUpload = (accept: string = '*/*') => {
     let savedRange: Range | null = null;
     const sel = window.getSelection();
-    if (sel && sel.rangeCount > 0) {
+    if (sel && sel.rangeCount > 0 && editorRef.current && editorRef.current.contains(sel.getRangeAt(0).commonAncestorContainer)) {
       savedRange = sel.getRangeAt(0).cloneRange();
     }
 
@@ -746,12 +762,14 @@ export const MentionInput: React.FC<MentionInputProps> = ({
     fontSize: '0.875rem',
     lineHeight: '1.5',
     overflowY: 'auto',
+    scrollbarWidth: 'thin',
+    scrollbarColor: 'var(--color-border) transparent',
     color: 'var(--color-text)',
     background: 'transparent',
     flex: 1,
     wordBreak: 'break-word',
     textAlign: 'left',
-    maxHeight: editorStyleProps.maxHeight || '240px',
+    maxHeight: editorStyleProps.maxHeight || '320px',
     ...editorStyleProps,
     minHeight: finalEditorMinHeight // Must be after ...editorStyleProps to override!
   };
@@ -773,7 +791,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
     position: 'relative',
     width: '100%',
     padding: '0px', // Force override any padding from className
-    maxHeight: wrapperStyleProps.maxHeight || '320px',
+    maxHeight: wrapperStyleProps.maxHeight || (editorStyleProps.maxHeight ? `calc(${editorStyleProps.maxHeight} + 45px)` : 'none'),
     ...wrapperStyleProps,
     minHeight: finalWrapperMinHeight // Must be after ...wrapperStyleProps to override!
   };
@@ -927,7 +945,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
             }
           }}
           style={editorStyle}
-          className="rich-text-editor-content"
+          className="rich-text-editor-content custom-scrollbar"
         />
       </div>
 

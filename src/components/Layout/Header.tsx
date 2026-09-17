@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Command, Activity, Sun, Moon, Keyboard, ChevronDown, User, AlertTriangle, LogOut, Menu, LayoutGrid, LayoutDashboard, Users, Building2, Clock, Truck, Boxes, Receipt, Settings, CheckCircle2, Fingerprint, Bell, MessageSquare, Info, Trash2, Check, Eye, EyeOff, CheckSquare, FileText, ArrowLeft, ShieldAlert, Laptop, RefreshCw, Code } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { getUserDisplayRoleOrTitle } from '../../utils/roleUtils';
+import { getUserDisplayRoleOrTitle, isAcademic } from '../../utils/roleUtils';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { useUIStore } from '../../store/uiStore';
 import { toast } from 'react-hot-toast';
@@ -756,170 +756,142 @@ export const Header = ({
 
       const urlObj = new URL(targetLink, window.location.origin);
 
-      // Robust Contact / Lead / Pipeline matching
-      let contactId: number | null = null;
+      // Route based strictly on target URL path (NO keyword matching):
+      if (urlObj.pathname.startsWith('/workspace')) {
+        const taskId = urlObj.searchParams.get('task_id') || urlObj.searchParams.get('id');
+        const numTaskId = Number(taskId);
+        if (taskId && !isNaN(numTaskId) && numTaskId > 0) {
+          window.dispatchEvent(new CustomEvent('open-task-drawer', {
+            detail: { id: numTaskId, taskId: numTaskId }
+          }));
+        }
+        navigate(targetLink, { state: { timestamp: Date.now(), openTaskId: numTaskId || undefined } });
+        return;
+      }
+
       if (urlObj.pathname.startsWith('/contacts')) {
         const idFromParam = urlObj.searchParams.get('open_contact_id') || 
                             urlObj.searchParams.get('id') || 
                             urlObj.searchParams.get('contact_id');
+        let contactId: number | null = null;
         if (idFromParam && !isNaN(Number(idFromParam)) && Number(idFromParam) > 0) {
           contactId = Number(idFromParam);
         } else {
           const pathMatch = urlObj.pathname.match(/^\/contacts\/(\d+)/);
           if (pathMatch) contactId = Number(pathMatch[1]);
         }
-      }
 
-      // Check direct notification properties
-      if (!contactId) {
-        const directId = (notif as any).contact_id || (notif as any).entity_id || (notif as any).lead_id;
-        if (directId && !isNaN(Number(directId)) && Number(directId) > 0) {
-          contactId = Number(directId);
+        if (contactId) {
+          window.dispatchEvent(new CustomEvent('open-contact-drawer', {
+            detail: { id: contactId, contactId: contactId }
+          }));
         }
+        navigate(targetLink, { state: { timestamp: Date.now(), openContactId: contactId || undefined } });
+        return;
       }
 
-      // Check notification body for Contact ID / Lead ID / #ID
-      const isLeadOrPipeline = 
-        notif.type === 'contact' || 
-        notif.type === 'lead' || 
-        notif.type === 'pipeline_transition' || 
-        notif.type === 'pipeline' ||
-        notif.type === 'customer' ||
-        notif.type === 'lead_assignment' ||
-        notif.type === 'lead_reassignment' ||
-        (notif.title && (notif.title.toLowerCase().includes('lead') || notif.title.toLowerCase().includes('khách hàng') || notif.title.toLowerCase().includes('pipeline'))) ||
-        (notif.body && (notif.body.toLowerCase().includes('lead') || notif.body.toLowerCase().includes('khách hàng') || notif.body.toLowerCase().includes('pipeline')));
-
-      if (!contactId && isLeadOrPipeline && notif.body) {
-        const bodyMatch = notif.body.match(/(?:Contact|Lead)?\s*ID:\s*#?(\d+)/i) || 
-                          notif.body.match(/#(\d+)/);
-        if (bodyMatch && !isNaN(Number(bodyMatch[1])) && Number(bodyMatch[1]) > 0) {
-          contactId = Number(bodyMatch[1]);
-        }
-      }
-
-      if (contactId) {
-        urlObj.pathname = '/contacts';
-        urlObj.searchParams.set('open_contact_id', String(contactId));
-        targetLink = `/contacts?${urlObj.searchParams.toString()}`;
-
-        // Instant dispatch event for already-mounted ContactsPage or drawers
-        window.dispatchEvent(new CustomEvent('open-contact-drawer', {
-          detail: { id: contactId, contactId: contactId }
-        }));
-      }
-
-      // Workspace Task matching
-      const fallbackActivityMatch = targetLink.match(/^\/activities\/(\d+)$/) || targetLink.match(/\/activities\?(?:task_id|id)=(\d+)/);
-      if (fallbackActivityMatch && !targetLink.includes('contacts')) {
-        urlObj.searchParams.set('task_id', fallbackActivityMatch[1]);
-        targetLink = `/workspace?${urlObj.searchParams.toString()}`;
-      }
-
-      // Project matching
-      const projectMatch = targetLink.match(/^\/projects\/(\d+)$/) || targetLink.match(/\/projects\?(?:id)=(\d+)/);
-      if (projectMatch) {
-        urlObj.searchParams.set('id', projectMatch[1]);
-        targetLink = `/projects?${urlObj.searchParams.toString()}`;
-      }
-
-      // Approval matching
-      if (targetLink.startsWith('/approvals') || notif.type === 'leave' || notif.type === 'expense' || notif.type === 'approval') {
-        if (!targetLink.startsWith('/approvals')) {
-          targetLink = `/approvals?open_type=${notif.type || 'leave'}`;
-        }
-        const appUrlObj = new URL(targetLink, window.location.origin);
-        let openId = appUrlObj.searchParams.get('open_id');
-        const openType = appUrlObj.searchParams.get('open_type') || (notif.type === 'leave' ? 'leave' : (notif.type === 'expense' ? 'expense' : undefined));
-        const openStatus = appUrlObj.searchParams.get('open_status');
-        
-        // If openId is missing or 0, attempt to extract code from body or title (e.g. #LV-12, #EXP-34, #55)
-        if ((!openId || openId === '0') && (notif.body || notif.title)) {
-          const combinedText = `${notif.title || ''} ${notif.body || ''}`;
-          const codeMatch = combinedText.match(/#(?:LV|EXP|REQ|APPR)-?(\d+)/i) || combinedText.match(/#(\d+)/);
-          if (codeMatch && codeMatch[1]) {
-            openId = codeMatch[1];
-            appUrlObj.searchParams.set('open_id', openId);
-          }
-        }
-        if (openType && !appUrlObj.searchParams.has('open_type')) {
-          appUrlObj.searchParams.set('open_type', openType);
-        }
-        targetLink = `/approvals?${appUrlObj.searchParams.toString()}`;
+      if (urlObj.pathname.startsWith('/approvals') || urlObj.pathname.startsWith('/expenses')) {
+        const openId = urlObj.searchParams.get('open_id') || urlObj.searchParams.get('id');
+        const openType = urlObj.searchParams.get('open_type') || (notif.type === 'leave' ? 'leave' : 'expense');
+        const openStatus = urlObj.searchParams.get('open_status');
         const numOpenId = Number(openId);
 
         navigate(targetLink, { state: { timestamp: Date.now(), openDrawer: true, openId: numOpenId || undefined, openType } });
 
         if (openId && !isNaN(numOpenId) && numOpenId > 0) {
           window.dispatchEvent(new CustomEvent('open-approval-drawer', {
-            detail: { id: numOpenId, type: openType || undefined, status: openStatus || undefined }
+            detail: { id: numOpenId, type: openType, status: openStatus || undefined }
           }));
-          setTimeout(() => {
-            window.dispatchEvent(new CustomEvent('open-approval-drawer', {
-              detail: { id: numOpenId, type: openType || undefined, status: openStatus || undefined }
-            }));
-          }, 120);
         }
         return;
       }
 
-      // Deposit / Sales Order matching
-      if (targetLink.startsWith('/deposits')) {
-        const depUrlObj = new URL(targetLink, window.location.origin);
-        const openId = depUrlObj.searchParams.get('open_id') || depUrlObj.searchParams.get('id');
+      if (urlObj.pathname.startsWith('/deposits')) {
+        const openId = urlObj.searchParams.get('open_id') || urlObj.searchParams.get('id') || urlObj.searchParams.get('open_deposit_id');
         const numOpenId = Number(openId);
         if (openId && !isNaN(numOpenId) && numOpenId > 0) {
           window.dispatchEvent(new CustomEvent('open-deposit-drawer', {
             detail: { id: numOpenId, depositId: numOpenId }
           }));
         }
+        navigate(targetLink, { state: { timestamp: Date.now(), openDepositId: numOpenId || undefined } });
+        return;
       }
 
-      const openDepId = urlObj.searchParams.get('open_deposit_id');
-      if (openDepId && !isNaN(Number(openDepId))) {
-        window.dispatchEvent(new CustomEvent('open-deposit-drawer', {
-          detail: { id: Number(openDepId), depositId: Number(openDepId) }
-        }));
+      if (urlObj.pathname.startsWith('/deals')) {
+        const dealId = urlObj.searchParams.get('id') || urlObj.searchParams.get('open_deal_id');
+        const numDealId = Number(dealId);
+        if (dealId && !isNaN(numDealId) && numDealId > 0) {
+          window.dispatchEvent(new CustomEvent('open-deal-drawer', {
+            detail: { id: numDealId, dealId: numDealId }
+          }));
+        }
+        navigate(targetLink, { state: { timestamp: Date.now() } });
+        return;
       }
 
+      // Any other link (e.g. /projects, /attendance, /settings)
       navigate(targetLink, { state: { timestamp: Date.now() } });
       return;
     }
 
-    // 2. Attendance & Check-in fallback
-    const isAttendance = 
-      notif.type === 'attendance_update' || 
-      notif.type === 'attendance' || 
-      (notif.title && (
-        notif.title.toLowerCase().includes('chấm công') || 
-        notif.title.toLowerCase().includes('đi trễ')
-      )) ||
-      (notif.body && (
-        notif.body.toLowerCase().includes('chấp thuận') || 
-        notif.body.toLowerCase().includes('chấm công') || 
-        notif.body.toLowerCase().includes('đi trễ')
-      ));
-
-    if (isAttendance) {
+    // 2. Structured fallback when notif.link is missing
+    const notifType = (notif.type || '').toLowerCase();
+    if (notifType.includes('attendance')) {
       navigate('/attendance');
       return;
     }
 
-    // 3. Contact ID from Reference fallback
-    let contactIdFromRef: string | null = null;
-    if (notif.body) {
-      const refMatch = notif.body.match(/(?:Contact|Lead)?\s*ID:\s*#?(\d+)/i) || notif.body.match(/#(\d+)/);
-      if (refMatch && !isNaN(Number(refMatch[1])) && Number(refMatch[1]) > 0) {
-        contactIdFromRef = refMatch[1];
+    if (notifType.startsWith('task') || notifType === 'activity' || notifType === 'subtask') {
+      const taskId = notif.task_id || notif.activity_id || notif.entity_id;
+      if (taskId && !isNaN(Number(taskId))) {
+        window.dispatchEvent(new CustomEvent('open-task-drawer', {
+          detail: { id: Number(taskId), taskId: Number(taskId) }
+        }));
+        navigate(`/workspace?task_id=${taskId}`);
+        return;
       }
+      navigate('/workspace');
+      return;
     }
 
-    if (contactIdFromRef) {
-      const cid = Number(contactIdFromRef);
-      window.dispatchEvent(new CustomEvent('open-contact-drawer', {
-        detail: { id: cid, contactId: cid }
-      }));
-      navigate(`/contacts?open_contact_id=${contactIdFromRef}`, { state: { timestamp: Date.now(), openContactId: cid } });
+    if (['expense', 'leave', 'approval', 'po', 'purchase_order'].includes(notifType)) {
+      const openId = notif.entity_id || notif.expense_id || notif.approval_id;
+      const openType = notifType === 'leave' ? 'leave' : 'expense';
+      if (openId && !isNaN(Number(openId))) {
+        window.dispatchEvent(new CustomEvent('open-approval-drawer', {
+          detail: { id: Number(openId), type: openType }
+        }));
+        navigate(`/approvals?open_type=${openType}&open_id=${openId}`);
+        return;
+      }
+      navigate('/approvals');
+      return;
+    }
+
+    if (['contact', 'lead', 'customer'].includes(notifType)) {
+      const cid = notif.contact_id || notif.entity_id;
+      if (cid && !isNaN(Number(cid))) {
+        window.dispatchEvent(new CustomEvent('open-contact-drawer', {
+          detail: { id: Number(cid), contactId: Number(cid) }
+        }));
+        navigate(`/contacts?open_contact_id=${cid}`);
+        return;
+      }
+      navigate('/contacts');
+      return;
+    }
+
+    if (['deposit', 'sales_order'].includes(notifType)) {
+      const depId = notif.deposit_id || notif.entity_id;
+      if (depId && !isNaN(Number(depId))) {
+        window.dispatchEvent(new CustomEvent('open-deposit-drawer', {
+          detail: { id: Number(depId), depositId: Number(depId) }
+        }));
+        navigate(`/deposits?open_id=${depId}`);
+        return;
+      }
+      navigate('/deposits');
       return;
     }
 

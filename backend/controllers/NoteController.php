@@ -11,28 +11,8 @@ class NoteController {
         $sql = "SELECT id FROM $table WHERE id=? AND tenant_id=?";
         $p = [$id, $auth['tenant_id']];
         if ($type === 'contact') {
-            if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
-                $sql .= ' AND (owner_id=? OR FIND_IN_SET(?, collaborator_ids) OR id IN (
-                    SELECT contact_id FROM cooperation_slips 
-                    WHERE JSON_CONTAINS(JSON_KEYS(CASE WHEN (shares_json IS NOT NULL AND JSON_VALID(shares_json)) THEN shares_json ELSE "{}" END), JSON_QUOTE(CAST(? AS CHAR)))
-                ))';
-                $p[] = $auth['user_id'];
-                $p[] = $auth['user_id'];
-                $p[] = $auth['user_id'];
-            } else if ($auth['role'] === 'manager') {
-                $sql .= " AND (owner_id=? OR owner_id IN (
-                    SELECT id FROM users WHERE team_id IN (
-                        SELECT id FROM teams WHERE leader_id = ?
-                    )
-                ) OR FIND_IN_SET(?, collaborator_ids) OR id IN (
-                    SELECT contact_id FROM cooperation_slips 
-                    WHERE JSON_CONTAINS(JSON_KEYS(CASE WHEN (shares_json IS NOT NULL AND JSON_VALID(shares_json)) THEN shares_json ELSE \"{}\" END), JSON_QUOTE(CAST(? AS CHAR)))
-                ))";
-                $p[] = $auth['user_id'];
-                $p[] = $auth['user_id'];
-                $p[] = $auth['user_id'];
-                $p[] = $auth['user_id'];
-            }
+            // Toàn bộ nhân viên trong tổ chức đều xem được ghi chú trao đổi của khách hàng
+            $sql .= " AND deleted_at IS NULL";
         } else if ($type === 'deal') {
             if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
                 $sql .= ' AND (owner_id=? OR contact_id IN (

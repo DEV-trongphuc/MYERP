@@ -872,5 +872,222 @@ EOT;
             'file_name' => $originalFileName
         ], 'Trích xuất dữ liệu thành công');
     }
+
+    /**
+     * AI Contract Extraction using Gemini Multimodal (PDF, DOCX, DOC, Images)
+     */
+    public function extractContractInfo(array $auth): void {
+        $tid = $auth['tenant_id'];
+        $b = getBody();
+        $fileUrl = $b['file_url'] ?? '';
+        $filePathInput = $b['file_path'] ?? '';
+
+        $localPath = null;
+        $originalFileName = '';
+
+        // Case 1: Uploaded file directly via multipart
+        if (!empty($_FILES['file']['tmp_name']) && is_uploaded_file($_FILES['file']['tmp_name'])) {
+            $localPath = $_FILES['file']['tmp_name'];
+            $originalFileName = $_FILES['file']['name'] ?? 'contract.pdf';
+        }
+        // Case 2: Provided file_url or file_path
+        elseif (!empty($fileUrl) || !empty($filePathInput)) {
+            $targetPath = !empty($fileUrl) ? $fileUrl : $filePathInput;
+            $parsed = parse_url($targetPath, PHP_URL_PATH);
+            $parsed = ltrim($parsed, '/');
+            $originalFileName = basename($parsed);
+            $candidates = [
+                __DIR__ . '/../' . $parsed,
+                __DIR__ . '/../../' . $parsed,
+                $_SERVER['DOCUMENT_ROOT'] . '/' . $parsed,
+                (defined('UPLOAD_DIR') ? UPLOAD_DIR : __DIR__ . '/../uploads') . '/' . str_replace('uploads/', '', $parsed),
+                (defined('UPLOAD_DIR') ? UPLOAD_DIR : __DIR__ . '/../uploads') . '/' . $parsed
+            ];
+            foreach ($candidates as $cand) {
+                if (file_exists($cand) && is_file($cand)) {
+                    $localPath = $cand;
+                    break;
+                }
+            }
+        }
+
+        if (!$localPath || !file_exists($localPath)) {
+            respond(404, null, 'Tệp tin hợp đồng không tồn tại trên máy chủ hoặc không thể đọc được', false);
+        }
+
+        $ext = strtolower(pathinfo($originalFileName ?: $localPath, PATHINFO_EXTENSION));
+        $allowedExts = ['pdf', 'docx', 'doc', 'jpg', 'jpeg', 'png', 'webp'];
+        if (!in_array($ext, $allowedExts)) {
+            respond(422, null, 'Định dạng tệp không hợp lệ. Vui lòng chọn tệp hợp đồng PDF, Word (.docx) hoặc ảnh scan.', false);
+        }
+
+        // Lấy Gemini API key
+        require_once __DIR__ . '/../db_connect.php';
+        $apiKey = function_exists('get_system_setting') ? get_system_setting($this->db, 'gemini_api_key') : null;
+        if (empty($apiKey)) {
+            $apiKey = getenv('GEMINI_API_KEY') ?: '';
+        }
+        if (empty($apiKey)) {
+            respond(500, null, 'Hệ thống chưa cấu hình Gemini API Key trong Cài đặt hệ thống.', false);
+        }
+
+        // Prompt hướng dẫn Gemini trích xuất hợp đồng
+        $prompt = <<<EOT
+Bạn là chuyên gia bóc tách dữ liệu hợp đồng đào tạo & kinh doanh (Contract AI Extraction) của hệ thống ERP.
+Nhiệm vụ của bạn:
+Đọc toàn bộ nội dung trong văn bản / tài liệu hợp đồng này và trích xuất thành đối tượng JSON chính xác:
+
+{
+  "contract_number": "Số hợp đồng nếu có (ví dụ: 01/2026/HĐĐT-IDEAS)",
+  "student_name": "Họ và tên học viên / Bên B / Bên C (chỉ tên người, viết IN HOA, ví dụ: NGUYỄN VĂN A)",
+  "student_phone": "Số điện thoại học viên nếu có (chỉ các chữ số)",
+  "student_email": "Email học viên nếu có",
+  "student_address": "Địa chỉ liên lạc của học viên nếu có",
+  "student_id_card": "Số CCCD / CMND / Hộ chiếu của học viên nếu có",
+  "program_name": "Tên chương trình / Khóa học (ví dụ: DBA ESTIAM, MBA ESTIAM, DBA, MBA...)",
+  "total_amount": 292096500,
+  "currency": "VND",
+  "milestones": [
+    {
+      "name": "Đợt 01 - Trước 10/09/2026",
+      "amount": "15373500",
+      "expected_pay_date": "2026-09-10",
+      "raw_date": "10/09/2026"
+    }
+  ]
 }
+
+Quy tắc bắt buộc:
+1. "milestones": Bóc tách ĐÚNG các đợt thanh toán có trong hợp đồng theo bảng tiến độ hoặc điều khoản học phí. TUYỆT ĐỐI KHÔNG TỰ BỊA thêm các đợt không có trong hợp đồng. Nếu hợp đồng có 2 đợt thì trả về 2 đợt, 3 đợt trả về 3 đợt, 1 đợt trả về 1 đợt.
+2. "student_name": Chỉ lấy tên của Học viên (Bên B hoặc Bên C hoặc Bên được đào tạo), KHÔNG lấy tên người đại diện pháp luật bên A / IDEAS / ESTIAM / Viện / Trường (ví dụ: không lấy PHẠM QUANG VINH).
+3. "total_amount": Là tổng tiền học phí / giá trị hợp đồng (số nguyên dương). Nếu không ghi tổng mà có danh sách các đợt, hãy cộng tổng số tiền của các đợt lại.
+4. "expected_pay_date": Định dạng bắt buộc YYYY-MM-DD. Nếu hợp đồng ghi DD/MM/YYYY hãy chuẩn hóa về YYYY-MM-DD.
+5. "amount" trong từng milestone: Chỉ chứa chữ số, không chứa dấu chấm hoặc phẩy hoặc chữ VND.
+6. Chỉ trả về duy nhất 1 chuỗi JSON hợp lệ. Không bọc markdown ```json, không thêm giải thích ngoài JSON.
+EOT;
+
+        $parts = [];
+
+        // Nếu là DOCX: thử đọc text từ XML
+        $docxText = '';
+        if ($ext === 'docx' && class_exists('ZipArchive')) {
+            $zip = new ZipArchive();
+            if ($zip->open($localPath) === true) {
+                $xml = $zip->getFromName('word/document.xml');
+                $zip->close();
+                if ($xml) {
+                    $docxText = strip_tags(str_replace(['</w:p>', '</w:tr>'], ["\n", "\n"], $xml));
+                }
+            }
+        }
+
+        if (!empty($docxText)) {
+            $parts[] = ['text' => "Nội dung văn bản hợp đồng:\n\n" . $docxText];
+            $parts[] = ['text' => $prompt];
+        } else {
+            // PDF hoặc ảnh
+            $mimeType = 'application/pdf';
+            if ($ext === 'png') $mimeType = 'image/png';
+            elseif ($ext === 'webp') $mimeType = 'image/webp';
+            elseif ($ext === 'jpg' || $ext === 'jpeg') $mimeType = 'image/jpeg';
+
+            $fileBytes = file_get_contents($localPath);
+            if (empty($fileBytes)) {
+                respond(422, null, 'Không thể đọc nội dung tệp tin hợp đồng (tệp rỗng).', false);
+            }
+            $base64 = base64_encode($fileBytes);
+            $parts[] = [
+                'inlineData' => [
+                    'mimeType' => $mimeType,
+                    'data' => $base64
+                ]
+            ];
+            $parts[] = ['text' => $prompt];
+        }
+
+        $payload = [
+            'contents' => [['parts' => $parts]],
+            'generationConfig' => [
+                'temperature' => 0.1,
+                'responseMimeType' => 'application/json'
+            ]
+        ];
+
+        $model = function_exists('get_system_setting') ? (get_system_setting($this->db, 'gemini_model') ?: 'gemini-2.5-flash') : 'gemini-2.5-flash';
+        if (strpos($model, 'embedding') !== false) {
+            $model = 'gemini-2.5-flash';
+        }
+        $url = "https://generativelanguage.googleapis.com/v1beta/models/" . $model . ":generateContent?key=" . $apiKey;
+
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+        curl_setopt($ch, CURLOPT_TIMEOUT, 90);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr = curl_error($ch);
+        curl_close($ch);
+
+        if (!$response) {
+            respond(500, null, 'Lỗi kết nối đến dịch vụ AI trích xuất hợp đồng: ' . $curlErr, false);
+        }
+
+        $resJson = json_decode($response, true);
+        if ($httpCode !== 200) {
+            $errDetail = $resJson['error']['message'] ?? 'Mã lỗi HTTP ' . $httpCode;
+            respond(500, null, 'Lỗi từ Gemini AI: ' . $errDetail, false);
+        }
+
+        $rawText = $resJson['candidates'][0]['content']['parts'][0]['text'] ?? '';
+        $rawText = trim($rawText);
+        $rawText = preg_replace('/^```json\s*/i', '', $rawText);
+        $rawText = preg_replace('/\s*```$/', '', $rawText);
+        $parsedData = json_decode($rawText, true);
+
+        if (!$parsedData) {
+            respond(500, null, 'Không thể giải mã dữ liệu hợp đồng từ AI: ' . substr($rawText, 0, 150), false);
+        }
+
+        // Chuẩn hóa milestones
+        $milestones = [];
+        if (!empty($parsedData['milestones']) && is_array($parsedData['milestones'])) {
+            foreach ($parsedData['milestones'] as $idx => $m) {
+                $mName = trim($m['name'] ?? ('Đợt ' . ($idx + 1)));
+                $mAmount = preg_replace('/[^\d]/', '', strval($m['amount'] ?? '0'));
+                $mDate = trim($m['expected_pay_date'] ?? date('Y-m-d'));
+                if (preg_match('/^(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{4})$/', $mDate, $dm)) {
+                    $mDate = sprintf('%04d-%02d-%02d', (int)$dm[3], (int)$dm[2], (int)$dm[1]);
+                }
+                $milestones[] = [
+                    'name' => $mName,
+                    'amount' => $mAmount,
+                    'expected_pay_date' => $mDate,
+                    'rawDate' => $m['raw_date'] ?? ''
+                ];
+            }
+        }
+
+        $result = [
+            'fileName' => $originalFileName,
+            'contractNumber' => $parsedData['contract_number'] ?? null,
+            'studentName' => $parsedData['student_name'] ?? null,
+            'studentPhone' => $parsedData['student_phone'] ?? null,
+            'studentEmail' => $parsedData['student_email'] ?? null,
+            'studentAddress' => $parsedData['student_address'] ?? null,
+            'studentIdCard' => $parsedData['student_id_card'] ?? null,
+            'programName' => $parsedData['program_name'] ?? 'DBA ESTIAM',
+            'totalAmount' => (int)($parsedData['total_amount'] ?? 0),
+            'currency' => $parsedData['currency'] ?? 'VND',
+            'milestones' => $milestones,
+            'rawTextPreview' => substr($rawText, 0, 500)
+        ];
+
+        respond(200, $result, 'Trích xuất hợp đồng thành công');
+    }
+}
+
 

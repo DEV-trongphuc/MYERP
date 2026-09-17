@@ -4973,10 +4973,12 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       if (res.data.success && res.data.data) {
         setProfileContact(res.data.data);
       } else {
+        setProfileContact(null);
         toast.error(t('Không thể lấy chi tiết liên hệ'));
       }
     } catch (e: any) {
       console.error(e);
+      setProfileContact(null);
       toast.error(t('Lỗi khi tải thông tin khách hàng'));
     }
   };

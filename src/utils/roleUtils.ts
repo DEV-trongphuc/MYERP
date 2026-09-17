@@ -247,9 +247,35 @@ export function isMarketing(input: RoleInput): boolean {
 }
 
 /**
- * Checks if the user is Academic / Teacher / Tutor
+ * Checks if the user is Academic / Teacher / Tutor (Học vụ / Học thuật / Giảng viên)
  */
 export function isAcademic(input: RoleInput): boolean {
+  if (typeof input === 'object' && input !== null) {
+    const u = input as any;
+    const combined = [
+      u.role,
+      u.job_title,
+      u.department,
+      u.team_name
+    ].filter(Boolean).join(' ').toLowerCase();
+    if (
+      combined.includes('học vụ') ||
+      combined.includes('hoc_vu') ||
+      combined.includes('học thuật') ||
+      combined.includes('hoc_thuat') ||
+      combined.includes('academic') ||
+      combined.includes('giảng viên') ||
+      combined.includes('giang_vien') ||
+      combined.includes('giáo viên') ||
+      combined.includes('giao_vien') ||
+      combined.includes('trợ giảng') ||
+      combined.includes('tro_giang') ||
+      combined.includes('tutor') ||
+      combined.includes('teacher')
+    ) {
+      return true;
+    }
+  }
   const role = normalizeRole(input);
   return ROLE_GROUPS.ACADEMIC.includes(role as any);
 }

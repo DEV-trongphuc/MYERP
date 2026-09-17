@@ -4684,6 +4684,17 @@ export default function Approvals() {
     }
   }, [activeTab, pendingList, myRequestsList, followingList, allList, draftApprovalItems]);
 
+  const unpaidCount = useMemo(() => {
+    return currentRawList.filter(item => {
+      const rawStatus = (item.status || 'pending').toLowerCase();
+      const isItemDraft = rawStatus === 'draft' || !!item.is_draft;
+      if (isItemDraft) return false;
+      const isItemApproved = ['approved', 'confirmed'].includes(rawStatus);
+      const isPaid = Boolean((item as any).is_refunded) || rawStatus === 'paid' || rawStatus === 'refunded';
+      return isItemApproved && !isPaid && (Number(item.amount || 0) > 0 || item.type === 'expense' || item.type === 'advance');
+    }).length;
+  }, [currentRawList]);
+
   const creatorOptions = useMemo(() => {
     const list: SelectOption[] = [
       { 
@@ -4729,12 +4740,16 @@ export default function Approvals() {
       const isItemPending = !isItemDraft && ['pending', 'pending_manager', 'pending_hr', 'pending_approval', 'level1_approved'].includes(rawStatus);
       const isItemApproved = ['approved', 'confirmed'].includes(rawStatus);
       const isItemRejected = ['rejected', 'failed'].includes(rawStatus);
+      const isPaid = Boolean((item as any).is_refunded) || rawStatus === 'paid' || rawStatus === 'refunded';
+      const isUnpaid = isItemApproved && !isPaid && (Number(item.amount || 0) > 0 || item.type === 'expense' || item.type === 'advance');
 
       let matchesStatus = listStatusFilter === 'all';
       if (!matchesStatus) {
         if (listStatusFilter === 'draft') matchesStatus = isItemDraft;
         else if (listStatusFilter === 'pending') matchesStatus = isItemPending;
         else if (listStatusFilter === 'approved') matchesStatus = isItemApproved;
+        else if (listStatusFilter === 'unpaid') matchesStatus = isUnpaid;
+        else if (listStatusFilter === 'paid') matchesStatus = isPaid;
         else if (listStatusFilter === 'rejected') matchesStatus = isItemRejected;
         else matchesStatus = rawStatus === listStatusFilter.toLowerCase();
       }
@@ -4843,25 +4858,27 @@ export default function Approvals() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        gap: isMobile ? '8px' : '12px',
+        gap: isMobile ? '8px' : '10px',
         background: 'var(--color-surface, #ffffff)',
         border: '1px solid var(--color-border)',
-        borderRadius: isMobile ? '12px' : '14px',
-        padding: isMobile ? '8px 10px' : '8px 12px',
+        borderRadius: isMobile ? '12px' : '12px',
+        padding: isMobile ? '8px 10px' : '6px 10px',
         marginBottom: isMobile ? '0.75rem' : '1.25rem',
         boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)',
         position: 'relative',
-        flexWrap: 'wrap'
-      }}>
+        flexWrap: isMobile ? 'wrap' : 'nowrap',
+        overflowX: isMobile ? 'visible' : 'auto'
+      }} className={!isMobile ? "custom-scrollbar" : undefined}>
         {/* Left: View Mode Tabs (Desktop) */}
         {!isMobile && (
           <div style={{
             display: 'flex',
-            gap: '3px',
+            gap: '2px',
             background: 'var(--color-bg-secondary, #f1f5f9)',
-            padding: '3px',
-            borderRadius: '9px',
-            position: 'relative'
+            padding: '2px',
+            borderRadius: '8px',
+            position: 'relative',
+            flexShrink: 0
           }}>
             {[
               { id: 'all', label: t('Tất cả đề xuất'), icon: FileText, count: allList.length, countBg: activeTab === 'all' ? 'var(--color-bg-secondary, #f1f5f9)' : 'rgba(0,0,0,0.06)', countColor: 'var(--color-text)' },
@@ -4880,17 +4897,18 @@ export default function Approvals() {
                     position: 'relative',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '6px',
-                    padding: '5px 12px',
-                    borderRadius: '7px',
+                    gap: '5px',
+                    padding: '4px 9px',
+                    borderRadius: '6px',
                     fontWeight: isActive ? 700 : 500,
-                    fontSize: '0.8125rem',
+                    fontSize: '0.78rem',
                     background: 'transparent',
                     color: isActive ? 'var(--color-text)' : 'var(--color-text-muted)',
                     border: 'none',
                     cursor: 'pointer',
                     userSelect: 'none',
-                    transition: 'color 0.15s ease'
+                    transition: 'color 0.15s ease',
+                    whiteSpace: 'nowrap'
                   }}
                 >
                   {isActive && (
@@ -4901,21 +4919,21 @@ export default function Approvals() {
                         position: 'absolute',
                         inset: 0,
                         background: 'var(--color-surface, #ffffff)',
-                        borderRadius: '7px',
+                        borderRadius: '6px',
                         boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)',
                         zIndex: 0
                       }}
                     />
                   )}
-                  <span style={{ position: 'relative', zIndex: 1, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                    <Icon size={14} />
+                  <span style={{ position: 'relative', zIndex: 1, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                    <Icon size={13} />
                     <span>{tab.label}</span>
                     {tab.count > 0 && (
                       <span style={{
-                        fontSize: '0.68rem',
+                        fontSize: '0.66rem',
                         background: tab.countBg,
                         color: tab.countColor,
-                        padding: '1px 6px',
+                        padding: '1px 5px',
                         borderRadius: 99,
                         fontWeight: 700,
                         lineHeight: 1.2
@@ -4934,51 +4952,96 @@ export default function Approvals() {
         <div style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '8px',
-          flex: isMobile ? 1 : 'none',
+          gap: '6px',
+          flex: isMobile ? 1 : '0 1 auto',
           justifyContent: isMobile ? 'stretch' : 'flex-end',
-          width: isMobile ? '100%' : 'auto'
+          width: isMobile ? '100%' : 'auto',
+          flexShrink: 0
         }}>
           {/* Search Field */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '8px',
+            gap: '6px',
             background: 'var(--color-bg-secondary, #f1f5f9)',
             border: '1px solid var(--color-border)',
             borderRadius: '8px',
-            padding: '0 10px',
-            height: '36px',
+            padding: '0 8px',
+            height: '32px',
             flex: isMobile ? 1 : 'none',
-            width: isMobile ? 'auto' : '260px',
+            width: isMobile ? 'auto' : '180px',
             minWidth: 0
           }}>
-            <Search size={14} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+            <Search size={13} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
             <input
               type="text"
               placeholder={t('Tìm kiếm đề xuất...')}
               value={listSearchText}
               onChange={e => setListSearchText(e.target.value)}
-              style={{ border: 'none', background: 'transparent', width: '100%', fontSize: isMobile ? '0.82rem' : '0.825rem', outline: 'none', color: 'var(--color-text)', minWidth: 0 }}
+              style={{ border: 'none', background: 'transparent', width: '100%', fontSize: isMobile ? '0.82rem' : '0.8rem', outline: 'none', color: 'var(--color-text)', minWidth: 0 }}
             />
             {listSearchText && (
               <button onClick={() => setListSearchText('')} style={{ border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
-                <X size={14} style={{ color: 'var(--color-text-muted)' }} />
+                <X size={13} style={{ color: 'var(--color-text-muted)' }} />
               </button>
             )}
           </div>
 
+          {/* Quick Filter Pill: Chưa thanh toán */}
+          {!isMobile && (
+            <button
+              type="button"
+              onClick={() => setListStatusFilter(listStatusFilter === 'unpaid' ? 'all' : 'unpaid')}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                height: '32px',
+                padding: '0 9px',
+                borderRadius: '8px',
+                fontSize: '0.78rem',
+                fontWeight: listStatusFilter === 'unpaid' ? 700 : 550,
+                border: listStatusFilter === 'unpaid' ? '1.5px solid #d97706' : '1px solid rgba(245, 158, 11, 0.35)',
+                background: listStatusFilter === 'unpaid' ? 'rgba(245, 158, 11, 0.16)' : 'rgba(245, 158, 11, 0.05)',
+                color: '#d97706',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                whiteSpace: 'nowrap',
+                flexShrink: 0
+              }}
+              title={t('Lọc các đề xuất đã duyệt đủ cấp nhưng chưa thanh toán / hạch toán')}
+            >
+              <Clock size={13} />
+              <span>{t('Chưa thanh toán')}</span>
+              {unpaidCount > 0 && (
+                <span style={{
+                  fontSize: '0.66rem',
+                  background: '#d97706',
+                  color: '#ffffff',
+                  padding: '1px 5px',
+                  borderRadius: 99,
+                  fontWeight: 700,
+                  lineHeight: 1.2
+                }}>
+                  {unpaidCount}
+                </span>
+              )}
+            </button>
+          )}
+
           {/* Desktop Status Dropdown */}
           {!isMobile && (
-            <div style={{ width: '160px' }}>
+            <div style={{ width: '135px', flexShrink: 0 }}>
               <CustomSelect
                 value={listStatusFilter}
                 onChange={val => setListStatusFilter(val)}
                 options={[
                   { value: 'all', label: t('Trạng thái: Tất cả') },
-                  { value: 'draft', label: t('Bản nháp') },
+                  { value: 'unpaid', label: t('Chưa thanh toán') },
+                  { value: 'paid', label: t('Đã thanh toán') },
                   { value: 'pending', label: t('Đang chờ duyệt') },
                   { value: 'approved', label: t('Đã duyệt') },
+                  { value: 'draft', label: t('Bản nháp') },
                   { value: 'rejected', label: t('Từ chối') }
                 ]}
                 size="sm"
@@ -4989,7 +5052,7 @@ export default function Approvals() {
 
           {/* Desktop Creator Dropdown */}
           {!isMobile && (
-            <div style={{ width: '220px' }}>
+            <div style={{ width: '160px', flexShrink: 0 }}>
               <CustomSelect
                 value={listCreatorFilter}
                 onChange={val => setListCreatorFilter(val)}
@@ -5142,6 +5205,36 @@ export default function Approvals() {
                         </div>
                       </div>
 
+                      <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+                        <button
+                          type="button"
+                          onClick={() => { setListStatusFilter(listStatusFilter === 'unpaid' ? 'all' : 'unpaid'); setShowMobileFilters(false); }}
+                          style={{
+                            flex: 1,
+                            padding: '6px 10px',
+                            borderRadius: '6px',
+                            fontSize: '0.75rem',
+                            fontWeight: listStatusFilter === 'unpaid' ? 700 : 500,
+                            border: listStatusFilter === 'unpaid' ? '1.5px solid #d97706' : '1px solid rgba(245, 158, 11, 0.35)',
+                            background: listStatusFilter === 'unpaid' ? 'rgba(245, 158, 11, 0.16)' : 'rgba(245, 158, 11, 0.05)',
+                            color: '#d97706',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '5px'
+                          }}
+                        >
+                          <Clock size={12} />
+                          <span>{t('Chưa thanh toán')}</span>
+                          {unpaidCount > 0 && (
+                            <span style={{ fontSize: '0.68rem', background: '#d97706', color: '#fff', padding: '0 5px', borderRadius: 99, fontWeight: 700 }}>
+                              {unpaidCount}
+                            </span>
+                          )}
+                        </button>
+                      </div>
+
                       <div>
                         <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
                           {t('Trạng thái')}
@@ -5151,9 +5244,11 @@ export default function Approvals() {
                           onChange={val => { setListStatusFilter(val); setShowMobileFilters(false); }}
                           options={[
                             { value: 'all', label: t('Tất cả trạng thái') },
-                            { value: 'draft', label: t('Bản nháp') },
+                            { value: 'unpaid', label: t('Chưa thanh toán') },
+                            { value: 'paid', label: t('Đã thanh toán') },
                             { value: 'pending', label: t('Đang chờ duyệt') },
                             { value: 'approved', label: t('Đã duyệt') },
+                            { value: 'draft', label: t('Bản nháp') },
                             { value: 'rejected', label: t('Từ chối') }
                           ]}
                           size="xs"
@@ -14208,14 +14303,22 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
             const amt = Number(it.amount);
             return sum + (amt > 0 ? amt : (qty * price));
           }, 0);
-          const totalVat = expenseItems.reduce((sum: number, it: any) => sum + (Number(it.vat_amount) || 0), 0);
+          const totalVat = expenseItems.reduce((sum: number, it: any) => {
+            const qty = Number(it.quantity || it.qty || 1);
+            const price = Number(it.unit_price || it.price || 0);
+            const preVat = Number(it.amount) > 0 ? Number(it.amount) : (qty * price);
+            const vatPct = Number(it.vat || 0);
+            const vatVal = Number(it.vat_amount) > 0 ? Number(it.vat_amount) : (vatPct > 0 ? Math.round(preVat * vatPct / 100) : 0);
+            return sum + vatVal;
+          }, 0);
           const totalPostTax = expenseItems.reduce((sum: number, it: any) => {
             const qty = Number(it.quantity || it.qty || 1);
             const price = Number(it.unit_price || it.price || 0);
+            const preVat = Number(it.amount) > 0 ? Number(it.amount) : (qty * price);
+            const vatPct = Number(it.vat || 0);
+            const vatVal = Number(it.vat_amount) > 0 ? Number(it.vat_amount) : (vatPct > 0 ? Math.round(preVat * vatPct / 100) : 0);
             const tot = Number(it.total);
-            const amt = Number(it.amount) || (qty * price);
-            const vAmt = Number(it.vat_amount) || 0;
-            return sum + (tot > 0 ? tot : (amt + vAmt));
+            return sum + (tot > 0 ? tot : (preVat + vatVal));
           }, 0);
           const finalSum = hasAnyVat ? totalPostTax : totalPreTax;
 

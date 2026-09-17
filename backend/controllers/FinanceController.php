@@ -72,6 +72,8 @@ class FinanceController
         $status = $_GET['status'] ?? '';
         $search = $_GET['search'] ?? '';
         $contactId = $_GET['contact_id'] ?? '';
+        $companyId = $_GET['company_id'] ?? '';
+        $supplierId = $_GET['supplier_id'] ?? '';
         $from = $_GET['from'] ?? '';
         $to = $_GET['to'] ?? '';
         $where = ['i.tenant_id=?', 'i.deleted_at IS NULL'];
@@ -79,6 +81,14 @@ class FinanceController
         if ($contactId) {
             $where[] = 'i.contact_id = ?';
             $params[] = (int)$contactId;
+        }
+        if ($companyId) {
+            $where[] = 'i.company_id = ?';
+            $params[] = (int)$companyId;
+        }
+        if ($supplierId) {
+            // Invoices are customer/student sales invoices, not supplier expenses/PO
+            $where[] = '1 = 0';
         }
         $role = $auth['role'] ?? '';
         $uid = (int)($auth['user_id'] ?? 0);
@@ -701,7 +711,20 @@ class FinanceController
 
         $includeZeroAdmin = ($_GET['include_zero_admin'] ?? '') === '1';
         if (!$includeZeroAdmin) {
-            $where[] = '(e.amount > 0 OR (e.notes NOT LIKE "%DANH SÁCH VĂN PHÒNG PHẨM%" AND e.title NOT LIKE "%văn phòng phẩm%" AND e.notes NOT LIKE "%Quy trình: In, đóng dấu%"))';
+            $where[] = '(e.amount > 0 OR (
+                e.title NOT LIKE "%IN ĐÓNG DẤU%"
+                AND e.title NOT LIKE "%in, đóng dấu%"
+                AND e.title NOT LIKE "%In, đóng dấu%"
+                AND e.title NOT LIKE "%văn phòng phẩm%"
+                AND e.title NOT LIKE "%phòng họp%"
+                AND e.title NOT LIKE "%phê duyệt văn bản%"
+                AND e.title NOT LIKE "%thiết bị IT%"
+                AND e.title NOT LIKE "%quy trình%"
+                AND e.title NOT LIKE "%QUY TRÌNH%"
+                AND e.notes NOT LIKE "%Quy trình: In, đóng dấu%"
+                AND e.notes NOT LIKE "%DANH SÁCH VĂN PHÒNG PHẨM%"
+                AND e.category NOT IN ("Hành chính", "admin", "general")
+            ))';
         }
         if ($category) {
             if ($category === 'Vận Chuyển' || $category === 'Di chuyển') {
@@ -1327,10 +1350,16 @@ class FinanceController
             // If modified by someone other than the creator, insert a system notification and send email
             if (isset($row['created_by']) && (int)$row['created_by'] !== (int)$auth['user_id']) {
                 $creatorId = (int)$row['created_by'];
+                $modifierName = !empty($auth['full_name']) ? $auth['full_name'] : (!empty($auth['name']) ? $auth['name'] : '');
+                if (empty($modifierName)) {
+                    $stMod = $this->db->prepare("SELECT full_name FROM users WHERE id = ?");
+                    $stMod->execute([$auth['user_id']]);
+                    $modifierName = $stMod->fetchColumn() ?: 'Thành viên hệ thống';
+                }
                 $notifTitle = "Yêu cầu chi phí đã chỉnh sửa";
-                $notifBody = "Quản lý/Admin đã chỉnh sửa yêu cầu chi phí: \"" . $row['title'] . "\"";
+                $notifBody = "{$modifierName} đã chỉnh sửa yêu cầu chi phí: \"" . $row['title'] . "\"";
                 $notifType = "expense_edited";
-                $notifLink = "/expenses";
+                $notifLink = "/approvals?open_id={$id}&open_type=expense";
                 
                 $stmtNotif = $this->db->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, ?, ?, ?, ?, ?)");
                 $stmtNotif->execute([$creatorId, $auth['tenant_id'], $notifTitle, $notifBody, $notifType, $notifLink]);
@@ -1340,10 +1369,10 @@ class FinanceController
                 $creatorRow = $stmtUser->fetch();
                 if ($creatorRow && !empty($creatorRow['email'])) {
                     require_once __DIR__ . '/../mailer.php';
-                    $emailSubject = "[IDEAS] Yêu cầu chi phí của bạn đã được cập nhật";
+                    $emailSubject = "[IDEAS] Yêu cầu chi phí của bạn đã được cập nhật bởi {$modifierName}";
                     $emailTitle = "CẬP NHẬT YÊU CẦU CHI PHÍ";
                     $emailContent = "Chào <strong>" . htmlspecialchars($creatorRow['full_name']) . "</strong>,<br/><br/>" .
-                                    "Yêu cầu thanh toán chi phí của bạn cho mục <strong>" . htmlspecialchars($row['title']) . "</strong> đã được quản trị viên chỉnh sửa.<br/>" .
+                                    "Yêu cầu thanh toán chi phí của bạn cho mục <strong>" . htmlspecialchars($row['title']) . "</strong> đã được <strong>" . htmlspecialchars($modifierName) . "</strong> chỉnh sửa.<br/>" .
                                     "Số tiền hiện tại: <strong>" . number_format($currentTotal, 0, ',', '.') . "đ</strong>.<br/>" .
                                     "Vui lòng đăng nhập hệ thống IDEAS CRM để xem chi tiết.";
                     sendEmailNotification($creatorRow['email'], $emailSubject, $emailTitle, $emailContent, '', false);

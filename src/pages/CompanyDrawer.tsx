@@ -77,7 +77,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
 
   const [activeTab, setActiveTab] = useState(() => window.innerWidth <= 1024 ? '' : 'info');
   const [formData, setFormData] = useState(entity || {});
-  const isPartner = ['f1', 'f2', 'f3', 'ctv', 'referrer'].includes(String(formData?.tier || entity?.tier || '').toLowerCase());
+  const isPartner = true; // All partner types have data referral and pipeline recording capabilities
   const isLecturer = ['f1', 'f2', 'giang_vien', 'chuyen_gia'].includes(String(formData?.tier || entity?.tier || '').toLowerCase());
   const [tags, setTags] = useState<string[]>(entity?.tags || []);
   const [isSaving, setIsSaving] = useState(false);
@@ -101,11 +101,9 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
     if (!isLecturer) {
       list = list.filter(t => t.id !== 'teaching');
     }
-    if (isPartner) {
-      list = list.map(t => t.id === 'contacts' ? { ...t, label: 'Khách hàng giới thiệu' } : t);
-    }
+    list = list.map(t => t.id === 'contacts' ? { ...t, label: 'Data giới thiệu (Pipeline)' } : t);
     return list;
-  }, [disableEdit, isLecturer, isPartner]);
+  }, [disableEdit, isLecturer]);
 
   const fetchPipelineStats = useCallback(async (companyId: number) => {
     if (!companyId) return;
@@ -121,6 +119,12 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
       setPipelineStatsLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (isOpen && entity?.id) {
+      fetchPipelineStats(entity.id);
+    }
+  }, [isOpen, entity?.id, fetchPipelineStats]);
 
   const [users, setUsers] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);

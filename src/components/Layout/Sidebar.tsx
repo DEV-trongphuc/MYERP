@@ -6,7 +6,7 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { useEffect, useState, useRef, Fragment } from 'react';
 import { fetchAPI } from '../../utils/api';
 import { hasModuleApprovalAccess } from '../../utils/approvalPermissions';
-import { isMarketing } from '../../utils/roleUtils';
+import { isMarketing, isAcademic } from '../../utils/roleUtils';
 
 export interface SidebarItem {
   name: string;
@@ -80,7 +80,7 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = [
     title: 'TÀI CHÍNH',
     items: [
       { name: 'Purchase Order', href: '/expenses', icon: CreditCard, badgeKey: 'pendingExpenses' },
-      { name: 'Sales Order', href: '/deposits', icon: Receipt, hideForRoles: ['viewer', 'marketing', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], badgeKey: 'pendingDeposits' },
+      { name: 'Sales Order', href: '/deposits', icon: Receipt, hideForRoles: ['viewer', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], badgeKey: 'pendingDeposits' },
       { name: 'Dự báo dòng tiền', href: '/cash-flow', icon: TrendingUp, hideForRoles: ['viewer', 'marketing', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'] }
     ]
   },
@@ -496,6 +496,11 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
       const isMkt = isMarketing(user);
       if (isMkt && (item.href === '/gatekeeper' || item.href === '/tickets')) {
         return true;
+      }
+
+      const isAcad = isAcademic(user);
+      if (isAcad && item.hideForRoles && (item.hideForRoles.includes('academic') || item.hideForRoles.includes('hoc_vu'))) {
+        return false;
       }
 
       if (item.adminOnly && !isManagerOrAdmin) {
