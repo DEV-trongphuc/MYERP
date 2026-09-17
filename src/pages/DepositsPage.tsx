@@ -19,6 +19,7 @@ import { CurrencyInput } from '../components/ui/CurrencyInput';
 import { MentionInput } from '../components/ui/MentionInput';
 import { PeriodFilter, getDateRange } from '../components/ui/PeriodFilter';
 import type { Period, DateRange } from '../components/ui/PeriodFilter';
+import { Pagination } from '../components/ui/Pagination';
 import {
   XAxis, YAxis, CartesianGrid,
   Tooltip as RechartsTooltip, ResponsiveContainer, ComposedChart,
@@ -92,7 +93,7 @@ const formatMoney = (val: string | number, currency: string = 'VND') => {
   if (isNaN(num)) return '0 đ';
   const normCurrency = currency === 'EURO' ? 'EUR' : currency;
   if (normCurrency === 'VND') {
-    return num.toLocaleString('vi-VN') + ' đ';
+    return Math.round(num).toLocaleString('vi-VN') + ' đ';
   }
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -1096,7 +1097,8 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
         d.milestones.forEach(m => {
           if (m.status !== 'approved' && m.expected_pay_date) {
             const rawDateStr = m.expected_pay_date.substring(0, 10);
-            const dateStr = rawDateStr < todayStr ? todayStr : rawDateStr;
+            const dateStr = rawDateStr;
+            const amount = Math.round(Number(m.expected_amount) || 0);
             
             if (!map[dateStr]) {
               map[dateStr] = {
@@ -1106,10 +1108,11 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
               };
             }
             if (!isPendingStudent) {
-              map[dateStr].totalAmount += Number(m.expected_amount) || 0;
+              map[dateStr].totalAmount += amount;
             }
             map[dateStr].milestones.push({
               ...m,
+              expected_amount: amount,
               milestone_name: m.milestone_name || t('Thanh toán đợt cọc'),
               customerName: d.full_name || '',
               phone: d.phone,
@@ -1128,8 +1131,8 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
     soList.forEach(so => {
       if (so.payment_status !== 'paid' && so.status !== 'cancelled' && so.order_date) {
         const rawDateStr = so.order_date.substring(0, 10);
-        const dateStr = rawDateStr < todayStr ? todayStr : rawDateStr;
-        const unpaid = (Number(so.total) || 0) - (Number(so.paid_amount) || 0);
+        const dateStr = rawDateStr;
+        const unpaid = Math.round((Number(so.total) || 0) - (Number(so.paid_amount) || 0));
 
         if (unpaid > 0) {
           if (!map[dateStr]) {
@@ -1171,16 +1174,17 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
     expList.forEach(e => {
       if (e.status === 'pending' && e.date) {
         const rawDateStr = e.date.substring(0, 10);
-        const dateStr = rawDateStr < todayStr ? todayStr : rawDateStr;
+        const dateStr = rawDateStr;
+        const amount = Math.round(Number(e.amount) || 0);
         if (!map[dateStr]) {
           map[dateStr] = { date: dateStr, totalAmount: 0, items: [] };
         }
-        map[dateStr].totalAmount += Number(e.amount) || 0;
+        map[dateStr].totalAmount += amount;
         map[dateStr].items.push({
           type: 'Expense',
           title: e.title,
           category: e.category,
-          amount: Number(e.amount) || 0,
+          amount,
           vendor: e.vendor_name || 'Khác',
           isOverdue: rawDateStr < todayStr
         });
@@ -1191,8 +1195,8 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
     poList.forEach(po => {
       if (po.payment_status !== 'paid' && po.order_date) {
         const rawDateStr = po.order_date.substring(0, 10);
-        const dateStr = rawDateStr < todayStr ? todayStr : rawDateStr;
-        const unpaid = (Number(po.total) || 0) - (Number(po.paid_amount) || 0);
+        const dateStr = rawDateStr;
+        const unpaid = Math.round((Number(po.total) || 0) - (Number(po.paid_amount) || 0));
         if (unpaid > 0) {
           if (!map[dateStr]) {
             map[dateStr] = { date: dateStr, totalAmount: 0, items: [] };
@@ -1214,27 +1218,81 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
   }, [expenses, purchaseOrders]);
 
   const projectedRec7Days = React.useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     return projectedReceivables.filter(r => {
-      const diff = (new Date(r.date).getTime() - new Date().getTime()) / (1000 * 3600 * 24);
-      return diff <= 7;
+      const target = new Date(r.date);
+      target.setHours(0, 0, 0, 0);
+      const diff = (target.getTime() - today.getTime()) / (1000 * 3600 * 24);
+      return diff >= 0 && diff <= 7;
     }).reduce((sum, r) => sum + r.totalAmount, 0);
+  }, [projectedReceivables]);
+
+  const rec7Count = React.useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return projectedReceivables.filter(r => {
+      const target = new Date(r.date);
+      target.setHours(0, 0, 0, 0);
+      const diff = (target.getTime() - today.getTime()) / (1000 * 3600 * 24);
+      return diff >= 0 && diff <= 7;
+    }).reduce((sum, r) => sum + r.milestones.length, 0);
   }, [projectedReceivables]);
 
   const projectedRec30Days = React.useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     return projectedReceivables.filter(r => {
-      const diff = (new Date(r.date).getTime() - new Date().getTime()) / (1000 * 3600 * 24);
-      return diff <= 30;
+      const target = new Date(r.date);
+      target.setHours(0, 0, 0, 0);
+      const diff = (target.getTime() - today.getTime()) / (1000 * 3600 * 24);
+      return diff >= 0 && diff <= 30;
     }).reduce((sum, r) => sum + r.totalAmount, 0);
   }, [projectedReceivables]);
 
+  const rec30Count = React.useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return projectedReceivables.filter(r => {
+      const target = new Date(r.date);
+      target.setHours(0, 0, 0, 0);
+      const diff = (target.getTime() - today.getTime()) / (1000 * 3600 * 24);
+      return diff >= 0 && diff <= 30;
+    }).reduce((sum, r) => sum + r.milestones.length, 0);
+  }, [projectedReceivables]);
+
+  const overdueRecTotal = React.useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return projectedReceivables.filter(r => {
+      const target = new Date(r.date);
+      target.setHours(0, 0, 0, 0);
+      return target.getTime() < today.getTime();
+    }).reduce((sum, r) => sum + r.totalAmount, 0);
+  }, [projectedReceivables]);
+
+  const overdueRecCount = React.useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return projectedReceivables.filter(r => {
+      const target = new Date(r.date);
+      target.setHours(0, 0, 0, 0);
+      return target.getTime() < today.getTime();
+    }).reduce((sum, r) => sum + r.milestones.length, 0);
+  }, [projectedReceivables]);
+
   const pendingStudentRec7Days = React.useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     let sum = 0;
     projectedReceivables.forEach(r => {
-      const diff = (new Date(r.date).getTime() - new Date().getTime()) / (1000 * 3600 * 24);
-      if (diff <= 7) {
+      const target = new Date(r.date);
+      target.setHours(0, 0, 0, 0);
+      const diff = (target.getTime() - today.getTime()) / (1000 * 3600 * 24);
+      if (diff >= 0 && diff <= 7) {
         r.milestones.forEach((m: any) => {
           if (m.isPendingStudent) {
-            sum += Number(m.expected_amount) || 0;
+            sum += Math.round(Number(m.expected_amount) || 0);
           }
         });
       }
@@ -1243,13 +1301,17 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
   }, [projectedReceivables]);
 
   const pendingStudentRec30Days = React.useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     let sum = 0;
     projectedReceivables.forEach(r => {
-      const diff = (new Date(r.date).getTime() - new Date().getTime()) / (1000 * 3600 * 24);
-      if (diff <= 30) {
+      const target = new Date(r.date);
+      target.setHours(0, 0, 0, 0);
+      const diff = (target.getTime() - today.getTime()) / (1000 * 3600 * 24);
+      if (diff >= 0 && diff <= 30) {
         r.milestones.forEach((m: any) => {
           if (m.isPendingStudent) {
-            sum += Number(m.expected_amount) || 0;
+            sum += Math.round(Number(m.expected_amount) || 0);
           }
         });
       }
@@ -1258,17 +1320,67 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
   }, [projectedReceivables]);
 
   const projectedExp7Days = React.useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     return projectedExpenditures.filter(r => {
-      const diff = (new Date(r.date).getTime() - new Date().getTime()) / (1000 * 3600 * 24);
-      return diff <= 7;
+      const target = new Date(r.date);
+      target.setHours(0, 0, 0, 0);
+      const diff = (target.getTime() - today.getTime()) / (1000 * 3600 * 24);
+      return diff >= 0 && diff <= 7;
     }).reduce((sum, r) => sum + r.totalAmount, 0);
   }, [projectedExpenditures]);
 
-  const projectedExp30Days = React.useMemo(() => {
+  const exp7Count = React.useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     return projectedExpenditures.filter(r => {
-      const diff = (new Date(r.date).getTime() - new Date().getTime()) / (1000 * 3600 * 24);
-      return diff <= 30;
+      const target = new Date(r.date);
+      target.setHours(0, 0, 0, 0);
+      const diff = (target.getTime() - today.getTime()) / (1000 * 3600 * 24);
+      return diff >= 0 && diff <= 7;
+    }).reduce((sum, r) => sum + r.items.length, 0);
+  }, [projectedExpenditures]);
+
+  const projectedExp30Days = React.useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return projectedExpenditures.filter(r => {
+      const target = new Date(r.date);
+      target.setHours(0, 0, 0, 0);
+      const diff = (target.getTime() - today.getTime()) / (1000 * 3600 * 24);
+      return diff >= 0 && diff <= 30;
     }).reduce((sum, r) => sum + r.totalAmount, 0);
+  }, [projectedExpenditures]);
+
+  const exp30Count = React.useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return projectedExpenditures.filter(r => {
+      const target = new Date(r.date);
+      target.setHours(0, 0, 0, 0);
+      const diff = (target.getTime() - today.getTime()) / (1000 * 3600 * 24);
+      return diff >= 0 && diff <= 30;
+    }).reduce((sum, r) => sum + r.items.length, 0);
+  }, [projectedExpenditures]);
+
+  const overdueExpTotal = React.useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return projectedExpenditures.filter(r => {
+      const target = new Date(r.date);
+      target.setHours(0, 0, 0, 0);
+      return target.getTime() < today.getTime();
+    }).reduce((sum, r) => sum + r.totalAmount, 0);
+  }, [projectedExpenditures]);
+
+  const overdueExpCount = React.useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return projectedExpenditures.filter(r => {
+      const target = new Date(r.date);
+      target.setHours(0, 0, 0, 0);
+      return target.getTime() < today.getTime();
+    }).reduce((sum, r) => sum + r.items.length, 0);
   }, [projectedExpenditures]);
 
   const forecastChartData = React.useMemo(() => {
@@ -1291,9 +1403,9 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
       data.push({
         date: dateStr,
         label,
-        'Dự thu': recAmount,
-        'Dự chi': expAmount,
-        'Dòng tiền ròng': recAmount - expAmount
+        'Dự thu': Math.round(recAmount),
+        'Dự chi': Math.round(expAmount),
+        'Dòng tiền ròng': Math.round(recAmount - expAmount)
       });
     }
     
@@ -1323,10 +1435,11 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
             ? `Dự thu (HV Pending): ${m.customerName} (${m.unitCode || 'Không có mã căn'})`
             : `Dự thu: ${m.customerName} (${m.unitCode || 'Không có mã căn'})`,
           desc: `${m.projectName || 'Dự án'} - Đợt thanh toán: ${m.milestone_name}`,
-          amount: Number(m.expected_amount) || 0,
+          amount: Math.round(Number(m.expected_amount) || 0),
           customerAvatar: m.customerAvatar,
           customerName: m.customerName,
-          isPendingStudent: m.isPendingStudent
+          isPendingStudent: m.isPendingStudent,
+          isOverdue: m.isOverdue
         });
       });
     });
@@ -1341,13 +1454,90 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
           type: 'expenditure',
           title: item.title,
           desc: `${item.category} - ${item.vendor}`,
-          amount: Number(item.amount) || 0
+          amount: Math.round(Number(item.amount) || 0),
+          isOverdue: item.isOverdue
         });
       });
     });
 
     return Object.values(map).sort((a, b) => a.date.localeCompare(b.date));
   }, [projectedReceivables, projectedExpenditures]);
+
+  const [timelineFilter, setTimelineFilter] = useState<'upcoming' | 'overdue' | 'all'>('upcoming');
+  const [timelinePage, setTimelinePage] = useState(1);
+  const TIMELINE_PAGE_SIZE = 50;
+  const todayDateStr = React.useMemo(() => new Date().toISOString().substring(0, 10), []);
+
+  const allTimelineItems = React.useMemo(() => {
+    const list: any[] = [];
+    unifiedTimeline.forEach(day => {
+      day.items.forEach((item: any) => {
+        list.push({
+          ...item,
+          date: day.date,
+          isOverdue: day.date < todayDateStr
+        });
+      });
+    });
+    return list;
+  }, [unifiedTimeline, todayDateStr]);
+
+  const upcomingTimelineCount = React.useMemo(() => {
+    return allTimelineItems.filter(it => it.date >= todayDateStr).length;
+  }, [allTimelineItems, todayDateStr]);
+
+  const overdueTimelineCount = React.useMemo(() => {
+    return allTimelineItems.filter(it => it.date < todayDateStr).length;
+  }, [allTimelineItems, todayDateStr]);
+
+  const filteredTimelineItems = React.useMemo(() => {
+    let items = allTimelineItems;
+    if (timelineFilter === 'upcoming') {
+      items = items.filter(it => it.date >= todayDateStr);
+      items = [...items].sort((a, b) => a.date.localeCompare(b.date));
+    } else if (timelineFilter === 'overdue') {
+      items = items.filter(it => it.date < todayDateStr);
+      items = [...items].sort((a, b) => b.date.localeCompare(a.date));
+    } else {
+      items = [...items].sort((a, b) => a.date.localeCompare(b.date));
+    }
+    return items;
+  }, [allTimelineItems, timelineFilter, todayDateStr]);
+
+  const paginatedTimelineItems = React.useMemo(() => {
+    const start = (timelinePage - 1) * TIMELINE_PAGE_SIZE;
+    return filteredTimelineItems.slice(start, start + TIMELINE_PAGE_SIZE);
+  }, [filteredTimelineItems, timelinePage]);
+
+  const paginatedTimelineGroups = React.useMemo(() => {
+    const groups: { date: string; receiptTotal: number; expenditureTotal: number; items: any[] }[] = [];
+    const groupMap: Record<string, { date: string; receiptTotal: number; expenditureTotal: number; items: any[] }> = {};
+
+    paginatedTimelineItems.forEach(item => {
+      if (!groupMap[item.date]) {
+        groupMap[item.date] = {
+          date: item.date,
+          receiptTotal: 0,
+          expenditureTotal: 0,
+          items: []
+        };
+        groups.push(groupMap[item.date]);
+      }
+      if (item.type === 'receipt') {
+        groupMap[item.date].receiptTotal += item.amount;
+      } else {
+        groupMap[item.date].expenditureTotal += item.amount;
+      }
+      groupMap[item.date].items.push(item);
+    });
+
+    return groups;
+  }, [paginatedTimelineItems]);
+
+  const handleTimelineFilterChange = (f: 'upcoming' | 'overdue' | 'all') => {
+    setTimelineFilter(f);
+    setTimelinePage(1);
+  };
 
   const listStats = React.useMemo(() => {
     let totalSOAmount = 0;
@@ -1479,7 +1669,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
             {[
               {
                 label: 'Tổng doanh thu kỳ này',
-                value: listStats.totalSOAmount.toLocaleString('vi-VN') + ' đ',
+                value: Math.round(listStats.totalSOAmount).toLocaleString('vi-VN') + ' đ',
                 icon: DollarSign,
                 color: '#2563eb',
                 bg: 'rgba(37, 99, 235, 0.08)',
@@ -1497,7 +1687,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
               },
               {
                 label: 'Đã đối soát (Đã thu)',
-                value: listStats.approvedMilestoneAmount.toLocaleString('vi-VN') + ' đ',
+                value: Math.round(listStats.approvedMilestoneAmount).toLocaleString('vi-VN') + ' đ',
                 icon: CheckCircle2,
                 color: '#10b981',
                 bg: 'rgba(16, 185, 129, 0.08)',
@@ -1511,7 +1701,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
               },
               {
                 label: 'Chờ đối soát (Chờ thu)',
-                value: listStats.pendingMilestoneAmount.toLocaleString('vi-VN') + ' đ',
+                value: Math.round(listStats.pendingMilestoneAmount).toLocaleString('vi-VN') + ' đ',
                 icon: Clock,
                 color: '#f59e0b',
                 bg: 'rgba(245, 158, 11, 0.08)',
@@ -1519,7 +1709,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                 pendingSub: listStats.pendingStudentMilestoneAmount > 0 ? (
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', color: 'var(--color-warning)', fontWeight: 700, padding: '2px 6px', background: 'rgba(245, 158, 11, 0.08)', borderRadius: '6px', marginBottom: '4px' }}>
                     <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--color-warning)', display: 'inline-block' }}></span>
-                    <span>+{listStats.pendingStudentMilestoneAmount.toLocaleString('vi-VN')}đ pending</span>
+                    <span>+{Math.round(listStats.pendingStudentMilestoneAmount).toLocaleString('vi-VN')}đ pending</span>
                   </div>
                 ) : null,
                 decor: (
@@ -1531,7 +1721,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
               },
               {
                 label: 'Đơn hàng lớn nhất',
-                value: listStats.maxSOAmount > 0 ? listStats.maxSOAmount.toLocaleString('vi-VN') + ' đ' : '—',
+                value: listStats.maxSOAmount > 0 ? Math.round(listStats.maxSOAmount).toLocaleString('vi-VN') + ' đ' : '—',
                 icon: Award,
                 color: '#a31422',
                 bg: 'rgba(163, 20, 34, 0.08)',
@@ -2106,21 +2296,23 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
               </div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' }}>
                 <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.2rem', fontWeight: 800 }}>
-                  {projectedRec7Days.toLocaleString('vi-VN')} đ
+                  {Math.round(projectedRec7Days).toLocaleString('vi-VN')} đ
                 </div>
                 {pendingStudentRec7Days > 0 && (
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', color: 'var(--color-warning)', fontWeight: 700, padding: '2px 6px', background: 'rgba(245, 158, 11, 0.08)', borderRadius: '6px', marginBottom: '4px' }}>
                     <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--color-warning)', display: 'inline-block' }}></span>
-                    <span>+{pendingStudentRec7Days.toLocaleString('vi-VN')}đ pending</span>
+                    <span>+{Math.round(pendingStudentRec7Days).toLocaleString('vi-VN')}đ pending</span>
                   </div>
                 )}
               </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', marginBottom: '8px', fontWeight: 600 }}>
-                Có {projectedReceivables.filter(r => {
-                  const diff = (new Date(r.date).getTime() - new Date().getTime()) / (1000 * 3600 * 24);
-                  return diff <= 7;
-                }).reduce((sum, r) => sum + r.milestones.length, 0)} đợt dự kiến thu
+              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', marginBottom: '4px', fontWeight: 600 }}>
+                Có {rec7Count} đợt dự kiến thu
               </div>
+              {overdueRecTotal > 0 && (
+                <div style={{ fontSize: '0.7rem', color: 'var(--color-danger)', fontWeight: 600, marginTop: '2px', marginBottom: '6px' }}>
+                  Tồn đọng quá hạn: {Math.round(overdueRecTotal).toLocaleString('vi-VN')} đ ({overdueRecCount} đợt)
+                </div>
+              )}
               <div className="stat-change up" style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: 'var(--color-success)', fontWeight: 700 }}>
                 <span>Dòng tiền dự kiến tăng</span>
               </div>
@@ -2139,20 +2331,17 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
               </div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' }}>
                 <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.2rem', fontWeight: 800 }}>
-                  {projectedRec30Days.toLocaleString('vi-VN')} đ
+                  {Math.round(projectedRec30Days).toLocaleString('vi-VN')} đ
                 </div>
                 {pendingStudentRec30Days > 0 && (
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', color: 'var(--color-warning)', fontWeight: 700, padding: '2px 6px', background: 'rgba(245, 158, 11, 0.08)', borderRadius: '6px', marginBottom: '4px' }}>
                     <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--color-warning)', display: 'inline-block' }}></span>
-                    <span>+{pendingStudentRec30Days.toLocaleString('vi-VN')}đ pending</span>
+                    <span>+{Math.round(pendingStudentRec30Days).toLocaleString('vi-VN')}đ pending</span>
                   </div>
                 )}
               </div>
               <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', marginBottom: '8px', fontWeight: 600 }}>
-                Có {projectedReceivables.filter(r => {
-                  const diff = (new Date(r.date).getTime() - new Date().getTime()) / (1000 * 3600 * 24);
-                  return diff <= 30;
-                }).reduce((sum, r) => sum + r.milestones.length, 0)} đợt dự kiến thu
+                Có {rec30Count} đợt dự kiến thu
               </div>
               <div className="stat-change up" style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: 'var(--color-success)', fontWeight: 700 }}>
                 <span>Chu kỳ thanh toán 30 ngày</span>
@@ -2171,14 +2360,16 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                 </div>
               </div>
               <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.2rem', fontWeight: 800 }}>
-                {projectedExp7Days.toLocaleString('vi-VN')} đ
+                {Math.round(projectedExp7Days).toLocaleString('vi-VN')} đ
               </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', marginBottom: '8px', fontWeight: 600 }}>
-                Có {projectedExpenditures.filter(r => {
-                  const diff = (new Date(r.date).getTime() - new Date().getTime()) / (1000 * 3600 * 24);
-                  return diff <= 7;
-                }).reduce((sum, r) => sum + r.items.length, 0)} khoản PO/chi phí
+              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', marginBottom: '4px', fontWeight: 600 }}>
+                Có {exp7Count} khoản PO/chi phí
               </div>
+              {overdueExpTotal > 0 && (
+                <div style={{ fontSize: '0.7rem', color: 'var(--color-danger)', fontWeight: 600, marginTop: '2px', marginBottom: '6px' }}>
+                  Tồn đọng quá hạn: {Math.round(overdueExpTotal).toLocaleString('vi-VN')} đ ({overdueExpCount} khoản)
+                </div>
+              )}
               <div className="stat-change down" style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: 'var(--color-warning)', fontWeight: 700 }}>
                 <span>Dòng tiền dự kiến chi</span>
               </div>
@@ -2196,13 +2387,10 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                 </div>
               </div>
               <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.2rem', fontWeight: 800 }}>
-                {projectedExp30Days.toLocaleString('vi-VN')} đ
+                {Math.round(projectedExp30Days).toLocaleString('vi-VN')} đ
               </div>
               <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', marginBottom: '8px', fontWeight: 600 }}>
-                Có {projectedExpenditures.filter(r => {
-                  const diff = (new Date(r.date).getTime() - new Date().getTime()) / (1000 * 3600 * 24);
-                  return diff <= 30;
-                }).reduce((sum, r) => sum + r.items.length, 0)} khoản PO/chi phí
+                Có {exp30Count} khoản PO/chi phí
               </div>
               <div className="stat-change down" style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: 'var(--color-danger)', fontWeight: 700 }}>
                 <span>Cam kết chi tiêu 30 ngày</span>
@@ -2228,10 +2416,10 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                       tickLine={false} 
                       axisLine={false} 
                       stroke="var(--color-text-muted)" 
-                      tickFormatter={(val) => val >= 1000000 ? `${(val / 1000000).toFixed(0)}M` : val.toLocaleString()} 
+                      tickFormatter={(val) => Math.abs(val) >= 1000000 ? `${(val / 1000000).toFixed(0)}M` : Math.round(val).toLocaleString('vi-VN')} 
                     />
                     <RechartsTooltip 
-                      formatter={(value: any) => [Number(value).toLocaleString() + ' đ']} 
+                      formatter={(value: any) => [Math.round(Number(value) || 0).toLocaleString('vi-VN') + ' đ']} 
                       contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', fontSize: '11px', color: 'var(--color-text)' }}
                     />
                     <Legend wrapperStyle={{ fontSize: '11px', fontWeight: 600 }} />
@@ -2262,10 +2450,10 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                       tickLine={false} 
                       axisLine={false} 
                       stroke="var(--color-text-muted)" 
-                      tickFormatter={(val) => val >= 1000000 || val <= -1000000 ? `${(val / 1000000).toFixed(0)}M` : val.toLocaleString()} 
+                      tickFormatter={(val) => Math.abs(val) >= 1000000 ? `${(val / 1000000).toFixed(0)}M` : Math.round(val).toLocaleString('vi-VN')} 
                     />
                     <RechartsTooltip 
-                      formatter={(value: any) => [Number(value).toLocaleString() + ' đ']} 
+                      formatter={(value: any) => [Math.round(Number(value) || 0).toLocaleString('vi-VN') + ' đ']} 
                       contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', fontSize: '11px', color: 'var(--color-text)' }}
                     />
                     <Legend wrapperStyle={{ fontSize: '11px', fontWeight: 600 }} />
@@ -2278,68 +2466,214 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
 
           {/* List by date */}
           <div className="card" style={{ padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--color-border-light)', background: 'var(--color-surface)' }}>
-            <h3 style={{ fontWeight: 800, fontSize: '1.1rem', marginBottom: '1.25rem', color: 'var(--color-text)' }}>Dự báo Dòng tiền chi tiết theo ngày</h3>
-            {unifiedTimeline.length === 0 ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '1.25rem' }}>
+              <div>
+                <h3 style={{ fontWeight: 800, fontSize: '1.1rem', margin: 0, color: 'var(--color-text)' }}>Dự báo Dòng tiền chi tiết theo ngày</h3>
+                <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                  Hiển thị danh sách các khoản thu và chi theo từng ngày (tối đa 50 khoản mỗi trang)
+                </p>
+              </div>
+
+              {/* Filter Tabs */}
+              <div style={{ display: 'flex', gap: '6px', background: 'var(--color-bg)', padding: '4px', borderRadius: '10px', border: '1px solid var(--color-border-light)' }}>
+                <button
+                  type="button"
+                  onClick={() => handleTimelineFilterChange('upcoming')}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    background: timelineFilter === 'upcoming' ? 'var(--color-primary)' : 'transparent',
+                    color: timelineFilter === 'upcoming' ? '#ffffff' : 'var(--color-text-muted)',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <span>Sắp tới</span>
+                  <span style={{
+                    padding: '1px 6px',
+                    borderRadius: '10px',
+                    fontSize: '0.7rem',
+                    background: timelineFilter === 'upcoming' ? 'rgba(255,255,255,0.2)' : 'var(--color-border)',
+                    color: timelineFilter === 'upcoming' ? '#fff' : 'var(--color-text)'
+                  }}>
+                    {upcomingTimelineCount}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleTimelineFilterChange('overdue')}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    background: timelineFilter === 'overdue' ? 'var(--color-danger)' : 'transparent',
+                    color: timelineFilter === 'overdue' ? '#ffffff' : 'var(--color-text-muted)',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <span>Quá hạn / Tồn đọng</span>
+                  <span style={{
+                    padding: '1px 6px',
+                    borderRadius: '10px',
+                    fontSize: '0.7rem',
+                    background: timelineFilter === 'overdue' ? 'rgba(255,255,255,0.2)' : 'rgba(239,68,68,0.1)',
+                    color: timelineFilter === 'overdue' ? '#fff' : 'var(--color-danger)'
+                  }}>
+                    {overdueTimelineCount}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleTimelineFilterChange('all')}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    background: timelineFilter === 'all' ? 'var(--color-text)' : 'transparent',
+                    color: timelineFilter === 'all' ? 'var(--color-surface)' : 'var(--color-text-muted)',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <span>Tất cả</span>
+                  <span style={{
+                    padding: '1px 6px',
+                    borderRadius: '10px',
+                    fontSize: '0.7rem',
+                    background: timelineFilter === 'all' ? 'rgba(255,255,255,0.2)' : 'var(--color-border)',
+                    color: timelineFilter === 'all' ? 'var(--color-surface)' : 'var(--color-text)'
+                  }}>
+                    {allTimelineItems.length}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {filteredTimelineItems.length === 0 ? (
               <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
-                Không có khoản dự thu hay dự chi nào trong tương lai.
+                {timelineFilter === 'upcoming' 
+                  ? 'Không có khoản dự thu hay dự chi nào trong tương lai gần.' 
+                  : (timelineFilter === 'overdue' ? 'Không có khoản nợ nào quá hạn.' : 'Không có dữ liệu dòng tiền.')}
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                {unifiedTimeline.map(r => (
-                  <div key={r.date} style={{ borderBottom: '1px solid var(--color-border-light)', paddingBottom: '1.25rem' }}>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', gap: '8px' }}>
-                      <span style={{ fontWeight: 800, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.95rem' }}>
-                        <Calendar size={16} style={{ color: 'var(--color-primary)' }} />
-                        {new Date(r.date).toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                      </span>
-                      <div style={{ display: 'flex', gap: '1rem', fontSize: '0.85rem', fontWeight: 700 }}>
-                        {r.receiptTotal > 0 && <span style={{ color: 'var(--color-success)' }}>Thu: +{r.receiptTotal.toLocaleString('vi-VN')} đ</span>}
-                        {r.expenditureTotal > 0 && <span style={{ color: 'var(--color-warning)' }}>Chi: -{r.expenditureTotal.toLocaleString('vi-VN')} đ</span>}
-                        <span style={{ color: 'var(--color-primary)' }}>Ròng: {(r.receiptTotal - r.expenditureTotal).toLocaleString('vi-VN')} đ</span>
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem', paddingLeft: '1.5rem' }}>
-                      {r.items.map((item, idx) => (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--color-bg)', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--color-border-light)', gap: '12px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
-                            {item.type === 'receipt' && (
-                              <Avatar 
-                                src={item.customerAvatar} 
-                                name={item.customerName || ''} 
-                                size={32} 
-                                style={{ borderRadius: '50%', flexShrink: 0 }} 
-                              />
+              <>
+                <div 
+                  className="custom-scrollbar" 
+                  style={{ 
+                    maxHeight: '620px', 
+                    overflowY: 'auto', 
+                    paddingRight: '6px',
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    gap: '1.5rem' 
+                  }}
+                >
+                  {paginatedTimelineGroups.map(r => {
+                    const isToday = r.date === todayDateStr;
+                    const isOverdue = r.date < todayDateStr;
+                    return (
+                      <div key={r.date} style={{ borderBottom: '1px solid var(--color-border-light)', paddingBottom: '1.25rem' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', gap: '8px' }}>
+                          <span style={{ fontWeight: 800, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.95rem' }}>
+                            <Calendar size={16} style={{ color: isOverdue ? 'var(--color-danger)' : (isToday ? 'var(--color-primary)' : 'var(--color-text-muted)') }} />
+                            <span>{new Date(r.date).toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                            {isToday && (
+                              <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '2px 8px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.1)', color: 'var(--color-primary)', textTransform: 'uppercase' }}>
+                                Hôm nay
+                              </span>
                             )}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
-                              <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.title}</span>
-                              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.desc}</span>
-                            </div>
-                          </div>
-                          <span style={{ 
-                            fontWeight: 800, 
-                            fontSize: '0.9rem',
-                            color: item.isPendingStudent 
-                              ? 'var(--color-warning)' 
-                              : item.type === 'receipt' ? 'var(--color-success)' : 'var(--color-danger)',
-                            flexShrink: 0,
-                            display: 'inline-flex',
-                            flexDirection: 'column',
-                            alignItems: 'flex-end',
-                            gap: '2px'
-                          }}>
-                            <span>{item.type === 'receipt' ? '+' : '-'}{item.amount.toLocaleString('vi-VN')} đ</span>
-                            {item.isPendingStudent && (
-                              <span style={{ fontSize: '0.625rem', fontWeight: 700, color: 'var(--color-warning)', background: 'rgba(245, 158, 11, 0.1)', padding: '1px 5px', borderRadius: '4px' }}>
-                                Pending
+                            {isOverdue && (
+                              <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '2px 8px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--color-danger)', textTransform: 'uppercase' }}>
+                                Quá hạn
                               </span>
                             )}
                           </span>
+                          <div style={{ display: 'flex', gap: '1rem', fontSize: '0.85rem', fontWeight: 700 }}>
+                            {r.receiptTotal > 0 && <span style={{ color: 'var(--color-success)' }}>Thu: +{Math.round(r.receiptTotal).toLocaleString('vi-VN')} đ</span>}
+                            {r.expenditureTotal > 0 && <span style={{ color: 'var(--color-warning)' }}>Chi: -{Math.round(r.expenditureTotal).toLocaleString('vi-VN')} đ</span>}
+                            <span style={{ color: 'var(--color-primary)' }}>Ròng: {Math.round(r.receiptTotal - r.expenditureTotal).toLocaleString('vi-VN')} đ</span>
+                          </div>
                         </div>
-                      ))}
-                    </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem', paddingLeft: '1.5rem' }}>
+                          {r.items.map((item, idx) => (
+                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--color-bg)', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--color-border-light)', gap: '12px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+                                {item.type === 'receipt' && (
+                                  <Avatar 
+                                    src={item.customerAvatar} 
+                                    name={item.customerName || ''} 
+                                    size={32} 
+                                    style={{ borderRadius: '50%', flexShrink: 0 }} 
+                                  />
+                                )}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+                                  <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.title}</span>
+                                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.desc}</span>
+                                </div>
+                              </div>
+                              <span style={{ 
+                                fontWeight: 800, 
+                                fontSize: '0.9rem',
+                                color: item.isPendingStudent 
+                                  ? 'var(--color-warning)' 
+                                  : item.type === 'receipt' ? 'var(--color-success)' : 'var(--color-danger)',
+                                flexShrink: 0,
+                                display: 'inline-flex',
+                                flexDirection: 'column',
+                                alignItems: 'flex-end',
+                                gap: '2px'
+                              }}>
+                                <span>{item.type === 'receipt' ? '+' : '-'}{Math.round(item.amount).toLocaleString('vi-VN')} đ</span>
+                                {item.isPendingStudent && (
+                                  <span style={{ fontSize: '0.625rem', fontWeight: 700, color: 'var(--color-warning)', background: 'rgba(245, 158, 11, 0.1)', padding: '1px 5px', borderRadius: '4px' }}>
+                                    Pending
+                                  </span>
+                                )}
+                                {item.isOverdue && (
+                                  <span style={{ fontSize: '0.625rem', fontWeight: 700, color: 'var(--color-danger)', background: 'rgba(239, 68, 68, 0.08)', padding: '1px 5px', borderRadius: '4px' }}>
+                                    Quá hạn
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Pagination */}
+                {filteredTimelineItems.length > TIMELINE_PAGE_SIZE && (
+                  <div style={{ borderTop: '1px solid var(--color-border-light)', paddingTop: '0.75rem', marginTop: '0.5rem' }}>
+                    <Pagination 
+                      total={filteredTimelineItems.length} 
+                      page={timelinePage} 
+                      pageSize={TIMELINE_PAGE_SIZE} 
+                      onChange={setTimelinePage} 
+                    />
                   </div>
-                ))}
-              </div>
+                )}
+              </>
             )}
           </div>
         </div>

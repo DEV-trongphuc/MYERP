@@ -4302,7 +4302,7 @@ switch ($action) {
                         ];
                     }
                     $stats[$d]['so_count'] = (int)$row['so_count'];
-                    $stats[$d]['so_total'] = (float)$row['so_total'];
+                    $stats[$d]['so_total'] = round((float)$row['so_total']);
                 }
             }
 
@@ -4335,7 +4335,7 @@ switch ($action) {
                         ];
                     }
                     $stats[$d]['so_count'] = ($stats[$d]['so_count'] ?? 0) + (int)$row['dm_count'];
-                    $stats[$d]['so_total'] = ($stats[$d]['so_total'] ?? 0) + (float)$row['dm_total'];
+                    $stats[$d]['so_total'] = round(($stats[$d]['so_total'] ?? 0) + (float)$row['dm_total']);
                 }
             }
 
@@ -4364,7 +4364,7 @@ switch ($action) {
                         ];
                     }
                     $stats[$d]['po_count'] = (int)$row['po_count'];
-                    $stats[$d]['po_total'] = (float)$row['po_total'];
+                    $stats[$d]['po_total'] = round((float)$row['po_total']);
                 }
             }
         }
@@ -4401,10 +4401,10 @@ switch ($action) {
             $dmSum = $dmSumRes ? $dmSumRes->fetch_assoc() : ['dm_pending' => 0];
 
             $financeSummary = [
-                'so_paid' => (float)($soSums['so_paid'] ?? 0),
-                'so_pending' => (float)($soSums['so_pending'] ?? 0) + (float)($dmSum['dm_pending'] ?? 0),
-                'po_approved' => (float)($poSums['po_approved'] ?? 0),
-                'po_pending' => (float)($poSums['po_pending'] ?? 0),
+                'so_paid' => round((float)($soSums['so_paid'] ?? 0)),
+                'so_pending' => round((float)($soSums['so_pending'] ?? 0) + (float)($dmSum['dm_pending'] ?? 0)),
+                'po_approved' => round((float)($poSums['po_approved'] ?? 0)),
+                'po_pending' => round((float)($poSums['po_pending'] ?? 0)),
             ];
         }
 
@@ -4657,7 +4657,7 @@ switch ($action) {
                     $invoices[] = [
                         'id' => (int)$row['id'],
                         'invoice_number' => $row['invoice_number'],
-                        'total' => (float)$row['total'],
+                        'total' => round((float)$row['total']),
                         'status' => $row['status'],
                         'issue_date' => $row['issue_date'],
                         'customer_name' => ($row['full_name'] ?? '') ? trim($row['full_name']) : 'N/A',
@@ -4690,7 +4690,7 @@ switch ($action) {
                     $invoices[] = [
                         'id' => (int)$row['id'],
                         'invoice_number' => $row['milestone_name'],
-                        'total' => (float)$row['expected_amount'],
+                        'total' => round((float)$row['expected_amount']),
                         'status' => 'pending',
                         'issue_date' => $row['expected_pay_date'],
                         'customer_name' => ($row['full_name'] ?? '') ? trim($row['full_name']) : 'N/A',
@@ -4792,7 +4792,7 @@ switch ($action) {
                     $expenses[] = [
                         'id' => (int)$row['id'],
                         'title' => $row['title'],
-                        'amount' => (float)$row['amount'],
+                        'amount' => round((float)$row['amount']),
                         'status' => $row['status'],
                         'date' => $row['date'],
                         'refunded_at' => $row['refunded_at'],

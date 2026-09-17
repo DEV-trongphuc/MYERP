@@ -1797,7 +1797,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                 <strong>{dayData.so_count}</strong>
               </div>
               <div style={{ fontSize: '0.65rem', fontWeight: 800, textAlign: 'right', marginTop: '1px', borderTop: '1px dashed rgba(29, 78, 216, 0.2)', paddingTop: '2px' }}>
-                {new Intl.NumberFormat('vi-VN').format(dayData.so_total || 0)}đ
+                {new Intl.NumberFormat('vi-VN').format(Math.round(dayData.so_total || 0))}đ
               </div>
             </div>
           )}
@@ -1817,7 +1817,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                 <strong>{dayData.po_count}</strong>
               </div>
               <div style={{ fontSize: '0.65rem', fontWeight: 800, textAlign: 'right', marginTop: '1px', borderTop: '1px dashed rgba(217, 119, 6, 0.2)', paddingTop: '2px' }}>
-                {new Intl.NumberFormat('vi-VN').format(dayData.po_total || 0)}đ
+                {new Intl.NumberFormat('vi-VN').format(Math.round(dayData.po_total || 0))}đ
               </div>
             </div>
           )}
@@ -2340,16 +2340,16 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                   <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#3b82f6' }}></div>
                 </div>
                 <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-primary)' }}>
-                  {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format((financeSummary.so_paid || 0) + (financeSummary.so_pending || 0))}
+                  {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Math.round((financeSummary.so_paid || 0) + (financeSummary.so_pending || 0)))}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', color: 'var(--color-text-muted)', borderTop: '1px solid var(--color-border-light)', paddingTop: '6px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>Đã thu:</span>
-                    <strong style={{ color: 'var(--color-success)' }}>{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(financeSummary.so_paid || 0)}</strong>
+                    <strong style={{ color: 'var(--color-success)' }}>{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Math.round(financeSummary.so_paid || 0))}</strong>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>Chờ thanh toán:</span>
-                    <strong style={{ color: 'var(--color-warning)' }}>{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(financeSummary.so_pending || 0)}</strong>
+                    <strong style={{ color: 'var(--color-warning)' }}>{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Math.round(financeSummary.so_pending || 0))}</strong>
                   </div>
                 </div>
               </div>
@@ -2361,16 +2361,16 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                   <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f59e0b' }}></div>
                 </div>
                 <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-text)' }}>
-                  {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format((financeSummary.po_approved || 0) + (financeSummary.po_pending || 0))}
+                  {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Math.round((financeSummary.po_approved || 0) + (financeSummary.po_pending || 0)))}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', color: 'var(--color-text-muted)', borderTop: '1px solid var(--color-border-light)', paddingTop: '6px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>Đã duyệt:</span>
-                    <strong style={{ color: 'var(--color-success)' }}>{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(financeSummary.po_approved || 0)}</strong>
+                    <strong style={{ color: 'var(--color-success)' }}>{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Math.round(financeSummary.po_approved || 0))}</strong>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>Chờ duyệt:</span>
-                    <strong style={{ color: 'var(--color-warning)' }}>{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(financeSummary.po_pending || 0)}</strong>
+                    <strong style={{ color: 'var(--color-warning)' }}>{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Math.round(financeSummary.po_pending || 0))}</strong>
                   </div>
                 </div>
               </div>
@@ -2382,16 +2382,16 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                   <span style={{ fontSize: '0.65rem', padding: '2px 6px', background: 'rgba(16, 185, 129, 0.1)', color: 'var(--color-success)', borderRadius: '4px', fontWeight: 700 }}>Thực tế</span>
                 </div>
                 <div style={{ fontSize: '1.25rem', fontWeight: 800, color: ((financeSummary.so_paid || 0) - (financeSummary.po_approved || 0)) >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
-                  {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format((financeSummary.so_paid || 0) - (financeSummary.po_approved || 0))}
+                  {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Math.round((financeSummary.so_paid || 0) - (financeSummary.po_approved || 0)))}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', color: 'var(--color-text-muted)', borderTop: '1px solid var(--color-border-light)', paddingTop: '6px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>Thực thu:</span>
-                    <span>{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(financeSummary.so_paid || 0)}</span>
+                    <span>{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Math.round(financeSummary.so_paid || 0))}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>Thực chi:</span>
-                    <span>{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(financeSummary.po_approved || 0)}</span>
+                    <span>{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Math.round(financeSummary.po_approved || 0))}</span>
                   </div>
                 </div>
               </div>
@@ -2403,16 +2403,16 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                   <span style={{ fontSize: '0.65rem', padding: '2px 6px', background: 'rgba(245, 158, 11, 0.1)', color: 'var(--color-warning)', borderRadius: '4px', fontWeight: 700 }}>Dự báo</span>
                 </div>
                 <div style={{ fontSize: '1.25rem', fontWeight: 800, color: ((financeSummary.so_pending || 0) - (financeSummary.po_pending || 0)) >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
-                  {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format((financeSummary.so_pending || 0) - (financeSummary.po_pending || 0))}
+                  {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Math.round((financeSummary.so_pending || 0) - (financeSummary.po_pending || 0)))}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', color: 'var(--color-text-muted)', borderTop: '1px solid var(--color-border-light)', paddingTop: '6px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>Sắp thu:</span>
-                    <span>{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(financeSummary.so_pending || 0)}</span>
+                    <span>{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Math.round(financeSummary.so_pending || 0))}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>Sắp chi:</span>
-                    <span>{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(financeSummary.po_pending || 0)}</span>
+                    <span>{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Math.round(financeSummary.po_pending || 0))}</span>
                   </div>
                 </div>
               </div>
@@ -5768,7 +5768,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                                   </td>
                                   <td>
                                     <strong style={{ color: 'var(--color-text)' }}>
-                                      {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(item.total)}
+                                      {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Math.round(item.total || 0))}
                                     </strong>
                                   </td>
                                   <td>
@@ -5851,7 +5851,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                                   <td style={{ whiteSpace: 'nowrap', verticalAlign: 'middle' }}>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                       <strong style={{ color: 'var(--color-text)', fontSize: '0.85rem' }}>
-                                        {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(item.amount)}
+                                        {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Math.round(item.amount || 0))}
                                       </strong>
                                       {Boolean(item.is_refunded) && (
                                         <span style={{ fontSize: '0.68rem', color: '#10b981', fontWeight: 600 }}>

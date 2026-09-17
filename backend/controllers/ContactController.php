@@ -91,19 +91,19 @@ class ContactController {
                 $where[] = "1=0";
             }
         } elseif ($role === 'accountant') {
-            $stmtStage = $this->db->prepare("SELECT order_index FROM pipeline_stages WHERE tenant_id = ? AND system_slug IN ('deposit_tuition_payment', 'dong_le_phi_ho_so') ORDER BY order_index ASC LIMIT 1");
+            $stmtStage = $this->db->prepare("SELECT order_index FROM pipeline_stages WHERE tenant_id = ? AND system_slug IN ('application_started', 'nop_ho_so') ORDER BY order_index ASC LIMIT 1");
             $stmtStage->execute([$tid]);
             $minOrderIndex = $stmtStage->fetchColumn();
             if ($minOrderIndex === false) {
-                $minOrderIndex = 13;
+                $minOrderIndex = 8;
             }
             $stListStmt = $this->db->prepare("SELECT id FROM pipeline_stages WHERE tenant_id = ? AND order_index >= ?");
             $stListStmt->execute([$tid, (int)$minOrderIndex]);
             $allowedStageIds = $stListStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
             if (!empty($allowedStageIds)) {
-                $where[] = "c.stage_id IN (" . implode(',', array_map('intval', $allowedStageIds)) . ")";
+                $where[] = "(c.stage_id IN (" . implode(',', array_map('intval', $allowedStageIds)) . ") OR c.status = 'customer' OR c.pipeline_status IN ('enrolled', 'hoc_vien', 'deposit_tuition_payment', 'dong_le_phi_ho_so', 'application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so'))";
             } else {
-                $where[] = "1=0";
+                $where[] = "(c.status = 'customer' OR c.pipeline_status IN ('enrolled', 'hoc_vien', 'deposit_tuition_payment', 'dong_le_phi_ho_so', 'application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so'))";
             }
         }
 
@@ -2821,19 +2821,19 @@ class ContactController {
                 $where[] = "1=0";
             }
         } elseif ($role === 'accountant') {
-            $stmtStage = $this->db->prepare("SELECT order_index FROM pipeline_stages WHERE tenant_id = ? AND system_slug IN ('deposit_tuition_payment', 'dong_le_phi_ho_so') ORDER BY order_index ASC LIMIT 1");
+            $stmtStage = $this->db->prepare("SELECT order_index FROM pipeline_stages WHERE tenant_id = ? AND system_slug IN ('application_started', 'nop_ho_so') ORDER BY order_index ASC LIMIT 1");
             $stmtStage->execute([$tid]);
             $minOrderIndex = $stmtStage->fetchColumn();
             if ($minOrderIndex === false) {
-                $minOrderIndex = 13;
+                $minOrderIndex = 8;
             }
             $stListStmt = $this->db->prepare("SELECT id FROM pipeline_stages WHERE tenant_id = ? AND order_index >= ?");
             $stListStmt->execute([$tid, (int)$minOrderIndex]);
             $allowedStageIds = $stListStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
             if (!empty($allowedStageIds)) {
-                $where[] = "c.stage_id IN (" . implode(',', array_map('intval', $allowedStageIds)) . ")";
+                $where[] = "(c.stage_id IN (" . implode(',', array_map('intval', $allowedStageIds)) . ") OR c.status = 'customer' OR c.pipeline_status IN ('enrolled', 'hoc_vien', 'deposit_tuition_payment', 'dong_le_phi_ho_so', 'application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so'))";
             } else {
-                $where[] = "1=0";
+                $where[] = "(c.status = 'customer' OR c.pipeline_status IN ('enrolled', 'hoc_vien', 'deposit_tuition_payment', 'dong_le_phi_ho_so', 'application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so'))";
             }
         }
 
