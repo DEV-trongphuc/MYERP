@@ -1023,6 +1023,7 @@ class DepositController {
         $tid = $auth['tenant_id'];
         $input = getBody();
         $milestones = $input['milestones'] ?? [];
+        $isPrivileged = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'accountant'], true);
 
         // 1. Verify deposit ownership/permissions
         $stmtDep = $this->db->prepare("
@@ -1241,7 +1242,9 @@ class DepositController {
                                 break;
                             }
 
-                            if ($dbMilestone['status'] !== 'approved' && $dbMilestone['status'] !== 'paid') {
+                            if (!$isPrivileged && ($dbMilestone['status'] === 'approved' || $dbMilestone['status'] === 'paid')) {
+                                // non-privileged cannot change amounts of locked milestones
+                            } else {
                                 if (abs((float)$dbMilestone['expected_amount'] - $mAmount) > 0.01) {
                                     $hasChanges = true;
                                     break;
@@ -1257,7 +1260,7 @@ class DepositController {
             }
 
             if ($hasChanges) {
-                // Delete milestones not in payload (only if they are not approved or paid)
+                // Delete milestones not in payload (only if they are not approved or paid, unless user is privileged)
                 foreach ($toDeleteIds as $delId) {
                     $dbMilestone = null;
                     foreach ($currentDbMilestones as $cdm) {
@@ -1267,7 +1270,9 @@ class DepositController {
                         }
                     }
                     if ($dbMilestone && ($dbMilestone['status'] === 'approved' || $dbMilestone['status'] === 'paid')) {
-                        throw new Exception("Không thể xóa đợt thanh toán đã đóng tiền hoặc đã được duyệt.");
+                        if (!$isPrivileged) {
+                            throw new Exception("Không thể xóa đợt thanh toán đã đóng tiền hoặc đã được duyệt.");
+                        }
                     }
                     $stmtDel = $this->db->prepare("DELETE FROM deposit_milestones WHERE id = ?");
                     $stmtDel->execute([$delId]);
@@ -1306,9 +1311,15 @@ class DepositController {
                             }
                         }
                         if ($dbMilestone && ($dbMilestone['status'] === 'approved' || $dbMilestone['status'] === 'paid')) {
-                            // Allow updating name and pay date, but prevent changing amount
-                            $stmtUpd = $this->db->prepare("UPDATE deposit_milestones SET milestone_name = ?, expected_pay_date = ? WHERE id = ?");
-                            $stmtUpd->execute([$mName, $payDate, $mId]);
+                            if ($isPrivileged) {
+                                // Privileged roles (Accountant, Admin) can update amount, actual_amount, date and name
+                                $stmtUpd = $this->db->prepare("UPDATE deposit_milestones SET milestone_name = ?, expected_amount = ?, original_amount = ?, actual_amount = ?, expected_pay_date = ? WHERE id = ?");
+                                $stmtUpd->execute([$mName, $mAmount, $origAmount, $mAmount, $payDate, $mId]);
+                            } else {
+                                // Allow updating name and pay date, but prevent changing amount
+                                $stmtUpd = $this->db->prepare("UPDATE deposit_milestones SET milestone_name = ?, expected_pay_date = ? WHERE id = ?");
+                                $stmtUpd->execute([$mName, $payDate, $mId]);
+                            }
                         } else {
                             $stmtUpd = $this->db->prepare("UPDATE deposit_milestones SET milestone_name = ?, expected_amount = ?, original_amount = ?, expected_pay_date = ? WHERE id = ?");
                             $stmtUpd->execute([$mName, $mAmount, $origAmount, $payDate, $mId]);
@@ -1321,6 +1332,21 @@ class DepositController {
                 }
 
                 logActivity($this->db, $tid, $auth['user_id'], 'UPDATE_MILESTONES', 'deposit', $id, "Cập nhật danh sách các đợt thanh toán");
+            }
+
+            // Synchronize deposit total price with sum of milestones
+            if (isset($input['price']) && (float)$input['price'] > 0) {
+                $newPrice = (float)$input['price'];
+                $stmtUpdPrice = $this->db->prepare("UPDATE deposits SET price = ? WHERE id = ?");
+                $stmtUpdPrice->execute([$newPrice, $id]);
+            } else if ($hasChanges) {
+                $stmtSum = $this->db->prepare("SELECT COALESCE(SUM(expected_amount), 0) FROM deposit_milestones WHERE deposit_id = ?");
+                $stmtSum->execute([$id]);
+                $newPrice = (float)$stmtSum->fetchColumn();
+                if ($newPrice > 0) {
+                    $stmtUpdPrice = $this->db->prepare("UPDATE deposits SET price = ? WHERE id = ?");
+                    $stmtUpdPrice->execute([$newPrice, $id]);
+                }
             }
 
             $this->db->commit();
