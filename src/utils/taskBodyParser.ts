@@ -54,9 +54,11 @@ export function formatVietnameseDescription(rawText: string | null | undefined):
         break;
       }
     } catch {
-      // Thử parse sau khi escape các ký tự xuống dòng dở dang
+      // Thử parse sau khi escape các ký tự xuống dòng dở dang (tương thích mọi phiên bản Safari/iOS WebKit không hỗ trợ regex lookbehind)
       try {
-        const sanitized = text.replace(/(?<!\\)\n/g, '\\n').replace(/(?<!\\)\r/g, '\\r');
+        const sanitized = text.replace(/(\\)?([\r\n])/g, (match, slash, nl) => {
+          return slash ? match : (nl === '\r' ? '\\r' : '\\n');
+        });
         const parsed = JSON.parse(sanitized);
         if (parsed && typeof parsed === 'object') {
           const candidate = parsed.erp_task?.description ?? parsed.description ?? parsed.body;

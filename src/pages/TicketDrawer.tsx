@@ -417,9 +417,11 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
       addMediaItem(m[2], m[1] || 'Ảnh đính kèm');
     }
 
-    const mdLinkRegex = /(?<!!)\[(.*?)\]\(([^)]+)\)/g;
+    // Tương thích mọi phiên bản Safari/iOS WebKit: không dùng lookbehind (?<!!)
+    const mdLinkRegex = /(!)?\[(.*?)\]\(([^)]+)\)/g;
     while ((m = mdLinkRegex.exec(text)) !== null) {
-      addMediaItem(m[2], m[1] || 'Tệp đính kèm');
+      if (m[1] === '!') continue; // Bỏ qua ảnh markdown
+      addMediaItem(m[3], m[2] || 'Tệp đính kèm');
     }
 
     const rawUrlRegex = /(?:https?:\/\/[^\s<"'\)]+)?\/?uploads\/[^\s<"'\)]+/gi;
