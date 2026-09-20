@@ -1501,7 +1501,11 @@ class FinanceController
                           ((int)($expenseRow['approver_id_2'] ?? 0) === (int)$auth['user_id']) || 
                           ((int)($expenseRow['approver_id_3'] ?? 0) === (int)$auth['user_id']);
             $isCreator = ((int)($expenseRow['created_by'] ?? 0) === (int)$auth['user_id']);
-            if ($isCreator) {
+            $isCommission = ($expenseRow['category'] ?? '') === 'commission' || 
+                            stripos($expenseRow['title'] ?? '', 'hoa hồng') !== false || 
+                            stripos($expenseRow['notes'] ?? '', 'hoa hồng') !== false;
+
+            if ($isCreator && !$isCommission) {
                 $this->db->rollBack();
                 respond(403, null, 'Người tạo đề xuất không được tự phê duyệt chi phí của chính mình', false);
             }
@@ -1955,6 +1959,145 @@ class FinanceController
                     'link' => "/approvals?open_id={$id}&open_type={$type}"
                 ]);
             }
+        }
+    }
+
+    public function payCommissionItem(array $auth, int $id): void
+    {
+        $allowedRoles = ['admin', 'super_admin', 'superadmin', 'director', 'accountant', 'manager', 'sale_admin', 'saleadmin'];
+        if (!in_array($auth['role'] ?? '', $allowedRoles, true)) {
+            respond(403, null, 'Bạn không có quyền thực hiện xác nhận chi trả hoa hồng', false);
+        }
+
+        $data = getBody();
+        $targetUserId = isset($data['user_id']) ? (int)$data['user_id'] : null;
+        $itemIndex = isset($data['item_index']) ? (int)$data['item_index'] : -1;
+        $uncFileUrl = !empty($data['unc_file_url']) ? trim($data['unc_file_url']) : null;
+        $note = !empty($data['note']) ? trim($data['note']) : '';
+
+        $this->db->beginTransaction();
+        try {
+            $stmt = $this->db->prepare("SELECT * FROM expenses WHERE id = ? AND tenant_id = ? FOR UPDATE");
+            $stmt->execute([$id, $auth['tenant_id']]);
+            $expenseRow = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$expenseRow) {
+                $this->db->rollBack();
+                respond(404, null, 'Không tìm thấy phiếu đề xuất chi phí', false);
+            }
+
+            $rawItems = $expenseRow['items'] ?? null;
+            $itemsList = [];
+            if (!empty($rawItems)) {
+                if (is_string($rawItems)) {
+                    $decoded = json_decode($rawItems, true);
+                    if (is_array($decoded)) {
+                        $itemsList = $decoded;
+                    }
+                } elseif (is_array($rawItems)) {
+                    $itemsList = $rawItems;
+                }
+            }
+
+            if (empty($itemsList)) {
+                $this->db->rollBack();
+                respond(422, null, 'Phiếu này chưa có bảng kê danh sách nhân sự chi trả', false);
+            }
+
+            // Locate target item by item_index or user_id
+            $foundIndex = -1;
+            if ($itemIndex >= 0 && isset($itemsList[$itemIndex])) {
+                $foundIndex = $itemIndex;
+            } elseif ($targetUserId !== null) {
+                foreach ($itemsList as $idx => $it) {
+                    if (isset($it['user_id']) && (int)$it['user_id'] === $targetUserId) {
+                        $foundIndex = $idx;
+                        break;
+                    }
+                }
+            }
+
+            if ($foundIndex === -1) {
+                $this->db->rollBack();
+                respond(404, null, 'Không tìm thấy dòng nhân viên thụ hưởng trong phiếu', false);
+            }
+
+            // Update item
+            $targetItem = &$itemsList[$foundIndex];
+            $targetItem['is_paid'] = 1;
+            $targetItem['paid_at'] = date('Y-m-d H:i:s');
+            $targetItem['paid_by'] = (int)$auth['user_id'];
+            $targetItem['paid_by_name'] = !empty($auth['full_name']) ? $auth['full_name'] : (!empty($auth['name']) ? $auth['name'] : 'Kế toán');
+            if ($uncFileUrl) {
+                $targetItem['unc_file_url'] = $uncFileUrl;
+            }
+            if ($note) {
+                $targetItem['payout_note'] = $note;
+            }
+
+            // Check if ALL items are paid
+            $allPaid = true;
+            foreach ($itemsList as $it) {
+                if (empty($it['is_paid'])) {
+                    $allPaid = false;
+                    break;
+                }
+            }
+
+            $newItemsJson = json_encode($itemsList, JSON_UNESCAPED_UNICODE);
+            $newRefunded = $allPaid ? 1 : ($expenseRow['is_refunded'] ?? 0);
+            $refundImg = $uncFileUrl ?: ($expenseRow['refund_image_url'] ?? null);
+
+            $stmtUpdate = $this->db->prepare("UPDATE expenses SET items = ?, is_refunded = ?, refund_image_url = ? WHERE id = ?");
+            $stmtUpdate->execute([$newItemsJson, $newRefunded, $refundImg, $id]);
+
+            // Notification: Send EXCLUSIVELY to target beneficiary user
+            $beneficiaryUserId = isset($targetItem['user_id']) ? (int)$targetItem['user_id'] : 0;
+            if ($beneficiaryUserId > 0) {
+                $paidAmt = (float)($targetItem['amount'] ?? 0);
+                $amtFormatted = number_format($paidAmt, 0, ',', '.') . ' ' . ($expenseRow['currency'] ?: 'VND');
+                $payerName = $targetItem['paid_by_name'];
+                
+                $notifTitle = "💵 Kế toán đã giải ngân hoa hồng ({$amtFormatted})";
+                $notifBody = "{$payerName} đã xác nhận thanh toán khoản hoa hồng {$amtFormatted} cho bạn thuộc đề xuất: \"{$expenseRow['title']}\".";
+                $notifType = "commission_paid";
+                $notifLink = "/approvals?open_id={$id}&open_type=expense";
+
+                $stmtNotif = $this->db->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, ?, ?, ?, ?, ?)");
+                $stmtNotif->execute([$beneficiaryUserId, $auth['tenant_id'], $notifTitle, $notifBody, $notifType, $notifLink]);
+
+                // Email notification if available
+                $stmtUserEmail = $this->db->prepare("SELECT email, full_name FROM users WHERE id = ?");
+                $stmtUserEmail->execute([$beneficiaryUserId]);
+                $beneUser = $stmtUserEmail->fetch(PDO::FETCH_ASSOC);
+                if ($beneUser && !empty($beneUser['email'])) {
+                    require_once __DIR__ . '/../mailer.php';
+                    $emailSubject = "[IDEAS] Bạn đã nhận được thanh toán hoa hồng ({$amtFormatted})";
+                    $emailTitle = "THÔNG BÁO THANH TOÁN HOA HỒNG";
+                    $emailContent = "Chào <strong>" . htmlspecialchars($beneUser['full_name'] ?? 'Bạn') . "</strong>,<br/><br/>" .
+                        "Khoản hoa hồng trị giá <strong>" . $amtFormatted . "</strong> của bạn trong đề xuất <strong>\"" . htmlspecialchars($expenseRow['title']) . "\"</strong> đã được Kế toán xác nhận giải ngân thành công.<br/>" .
+                        ($uncFileUrl ? "Đã có chứng từ UNC kèm theo trên hệ thống.<br/>" : "") .
+                        "Vui lòng kiểm tra tài khoản ngân hàng hoặc truy cập MYERP để xem chi tiết.";
+                    sendEmailNotification($beneUser['email'], $emailSubject, $emailTitle, $emailContent, '', false);
+                }
+            }
+
+            logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'PAY_COMMISSION_ITEM', 'expense', $id, json_encode([
+                'beneficiary_user_id' => $beneficiaryUserId,
+                'amount' => $targetItem['amount'] ?? 0,
+                'unc_file_url' => $uncFileUrl,
+                'all_paid' => $allPaid
+            ]));
+
+            $this->db->commit();
+
+            // Return updated expense
+            $this->showExpense($auth, $id);
+        } catch (Exception $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            respond(500, null, 'Lỗi khi xác nhận chi trả hoa hồng: ' . $e->getMessage(), false);
         }
     }
 }

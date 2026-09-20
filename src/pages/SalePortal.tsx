@@ -6596,7 +6596,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                         id: 'new',
                         subject: '',
                         priority: 'medium',
-                        due_date: `${new Date().toISOString().slice(0, 10)} 18:00:00`,
+                        due_date: null,
                         description: '',
                         link: '',
                         user_id: String(user?.id || ''),

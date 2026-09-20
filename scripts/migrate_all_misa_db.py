@@ -435,6 +435,9 @@ for zp in ZIP_PATHS:
                                         lecturer_name = str(ws.cell(r0, 15).value or '').strip()
                                         subject = str(ws.cell(r0, 16).value or '').strip()
                                         program = str(ws.cell(r0, 17).value or '').strip()
+                                        lecturer_due_date = parse_date(ws.cell(r0, 19).value)
+                                        if lecturer_due_date:
+                                            lecturer_due_date = lecturer_due_date[:10]
                                         fee = parse_num(ws.cell(r0, 20).value)
                                         bank_name = str(ws.cell(r0, 23).value or '').strip()
                                         bank_acc = str(ws.cell(r0, 24).value or '').strip()
@@ -561,7 +564,8 @@ for zp in ZIP_PATHS:
                                             'amount': calc_amount,
                                             'items': items_json_str,
                                             'notes': clean_notes_str,
-                                            'image_url': first_image_url
+                                            'image_url': first_image_url,
+                                            'due_date': lecturer_due_date if is_lecturer_wf else None
                                         })
                                 else:
                                     curr_r += 1
@@ -594,6 +598,7 @@ for b_idx in range(total_batches):
     for item in batch:
         eid = item['id']
         amt_clause = f", amount = {item['amount']}" if item['amount'] > 0 else ""
+        date_clause = f", date = '{item['due_date']}'" if item.get('due_date') else ""
         img_clause = f", image_url = {escape_sql(item['image_url'])}" if item['image_url'] else ""
         app_time_clause = f", approved_at = {escape_sql(item['approved_at'])}" if item['approved_at'] else ""
         rej_clause = f", reject_reason = {escape_sql(item['reject_reason'])}" if item['reject_reason'] else ""
@@ -615,6 +620,7 @@ for b_idx in range(total_batches):
             notes = {escape_sql(item['notes'])},
             deleted_at = NULL
             {amt_clause}
+            {date_clause}
             {img_clause}
             {app_time_clause}
             {rej_clause}

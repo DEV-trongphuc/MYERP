@@ -1387,7 +1387,7 @@ class ContactController {
             'form_name', 'zalo_phone', 'facebook_link',
             'lead_status', 'lead_temperature', 'next_action', 'next_followup_date',
             'expected_decision_date', 'expected_intake', 'nurture_reason', 'lost_reason', 'lost_stage_id',
-            'program', 'admission_date', 'student_id'
+            'program', 'admission_date', 'student_id', 'study_status'
         ];
         $sets = []; $params = [];
         
@@ -3403,6 +3403,250 @@ class ContactController {
             'avatar_url' => $savedUrl,
             'original_url' => $avatarUrl
         ], 'Cập nhật avatar âm thầm thành công', true);
+    }
+
+    public function sendAcademicEmail($auth, $id) {
+        $id = (int)$id;
+        if ($id <= 0) respond(400, null, 'ID học viên không hợp lệ', false);
+
+        $stmt = $this->db->prepare("SELECT id, full_name, email, phone FROM contacts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL LIMIT 1");
+        $stmt->execute([$id, $auth['tenant_id']]);
+        $contact = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$contact) respond(404, null, 'Không tìm thấy thông tin học viên', false);
+
+        $body = getJsonBody();
+        $toEmail = trim($body['to_email'] ?? $contact['email'] ?? '');
+        $ccEmail = trim($body['cc_email'] ?? '');
+        $subject = trim($body['subject'] ?? 'Thông báo Tiếp nhận học viên & Hướng dẫn học tập');
+        $contentHtml = trim($body['content'] ?? $body['content_html'] ?? '');
+
+        if (empty($toEmail)) {
+            respond(422, null, 'Email người nhận không được để trống', false);
+        }
+        if (empty($subject)) {
+            respond(422, null, 'Tiêu đề email không được để trống', false);
+        }
+        if (empty($contentHtml)) {
+            respond(422, null, 'Nội dung email không được để trống', false);
+        }
+
+        require_once __DIR__ . '/../mailer.php';
+        
+        // Bọc nội dung học thuật chuẩn để mailer.php hiển thị đúng template và không chèn ghi chú hóa đơn cọc
+        $academicBody = '<div style="background: #ffffff; border-left: 0px solid transparent; color: #475569; font-size: 14.5px; line-height: 1.65;">' . $contentHtml . '</div>';
+        
+        // Gửi email qua hệ thống gửi mail chuẩn
+        $sent = sendEmailNotification($toEmail, $subject, $subject, $academicBody, $ccEmail, false, 0, true);
+
+        // Lấy tên nhân sự / user đang thực hiện thao tác gửi
+        $senderName = trim($auth['full_name'] ?? $auth['name'] ?? 'Nhân sự');
+        $studentName = trim($contact['full_name'] ?: 'học viên');
+        
+        // Ghi nhận lịch sử tương tác: [Tên nhân sự] đã gửi mail "[Tiêu đề]" cho khách hàng [Tên khách hàng]
+        $activitySubject = "{$senderName} đã gửi mail \"{$subject}\" cho khách hàng {$studentName}";
+        
+        $activityBody = "Người nhận: {$toEmail}" . (!empty($ccEmail) ? "\nCC: {$ccEmail}" : "") . "\n\nNội dung email:\n" . strip_tags($contentHtml);
+
+        $activityId = null;
+        try {
+            $stmtAct = $this->db->prepare("
+                INSERT INTO activities (tenant_id, user_id, created_by, type, subject, body, status, priority, due_date, done_at, related_type, related_id, contact_id)
+                VALUES (?, ?, ?, 'email', ?, ?, 'done', 'medium', NOW(), NOW(), 'contact', ?, ?)
+            ");
+            $stmtAct->execute([
+                $auth['tenant_id'],
+                $auth['user_id'],
+                $auth['user_id'],
+                $activitySubject,
+                $activityBody,
+                $id,
+                $id
+            ]);
+            $activityId = (int)$this->db->lastInsertId();
+        } catch (\Throwable $ex) {
+            error_log("Failed to insert activity for sendAcademicEmail: " . $ex->getMessage());
+        }
+
+        respond(200, [
+            'sent' => $sent,
+            'activity_id' => $activityId,
+            'activity_subject' => $activitySubject,
+            'activity' => [
+                'id' => $activityId,
+                'tenant_id' => $auth['tenant_id'],
+                'user_id' => $auth['user_id'],
+                'created_by' => $auth['user_id'],
+                'creator_name' => $senderName,
+                'user_name' => $senderName,
+                'type' => 'email',
+                'subject' => $activitySubject,
+                'body' => $activityBody,
+                'status' => 'done',
+                'due_date' => date('Y-m-d H:i:s'),
+                'done_at' => date('Y-m-d H:i:s'),
+                'created_at' => date('Y-m-d H:i:s'),
+                'related_type' => 'contact',
+                'related_id' => $id,
+                'contact_id' => $id
+            ]
+        ], 'Đã gửi email và ghi nhận lịch sử tương tác thành công');
+    }
+
+    public function updateStudyStatus($auth, $id) {
+        $id = (int)$id;
+        if ($id <= 0) respond(400, null, 'ID học viên không hợp lệ', false);
+
+        $stmt = $this->db->prepare("SELECT id, full_name, email, phone, mobile, owner_id, study_status FROM contacts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL LIMIT 1");
+        $stmt->execute([$id, $auth['tenant_id']]);
+        $contact = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$contact) respond(404, null, 'Không tìm thấy thông tin học viên', false);
+
+        $body = getJsonBody();
+        $targetStatus = trim($body['study_status'] ?? '');
+        $allowedStatuses = ['studying', 'completed', 'reserved'];
+        if (!in_array($targetStatus, $allowedStatuses, true)) {
+            respond(422, null, 'Trạng thái học tập không hợp lệ', false);
+        }
+
+        $userNote = trim($body['note'] ?? '');
+        if (empty($userNote)) {
+            respond(422, null, 'Vui lòng nhập lý do / ghi chú chuyển trạng thái', false);
+        }
+
+        $oldStatus = $contact['study_status'] ?: 'studying';
+        $statusLabels = [
+            'studying' => 'Đang học',
+            'completed' => 'Đã hoàn thành',
+            'reserved' => 'Bảo lưu'
+        ];
+        $oldStatusLabel = $statusLabels[$oldStatus] ?? $oldStatus;
+        $newStatusLabel = $statusLabels[$targetStatus] ?? $targetStatus;
+
+        // Cập nhật CSDL
+        $stmtUpd = $this->db->prepare("UPDATE contacts SET study_status = ?, updated_at = NOW() WHERE id = ? AND tenant_id = ?");
+        $stmtUpd->execute([$targetStatus, $id, $auth['tenant_id']]);
+
+        $senderName = trim($auth['full_name'] ?? $auth['name'] ?? 'Nhân sự');
+        $studentName = trim($contact['full_name'] ?: 'học viên');
+        $subject = "{$senderName} đã chuyển trạng thái học tập: {$oldStatusLabel} ➔ {$newStatusLabel}";
+
+        // Bắn thông báo (Notifications)
+        $notifyUserIds = [];
+        if (!empty($body['notify_user_ids']) && is_array($body['notify_user_ids'])) {
+            foreach ($body['notify_user_ids'] as $uid) {
+                $uidInt = (int)$uid;
+                if ($uidInt > 0 && !in_array($uidInt, $notifyUserIds, true)) {
+                    $notifyUserIds[] = $uidInt;
+                }
+            }
+        }
+        $ownerId = (int)($contact['owner_id'] ?? 0);
+        if ($ownerId > 0 && $ownerId !== (int)$auth['user_id'] && !in_array($ownerId, $notifyUserIds, true)) {
+            $notifyUserIds[] = $ownerId;
+        }
+
+        // Tự động thêm Mai Thị Nữ vào danh sách nhận thông báo
+        try {
+            $stmtNu = $this->db->prepare("SELECT id FROM users WHERE (email = 'numt@ideas.edu.vn' OR username = 'numt' OR full_name LIKE '%Mai Thị Nữ%' OR id = 100062) AND is_active = 1 LIMIT 1");
+            $stmtNu->execute();
+            $nuRow = $stmtNu->fetch(PDO::FETCH_ASSOC);
+            if ($nuRow && (int)$nuRow['id'] > 0) {
+                $nuId = (int)$nuRow['id'];
+                if ($nuId !== (int)$auth['user_id'] && !in_array($nuId, $notifyUserIds, true)) {
+                    $notifyUserIds[] = $nuId;
+                }
+            }
+        } catch (\Throwable $e) {}
+
+        // Ghi nhận tương tác
+        $notifiedNames = [];
+        if (!empty($notifyUserIds)) {
+            try {
+                $inClause = implode(',', array_map('intval', $notifyUserIds));
+                $stmtNames = $this->db->query("SELECT full_name FROM users WHERE id IN ($inClause)");
+                while ($rName = $stmtNames->fetch(PDO::FETCH_ASSOC)) {
+                    if (!empty($rName['full_name'])) {
+                        $notifiedNames[] = $rName['full_name'];
+                    }
+                }
+            } catch (\Throwable $exNames) {}
+        }
+
+        $fullNote = "Lý do / Ghi chú: {$userNote}";
+        if (!empty($notifiedNames)) {
+            $fullNote .= "\n\n🔔 Đã thông báo đến: " . implode(', ', $notifiedNames);
+        }
+
+        $activityId = null;
+        try {
+            $stmtAct = $this->db->prepare("
+                INSERT INTO activities (tenant_id, user_id, created_by, type, subject, body, status, priority, due_date, done_at, related_type, related_id, contact_id)
+                VALUES (?, ?, ?, 'note', ?, ?, 'done', 'medium', NOW(), NOW(), 'contact', ?, ?)
+            ");
+            $stmtAct->execute([
+                $auth['tenant_id'],
+                $auth['user_id'],
+                $auth['user_id'],
+                $subject,
+                $fullNote,
+                $id,
+                $id
+            ]);
+            $activityId = (int)$this->db->lastInsertId();
+        } catch (\Throwable $ex) {
+            error_log("Failed to insert activity in updateStudyStatus: " . $ex->getMessage());
+        }
+
+        if (!empty($notifyUserIds)) {
+            try {
+                $custPhone = trim($contact['phone'] ?? $contact['mobile'] ?? '');
+                $phoneStr = !empty($custPhone) ? " ($custPhone)" : "";
+                
+                $notifTitle = "📢 Trạng thái Học tập: {$studentName} ➔ {$newStatusLabel}";
+                $notifBody = "{$senderName} vừa chuyển trạng thái học tập của \"{$studentName}\"{$phoneStr} từ \"{$oldStatusLabel}\" sang \"{$newStatusLabel}\".\n📝 Lý do: {$userNote}";
+                $notifLink = "/contacts?open_contact_id={$id}";
+
+                $stmtInsertNotif = $this->db->prepare("
+                    INSERT INTO notifications (user_id, tenant_id, title, body, type, link, is_read, created_at)
+                    VALUES (?, ?, ?, ?, 'study_status_transition', ?, 0, NOW())
+                ");
+
+                foreach ($notifyUserIds as $targetUid) {
+                    $stmtInsertNotif->execute([
+                        $targetUid,
+                        $auth['tenant_id'],
+                        $notifTitle,
+                        $notifBody,
+                        $notifLink
+                    ]);
+                }
+            } catch (\Throwable $notifEx) {
+                error_log("Notification error in updateStudyStatus: " . $notifEx->getMessage());
+            }
+        }
+
+        respond(200, [
+            'study_status' => $targetStatus,
+            'activity_id' => $activityId,
+            'activity' => [
+                'id' => $activityId,
+                'tenant_id' => $auth['tenant_id'],
+                'user_id' => $auth['user_id'],
+                'created_by' => $auth['user_id'],
+                'creator_name' => $senderName,
+                'user_name' => $senderName,
+                'type' => 'note',
+                'subject' => $subject,
+                'body' => $fullNote,
+                'status' => 'done',
+                'due_date' => date('Y-m-d H:i:s'),
+                'done_at' => date('Y-m-d H:i:s'),
+                'created_at' => date('Y-m-d H:i:s'),
+                'related_type' => 'contact',
+                'related_id' => $id,
+                'contact_id' => $id
+            ]
+        ], "Đã cập nhật trạng thái học tập sang \"{$newStatusLabel}\" thành công");
     }
 }
 

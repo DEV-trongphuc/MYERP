@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 281;
+$targetVersion = 282;
 $currentVersion = 186;
 
 // Query current DB version
@@ -3355,8 +3355,23 @@ try {
         $logMsg("Nâng cấp lên phiên bản 281 hoàn tất.", "success");
     }
 
+    // --- PHIÊN BẢN 282: BỔ SUNG CỘT study_status VÀO BẢNG contacts (HỌC VỤ / HỌC THUẬT) ---
+    if ($currentVersion < 282) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 282: Bổ sung trường study_status cho bảng contacts...", "info");
+        try {
+            $chkCol = $conn->query("SHOW COLUMNS FROM contacts LIKE 'study_status'");
+            if (!$chkCol || $chkCol->num_rows === 0) {
+                $conn->query("ALTER TABLE contacts ADD COLUMN `study_status` VARCHAR(50) DEFAULT 'studying' AFTER `student_id`");
+                $logMsg("Đã thêm cột study_status vào bảng contacts.", "success");
+            }
+            $logMsg("Nâng cấp lên phiên bản 282 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi nâng cấp v282: " . $e->getMessage(), "error");
+        }
+    }
+
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '281') ON DUPLICATE KEY UPDATE setting_value = '281'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '282') ON DUPLICATE KEY UPDATE setting_value = '282'");
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
 

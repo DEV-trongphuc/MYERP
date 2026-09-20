@@ -890,6 +890,8 @@ switch ($resource) {
         elseif ($resourceId  && in_array($subResource, ['stage', 'move', 'move-stage'], true) && in_array($method, ['PATCH', 'POST', 'PUT'], true)) $ctrl->moveStage($auth, (int)$resourceId);
         elseif ($resourceId  && $subResource === 'release-databank' && $method === 'POST') $ctrl->releaseDatabank($auth, (int)$resourceId);
         elseif ($resourceId  && $subResource === 'collaborators' && $method === 'GET') $ctrl->getCollaborators($auth, (int)$resourceId);
+        elseif ($resourceId  && $subResource === 'send-academic-email' && $method === 'POST') $ctrl->sendAcademicEmail($auth, (int)$resourceId);
+        elseif ($resourceId  && $subResource === 'study-status' && in_array($method, ['POST', 'PUT', 'PATCH'], true)) $ctrl->updateStudyStatus($auth, (int)$resourceId);
         elseif ($resourceId  && $method === 'GET')    $ctrl->show($auth, (int)$resourceId);
         elseif ($resourceId  && $method === 'PUT')    $ctrl->update($auth, (int)$resourceId);
         elseif ($resourceId  && $method === 'DELETE') $ctrl->destroy($auth, (int)$resourceId);
@@ -1272,6 +1274,7 @@ switch ($resource) {
         elseif ($resourceId && $subResource === 'comments' && isset($segments[3]) && $method === 'DELETE') $ctrl->deleteComment($auth, (int)$segments[3]);
         elseif ($resourceId === 'comments' && $subResource && $method === 'DELETE') $ctrl->deleteComment($auth, (int)$subResource);
         elseif ($resourceId && $subResource === 'history' && $method === 'GET') $ctrl->getHistory($auth, (int)$resourceId);
+        elseif ($resourceId && $subResource === 'pay-item' && $method === 'POST') $ctrl->payCommissionItem($auth, (int)$resourceId);
         elseif (!$resourceId && $method === 'GET')    $ctrl->listExpenses($auth);
         elseif (!$resourceId && $method === 'POST')   $ctrl->createExpense($auth);
         elseif ($resourceId  && $method === 'GET')    $ctrl->showExpense($auth, (int)$resourceId);

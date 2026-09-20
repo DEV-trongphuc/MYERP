@@ -10,7 +10,7 @@ import {
   Search, Trash2, Paperclip, Send, AlertTriangle, Users, CreditCard, ShoppingCart, Award,
   HelpCircle, HardDrive, FileSignature, Receipt, Package, Briefcase, ChevronRight, CheckSquare, Server, Home,
   FileCheck, Settings, ArrowLeft, X, Save, GitBranch, Clock3, Copy, Bell, Edit, Pencil, RefreshCw, Eye, MessageSquare, Info, Loader2,
-  UserPlus, Check, MoreHorizontal, Filter, Zap, Download, Image as ImageIcon, Building2, Truck,
+  UserPlus, Check, MoreHorizontal, Filter, Zap, Download, Upload, Image as ImageIcon, Building2, Truck,
   GraduationCap, Utensils, Phone, Mail, MapPin, Sparkles, AlertCircle, Bookmark, Edit3,
   Landmark, Wallet, BarChart2, Palmtree, QrCode, Coffee, Tag, Globe
 } from 'lucide-react';
@@ -48,6 +48,7 @@ const workflowList = [
   { id: 'client_meeting', name: 'Đề xuất tiếp khách', description: 'Chi phí tiếp đãi khách hàng, đối tác quan trọng.', category: 'finance', icon: Briefcase, bg: 'rgba(236, 72, 153, 0.08)', color: '#ec4899' },
   { id: 'phased_payment', name: 'Thanh toán theo đợt', description: 'Đề xuất thanh toán chia nhiều đợt theo tiến độ hợp đồng.', category: 'finance', icon: GitBranch, bg: 'rgba(139, 92, 246, 0.08)', color: '#8b5cf6' },
   { id: 'recurring_payment', name: 'Thanh toán định kỳ', description: 'Đề xuất thanh toán định kỳ hàng tháng/quý (tiền nhà, internet, phí dịch vụ).', category: 'finance', icon: Clock3, bg: 'rgba(217, 70, 239, 0.08)', color: '#d946ef' },
+  { id: 'commission_payout', name: 'Đề xuất chi trả hoa hồng', description: 'Chi trả hoa hồng nhiều nhân sự, tự động trích xuất STK và xác nhận UNC theo từng người.', category: 'finance', icon: Award, bg: 'rgba(245, 158, 11, 0.08)', color: '#f59e0b' },
 
   { id: 'leave_late', name: 'Đơn xin nghỉ', description: 'Đề xuất nghỉ phép năm, nghỉ việc riêng, nghỉ thai sản, nghỉ ốm.', category: 'hr', icon: Calendar, bg: 'rgba(239, 68, 68, 0.08)', color: '#ef4444' },
   { id: 'late_early', name: 'Đăng ký đi muộn, về sớm', description: 'Đăng ký đi muộn hoặc về sớm vì việc cá nhân lý do chính đáng.', category: 'hr', icon: Clock, bg: 'rgba(234, 179, 8, 0.08)', color: '#eab308' },
@@ -990,6 +991,34 @@ export default function Approvals() {
   const [recurringFrequency, setRecurringFrequency] = useState('monthly');
   const [recurringEndDate, setRecurringEndDate] = useState('');
 
+  // Commission payout states (Multi-recipient)
+  const [commissionItems, setCommissionItems] = useState<any[]>([
+    {
+      id: Date.now(),
+      user_id: '',
+      user_name: '',
+      avatar: '',
+      role: '',
+      bank_name: '',
+      bank_account: '',
+      bank_owner: '',
+      amount: 0,
+      note: ''
+    }
+  ]);
+
+  // Tự động đồng bộ các nhân viên được chọn nhận hoa hồng vào danh sách Người liên quan (relatedUserIds)
+  useEffect(() => {
+    if (selectedWorkflowDef?.id === 'commission_payout') {
+      const recipientIds = commissionItems
+        .map(it => Number(it.user_id))
+        .filter(id => !isNaN(id) && id > 0 && id !== Number(user?.id));
+      if (recipientIds.length > 0) {
+        setRelatedUserIds(prev => Array.from(new Set([...prev, ...recipientIds])));
+      }
+    }
+  }, [commissionItems, selectedWorkflowDef?.id, user?.id]);
+
   const onSelectWorkflowItem = (item: any) => {
     setSelectedWorkflowDef(item);
     setExpenseTitle(item.name);
@@ -997,7 +1026,18 @@ export default function Approvals() {
     lastSavedSnapshotRef.current = null;
     setCurrentDraftId(null);
     handleSelectWorkflow(item.id);
-    if (item.id === 'advance_money') {
+    if (item.id === 'commission_payout') {
+      setFormType('expense');
+      setIsRecurring(false);
+      setIsPhasedPayment(false);
+      setPaymentTarget('Nội bộ');
+      setInvoiceType('none');
+      // Cho phép người tạo tự duyệt bước của mình nếu là Manager/Leader hoặc người dùng hiện tại
+      const isManagerOrLeader = ['manager', 'director', 'admin', 'superadmin', 'super_admin', 'leader', 'truongphong', 'head_of_department'].includes(String(user?.role).toLowerCase()) || Boolean((user as any)?.is_team_leader);
+      if (user) {
+        setCustomApprover1(user);
+      }
+    } else if (item.id === 'advance_money') {
       setFormType('expense');
       setIsRecurring(false);
       setIsPhasedPayment(false);
@@ -1860,29 +1900,81 @@ export default function Approvals() {
           finalDesc += `\n\n[Tài liệu đính kèm (${uniqueAtts.length} tệp)]:\n${attsStr}`;
         }
 
-        const calcTotalAmt = expenseItems.reduce((acc, it) => {
-          const lineBase = (Number(it.quantity) || 1) * (Number(it.price) || 0);
-          const lineVat = currencyType === 'VND' 
-            ? Math.round(lineBase * (Number(it.vat) || 0) / 100) 
-            : (lineBase * (Number(it.vat) || 0) / 100);
-          return acc + lineBase + lineVat;
-        }, 0);
-        const calcVatAmt = expenseItems.reduce((acc, it) => {
-          const lineBase = (Number(it.quantity) || 1) * (Number(it.price) || 0);
-          return acc + (currencyType === 'VND' ? Math.round(lineBase * (Number(it.vat) || 0) / 100) : (lineBase * (Number(it.vat) || 0) / 100));
-        }, 0);
+        const isCommissionWf = selectedWorkflowDef?.id === 'commission_payout';
+        let payloadItems: any[] = expenseItems;
+        let calcTotalAmt = 0;
+        let calcVatAmt = 0;
+        let effectiveRelatedUserIds = [...relatedUserIds];
+
+        if (isCommissionWf) {
+          const validCommission = commissionItems.filter(c => c.user_id && (Number(c.amount) > 0 || c.amount));
+          if (validCommission.length === 0) {
+            toast.error(t('Vui lòng thêm ít nhất một nhân viên nhận hoa hồng với số tiền hợp lệ.'));
+            setSubmitting(false);
+            return;
+          }
+          calcTotalAmt = validCommission.reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
+          calcVatAmt = 0;
+          payloadItems = validCommission.map((c, idx) => ({
+            stt: idx + 1,
+            user_id: Number(c.user_id),
+            user_name: c.user_name || '',
+            avatar: c.avatar || '',
+            role: c.role || '',
+            bank_name: c.bank_name || '',
+            bank_account: c.bank_account || '',
+            bank_owner: c.bank_owner || '',
+            amount: Number(c.amount) || 0,
+            note: c.note || '',
+            name: `Hoa hồng: ${c.user_name || ''}${c.note ? ` - ${c.note}` : ''}`,
+            quantity: 1,
+            unit_price: Number(c.amount) || 0,
+            price: Number(c.amount) || 0,
+            vat: 0,
+            vat_amount: 0,
+            total: Number(c.amount) || 0,
+            is_paid: 0,
+            unc_file_url: null,
+            paid_at: null,
+            paid_by: null
+          }));
+
+          // Tự động gắn tất cả người nhận thành Người liên quan (related_user_ids)
+          const beneIds = validCommission.map(c => Number(c.user_id)).filter(id => id > 0 && id !== Number(user?.id));
+          effectiveRelatedUserIds = Array.from(new Set([...effectiveRelatedUserIds, ...beneIds]));
+
+          const commListStr = validCommission.map((c, idx) => 
+            `• [${idx + 1}] ${c.user_name} (STK: ${c.bank_name || ''} ${c.bank_account || ''}) - Số tiền: ${formatApprovalCurrency(c.amount, currencyType)}${c.note ? ` (Ghi chú: ${c.note})` : ''}`
+          ).join('\n');
+          finalDesc = `[Đề xuất chi trả hoa hồng - ${validCommission.length} nhân sự]:\n${commListStr}\n\n[Tổng tiền chi trả]: ${formatApprovalCurrency(calcTotalAmt, currencyType)}\n\n` + finalDesc;
+        } else {
+          calcTotalAmt = expenseItems.reduce((acc, it) => {
+            const lineBase = (Number(it.quantity) || 1) * (Number(it.price) || 0);
+            const lineVat = currencyType === 'VND' 
+              ? Math.round(lineBase * (Number(it.vat) || 0) / 100) 
+              : (lineBase * (Number(it.vat) || 0) / 100);
+            return acc + lineBase + lineVat;
+          }, 0);
+          calcVatAmt = expenseItems.reduce((acc, it) => {
+            const lineBase = (Number(it.quantity) || 1) * (Number(it.price) || 0);
+            return acc + (currencyType === 'VND' ? Math.round(lineBase * (Number(it.vat) || 0) / 100) : (lineBase * (Number(it.vat) || 0) / 100));
+          }, 0);
+          payloadItems = expenseItems;
+        }
 
         if (editingItemId && (editingItemType === 'expense' || formType === 'expense')) {
           await api.put(`/expenses/${editingItemId}`, {
             title: getFullWorkflowTitle(),
             description: finalDesc,
             notes: finalDesc,
+            category: isCommissionWf ? 'commission' : 'Khác',
             amount: calcTotalAmt,
             vat_amount: calcVatAmt,
+            items: payloadItems,
             approver_id: appVal1 || finalApproverId,
             approver_id_2: appVal2,
             approver_id_3: appVal3,
-            related_user_ids: relatedUserIds,
+            related_user_ids: effectiveRelatedUserIds,
             currency: currencyType,
             image_url: attachments.length > 0 ? normalizeFileUrl(attachments[0].url) : null,
             bank_name: paymentBankName || null,
@@ -1896,13 +1988,15 @@ export default function Approvals() {
             title: getFullWorkflowTitle(),
             description: finalDesc,
             notes: finalDesc,
+            category: isCommissionWf ? 'commission' : 'Khác',
             amount: calcTotalAmt,
             vat_amount: calcVatAmt,
+            items: payloadItems,
             status: 'pending',
             approver_id: appVal1 || finalApproverId,
             approver_id_2: appVal2,
             approver_id_3: appVal3,
-            related_user_ids: relatedUserIds,
+            related_user_ids: effectiveRelatedUserIds,
             currency: currencyType,
             image_url: attachments.length > 0 ? normalizeFileUrl(attachments[0].url) : null,
             bank_name: paymentBankName || null,
@@ -2052,11 +2146,12 @@ export default function Approvals() {
     const currentUserId = p?.id || (user as any)?.id;
     const proposerInUsers = users.find(u => Number(u.id) === Number(currentUserId) || (p?.email && u.email === p.email) || (p?.username && u.username === p.username));
 
-    // Ngoại lệ: Với quy trình chấm công / cập nhật công (attendance_bulk), nếu người đề xuất là Trưởng phòng/Quản lý:
-    // Tự tạo và tự phê duyệt cho chính mình (Bước 2 duyệt là chính người đề xuất)
+    // Ngoại lệ: Với quy trình chấm công (attendance_bulk) hoặc Quy trình hoa hồng (commission_payout):
+    // Cho phép tự tạo và tự phê duyệt (Bước duyệt mặc định có thể là chính người tạo)
     const isAttendance = workflowDef?.id === 'attendance_bulk' || formType === 'attendance_bulk';
+    const isCommissionWf = workflowDef?.id === 'commission_payout' || selectedWorkflowDef?.id === 'commission_payout';
     const isProposerManagerOrLeader = ['manager', 'director', 'admin', 'superadmin', 'super_admin', 'leader', 'truongphong', 'head_of_department'].includes(String(p?.role || user?.role).toLowerCase()) || Boolean(p?.is_team_leader || (user as any)?.is_team_leader);
-    if (isAttendance && isProposerManagerOrLeader) {
+    if ((isAttendance && isProposerManagerOrLeader) || isCommissionWf) {
       return proposerInUsers || p;
     }
 
@@ -9857,7 +9952,7 @@ export default function Approvals() {
                             )}
 
                             {/* DEDICATED BLOCK 5: ĐỀ XUẤT CHI PHÍ / HOÀN ỨNG / THANH TOÁN */}
-                            {(selectedWorkflowDef?.id === 'expense_claim' || selectedWorkflowDef?.id === 'payment' || formType === 'expense') && (
+                            {(selectedWorkflowDef?.id === 'expense_claim' || selectedWorkflowDef?.id === 'payment' || formType === 'expense') && selectedWorkflowDef?.id !== 'commission_payout' && (
                               <div style={{
                                 background: 'var(--color-card, #ffffff)',
                                 border: '1px solid var(--color-border)',
@@ -9949,8 +10044,10 @@ export default function Approvals() {
                               </div>
                             )}
                             
-                            {/* PAYMENT METHOD & TARGET ROW */}
-                            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.3fr 1.2fr 0.8fr', gap: '1rem' }}>
+                            {/* PAYMENT METHOD & TARGET ROW (Ẩn khi là quy trình chi hoa hồng vì đã quản lý danh sách chi tiết bên dưới) */}
+                            {selectedWorkflowDef?.id !== 'commission_payout' && (
+                              <>
+                                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.3fr 1.2fr 0.8fr', gap: '1rem' }}>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
                                   {t('Đối tượng thụ hưởng')} <span style={{ color: 'var(--color-danger)' }}>*</span>
@@ -10031,7 +10128,22 @@ export default function Approvals() {
                             </div>
 
                             {/* BENEFICIARY DYNAMIC SELECTORS */}
-                            {paymentTarget === 'Nội bộ' && (
+                            {selectedWorkflowDef?.id === 'commission_payout' ? (
+                              <div style={{
+                                background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(217, 119, 6, 0.04))',
+                                border: '1px solid rgba(245, 158, 11, 0.25)',
+                                borderRadius: '12px',
+                                padding: '12px 16px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '12px'
+                              }}>
+                                <Award size={22} color="#d97706" style={{ flexShrink: 0 }} />
+                                <div style={{ fontSize: '0.78rem', color: '#92400e', lineHeight: 1.5 }}>
+                                  <strong>{t('Chi trả hoa hồng nội bộ cho nhiều nhân sự:')}</strong> {t('Danh sách nhân viên nhận tiền, STK ngân hàng và số tiền được quản lý chi tiết theo từng dòng tại Bảng phân bổ hoa hồng bên dưới. Hệ thống sẽ tự động trích xuất STK ngân hàng của từng nhân sự sale.')}
+                                </div>
+                              </div>
+                            ) : paymentTarget === 'Nội bộ' && (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                   <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
@@ -10886,13 +10998,347 @@ export default function Approvals() {
                                 </div>
                               </div>
                             )}
+                            </>
+                          )}
 
                           </div>
                         )}
                       </div>
 
                       {/* Card: Bảng chi tiết thanh toán & Mục đích thanh toán (only for expense/payment) */}
-                      {formType === 'expense' && (
+                      {formType === 'expense' && (selectedWorkflowDef?.id === 'commission_payout' ? (
+                        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '14px', background: 'var(--color-surface)', border: '1px solid rgba(245, 158, 11, 0.3)', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)', overflow: 'visible' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <Award size={18} color="#f59e0b" />
+                              <div>
+                                <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                  {t('BẢNG PHÂN BỔ HOA HỒNG NHÂN SỰ')}
+                                </span>
+                                <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                                  {t('Không giới hạn số lượng nhân viên. STK được tự động trích xuất từ hồ sơ và tự động gắn vào Người liên quan.')}
+                                </div>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCommissionItems(prev => [
+                                  ...prev,
+                                  {
+                                    id: Date.now(),
+                                    user_id: '',
+                                    user_name: '',
+                                    avatar: '',
+                                    role: '',
+                                    bank_name: '',
+                                    bank_account: '',
+                                    bank_owner: '',
+                                    amount: 0,
+                                    note: ''
+                                  }
+                                ]);
+                              }}
+                              className="btn primary"
+                              style={{
+                                height: '32px',
+                                padding: '0 14px',
+                                fontSize: '0.75rem',
+                                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                                color: '#ffffff',
+                                fontWeight: 700,
+                                borderRadius: '8px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                boxShadow: '0 2px 8px rgba(245, 158, 11, 0.25)'
+                              }}
+                            >
+                              <Plus size={15} /> {t('Thêm nhân viên nhận hoa hồng')}
+                            </button>
+                          </div>
+
+                          {/* DANH SÁCH NHÂN VIÊN NHẬN HOA HỒNG (CARD 2 HÀNG RỘNG RÃI, OVERFLOW VISIBLE) */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', overflow: 'visible' }}>
+                            {commissionItems.map((cItem, idx) => {
+                              return (
+                                <div
+                                  key={cItem.id}
+                                  style={{
+                                    border: '1px solid var(--color-border)',
+                                    borderRadius: '12px',
+                                    background: 'var(--color-bg-primary, #ffffff)',
+                                    padding: '14px 16px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '12px',
+                                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
+                                    position: 'relative',
+                                    overflow: 'visible'
+                                  }}
+                                >
+                                  {/* HÀNG 1: THÔNG TIN NHÂN VIÊN & SỐ TIỀN HOA HỒNG & NÚT XÓA */}
+                                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.4fr 1fr auto', gap: '14px', alignItems: 'flex-start', overflow: 'visible' }}>
+                                    {/* Cột 1: Nhân viên thụ hưởng */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', overflow: 'visible' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          width: '22px',
+                                          height: '22px',
+                                          borderRadius: '50%',
+                                          background: 'rgba(245, 158, 11, 0.15)',
+                                          color: '#d97706',
+                                          fontSize: '0.72rem',
+                                          fontWeight: 800
+                                        }}>
+                                          {idx + 1}
+                                        </span>
+                                        <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                                          {t('Nhân viên thụ hưởng')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                        </label>
+                                        <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginLeft: 'auto' }}>
+                                          {t('(Tự động điền STK từ hồ sơ)')}
+                                        </span>
+                                      </div>
+                                      <CustomSelect
+                                        options={users.map((u: any) => ({
+                                          value: String(u.id),
+                                          label: u.full_name || u.name || u.username || `Nhân viên #${u.id}`,
+                                          avatar: u.avatar_url || u.avatar,
+                                          sublabel: [
+                                            u.role || '',
+                                            u.bank_name ? `${u.bank_name}: ${u.bank_account}` : t('Chưa có STK')
+                                          ].filter(Boolean).join(' • ')
+                                        }))}
+                                        value={cItem.user_id ? String(cItem.user_id) : ''}
+                                        onChange={val => {
+                                          const empId = String(val);
+                                          const emp = users.find((u: any) => String(u.id) === empId);
+                                          setCommissionItems(prev => {
+                                            const copy = [...prev];
+                                            if (emp) {
+                                              const empName = emp.full_name || emp.name || emp.username || '';
+                                              copy[idx] = {
+                                                ...copy[idx],
+                                                user_id: empId,
+                                                user_name: empName,
+                                                avatar: emp.avatar_url || emp.avatar || '',
+                                                role: emp.role || '',
+                                                bank_name: emp.bank_name || copy[idx].bank_name || '',
+                                                bank_account: emp.bank_account || copy[idx].bank_account || '',
+                                                bank_owner: (empName || '').toUpperCase()
+                                              };
+                                            } else {
+                                              copy[idx] = {
+                                                ...copy[idx],
+                                                user_id: '',
+                                                user_name: '',
+                                                avatar: '',
+                                                role: ''
+                                              };
+                                            }
+                                            return copy;
+                                          });
+                                        }}
+                                        placeholder={t('-- Tìm & chọn nhân viên nhận hoa hồng --')}
+                                        searchable
+                                        showAvatars
+                                        width="100%"
+                                      />
+                                      {cItem.user_id && !cItem.bank_account && (
+                                        <div style={{ fontSize: '0.72rem', color: '#d97706', marginTop: '2px', fontWeight: 600 }}>
+                                          ⚠️ {t('Nhân viên này chưa cập nhật STK trong hồ sơ. Vui lòng nhập STK ở Hàng 2 bên dưới.')}
+                                        </div>
+                                      )}
+                                      {cItem.user_id && cItem.bank_account && (
+                                        <div style={{ fontSize: '0.72rem', color: '#059669', marginTop: '2px', fontWeight: 600 }}>
+                                          ✓ {t('Đã tự động liên kết STK ngân hàng từ hồ sơ nhân sự.')}
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Cột 2: Số tiền hoa hồng */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                      <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                                        {t('Số tiền hoa hồng (₫)')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                      </label>
+                                      <input
+                                        type="text"
+                                        className="form-input"
+                                        value={formatNumberWithDots(cItem.amount || 0)}
+                                        onChange={e => {
+                                          const rawVal = e.target.value.replace(/\D/g, '');
+                                          setCommissionItems(prev => {
+                                            const copy = [...prev];
+                                            copy[idx] = { ...copy[idx], amount: Number(rawVal) };
+                                            return copy;
+                                          });
+                                        }}
+                                        placeholder="0"
+                                        style={{ height: '38px', fontSize: '0.95rem', fontWeight: 800, color: '#059669', textAlign: 'right' }}
+                                      />
+                                      {cItem.amount > 0 && (
+                                        <div style={{ fontSize: '0.7rem', color: '#059669', fontStyle: 'italic', textAlign: 'right', fontWeight: 600, wordBreak: 'break-word' }}>
+                                          {docSoTiengViet(cItem.amount)}
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Cột 3: Nút xóa dòng */}
+                                    <div style={{ display: 'flex', alignItems: 'center', paddingTop: '26px' }}>
+                                      {commissionItems.length > 1 && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setCommissionItems(prev => prev.filter(x => x.id !== cItem.id));
+                                          }}
+                                          style={{
+                                            border: '1px solid rgba(239, 68, 68, 0.3)',
+                                            background: 'rgba(239, 68, 68, 0.06)',
+                                            color: 'var(--color-danger)',
+                                            cursor: 'pointer',
+                                            padding: '8px',
+                                            borderRadius: '8px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            transition: 'all 0.15s'
+                                          }}
+                                          title={t('Xóa nhân viên này khỏi danh sách')}
+                                        >
+                                          <Trash2 size={16} />
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* HÀNG 2: THÔNG TIN TÀI KHOẢN NGÂN HÀNG & NỘI DUNG/DEAL */}
+                                  <div style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr 1.4fr',
+                                    gap: '10px',
+                                    background: 'var(--color-bg-secondary, #f8fafc)',
+                                    padding: '10px 12px',
+                                    borderRadius: '8px',
+                                    border: '1px solid var(--color-border-light)'
+                                  }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                      <label style={{ fontSize: '0.7rem', fontWeight: 650, color: 'var(--color-text-muted)' }}>
+                                        {t('Số tài khoản (STK)')}
+                                      </label>
+                                      <input
+                                        type="text"
+                                        className="form-input"
+                                        value={cItem.bank_account || ''}
+                                        onChange={e => {
+                                          const v = e.target.value;
+                                          setCommissionItems(prev => {
+                                            const copy = [...prev];
+                                            copy[idx] = { ...copy[idx], bank_account: v };
+                                            return copy;
+                                          });
+                                        }}
+                                        placeholder={t('Nhập số tài khoản...')}
+                                        style={{ height: '32px', fontSize: '0.8rem', fontWeight: 650 }}
+                                      />
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                      <label style={{ fontSize: '0.7rem', fontWeight: 650, color: 'var(--color-text-muted)' }}>
+                                        {t('Tên Ngân hàng')}
+                                      </label>
+                                      <input
+                                        type="text"
+                                        className="form-input"
+                                        value={cItem.bank_name || ''}
+                                        onChange={e => {
+                                          const v = e.target.value;
+                                          setCommissionItems(prev => {
+                                            const copy = [...prev];
+                                            copy[idx] = { ...copy[idx], bank_name: v };
+                                            return copy;
+                                          });
+                                        }}
+                                        placeholder={t('VD: Vietcombank, MB...')}
+                                        style={{ height: '32px', fontSize: '0.8rem' }}
+                                      />
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                      <label style={{ fontSize: '0.7rem', fontWeight: 650, color: 'var(--color-text-muted)' }}>
+                                        {t('Chủ tài khoản')}
+                                      </label>
+                                      <input
+                                        type="text"
+                                        className="form-input"
+                                        value={cItem.bank_owner || ''}
+                                        onChange={e => {
+                                          const v = e.target.value.toUpperCase();
+                                          setCommissionItems(prev => {
+                                            const copy = [...prev];
+                                            copy[idx] = { ...copy[idx], bank_owner: v };
+                                            return copy;
+                                          });
+                                        }}
+                                        placeholder={t('Tự động in hoa...')}
+                                        style={{ height: '32px', fontSize: '0.8rem', textTransform: 'uppercase', fontWeight: 600 }}
+                                      />
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                      <label style={{ fontSize: '0.7rem', fontWeight: 650, color: 'var(--color-text-muted)' }}>
+                                        {t('Nội dung / Deal / Lý do chi trả')}
+                                      </label>
+                                      <input
+                                        type="text"
+                                        className="form-input"
+                                        value={cItem.note || ''}
+                                        onChange={e => {
+                                          const v = e.target.value;
+                                          setCommissionItems(prev => {
+                                            const copy = [...prev];
+                                            copy[idx] = { ...copy[idx], note: v };
+                                            return copy;
+                                          });
+                                        }}
+                                        placeholder={t('Ví dụ: Hoa hồng chốt hợp đồng dự án ABC...')}
+                                        style={{ height: '32px', fontSize: '0.8rem' }}
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* Totals Summary */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--color-bg-secondary)', padding: '12px 18px', borderRadius: '12px', border: '1px solid var(--color-border-light)' }}>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
+                              {t('Tổng số nhân viên nhận hoa hồng:')} <strong style={{ color: 'var(--color-text)' }}>{commissionItems.filter(c => c.user_id).length}</strong>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('TỔNG TIỀN HOA HỒNG')}:</span>
+                              <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#059669', fontFamily: 'monospace' }}>
+                                {formatApprovalCurrency(commissionItems.reduce((s, c) => s + (Number(c.amount) || 0), 0), currencyType)}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* PURPOSE & DETAILS */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '0.5rem', paddingTop: '1rem', borderTop: '1px solid var(--color-border-light)' }}>
+                            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                              {t('Ghi chú / Căn cứ chi trả hoa hồng chung')}
+                            </label>
+                            <textarea
+                              className="form-input"
+                              value={paymentDetails}
+                              onChange={e => setPaymentDetails(e.target.value)}
+                              placeholder={t('Giải trình chi tiết mục đích hoặc căn cứ tính hoa hồng (nếu có)...')}
+                              style={{ height: '64px', resize: 'vertical', fontSize: '0.8rem', padding: '8px' }}
+                            />
+                          </div>
+                        </div>
+                      ) : (
                         <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -11080,7 +11526,7 @@ export default function Approvals() {
                             />
                           </div>
                         </div>
-                      )}
+                      ))}
 
 
                       {/* Card 4: Document Attachments dropzone */}
@@ -12180,6 +12626,10 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth <= 1024 : false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [previewQrModalUrl, setPreviewQrModalUrl] = useState<string | null>(null);
+  const [payingItemIndex, setPayingItemIndex] = useState<number | null>(null);
+  const [uploadingUncIndex, setUploadingUncIndex] = useState<number | null>(null);
+  const uncFileInputRef = useRef<HTMLInputElement>(null);
+  const [targetUploadIndex, setTargetUploadIndex] = useState<number | null>(null);
 
   const handleClose = useCallback(() => {
     if (isClosing) return;
@@ -12213,6 +12663,97 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
     setCopiedField(label);
     toast.success(`${t('Đã sao chép')} ${label}: ${text}`);
     setTimeout(() => setCopiedField(null), 2000);
+  };
+
+  const resolveFileUrl = (url?: string | null) => {
+    if (!url) return '';
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    const baseUrl = import.meta.env.VITE_API_URL || '/backend';
+    const clean = url.replace(/^\/?(backend\/)?/, '');
+    return `${baseUrl}/${clean}`;
+  };
+
+  const handleViewUnc = (url: string) => {
+    const resolved = resolveFileUrl(url);
+    const isImg = /\.(jpg|jpeg|png|webp|gif|svg|bmp)(\?.*)?$/i.test(resolved);
+    if (isImg) {
+      setLightboxState({
+        isOpen: true,
+        items: [{ url: resolved, name: 'Ủy nhiệm chi (UNC)', type: 'image' }],
+        initialIndex: 0
+      });
+    } else {
+      window.open(resolved, '_blank');
+    }
+  };
+
+  const handleCommissionFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || targetUploadIndex === null) return;
+    const idx = targetUploadIndex;
+    setUploadingUncIndex(idx);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const uploadRes = await api.post('/upload', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      const fileUrl = uploadRes.data?.data?.url || uploadRes.data?.url || uploadRes.data?.file_url;
+      if (!fileUrl) {
+        toast.error(t('Không nhận được đường dẫn tệp sau khi tải lên'));
+        return;
+      }
+      await handleExecutePayItem(idx, fileUrl);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.message || t('Lỗi tải tệp UNC'));
+    } finally {
+      setUploadingUncIndex(null);
+      setTargetUploadIndex(null);
+      if (e.target) e.target.value = '';
+    }
+  };
+
+  const handleExecutePayItem = async (itemIdx: number, uncUrl?: string) => {
+    const rawItems = detail?.items || (item as any)?.items || [];
+    const targetItem = Array.isArray(rawItems) ? rawItems[itemIdx] : null;
+    if (!targetItem) return;
+    setPayingItemIndex(itemIdx);
+    try {
+      const res = await api.post(`/expenses/${detail?.id || item.id}/pay-item`, {
+        item_index: itemIdx,
+        user_id: targetItem.user_id,
+        unc_file_url: uncUrl || targetItem.unc_file_url || null
+      });
+      if (res.data?.success) {
+        toast.success(t('Đã xác nhận chi và gửi thông báo riêng cho nhân sự!'));
+        setDetail((prev: any) => {
+          if (!prev) return prev;
+          const currentItems = Array.isArray(prev.items) ? [...prev.items] : [];
+          if (currentItems[itemIdx]) {
+            currentItems[itemIdx] = {
+              ...currentItems[itemIdx],
+              is_paid: 1,
+              paid_at: new Date().toISOString(),
+              paid_by: user?.id,
+              paid_by_name: user?.name || (user as any)?.full_name || 'Kế toán',
+              ...(uncUrl ? { unc_file_url: uncUrl } : {})
+            };
+          }
+          const allPaid = currentItems.length > 0 && currentItems.every((it: any) => it.is_paid == 1 || it.is_paid === true);
+          return {
+            ...prev,
+            items: currentItems,
+            is_refunded: allPaid ? 1 : prev.is_refunded
+          };
+        });
+      } else {
+        toast.error(res.data?.message || t('Có lỗi xảy ra khi xác nhận'));
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.message || t('Không thể xác nhận chi trả'));
+    } finally {
+      setPayingItemIndex(null);
+    }
   };
 
   useEffect(() => {
@@ -14293,10 +14834,409 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
           )}
         </div>
 
-        {/* Card: Bảng kê chi tiết chi phí (nếu có các dòng chi phí con) */}
+        {/* Card: Bảng kê chi tiết chi phí hoặc Bảng phân bổ chi trả hoa hồng */}
         {expenseItems && expenseItems.length > 0 && (() => {
-          const hasAnyVat = expenseItems.some((it: any) => Number(it.vat) > 0 || Number(it.vat_amount) > 0);
+          const isCommissionProposal = 
+            detail?.category === 'commission' || 
+            (item as any)?.category === 'commission' || 
+            detail?.type === 'commission_payout' || 
+            (item as any)?.type === 'commission_payout' || 
+            (detail?.title && detail.title.toLowerCase().includes('hoa hồng')) || 
+            (item?.title && item.title.toLowerCase().includes('hoa hồng')) || 
+            (detail?.notes && detail.notes.includes('[Đề xuất chi trả hoa hồng]')) ||
+            (detail?.notes && detail.notes.includes('[BẢNG PHÂN BỔ HOA HỒNG NHÂN SỰ]')) ||
+            (rawDesc && rawDesc.includes('[Đề xuất chi trả hoa hồng]')) ||
+            (rawDesc && rawDesc.includes('[BẢNG PHÂN BỔ HOA HỒNG NHÂN SỰ]')) ||
+            (Array.isArray(expenseItems) && expenseItems.length > 0 && expenseItems.some((it: any) => it.bank_account_no || (it.user_id && it.user_name)));
+
           const curr = detail?.currency || (item as any)?.currency || 'VND';
+
+          if (isCommissionProposal) {
+            const totalCommission = expenseItems.reduce((sum: number, it: any) => sum + Number(it.amount || it.price || 0), 0);
+            const paidCount = expenseItems.filter((it: any) => it.is_paid == 1 || it.is_paid === true).length;
+            const totalCount = expenseItems.length;
+            const isAllPaid = totalCount > 0 && paidCount === totalCount;
+            const canManagePayment = isAdmin || 
+              isExecutive(user) || 
+              isAccountant(user) || 
+              ['accountant', 'admin', 'super_admin', 'superadmin', 'director', 'manager', 'sale_admin', 'saleadmin'].includes(String(user?.role || '').toLowerCase()) ||
+              String((user as any)?.department || '').toLowerCase().includes('kế toán') ||
+              String((user as any)?.department || '').toLowerCase().includes('tài chính');
+
+            return (
+              <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '14px', background: 'var(--color-surface)', border: '1.5px solid rgba(245, 158, 11, 0.3)', borderRadius: '16px', padding: isMobile ? '1.1rem' : '1.5rem', boxShadow: '0 4px 24px rgba(245, 158, 11, 0.05)' }}>
+                {/* Header */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'linear-gradient(135deg, #f59e0b, #d97706)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', boxShadow: '0 2px 8px rgba(245, 158, 11, 0.25)', flexShrink: 0 }}>
+                      <Award size={20} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span>{t('BẢNG PHÂN BỔ & CHI TRẢ HOA HỒNG')}</span>
+                        <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.12)', color: '#d97706', fontWeight: 700 }}>
+                          {totalCount} {t('nhân sự')}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                        {t('Giải ngân độc lập từng nhân sự • Tự động gửi thông báo riêng biệt')}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>{t('Tiến độ giải ngân')}</div>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 800, color: isAllPaid ? '#10b981' : '#f59e0b' }}>
+                        {paidCount}/{totalCount} {t('đã chi')} ({Math.round((paidCount / Math.max(1, totalCount)) * 100)}%)
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right', paddingLeft: '12px', borderLeft: '1px solid var(--color-border-light)' }}>
+                      <div style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>{t('Tổng tiền hoa hồng')}</div>
+                      <div style={{ fontSize: '1.05rem', fontWeight: 900, color: '#059669', fontFamily: 'monospace' }}>
+                        {formatApprovalCurrency(totalCommission, curr)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Security Notice Banner */}
+                <div style={{ padding: '8px 12px', borderRadius: '10px', background: 'rgba(59, 130, 246, 0.05)', border: '1px solid rgba(59, 130, 246, 0.15)', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                  <ShieldCheck size={16} style={{ color: '#3b82f6', flexShrink: 0 }} />
+                  <span>
+                    <strong style={{ color: '#2563eb' }}>{t('Cơ chế bảo mật thông báo riêng biệt')}:</strong> {t('Kế toán xác nhận hoặc upload UNC cho nhân sự nào thì chỉ gửi thông báo và email thanh toán đến đúng nhân viên đó.')}
+                  </span>
+                </div>
+
+                {/* Table */}
+                <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid var(--color-border-light)' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: isMobile ? '0.725rem' : '0.8125rem' }}>
+                    <thead>
+                      <tr style={{ background: 'var(--color-bg-secondary)', borderBottom: '1px solid var(--color-border-light)', textAlign: 'left' }}>
+                        <th style={{ padding: '10px 12px', width: '38px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>#</th>
+                        <th style={{ padding: '10px 12px', minWidth: '160px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>{t('Nhân sự thụ hưởng')}</th>
+                        <th style={{ padding: '10px 12px', minWidth: '200px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>{t('Thông tin tài khoản nhận')}</th>
+                        <th style={{ padding: '10px 12px', width: '130px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>{t('Số tiền chi')}</th>
+                        <th style={{ padding: '10px 12px', minWidth: '150px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>{t('Nội dung')}</th>
+                        <th style={{ padding: '10px 12px', minWidth: '140px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>{t('Trạng thái & UNC')}</th>
+                        {canManagePayment && (
+                          <th style={{ padding: '10px 12px', minWidth: '150px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>{t('Thao tác kế toán')}</th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {expenseItems.map((it: any, idx: number) => {
+                        const u = users.find((usr: any) => Number(usr.id) === Number(it.user_id));
+                        const isCurrentUser = Number(user?.id) === Number(it.user_id);
+                        const isRowPaid = Boolean(it.is_paid == 1 || it.is_paid === true);
+                        const isUploading = uploadingUncIndex === idx;
+                        const isPaying = payingItemIndex === idx;
+                        const rowAmt = Number(it.amount || it.price || 0);
+                        const qrUrl = (it.bank_name && it.bank_account_no && rowAmt > 0) ? getVietQrUrl({ bankBinOrCode: it.bank_name, accountNumber: it.bank_account_no, amount: rowAmt, memo: it.note || 'Hoa hong' }) : null;
+
+                        return (
+                          <tr key={idx} style={{
+                            borderBottom: idx < expenseItems.length - 1 ? '1px solid var(--color-border-light)' : 'none',
+                            background: isCurrentUser ? 'rgba(245, 158, 11, 0.04)' : (idx % 2 === 0 ? 'var(--color-surface)' : 'var(--color-bg-secondary)'),
+                            transition: 'background 0.2s ease'
+                          }}>
+                            {/* # */}
+                            <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+                              {idx + 1}
+                            </td>
+
+                            {/* Staff Info */}
+                            <td style={{ padding: '12px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <div style={{ position: 'relative' }}>
+                                  <Avatar
+                                    src={u?.avatar_url || u?.avatar}
+                                    name={it.user_name || u?.full_name || 'N'}
+                                    size="sm"
+                                  />
+                                  {isRowPaid && (
+                                    <div style={{ position: 'absolute', bottom: -2, right: -2, width: '12px', height: '12px', borderRadius: '50%', background: '#10b981', border: '2px solid var(--color-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                      <Check size={8} color="#fff" strokeWidth={3} />
+                                    </div>
+                                  )}
+                                </div>
+                                <div>
+                                  <div style={{ fontWeight: 750, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span>{it.user_name || u?.full_name || u?.name || t('Nhân sự')}</span>
+                                    {isCurrentUser && (
+                                      <span style={{ fontSize: '0.65rem', padding: '1px 6px', borderRadius: '4px', background: '#f59e0b', color: '#fff', fontWeight: 800 }}>
+                                        {t('Bạn')}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                                    {u?.email || u?.phone || (it.user_id ? `#${it.user_id}` : '')}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Bank Info */}
+                            <td style={{ padding: '12px' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                  <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>
+                                    {it.bank_name || '—'}
+                                  </span>
+                                  {qrUrl && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setPreviewQrModalUrl(qrUrl)}
+                                      title={t('Xem mã VietQR để quét thanh toán')}
+                                      style={{
+                                        background: 'rgba(59, 130, 246, 0.08)',
+                                        border: '1px solid rgba(59, 130, 246, 0.2)',
+                                        borderRadius: '4px',
+                                        padding: '2px 5px',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '3px',
+                                        cursor: 'pointer',
+                                        color: '#2563eb',
+                                        fontSize: '0.68rem',
+                                        fontWeight: 700
+                                      }}
+                                    >
+                                      <QrCode size={11} />
+                                      <span>QR</span>
+                                    </button>
+                                  )}
+                                </div>
+
+                                {it.bank_account_no ? (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '0.85rem', color: '#2563eb', letterSpacing: '0.02em' }}>
+                                      {it.bank_account_no}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCopyText(it.bank_account_no, `STK (${it.user_name || 'Nhân sự'})`)}
+                                      title={t('Sao chép số tài khoản')}
+                                      style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        padding: '2px 4px',
+                                        cursor: 'pointer',
+                                        color: copiedField?.includes(it.bank_account_no) ? '#10b981' : 'var(--color-text-muted)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        borderRadius: '4px'
+                                      }}
+                                    >
+                                      <Copy size={12} />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                                    {t('Chưa có STK')}
+                                  </span>
+                                )}
+
+                                {it.bank_account_name && (
+                                  <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+                                    {it.bank_account_name}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Amount */}
+                            <td style={{ padding: '12px', textAlign: 'right' }}>
+                              <div style={{ fontWeight: 900, color: '#059669', fontSize: '0.9rem', fontFamily: 'monospace' }}>
+                                {formatApprovalCurrency(rowAmt, curr)}
+                              </div>
+                            </td>
+
+                            {/* Note */}
+                            <td style={{ padding: '12px' }}>
+                              <div style={{ color: 'var(--color-text)', fontWeight: 500, fontSize: '0.78rem', maxWidth: '220px', wordBreak: 'break-word' }}>
+                                {it.note || it.name || 'Chi trả hoa hồng'}
+                              </div>
+                            </td>
+
+                            {/* Status & UNC */}
+                            <td style={{ padding: '12px' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                {isRowPaid ? (
+                                  <span style={{
+                                    fontSize: '0.7rem',
+                                    fontWeight: 750,
+                                    padding: '2px 8px',
+                                    borderRadius: '6px',
+                                    background: 'rgba(16, 185, 129, 0.1)',
+                                    color: '#059669',
+                                    border: '1px solid rgba(16, 185, 129, 0.25)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    width: 'fit-content'
+                                  }}>
+                                    <CheckCircle2 size={11} />
+                                    {t('Đã chi trả')}
+                                  </span>
+                                ) : (
+                                  <span style={{
+                                    fontSize: '0.7rem',
+                                    fontWeight: 750,
+                                    padding: '2px 8px',
+                                    borderRadius: '6px',
+                                    background: 'rgba(245, 158, 11, 0.1)',
+                                    color: '#d97706',
+                                    border: '1px solid rgba(245, 158, 11, 0.25)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    width: 'fit-content'
+                                  }}>
+                                    <Clock size={11} />
+                                    {t('Chờ chi')}
+                                  </span>
+                                )}
+
+                                {/* UNC file */}
+                                {it.unc_file_url ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleViewUnc(it.unc_file_url)}
+                                    style={{
+                                      background: 'rgba(59, 130, 246, 0.08)',
+                                      border: '1px solid rgba(59, 130, 246, 0.2)',
+                                      borderRadius: '6px',
+                                      padding: '3px 8px',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '5px',
+                                      cursor: 'pointer',
+                                      color: '#2563eb',
+                                      fontSize: '0.7rem',
+                                      fontWeight: 700,
+                                      width: 'fit-content'
+                                    }}
+                                  >
+                                    <Eye size={12} />
+                                    <span>{t('Xem UNC')}</span>
+                                  </button>
+                                ) : (
+                                  isRowPaid && (
+                                    <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                                      {t('Chưa đính kèm UNC')}
+                                    </span>
+                                  )
+                                )}
+
+                                {it.paid_by_name && (
+                                  <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>
+                                    {it.paid_by_name} • {it.paid_at ? new Date(it.paid_at).toLocaleDateString('vi-VN') : ''}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Actions for Accountant */}
+                            {canManagePayment && (
+                              <td style={{ padding: '12px', textAlign: 'center' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'center' }}>
+                                  {!isRowPaid ? (
+                                    <>
+                                      {/* Upload UNC & Pay */}
+                                      <button
+                                        type="button"
+                                        disabled={isUploading || isPaying}
+                                        onClick={() => {
+                                          setTargetUploadIndex(idx);
+                                          uncFileInputRef.current?.click();
+                                        }}
+                                        style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '5px',
+                                          padding: '5px 10px',
+                                          borderRadius: '7px',
+                                          background: 'linear-gradient(135deg, #10b981, #059669)',
+                                          color: '#fff',
+                                          border: 'none',
+                                          fontWeight: 700,
+                                          fontSize: '0.72rem',
+                                          cursor: (isUploading || isPaying) ? 'not-allowed' : 'pointer',
+                                          boxShadow: '0 2px 6px rgba(16, 185, 129, 0.25)',
+                                          whiteSpace: 'nowrap'
+                                        }}
+                                      >
+                                        {isUploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+                                        <span>{t('Tải UNC & Chi')}</span>
+                                      </button>
+
+                                      {/* Direct Confirm Pay */}
+                                      <button
+                                        type="button"
+                                        disabled={isUploading || isPaying}
+                                        onClick={() => handleExecutePayItem(idx)}
+                                        style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '4px',
+                                          padding: '4px 8px',
+                                          borderRadius: '6px',
+                                          background: 'rgba(59, 130, 246, 0.08)',
+                                          color: '#2563eb',
+                                          border: '1px solid rgba(59, 130, 246, 0.2)',
+                                          fontWeight: 650,
+                                          fontSize: '0.7rem',
+                                          cursor: (isUploading || isPaying) ? 'not-allowed' : 'pointer',
+                                          whiteSpace: 'nowrap'
+                                        }}
+                                      >
+                                        {isPaying ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+                                        <span>{t('Xác nhận đã chi')}</span>
+                                      </button>
+                                    </>
+                                  ) : (
+                                    /* Already paid: Allow updating UNC if needed */
+                                    <button
+                                      type="button"
+                                      disabled={isUploading}
+                                      onClick={() => {
+                                        setTargetUploadIndex(idx);
+                                        uncFileInputRef.current?.click();
+                                      }}
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        padding: '3px 8px',
+                                        borderRadius: '6px',
+                                        background: 'var(--color-bg-secondary)',
+                                        color: 'var(--color-text-muted)',
+                                        border: '1px solid var(--color-border-light)',
+                                        fontWeight: 600,
+                                        fontSize: '0.68rem',
+                                        cursor: isUploading ? 'not-allowed' : 'pointer',
+                                        whiteSpace: 'nowrap'
+                                      }}
+                                    >
+                                      {isUploading ? <Loader2 size={10} className="animate-spin" /> : <Upload size={10} />}
+                                      <span>{it.unc_file_url ? t('Đổi tệp UNC') : t('+ Đính UNC')}</span>
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          }
+
+          const hasAnyVat = expenseItems.some((it: any) => Number(it.vat) > 0 || Number(it.vat_amount) > 0);
           const totalPreTax = expenseItems.reduce((sum: number, it: any) => {
             const qty = Number(it.quantity || it.qty || 1);
             const price = Number(it.unit_price || it.price || 0);
@@ -16277,6 +17217,14 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         isOpen={!!previewQrModalUrl}
         qrUrl={previewQrModalUrl}
         onClose={() => setPreviewQrModalUrl(null)}
+      />
+
+      <input 
+        type="file" 
+        ref={uncFileInputRef} 
+        onChange={handleCommissionFileUpload} 
+        accept="image/*,application/pdf" 
+        style={{ display: 'none' }} 
       />
             </motion.div>
           </>

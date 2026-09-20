@@ -1880,7 +1880,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       'gender', 'zalo_link', 'fb_link', 'customer_type', 'industry', 'budget_range', 'project_id', 'campaign_id', 'ttl1_completed', 'ttl1_data',
       'stage_id', 'pipeline_status', 'temperature', 'suggested_temperature', 'collaborator_ids', 'citizen_id', 'passport',
       'utm_campaign', 'utm_medium', 'utm_content', 'utm_term', 'platform', 'form_name',
-      'program', 'admission_date', 'student_id'
+      'program', 'admission_date', 'student_id', 'study_status'
     ];
     const payload: Record<string, any> = {};
     allowedFields.forEach(f => { if (formData[f] !== undefined) payload[f] = formData[f]; });
@@ -2056,7 +2056,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       contact_email: targetContactEmail,
       related_type: 'contact',
       related_id: targetContactId,
-      due_date: `${todayStr} 18:00:00`,
+      due_date: null,
       user_id: formData.owner_id || contact?.owner_id || currentUser?.id,
       created_by: currentUser?.id,
       type: 'task',
@@ -3755,6 +3755,213 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [drawerActivities, setDrawerActivities] = useState<any[]>([]);
   const [showQuoteEditor, setShowQuoteEditor] = useState(false);
   const [selectedQuote, setSelectedQuote] = useState<any>(null);
+
+  // Academic Study Status & Email Notification States
+  const [savingStudyStatus, setSavingStudyStatus] = useState(false);
+  const [showAcademicEmailModal, setShowAcademicEmailModal] = useState(false);
+  const [academicEmailTab, setAcademicEmailTab] = useState<'preview' | 'edit'>('preview');
+  const [isSendingAcademicEmail, setIsSendingAcademicEmail] = useState(false);
+  const [academicEmailForm, setAcademicEmailForm] = useState({
+    to_email: '',
+    cc_email: 'student.notice@ideas.edu.vn',
+    subject: '[IDEAS] Thông báo Tiếp nhận học viên & Hướng dẫn học tập - Swiss UMEF',
+    content: ''
+  });
+
+  const getAcademicEmailDefaultContent = useCallback((studentName: string) => {
+    const greeting = studentName ? `Kính gửi Quý Anh/Chị học viên <strong>${studentName}</strong>,` : 'Kính gửi Quý Anh/Chị học viên,';
+    return `<p>${greeting}</p>
+<p>Lời đầu tiên, Ban Công tác Sinh viên IDEAS xin gửi lời chúc mừng và trân trọng cảm ơn Anh/Chị đã tin chọn IDEAS làm người bạn đồng hành trên chặng đường chinh phục tấm bằng từ <strong>Đại học Swiss UMEF</strong>. Chúng tôi cam kết đồng hành và hỗ trợ Anh/Chị xuyên suốt quá trình học tập.</p>
+
+<p><strong style="color: #BD1D2D; font-size: 15px;">A. KÊNH LIÊN LẠC CHÍNH THỨC</strong></p>
+<p>1. <strong>Kênh Hỗ trợ Nhanh (Zalo/Hotline):</strong> 098 736 3935<br/>
+2. <strong>Kênh Hỗ trợ Học vụ (Email):</strong><br/>
+&nbsp;&nbsp;&bull; Tiếp nhận yêu cầu: <a href="mailto:support@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">support@ideas.edu.vn</a><br/>
+&nbsp;&nbsp;&bull; CC (Đồng gửi): <a href="mailto:student.notice@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">student.notice@ideas.edu.vn</a> <em>(Vui lòng luôn CC địa chỉ này để hệ thống ghi nhận và xử lý nhanh nhất)</em></p>
+
+<p><strong style="color: #BD1D2D; font-size: 15px;">B. TÀI KHOẢN HỌC TẬP</strong></p>
+<p>Anh/Chị sẽ được cấp 3 tài khoản học tập, sử dụng xuyên suốt chương trình:</p>
+<ul style="padding-left: 20px; line-height: 1.8;">
+  <li><strong>Tài khoản LMS IDEAS</strong> (xem tài liệu, video buổi học, hỗ trợ học thuật): <a href="https://lms.ideas.edu.vn/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://lms.ideas.edu.vn/</a> | Video hướng dẫn: <a href="https://lms.ideas.edu.vn/" target="_blank" rel="noreferrer" style="color: #BD1D2D; font-weight: 600;">LINK tại đây</a></li>
+  <li><strong>Tài khoản LMS UMEF</strong> (làm bài, nộp bài, tính điểm chính thức): <a href="https://portal.swiss-umef.ch/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://portal.swiss-umef.ch/</a></li>
+  <li><strong>Platform IDEAS AI</strong> (công cụ bổ trợ học tập): <a href="https://ai.ideas.edu.vn/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://ai.ideas.edu.vn/</a></li>
+</ul>
+<p><em>(Thông tin tài khoản sẽ được gửi trực tiếp đến email cá nhân của học viên đã đăng ký học tập)</em></p>
+
+<p><strong style="color: #BD1D2D; font-size: 15px;">C. TÀI LIỆU ĐÍNH KÈM</strong></p>
+<ul style="padding-left: 20px; line-height: 1.8;">
+  <li>File giải thích Format APA</li>
+  <li>File hướng dẫn sử dụng các hệ thống học tập</li>
+  <li>Hướng dẫn sử dụng Zoom Meeting &amp; Format bài làm mẫu</li>
+</ul>
+<p>Link tổng hợp tài liệu hướng dẫn: <a href="https://lms.ideas.edu.vn/" target="_blank" rel="noreferrer" style="color: #BD1D2D; font-weight: 600;">LINK tại đây</a></p>
+
+<p>Nếu có bất kỳ vướng mắc nào, Anh/Chị vui lòng liên hệ CTSV để được hỗ trợ kịp thời. Chúc Anh/Chị có hành trình học tập thật thuận lợi và thành công!</p>
+
+<p style="margin-top: 20px;">Trân trọng,<br/><strong>Ban Công tác Sinh viên IDEAS</strong></p>`;
+  }, []);
+
+  const handleOpenAcademicEmailModal = () => {
+    const studentName = (formData.full_name || contact?.full_name || '').trim();
+    const recipientEmail = (formData.email || contact?.email || '').trim();
+    setAcademicEmailForm({
+      to_email: recipientEmail,
+      cc_email: 'student.notice@ideas.edu.vn',
+      subject: `[IDEAS] Thông báo Tiếp nhận học viên & Hướng dẫn học tập - Swiss UMEF`,
+      content: getAcademicEmailDefaultContent(studentName)
+    });
+    setAcademicEmailTab('preview');
+    setShowAcademicEmailModal(true);
+  };
+
+  // Study Status Transition Modal State
+  const [studyStatusModal, setStudyStatusModal] = useState<{
+    isOpen: boolean;
+    targetStatus: 'studying' | 'completed' | 'reserved';
+    targetLabel: string;
+    note: string;
+    notifyUserIds: number[];
+  }>({
+    isOpen: false,
+    targetStatus: 'studying',
+    targetLabel: 'Đang học',
+    note: '',
+    notifyUserIds: []
+  });
+  const [showStudyStatusNotifyDropdown, setShowStudyStatusNotifyDropdown] = useState(false);
+  const [studyStatusNotifySearch, setStudyStatusNotifySearch] = useState('');
+  const studyStatusNotifyDropdownRef = useRef<HTMLDivElement>(null);
+  const [isSubmittingStudyStatus, setIsSubmittingStudyStatus] = useState(false);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (studyStatusNotifyDropdownRef.current && !studyStatusNotifyDropdownRef.current.contains(e.target as Node)) {
+        setShowStudyStatusNotifyDropdown(false);
+      }
+    };
+    if (showStudyStatusNotifyDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showStudyStatusNotifyDropdown]);
+
+  const handleOpenStudyStatusModal = (targetStatus: 'studying' | 'completed' | 'reserved') => {
+    const currentStatus = (formData.study_status || 'studying') as 'studying' | 'completed' | 'reserved';
+    if (currentStatus === targetStatus) return;
+
+    const statusLabels: Record<string, string> = {
+      studying: 'Đang học',
+      completed: 'Đã hoàn thành',
+      reserved: 'Bảo lưu'
+    };
+
+    // Default recipients: include contact assigned sale (owner) and Mai Thị Nữ
+    const defaultNotifyIds: number[] = [];
+    const ownerId = Number(formData.owner_id || contact?.owner_id || 0);
+    if (ownerId > 0 && ownerId !== Number(currentUser?.id)) {
+      defaultNotifyIds.push(ownerId);
+    }
+
+    const maiThiNuUser = users.find((u: any) =>
+      u.email === 'numt@ideas.edu.vn' || u.username === 'numt' || String(u.full_name || '').toLowerCase().includes('thị nữ') || Number(u.id) === 100062
+    );
+    const maiThiNuId = maiThiNuUser ? Number(maiThiNuUser.id) : 100062;
+    if (maiThiNuId > 0 && maiThiNuId !== Number(currentUser?.id) && !defaultNotifyIds.includes(maiThiNuId)) {
+      defaultNotifyIds.push(maiThiNuId);
+    }
+
+    setStudyStatusModal({
+      isOpen: true,
+      targetStatus,
+      targetLabel: statusLabels[targetStatus] || targetStatus,
+      note: '',
+      notifyUserIds: defaultNotifyIds
+    });
+    setShowStudyStatusNotifyDropdown(false);
+    setStudyStatusNotifySearch('');
+  };
+
+  const handleConfirmStudyStatusChange = async () => {
+    if (!effectiveContactId || isSubmittingStudyStatus) return;
+    if (!studyStatusModal.note?.trim()) {
+      addToast('Vui lòng nhập lý do / ghi chú chuyển trạng thái học tập!', 'warning');
+      return;
+    }
+
+    setIsSubmittingStudyStatus(true);
+    try {
+      const res = await api.post(`/contacts/${effectiveContactId}/study-status`, {
+        study_status: studyStatusModal.targetStatus,
+        note: studyStatusModal.note.trim(),
+        notify_user_ids: studyStatusModal.notifyUserIds || []
+      });
+
+      if (res.data?.success || res.status === 200) {
+        addToast(`Đã chuyển trạng thái học tập sang "${studyStatusModal.targetLabel}" và gửi thông báo thành công!`, 'success');
+        setFormData((prev: any) => ({ ...prev, study_status: studyStatusModal.targetStatus }));
+        setStudyStatusModal(prev => ({ ...prev, isOpen: false }));
+
+        if (res.data?.data?.activity) {
+          setDrawerActivities((prev: any[]) => [res.data.data.activity, ...prev]);
+        }
+        window.dispatchEvent(new CustomEvent('activity-added'));
+        window.dispatchEvent(new CustomEvent('contact-updated'));
+        window.dispatchEvent(new CustomEvent('notification-trigger'));
+        onUpdate?.({ ...formData, study_status: studyStatusModal.targetStatus });
+      } else {
+        addToast(res.data?.message || 'Lỗi khi chuyển trạng thái', 'error');
+      }
+    } catch (e: any) {
+      addToast(e?.response?.data?.message || 'Lỗi khi cập nhật trạng thái học tập', 'error');
+    } finally {
+      setIsSubmittingStudyStatus(false);
+    }
+  };
+
+  const handleSendAcademicEmail = async () => {
+    if (!effectiveContactId || isSendingAcademicEmail) return;
+    if (!academicEmailForm.to_email?.trim()) {
+      addToast('Vui lòng nhập email người nhận!', 'error');
+      return;
+    }
+    if (!academicEmailForm.subject?.trim()) {
+      addToast('Vui lòng nhập tiêu đề email!', 'error');
+      return;
+    }
+    if (!academicEmailForm.content?.trim()) {
+      addToast('Vui lòng nhập nội dung email!', 'error');
+      return;
+    }
+
+    setIsSendingAcademicEmail(true);
+    try {
+      const res = await api.post(`/contacts/${effectiveContactId}/send-academic-email`, {
+        to_email: academicEmailForm.to_email.trim(),
+        cc_email: academicEmailForm.cc_email.trim(),
+        subject: academicEmailForm.subject.trim(),
+        content: academicEmailForm.content.trim()
+      });
+
+      if (res.data?.success || res.status === 200) {
+        addToast('Đã gửi email và ghi nhận vào Lịch sử tương tác thành công!', 'success');
+        setShowAcademicEmailModal(false);
+
+        if (res.data?.data?.activity) {
+          setDrawerActivities((prev: any[]) => [res.data.data.activity, ...prev]);
+        }
+        window.dispatchEvent(new CustomEvent('activity-added'));
+        window.dispatchEvent(new CustomEvent('contact-updated'));
+      } else {
+        addToast(res.data?.message || 'Lỗi khi gửi email', 'error');
+      }
+    } catch (e: any) {
+      addToast(e?.response?.data?.message || 'Không thể gửi email lúc này. Vui lòng thử lại!', 'error');
+    } finally {
+      setIsSendingAcademicEmail(false);
+    }
+  };
 
   const [loadingRelated, setLoadingRelated] = useState(false);
 
@@ -6546,10 +6753,15 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     );
     const huyenTramId = huyenTramUser ? Number(huyenTramUser.id) : 100073;
 
+    const hieuNganUser = users.find((u: any) =>
+      u.email === 'nganph@ideas.edu.vn' || u.username === 'nganph' || String(u.full_name || '').toLowerCase().includes('hiếu ngân') || Number(u.id) === 100076
+    );
+    const hieuNganId = hieuNganUser ? Number(hieuNganUser.id) : 100076;
+
     let defaultNotifyIds: number[] = [];
     if (isStage14(targetStageObj)) {
-      // Bất kì đâu lên 14: mặc định thông báo cả Mai Thị Nữ và Lê Thị Huyền Trâm
-      defaultNotifyIds = [maiThiNuId, huyenTramId].filter(Boolean);
+      // Bất kì đâu lên 14: mặc định thông báo Mai Thị Nữ, Lê Thị Huyền Trâm và Phan Hiếu Ngân
+      defaultNotifyIds = [maiThiNuId, huyenTramId, hieuNganId].filter(Boolean);
     } else if (isStage13(targetStageObj)) {
       // Bất kì đâu lên 13: mặc định thông báo cả Mai Thị Nữ và Đặng Khánh Linh
       defaultNotifyIds = [maiThiNuId, saleAdminId].filter(Boolean);
@@ -9955,9 +10167,102 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                         flexDirection: 'column',
                         gap: '1.25rem'
                       }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '0.75rem', marginBottom: '0.25rem' }}>
-                          <BookOpen size={18} style={{ color: 'var(--color-primary)' }} />
-                          <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Khóa học tham gia</h4>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '0.75rem', marginBottom: '0.25rem', flexWrap: 'wrap', gap: '10px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <BookOpen size={18} style={{ color: 'var(--color-primary)' }} />
+                            <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Khóa học & Trạng thái học tập</h4>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={handleOpenAcademicEmailModal}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              fontSize: '0.8125rem',
+                              fontWeight: 700,
+                              color: '#ffffff',
+                              background: 'linear-gradient(135deg, #BD1D2D, #8C111E)',
+                              border: 'none',
+                              padding: '7px 14px',
+                              borderRadius: '8px',
+                              cursor: 'pointer',
+                              boxShadow: '0 2px 6px rgba(189, 29, 45, 0.25)',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.transform = 'translateY(-1px)';
+                              e.currentTarget.style.boxShadow = '0 4px 10px rgba(189, 29, 45, 0.35)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.transform = 'none';
+                              e.currentTarget.style.boxShadow = '0 2px 6px rgba(189, 29, 45, 0.25)';
+                            }}
+                          >
+                            <Mail size={15} />
+                            Gửi Email Tiếp nhận / Nhắc nhở
+                          </button>
+                        </div>
+
+                        {/* Trạng thái học tập của học viên */}
+                        <div style={{ padding: '12px 14px', background: 'var(--color-bg)', borderRadius: '12px', border: '1px solid var(--color-border-light)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                              Trạng thái học tập của học viên:
+                            </span>
+                            {savingStudyStatus && (
+                              <span style={{ fontSize: '0.75rem', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <Loader2 size={12} className="animate-spin" /> Đang cập nhật...
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: isMobileOrTablet ? '1fr' : 'repeat(3, 1fr)', gap: '10px' }}>
+                            {[
+                              { id: 'studying', label: 'Đang học', color: '#16a34a', bg: '#f0fdf4', activeBg: '#dcfce7', border: '#86efac', dot: '#22c55e' },
+                              { id: 'completed', label: 'Đã hoàn thành', color: '#2563eb', bg: '#eff6ff', activeBg: '#dbeafe', border: '#93c5fd', dot: '#3b82f6' },
+                              { id: 'reserved', label: 'Bảo lưu', color: '#d97706', bg: '#fffbeb', activeBg: '#fef3c7', border: '#fde68a', dot: '#f59e0b' }
+                            ].map(st => {
+                              const currentStatus = formData.study_status || 'studying';
+                              const isSelected = currentStatus === st.id;
+                              return (
+                                <button
+                                  key={st.id}
+                                  type="button"
+                                  onClick={() => handleOpenStudyStatusModal(st.id as any)}
+                                  disabled={isSubmittingStudyStatus}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    padding: '10px 14px',
+                                    borderRadius: '10px',
+                                    fontSize: '0.8125rem',
+                                    fontWeight: isSelected ? 800 : 600,
+                                    cursor: savingStudyStatus ? 'not-allowed' : 'pointer',
+                                    transition: 'all 0.15s ease',
+                                    border: isSelected ? `2px solid ${st.color}` : '1px solid var(--color-border)',
+                                    background: isSelected ? st.activeBg : 'var(--color-surface)',
+                                    color: isSelected ? st.color : 'var(--color-text)',
+                                    boxShadow: isSelected ? `0 2px 8px ${st.color}25` : 'none'
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{
+                                      width: '10px',
+                                      height: '10px',
+                                      borderRadius: '50%',
+                                      background: st.dot,
+                                      display: 'inline-block',
+                                      boxShadow: isSelected ? `0 0 0 3px ${st.dot}33` : 'none'
+                                    }} />
+                                    <span>{st.label}</span>
+                                  </div>
+                                  {isSelected && <Check size={16} style={{ color: st.color, strokeWidth: 3 }} />}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
 
                         <div style={{ display: 'grid', gridTemplateColumns: isMobileOrTablet ? '1fr' : '1fr 1fr', gap: '1.25rem' }}>
@@ -18050,6 +18355,673 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
             window.dispatchEvent(new CustomEvent('contact-updated'));
           }}
         />
+      )}
+
+      {/* ACADEMIC EMAIL PREVIEW & EDIT MODAL */}
+      {showAcademicEmailModal && (
+        <CustomModal
+          isOpen={showAcademicEmailModal}
+          onClose={() => setShowAcademicEmailModal(false)}
+          title="✉️ Gửi Email Tiếp nhận học viên & Hướng dẫn học tập"
+          width="780px"
+          zIndex={effectiveZIndex + 25}
+        >
+          <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1.125rem' }}>
+            {/* Header banner info */}
+            <div style={{
+              padding: '10px 14px',
+              background: '#f8fafc',
+              borderRadius: '10px',
+              border: '1px solid #e2e8f0',
+              fontSize: '0.8125rem',
+              color: '#475569',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              <Sparkles size={16} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+              <div>
+                Hệ thống sẽ gửi email tới học viên và tự động ghi lại bản ghi nhật ký tại <strong>Lịch sử tương tác</strong> với tên của bạn.
+              </div>
+            </div>
+
+            {/* Email Recipients Row */}
+            <div style={{ display: 'grid', gridTemplateColumns: isMobileOrTablet ? '1fr' : '1fr 1fr', gap: '1rem' }}>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.8rem' }}>
+                  Email người nhận (To) <span style={{ color: 'var(--color-danger)' }}>*</span>
+                </label>
+                <input
+                  type="email"
+                  className="form-input"
+                  placeholder="học viên@email.com"
+                  value={academicEmailForm.to_email}
+                  onChange={e => setAcademicEmailForm(prev => ({ ...prev, to_email: e.target.value }))}
+                />
+              </div>
+
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.8rem' }}>
+                  CC (Đồng gửi)
+                </label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="student.notice@ideas.edu.vn, ..."
+                  value={academicEmailForm.cc_email}
+                  onChange={e => setAcademicEmailForm(prev => ({ ...prev, cc_email: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            {/* Email Subject */}
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label" style={{ fontWeight: 700, fontSize: '0.8rem' }}>
+                Tiêu đề email <span style={{ color: 'var(--color-danger)' }}>*</span>
+              </label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="Nhập tiêu đề email..."
+                value={academicEmailForm.subject}
+                onChange={e => setAcademicEmailForm(prev => ({ ...prev, subject: e.target.value }))}
+              />
+            </div>
+
+            {/* Content Tabs (Preview / Edit) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                <label className="form-label" style={{ margin: 0, fontWeight: 700, fontSize: '0.8rem' }}>
+                  Nội dung email <span style={{ color: 'var(--color-danger)' }}>*</span>
+                </label>
+
+                <div style={{ display: 'flex', gap: '4px', background: 'var(--color-bg)', padding: '3px', borderRadius: '8px', border: '1px solid var(--color-border-light)' }}>
+                  <button
+                    type="button"
+                    onClick={() => setAcademicEmailTab('preview')}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      background: academicEmailTab === 'preview' ? 'var(--color-surface)' : 'transparent',
+                      color: academicEmailTab === 'preview' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                      boxShadow: academicEmailTab === 'preview' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                    }}
+                  >
+                    <Eye size={12} />
+                    Xem trước (Preview)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAcademicEmailTab('edit')}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      background: academicEmailTab === 'edit' ? 'var(--color-surface)' : 'transparent',
+                      color: academicEmailTab === 'edit' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                      boxShadow: academicEmailTab === 'edit' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                    }}
+                  >
+                    <Pencil size={12} />
+                    Chỉnh sửa (HTML/Text)
+                  </button>
+                </div>
+              </div>
+
+              {academicEmailTab === 'preview' ? (
+                <div style={{
+                  maxHeight: '440px',
+                  overflowY: 'auto',
+                  background: '#f1f5f9',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.04)'
+                }}>
+                  <div style={{
+                    maxWidth: '640px',
+                    margin: '0 auto',
+                    background: '#ffffff',
+                    borderRadius: '10px',
+                    overflow: 'hidden',
+                    border: '1px solid #e2e8f0',
+                    boxShadow: '0 4px 14px rgba(0,0,0,0.06)'
+                  }}>
+                    {/* Email Template Header */}
+                    <div style={{
+                      background: 'linear-gradient(135deg, #BD1D2D 0%, #8C111E 100%)',
+                      padding: '20px 24px',
+                      color: '#ffffff'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.2)', paddingBottom: '10px', marginBottom: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{
+                            width: '28px',
+                            height: '28px',
+                            borderRadius: '6px',
+                            background: 'rgba(255,255,255,0.2)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: 900,
+                            fontSize: '14px',
+                            color: '#ffffff'
+                          }}>
+                            I
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 900, fontSize: '1.1rem', letterSpacing: '0.05em', lineHeight: 1.1 }}>IDEAS</div>
+                            <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', opacity: 0.85, letterSpacing: '0.08em', fontWeight: 600 }}>Viện Đào tạo &amp; Phát triển Nhân lực</div>
+                          </div>
+                        </div>
+                        <div style={{ fontSize: '0.72rem', background: 'rgba(0,0,0,0.2)', padding: '3px 8px', borderRadius: '4px', opacity: 0.9 }}>
+                          Academic Department
+                        </div>
+                      </div>
+                      <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#ffffff', lineHeight: 1.35 }}>
+                        {academicEmailForm.subject || 'Thông báo từ Ban Học vụ IDEAS'}
+                      </div>
+                    </div>
+
+                    {/* Email Template Body */}
+                    <div style={{
+                      padding: '24px',
+                      fontSize: '0.875rem',
+                      lineHeight: '1.65',
+                      color: '#334155'
+                    }}>
+                      <div dangerouslySetInnerHTML={{ __html: academicEmailForm.content }} />
+                    </div>
+
+                    {/* Email Template Footer */}
+                    <div style={{
+                      background: '#f8fafc',
+                      borderTop: '1px solid #e2e8f0',
+                      padding: '16px 24px',
+                      fontSize: '0.75rem',
+                      color: '#64748b',
+                      lineHeight: '1.5'
+                    }}>
+                      <div style={{ fontWeight: 700, color: '#334155', marginBottom: '2px' }}>
+                        Ban Công tác Sinh viên &amp; Học vụ - Viện IDEAS
+                      </div>
+                      <div>
+                        Hotline / Zalo: <strong style={{ color: '#BD1D2D' }}>098 736 3935</strong> | Email: <span style={{ color: '#BD1D2D' }}>support@ideas.edu.vn</span>
+                      </div>
+                      <div style={{ marginTop: '6px', fontSize: '0.7rem', color: '#94a3b8' }}>
+                        &copy; {new Date().getFullYear()} IDEAS Institute. All rights reserved.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <textarea
+                  className="form-input"
+                  style={{
+                    minHeight: '280px',
+                    fontFamily: 'Consolas, Monaco, monospace',
+                    fontSize: '0.8125rem',
+                    lineHeight: '1.5',
+                    padding: '12px'
+                  }}
+                  value={academicEmailForm.content}
+                  onChange={e => setAcademicEmailForm(prev => ({ ...prev, content: e.target.value }))}
+                />
+              )}
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '0.5rem', paddingTop: '10px', borderTop: '1px solid var(--color-border-light)' }}>
+              <button
+                type="button"
+                className="btn outline"
+                onClick={() => setShowAcademicEmailModal(false)}
+                disabled={isSendingAcademicEmail}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                className="btn primary"
+                onClick={handleSendAcademicEmail}
+                disabled={isSendingAcademicEmail}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  minWidth: '120px',
+                  justifyContent: 'center',
+                  background: 'linear-gradient(135deg, #BD1D2D, #8C111E)'
+                }}
+              >
+                {isSendingAcademicEmail ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Đang gửi...
+                  </>
+                ) : (
+                  <>
+                    <Send size={15} />
+                    Gửi email
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </CustomModal>
+      )}
+
+      {/* STUDY STATUS TRANSITION MODAL */}
+      {studyStatusModal.isOpen && (
+        <CustomModal
+          isOpen={studyStatusModal.isOpen}
+          onClose={() => !isSubmittingStudyStatus && setStudyStatusModal(prev => ({ ...prev, isOpen: false }))}
+          title="🎓 Chuyển trạng thái học tập của học viên"
+          width="560px"
+          zIndex={effectiveZIndex + 25}
+        >
+          <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {/* Transition Badge Header */}
+            {(() => {
+              const currentStatus = (formData.study_status || 'studying') as string;
+              const statusMeta: Record<string, { label: string; color: string; bg: string }> = {
+                studying: { label: 'Đang học', color: '#16a34a', bg: '#dcfce7' },
+                completed: { label: 'Đã hoàn thành', color: '#2563eb', bg: '#dbeafe' },
+                reserved: { label: 'Bảo lưu', color: '#d97706', bg: '#fef3c7' }
+              };
+              const cur = statusMeta[currentStatus] || { label: currentStatus, color: '#64748b', bg: '#f1f5f9' };
+              const target = statusMeta[studyStatusModal.targetStatus] || { label: studyStatusModal.targetLabel, color: '#BD1D2D', bg: '#fee2e2' };
+
+              return (
+                <div style={{
+                  padding: '12px 14px',
+                  borderRadius: '10px',
+                  background: 'var(--color-bg)',
+                  border: '1px solid var(--color-border-light)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '8px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}>
+                    <span style={{
+                      padding: '3px 10px',
+                      borderRadius: '12px',
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      background: cur.bg,
+                      color: cur.color,
+                      border: `1px solid ${cur.color}40`
+                    }}>
+                      {cur.label}
+                    </span>
+                    <span style={{ color: 'var(--color-text-muted)', fontWeight: 700 }}>➔</span>
+                    <span style={{
+                      padding: '3px 12px',
+                      borderRadius: '12px',
+                      fontSize: '0.82rem',
+                      fontWeight: 800,
+                      background: target.bg,
+                      color: target.color,
+                      border: `1px solid ${target.color}60`,
+                      boxShadow: `0 2px 6px ${target.color}20`
+                    }}>
+                      {target.label}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
+                    Học viên: <strong style={{ color: 'var(--color-text)' }}>{formData.full_name || contact?.full_name}</strong>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Quick Reason Suggestions */}
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, marginBottom: '6px', color: 'var(--color-text)' }}>
+                Gợi ý lý do chuyển trạng thái nhanh:
+              </label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {(() => {
+                  const quickReasons: Record<string, string[]> = {
+                    reserved: [
+                      'Bảo lưu kỳ 1 theo nguyện vọng học viên',
+                      'Tạm hoãn học tập do công tác / việc cá nhân',
+                      'Bảo lưu chuyển tiếp sang khóa sau',
+                      'Chờ hoàn tất thủ tục tài chính'
+                    ],
+                    completed: [
+                      'Đã hoàn thành toàn bộ chương trình và đồ án',
+                      'Đã bảo vệ luận văn & đủ điều kiện tốt nghiệp',
+                      'Đã nhận chứng chỉ / văn bằng tốt nghiệp',
+                      'Hoàn tất khóa học xuất sắc'
+                    ],
+                    studying: [
+                      'Quay trở lại học tập sau thời gian bảo lưu',
+                      'Bắt đầu học kỳ mới chính thức',
+                      'Cập nhật lại trạng thái theo dõi học vụ'
+                    ]
+                  };
+                  const list = quickReasons[studyStatusModal.targetStatus] || quickReasons.studying;
+
+                  return list.map((reason, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setStudyStatusModal(prev => ({
+                        ...prev,
+                        note: prev.note ? `${prev.note}; ${reason}` : reason
+                      }))}
+                      style={{
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                        padding: '4px 10px',
+                        borderRadius: '14px',
+                        border: '1px solid var(--color-border)',
+                        background: 'var(--color-surface)',
+                        color: 'var(--color-text)',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                      className="hover-lift"
+                    >
+                      + {reason}
+                    </button>
+                  ));
+                })()}
+              </div>
+            </div>
+
+            {/* Note / Reason (Mandatory) */}
+            <div>
+              <label className="form-label" style={{ fontWeight: 700, fontSize: '0.8rem', marginBottom: '6px' }}>
+                Lý do / Ghi chú cập nhật học vụ <span style={{ color: 'var(--color-danger)' }}>*</span>
+              </label>
+              <textarea
+                className="form-input"
+                rows={3}
+                placeholder="Nhập lý do chi tiết chuyển trạng thái học tập (bắt buộc)..."
+                value={studyStatusModal.note}
+                onChange={e => setStudyStatusModal(prev => ({ ...prev, note: e.target.value }))}
+                style={{ width: '100%', fontSize: '0.825rem', padding: '8px 12px', resize: 'vertical' }}
+              />
+            </div>
+
+            {/* Notify Users Section */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.8rem', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Bell size={14} style={{ color: 'var(--color-primary)' }} />
+                  <span>Người nhận thông báo nội bộ</span>
+                </label>
+                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                  {(studyStatusModal.notifyUserIds || []).length} người nhận
+                </span>
+              </div>
+
+              {/* Selected User Pills */}
+              <div style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '6px',
+                padding: '8px',
+                background: 'var(--color-bg-alt, rgba(0,0,0,0.02))',
+                borderRadius: '8px',
+                border: '1px solid var(--color-border-light)',
+                minHeight: '40px',
+                alignItems: 'center',
+                marginBottom: '6px'
+              }}>
+                {(studyStatusModal.notifyUserIds || []).length === 0 ? (
+                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontStyle: 'italic', padding: '2px 4px' }}>
+                    Chưa chọn nhân sự nào nhận thông báo (chọn thêm bên dưới)
+                  </span>
+                ) : (
+                  (studyStatusModal.notifyUserIds || []).map((uid: number) => {
+                    const u = users.find((x: any) => Number(x.id) === Number(uid));
+                    const uName = u?.full_name || u?.name || `ID ${uid}`;
+                    return (
+                      <span
+                        key={uid}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '3px 8px',
+                          borderRadius: '16px',
+                          background: 'var(--color-surface)',
+                          border: '1px solid var(--color-border)',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          color: 'var(--color-text)',
+                          boxShadow: 'var(--shadow-xs)'
+                        }}
+                      >
+                        <Avatar src={u?.avatar_url || u?.avatar} name={uName} size={18} />
+                        <span>{uName}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStudyStatusModal(prev => ({
+                              ...prev,
+                              notifyUserIds: (prev.notifyUserIds || []).filter(id => id !== uid)
+                            }));
+                          }}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            padding: '1px',
+                            color: 'var(--color-text-muted)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            borderRadius: '50%'
+                          }}
+                          title="Xóa người này"
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Add User Dropdown */}
+              <div style={{ position: 'relative' }} ref={studyStatusNotifyDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowStudyStatusNotifyDropdown(prev => !prev);
+                    setStudyStatusNotifySearch('');
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '5px 12px',
+                    borderRadius: '8px',
+                    fontSize: '0.78rem',
+                    fontWeight: 600,
+                    color: 'var(--color-primary)',
+                    background: 'rgba(189, 29, 45, 0.06)',
+                    border: '1px solid rgba(189, 29, 45, 0.25)',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                  className="hover-lift"
+                >
+                  <UserPlus size={13} />
+                  <span>+ Thêm nhân sự nhận thông báo...</span>
+                  <ChevronDown size={13} style={{ transform: showStudyStatusNotifyDropdown ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                </button>
+
+                {showStudyStatusNotifyDropdown && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 6px)',
+                      left: 0,
+                      zIndex: 99999,
+                      background: 'var(--color-surface, #ffffff)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: '12px',
+                      boxShadow: '0 10px 30px rgba(0, 0, 0, 0.15)',
+                      minWidth: '280px',
+                      maxWidth: '360px',
+                      maxHeight: '260px',
+                      overflowY: 'auto',
+                      padding: '8px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px'
+                    }}
+                  >
+                    <div style={{ position: 'sticky', top: 0, background: 'var(--color-surface, #ffffff)', zIndex: 10, paddingBottom: '6px' }}>
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <Search size={13} style={{ position: 'absolute', left: '8px', color: 'var(--color-text-muted)', pointerEvents: 'none' }} />
+                        <input
+                          type="text"
+                          placeholder="Tìm nhân sự..."
+                          value={studyStatusNotifySearch}
+                          onChange={(e) => setStudyStatusNotifySearch(e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                          style={{
+                            width: '100%',
+                            padding: '6px 8px 6px 26px',
+                            fontSize: '0.75rem',
+                            borderRadius: '6px',
+                            border: '1px solid var(--color-border)',
+                            background: 'var(--color-bg)',
+                            color: 'var(--color-text)',
+                            outline: 'none',
+                            boxSizing: 'border-box'
+                          }}
+                          autoFocus
+                        />
+                      </div>
+                    </div>
+
+                    {(() => {
+                      const query = studyStatusNotifySearch.trim().toLowerCase();
+                      const filteredUsers = users.filter((u: any) => {
+                        if (!query) return true;
+                        const fullName = (u.full_name || u.name || '').toLowerCase();
+                        const email = (u.email || '').toLowerCase();
+                        const title = (u.job_title || u.role || '').toLowerCase();
+                        return fullName.includes(query) || email.includes(query) || title.includes(query);
+                      });
+
+                      if (filteredUsers.length === 0) {
+                        return (
+                          <div style={{ textAlign: 'center', padding: '12px 6px', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                            Không tìm thấy nhân sự
+                          </div>
+                        );
+                      }
+
+                      return filteredUsers.map((u: any) => {
+                        const isSelected = (studyStatusModal.notifyUserIds || []).includes(Number(u.id));
+                        const uName = u.full_name || u.name || `User #${u.id}`;
+                        return (
+                          <div
+                            key={u.id}
+                            onClick={() => {
+                              const uid = Number(u.id);
+                              const currentList = studyStatusModal.notifyUserIds || [];
+                              const nextList = isSelected
+                                ? currentList.filter(id => id !== uid)
+                                : [...currentList, uid];
+                              setStudyStatusModal(prev => ({ ...prev, notifyUserIds: nextList }));
+                            }}
+                            style={{
+                              padding: '6px 8px',
+                              borderRadius: '8px',
+                              cursor: 'pointer',
+                              fontSize: '0.75rem',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              background: isSelected ? 'rgba(189, 29, 45, 0.08)' : 'transparent',
+                              color: isSelected ? 'var(--color-primary)' : 'var(--color-text)',
+                              fontWeight: isSelected ? 600 : 400,
+                              transition: 'background 0.15s ease'
+                            }}
+                            className="hover-bg-alt"
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+                              <Avatar src={u.avatar || u.avatar_url} name={uName} size={22} />
+                              <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                                  {uName}
+                                </span>
+                              </div>
+                            </div>
+                            {isSelected && (
+                              <Check size={14} color="var(--color-primary)" strokeWidth={2.5} style={{ flexShrink: 0, marginLeft: '6px' }} />
+                            )}
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Actions Footer */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '0.5rem', paddingTop: '12px', borderTop: '1px solid var(--color-border-light)' }}>
+              <button
+                type="button"
+                className="btn outline"
+                onClick={() => setStudyStatusModal(prev => ({ ...prev, isOpen: false }))}
+                disabled={isSubmittingStudyStatus}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                className="btn primary"
+                onClick={handleConfirmStudyStatusChange}
+                disabled={isSubmittingStudyStatus || !studyStatusModal.note?.trim()}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  minWidth: '130px',
+                  justifyContent: 'center',
+                  background: 'var(--color-primary)'
+                }}
+              >
+                {isSubmittingStudyStatus ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Đang lưu...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 size={15} />
+                    Xác nhận chuyển
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </CustomModal>
       )}
     </>,
     document.body

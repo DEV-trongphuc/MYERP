@@ -125,9 +125,14 @@ export function isItemAtMyStepToApprove(item: any, user: any, usersByNameMap?: M
   const isManagerOrLeader = ['manager', 'director', 'admin', 'superadmin', 'super_admin', 'leader', 'truongphong', 'head_of_department'].includes(currentRole) || Boolean((user as any)?.is_team_leader);
 
   // Người tạo KHÔNG tự phê duyệt yêu cầu của chính mình trong "Chờ duyệt"
-  // NGOẠI LỆ: Trưởng phòng / Quản lý được quyền tự tạo, tự duyệt chấm công cho mình
+  // NGOẠI LỆ 1: Trưởng phòng / Quản lý được quyền tự tạo, tự duyệt chấm công cho mình
+  // NGOẠI LỆ 2: Quy trình Hoa hồng (commission_payout) cho phép người tạo tự duyệt bước của mình
+  const isCommission = (item.category === 'commission' || 
+                        item.type === 'commission_payout' || 
+                        (item.title && typeof item.title === 'string' && item.title.toLowerCase().includes('hoa hồng')) || 
+                        (item.notes && typeof item.notes === 'string' && item.notes.toLowerCase().includes('hoa hồng')));
   if ((currentUid > 0 && itemUid === currentUid) || (currentUserName && itEmpName === currentUserName)) {
-    if (!isAttendance || !isManagerOrLeader) {
+    if (!isCommission && (!isAttendance || !isManagerOrLeader)) {
       return false;
     }
   }
