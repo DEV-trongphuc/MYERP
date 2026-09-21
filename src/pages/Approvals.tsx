@@ -12,7 +12,7 @@ import {
   FileCheck, Settings, ArrowLeft, X, Save, GitBranch, Clock3, Copy, Bell, Edit, Pencil, RefreshCw, Eye, MessageSquare, Info, Loader2,
   UserPlus, Check, MoreHorizontal, Filter, Zap, Download, Upload, Image as ImageIcon, Building2, Truck,
   GraduationCap, Utensils, Phone, Mail, MapPin, Sparkles, AlertCircle, Bookmark, Edit3,
-  Landmark, Wallet, BarChart2, Palmtree, QrCode, Coffee, Tag, Globe
+  Landmark, Wallet, BarChart2, Palmtree, QrCode, Coffee, Tag, Globe, ExternalLink
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { DraftExitConfirmModal } from '../components/ui/DraftExitConfirmModal';
@@ -1283,8 +1283,18 @@ export default function Approvals() {
       const appVal3 = activeApproverChain[2] || null;
 
       let finalApproverId = activeApproverChain.length > 0 ? activeApproverChain[activeApproverChain.length - 1] : (proposerUser?.id || 1003);
+      
+      // Đối với quy trình In, đóng dấu và gửi hồ sơ:
+      // Người duyệt duy nhất (Xác nhận hoàn thành) là Người thực hiện (pssExecutorId / Duy Phương)
+      let effectiveAppVal1 = appVal1;
+      let effectiveAppVal2 = appVal2;
+      let effectiveAppVal3 = appVal3;
+
       if (selectedWorkflowDef?.id === 'print_stamp_send') {
-        finalApproverId = Number(pssExecutorId) || finalApproverId;
+        effectiveAppVal1 = Number(pssExecutorId) || Number(user?.id) || 1003;
+        effectiveAppVal2 = null;
+        effectiveAppVal3 = null;
+        finalApproverId = effectiveAppVal1;
       }
 
       // Always ensure HR Leader / Hành chính is included in related users for attendance/HR workflows
@@ -1647,9 +1657,9 @@ export default function Approvals() {
             notes: generalDesc,
             amount: totalStationeryCost,
             vat_amount: totalStationeryVat || 0,
-            approver_id: appVal1 || finalApproverId,
-            approver_id_2: appVal2,
-            approver_id_3: appVal3,
+            approver_id: effectiveAppVal1 || finalApproverId,
+            approver_id_2: effectiveAppVal2,
+            approver_id_3: effectiveAppVal3,
             related_user_ids: relatedUserIds,
             currency: currencyType,
             image_url: attachments[0]?.url || null,
@@ -1667,9 +1677,9 @@ export default function Approvals() {
             amount: totalStationeryCost,
             vat_amount: totalStationeryVat || 0,
             status: 'pending',
-            approver_id: appVal1 || finalApproverId,
-            approver_id_2: appVal2,
-            approver_id_3: appVal3,
+            approver_id: effectiveAppVal1 || finalApproverId,
+            approver_id_2: effectiveAppVal2,
+            approver_id_3: effectiveAppVal3,
             related_user_ids: relatedUserIds,
             currency: currencyType,
             image_url: attachments[0]?.url || null,
@@ -2279,7 +2289,14 @@ export default function Approvals() {
 
   // Set default steps whenever the form type changes
   useEffect(() => {
-    if (selectedWorkflowDef?.id === 'stationery') {
+    if (selectedWorkflowDef?.id === 'print_stamp_send') {
+      setShowStepManager(false);
+      setShowStepAccountant(false);
+      setShowStepDirector(false);
+      setCustomApprover1(null);
+      setCustomApprover2(null);
+      setCustomApprover3(null);
+    } else if (selectedWorkflowDef?.id === 'stationery') {
       setShowStepManager(true);
       setShowStepAccountant(false);
       setShowStepDirector(false);
@@ -3748,6 +3765,12 @@ export default function Approvals() {
           setFormType('general');
           setExpenseTitle(expData.title || def.name);
           setWorkflowTitleSuffix(extractTitleSuffix(expData.title || '', def?.name));
+          setShowStepManager(false);
+          setShowStepAccountant(false);
+          setShowStepDirector(false);
+          setCustomApprover1(null);
+          setCustomApprover2(null);
+          setCustomApprover3(null);
 
           const extractLine = (prefix: string) => {
             const m = notes.match(new RegExp(`${prefix}:\\s*([^\\n]+)`, 'i'));
@@ -3766,6 +3789,8 @@ export default function Approvals() {
           if (exec) {
             const u = users.find(x => x.full_name?.toLowerCase() === exec.toLowerCase() || x.name?.toLowerCase() === exec.toLowerCase());
             if (u) setPssExecutorId(String(u.id));
+          } else if (expData.approver_id) {
+            setPssExecutorId(String(expData.approver_id));
           }
 
           const sendMethod = extractLine('Hình thức gửi');
@@ -3786,10 +3811,15 @@ export default function Approvals() {
           const sendDate = extractLine('Ngày cần gửi hồ sơ');
           if (sendDate) setPssRequiredSendDate(sendDate);
 
-          if (expData.approver_id) setCustomApprover1(users.find(u => Number(u.id) === Number(expData.approver_id)) || null);
-          if (expData.approver_id_2) setCustomApprover2(users.find(u => Number(u.id) === Number(expData.approver_id_2)) || null);
-          if (expData.approver_id_3) setCustomApprover3(users.find(u => Number(u.id) === Number(expData.approver_id_3)) || null);
-          if (expData.image_url) setAttachments([{ name: expData.image_url.split('/').pop() || 'Tài liệu', url: expData.image_url }]);
+          const rawAttLine = extractLine('Hồ sơ đính kèm');
+          if (expData.image_url) {
+            setAttachments([{ name: expData.image_url.split('/').pop() || 'Tài liệu', url: expData.image_url }]);
+          } else if (rawAttLine) {
+            const mAtt = rawAttLine.match(/([^\(]+)\s*\((https?:\/\/[^\)]+)\)/);
+            if (mAtt) {
+              setAttachments([{ name: mAtt[1].trim(), url: mAtt[2].trim() }]);
+            }
+          }
 
           setShowCreateModal(true);
           return;
@@ -4500,13 +4530,16 @@ export default function Approvals() {
     let targetApproverId = 0;
     let targetApproverName = '';
 
-    if (status1 === 'approved' && hasLevel2 && status2 !== 'approved' && status2 !== 'rejected') {
+    const rawNotesForApprover = String((item as any).notes || (item as any).description || item.description || '');
+    const isPrintStampSendRow = item.type === 'expense' && rawNotesForApprover.includes('Quy trình: In, đóng dấu và gửi hồ sơ');
+
+    if (status1 === 'approved' && hasLevel2 && !isPrintStampSendRow && status2 !== 'approved' && status2 !== 'rejected') {
       targetApproverId = Number((item as any).approver_id_2 || 0);
       targetApproverName = (item as any).approver_name_2 || '';
       stepLabel = t('Chờ duyệt Cấp 2');
       badgeClass = 'badge warning';
       icon = <Clock size={10} />;
-    } else if (status1 === 'approved' && (!hasLevel2 || status2 === 'approved') && hasLevel3 && status3 !== 'approved' && status3 !== 'rejected') {
+    } else if (status1 === 'approved' && (!hasLevel2 || status2 === 'approved') && hasLevel3 && !isPrintStampSendRow && status3 !== 'approved' && status3 !== 'rejected') {
       targetApproverId = Number((item as any).approver_id_3 || 0);
       targetApproverName = (item as any).approver_name_3 || '';
       stepLabel = t('Chờ duyệt Cấp 3');
@@ -4515,13 +4548,13 @@ export default function Approvals() {
     } else if (status1 === 'pending' || overallStatus === 'pending') {
       targetApproverId = Number((item as any).approver_id || (item as any).manager_id || 0);
       targetApproverName = (item as any).approver_name || '';
-      stepLabel = hasLevel2 ? t('Chờ duyệt Cấp 1') : t('Chờ duyệt');
+      stepLabel = isPrintStampSendRow ? t('Chờ xác nhận') : (hasLevel2 ? t('Chờ duyệt Cấp 1') : t('Chờ duyệt'));
       badgeClass = 'badge warning';
       icon = <Clock size={10} />;
     } else {
       targetApproverId = Number((item as any).approver_id || 0);
       targetApproverName = (item as any).approver_name || '';
-      stepLabel = t('Chờ duyệt');
+      stepLabel = isPrintStampSendRow ? t('Chờ xác nhận') : t('Chờ duyệt');
       badgeClass = 'badge warning';
       icon = <Clock size={10} />;
     }
@@ -4599,9 +4632,12 @@ export default function Approvals() {
       });
     }
 
+    const rawRowNotes = String((item as any).notes || (item as any).description || item.description || '');
+    const isPrintStampSendItem = item.type === 'expense' && rawRowNotes.includes('Quy trình: In, đóng dấu và gửi hồ sơ');
+
     // Step 2
-    const app2Id = Number((item as any).approver_id_2 || 0);
-    const app2Name = (item as any).approver_name_2 || '';
+    const app2Id = !isPrintStampSendItem ? Number((item as any).approver_id_2 || 0) : 0;
+    const app2Name = !isPrintStampSendItem ? ((item as any).approver_name_2 || '') : '';
     if (app2Id > 0 || (app2Name && app2Name.trim() !== '')) {
       let stepStatus: StepInfo['status'] = 'waiting';
       if (isDraft) stepStatus = 'waiting';
@@ -4620,8 +4656,8 @@ export default function Approvals() {
     }
 
     // Step 3
-    const app3Id = Number((item as any).approver_id_3 || 0);
-    const app3Name = (item as any).approver_name_3 || '';
+    const app3Id = !isPrintStampSendItem ? Number((item as any).approver_id_3 || 0) : 0;
+    const app3Name = !isPrintStampSendItem ? ((item as any).approver_name_3 || '') : '';
     if (app3Id > 0 || (app3Name && app3Name.trim() !== '')) {
       let stepStatus: StepInfo['status'] = 'waiting';
       if (isDraft) stepStatus = 'waiting';
@@ -12178,7 +12214,7 @@ export default function Approvals() {
                           );
                         })()}
 
-                        {(!showStepManager || !showStepAccountant || !showStepDirector) && (
+                        {selectedWorkflowDef?.id !== 'print_stamp_send' && (!showStepManager || !showStepAccountant || !showStepDirector) && (
                           <div style={{ 
                             display: 'flex', 
                             flexDirection: 'column', 
@@ -13323,8 +13359,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       : users.find(u => ['director', 'admin', 'superadmin'].includes(String(u.role).toLowerCase()));
 
     // Multi-level conditions: Only show Level 2 if app2Id exists or it's multi-level finance
-    const hasLevel2 = Boolean(app2Id) || (!isHrItem && (item.type === 'advance' || (item.type === 'expense' && Boolean(detail?.approver_id_2))));
-    const hasLevel3 = !isHrItem && (Boolean(app3Id) || (item.type === 'expense' && Boolean(detail?.approver_id_3)));
+    const hasLevel2 = !isPrintStampSend && (Boolean(app2Id) || (!isHrItem && (item.type === 'advance' || (item.type === 'expense' && Boolean(detail?.approver_id_2)))));
+    const hasLevel3 = !isPrintStampSend && !isHrItem && (Boolean(app3Id) || (item.type === 'expense' && Boolean(detail?.approver_id_3)));
 
     const overallStatus = (item.status || 'pending').toLowerCase();
     const s1 = (detail?.status_level_1 || (item as any)?.status_level_1 || overallStatus).toLowerCase();
@@ -13433,8 +13469,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       steps.push({
         stepNumber: steps.length + 1,
         title: isPrintStampSend ? t('Bước 2: Xác nhận hoàn thành') : t('Bước 2: Phê duyệt (Cấp 1)'),
-        roleTitle: t('Người duyệt Cấp 1'),
-        user: managerUser,
+        roleTitle: isPrintStampSend ? t('Người thực hiện') : t('Người duyệt Cấp 1'),
+        user: isPrintStampSend ? (users.find(u => Number(u.id) === Number(app1Id)) || managerUser) : managerUser,
         status: s1Status,
         approvedAt: s1Status === 'approved' || s1Status === 'rejected' ? formatApprovalTime(s1ApprovedTime) : '',
         waitingSince: s1Status === 'pending' ? step1CreatedTime : null,
@@ -15395,21 +15431,276 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
           );
         })()}
 
-        {isPrintStampSend ? (
-          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '16px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)' }}>
-            <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
-              {t('Thông Tin Quy Trình Gửi Hồ Sơ')}
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: '12px 24px', fontSize: '0.85rem' }}>
-              {Object.entries(printStampSendFields).map(([key, val]) => (
-                <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <span style={{ color: 'var(--color-text-muted)', fontWeight: 600, fontSize: '0.75rem' }}>{key}</span>
-                  <span style={{ color: 'var(--color-text)', fontWeight: 700 }}>{val}</span>
+        {isPrintStampSend ? (() => {
+          const reqEmpName = printStampSendFields['Nhân viên yêu cầu'] || getEmployeeName();
+          const reqEmpUser = users.find(u => u.full_name?.toLowerCase() === reqEmpName.toLowerCase() || u.name?.toLowerCase() === reqEmpName.toLowerCase()) || creatorUser;
+          
+          const execName = printStampSendFields['Người thực hiện'] || '';
+          const execUser = users.find(u => u.full_name?.toLowerCase() === execName.toLowerCase() || u.name?.toLowerCase() === execName.toLowerCase()) || (detail?.approver_id ? users.find(u => Number(u.id) === Number(detail.approver_id)) : null);
+
+          const reqDate = printStampSendFields['Ngày yêu cầu'] || '';
+          const sendMethod = printStampSendFields['Hình thức gửi'] || 'Chuyển phát nhanh';
+          const sendTime = printStampSendFields['Khung giờ gửi'] || '';
+          const recName = printStampSendFields['Tên người nhận'] || '';
+          const recPhone = printStampSendFields['SĐT người nhận'] || '';
+          const recAddress = printStampSendFields['Địa chỉ người nhận'] || '';
+          const needSendDate = printStampSendFields['Ngày cần gửi hồ sơ'] || '';
+          const rawAttach = printStampSendFields['Hồ sơ đính kèm'] || '';
+
+          // Parse attachments if any
+          const parsedAttachments: Array<{ name: string; url: string }> = [];
+          if (rawAttach) {
+            const matches = rawAttach.matchAll(/([^,\(]+)\s*\((https?:\/\/[^\)]+)\)/g);
+            for (const m of matches) {
+              parsedAttachments.push({ name: m[1].trim(), url: m[2].trim() });
+            }
+          }
+          if (parsedAttachments.length === 0 && (detail?.image_url || (item as any)?.image_url)) {
+            const u = detail?.image_url || (item as any)?.image_url;
+            parsedAttachments.push({ name: u.split('/').pop() || 'Tài liệu đính kèm', url: u });
+          }
+
+          return (
+            <div className="card" style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border-light)',
+              borderRadius: '16px',
+              padding: isMobile ? '1.1rem' : '1.5rem',
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)'
+            }}>
+              {/* Header Title */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
+                    background: 'rgba(245, 158, 11, 0.12)',
+                    color: '#d97706',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <FileText size={18} />
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#d97706', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      {t('Quy trình: In, đóng dấu và gửi hồ sơ')}
+                    </span>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                      {t('Chi tiết hồ sơ phát hành & người nhận')}
+                    </div>
+                  </div>
                 </div>
-              ))}
+              </div>
+
+              {/* Block 1: Nhân sự thực hiện & Yêu cầu */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)',
+                gap: '12px'
+              }}>
+                {/* Người yêu cầu */}
+                <div style={{
+                  padding: '12px 14px',
+                  borderRadius: '12px',
+                  background: 'var(--color-bg-secondary)',
+                  border: '1px solid var(--color-border-light)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px'
+                }}>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                    {t('Nhân viên yêu cầu')}
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <Avatar
+                      src={reqEmpUser?.avatar_url || reqEmpUser?.avatar}
+                      name={reqEmpName}
+                      size="sm"
+                    />
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <strong style={{ fontSize: '0.85rem', color: 'var(--color-text)' }}>
+                        {reqEmpName}
+                      </strong>
+                      {reqDate && (
+                        <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                          {t('Ngày yêu cầu')}: {reqDate}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Người thực hiện */}
+                <div style={{
+                  padding: '12px 14px',
+                  borderRadius: '12px',
+                  background: 'rgba(37, 99, 235, 0.03)',
+                  border: '1px solid rgba(37, 99, 235, 0.15)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px'
+                }}>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#2563eb', textTransform: 'uppercase' }}>
+                    {t('Người thực hiện (Xác nhận)')}
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={getAvatarRingStyle('#10b981')}>
+                      <Avatar
+                        src={execUser?.avatar_url || execUser?.avatar}
+                        name={execName || 'Chưa phân công'}
+                        size="sm"
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <strong style={{ fontSize: '0.85rem', color: '#1e40af' }}>
+                        {execName || t('Chưa chọn')}
+                      </strong>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                        {t('Bộ phận Hành chính / Nhân sự')}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Block 2: Thông tin chuyển phát */}
+              <div style={{
+                padding: '12px 14px',
+                borderRadius: '12px',
+                background: 'var(--color-bg-secondary)',
+                border: '1px solid var(--color-border-light)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px'
+              }}>
+                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Truck size={14} style={{ color: 'var(--color-primary)' }} /> {t('Phương thức & Thời gian gửi')}
+                </span>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
+                  gap: '10px'
+                }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('Hình thức gửi')}</span>
+                    <strong style={{ fontSize: '0.825rem', color: 'var(--color-text)' }}>{sendMethod}</strong>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('Khung giờ gửi')}</span>
+                    <strong style={{ fontSize: '0.825rem', color: 'var(--color-text)' }}>{sendTime || '—'}</strong>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('Ngày cần gửi hồ sơ')}</span>
+                    <strong style={{ fontSize: '0.825rem', color: '#d97706' }}>{needSendDate || '—'}</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* Block 3: Thông tin người nhận & Địa chỉ (Full width) */}
+              <div style={{
+                padding: '12px 14px',
+                borderRadius: '12px',
+                background: 'var(--color-bg-secondary)',
+                border: '1px solid var(--color-border-light)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px'
+              }}>
+                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <User size={14} style={{ color: '#059669' }} /> {t('Thông tin người nhận')}
+                </span>
+
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: isMobile ? '1fr' : '1.2fr 1fr',
+                  gap: '10px'
+                }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('Tên người nhận')}</span>
+                    <strong style={{ fontSize: '0.85rem', color: 'var(--color-text)' }}>{recName || '—'}</strong>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('Số điện thoại người nhận')}</span>
+                    <strong style={{ fontSize: '0.85rem', color: '#2563eb', fontFamily: 'monospace' }}>{recPhone || '—'}</strong>
+                  </div>
+                </div>
+
+                {/* Địa chỉ người nhận full width */}
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px',
+                  marginTop: '4px',
+                  paddingTop: '8px',
+                  borderTop: '1px solid var(--color-border-light)'
+                }}>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <MapPin size={12} style={{ color: '#ef4444' }} /> {t('Địa chỉ giao / gửi hồ sơ')}
+                  </span>
+                  <div style={{
+                    fontSize: '0.85rem',
+                    fontWeight: 650,
+                    color: 'var(--color-text)',
+                    lineHeight: 1.5,
+                    whiteSpace: 'normal',
+                    wordBreak: 'break-word',
+                    background: 'var(--color-surface)',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--color-border-light)'
+                  }}>
+                    {recAddress || '—'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Block 4: Hồ sơ đính kèm */}
+              {parsedAttachments.length > 0 && (
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px'
+                }}>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Paperclip size={14} style={{ color: 'var(--color-primary)' }} /> {t('Hồ sơ cần in, đóng dấu & gửi')} ({parsedAttachments.length})
+                  </span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {parsedAttachments.map((att, aIdx) => (
+                      <a
+                        key={aIdx}
+                        href={att.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '6px 12px',
+                          background: 'rgba(59, 130, 246, 0.08)',
+                          border: '1px solid rgba(59, 130, 246, 0.25)',
+                          borderRadius: '8px',
+                          color: '#2563eb',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          textDecoration: 'none'
+                        }}
+                      >
+                        <FileText size={14} />
+                        <span>{att.name}</span>
+                        <ExternalLink size={12} style={{ opacity: 0.7 }} />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
-        ) : isStationery ? (
+          );
+        })() : isStationery ? (
           <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '14px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)' }}>
             <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Package size={15} />
@@ -17065,7 +17356,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
           overflowY: 'auto',
           padding: isMobile ? '1rem' : '1.5rem',
           display: 'grid',
-          gridTemplateColumns: isMobile ? '1fr' : '1.1fr 0.9fr',
+          gridTemplateColumns: isMobile ? '1fr' : '1.3fr 1fr',
           gap: isMobile ? '1rem' : '1.5rem',
           background: 'var(--color-bg-light, #f8fafc)'
         }}>
