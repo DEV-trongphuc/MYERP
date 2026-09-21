@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 283;
+$targetVersion = 284;
 $currentVersion = 186;
 
 // Query current DB version
@@ -3372,22 +3372,28 @@ try {
 
     // --- PHIÊN BẢN 283: ĐỒNG BỘ NGƯỜI DUYỆT (APPROVER_ID) QUY TRÌNH IN, ĐÓNG DẤU VÀ GỬI HỒ SƠ ---
     if ($currentVersion < 283) {
-        $logMsg("Bắt đầu nâng cấp phiên bản 283: Đồng bộ người duyệt cho quy trình In, đóng dấu và gửi hồ sơ...", "info");
+        $logMsg("Bắt đầu nâng cấp phiên bản 283...", "info");
+        $logMsg("Nâng cấp lên phiên bản 283 hoàn tất.", "success");
+    }
+
+    // --- PHIÊN BẢN 284: CHUYỂN TOÀN BỘ ĐỀ XUẤT IN ĐÓNG DẤU VỀ NGUYỄN THỊ DUY PHƯƠNG ---
+    if ($currentVersion < 284) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 284: Cập nhật approver_id bảng expenses...", "info");
         try {
             $resUser = $conn->query("SELECT id FROM users WHERE full_name LIKE '%Duy Phương%' OR username = 'phuongntd' LIMIT 1");
             if ($resUser && $resUser->num_rows > 0) {
                 $dpId = (int)$resUser->fetch_assoc()['id'];
-                $conn->query("UPDATE expenses SET approver_id = {$dpId}, approver_id_2 = NULL, approver_id_3 = NULL WHERE notes LIKE '%Quy trình: In, đóng dấu và gửi hồ sơ%' OR description LIKE '%Quy trình: In, đóng dấu và gửi hồ sơ%'");
+                $conn->query("UPDATE expenses SET approver_id = {$dpId}, approver_id_2 = NULL, approver_id_3 = NULL WHERE notes LIKE '%Quy trình: In, đóng dấu và gửi hồ sơ%'");
                 $logMsg("Đã cập nhật các đề xuất In, đóng dấu và gửi hồ sơ về đúng approver_id = {$dpId} (Nguyễn Thị Duy Phương).", "success");
             }
-            $logMsg("Nâng cấp lên phiên bản 283 hoàn tất.", "success");
+            $logMsg("Nâng cấp lên phiên bản 284 hoàn tất.", "success");
         } catch (Throwable $e) {
-            $logMsg("Lỗi khi nâng cấp v283: " . $e->getMessage(), "error");
+            $logMsg("Lỗi khi nâng cấp v284: " . $e->getMessage(), "error");
         }
     }
 
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '283') ON DUPLICATE KEY UPDATE setting_value = '283'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '284') ON DUPLICATE KEY UPDATE setting_value = '284'");
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
 
