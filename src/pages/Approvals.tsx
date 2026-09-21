@@ -4559,11 +4559,34 @@ export default function Approvals() {
       icon = <Clock size={10} />;
     }
 
-    if (targetApproverId > 0) {
-      approverUser = usersMap.get(targetApproverId);
-    }
-    if (!approverUser && targetApproverName) {
-      approverUser = usersByNameMap.get(targetApproverName.toLowerCase().trim());
+    if (isPrintStampSendRow) {
+      const mExec = rawNotesForApprover.match(/Người thực hiện:\s*([^\n]+)/i);
+      const parsedExecName = mExec ? mExec[1].trim() : '';
+      let matchedExecUser = null;
+      if (parsedExecName) {
+        matchedExecUser = usersByNameMap.get(parsedExecName.toLowerCase()) || 
+                          Array.from(usersMap.values()).find(u => 
+                            u.full_name?.toLowerCase() === parsedExecName.toLowerCase() || 
+                            u.name?.toLowerCase() === parsedExecName.toLowerCase() ||
+                            u.full_name?.toLowerCase().includes(parsedExecName.toLowerCase())
+                          );
+      }
+      if (!matchedExecUser) {
+        matchedExecUser = usersByNameMap.get('phuongntd') || 
+                          Array.from(usersMap.values()).find(u => (u.full_name || u.name || '').toLowerCase().includes('duy phương'));
+      }
+      if (matchedExecUser) {
+        approverUser = matchedExecUser;
+        targetApproverId = Number(matchedExecUser.id);
+        targetApproverName = matchedExecUser.full_name || matchedExecUser.name;
+      }
+    } else {
+      if (targetApproverId > 0) {
+        approverUser = usersMap.get(targetApproverId);
+      }
+      if (!approverUser && targetApproverName) {
+        approverUser = usersByNameMap.get(targetApproverName.toLowerCase().trim());
+      }
     }
 
     if (!approverUser) {
@@ -4613,9 +4636,35 @@ export default function Approvals() {
     const s2 = String((item as any).status_level_2 || 'none').toLowerCase();
     const s3 = String((item as any).status_level_3 || 'none').toLowerCase();
 
+    const rawRowNotes = String((item as any).notes || (item as any).description || item.description || '');
+    const isPrintStampSendItem = item.type === 'expense' && rawRowNotes.includes('Quy trình: In, đóng dấu và gửi hồ sơ');
+
     // Step 1
-    const app1Id = Number((item as any).approver_id || (item as any).manager_id || 0);
-    const app1Name = (item as any).approver_name || '';
+    let app1Id = Number((item as any).approver_id || (item as any).manager_id || 0);
+    let app1Name = (item as any).approver_name || '';
+
+    if (isPrintStampSendItem) {
+      const mExec = rawRowNotes.match(/Người thực hiện:\s*([^\n]+)/i);
+      const parsedExecName = mExec ? mExec[1].trim() : '';
+      let matchedExecUser = null;
+      if (parsedExecName) {
+        matchedExecUser = usersByNameMap.get(parsedExecName.toLowerCase()) || 
+                          Array.from(usersMap.values()).find(u => 
+                            u.full_name?.toLowerCase() === parsedExecName.toLowerCase() || 
+                            u.name?.toLowerCase() === parsedExecName.toLowerCase() ||
+                            u.full_name?.toLowerCase().includes(parsedExecName.toLowerCase())
+                          );
+      }
+      if (!matchedExecUser) {
+        matchedExecUser = usersByNameMap.get('phuongntd') || 
+                          Array.from(usersMap.values()).find(u => (u.full_name || u.name || '').toLowerCase().includes('duy phương'));
+      }
+      if (matchedExecUser) {
+        app1Id = Number(matchedExecUser.id);
+        app1Name = matchedExecUser.full_name || matchedExecUser.name;
+      }
+    }
+
     if (app1Id > 0 || app1Name || (item as any).approver_id_2) {
       let stepStatus: StepInfo['status'] = 'pending';
       if (isDraft) stepStatus = 'waiting';
@@ -4625,15 +4674,12 @@ export default function Approvals() {
 
       steps.push({
         stepIndex: 1,
-        title: 'Cấp 1',
+        title: isPrintStampSendItem ? 'Thực hiện' : 'Cấp 1',
         userId: app1Id,
         userName: app1Name,
         status: stepStatus
       });
     }
-
-    const rawRowNotes = String((item as any).notes || (item as any).description || item.description || '');
-    const isPrintStampSendItem = item.type === 'expense' && rawRowNotes.includes('Quy trình: In, đóng dấu và gửi hồ sơ');
 
     // Step 2
     const app2Id = !isPrintStampSendItem ? Number((item as any).approver_id_2 || 0) : 0;
@@ -13466,11 +13512,27 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
 
       const s1ApprovedTime = detail?.approved_at || null;
 
+      let printStampSendExecUser = null;
+      if (isPrintStampSend) {
+        const mExec = rawDesc.match(/Người thực hiện:\s*([^\n]+)/i);
+        const parsedExecName = mExec ? mExec[1].trim() : '';
+        if (parsedExecName) {
+          printStampSendExecUser = users.find(u => 
+            u.full_name?.toLowerCase() === parsedExecName.toLowerCase() || 
+            u.name?.toLowerCase() === parsedExecName.toLowerCase() ||
+            u.full_name?.toLowerCase().includes(parsedExecName.toLowerCase())
+          );
+        }
+        if (!printStampSendExecUser) {
+          printStampSendExecUser = users.find(u => (u.full_name || u.name || '').toLowerCase().includes('duy phương') || u.username === 'phuongntd');
+        }
+      }
+
       steps.push({
         stepNumber: steps.length + 1,
         title: isPrintStampSend ? t('Bước 2: Xác nhận hoàn thành') : t('Bước 2: Phê duyệt (Cấp 1)'),
         roleTitle: isPrintStampSend ? t('Người thực hiện') : t('Người duyệt Cấp 1'),
-        user: isPrintStampSend ? (users.find(u => Number(u.id) === Number(app1Id)) || managerUser) : managerUser,
+        user: isPrintStampSend ? (printStampSendExecUser || users.find(u => Number(u.id) === Number(app1Id)) || managerUser) : managerUser,
         status: s1Status,
         approvedAt: s1Status === 'approved' || s1Status === 'rejected' ? formatApprovalTime(s1ApprovedTime) : '',
         waitingSince: s1Status === 'pending' ? step1CreatedTime : null,
