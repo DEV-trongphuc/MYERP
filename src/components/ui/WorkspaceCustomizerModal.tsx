@@ -964,8 +964,8 @@ export const WorkspaceCustomizerModal: React.FC<WorkspaceCustomizerModalProps> =
                 opacity: isUploading ? 0.6 : 1
               }}
             >
-              <Check size={16} />
-              Áp dụng ngay
+              {isUploading ? <Loader2 size={16} className="spin" /> : <Check size={16} />}
+              <span>{isUploading ? 'Đang tải...' : 'Áp dụng ngay'}</span>
             </button>
           </div>
         </div>

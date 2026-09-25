@@ -109,6 +109,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
   const [uploadingRefund, setUploadingRefund] = useState(false);
   const [submittingRefund, setSubmittingRefund] = useState(false);
   const [isDraggingRefund, setIsDraggingRefund] = useState(false);
+  const [isProcessingApproval, setIsProcessingApproval] = useState<'approve' | 'reject' | null>(null);
 
   const [users, setUsers] = useState<any[]>([]);
   const [reminderTargetUser, setReminderTargetUser] = useState<any>(null);
@@ -739,7 +740,8 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
   };
 
   const handleApprove = async () => {
-    if (!viewItem) return;
+    if (!viewItem || isProcessingApproval) return;
+    setIsProcessingApproval('approve');
     try {
       await api.patch(`/expenses/${viewItem.id}`, { status: 'approved' });
       addToast('Đã phê duyệt chi phí', 'success');
@@ -748,11 +750,14 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
       window.dispatchEvent(new Event('refresh-pending-counts'));
     } catch (e: any) {
       addToast('Lỗi khi phê duyệt chi phí', 'error');
+    } finally {
+      setIsProcessingApproval(null);
     }
   };
 
   const handleReject = async () => {
-    if (!viewItem) return;
+    if (!viewItem || isProcessingApproval) return;
+    setIsProcessingApproval('reject');
     try {
       await api.patch(`/expenses/${viewItem.id}`, { status: 'rejected' });
       addToast('Đã từ chối chi phí', 'success');
@@ -761,6 +766,8 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
       window.dispatchEvent(new Event('refresh-pending-counts'));
     } catch (e: any) {
       addToast('Lỗi khi từ chối chi phí', 'error');
+    } finally {
+      setIsProcessingApproval(null);
     }
   };
 
@@ -879,18 +886,22 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
               {isMyTurnToApprove(viewItem) && (
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button 
-                    className="btn danger sm" 
-                    style={{ background: 'var(--color-danger)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, height: '32px', fontSize: '0.8rem', padding: '0 12px', borderRadius: '6px', cursor: 'pointer' }} 
+                    className="btn danger sm hover-lift" 
+                    disabled={isProcessingApproval !== null}
+                    style={{ background: 'var(--color-danger)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, height: '32px', fontSize: '0.8rem', padding: '0 12px', borderRadius: '6px', cursor: isProcessingApproval !== null ? 'not-allowed' : 'pointer', opacity: isProcessingApproval !== null ? 0.6 : 1 }} 
                     onClick={handleReject}
                   >
-                    <XCircle size={14} /> Từ chối
+                    {isProcessingApproval === 'reject' ? <Loader2 size={14} className="spin" /> : <XCircle size={14} />}
+                    <span>{isProcessingApproval === 'reject' ? 'Đang từ chối...' : 'Từ chối'}</span>
                   </button>
                   <button 
-                    className="btn success sm" 
-                    style={{ background: 'var(--color-success)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, height: '32px', fontSize: '0.8rem', padding: '0 12px', borderRadius: '6px', cursor: 'pointer' }} 
+                    className="btn success sm hover-lift" 
+                    disabled={isProcessingApproval !== null}
+                    style={{ background: 'var(--color-success)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, height: '32px', fontSize: '0.8rem', padding: '0 12px', borderRadius: '6px', cursor: isProcessingApproval !== null ? 'not-allowed' : 'pointer', opacity: isProcessingApproval !== null ? 0.6 : 1 }} 
                     onClick={handleApprove}
                   >
-                    <CheckCircle2 size={14} /> Phê duyệt
+                    {isProcessingApproval === 'approve' ? <Loader2 size={14} className="spin" /> : <CheckCircle2 size={14} />}
+                    <span>{isProcessingApproval === 'approve' ? 'Đang duyệt...' : 'Phê duyệt'}</span>
                   </button>
                 </div>
               )}
@@ -1459,18 +1470,22 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
               {isMyTurnToApprove(viewItem) && (
                 <div style={{ display: 'flex', gap: '12px', width: '100%', flexShrink: 0 }}>
                   <button 
-                    className="btn danger" 
-                    style={{ flex: 1, background: '#ef4444', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: 800, height: '42px', fontSize: '0.875rem', borderRadius: '12px', cursor: 'pointer', boxShadow: 'var(--shadow-sm)', transition: 'all 0.2s' }} 
+                    className="btn danger hover-lift" 
+                    disabled={isProcessingApproval !== null}
+                    style={{ flex: 1, background: '#ef4444', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: 800, height: '42px', fontSize: '0.875rem', borderRadius: '12px', cursor: isProcessingApproval !== null ? 'not-allowed' : 'pointer', opacity: isProcessingApproval !== null ? 0.6 : 1, boxShadow: 'var(--shadow-sm)', transition: 'all 0.2s' }} 
                     onClick={handleReject}
                   >
-                    <XCircle size={16} /> Từ chối
+                    {isProcessingApproval === 'reject' ? <Loader2 size={16} className="spin" /> : <XCircle size={16} />}
+                    <span>{isProcessingApproval === 'reject' ? 'Đang từ chối...' : 'Từ chối'}</span>
                   </button>
                   <button 
-                    className="btn success" 
-                    style={{ flex: 1, background: '#10b981', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: 800, height: '42px', fontSize: '0.875rem', borderRadius: '12px', cursor: 'pointer', boxShadow: 'var(--shadow-sm)', transition: 'all 0.2s' }} 
+                    className="btn success hover-lift" 
+                    disabled={isProcessingApproval !== null}
+                    style={{ flex: 1, background: '#10b981', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: 800, height: '42px', fontSize: '0.875rem', borderRadius: '12px', cursor: isProcessingApproval !== null ? 'not-allowed' : 'pointer', opacity: isProcessingApproval !== null ? 0.6 : 1, boxShadow: 'var(--shadow-sm)', transition: 'all 0.2s' }} 
                     onClick={handleApprove}
                   >
-                    <CheckCircle2 size={16} /> Phê duyệt
+                    {isProcessingApproval === 'approve' ? <Loader2 size={16} className="spin" /> : <CheckCircle2 size={16} />}
+                    <span>{isProcessingApproval === 'approve' ? 'Đang duyệt...' : 'Phê duyệt'}</span>
                   </button>
                 </div>
               )}

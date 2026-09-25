@@ -80,9 +80,13 @@ export async function fetchAPI(action: string, options: RequestInit = {}) {
       url,
       data: options.body,
       headers,
+      signal: options.signal,
     });
     return response.data;
   } catch (err: any) {
+    if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') {
+      throw err; // Allow caller to detect cancelled request
+    }
     if (err.response) {
       throw new Error(err.response.data?.message || err.message, { cause: err });
     }

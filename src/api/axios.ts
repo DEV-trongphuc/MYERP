@@ -232,6 +232,19 @@ api.interceptors.response.use(
         }
       }
     }
+    // Safe auto-retry for idempotent GET requests on temporary network loss / 502-504 gateway glitches
+    const reqMethod = String(original?.method || 'get').toLowerCase();
+    const isIdempotent = reqMethod === 'get' || reqMethod === 'head';
+    const isNetworkOrGatewayError = !error.response || (error.response.status >= 502 && error.response.status <= 504);
+    const isCanceled = axios.isCancel(error) || error.name === 'CanceledError' || error.code === 'ERR_CANCELED';
+
+    if (isIdempotent && isNetworkOrGatewayError && !isCanceled && (!original?._netRetryCount || original._netRetryCount < 2)) {
+      original._netRetryCount = (original._netRetryCount || 0) + 1;
+      const backoffMs = original._netRetryCount * 600;
+      await new Promise((resolve) => setTimeout(resolve, backoffMs));
+      return api(original);
+    }
+
     if (error.response?.status === 500) {
       console.error('SERVER ERROR:', error.response.data);
     }

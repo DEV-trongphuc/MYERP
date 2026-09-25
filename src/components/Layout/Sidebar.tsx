@@ -7,6 +7,7 @@ import { useEffect, useState, useRef, Fragment } from 'react';
 import { fetchAPI } from '../../utils/api';
 import { hasModuleApprovalAccess } from '../../utils/approvalPermissions';
 import { isMarketing, isAcademic } from '../../utils/roleUtils';
+import { prefetchRoute } from '../../utils/routePrefetcher';
 
 export interface SidebarItem {
   name: string;
@@ -806,6 +807,9 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
                       data-active={isActive ? 'true' : 'false'}
                       className={() => `sidebar-nav-item ${isActive ? 'active' : ''}`}
                       title={isCollapsed ? displayName : undefined}
+                      onMouseEnter={() => prefetchRoute(effectiveHref)}
+                      onTouchStart={() => prefetchRoute(effectiveHref)}
+                      onFocus={() => prefetchRoute(effectiveHref)}
                       onClick={(e) => {
                         const targetPath = href.split('?')[0];
                         if (location.pathname === targetPath) {

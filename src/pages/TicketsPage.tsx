@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Search, Filter, LifeBuoy, AlertCircle, Clock, X, Save, MoreHorizontal, FileText } from 'lucide-react';
+import { Plus, Search, Filter, LifeBuoy, AlertCircle, Clock, X, Save, MoreHorizontal, FileText, Loader2 } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
 const TicketDrawer = lazy(() => import('./TicketDrawer').then(module => ({ default: module.TicketDrawer })));
 const CustomerProfileDrawer = lazy(() => import('./CustomerProfileDrawer').then(module => ({ default: module.CustomerProfileDrawer })));
@@ -234,6 +234,16 @@ export const TicketsPage: React.FC = () => {
     setPage(1);
   }, [debouncedSearch, filterStatus]);
 
+  // Auto fallback to last available page if current page becomes empty
+  useEffect(() => {
+    if (total > 0 && page > 1) {
+      const maxPage = Math.ceil(total / 20);
+      if (page > maxPage) {
+        setPage(maxPage);
+      }
+    }
+  }, [total, page]);
+
   const handleUpdate = (updated: any) => {
     setTickets(prev => prev.map(t => t.id === updated.id ? { ...t, ...updated } : t));
     if (selectedTicket?.id === updated.id) {
@@ -249,18 +259,20 @@ export const TicketsPage: React.FC = () => {
   };
 
   const handleCreateTicket = async () => {
-    if (!createForm.subject || !createForm.customer_name) {
+    const trimmedSubject = createForm.subject?.trim() || '';
+    const trimmedCustomer = createForm.customer_name?.trim() || '';
+    if (!trimmedSubject || !trimmedCustomer) {
       addToast('Vui lòng nhập tiêu đề và tên khách hàng', 'error');
       return;
     }
     const payload = {
-      subject: createForm.subject,
+      subject: trimmedSubject,
       status: 'open',
       priority: createForm.priority,
-      customer_name: createForm.customer_name,
+      customer_name: trimmedCustomer,
       contact_id: createForm.contact_id,
       customer_id: createForm.contact_id,
-      description: createForm.description,
+      description: createForm.description?.trim() || '',
       related_contacts: createForm.contact_id ? [String(createForm.contact_id), ...createForm.related_contacts] : createForm.related_contacts,
       related_users: createForm.related_users,
       attachments: createForm.attachments
@@ -855,8 +867,11 @@ export const TicketsPage: React.FC = () => {
                 </div>
               </div>
               <div className="modal-footer" style={{ padding: '1.25rem 1.5rem', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid var(--color-border)' }}>
-                <button className="btn outline" onClick={() => setShowCreateModal(false)}>Hủy bỏ</button>
-                <button className="btn primary" onClick={handleCreateTicket}><Save size={14} /> Tạo Ticket</button>
+                <button className="btn outline hover-lift" onClick={() => setShowCreateModal(false)} disabled={saving}>Hủy bỏ</button>
+                <button className="btn primary hover-lift" onClick={handleCreateTicket} disabled={saving}>
+                  {saving ? <Loader2 size={14} className="spin" /> : <Save size={14} />}
+                  <span>{saving ? 'Đang tạo...' : 'Tạo Ticket'}</span>
+                </button>
               </div>
             </motion.div>
           </div>

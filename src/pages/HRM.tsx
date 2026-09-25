@@ -5,7 +5,7 @@ import {
   Users, Calendar, CreditCard, DollarSign, Check, X, ShieldAlert,
   Send, Lock, Award, FileText, ChevronLeft, ChevronRight, Play, CheckCircle, ArrowLeft,
   LayoutDashboard, Clock, User, Building2, MapPin, ClipboardList, PenTool, MessageSquare, Info, Save, Plus, HelpCircle,
-  Search, CheckCircle2, XCircle, Trash2, Eye, Flame, AlertCircle, Briefcase, BarChart2
+  Search, CheckCircle2, XCircle, Trash2, Eye, Flame, AlertCircle, Briefcase, BarChart2, Loader2, RefreshCw
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -52,18 +52,21 @@ const FormattedMoneyInput = ({ value, onChange, disabled, width = '95px' }: { va
 
   return isEditing ? (
     <input
-      type="number"
+      type="text"
       autoFocus
       value={inputValue}
-      onChange={e => setInputValue(e.target.value)}
+      onChange={e => {
+        const val = e.target.value.replace(/[^0-9]/g, '');
+        setInputValue(val);
+      }}
       onBlur={() => {
         setIsEditing(false);
-        onChange(Number(inputValue || 0));
+        onChange(Math.max(0, Number(inputValue || 0)));
       }}
       onKeyDown={e => {
         if (e.key === 'Enter') {
           setIsEditing(false);
-          onChange(Number(inputValue || 0));
+          onChange(Math.max(0, Number(inputValue || 0)));
         }
       }}
       style={{
@@ -523,8 +526,10 @@ export default function HRM() {
           <>
             <button
               type="button"
+              disabled={actionApprovalId === item.id}
               onClick={async (e) => {
                 e.stopPropagation();
+                if (actionApprovalId === item.id) return;
                 if (type === 'leave') {
                   await handleApproveLeave(item.id, 'rejected');
                 } else {
@@ -543,17 +548,21 @@ export default function HRM() {
                 padding: '4px 8px',
                 fontSize: '0.72rem',
                 fontWeight: 700,
-                cursor: 'pointer'
+                cursor: actionApprovalId === item.id ? 'not-allowed' : 'pointer',
+                opacity: actionApprovalId === item.id ? 0.6 : 1
               }}
+              className="hover-lift"
               title={t('Từ chối')}
             >
-              <XCircle size={12} />
+              {actionApprovalId === item.id ? <Loader2 size={12} className="spin" /> : <XCircle size={12} />}
               {t('Từ chối')}
             </button>
             <button
               type="button"
+              disabled={actionApprovalId === item.id}
               onClick={async (e) => {
                 e.stopPropagation();
+                if (actionApprovalId === item.id) return;
                 if (type === 'leave') {
                   await handleApproveLeave(item.id, 'approved');
                 } else {
@@ -572,11 +581,13 @@ export default function HRM() {
                 padding: '4px 8px',
                 fontSize: '0.72rem',
                 fontWeight: 700,
-                cursor: 'pointer'
+                cursor: actionApprovalId === item.id ? 'not-allowed' : 'pointer',
+                opacity: actionApprovalId === item.id ? 0.6 : 1
               }}
+              className="hover-lift"
               title={t('Duyệt')}
             >
-              <CheckCircle2 size={12} />
+              {actionApprovalId === item.id ? <Loader2 size={12} className="spin" /> : <CheckCircle2 size={12} />}
               {t('Duyệt')}
             </button>
           </>
@@ -1074,8 +1085,13 @@ export default function HRM() {
     setCompensatoryLeaveUsed(Number(user.compensatory_leave_used ?? 0.0));
   };
 
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [actionApprovalId, setActionApprovalId] = useState<number | null>(null);
+  const [sendingPayslipId, setSendingPayslipId] = useState<number | null>(null);
+
   const handleSaveProfile = async () => {
-    if (!selectedUser) return;
+    if (!selectedUser || isSavingProfile) return;
+    setIsSavingProfile(true);
     try {
       await fetchAPI('hrm/profiles', {
         method: 'POST',
@@ -1102,10 +1118,14 @@ export default function HRM() {
       loadData();
     } catch (err: any) {
       toast.error(err?.message || t('Lỗi khi lưu thông tin'));
+    } finally {
+      setIsSavingProfile(false);
     }
   };
 
   const handleApproveLeave = async (id: number, status: 'approved' | 'rejected') => {
+    if (actionApprovalId === id) return;
+    setActionApprovalId(id);
     try {
       await fetchAPI('hrm/leaves', {
         method: 'PUT',
@@ -1116,10 +1136,14 @@ export default function HRM() {
       loadData();
     } catch (err: any) {
       toast.error(err?.message || t('Lỗi xử lý'));
+    } finally {
+      setActionApprovalId(null);
     }
   };
 
   const handleApproveAdvance = async (id: number, status: 'approved' | 'rejected') => {
+    if (actionApprovalId === id) return;
+    setActionApprovalId(id);
     try {
       await fetchAPI('hrm/advances', {
         method: 'PUT',
@@ -1130,6 +1154,8 @@ export default function HRM() {
       loadData();
     } catch (err: any) {
       toast.error(err?.message || t('Lỗi xử lý'));
+    } finally {
+      setActionApprovalId(null);
     }
   };
 
@@ -1223,6 +1249,8 @@ export default function HRM() {
   };
 
   const handleSendSinglePayslip = async (ps: any) => {
+    if (sendingPayslipId === ps.id) return;
+    setSendingPayslipId(ps.id);
     try {
       await fetchAPI('hrm/payroll/send', {
         method: 'POST',
@@ -1233,6 +1261,8 @@ export default function HRM() {
       setPayslips(prev => prev.map(item => item.id === ps.id ? { ...item, status: 'sent', signature_url: null, confirmed_at: null, note: null } : item));
     } catch (err: any) {
       toast.error(err?.message || t('Lỗi gửi yêu cầu xác nhận'));
+    } finally {
+      setSendingPayslipId(null);
     }
   };
 
@@ -2607,11 +2637,12 @@ export default function HRM() {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
-              <button onClick={() => setSelectedUser(null)} className="btn secondary">
+              <button onClick={() => setSelectedUser(null)} className="btn secondary hover-lift" disabled={isSavingProfile}>
                 {t('Hủy bỏ')}
               </button>
-              <button onClick={handleSaveProfile} className="btn primary">
-                {t('Lưu thay đổi')}
+              <button onClick={handleSaveProfile} className="btn primary hover-lift" disabled={isSavingProfile}>
+                {isSavingProfile && <Loader2 size={14} className="spin" />}
+                <span>{isSavingProfile ? t('Đang lưu...') : t('Lưu thay đổi')}</span>
               </button>
             </div>
           </div>
@@ -3141,7 +3172,7 @@ export default function HRM() {
                               {!isLocked && (
                                 <button
                                   onClick={() => handleSendSinglePayslip(ps)}
-                                  disabled={ps.status === 'sent'}
+                                  disabled={ps.status === 'sent' || sendingPayslipId === ps.id}
                                   className="btn outline sm hover-lift"
                                   style={{
                                     padding: '3px 10px',
@@ -3154,12 +3185,13 @@ export default function HRM() {
                                     borderColor: ps.status === 'sent' ? 'rgba(59, 130, 246, 0.4)' : 'rgba(16, 185, 129, 0.4)',
                                     background: ps.status === 'sent' ? 'rgba(59, 130, 246, 0.04)' : 'rgba(16, 185, 129, 0.04)',
                                     borderRadius: '6px',
-                                    cursor: ps.status === 'sent' ? 'default' : 'pointer'
+                                    cursor: (ps.status === 'sent' || sendingPayslipId === ps.id) ? 'default' : 'pointer',
+                                    opacity: sendingPayslipId === ps.id ? 0.7 : 1
                                   }}
                                   title={ps.status === 'sent' ? t('Đã gửi yêu cầu xác nhận') : t('Gửi yêu cầu ký xác nhận cho nhân sự này')}
                                 >
-                                  <Send size={12} />
-                                  {ps.status === 'sent' ? t('Đã gửi') : t('Gửi ký')}
+                                  {sendingPayslipId === ps.id ? <Loader2 size={12} className="spin" /> : <Send size={12} />}
+                                  {sendingPayslipId === ps.id ? t('Đang gửi...') : (ps.status === 'sent' ? t('Đã gửi') : t('Gửi ký'))}
                                 </button>
                               )}
                             </td>

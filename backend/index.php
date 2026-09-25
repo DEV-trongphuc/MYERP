@@ -122,18 +122,34 @@ if (isset($_GET['action']) && $_GET['action'] === 'version') {
 
 // ── Helper functions ──────────────────────────────────────────
 function respond(int $code, $data = null, string $message = '', bool $success = true): void {
+    $payload = ['success' => $success, 'data' => $data, 'message' => $message];
+    $json = json_encode($payload, JSON_UNESCAPED_UNICODE);
+
     if (!headers_sent()) {
         http_response_code($code);
         header('Content-Type: application/json; charset=UTF-8');
-        $json = json_encode(['success' => $success, 'data' => $data, 'message' => $message], JSON_UNESCAPED_UNICODE);
-        header('Content-Length: ' . strlen($json));
-        header('Connection: close');
+
+        // High-Performance ETag & 304 Caching for GET requests
+        if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'GET' && $code === 200) {
+            $etag = '"' . md5($json) . '"';
+            header('ETag: ' . $etag);
+            header('Cache-Control: private, must-revalidate, max-age=0');
+            $ifNoneMatch = $_SERVER['HTTP_IF_NONE_MATCH'] ?? '';
+            if ($ifNoneMatch === $etag || trim($ifNoneMatch, '"') === trim($etag, '"')) {
+                http_response_code(304);
+                if (function_exists('fastcgi_finish_request')) {
+                    fastcgi_finish_request();
+                }
+                exit;
+            }
+        }
+
         echo $json;
         if (function_exists('fastcgi_finish_request')) {
             fastcgi_finish_request();
         }
     } else {
-        echo json_encode(['success' => $success, 'data' => $data, 'message' => $message], JSON_UNESCAPED_UNICODE);
+        echo $json;
     }
     exit;
 }

@@ -389,7 +389,23 @@ export const DealsPage: React.FC = () => {
     }
   };
 
+  const fetchAbortRef = React.useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (fetchAbortRef.current) {
+        fetchAbortRef.current.abort();
+      }
+    };
+  }, []);
+
   const fetchData = async () => {
+    if (fetchAbortRef.current) {
+      fetchAbortRef.current.abort();
+    }
+    fetchAbortRef.current = new AbortController();
+    const signal = fetchAbortRef.current.signal;
+
     setLoading(true);
     try {
       const endpoint = pipelineView === 'contacts' ? '/contacts' : (pipelineView === 'companies' ? '/companies' : '/deals');
@@ -458,7 +474,7 @@ export const DealsPage: React.FC = () => {
             kanban: 1,
             limit_per_stage: 30
           };
-          const res = await api.get('/contacts', { params: kanbanParams });
+          const res = await api.get('/contacts', { params: kanbanParams, signal });
           let groupedData = res.data.data?.grouped || {};
           let totals = res.data.data?.stage_totals || {};
           let totalCount = res.data.data?.total || 0;
@@ -486,7 +502,7 @@ export const DealsPage: React.FC = () => {
               stage_id: stage.id,
               skip_counts: 1
             };
-            const res = await api.get(endpoint, { params: stageParams });
+            const res = await api.get(endpoint, { params: stageParams, signal });
             let stageItems = res.data.data?.items || res.data.data || [];
             const stageTotal = res.data.data?.total !== undefined ? Number(res.data.data.total) : stageItems.length;
             return { stageId: stage.id, items: stageItems, total: stageTotal };
@@ -513,7 +529,7 @@ export const DealsPage: React.FC = () => {
           page,
           limit
         };
-        const r = await api.get(endpoint, { params: tableParams });
+        const r = await api.get(endpoint, { params: tableParams, signal });
         let dataItems = r.data.data?.items || [];
 
         const isMarketing = currentUser?.role === 'marketing' || 
@@ -547,6 +563,9 @@ export const DealsPage: React.FC = () => {
         setTotal(r.data.data?.total || dataItems.length);
       }
     } catch (e: any) {
+      if (e.name === 'CanceledError' || e.code === 'ERR_CANCELED' || e.message === 'canceled') {
+        return; // Request was aborted due to rapid filter switch, ignore silently
+      }
       console.error("Failed to fetch data", e);
       setItems({});
     } finally { setLoading(false); }

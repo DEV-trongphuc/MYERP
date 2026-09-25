@@ -6655,3 +6655,56 @@ img[data-mention-avatar]:hover,
   0%   { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+
+/* ==========================================================================
+   120 FPS GPU HARDWARE ACCELERATION & LAYOUT CONTAINMENT ENGINE
+   ========================================================================== */
+.drawer-backdrop,
+.drawer-panel,
+.crm-drawer,
+.drawer-content,
+.deal-drawer,
+.ticket-drawer,
+.company-drawer,
+.deposit-drawer {
+  will-change: transform, opacity;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+.table-container,
+.data-table-container,
+.kanban-board-container,
+.deals-kanban-board,
+.workspace-scroll-area {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+}
+
+.table-row,
+.data-table tbody tr,
+.kanban-column-card,
+.workspace-card {
+  contain: layout style;
+}
+
+.dropdown-menu,
+.popover-content,
+.custom-popover,
+.context-menu,
+.filter-dropdown-menu {
+  will-change: transform, opacity;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  contain: layout style;
+}
+
+.toast-container,
+.toast-item,
+.notification-bell-badge {
+  will-change: transform, opacity;
+  transform: translate3d(0, 0, 0);
+}
+

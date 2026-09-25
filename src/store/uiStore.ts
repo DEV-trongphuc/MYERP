@@ -47,6 +47,9 @@ interface UIStore {
   closeCall: () => void;
 }
 
+const recentToastTimestamps = new Map<string, number>();
+const TOAST_DEDUPE_WINDOW_MS = 1200;
+
 export const useUIStore = create<UIStore>((set) => ({
   toasts: [],
   showPOS: false,
@@ -76,6 +79,22 @@ export const useUIStore = create<UIStore>((set) => ({
   showCall: (phone: string) => set({ callModal: { isOpen: true, phone } }),
   closeCall: () => set((state) => ({ callModal: { ...state.callModal, isOpen: false } })),
   addToast: (message, type = 'info', action) => {
+    // Deduplication check for string messages
+    if (typeof message === 'string') {
+      const key = `${type}::${message}`;
+      const now = Date.now();
+      const last = recentToastTimestamps.get(key);
+      if (last && now - last < TOAST_DEDUPE_WINDOW_MS) {
+        return; // Suppress duplicate spam
+      }
+      recentToastTimestamps.set(key, now);
+      if (recentToastTimestamps.size > 50) {
+        for (const [k, ts] of recentToastTimestamps.entries()) {
+          if (now - ts > 10000) recentToastTimestamps.delete(k);
+        }
+      }
+    }
+
     if (action) {
       toast((t) => (
         React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },

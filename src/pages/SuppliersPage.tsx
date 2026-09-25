@@ -211,6 +211,21 @@ export const SuppliersPage: React.FC = () => {
 
   useEffect(() => { fetchSuppliers(); }, [page, filters]);
 
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [filters]);
+
+  // Auto fallback to last available page if current page becomes empty
+  useEffect(() => {
+    if (total > 0 && page > 1) {
+      const maxPage = Math.ceil(total / 12);
+      if (page > maxPage) {
+        setPage(maxPage);
+      }
+    }
+  }, [total, page]);
+
   // Handle search with debounce effect if needed, but for now simple trigger
   useEffect(() => {
     if (isFirstRender.current) {
@@ -267,10 +282,12 @@ export const SuppliersPage: React.FC = () => {
     try {
       setIsSaving(true);
       if (selectedSupplier) {
-        await api.put(`/suppliers/${selectedSupplier.id}`, formData);
+        const cleanData = { ...formData, name: formData.name?.trim() || '' };
+        await api.put(`/suppliers/${selectedSupplier.id}`, cleanData);
         addToast('Đã cập nhật đối tác', 'success');
       } else {
-        await api.post('/suppliers', formData);
+        const cleanData = { ...formData, name: formData.name?.trim() || '' };
+        await api.post('/suppliers', cleanData);
         addToast('Đã thêm đối tác mới', 'success');
       }
       setShowModal(false);

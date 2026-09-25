@@ -147,6 +147,7 @@ export const ExpensesPage: React.FC = () => {
   const [rejectingItem, setRejectingItem] = useState<any>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [submittingReject, setSubmittingReject] = useState(false);
+  const [approvingExpenseId, setApprovingExpenseId] = useState<number | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [catOpen, setCatOpen] = useState(false);
   const [users, setUsers] = useState<any[]>([]); // for approver dropdown
@@ -298,6 +299,21 @@ export const ExpensesPage: React.FC = () => {
       setLoading(false);
     }
   }, [page, dateRange, statusFilter, catFilter, creatorFilter, debouncedSearch]);
+
+  // Reset page to 1 whenever any filter or search query changes
+  useEffect(() => {
+    setPage(1);
+  }, [dateRange, statusFilter, catFilter, creatorFilter, debouncedSearch]);
+
+  // Auto fallback to last available page if current page becomes empty after deletions
+  useEffect(() => {
+    if (total > 0 && page > 1) {
+      const maxPage = Math.ceil(total / PAGE_SIZE);
+      if (page > maxPage) {
+        setPage(maxPage);
+      }
+    }
+  }, [total, page]);
 
   // Fetch users & contacts for dropdowns
   useEffect(() => {
@@ -2011,16 +2027,20 @@ export const ExpensesPage: React.FC = () => {
                     {isMyTurnToApprove(viewItem) && (
                       <div style={{ display: 'flex', gap: '8px' }}>
                         <button 
-                          className="btn danger sm" 
-                          style={{ background: 'var(--color-danger)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, height: '32px', fontSize: '0.8rem', padding: '0 12px', borderRadius: '6px', cursor: 'pointer' }} 
+                          className="btn danger sm hover-lift" 
+                          disabled={approvingExpenseId !== null || submittingReject}
+                          style={{ background: 'var(--color-danger)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, height: '32px', fontSize: '0.8rem', padding: '0 12px', borderRadius: '6px', cursor: approvingExpenseId !== null ? 'not-allowed' : 'pointer', opacity: approvingExpenseId !== null ? 0.6 : 1 }} 
                           onClick={() => setRejectingItem(viewItem)}
                         >
                           <XCircle size={14} /> Từ chối
                         </button>
                         <button 
-                          className="btn success sm" 
-                          style={{ background: 'var(--color-success)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, height: '32px', fontSize: '0.8rem', padding: '0 12px', borderRadius: '6px', cursor: 'pointer' }} 
+                          className="btn success sm hover-lift" 
+                          disabled={approvingExpenseId !== null || submittingReject}
+                          style={{ background: 'var(--color-success)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, height: '32px', fontSize: '0.8rem', padding: '0 12px', borderRadius: '6px', cursor: approvingExpenseId !== null ? 'not-allowed' : 'pointer', opacity: approvingExpenseId !== null ? 0.6 : 1 }} 
                           onClick={async () => {
+                            if (approvingExpenseId !== null) return;
+                            setApprovingExpenseId(viewItem.id);
                             try {
                               await api.patch(`/expenses/${viewItem.id}`, { status: 'approved' });
                               setItems(prev => prev.map(e => e.id === viewItem.id ? {...e, status: 'approved'} : e));
@@ -2030,10 +2050,13 @@ export const ExpensesPage: React.FC = () => {
                               window.dispatchEvent(new Event('refresh-pending-counts'));
                             } catch (e: any) {
                               addToast('Lỗi khi phê duyệt chi phí', 'error');
+                            } finally {
+                              setApprovingExpenseId(null);
                             }
                           }}
                         >
-                          <CheckCircle2 size={14} /> Phê duyệt
+                          {approvingExpenseId === viewItem.id ? <Loader2 size={14} className="spin" /> : <CheckCircle2 size={14} />}
+                          <span>{approvingExpenseId === viewItem.id ? 'Đang duyệt...' : 'Phê duyệt'}</span>
                         </button>
                       </div>
                     )}
@@ -2387,16 +2410,20 @@ export const ExpensesPage: React.FC = () => {
                     {isMyTurnToApprove(viewItem) && (
                       <div style={{ display: 'flex', gap: '12px', width: '100%', flexShrink: 0 }}>
                         <button 
-                          className="btn danger" 
-                          style={{ flex: 1, background: '#ef4444', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: 800, height: '42px', fontSize: '0.875rem', borderRadius: '12px', cursor: 'pointer', boxShadow: 'var(--shadow-sm)', transition: 'all 0.2s' }} 
+                          className="btn danger hover-lift" 
+                          disabled={approvingExpenseId !== null || submittingReject}
+                          style={{ flex: 1, background: '#ef4444', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: 800, height: '42px', fontSize: '0.875rem', borderRadius: '12px', cursor: approvingExpenseId !== null ? 'not-allowed' : 'pointer', opacity: approvingExpenseId !== null ? 0.6 : 1, boxShadow: 'var(--shadow-sm)', transition: 'all 0.2s' }} 
                           onClick={() => setRejectingItem(viewItem)}
                         >
                           <XCircle size={16} /> Từ chối
                         </button>
                         <button 
-                          className="btn success" 
-                          style={{ flex: 1, background: '#10b981', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: 800, height: '42px', fontSize: '0.875rem', borderRadius: '12px', cursor: 'pointer', boxShadow: 'var(--shadow-sm)', transition: 'all 0.2s' }} 
+                          className="btn success hover-lift" 
+                          disabled={approvingExpenseId !== null || submittingReject}
+                          style={{ flex: 1, background: '#10b981', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: 800, height: '42px', fontSize: '0.875rem', borderRadius: '12px', cursor: approvingExpenseId !== null ? 'not-allowed' : 'pointer', opacity: approvingExpenseId !== null ? 0.6 : 1, boxShadow: 'var(--shadow-sm)', transition: 'all 0.2s' }} 
                           onClick={async () => {
+                            if (approvingExpenseId !== null) return;
+                            setApprovingExpenseId(viewItem.id);
                             try {
                               await api.patch(`/expenses/${viewItem.id}`, { status: 'approved' });
                               setItems(prev => prev.map(e => e.id === viewItem.id ? {...e, status: 'approved'} : e));
@@ -2406,10 +2433,13 @@ export const ExpensesPage: React.FC = () => {
                               window.dispatchEvent(new Event('refresh-pending-counts'));
                             } catch (e: any) {
                               addToast('Lỗi khi phê duyệt chi phí', 'error');
+                            } finally {
+                              setApprovingExpenseId(null);
                             }
                           }}
                         >
-                          <CheckCircle2 size={16} /> Phê duyệt
+                          {approvingExpenseId === viewItem.id ? <Loader2 size={16} className="spin" /> : <CheckCircle2 size={16} />}
+                          <span>{approvingExpenseId === viewItem.id ? 'Đang duyệt...' : 'Phê duyệt'}</span>
                         </button>
                       </div>
                     )}
@@ -3970,8 +4000,8 @@ export const ExpensesPage: React.FC = () => {
                 Hủy
               </button>
               <button 
-                className="btn danger sm" 
-                style={{ background: 'var(--color-danger)', color: 'white', border: 'none', fontWeight: 600 }}
+                className="btn danger sm hover-lift" 
+                style={{ background: 'var(--color-danger)', color: 'white', border: 'none', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                 onClick={async () => {
                   if (!rejectReason.trim()) {
                     addToast('Vui lòng nhập lý do từ chối', 'error');
@@ -3994,7 +4024,8 @@ export const ExpensesPage: React.FC = () => {
                 }}
                 disabled={submittingReject || !rejectReason.trim()}
               >
-                {submittingReject ? 'Đang cập nhật...' : 'Từ chối'}
+                {submittingReject && <Loader2 size={14} className="spin" />}
+                <span>{submittingReject ? 'Đang từ chối...' : 'Từ chối'}</span>
               </button>
             </div>
           </motion.div>

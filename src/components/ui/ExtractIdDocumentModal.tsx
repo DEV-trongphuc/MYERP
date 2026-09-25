@@ -629,6 +629,7 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                   </p>
                   <button
                     type="button"
+                    disabled={isUploading}
                     onClick={() => fileInputRef.current?.click()}
                     style={{
                       background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
@@ -638,16 +639,17 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                       borderRadius: '10px',
                       fontSize: '0.9rem',
                       fontWeight: 700,
-                      cursor: 'pointer',
+                      cursor: isUploading ? 'not-allowed' : 'pointer',
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: '8px',
-                      boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)'
+                      boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)',
+                      opacity: isUploading ? 0.7 : 1
                     }}
-                    className="hover-lift"
+                    className={isUploading ? '' : 'hover-lift'}
                   >
-                    <UploadCloud size={18} />
-                    Tải tệp CCCD / Hộ chiếu lên ngay
+                    {isUploading ? <Loader2 size={18} className="animate-spin" /> : <UploadCloud size={18} />}
+                    {isUploading ? 'Đang tải tệp lên...' : 'Tải tệp CCCD / Hộ chiếu lên ngay'}
                   </button>
                 </div>
               ) : (
@@ -1218,6 +1220,7 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                 <button
                   type="button"
                   onClick={onClose}
+                  disabled={isUploading}
                   style={{
                     background: 'transparent',
                     border: '1px solid var(--color-border, #cbd5e1)',
@@ -1226,7 +1229,8 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                     borderRadius: '10px',
                     fontSize: '0.85rem',
                     fontWeight: 600,
-                    cursor: 'pointer'
+                    cursor: isUploading ? 'not-allowed' : 'pointer',
+                    opacity: isUploading ? 0.6 : 1
                   }}
                 >
                   Hủy

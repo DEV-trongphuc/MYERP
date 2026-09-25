@@ -8804,6 +8804,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
           }}>
             <button
               type="button"
+              disabled={bulkSubmitting}
               onClick={() => setShowBulkCreateModal(false)}
               style={{
                 height: '38px',
@@ -8812,9 +8813,10 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                 border: '1px solid var(--color-border)',
                 fontSize: '0.8125rem',
                 fontWeight: 700,
-                cursor: 'pointer',
+                cursor: bulkSubmitting ? 'not-allowed' : 'pointer',
                 background: 'transparent',
-                color: 'var(--color-text)'
+                color: 'var(--color-text)',
+                opacity: bulkSubmitting ? 0.6 : 1
               }}
             >
               {t('Hủy')}

@@ -85,6 +85,7 @@ export const ActivitiesPage: React.FC = () => {
   const [profileContact, setProfileContact] = useState<any>(null);
   const [selectedTaskForDrawer, setSelectedTaskForDrawer] = useState<any>(null);
   const [users, setUsers] = useState<any[]>([]);
+  const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
 
   const openContactDrawer = async (contactId: number) => {
     try {
@@ -285,12 +286,16 @@ export const ActivitiesPage: React.FC = () => {
   };
 
   const toggleDone = async (item: any) => {
+    if (actionLoadingId === item.id) return;
     const newStatus = item.status === 'done' ? 'planned' : 'done';
+    setActionLoadingId(item.id);
     try {
       await api.put(`/activities/${item.id}`, { status: newStatus, done_at: newStatus === 'done' ? new Date().toISOString() : null });
       setItems(prev => prev.map(a => a.id === item.id ? { ...a, status: newStatus } : a));
     } catch (e: any) {
       addToast('Lỗi khi cập nhật trạng thái', 'error');
+    } finally {
+      setActionLoadingId(null);
     }
   };
 
@@ -574,10 +579,27 @@ export const ActivitiesPage: React.FC = () => {
                               </div>
 
                               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
-                                <button onClick={() => toggleDone(act)}
+                                <button 
+                                  onClick={() => toggleDone(act)}
+                                  disabled={actionLoadingId === act.id}
+                                  className="hover-lift"
                                   title={act.status === 'done' ? 'Đánh dấu chưa xong' : 'Đánh dấu hoàn thành'}
-                                  style={{ width: 28, height: 28, borderRadius: '8px', border: `1.5px solid ${act.status === 'done' ? 'var(--color-success)' : 'var(--color-border)'}`, background: act.status === 'done' ? 'var(--color-success-light)' : 'transparent', color: act.status === 'done' ? 'var(--color-success)' : 'var(--color-text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s' }}>
-                                  <CheckCircle2 size={15} />
+                                  style={{ 
+                                    width: 28, 
+                                    height: 28, 
+                                    borderRadius: '8px', 
+                                    border: `1.5px solid ${act.status === 'done' ? 'var(--color-success)' : 'var(--color-border)'}`, 
+                                    background: act.status === 'done' ? 'var(--color-success-light)' : 'transparent', 
+                                    color: act.status === 'done' ? 'var(--color-success)' : 'var(--color-text-muted)', 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'center', 
+                                    cursor: actionLoadingId === act.id ? 'not-allowed' : 'pointer', 
+                                    transition: 'all 0.2s',
+                                    opacity: actionLoadingId === act.id ? 0.6 : 1
+                                  }}
+                                >
+                                  {actionLoadingId === act.id ? <Loader2 size={13} className="spin" /> : <CheckCircle2 size={15} />}
                                 </button>
                                 <button className="btn ghost sm" onClick={() => openEdit(act)} style={{ padding: '6px' }}><Pencil size={13} /></button>
                                 <button className="btn ghost sm" style={{ color: 'var(--color-danger)', padding: '6px' }} onClick={() => handleDelete(act)}><Trash2 size={13} /></button>

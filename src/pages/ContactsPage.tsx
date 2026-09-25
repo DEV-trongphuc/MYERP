@@ -978,7 +978,23 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     }
   }, [total, studentSubTab, loading, segment]);
 
+  const fetchAbortRef = React.useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (fetchAbortRef.current) {
+        fetchAbortRef.current.abort();
+      }
+    };
+  }, []);
+
   const fetchData = async (isSilent = false) => {
+    if (fetchAbortRef.current) {
+      fetchAbortRef.current.abort();
+    }
+    fetchAbortRef.current = new AbortController();
+    const signal = fetchAbortRef.current.signal;
+
     if (!isSilent) setLoading(true);
     try {
       const isSearching = Boolean(debouncedSearch);
@@ -1074,7 +1090,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
         params.team_id = teamId;
       }
 
-      const r = await api.get('/contacts', { params });
+      const r = await api.get('/contacts', { params, signal });
       const data = r.data.data;
       const items = data.items || [];
       const uniqueItems = Array.from(new Map(items.map((c: any) => [c.id, c])).values());
@@ -1084,6 +1100,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
         setStageCounts(data.stage_counts);
       }
     } catch (e: any) {
+      if (e.name === 'CanceledError' || e.code === 'ERR_CANCELED' || e.message === 'canceled') {
+        return; // Request was aborted due to rapid filter switch, ignore silently
+      }
       setContacts([]);
       setTotal(0);
       addToast('Không thể lấy danh sách liên hệ', 'error');
@@ -1097,6 +1116,21 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       fetchData();
     }
   }, [page, pageSize, debouncedSearch, sortBy, activeFilters, segment, studentSubTab, initialMetadataLoaded, showLost, quickLeadStatus, quickPipelineStage, filterUncontacted]);
+
+  // Reset page to 1 whenever any filter or search query changes
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, sortBy, activeFilters, segment, studentSubTab, showLost, quickLeadStatus, quickPipelineStage, filterUncontacted]);
+
+  // Auto fallback to last available page if current page becomes empty after deletions
+  useEffect(() => {
+    if (total > 0 && page > 1) {
+      const maxPage = Math.ceil(total / pageSize);
+      if (page > maxPage) {
+        setPage(maxPage);
+      }
+    }
+  }, [total, page, pageSize]);
 
   useEffect(() => {
     const handleRefresh = () => {

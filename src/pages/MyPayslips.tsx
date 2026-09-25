@@ -4,7 +4,7 @@ import api from '../api/axios';
 import { 
   FileText, Calendar, CheckCircle, ShieldCheck, PenTool,
   Clock, DollarSign, Award, Percent, HelpCircle, Plus, Send,
-  ChevronLeft, ChevronRight, XCircle, CheckCircle2, Download, AlertCircle
+  ChevronLeft, ChevronRight, XCircle, CheckCircle2, Download, AlertCircle, Loader2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -1085,18 +1085,18 @@ export default function MyPayslips() {
                     <canvas ref={canvasRef} width={500} height={120} style={{ width: '100%', height: '100%', cursor: 'crosshair', backgroundColor: 'white', backgroundImage: 'radial-gradient(#e2e8f0 1.2px, transparent 1.2px)', backgroundSize: '20px 20px' }} onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing} onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing} />
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: '0.75rem' }}>
-                    <button onClick={clearCanvas} className="btn secondary" style={{ padding: '5px 12px', fontSize: '0.78rem' }}>{t('Vẽ lại')}</button>
+                    <button onClick={clearCanvas} disabled={submitting} className="btn secondary hover-lift" style={{ padding: '5px 12px', fontSize: '0.78rem' }}>{t('Vẽ lại')}</button>
                     <button
                       onClick={() => setDisputeModalOpen(true)}
                       disabled={submitting}
-                      className="btn outline"
+                      className="btn outline hover-lift"
                       style={{ padding: '5px 14px', fontSize: '0.78rem', color: '#ef4444' }}
                     >
                       <AlertCircle size={13} />
                       {t('Yêu cầu thay đổi')}
                     </button>
-                    <button onClick={handleConfirmPayslip} disabled={submitting} className="btn primary" style={{ padding: '5px 18px', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      <CheckCircle size={13} />
+                    <button onClick={handleConfirmPayslip} disabled={submitting} className="btn primary hover-lift" style={{ padding: '5px 18px', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      {submitting ? <Loader2 size={13} className="spin" /> : <CheckCircle size={13} />}
                       {submitting ? t('Đang ký...') : t('Ký xác nhận lương')}
                     </button>
                   </div>
@@ -1123,9 +1123,10 @@ export default function MyPayslips() {
             rows={4}
           />
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '1rem' }}>
-            <button onClick={() => setDisputeModalOpen(false)} className="btn secondary">{t('Hủy')}</button>
-            <button onClick={handleSendDispute} disabled={sendingDispute} className="btn primary">
-              {sendingDispute ? t('Đang gửi...') : t('Gửi yêu cầu')}
+            <button onClick={() => setDisputeModalOpen(false)} disabled={sendingDispute} className="btn secondary hover-lift">{t('Hủy')}</button>
+            <button onClick={handleSendDispute} disabled={sendingDispute} className="btn primary hover-lift" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              {sendingDispute && <Loader2 size={14} className="spin" />}
+              <span>{sendingDispute ? t('Đang gửi...') : t('Gửi yêu cầu')}</span>
             </button>
           </div>
         </div>

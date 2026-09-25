@@ -1,4 +1,4 @@
-import { useState, useEffect, Fragment, useMemo, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useRef, Fragment, useMemo, lazy, Suspense } from 'react';
 import api from '../api/axios';
 import { createPortal } from 'react-dom';
 import { Database, Search, Filter, ChevronLeft, ChevronRight, Download, RefreshCw, User, Users, Phone, Mail, Clock, Tag, ExternalLink, AlertTriangle, CheckCircle2, XCircle, ShieldAlert, Calendar, LayoutList, Sparkles, Check, X, Edit, Bell, Copy, CheckCircle, BarChart2, Scale, Info, Ban, UserPlus, Send, Plus, Eye } from 'lucide-react';
@@ -528,11 +528,26 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
   const [rounds, setRounds] = useState<{ id: number; round_name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
+  const leadsAbortRef = React.useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (leadsAbortRef.current) {
+        leadsAbortRef.current.abort();
+      }
+    };
+  }, []);
 
   const fetchLeads = async () => {
+    if (leadsAbortRef.current) {
+      leadsAbortRef.current.abort();
+    }
+    leadsAbortRef.current = new AbortController();
+    const signal = leadsAbortRef.current.signal;
+
     setLoading(true);
     try {
-      const json = await fetchAPI(`get_logs&page=${currentPage}&pageSize=${ITEMS_PER_PAGE}&date=${encodeURIComponent(dateFilter)}&status=${encodeURIComponent(statusFilter)}&consultant=${encodeURIComponent(consultantFilter)}&round=${encodeURIComponent(roundFilter)}&search=${encodeURIComponent(searchTerm)}`);
+      const json = await fetchAPI(`get_logs&page=${currentPage}&pageSize=${ITEMS_PER_PAGE}&date=${encodeURIComponent(dateFilter)}&status=${encodeURIComponent(statusFilter)}&consultant=${encodeURIComponent(consultantFilter)}&round=${encodeURIComponent(roundFilter)}&search=${encodeURIComponent(searchTerm)}`, { signal });
       if (json.success) {
         // Map the backend structure to the frontend structure
         const mappedLeads = json.data.map((item: any) => ({
@@ -560,6 +575,9 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
         setTotalCount(json.total_count ?? mappedLeads.length);
       }
     } catch (e: any) {
+      if (e.name === 'CanceledError' || e.code === 'ERR_CANCELED' || e.message === 'canceled') {
+        return; // Request was aborted due to rapid filter switch, ignore silently
+      }
       toast.error(t('Lỗi tải dữ liệu: ') + e.message);
     }
     setLoading(false);
@@ -1275,8 +1293,9 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
           }
         } catch (e: any) {
           toast.error(t('Lỗi: ') + e.message);
+        } finally {
+          setIsClaimingLeadId(null);
         }
-        setIsClaimingLeadId(null);
       }
     });
   };
@@ -2744,7 +2763,12 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                                   e.currentTarget.style.boxShadow = '0 2px 6px rgba(189, 29, 45, 0.2)';
                                 } : undefined}
                               >
-                                {isClaimingLeadId === lead.id ? t('Đang nhận...') : (hasClaimed ? t('Đã nhận') : (isFull ? t('Hết lượt') : t('Nhận Data')))}
+                                {isClaimingLeadId === lead.id ? (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                                    <RefreshCw size={13} className="spin" />
+                                    {t('Đang nhận...')}
+                                  </span>
+                                ) : (hasClaimed ? t('Đã nhận') : (isFull ? t('Hết lượt') : t('Nhận Data')))}
                               </button>
                             );
                           })()}

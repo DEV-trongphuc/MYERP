@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 290;
+$targetVersion = 291;
 $currentVersion = 186;
 
 // Query current DB version
@@ -3657,10 +3657,70 @@ try {
         }
     }
 
-    // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '290') ON DUPLICATE KEY UPDATE setting_value = '290'");
+    // ==========================================
+    // VERSION 291: HIGH-THROUGHPUT COMPOSITE INDEXES & QUERY OPTIMIZATION
+    // ==========================================
+    if ($currentVersion < 291 || $isForce) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 291: Tối ưu hoá Composite Index cho Điểm danh (Attendance), Hoạt động (Activities), FairShare, Tiến độ Deals & Audit Logs...", "info");
+        try {
+            $safeAddIndex = function($tableName, $indexName, $columns) use ($conn, $logMsg) {
+                try {
+                    $tableCheck = $conn->query("SHOW TABLES LIKE '{$tableName}'");
+                    if (!$tableCheck || $tableCheck->num_rows === 0) return;
+                    
+                    $idxCheck = $conn->query("SHOW INDEX FROM `{$tableName}` WHERE Key_name = '{$indexName}'");
+                    if ($idxCheck && $idxCheck->num_rows > 0) return;
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 290", "success");
+                    $conn->query("ALTER TABLE `{$tableName}` ADD INDEX `{$indexName}` ({$columns})");
+                    $logMsg("Đã bổ sung index `{$indexName}` trên bảng `{$tableName}` ({$columns})", "success");
+                } catch (Throwable $e) {
+                    // Ignore if error or duplicate
+                }
+            };
+
+            // 1. Attendance logs & Time tracking
+            $safeAddIndex('hrm_attendance_logs', 'idx_att_user_date_status', '`user_id`, `date`, `status`');
+            $safeAddIndex('hrm_attendance_logs', 'idx_att_date_created', '`date`, `created_at`');
+
+            // 2. Activities & Interaction logs
+            $safeAddIndex('activities', 'idx_act_entity_created', '`entity_type`, `entity_id`, `created_at`');
+            $safeAddIndex('activities', 'idx_act_user_created', '`user_id`, `created_at`');
+
+            // 3. FairShare Rounds & Allocation
+            $safeAddIndex('fair_share_rounds', 'idx_fsr_status_created', '`status`, `created_at`');
+            $safeAddIndex('fair_share_allocations', 'idx_fsa_round_user_status', '`round_id`, `user_id`, `status`');
+
+            // 4. Deal Milestones & Stages
+            $safeAddIndex('deal_milestones', 'idx_dm_deal_status_due', '`deal_id`, `status`, `due_date`');
+
+            // 5. Audit Logs
+            $safeAddIndex('audit_logs', 'idx_audit_action_user_created', '`action`, `user_id`, `created_at`');
+
+            // 6. Customer Contacts & Documents
+            $safeAddIndex('customer_contacts', 'idx_cust_contact_primary', '`customer_id`, `is_primary`');
+            $safeAddIndex('company_documents', 'idx_comp_doc_entity', '`entity_type`, `entity_id`, `created_at`');
+
+            // 7. High-Volume Notifications & System Activity
+            $safeAddIndex('system_notifications', 'idx_notif_user_read_created', '`user_id`, `is_read`, `created_at`');
+
+            // 8. Financial Expenses & POs
+            $safeAddIndex('expenses', 'idx_exp_status_created', '`status`, `created_at`');
+            $safeAddIndex('expenses', 'idx_exp_user_status', '`created_by`, `status`');
+
+            // 9. Deals & Customer Pipeline
+            $safeAddIndex('deals', 'idx_deals_stage_status_created', '`stage_id`, `status`, `created_at`');
+            $safeAddIndex('deals', 'idx_deals_user_stage', '`user_id`, `stage_id`');
+
+            $logMsg("Nâng cấp lên phiên bản 291 hoàn tất: Toàn bộ Composite Indexes giai đoạn 3 đã sẵn sàng!", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi nâng cấp v291: " . $e->getMessage(), "error");
+        }
+    }
+
+    // Update DB version in system_settings
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '291') ON DUPLICATE KEY UPDATE setting_value = '291'");
+
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 291", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");

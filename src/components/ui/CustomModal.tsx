@@ -19,6 +19,8 @@ interface CustomModalProps {
   fullScreenOnMobile?: boolean;
   modalClassName?: string;
   centeredOnMobile?: boolean;
+  disableClose?: boolean;
+  preventCloseOnBackdrop?: boolean;
 }
 
 // Global modal stack tracker to prevent scroll-unlocking collisions with nested modals
@@ -55,17 +57,26 @@ export const CustomModal: React.FC<CustomModalProps> = ({
   zIndex,
   fullScreenOnMobile = false,
   modalClassName,
-  centeredOnMobile = false
+  centeredOnMobile = false,
+  disableClose = false,
+  preventCloseOnBackdrop = false
 }) => {
-  // Safe body scroll lock with reference count
+  // Safe body scroll lock with reference count and Escape key handling
   useEffect(() => {
     if (isOpen) {
       lockBodyScroll();
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape' && !disableClose) {
+          onClose();
+        }
+      };
+      window.addEventListener('keydown', handleKeyDown);
       return () => {
         unlockBodyScroll();
+        window.removeEventListener('keydown', handleKeyDown);
       };
     }
-  }, [isOpen]);
+  }, [isOpen, onClose, disableClose]);
 
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -113,13 +124,25 @@ export const CustomModal: React.FC<CustomModalProps> = ({
     transition: { duration: 0.16, ease: [0.16, 1, 0.3, 1] as any }
   };
 
-  const dragProps = (isMobile && !centeredOnMobile) ? {
+  const handleBackdropClick = () => {
+    if (!disableClose && !preventCloseOnBackdrop) {
+      onClose();
+    }
+  };
+
+  const handleCloseIconClick = () => {
+    if (!disableClose) {
+      onClose();
+    }
+  };
+
+  const dragProps = (isMobile && !centeredOnMobile && !disableClose) ? {
     drag: 'y' as const,
     dragDirectionLock: true,
     dragConstraints: { top: 0 },
     dragElastic: { top: 0.05, bottom: 0.65 },
     onDragEnd: (_: any, info: any) => {
-      if (info.offset.y > 120 || info.velocity.y > 400) {
+      if ((info.offset.y > 120 || info.velocity.y > 400) && !disableClose) {
         onClose();
       }
     }
@@ -137,7 +160,7 @@ export const CustomModal: React.FC<CustomModalProps> = ({
           <div className={overlayClass} style={{ zIndex: resolvedZIndex }}>
             <div
               className={styles.backdrop}
-              onClick={onClose}
+              onClick={handleBackdropClick}
             />
 
             <div
@@ -151,7 +174,13 @@ export const CustomModal: React.FC<CustomModalProps> = ({
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     {headerAction}
                     {showCloseIcon && (
-                      <button className={styles.closeBtn} onClick={onClose} aria-label="Close modal">
+                      <button 
+                        className={styles.closeBtn} 
+                        onClick={handleCloseIconClick} 
+                        disabled={disableClose}
+                        aria-label="Close modal"
+                        style={{ opacity: disableClose ? 0.4 : 1, cursor: disableClose ? 'not-allowed' : 'pointer' }}
+                      >
                         <X size={20} />
                       </button>
                     )}
@@ -159,7 +188,13 @@ export const CustomModal: React.FC<CustomModalProps> = ({
                 </div>
               )}
               {!title && showCloseIcon && (
-                <button className={`${styles.closeBtn} ${styles.floatingClose}`} onClick={onClose} aria-label="Close modal">
+                <button 
+                  className={`${styles.closeBtn} ${styles.floatingClose}`} 
+                  onClick={handleCloseIconClick} 
+                  disabled={disableClose}
+                  aria-label="Close modal"
+                  style={{ opacity: disableClose ? 0.4 : 1, cursor: disableClose ? 'not-allowed' : 'pointer' }}
+                >
                   <X size={20} />
                 </button>
               )}
@@ -177,7 +212,7 @@ export const CustomModal: React.FC<CustomModalProps> = ({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.16, ease: 'easeOut' }}
-              onClick={onClose}
+              onClick={handleBackdropClick}
             />
 
             <motion.div
@@ -193,7 +228,13 @@ export const CustomModal: React.FC<CustomModalProps> = ({
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     {headerAction}
                     {showCloseIcon && (
-                      <button className={styles.closeBtn} onClick={onClose} aria-label="Close modal">
+                      <button 
+                        className={styles.closeBtn} 
+                        onClick={handleCloseIconClick} 
+                        disabled={disableClose}
+                        aria-label="Close modal"
+                        style={{ opacity: disableClose ? 0.4 : 1, cursor: disableClose ? 'not-allowed' : 'pointer' }}
+                      >
                         <X size={20} />
                       </button>
                     )}
@@ -201,7 +242,13 @@ export const CustomModal: React.FC<CustomModalProps> = ({
                 </div>
               )}
               {!title && showCloseIcon && (
-                <button className={`${styles.closeBtn} ${styles.floatingClose}`} onClick={onClose} aria-label="Close modal">
+                <button 
+                  className={`${styles.closeBtn} ${styles.floatingClose}`} 
+                  onClick={handleCloseIconClick} 
+                  disabled={disableClose}
+                  aria-label="Close modal"
+                  style={{ opacity: disableClose ? 0.4 : 1, cursor: disableClose ? 'not-allowed' : 'pointer' }}
+                >
                   <X size={20} />
                 </button>
               )}

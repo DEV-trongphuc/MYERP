@@ -64,7 +64,15 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   };
 
   return (
-    <CustomModal isOpen={isOpen} onClose={() => { if (!isSubmitting) onClose(); }} title={t(title)} width={width} zIndex={zIndex}>
+    <CustomModal 
+      isOpen={isOpen} 
+      onClose={() => { if (!isSubmitting) onClose(); }} 
+      title={t(title)} 
+      width={width} 
+      zIndex={zIndex}
+      disableClose={isSubmitting}
+      preventCloseOnBackdrop={isSubmitting}
+    >
       {isOpen && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', padding: '0.5rem 0' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>

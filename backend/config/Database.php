@@ -14,6 +14,7 @@ class Database {
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                 PDO::ATTR_EMULATE_PREPARES   => false,
                 PDO::ATTR_PERSISTENT         => true,
+                PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true,
             ];
             self::$instance = new PDO($dsn, DB_USER, DB_PASS, $opts);
             self::$instance->exec("SET time_zone = '+07:00'");
