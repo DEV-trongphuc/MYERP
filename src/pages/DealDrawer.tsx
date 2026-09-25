@@ -1094,9 +1094,10 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
                     />
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-                    <button className="btn ghost w-full" onClick={() => setIsSwitchModalOpen(false)}>Hủy bỏ</button>
-                    <button className="btn primary w-full" style={{ backgroundColor: '#BD1D2D', borderColor: '#BD1D2D' }} onClick={handleSwitchUnit} disabled={submittingSwitch}>
-                      {submittingSwitch ? 'Đang xử lý...' : 'Xác nhận Đổi Căn'}
+                    <button className="btn ghost w-full" onClick={() => setIsSwitchModalOpen(false)} disabled={submittingSwitch}>Hủy bỏ</button>
+                    <button className="btn primary w-full hover-lift" style={{ backgroundColor: '#BD1D2D', borderColor: '#BD1D2D', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }} onClick={handleSwitchUnit} disabled={submittingSwitch}>
+                      {submittingSwitch && <RefreshCw size={14} className="spin" />}
+                      <span>{submittingSwitch ? 'Đang xử lý...' : 'Xác nhận Đổi Căn'}</span>
                     </button>
                   </div>
                 </div>

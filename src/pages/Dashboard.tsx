@@ -34,10 +34,11 @@ import { KpiCardSkeleton, Skeleton, ChartSkeleton } from '../components/ui/Skele
 import { Avatar } from '../components/ui/Avatar';
 import { Pagination } from '../components/ui/Pagination';
 import { WarRoomFlightDeck } from '../components/Dashboard/WarRoomFlightDeck';
-import { ExpenseQuickViewDrawer } from '../components/ExpenseQuickViewDrawer';
-import { DepositDetailDrawer } from '../components/DepositDetailDrawer';
 import { useAuth } from '../contexts/AuthContext';
 import { getUserJobTitle, getUserDisplayRoleOrTitle } from '../utils/roleUtils';
+
+const ExpenseQuickViewDrawer = React.lazy(() => import('../components/ExpenseQuickViewDrawer').then(m => ({ default: m.ExpenseQuickViewDrawer })));
+const DepositDetailDrawer = React.lazy(() => import('../components/DepositDetailDrawer').then(m => ({ default: m.DepositDetailDrawer })));
 
 const parseServerDate = (dateStr: string) => {
   if (!dateStr) return new Date();
@@ -1874,40 +1875,42 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
         `}</style>
         {children}
 
-        {/* Quick View Drawer for Purchase Orders / Expenses */}
-        {selectedExpenseId !== null && (
-          <ExpenseQuickViewDrawer
-            expenseId={selectedExpenseId}
-            onClose={() => setSelectedExpenseId(null)}
-            user={user}
-            onStatusChange={() => {
-              api.get('/expenses', { params: { limit: 50 } })
-                .then(expRes => {
-                  const rawPos = expRes?.data?.data?.items || expRes?.data?.data || [];
-                  if (Array.isArray(rawPos)) setPoList(rawPos);
-                })
-                .catch(console.error);
-            }}
-          />
-        )}
+        <React.Suspense fallback={null}>
+          {/* Quick View Drawer for Purchase Orders / Expenses */}
+          {selectedExpenseId !== null && (
+            <ExpenseQuickViewDrawer
+              expenseId={selectedExpenseId}
+              onClose={() => setSelectedExpenseId(null)}
+              user={user}
+              onStatusChange={() => {
+                api.get('/expenses', { params: { limit: 50 } })
+                  .then(expRes => {
+                    const rawPos = expRes?.data?.data?.items || expRes?.data?.data || [];
+                    if (Array.isArray(rawPos)) setPoList(rawPos);
+                  })
+                  .catch(console.error);
+              }}
+            />
+          )}
 
-        {/* Quick View Drawer for Sales Orders / Deposits */}
-        {selectedDeposit && (
-          <DepositDetailDrawer
-            isOpen={!!selectedDeposit}
-            onClose={() => setSelectedDeposit(null)}
-            deposit={selectedDeposit}
-            onSaveSuccess={() => {
-              fetchAPI('deposits')
-                .then(soRes => {
-                  const rawSos = soRes?.data || soRes || [];
-                  const sos = Array.isArray(rawSos) ? rawSos : (Array.isArray(rawSos?.orders) ? rawSos.orders : []);
-                  setSoList(sos);
-                })
-                .catch(console.error);
-            }}
-          />
-        )}
+          {/* Quick View Drawer for Sales Orders / Deposits */}
+          {selectedDeposit && (
+            <DepositDetailDrawer
+              isOpen={!!selectedDeposit}
+              onClose={() => setSelectedDeposit(null)}
+              deposit={selectedDeposit}
+              onSaveSuccess={() => {
+                fetchAPI('deposits')
+                  .then(soRes => {
+                    const rawSos = soRes?.data || soRes || [];
+                    const sos = Array.isArray(rawSos) ? rawSos : (Array.isArray(rawSos?.orders) ? rawSos.orders : []);
+                    setSoList(sos);
+                  })
+                  .catch(console.error);
+              }}
+            />
+          )}
+        </React.Suspense>
       </div>
     );
   };

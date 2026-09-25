@@ -1,4 +1,11 @@
 <?php
+if (!ob_get_level() && !headers_sent()) {
+    if (extension_loaded('zlib') && !ini_get('zlib.output_compression')) {
+        @ob_start('ob_gzhandler');
+    } else {
+        @ob_start();
+    }
+}
 header("Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, X-Auth-Token, X-HTTP-Method-Override");
 header("Content-Type: application/json; charset=utf-8");
@@ -10373,12 +10380,12 @@ switch ($action) {
                                 $rLink = $reportContactId ? "/contacts?open_contact_id=$reportContactId" : "/contacts";
                                 $stmtNotifRep = $conn->prepare("
                                     INSERT INTO notifications (user_id, tenant_id, title, body, type, link)
-                                    VALUES (?, 1, '🔄 Bạn được chuyển giao Lead mới!', ?, 'contact', ?)
+                                    VALUES (?, 1, 'Bạn vừa nhận được khách hàng mới!', ?, 'contact', ?)
                                 ");
                                 if ($stmtNotifRep) {
                                     $rCustName = $lDetails['name'] ?: 'Khách hàng';
                                     $rPhoneStr = !empty($lDetails['phone']) ? " ({$lDetails['phone']})" : "";
-                                    $rBody = "Bạn vừa được phân bổ khách hàng \"$rCustName\"$rPhoneStr từ xử lý trùng lặp. Nhấn để mở chi tiết.";
+                                    $rBody = "Bạn vừa nhận được khách hàng \"$rCustName\"$rPhoneStr (từ xử lý báo cáo). Nhấn để mở hồ sơ chi tiết.";
                                     $stmtNotifRep->bind_param("iss", $targetUserId, $rBody, $rLink);
                                     $stmtNotifRep->execute();
                                     $stmtNotifRep->close();

@@ -14,7 +14,7 @@ import { EmptyCard } from '../components/ui/EmptyCard';
 import { Avatar } from '../components/ui/Avatar';
 import { TableSkeleton } from '../components/ui/Skeleton';
 const CustomerProfileDrawer = lazy(() => import('./CustomerProfileDrawer').then(module => ({ default: module.CustomerProfileDrawer })));
-import { DepositDetailDrawer } from '../components/DepositDetailDrawer';
+const DepositDetailDrawer = lazy(() => import('../components/DepositDetailDrawer').then(module => ({ default: module.DepositDetailDrawer })));
 import { CurrencyInput } from '../components/ui/CurrencyInput';
 import { MentionInput } from '../components/ui/MentionInput';
 import { PeriodFilter, getDateRange } from '../components/ui/PeriodFilter';
@@ -3088,12 +3088,14 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
       </CustomModal>
 
             {showManageModal && selectedDepForManage && (
-        <DepositDetailDrawer
-          isOpen={showManageModal}
-          onClose={() => setShowManageModal(false)}
-          deposit={selectedDepForManage}
-          onSaveSuccess={loadData}
-        />
+        <Suspense fallback={null}>
+          <DepositDetailDrawer
+            isOpen={showManageModal}
+            onClose={() => setShowManageModal(false)}
+            deposit={selectedDepForManage}
+            onSaveSuccess={loadData}
+          />
+        </Suspense>
       )}
 
       {showContactDrawer && selectedContact && (

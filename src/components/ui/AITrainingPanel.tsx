@@ -253,6 +253,7 @@ export const AITrainingPanel: React.FC = () => {
   // File Upload State
   const [uploadingFile, setUploadingFile] = useState(false);
   const [uploadFolderId, setUploadFolderId] = useState('');
+  const [isTrainingAll, setIsTrainingAll] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Search & Filter
@@ -532,12 +533,14 @@ export const AITrainingPanel: React.FC = () => {
   };
 
   const handleTrainAllPending = async () => {
+    if (isTrainingAll) return;
     const pendingDocs = docs.filter(d => d.source_type !== 'folder' && d.status !== 'trained');
     if (pendingDocs.length === 0) return;
 
     const docIds = pendingDocs.map(d => d.id);
     
     // Set all pending docs as training
+    setIsTrainingAll(true);
     pendingDocs.forEach(d => {
       setTrainingDocs(prev => ({ ...prev, [d.id]: true }));
       setTrainingProgress(prev => ({ ...prev, [d.id]: 'Đang học...' }));
@@ -562,6 +565,7 @@ export const AITrainingPanel: React.FC = () => {
     } catch (e: any) {
       toast.error('Lỗi khi huấn luyện: ' + e.message);
     } finally {
+      setIsTrainingAll(false);
       pendingDocs.forEach(d => {
         setTrainingDocs(prev => ({ ...prev, [d.id]: false }));
         setTrainingProgress(prev => {
@@ -1009,11 +1013,11 @@ export const AITrainingPanel: React.FC = () => {
                   type="button" 
                   className="btn primary" 
                   onClick={handleTrainAllPending} 
-                  disabled={loadingDocs} 
+                  disabled={loadingDocs || isTrainingAll} 
                   style={{ display: 'flex', gap: 6, alignItems: 'center', background: '#10b981', borderColor: '#10b981', borderRadius: '10px' }}
                 >
-                  <Play size={14} fill="white" />
-                  Huấn luyện tất cả ({pendingDocsCount})
+                  {isTrainingAll ? <RefreshCw size={14} className="spin" /> : <Play size={14} fill="white" />}
+                  {isTrainingAll ? 'Đang huấn luyện tất cả...' : `Huấn luyện tất cả (${pendingDocsCount})`}
                 </button>
               )}
             </div>

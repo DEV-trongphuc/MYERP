@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
-import { User, Key, Eye, EyeOff, Save, ShieldAlert, Shield, Mail, Activity, Clock, Settings, ChevronDown, ChevronUp, LogOut, Check, X } from 'lucide-react';
+import { User, Key, Eye, EyeOff, Save, ShieldAlert, Shield, Mail, Activity, Clock, Settings, ChevronDown, ChevronUp, LogOut, Check, X, RefreshCw } from 'lucide-react';
 import { fetchAPI } from '../utils/api';
 import { compressToWebP } from '../utils/imageCompress';
 import { useAuth } from '../contexts/AuthContext';
@@ -199,7 +199,9 @@ export const ProfileModal = () => {
       title={t("Thông tin Tài khoản")}
       width="760px"
     >
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', marginBottom: '1.5rem', gap: '0.75rem', padding: '0 1rem', overflowX: 'auto', scrollbarWidth: 'none' }}>
+      {isOpen && (
+        <>
+          <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', marginBottom: '1.5rem', gap: '0.75rem', padding: '0 1rem', overflowX: 'auto', scrollbarWidth: 'none' }}>
         <button
           onClick={() => setActiveTab('profile')}
           style={{
@@ -343,7 +345,8 @@ export const ProfileModal = () => {
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <button
                   type="button"
-                  className="btn outline"
+                  className="btn outline hover-lift"
+                  disabled={loading}
                   style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '38px', padding: '0 14px', fontSize: '0.8rem', fontWeight: 700, whiteSpace: 'nowrap' }}
                   onClick={() => {
                     setIsOpen(false);
@@ -353,8 +356,8 @@ export const ProfileModal = () => {
                   {t('Mở trang chi tiết')} →
                 </button>
                 
-                <button type="submit" className="btn primary" style={{ height: '38px', padding: '0 14px', fontSize: '0.8rem', fontWeight: 700, whiteSpace: 'nowrap' }} disabled={loading}>
-                  {loading ? t('Đang xử lý...') : <><Save size={14} style={{ marginRight: 4 }} /> {t('Cập nhật Thông tin')}</>}
+                <button type="submit" className="btn primary hover-lift" style={{ height: '38px', padding: '0 14px', fontSize: '0.8rem', fontWeight: 700, whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }} disabled={loading}>
+                  {loading ? <><RefreshCw size={14} className="spin" /> {t('Đang xử lý...')}</> : <><Save size={14} /> {t('Cập nhật Thông tin')}</>}
                 </button>
               </div>
             </div>
@@ -463,11 +466,11 @@ export const ProfileModal = () => {
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
                 <button
                   type="submit"
-                  className="btn primary"
+                  className="btn primary hover-lift"
                   disabled={loading || !passData.oldPassword || !isStrong || !isConfirmMatch}
-                  style={{ background: '#10b981' }}
+                  style={{ background: '#10b981', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                 >
-                  {loading ? t('Đang xử lý...') : <><Save size={18} /> {t('Đổi Mật Khẩu')}</>}
+                  {loading ? <><RefreshCw size={16} className="spin" /> {t('Đang xử lý...')}</> : <><Save size={18} /> {t('Đổi Mật Khẩu')}</>}
                 </button>
               </div>
             </form>
@@ -706,6 +709,8 @@ export const ProfileModal = () => {
           </div>
         )}
       </div>
-    </CustomModal>
+    </>
+  )}
+</CustomModal>
   );
 };

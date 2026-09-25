@@ -102,17 +102,21 @@ export const GlobalConfirmModal: React.FC = () => {
         <div 
           style={{
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.82)', backdropFilter: 'blur(4px)',
+            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(4px)',
+            WebkitBackdropFilter: 'blur(4px)',
             zIndex: 9999999999, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: '1.5rem'
+            padding: '1.5rem',
+            contain: 'strict',
+            willChange: 'opacity'
           }} 
           onClick={handleCancel}
         >
           <motion.div 
-            initial={{ opacity: 0, scale: 0.96, y: 8 }}
+            initial={{ opacity: 0, scale: 0.97, y: 6 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: 8 }}
-            transition={{ type: "tween", ease: "easeOut", duration: 0.25 }}
+            exit={{ opacity: 0, scale: 0.97, y: 6 }}
+            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] as any }}
             onClick={(e) => e.stopPropagation()}
             style={{
               background: 'var(--color-surface)', width: '100%', maxWidth: '480px',
@@ -120,7 +124,10 @@ export const GlobalConfirmModal: React.FC = () => {
               boxShadow: '0 24px 48px -12px rgba(0, 0, 0, 0.18), 0 8px 16px -8px rgba(0, 0, 0, 0.08)',
               border: '1px solid var(--color-border-light)',
               overflow: 'hidden', display: 'flex', flexDirection: 'column',
-              position: 'relative'
+              position: 'relative',
+              willChange: 'transform, opacity',
+              transform: 'translate3d(0, 0, 0)',
+              contain: 'layout style'
             }}
           >
             {/* Close button top right */}

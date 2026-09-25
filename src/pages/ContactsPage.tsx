@@ -493,6 +493,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   const [scoringRules, setScoringRules] = useState<any>(null);
   const [decayDays, setDecayDays] = useState<number>(5);
   const [loading, setLoading] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search.trim(), 300); // 300ms debounce
   const [pageSize, setPageSize] = useState<number>(() => {
@@ -1314,6 +1315,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   };
 
   const bulkExport = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
     const params: Record<string, any> = {
       type: 'contact',
       search: debouncedSearch,
@@ -1381,6 +1384,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       });
     } catch (err: any) {
       addToast(err?.message || 'Xuất danh sách thất bại. Vui lòng thử lại sau.', 'error');
+    } finally {
+      setIsExporting(false);
     }
   };
   const bulkTag    = () => addToast('Mở gán tag hàng loạt...', 'info');
@@ -1541,9 +1546,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                 </button>
               )}
               {user?.role !== 'viewer' && user?.role !== 'sale' && (
-                <button className="btn outline" onClick={bulkExport} title="Xuất dữ liệu theo bộ lọc">
-                  <Download size={14}/>
-                  <span> Xuất theo bộ lọc</span>
+                <button className="btn outline" onClick={bulkExport} disabled={isExporting} title="Xuất dữ liệu theo bộ lọc">
+                  {isExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
+                  <span> {isExporting ? 'Đang xuất...' : 'Xuất theo bộ lọc'}</span>
                 </button>
               )}
             </>

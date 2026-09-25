@@ -828,7 +828,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
               onClick={handleClose}
               style={{
                 position: 'fixed',
@@ -836,7 +836,9 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                 background: 'rgba(0, 0, 0, 0.45)',
                 backdropFilter: 'blur(8px)',
                 WebkitBackdropFilter: 'blur(8px)',
-                zIndex: baseZIndex + 5
+                zIndex: baseZIndex + 5,
+                willChange: 'opacity',
+                transform: 'translate3d(0, 0, 0)'
               }}
             />
             {/* Drawer panel */}
@@ -844,7 +846,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
               initial={window.innerWidth < 768 ? { y: '100%' } : { opacity: 0, x: '250px' }}
               animate={{ y: 0, x: 0, opacity: 1 }}
               exit={window.innerWidth < 768 ? { y: '60%', opacity: 0 } : { opacity: 0, x: '60%' }}
-              transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] as any }}
               style={{
                 position: 'fixed',
                 top: 0,
@@ -855,7 +857,10 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                 boxShadow: '-10px 0 30px rgba(0, 0, 0, 0.15)',
                 display: 'flex',
                 flexDirection: 'column',
-                zIndex: baseZIndex + 10
+                zIndex: baseZIndex + 10,
+                willChange: 'transform, opacity',
+                transform: 'translate3d(0, 0, 0)',
+                contain: 'layout style'
               }}
             >
               {/* Header */}
@@ -975,10 +980,11 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                     <button
                       className="btn primary"
                       onClick={handleSaveMilestones}
-                      style={{ height: '34px', minWidth: 100, fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                      style={{ height: '34px', minWidth: 100, fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                       disabled={isSavingMilestones}
                     >
-                      {isSavingMilestones ? 'Đang lưu...' : 'Lưu lịch trình'}
+                      {isSavingMilestones && <Loader2 size={13} className="spin" />}
+                      <span>{isSavingMilestones ? 'Đang lưu...' : 'Lưu lịch trình'}</span>
                     </button>
                   )}
 

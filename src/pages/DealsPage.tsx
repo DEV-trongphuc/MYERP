@@ -275,7 +275,12 @@ export const DealsPage: React.FC = () => {
     setSelected(new Set(getVisibleItems().map(v => v.id)));
   };
 
+  const [isExporting, setIsExporting] = useState(false);
+  const [isBulkMoving, setIsBulkMoving] = useState(false);
+
   const bulkExport = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
     const type = pipelineView === 'contacts' ? 'contact' : (pipelineView === 'companies' ? 'company' : 'deal');
     const params: Record<string, any> = {
       type,
@@ -298,11 +303,14 @@ export const DealsPage: React.FC = () => {
       });
     } catch (err: any) {
       addToast(err?.message || 'Xuất dữ liệu thất bại', 'error');
+    } finally {
+      setIsExporting(false);
     }
   };
 
   const bulkMove = async () => {
-    if (!targetStageId) return;
+    if (!targetStageId || isBulkMoving) return;
+    setIsBulkMoving(true);
     try {
       const ids = Array.from(selected);
       // In a real app, this would be one API call
@@ -315,6 +323,8 @@ export const DealsPage: React.FC = () => {
       setShowBulkMove(false);
     } catch (err: any) {
       addToast(err.response?.data?.message || 'Lỗi khi chuyển giai đoạn', 'error');
+    } finally {
+      setIsBulkMoving(false);
     }
   };
 
@@ -1002,8 +1012,9 @@ export const DealsPage: React.FC = () => {
               <div style={{ flex: 1 }} />
               
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button className="btn ghost sm" style={{ color: 'var(--color-text)' }} onClick={bulkExport}>
-                  <Download size={14} /> Xuất CSV
+                <button className="btn ghost sm" style={{ color: 'var(--color-text)', display: 'inline-flex', alignItems: 'center', gap: '6px' }} onClick={bulkExport} disabled={isExporting}>
+                  {isExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
+                  <span>{isExporting ? 'Đang xuất...' : 'Xuất CSV'}</span>
                 </button>
                 <button className="btn primary sm" onClick={() => setShowBulkMove(true)}>
                   <RefreshCw size={14} /> Chuyển Giai đoạn
@@ -2053,8 +2064,11 @@ export const DealsPage: React.FC = () => {
                   />
                 </div>
                 <div style={{ display: 'flex', gap: '1rem' }}>
-                  <button className="btn outline" style={{ flex: 1 }} onClick={() => setShowBulkMove(false)}>Hủy</button>
-                  <button className="btn primary" style={{ flex: 1 }} onClick={bulkMove} disabled={!targetStageId}>Xác nhận chuyển</button>
+                  <button className="btn outline" style={{ flex: 1 }} onClick={() => setShowBulkMove(false)} disabled={isBulkMoving}>Hủy</button>
+                  <button className="btn primary" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }} onClick={bulkMove} disabled={!targetStageId || isBulkMoving}>
+                    {isBulkMoving && <Loader2 size={15} className="spin" />}
+                    <span>{isBulkMoving ? 'Đang chuyển...' : 'Xác nhận chuyển'}</span>
+                  </button>
                 </div>
               </motion.div>
             </div>

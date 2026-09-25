@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Search, X, Users, Building2, Briefcase, ArrowRight, Loader2, Phone, Mail, Plus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
@@ -42,27 +43,47 @@ export const GlobalSearchModal: React.FC<{ onClose: () => void }> = ({ onClose }
 
   const hasResults = Object.values(results).some((arr: any) => arr?.length > 0);
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <>
-      <motion.div className="overlay-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
       <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: -40, x: '-50%' }} 
+        className="overlay-backdrop"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.16, ease: 'easeOut' }}
+        onClick={onClose}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 2147483640,
+          background: 'rgba(0, 0, 0, 0.45)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          willChange: 'opacity',
+          transform: 'translate3d(0, 0, 0)'
+        }}
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: -20, x: '-50%' }} 
         animate={{ opacity: 1, scale: 1, y: 0, x: '-50%' }} 
-        exit={{ opacity: 0, scale: 0.95, y: -40, x: '-50%' }}
-        transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+        exit={{ opacity: 0, scale: 0.96, y: -20, x: '-50%' }}
+        transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] as any }}
         style={{ 
           position: 'fixed', 
           top: '12vh', 
           left: '50%', 
           width: 640, 
           maxWidth: 'calc(100vw - 2rem)', 
-          background: 'rgba(255, 255, 255, 0.85)',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
+          background: 'var(--color-surface)',
           borderRadius: '24px', 
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0,0,0,0.05)', 
-          zIndex: 1010, 
-          overflow: 'hidden' 
+          zIndex: 2147483645, 
+          overflow: 'hidden',
+          willChange: 'transform, opacity',
+          transform: 'translate3d(0, 0, 0)',
+          contain: 'layout style'
         }}
       >
         {/* Search input */}
@@ -169,7 +190,8 @@ export const GlobalSearchModal: React.FC<{ onClose: () => void }> = ({ onClose }
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ padding: '2px 5px', background: 'rgba(0,0,0,0.08)', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 800 }}>ESC</span> Đóng</div>
         </div>
       </motion.div>
-    </>
+    </>,
+    document.body
   );
 };
 

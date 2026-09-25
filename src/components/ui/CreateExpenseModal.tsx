@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, Calendar, DollarSign, Users, Briefcase, FileText, 
   Building2, Search, Check, ChevronDown, StickyNote,
-  Car, UtensilsCrossed, Settings, Gift, Wrench, User
+  Car, UtensilsCrossed, Settings, Gift, Wrench, User, Loader2
 } from 'lucide-react';
 import api from '../../api/axios';
 import { useUIStore } from '../../store/uiStore';
@@ -714,14 +714,19 @@ export const CreateExpenseModal: React.FC<Props> = ({ isOpen, onClose, initialEn
 
           {/* Footer */}
           <div className="modal-footer">
-            <button className="btn outline" onClick={onClose}>Hủy</button>
+            <button className="btn outline" onClick={onClose} disabled={loading}>Hủy</button>
             <button
               className="btn primary"
               onClick={handleSubmit}
               disabled={loading || isViewer}
-              style={{ minWidth: '160px', background: isViewer ? 'var(--color-border)' : 'var(--color-primary)', color: isViewer ? 'var(--color-text-muted)' : 'white' }}
+              style={{ minWidth: '160px', background: isViewer ? 'var(--color-border)' : 'var(--color-primary)', color: isViewer ? 'var(--color-text-muted)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
             >
-              {loading ? 'Đang lưu...' : (isViewer ? 'Bạn không có quyền gửi chi phí' : '✓ Gửi phê duyệt')}
+              {loading ? (
+                <>
+                  <Loader2 size={16} className="spin" />
+                  <span>Đang gửi phê duyệt...</span>
+                </>
+              ) : (isViewer ? 'Bạn không có quyền gửi chi phí' : '✓ Gửi phê duyệt')}
             </button>
           </div>
         </motion.div>

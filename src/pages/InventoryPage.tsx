@@ -5,7 +5,7 @@ import {
   Package, Plus, Edit, Trash2, LayoutGrid, List, Search, 
   Filter, History, Share, Clock, CheckCircle, AlertTriangle, 
   ChevronDown, DollarSign, CalendarDays, Layers, ArrowRight,
-  TrendingDown, TrendingUp, MoreHorizontal, X, Download, FileSpreadsheet
+  TrendingDown, TrendingUp, MoreHorizontal, X, Download, FileSpreadsheet, Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUIStore } from '../store/uiStore';
@@ -74,13 +74,13 @@ export default function InventoryPage() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   
-  // Modals
   const [showExportModal, setShowExportModal] = useState(false);
   const [showImportExport, setShowImportExport] = useState(false);
   const [showInventorySync, setShowInventorySync] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showAdjustModal, setShowAdjustModal] = useState(false);
   const [showPOModal, setShowPOModal] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [activeTab, setActiveTab] = useState<'batches' | 'history' | 'purchase_orders'>('batches');
   const [selectedBatch, setSelectedBatch] = useState<Batch | null>(null);
   const [logs, setLogs] = useState<InventoryLog[]>([]);
@@ -274,6 +274,8 @@ export default function InventoryPage() {
   };
 
   const handleExport = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
     addToast('Đang tải xuống dữ liệu kho hàng theo bộ lọc...', 'info');
     try {
       await downloadExportFile({
@@ -290,6 +292,8 @@ export default function InventoryPage() {
       });
     } catch (err: any) {
       addToast(err?.message || 'Xuất dữ liệu kho hàng thất bại', 'error');
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -306,6 +310,7 @@ export default function InventoryPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', width: isMobile ? '100%' : 'auto' }}>
             <button 
               onClick={handleExport} 
+              disabled={isExporting}
               style={{ 
                 height: '36px', 
                 fontSize: '0.8125rem', 
@@ -318,15 +323,16 @@ export default function InventoryPage() {
                 border: '1px solid var(--color-border)',
                 background: 'var(--color-surface)',
                 color: 'var(--color-text)',
-                cursor: 'pointer',
+                cursor: isExporting ? 'not-allowed' : 'pointer',
                 fontWeight: 600,
                 transition: 'all 0.2s',
-                flex: isMobile ? '1 1 calc(50% - 4px)' : 'none'
+                flex: isMobile ? '1 1 calc(50% - 4px)' : 'none',
+                opacity: isExporting ? 0.7 : 1
               }} 
               title="Xuất Excel/CSV"
             >
-              <Download size={14} />
-              <span>Xuất file</span>
+              {isExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
+              <span>{isExporting ? 'Đang xuất...' : 'Xuất file'}</span>
             </button>
 
             {!isSale && (

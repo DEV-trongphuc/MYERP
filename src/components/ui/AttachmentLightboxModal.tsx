@@ -107,7 +107,7 @@ export const AttachmentLightboxModal: React.FC<AttachmentLightboxModalProps> = (
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.22, ease: 'easeOut' }}
+          transition={{ duration: 0.16, ease: 'easeOut' }}
           style={{
             position: 'fixed',
             inset: 0,
@@ -120,7 +120,10 @@ export const AttachmentLightboxModal: React.FC<AttachmentLightboxModalProps> = (
             alignItems: 'center',
             justifyContent: 'center',
             padding: '1rem',
-            userSelect: 'none'
+            userSelect: 'none',
+            willChange: 'opacity',
+            transform: 'translate3d(0, 0, 0)',
+            contain: 'strict'
           }}
           onClick={onClose}
         >
@@ -373,7 +376,7 @@ export const AttachmentLightboxModal: React.FC<AttachmentLightboxModalProps> = (
               initial={{ opacity: 0, scale: 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.96 }}
-              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] as any }}
               style={{
                 position: 'relative',
                 maxWidth: '94vw',
@@ -381,7 +384,10 @@ export const AttachmentLightboxModal: React.FC<AttachmentLightboxModalProps> = (
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                justifyContent: 'center'
+                justifyContent: 'center',
+                willChange: 'transform, opacity',
+                transform: 'translate3d(0, 0, 0)',
+                contain: 'layout style'
               }}
               onClick={(e) => e.stopPropagation()}
             >

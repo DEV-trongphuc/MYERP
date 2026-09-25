@@ -886,10 +886,12 @@ try {
                 }
 
                 // Insert database notification for assigned consultant
-                $stmtDbNotif = $conn->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, 1, ?, ?, 'lead_assignment', ?)");
+                $stmtDbNotif = $conn->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, 1, ?, ?, 'contact', ?)");
                 if ($stmtDbNotif) {
-                    $notifTitle = "Bạn được phân bổ khách hàng mới";
-                    $notifBody = "Khách hàng \"" . ($name ?: "Khách hàng") . "\" (" . $phone . ") đã được phân bổ cho bạn từ nguồn \"" . ($source ?: "Nguồn khác") . "\".";
+                    $notifTitle = "Bạn vừa nhận được khách hàng mới!";
+                    $custName = $name ?: "Khách hàng mới";
+                    $phoneStr = !empty($phone) ? " ($phone)" : "";
+                    $notifBody = "Bạn vừa nhận được khách hàng \"$custName\"$phoneStr. Nhấn để mở hồ sơ chi tiết.";
                     $notifLink = $contactId ? "/contacts?open_contact_id=" . $contactId : "/contacts";
                     $stmtDbNotif->bind_param("isss", $assignedConsultantId, $notifTitle, $notifBody, $notifLink);
                     $stmtDbNotif->execute();

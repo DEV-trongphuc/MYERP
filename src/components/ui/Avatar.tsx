@@ -143,7 +143,8 @@ export const Avatar: React.FC<AvatarProps> = ({ src, name, size = 'md', classNam
 
   const avatarEl = (
     <div 
-      className={`${styles.avatar} ${className}`}
+      data-avatar="true"
+      className={`${styles.avatar} avatar user-avatar ${className}`}
       title={title}
       style={{ 
         width: finalSize, 
@@ -161,7 +162,9 @@ export const Avatar: React.FC<AvatarProps> = ({ src, name, size = 'md', classNam
         <img 
           src={resolvedSrc} 
           alt={name} 
-          className={styles.image} 
+          data-avatar="true"
+          data-no-lightbox="true"
+          className={`${styles.image} avatar-img`} 
           onError={() => setHasError(true)} 
         />
       ) : (

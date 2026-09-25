@@ -688,7 +688,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                     }}
                     title={isSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
                   >
-                    <Save size={18} />
+                    {isSaving ? <Loader2 size={18} className="spin" /> : <Save size={18} />}
                   </button>
                 </div>
               </div>
@@ -823,7 +823,8 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                     }}
                     onClick={handleSave}
                   >
-                    {isSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
+                    {isSaving && <Loader2 size={16} className="spin" />}
+                    <span>{isSaving ? 'Đang lưu...' : 'Lưu thay đổi'}</span>
                   </button>
                   <button className={styles.closeBtn} onClick={handleClose} style={{ marginLeft: '4px' }}><X size={20} /></button>
                 </div>
@@ -3253,9 +3254,10 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                     </div>
                   </div>
                   <div className="modal-footer">
-                    <button className="btn outline" onClick={() => setShowDealModal(false)} disabled={isSaving}>Hủy</button>
-                    <button className="btn primary" onClick={handleCreateDeal} disabled={isSaving}>
-                      {isSaving ? 'Đang tạo...' : 'Tạo Deal'}
+                    <button className="btn outline hover-lift" onClick={() => setShowDealModal(false)} disabled={isSaving}>Hủy</button>
+                    <button className="btn primary hover-lift" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }} onClick={handleCreateDeal} disabled={isSaving}>
+                      {isSaving && <Loader2 size={16} className="spin" />}
+                      <span>{isSaving ? 'Đang tạo...' : 'Tạo Deal'}</span>
                     </button>
                   </div>
                 </motion.div>

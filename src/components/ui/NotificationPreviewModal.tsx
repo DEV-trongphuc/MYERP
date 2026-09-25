@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CustomModal } from './CustomModal';
 import { Mail, MessageCircle, Send } from 'lucide-react';
 import { fetchAPI } from '../../utils/api';
@@ -434,7 +434,8 @@ export const NotificationPreviewModal: React.FC<NotificationPreviewModalProps> =
       title={t(modalTitle)}
       width={isEmail ? 680 : 520}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', maxHeight: '75vh', overflow: 'hidden' }}>
+      {isOpen && (
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', maxHeight: '75vh', overflow: 'hidden' }}>
         
         {/* Info Header */}
         <div style={{
@@ -750,8 +751,8 @@ export const NotificationPreviewModal: React.FC<NotificationPreviewModalProps> =
             {t("Đóng")}
           </button>
         </div>
-
       </div>
+      )}
     </CustomModal>
   );
 };

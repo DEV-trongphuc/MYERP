@@ -645,6 +645,7 @@ export const SignaturePadModal: React.FC<SignaturePadModalProps> = ({
           <button
             type="button"
             onClick={onClose}
+            disabled={saving}
             style={{
               padding: '8px 16px',
               borderRadius: '8px',
@@ -653,7 +654,8 @@ export const SignaturePadModal: React.FC<SignaturePadModalProps> = ({
               color: 'var(--color-text)',
               fontSize: '0.85rem',
               fontWeight: 600,
-              cursor: 'pointer'
+              cursor: saving ? 'not-allowed' : 'pointer',
+              opacity: saving ? 0.6 : 1
             }}
           >
             {t('Hủy')}

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Check, UploadCloud, RotateCcw, Image as ImageIcon, LayoutGrid, Sparkles, Layers, Sliders } from 'lucide-react';
+import { X, Check, UploadCloud, RotateCcw, Image as ImageIcon, LayoutGrid, Sparkles, Layers, Sliders, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/axios';
 import { compressToWebP } from '../../utils/imageCompress';
@@ -779,22 +779,23 @@ export const WorkspaceCustomizerModal: React.FC<WorkspaceCustomizerModalProps> =
                 />
 
                 <div 
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => !isUploading && fileInputRef.current?.click()}
                   style={{
                     border: '2px dashed var(--color-border)',
                     borderRadius: '14px',
                     padding: '24px 16px',
                     textAlign: 'center',
-                    cursor: 'pointer',
+                    cursor: isUploading ? 'not-allowed' : 'pointer',
                     backgroundColor: 'var(--color-bg)',
                     transition: 'all 0.2s ease',
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
-                    gap: '8px'
+                    gap: '8px',
+                    opacity: isUploading ? 0.7 : 1
                   }}
-                  onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--color-primary)'}
-                  onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--color-border)'}
+                  onMouseEnter={e => { if (!isUploading) e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
+                  onMouseLeave={e => { if (!isUploading) e.currentTarget.style.borderColor = 'var(--color-border)'; }}
                 >
                   <div style={{
                     width: '44px',
@@ -806,11 +807,11 @@ export const WorkspaceCustomizerModal: React.FC<WorkspaceCustomizerModalProps> =
                     justifyContent: 'center',
                     color: 'var(--color-primary)'
                   }}>
-                    <UploadCloud size={24} />
+                    {isUploading ? <Loader2 size={24} className="spin" /> : <UploadCloud size={24} />}
                   </div>
                   <div>
                     <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-primary)' }}>
-                      Bấm vào đây để tải ảnh nền của bạn
+                      {isUploading ? 'Đang tải & tối ưu ảnh nền...' : 'Bấm vào đây để tải ảnh nền của bạn'}
                     </span>
                     <p style={{ margin: '4px 0 0 0', fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
                       Yêu cầu tối thiểu: <strong>1280 x 720 px</strong> (Khuyến nghị <strong>1920 x 1080 px</strong> để không bị vỡ ảnh)
@@ -901,18 +902,21 @@ export const WorkspaceCustomizerModal: React.FC<WorkspaceCustomizerModalProps> =
           <button
             type="button"
             onClick={handleReset}
+            disabled={isUploading}
+            className="hover-lift"
             style={{
               background: 'transparent',
               border: '1px solid var(--color-border)',
               padding: '8px 16px',
               borderRadius: '8px',
-              cursor: 'pointer',
+              cursor: isUploading ? 'not-allowed' : 'pointer',
               color: 'var(--color-text)',
               fontSize: '0.8rem',
               fontWeight: 600,
               display: 'flex',
               alignItems: 'center',
-              gap: '6px'
+              gap: '6px',
+              opacity: isUploading ? 0.6 : 1
             }}
           >
             <RotateCcw size={14} />
@@ -923,15 +927,18 @@ export const WorkspaceCustomizerModal: React.FC<WorkspaceCustomizerModalProps> =
             <button
               type="button"
               onClick={onClose}
+              disabled={isUploading}
+              className="hover-lift"
               style={{
                 background: 'var(--color-surface)',
                 border: '1px solid var(--color-border)',
                 padding: '8px 16px',
                 borderRadius: '8px',
-                cursor: 'pointer',
+                cursor: isUploading ? 'not-allowed' : 'pointer',
                 color: 'var(--color-text)',
                 fontSize: '0.8rem',
-                fontWeight: 600
+                fontWeight: 600,
+                opacity: isUploading ? 0.6 : 1
               }}
             >
               Hủy
@@ -939,19 +946,22 @@ export const WorkspaceCustomizerModal: React.FC<WorkspaceCustomizerModalProps> =
             <button
               type="button"
               onClick={handleApply}
+              disabled={isUploading}
+              className="hover-lift"
               style={{
                 background: 'var(--color-primary)',
                 border: 'none',
                 padding: '8px 20px',
                 borderRadius: '8px',
-                cursor: 'pointer',
+                cursor: isUploading ? 'not-allowed' : 'pointer',
                 color: '#fff',
                 fontSize: '0.8rem',
                 fontWeight: 700,
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
-                boxShadow: '0 2px 6px rgba(189, 29, 45, 0.3)'
+                boxShadow: '0 2px 6px rgba(189, 29, 45, 0.3)',
+                opacity: isUploading ? 0.6 : 1
               }}
             >
               <Check size={16} />

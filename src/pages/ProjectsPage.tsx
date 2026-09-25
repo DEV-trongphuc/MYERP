@@ -7419,11 +7419,12 @@ export default function ProjectsPage() {
               <button
                 type="submit"
                 form="project-form"
-                className="btn primary sm"
+                className="btn primary sm hover-lift"
                 disabled={isSaving}
-                style={{ borderRadius: '100px', fontWeight: 700, background: 'var(--color-primary)', border: 'none', opacity: isSaving ? 0.7 : 1, cursor: isSaving ? 'not-allowed' : 'pointer' }}
+                style={{ borderRadius: '100px', fontWeight: 700, background: 'var(--color-primary)', border: 'none', opacity: isSaving ? 0.7 : 1, cursor: isSaving ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
               >
-                {isSaving ? 'Đang lưu...' : 'Lưu chương trình'}
+                {isSaving && <RefreshCw size={14} className="spin" />}
+                <span>{isSaving ? 'Đang lưu...' : 'Lưu chương trình'}</span>
               </button>
             </div>
           )
@@ -8956,11 +8957,12 @@ export default function ProjectsPage() {
               <button
                 type="submit"
                 form="campaign-form"
-                className="btn primary sm"
+                className="btn primary sm hover-lift"
                 disabled={isSaving}
-                style={{ borderRadius: '100px', fontWeight: 700, background: 'var(--color-primary)', border: 'none', opacity: isSaving ? 0.7 : 1, cursor: isSaving ? 'not-allowed' : 'pointer' }}
+                style={{ borderRadius: '100px', fontWeight: 700, background: 'var(--color-primary)', border: 'none', opacity: isSaving ? 0.7 : 1, cursor: isSaving ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
               >
-                {isSaving ? 'Đang lưu...' : 'Lưu chiến dịch'}
+                {isSaving && <RefreshCw size={14} className="spin" />}
+                <span>{isSaving ? 'Đang lưu...' : 'Lưu chiến dịch'}</span>
               </button>
             </div>
           ),

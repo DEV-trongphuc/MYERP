@@ -1,4 +1,11 @@
 <?php
+if (!ob_get_level() && !headers_sent()) {
+    if (extension_loaded('zlib') && !ini_get('zlib.output_compression')) {
+        @ob_start('ob_gzhandler');
+    } else {
+        @ob_start();
+    }
+}
 require_once __DIR__ . '/config.php';          // DB constants + CORS origins
 
 register_shutdown_function(function() {
@@ -33,24 +40,28 @@ require_once __DIR__ . '/config/JWT.php';
 $origin  = $_SERVER['HTTP_ORIGIN'] ?? '';
 $allowed = array_map('trim', explode(',', ALLOWED_ORIGINS));
 
-// Dynamically fetch and allow frontend_url from system_settings
-try {
-    $db = Database::getInstance();
-    
-
-
-    $stmtSetting = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'frontend_url' LIMIT 1");
-    if ($stmtSetting) {
-        $feUrl = $stmtSetting->fetchColumn();
-        if (!empty($feUrl)) {
-            $parsed = parse_url($feUrl);
-            if (isset($parsed['scheme']) && isset($parsed['host'])) {
-                $allowed[] = $parsed['scheme'] . '://' . $parsed['host'] . (isset($parsed['port']) ? ':' . $parsed['port'] : '');
-            }
+// Dynamically fetch and allow frontend_url from system_settings with 300s cache
+$feUrlCacheFile = sys_get_temp_dir() . DIRECTORY_SEPARATOR . "ideas_fe_url.txt";
+$feUrl = '';
+if (file_exists($feUrlCacheFile) && (time() - filemtime($feUrlCacheFile) < 300)) {
+    $feUrl = trim(@file_get_contents($feUrlCacheFile));
+} else {
+    try {
+        $db = Database::getInstance();
+        $stmtSetting = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'frontend_url' LIMIT 1");
+        if ($stmtSetting) {
+            $feUrl = $stmtSetting->fetchColumn() ?: '';
+            @file_put_contents($feUrlCacheFile, $feUrl);
         }
+    } catch (Throwable $e) {
+        // Avoid crashing on DB issues during CORS phase
     }
-} catch (Throwable $e) {
-    // Avoid crashing on DB issues during CORS phase
+}
+if (!empty($feUrl)) {
+    $parsed = parse_url($feUrl);
+    if (isset($parsed['scheme']) && isset($parsed['host'])) {
+        $allowed[] = $parsed['scheme'] . '://' . $parsed['host'] . (isset($parsed['port']) ? ':' . $parsed['port'] : '');
+    }
 }
 
 if (isset($_GET['action']) && $_GET['action'] === 'get_user_role') {
@@ -76,6 +87,7 @@ if ($isLocalhost || $isVercel || $isZalo || in_array($origin, $allowed, true)) {
 header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, X-HTTP-Method-Override');
 header('Access-Control-Expose-Headers: Content-Type, Authorization, X-App-Version');
+header('Access-Control-Max-Age: 86400');
 header('Vary: Origin');
 header('Content-Type: application/json; charset=UTF-8');
 
@@ -93,7 +105,11 @@ if (file_exists($versionFile)) {
 }
 header('X-App-Version: ' . $appVersion);
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    header('Access-Control-Max-Age: 86400');
+    http_response_code(204);
+    exit;
+}
 
 if (isset($_GET['action']) && $_GET['action'] === 'version') {
     header('Cache-Control: no-store, no-cache, must-revalidate');
@@ -1190,6 +1206,12 @@ switch ($resource) {
                 $ctrl->sendTestAttendanceEmail($auth);
             } else {
                 respond(405, null, 'Phương thức không hỗ trợ cho test-attendance', false);
+            }
+        } elseif ($resourceId === 'prune') {
+            if ($method === 'POST' || $method === 'DELETE' || $method === 'GET') {
+                $ctrl->prune($auth);
+            } else {
+                respond(405, null, 'Phương thức không hỗ trợ cho prune', false);
             }
         } else {
             if ($method === 'GET') {

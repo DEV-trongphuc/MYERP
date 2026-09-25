@@ -65,34 +65,36 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
 
   return (
     <CustomModal isOpen={isOpen} onClose={() => { if (!isSubmitting) onClose(); }} title={t(title)} width={width} zIndex={zIndex}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', padding: '0.5rem 0' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <div style={{ 
-            width: 40, height: 40, borderRadius: '50%', background: iconBg, 
-            color: iconColor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 
-          }}>
-            <AlertTriangle size={20} />
+      {isOpen && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', padding: '0.5rem 0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <div style={{ 
+              width: 40, height: 40, borderRadius: '50%', background: iconBg, 
+              color: iconColor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 
+            }}>
+              <AlertTriangle size={20} />
+            </div>
+            <div>
+              {message && <p style={{ color: 'var(--color-text)', lineHeight: 1.6, fontSize: '0.9375rem', whiteSpace: 'pre-line', margin: 0 }}>{t(message)}</p>}
+            </div>
           </div>
-          <div>
-            {message && <p style={{ color: 'var(--color-text)', lineHeight: 1.6, fontSize: '0.9375rem', whiteSpace: 'pre-line', margin: 0 }}>{t(message)}</p>}
-          </div>
-        </div>
 
-        {children}
-        
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
-          <button className="btn outline" disabled={isSubmitting} onClick={onClose}>{t(cancelText)}</button>
-          <button
-            className={btnClass}
-            disabled={isSubmitting}
-            onClick={handleConfirm}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, opacity: isSubmitting ? 0.6 : 1 }}
-          >
-            {isSubmitting ? <RefreshCw size={14} className="spin" /> : null}
-            {isSubmitting ? `${t(confirmText)}...` : t(confirmText)}
-          </button>
+          {children}
+          
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
+            <button className="btn outline" disabled={isSubmitting} onClick={onClose}>{t(cancelText)}</button>
+            <button
+              className={btnClass}
+              disabled={isSubmitting}
+              onClick={handleConfirm}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, opacity: isSubmitting ? 0.6 : 1 }}
+            >
+              {isSubmitting ? <RefreshCw size={14} className="spin" /> : null}
+              {isSubmitting ? `${t(confirmText)}...` : t(confirmText)}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </CustomModal>
   );
 };

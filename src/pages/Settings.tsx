@@ -500,6 +500,9 @@ const SettingsInner = () => {
   const [loadingDb, setLoadingDb] = useState(false);
   const [dbActionRunning, setDbActionRunning] = useState(false);
   const [dbLogs, setDbLogs] = useState<string[]>([]);
+  const [isExportingResults, setIsExportingResults] = useState(false);
+  const [savingWorkflow, setSavingWorkflow] = useState(false);
+  const [savingTag, setSavingTag] = useState(false);
 
   // Database ERD State & Fetching
   const [dbSchema, setDbSchema] = useState<Record<string, any>>(dbSchemaJson.schema || {});
@@ -1252,10 +1255,11 @@ const SettingsInner = () => {
 
   const handleSaveTag = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!tagForm.name) {
-      toast.error(t('Tên tag không được để trống'));
+    if (!tagForm.name || savingTag) {
+      if (!tagForm.name) toast.error(t('Tên tag không được để trống'));
       return;
     }
+    setSavingTag(true);
     try {
       const isEdit = Boolean(editingTag);
       const url = isEdit ? `tags/${editingTag.id}` : 'tags';
@@ -1273,6 +1277,8 @@ const SettingsInner = () => {
       }
     } catch (err: any) {
       toast.error(err.message || t('Lỗi hệ thống'));
+    } finally {
+      setSavingTag(false);
     }
   };
 
@@ -1335,10 +1341,11 @@ const SettingsInner = () => {
 
   const handleSaveWorkflowTemplate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!workflowForm.title || !workflowForm.stage_id) {
-      toast.error(t('Vui lòng điền đầy đủ tiêu đề và giai đoạn'));
+    if (!workflowForm.title || !workflowForm.stage_id || savingWorkflow) {
+      if (!workflowForm.title || !workflowForm.stage_id) toast.error(t('Vui lòng điền đầy đủ tiêu đề và giai đoạn'));
       return;
     }
+    setSavingWorkflow(true);
     try {
       const isEdit = Boolean(editingTemplate);
       const url = isEdit ? `workflow-task-templates/${editingTemplate.id}` : 'workflow-task-templates';
@@ -1356,6 +1363,8 @@ const SettingsInner = () => {
       }
     } catch (err: any) {
       toast.error(t('Lỗi kết nối: ') + err.message);
+    } finally {
+      setSavingWorkflow(false);
     }
   };
 
@@ -1959,27 +1968,34 @@ const SettingsInner = () => {
   };
 
   const handleExportResults = async () => {
-    if (!checkedResults || checkedResults.length === 0) return;
-    const XLSX = await import('xlsx');
+    if (!checkedResults || checkedResults.length === 0 || isExportingResults) return;
+    setIsExportingResults(true);
+    try {
+      const XLSX = await import('xlsx');
 
-    // Combine original rows with checking results
-    const exportData = checkedResults.map((res, idx) => {
-      const original = selectedSheetId === 'local' ? (localRows[idx] || {}) : { [t('Họ và tên')]: res.name, [t('Số điện thoại')]: res.phone, [t('Email')]: res.email };
-      return {
-        ...original,
-        [t('Trạng thái CRM')]: res.has_record ? t('TRÙNG LẶP') : t('MỚI HOÀN TOÀN'),
-        [t('Sale cũ sở hữu')]: res.consultant_name || '',
-        [t('Trạng thái Sale cũ')]: res.consultant_status === 'active' ? t('Đang hoạt động') : (res.consultant_status === 'leave' ? t('Nghỉ phép') : t('Ngưng hoạt động')),
-        [t('Thời gian tương tác cuối')]: res.last_interaction_date || '',
-        [t('Số tháng kể từ tương tác cuối')]: res.months_since_last_interaction !== null ? Number(res.months_since_last_interaction).toFixed(1) : ''
-      };
-    });
+      // Combine original rows with checking results
+      const exportData = checkedResults.map((res, idx) => {
+        const original = selectedSheetId === 'local' ? (localRows[idx] || {}) : { [t('Họ và tên')]: res.name, [t('Số điện thoại')]: res.phone, [t('Email')]: res.email };
+        return {
+          ...original,
+          [t('Trạng thái CRM')]: res.has_record ? t('TRÙNG LẶP') : t('MỚI HOÀN TOÀN'),
+          [t('Sale cũ sở hữu')]: res.consultant_name || '',
+          [t('Trạng thái Sale cũ')]: res.consultant_status === 'active' ? t('Đang hoạt động') : (res.consultant_status === 'leave' ? t('Nghỉ phép') : t('Ngưng hoạt động')),
+          [t('Thời gian tương tác cuối')]: res.last_interaction_date || '',
+          [t('Số tháng kể từ tương tác cuối')]: res.months_since_last_interaction !== null ? Number(res.months_since_last_interaction).toFixed(1) : ''
+        };
+      });
 
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, t("Kết quả lọc trùng"));
-    XLSX.writeFile(workbook, `Ket_qua_loc_trung_${new Date().toISOString().slice(0, 10)}.xlsx`);
-    toast.success(t("Đã xuất file kết quả lọc trùng thành công!"));
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, t("Kết quả lọc trùng"));
+      XLSX.writeFile(workbook, `Ket_qua_loc_trung_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      toast.success(t("Đã xuất file kết quả lọc trùng thành công!"));
+    } catch (err: any) {
+      toast.error(t("Lỗi xuất file: ") + (err?.message || ''));
+    } finally {
+      setIsExportingResults(false);
+    }
   };
 
   const parseSecurityTimer = (val: string) => {
@@ -3282,7 +3298,10 @@ const SettingsInner = () => {
                           </div>
                           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', width: '100%', maxWidth: '400px', flex: '1 1 300px' }}>
                             <input className="form-input" placeholder={t("Tìm kiếm theo Tên, SĐT, Email...")} value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setResultsPage(1); }} style={{ height: 34, fontSize: '0.825rem' }} />
-                            <button type="button" className="btn success" style={{ gap: 6, padding: '6px 14px', height: 34, flexShrink: 0, fontWeight: 700 }} onClick={handleExportResults}><Download size={14} /> {t('Xuất File')}</button>
+                            <button type="button" className="btn success" disabled={isExportingResults} style={{ gap: 6, padding: '6px 14px', height: 34, flexShrink: 0, fontWeight: 700, display: 'inline-flex', alignItems: 'center' }} onClick={handleExportResults}>
+                              {isExportingResults ? <RefreshCw size={14} className="spin" /> : <Download size={14} />}
+                              <span>{isExportingResults ? t('Đang xuất...') : t('Xuất File')}</span>
+                            </button>
                           </div>
                         </div>
 
@@ -8626,8 +8645,11 @@ function doPost(e) {
             </div>
 
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
-              <button type="button" className="btn outline" onClick={() => setShowWorkflowModal(false)}>{t('Hủy')}</button>
-              <button type="submit" className="btn primary">{t('Lưu lại')}</button>
+              <button type="button" className="btn outline" onClick={() => setShowWorkflowModal(false)} disabled={savingWorkflow}>{t('Hủy')}</button>
+              <button type="submit" className="btn primary" disabled={savingWorkflow} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                {savingWorkflow && <RefreshCw size={14} className="spin" />}
+                <span>{savingWorkflow ? t('Đang lưu...') : t('Lưu lại')}</span>
+              </button>
             </div>
           </form>
         )}
@@ -8854,8 +8876,11 @@ function doPost(e) {
 
 
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
-              <button type="button" className="btn outline" onClick={() => setShowTagModal(false)}>{t('Hủy')}</button>
-              <button type="submit" className="btn primary">{t('Lưu lại')}</button>
+              <button type="button" className="btn outline" onClick={() => setShowTagModal(false)} disabled={savingTag}>{t('Hủy')}</button>
+              <button type="submit" className="btn primary" disabled={savingTag} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                {savingTag && <RefreshCw size={14} className="spin" />}
+                <span>{savingTag ? t('Đang lưu...') : t('Lưu lại')}</span>
+              </button>
             </div>
           </form>
         )}

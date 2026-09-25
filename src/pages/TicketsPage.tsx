@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import { Plus, Search, Filter, LifeBuoy, AlertCircle, Clock, X, Save, MoreHorizontal, FileText } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
-import { TicketDrawer } from './TicketDrawer';
+const TicketDrawer = lazy(() => import('./TicketDrawer').then(module => ({ default: module.TicketDrawer })));
 const CustomerProfileDrawer = lazy(() => import('./CustomerProfileDrawer').then(module => ({ default: module.CustomerProfileDrawer })));
 import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar } from '../components/ui/Avatar';
@@ -863,17 +863,21 @@ export const TicketsPage: React.FC = () => {
         )}
       </AnimatePresence>
     , document.body)}
-      <TicketDrawer 
-        key={selectedTicket?.id ? `ticket-drawer-${selectedTicket.id}` : 'ticket-drawer-empty'}
-        isOpen={!!selectedTicket} 
-        onClose={() => setSelectedTicket(null)} 
-        ticket={selectedTicket} 
-        onUpdate={handleUpdate}
-        onDelete={handleDelete}
-        contacts={contacts}
-        users={users}
-        onOpenContact={(contactData) => setSelectedContactForDrawer(contactData)}
-      />
+      {selectedTicket && (
+        <Suspense fallback={null}>
+          <TicketDrawer 
+            key={selectedTicket?.id ? `ticket-drawer-${selectedTicket.id}` : 'ticket-drawer-empty'}
+            isOpen={!!selectedTicket} 
+            onClose={() => setSelectedTicket(null)} 
+            ticket={selectedTicket} 
+            onUpdate={handleUpdate}
+            onDelete={handleDelete}
+            contacts={contacts}
+            users={users}
+            onOpenContact={(contactData) => setSelectedContactForDrawer(contactData)}
+          />
+        </Suspense>
+      )}
       {selectedContactForDrawer && (
         <Suspense fallback={null}>
           <CustomerProfileDrawer

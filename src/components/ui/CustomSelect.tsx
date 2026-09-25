@@ -460,17 +460,19 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: dropdownDirection === 'down' ? -18 : 18, scale: 0.96 }}
+            initial={{ opacity: 0, y: dropdownDirection === 'down' ? -8 : 8, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: dropdownDirection === 'down' ? -18 : 18, scale: 0.96 }}
-            transition={{ type: "spring", duration: 0.32, bounce: 0.05 }}
+            exit={{ opacity: 0, y: dropdownDirection === 'down' ? -8 : 8, scale: 0.98 }}
+            transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] as any }}
             className={styles.dropdown}
             style={{
-              top: dropdownDirection === 'down' ? 'calc(100% + 0.5rem)' : 'auto',
-              bottom: dropdownDirection === 'up' ? 'calc(100% + 0.5rem)' : 'auto',
+              top: dropdownDirection === 'down' ? 'calc(100% + 0.35rem)' : 'auto',
+              bottom: dropdownDirection === 'up' ? 'calc(100% + 0.35rem)' : 'auto',
               left: align === 'right' ? 'auto' : 0,
               right: align === 'right' ? 0 : 'auto',
-              transformOrigin: dropdownDirection === 'down' ? 'top' : 'bottom'
+              transformOrigin: dropdownDirection === 'down' ? 'top' : 'bottom',
+              willChange: 'transform, opacity',
+              contain: 'layout style'
             }}
           >
             {searchable && (

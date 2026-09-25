@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Upload, Download, FileText, AlertTriangle, CheckCircle, RefreshCw } from 'lucide-react';
+import { X, Upload, Download, FileText, AlertTriangle, CheckCircle, RefreshCw, Loader2 } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { CustomRadio } from './CustomRadio';
 import api from '../../api/axios';
@@ -35,6 +35,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({ isOpen, on
   // Import states
   const [file, setFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
+  const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
   const [results, setResults] = useState<any>(null);
   const [step, setStep] = useState<1 | 2>(1); // 1: Upload, 2: Result
 
@@ -78,6 +79,8 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({ isOpen, on
   };
 
   const handleDownloadTemplate = async () => {
+    if (isDownloadingTemplate) return;
+    setIsDownloadingTemplate(true);
     addToast('Đang tải file mẫu...', 'info');
     try {
       await downloadExportFile({
@@ -90,6 +93,8 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({ isOpen, on
       });
     } catch (err: any) {
       addToast(err?.message || 'Lỗi khi tải file mẫu', 'error');
+    } finally {
+      setIsDownloadingTemplate(false);
     }
   };
 
@@ -130,7 +135,10 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({ isOpen, on
                       <h3 style={{ fontSize: '1.125rem', fontWeight: 700 }}>Nhập {entityName} từ file</h3>
                       <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>Hỗ trợ định dạng .csv. Hệ thống sẽ tự động thêm các trường tùy chỉnh vào file mẫu.</p>
                     </div>
-                    <button className="btn outline sm" onClick={handleDownloadTemplate}><FileText size={14}/> Tải file mẫu</button>
+                    <button className="btn outline sm" onClick={handleDownloadTemplate} disabled={isDownloadingTemplate} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                      {isDownloadingTemplate ? <Loader2 size={14} className="spin" /> : <FileText size={14}/>}
+                      <span>{isDownloadingTemplate ? 'Đang tải file...' : 'Tải file mẫu'}</span>
+                    </button>
                   </div>
                   
                   <div style={{ border: '2px dashed var(--color-primary-light)', borderRadius: 'var(--radius-xl)', padding: '3rem 2rem', textAlign: 'center', background: 'var(--color-bg)', cursor: importing ? 'not-allowed' : 'pointer', position: 'relative', transition: 'all 0.2s' }}>

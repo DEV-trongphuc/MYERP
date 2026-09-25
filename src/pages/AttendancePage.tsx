@@ -23,7 +23,6 @@ import { isItemAtMyStepToApprove } from '../utils/approvalPermissions';
 import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 import { VietnameseMonthInput } from '../components/ui/VietnameseMonthInput';
 import { formatDateVN, formatDateTimeVN, formatMonthYearVN } from '../utils/dateUtils';
-import * as XLSX from 'xlsx';
 
 const resolveAttachmentUrl = (path: string | null | undefined): string => {
   if (!path) return '';
@@ -1693,7 +1692,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         ]);
       });
 
-      // 5. Create Workbook & Sheets
+      // 5. Create Workbook & Sheets (Dynamic import for speed)
+      const XLSX = await import('xlsx');
       const wb = XLSX.utils.book_new();
 
       // Sheet 1: Bảng tổng hợp công

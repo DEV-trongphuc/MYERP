@@ -721,7 +721,7 @@ export const QuoteEditorModal: React.FC<QuoteEditorProps> = ({
           </div>
 
           <div className="modal-footer" style={{ padding: '0.75rem 2rem', background: 'var(--color-bg)', borderTop: 'none', borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }}>
-             <button className="btn ghost font-bold text-muted" onClick={onClose}>
+             <button className="btn ghost font-bold text-muted" onClick={onClose} disabled={loading}>
                {isViewerProp ? 'Đóng' : 'Hủy bỏ'}
              </button>
              {isViewerProp ? (

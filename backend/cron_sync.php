@@ -4317,6 +4317,23 @@ if (!defined('DIAG_TOKEN')) {
         logSync("Error running recurring tasks cron: " . $recurrenceEx->getMessage());
     }
 
+    // --- Dọn sạch thông báo cũ, chỉ lưu tối đa 200 thông báo gần nhất mỗi user ---
+    try {
+        require_once __DIR__ . '/NotificationService.php';
+        require_once __DIR__ . '/config.php';
+        $dsn = "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4";
+        $pdo = new PDO($dsn, DB_USER, DB_PASS, [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
+        ]);
+        $prunedCount = NotificationService::pruneAllUsersNotifications($pdo, 200);
+        if ($prunedCount > 0) {
+            logSync("Auto-pruned $prunedCount excess notifications across users (capped at max 200/user).");
+        }
+    } catch (Exception $pruneEx) {
+        logSync("Error pruning notifications in cron_sync: " . $pruneEx->getMessage());
+    }
+
     if (php_sapi_name() === 'cli') {
         $conn->close();
     }

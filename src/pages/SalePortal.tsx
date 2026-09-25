@@ -17900,9 +17900,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '1rem' }}>
                   <button
                     onClick={() => setReportModalOpen(false)}
+                    disabled={submittingReport}
                     style={{
                       background: 'var(--color-border-light)', color: 'var(--color-text-light)', border: 'none', borderRadius: '8px',
-                      padding: '10px 20px', fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer'
+                      padding: '10px 20px', fontWeight: 600, fontSize: '0.875rem', cursor: submittingReport ? 'not-allowed' : 'pointer',
+                      opacity: submittingReport ? 0.6 : 1
                     }}
                   >
                     {t('Hủy bỏ')}
@@ -17912,11 +17914,13 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                     disabled={submittingReport}
                     style={{
                       background: '#ef4444', color: 'white', border: 'none', borderRadius: '8px',
-                      padding: '10px 20px', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', gap: '6px'
+                      padding: '10px 20px', fontWeight: 700, fontSize: '0.875rem', cursor: submittingReport ? 'not-allowed' : 'pointer',
+                      display: 'flex', alignItems: 'center', gap: '6px',
+                      opacity: submittingReport ? 0.7 : 1
                     }}
                   >
-                    <Send size={16} /> {submittingReport ? t('Đang gửi...') : t('Gửi báo cáo lỗi')}
+                    {submittingReport ? <RefreshCw size={16} className="spin" /> : <Send size={16} />}
+                    <span>{submittingReport ? t('Đang gửi...') : t('Gửi báo cáo lỗi')}</span>
                   </button>
                 </div>
               </div>

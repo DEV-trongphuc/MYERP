@@ -605,8 +605,9 @@ export const AIContractImportModal: React.FC<AIContractImportModalProps> = ({
           >
             <button
               type="button"
-              className="btn secondary sm"
+              className="btn secondary sm hover-lift"
               onClick={handleClose}
+              disabled={isProcessing}
               style={{ padding: '8px 16px', borderRadius: '8px' }}
             >
               Hủy

@@ -502,10 +502,11 @@ export const InventorySyncModal: React.FC<InventorySyncModalProps> = ({ isOpen, 
 
                     <div className="flex gap-2">
                       {editingMappingId && (
-                        <button type="button" className="btn outline sm" onClick={() => { setEditingMappingId(null); setNewMappingCol(''); setNewMappingCustomLabel(''); }}>Hủy</button>
+                        <button type="button" className="btn outline sm hover-lift" onClick={() => { setEditingMappingId(null); setNewMappingCol(''); setNewMappingCustomLabel(''); }} disabled={isSavingMapping}>Hủy</button>
                       )}
-                      <button type="submit" className="btn primary sm" style={{ height: 38 }}>
-                        {editingMappingId ? 'Cập nhật' : 'Thêm'}
+                      <button type="submit" className="btn primary sm hover-lift" style={{ height: 38, display: 'inline-flex', alignItems: 'center', gap: '6px' }} disabled={isSavingMapping}>
+                        {isSavingMapping && <RefreshCw size={14} className="spin" />}
+                        <span>{editingMappingId ? (isSavingMapping ? 'Đang cập nhật...' : 'Cập nhật') : (isSavingMapping ? 'Đang thêm...' : 'Thêm')}</span>
                       </button>
                     </div>
                   </form>

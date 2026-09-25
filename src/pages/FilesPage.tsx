@@ -6,7 +6,7 @@ import {
   MoreVertical, File, Filter, LayoutGrid, List, Plus, Edit,
   Shield, User, Users, Globe, Clock, ChevronRight, HardDrive,
   Star, Clock3, FileJson, FileCode, FileImage, FileVideo,
-  MoreHorizontal, Share2, Info, Building2, Eye, Megaphone
+  MoreHorizontal, Share2, Info, Building2, Eye, Megaphone, Loader2
 } from 'lucide-react';
 import api from '../api/axios';
 import { compressToWebP } from '../utils/imageCompress';
@@ -1675,9 +1675,10 @@ export const FilesPage: React.FC<FilesPageProps> = ({ embedProjectId, isEmbedded
                 </div>
               </div>
               <div className="modal-footer" style={{ gap: '1rem' }}>
-                <button className="btn secondary flex-1" onClick={() => setShowEditModal(false)}>Hủy</button>
-                <button className="btn primary flex-1" onClick={handleUpdateFile} disabled={loading}>
-                  {loading ? 'Đang lưu...' : 'Lưu thay đổi'}
+                <button className="btn secondary flex-1 hover-lift" onClick={() => setShowEditModal(false)} disabled={loading}>Hủy</button>
+                <button className="btn primary flex-1 hover-lift" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }} onClick={handleUpdateFile} disabled={loading}>
+                  {loading && <Loader2 size={16} className="spin" />}
+                  <span>{loading ? 'Đang lưu...' : 'Lưu thay đổi'}</span>
                 </button>
               </div>
             </motion.div>
@@ -1715,9 +1716,10 @@ export const FilesPage: React.FC<FilesPageProps> = ({ embedProjectId, isEmbedded
                 </div>
               </div>
               <div className="modal-footer" style={{ gap: '1rem' }}>
-                 <button className="btn secondary flex-1" onClick={() => setShowCatModal(false)} disabled={isSavingCategory}>Hủy</button>
-                 <button className="btn primary flex-1" onClick={handleSaveCategory} disabled={isSavingCategory}>
-                   {isSavingCategory ? 'Đang lưu...' : (editingCat ? 'Cập nhật' : 'Thêm ngay')}
+                 <button className="btn secondary flex-1 hover-lift" onClick={() => setShowCatModal(false)} disabled={isSavingCategory}>Hủy</button>
+                 <button className="btn primary flex-1 hover-lift" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }} onClick={handleSaveCategory} disabled={isSavingCategory}>
+                   {isSavingCategory && <Loader2 size={16} className="spin" />}
+                   <span>{isSavingCategory ? 'Đang lưu...' : (editingCat ? 'Cập nhật' : 'Thêm ngay')}</span>
                  </button>
               </div>
             </motion.div>

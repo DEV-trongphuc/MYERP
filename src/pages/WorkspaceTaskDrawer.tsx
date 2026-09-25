@@ -2549,33 +2549,59 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
   const handleImageClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
-    const imgEl = target.tagName === 'IMG' ? (target as HTMLImageElement) : target.querySelector('img');
-    if (imgEl && imgEl.src) {
-      if (imgEl.closest('.avatar') || imgEl.closest('.mention-avatar') || imgEl.hasAttribute('data-mention-avatar')) {
-        return;
-      }
-      e.preventDefault();
-      e.stopPropagation();
-      const src = imgEl.src;
-      const container = imgEl.closest('.rich-comment-content') || imgEl.closest('.rich-text-editor-content') || imgEl.closest('[id^="workspace-comment-"]');
-      let imgItems: AttachmentItem[] = [];
-      if (container) {
-        const allImgs = Array.from(container.querySelectorAll('img:not(.mention-avatar):not([data-mention-avatar])')) as HTMLImageElement[];
-        imgItems = allImgs
-          .map(img => ({
-            url: img.src,
-            name: img.alt || 'Hình ảnh',
-            type: 'image' as const
-          }))
-          .filter(x => Boolean(x.url));
-      }
-      const clickedIdx = imgItems.findIndex(x => x.url === src);
-      setLightboxState({
-        isOpen: true,
-        items: imgItems.length > 0 ? imgItems : [{ url: src, name: imgEl.alt || 'Hình ảnh', type: 'image' }],
-        initialIndex: Math.max(0, clickedIdx)
-      });
+    // Only proceed if an actual IMG element was clicked
+    if (!target || target.tagName !== 'IMG') {
+      return;
     }
+    const imgEl = target as HTMLImageElement;
+    if (!imgEl.src) return;
+
+    // Strict guard: Never trigger lightbox for avatars, icons, emojis, buttons, or custom selectors
+    if (
+      imgEl.hasAttribute('data-avatar') ||
+      imgEl.hasAttribute('data-no-lightbox') ||
+      imgEl.hasAttribute('data-mention-avatar') ||
+      imgEl.closest('[data-avatar]') ||
+      imgEl.closest('[data-no-lightbox]') ||
+      imgEl.closest('.avatar') ||
+      imgEl.closest('.user-avatar') ||
+      imgEl.closest('.mention-avatar') ||
+      imgEl.closest('[class*="avatar"]') ||
+      imgEl.closest('.custom-select') ||
+      imgEl.closest('button')
+    ) {
+      return;
+    }
+
+    // Must be within a rich text content, comment, or attachment preview container
+    const container = imgEl.closest('.rich-comment-content') ||
+                      imgEl.closest('.rich-text-editor-content') ||
+                      imgEl.closest('[id^="workspace-comment-"]') ||
+                      imgEl.closest('.task-description-body') ||
+                      imgEl.closest('.task-attachments-list');
+
+    if (!container) {
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+    const src = imgEl.src;
+    const allImgs = Array.from(container.querySelectorAll('img:not([data-avatar]):not([data-no-lightbox]):not([data-mention-avatar]):not([class*="avatar"])')) as HTMLImageElement[];
+    const imgItems: AttachmentItem[] = allImgs
+      .map(img => ({
+        url: img.src,
+        name: img.alt || 'Hình ảnh',
+        type: 'image' as const
+      }))
+      .filter(x => Boolean(x.url));
+
+    const clickedIdx = imgItems.findIndex(x => x.url === src);
+    setLightboxState({
+      isOpen: true,
+      items: imgItems.length > 0 ? imgItems : [{ url: src, name: imgEl.alt || 'Hình ảnh', type: 'image' }],
+      initialIndex: Math.max(0, clickedIdx)
+    });
   };
 
   const hasChanges = originalHash !== currentHash;
@@ -2657,7 +2683,6 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
   const content = (
     <motion.div 
-      onClick={handleImageClick}
       className={`${embedMode ? '' : styles.drawer} ${embedMode ? 'focus-right-column' : ''}`}
       {...drawerMotionProps}
       style={embedMode ? {
@@ -6231,7 +6256,11 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     {participants.length > 0 && (
                       <div 
                         style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer' }}
-                        onClick={() => setShowParticipantsModal(true)}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setShowParticipantsModal(true);
+                        }}
                         title={t('Xem chi tiết người liên quan')}
                         className="hover-lift"
                       >
@@ -6258,7 +6287,11 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     {/* Dash add button */}
                     <button
                       type="button"
-                      onClick={() => setShowParticipantDropdown(!showParticipantDropdown)}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setShowParticipantDropdown(!showParticipantDropdown);
+                      }}
                       disabled={currentUser?.role === 'viewer'}
                       style={{
                         border: '1px dashed var(--color-primary)',

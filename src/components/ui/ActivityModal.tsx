@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Calendar, Clock, AlignLeft, Phone, Mail, Users, CheckSquare, Zap, PhoneOutgoing, PhoneIncoming, Camera, FileText } from 'lucide-react';
+import { X, Calendar, Clock, AlignLeft, Phone, Mail, Users, CheckSquare, Zap, PhoneOutgoing, PhoneIncoming, Camera, FileText, Loader2 } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { CustomSelect } from './CustomSelect';
 import { MentionInput } from './MentionInput';
@@ -253,7 +253,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, e
             <h3 style={{ margin: 0, fontSize: isMobile ? '1rem' : '1.15rem', fontWeight: 800 }}>
               {activity?.id ? 'Cập nhật hoạt động' : 'Thêm hoạt động mới'}
             </h3>
-            <button className="btn-icon-bare" onClick={onClose} style={{ padding: '4px', cursor: 'pointer' }}>
+            <button className="btn-icon-bare" onClick={onClose} disabled={loading} style={{ padding: '4px', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.6 : 1 }}>
               <X size={isMobile ? 18 : 20} />
             </button>
           </div>
@@ -610,9 +610,10 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, e
               flexShrink: 0
             }}
           >
-            <button type="button" className="btn outline lg" style={{ flex: 1 }} onClick={onClose} disabled={loading}>Hủy bỏ</button>
-            <button type="button" className="btn primary lg" style={{ flex: 1 }} onClick={handleSubmit} disabled={loading}>
-              {loading ? 'Đang lưu...' : 'Lưu hoạt động'}
+            <button type="button" className="btn outline lg hover-lift" style={{ flex: 1 }} onClick={onClose} disabled={loading}>Hủy bỏ</button>
+            <button type="button" className="btn primary lg hover-lift" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }} onClick={handleSubmit} disabled={loading}>
+              {loading && <Loader2 size={16} className="spin" />}
+              <span>{loading ? 'Đang lưu...' : 'Lưu hoạt động'}</span>
             </button>
           </div>
         </motion.div>

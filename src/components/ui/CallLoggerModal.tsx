@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Phone, X, Check, Clock, Mic, User, PhoneOutgoing, PhoneIncoming, CheckCircle, PhoneOff, Voicemail, XCircle } from 'lucide-react';
+import { Phone, X, Check, Clock, Mic, User, PhoneOutgoing, PhoneIncoming, CheckCircle, PhoneOff, Voicemail, XCircle, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUIStore } from '../../store/uiStore';
 import { CustomSelect } from './CustomSelect';
@@ -175,9 +175,19 @@ export const CallLoggerModal: React.FC<CallLoggerModalProps> = ({ isOpen, onClos
 
             {/* Footer */}
             <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--color-border)', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', background: 'var(--color-bg)' }}>
-              <button className="btn outline" onClick={onClose}>Hủy</button>
-              <button className="btn primary" onClick={handleSave} disabled={saving}>
-                {saving ? 'Đang lưu...' : <><Check size={15} /> Lưu ghi nhận</>}
+              <button className="btn outline" onClick={onClose} disabled={saving}>Hủy</button>
+              <button className="btn primary" onClick={handleSave} disabled={saving} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                {saving ? (
+                  <>
+                    <RefreshCw size={14} className="spin" />
+                    <span>Đang lưu...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check size={15} />
+                    <span>Lưu ghi nhận</span>
+                  </>
+                )}
               </button>
             </div>
           </motion.div>

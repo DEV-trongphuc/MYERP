@@ -769,7 +769,7 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
             onClick={handleRequestClose}
             style={{
               position: 'fixed',
@@ -777,7 +777,9 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
               background: 'rgba(0, 0, 0, 0.45)',
               backdropFilter: 'blur(8px)',
               WebkitBackdropFilter: 'blur(8px)',
-              zIndex: baseZIndex + 5
+              zIndex: baseZIndex + 5,
+              willChange: 'opacity',
+              transform: 'translate3d(0, 0, 0)'
             }}
           />
 
@@ -786,7 +788,7 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
             initial={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
             animate={{ y: 0, x: 0, opacity: 1 }}
             exit={isMobile ? { y: '60%', opacity: 0 } : { opacity: 0, x: '60%' }}
-            transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] as any }}
             style={{
               position: 'fixed',
               top: 0,
@@ -798,6 +800,9 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
               display: 'flex',
               flexDirection: 'column',
               zIndex: baseZIndex + 10,
+              willChange: 'transform, opacity',
+              transform: 'translate3d(0, 0, 0)',
+              contain: 'layout style',
               overflow: 'hidden'
             }}
             onClick={e => e.stopPropagation()}
@@ -899,11 +904,12 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
                 <button
                   type="submit"
                   form="create-deposit-form-drawer"
-                  className="btn primary"
+                  className="btn primary hover-lift"
                   disabled={isSaving}
-                  style={{ height: '38px', minWidth: '160px', fontSize: '0.85rem', fontWeight: 700 }}
+                  style={{ height: '38px', minWidth: '160px', fontSize: '0.85rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                 >
-                  {isSaving ? 'Đang tạo...' : 'Tạo phiếu Thanh toán'}
+                  {isSaving && <Loader2 size={16} className="spin" />}
+                  <span>{isSaving ? 'Đang tạo...' : 'Tạo phiếu Thanh toán'}</span>
                 </button>
               </div>
             </div>
@@ -1840,9 +1846,10 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
                   form="create-deposit-form-drawer"
                   className="btn primary"
                   disabled={isSaving}
-                  style={{ flex: 2, height: '42px', fontWeight: 700 }}
+                  style={{ flex: 2, height: '42px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                 >
-                  {isSaving ? 'Đang tạo...' : 'Tạo phiếu'}
+                  {isSaving && <Loader2 size={16} className="spin" />}
+                  <span>{isSaving ? 'Đang tạo...' : 'Tạo phiếu'}</span>
                 </button>
               </div>
             )}

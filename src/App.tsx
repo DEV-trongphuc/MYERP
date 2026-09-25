@@ -283,7 +283,9 @@ const AppTabs = () => {
               display: isActive ? 'block' : 'none',
               width: '100%',
               height: '100%',
-              position: 'relative'
+              position: 'relative',
+              contain: isActive ? 'none' : 'strict',
+              contentVisibility: isActive ? 'visible' : 'hidden',
             }}
           >
             <Suspense fallback={<PageLoader />}>
@@ -400,118 +402,120 @@ const KeyboardShortcutsController = () => {
         title={t("Bảng phím tắt điều hướng nhanh")}
         width="650px"
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', padding: '0.5rem 0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-primary)' }}>
-            <Keyboard size={20} />
-            <span style={{ fontSize: '0.875rem', fontWeight: 700 }}>{t("Mẹo: Nhấn Alt + [Chữ cái] để chuyển hướng nhanh toàn hệ thống")}</span>
-          </div>
+        {showHelpModal && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', padding: '0.5rem 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-primary)' }}>
+              <Keyboard size={20} />
+              <span style={{ fontSize: '0.875rem', fontWeight: 700 }}>{t("Mẹo: Nhấn Alt + [Chữ cái] để chuyển hướng nhanh toàn hệ thống")}</span>
+            </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: isSystemAdmin ? '1fr 1fr' : '1fr', gap: '1.5rem' }}>
-            {/* Column 1: Chung & Vận hành */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div>
-                <h4 style={{ fontSize: '0.8125rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '8px', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '4px' }}>
-                  {t("Chung & Vận hành")}
-                </h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
-                    <span style={{ color: 'var(--color-text)' }}>{t("Trang chủ Dashboard")}</span>
-                    <kbd className="shortcuts-kbd">Alt + D</kbd>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
-                    <span style={{ color: 'var(--color-text)' }}>{t("Nhật ký Lead (Data)")}</span>
-                    <kbd className="shortcuts-kbd">Alt + L</kbd>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
-                    <span style={{ color: 'var(--color-text)' }}>{t("Thêm Data (Lead) nhanh")}</span>
-                    <kbd className="shortcuts-kbd">Alt + N</kbd>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
-                    <span style={{ color: 'var(--color-text)' }}>{t("Bản tin hoạt động hệ thống")}</span>
-                    <kbd className="shortcuts-kbd">Alt + H</kbd>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
-                    <span style={{ color: 'var(--color-text)' }}>{t("Xem kịch bản trợ giúp này")}</span>
-                    <kbd className="shortcuts-kbd">?</kbd>
-                  </div>
-                </div>
-              </div>
-
-              {isSystemAdmin && (
+            <div style={{ display: 'grid', gridTemplateColumns: isSystemAdmin ? '1fr 1fr' : '1fr', gap: '1.5rem' }}>
+              {/* Column 1: Chung & Vận hành */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div>
                   <h4 style={{ fontSize: '0.8125rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '8px', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '4px' }}>
-                    {t("Chia số & Đối soát")}
+                    {t("Chung & Vận hành")}
                   </h4>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
-                      <span style={{ color: 'var(--color-text)' }}>{t("Vòng xoay chia số (Rounds)")}</span>
-                      <kbd className="shortcuts-kbd">Alt + R</kbd>
+                      <span style={{ color: 'var(--color-text)' }}>{t("Trang chủ Dashboard")}</span>
+                      <kbd className="shortcuts-kbd">Alt + D</kbd>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
-                      <span style={{ color: 'var(--color-text)' }}>{t("Quy tắc chia số (Rules)")}</span>
-                      <kbd className="shortcuts-kbd">Alt + W</kbd>
+                      <span style={{ color: 'var(--color-text)' }}>{t("Nhật ký Lead (Data)")}</span>
+                      <kbd className="shortcuts-kbd">Alt + L</kbd>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
-                      <span style={{ color: 'var(--color-text)' }}>{t("Đối soát Công bằng (Fair Share)")}</span>
-                      <kbd className="shortcuts-kbd">Alt + S</kbd>
+                      <span style={{ color: 'var(--color-text)' }}>{t("Thêm Data (Lead) nhanh")}</span>
+                      <kbd className="shortcuts-kbd">Alt + N</kbd>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
+                      <span style={{ color: 'var(--color-text)' }}>{t("Bản tin hoạt động hệ thống")}</span>
+                      <kbd className="shortcuts-kbd">Alt + H</kbd>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
+                      <span style={{ color: 'var(--color-text)' }}>{t("Xem kịch bản trợ giúp này")}</span>
+                      <kbd className="shortcuts-kbd">?</kbd>
+                    </div>
+                  </div>
+                </div>
+
+                {isSystemAdmin && (
+                  <div>
+                    <h4 style={{ fontSize: '0.8125rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '8px', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '4px' }}>
+                      {t("Chia số & Đối soát")}
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
+                        <span style={{ color: 'var(--color-text)' }}>{t("Vòng xoay chia số (Rounds)")}</span>
+                        <kbd className="shortcuts-kbd">Alt + R</kbd>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
+                        <span style={{ color: 'var(--color-text)' }}>{t("Quy tắc chia số (Rules)")}</span>
+                        <kbd className="shortcuts-kbd">Alt + W</kbd>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
+                        <span style={{ color: 'var(--color-text)' }}>{t("Đối soát Công bằng (Fair Share)")}</span>
+                        <kbd className="shortcuts-kbd">Alt + S</kbd>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Column 2: Nhân sự & Quản trị */}
+              {isSystemAdmin && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div>
+                    <h4 style={{ fontSize: '0.8125rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '8px', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '4px' }}>
+                      {t("Nhân sự & Tickets")}
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
+                        <span style={{ color: 'var(--color-text)' }}>{t("Quản lý Tư vấn viên (Sale)")}</span>
+                        <kbd className="shortcuts-kbd">Alt + C</kbd>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
+                        <span style={{ color: 'var(--color-text)' }}>{t("Quản lý Tickets báo lỗi")}</span>
+                        <kbd className="shortcuts-kbd">Alt + T</kbd>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 style={{ fontSize: '0.8125rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '8px', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '4px' }}>
+                      {t("Cấu hình & Quản trị")}
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
+                        <span style={{ color: 'var(--color-text)' }}>{t("Tích hợp API & Google Sheets")}</span>
+                        <kbd className="shortcuts-kbd">Alt + I</kbd>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
+                        <span style={{ color: 'var(--color-text)' }}>{t("Cài đặt Hệ thống")}</span>
+                        <kbd className="shortcuts-kbd">Alt + O</kbd>
+                      </div>
+                      {user?.role === 'superadmin' && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
+                          <span style={{ color: 'var(--color-text)' }}>{t("Tài khoản phân quyền")}</span>
+                          <kbd className="shortcuts-kbd">Alt + A</kbd>
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
+                        <span style={{ color: 'var(--color-text)' }}>{t("AI Pre-screener")}</span>
+                        <kbd className="shortcuts-kbd">Alt + G</kbd>
+                      </div>
                     </div>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Column 2: Nhân sự & Quản trị */}
-            {isSystemAdmin && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div>
-                  <h4 style={{ fontSize: '0.8125rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '8px', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '4px' }}>
-                    {t("Nhân sự & Tickets")}
-                  </h4>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
-                      <span style={{ color: 'var(--color-text)' }}>{t("Quản lý Tư vấn viên (Sale)")}</span>
-                      <kbd className="shortcuts-kbd">Alt + C</kbd>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
-                      <span style={{ color: 'var(--color-text)' }}>{t("Quản lý Tickets báo lỗi")}</span>
-                      <kbd className="shortcuts-kbd">Alt + T</kbd>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <h4 style={{ fontSize: '0.8125rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '8px', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '4px' }}>
-                    {t("Cấu hình & Quản trị")}
-                  </h4>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
-                      <span style={{ color: 'var(--color-text)' }}>{t("Tích hợp API & Google Sheets")}</span>
-                      <kbd className="shortcuts-kbd">Alt + I</kbd>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
-                      <span style={{ color: 'var(--color-text)' }}>{t("Cài đặt Hệ thống")}</span>
-                      <kbd className="shortcuts-kbd">Alt + O</kbd>
-                    </div>
-                    {user?.role === 'superadmin' && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
-                        <span style={{ color: 'var(--color-text)' }}>{t("Tài khoản phân quyền")}</span>
-                        <kbd className="shortcuts-kbd">Alt + A</kbd>
-                      </div>
-                    )}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
-                      <span style={{ color: 'var(--color-text)' }}>{t("AI Pre-screener")}</span>
-                      <kbd className="shortcuts-kbd">Alt + G</kbd>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+              <button className="btn primary" onClick={() => setShowHelpModal(false)}>{t("Đóng")}</button>
+            </div>
           </div>
-
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
-            <button className="btn primary" onClick={() => setShowHelpModal(false)}>{t("Đóng")}</button>
-          </div>
-        </div>
+        )}
       </CustomModal>
 
       <style>{`

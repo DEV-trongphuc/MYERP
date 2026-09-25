@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, User, FileText, Settings, CreditCard, ChevronRight, CheckSquare, Phone, Activity, Package, BarChart3 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -26,7 +27,7 @@ export const CommandPalette = () => {
   useEffect(() => {
     if (open) {
       setSearch('');
-      setTimeout(() => inputRef.current?.focus(), 100);
+      setTimeout(() => inputRef.current?.focus(), 80);
     }
   }, [open]);
 
@@ -45,18 +46,46 @@ export const CommandPalette = () => {
     { title: 'Cài đặt hệ thống', icon: <Settings size={16}/>, action: () => handleAction('/settings'), visible: ['admin', 'superadmin', 'super_admin'].includes(user?.role || '') },
   ].filter(r => (r.visible !== false) && r.title.toLowerCase().includes(search.toLowerCase()));
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <AnimatePresence>
       {open && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '10vh' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 2147483640, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '10vh' }}>
           <motion.div 
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            style={{ position: 'absolute', inset: 0, background: 'rgba(0, 0, 0, 0.82)', backdropFilter: 'blur(4px)' }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.16, ease: 'easeOut' }}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: 'rgba(0, 0, 0, 0.45)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              willChange: 'opacity',
+              transform: 'translate3d(0, 0, 0)'
+            }}
             onClick={() => setOpen(false)}
           />
           <motion.div 
-            initial={{ opacity: 0, scale: 0.95, y: -20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: -20 }}
-            style={{ position: 'relative', width: '90%', maxWidth: '600px', background: 'var(--color-surface)', borderRadius: 'var(--radius-xl)', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', overflow: 'hidden', border: '1px solid var(--color-border)' }}
+            initial={{ opacity: 0, scale: 0.96, y: -20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: -20 }}
+            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] as any }}
+            style={{
+              position: 'relative',
+              width: '90%',
+              maxWidth: '600px',
+              background: 'var(--color-surface)',
+              borderRadius: 'var(--radius-xl)',
+              boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)',
+              overflow: 'hidden',
+              border: '1px solid var(--color-border)',
+              willChange: 'transform, opacity',
+              transform: 'translate3d(0, 0, 0)',
+              contain: 'layout style'
+            }}
           >
             <div style={{ display: 'flex', alignItems: 'center', padding: '1rem 1.5rem', borderBottom: '1px solid var(--color-border-light)' }}>
               <Search size={20} style={{ color: 'var(--color-text-muted)', marginRight: '1rem' }} />
@@ -95,6 +124,7 @@ export const CommandPalette = () => {
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 };

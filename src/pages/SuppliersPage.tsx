@@ -140,6 +140,7 @@ export const SuppliersPage: React.FC = () => {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   const fetchActivities = async (supplierId?: number) => {
     const sId = supplierId || selectedSupplier?.id;
@@ -303,6 +304,54 @@ export const SuppliersPage: React.FC = () => {
     });
   };
 
+  const handleExport = async () => {
+    if (isExporting) return;
+    try {
+      setIsExporting(true);
+      if (!suppliers || suppliers.length === 0) {
+        addToast('Không có dữ liệu đối tác để xuất', 'info');
+        return;
+      }
+      const headers = ['Mã ĐT', 'Tên Đối Tác', 'Người Đại Diện', 'Chức Vụ', 'SĐT', 'Email', 'Địa Chỉ', 'Mã Số Thuế', 'Quy Mô / Vốn', 'Dự Án / Chương Trình', 'Xếp Hạng', 'Trạng Thái', 'Tài Khoản Ngân Hàng', 'Ghi Chú'];
+      const rows = suppliers.map(s => [
+        `DT-${s.id}`,
+        s.name || '',
+        s.contact_name || '',
+        s.contact_position || '',
+        s.phone || '',
+        s.email || '',
+        s.address || '',
+        s.tax_code || '',
+        s.scale_capital || '',
+        s.typical_projects || '',
+        s.prestige_tier || 'A',
+        s.cooperation_status === 'active' ? 'Đang hợp tác' : s.cooperation_status === 'negotiating' ? 'Đang đàm phán' : 'Tạm ngưng',
+        s.bank_account || '',
+        s.notes || ''
+      ]);
+
+      const csvContent = "\uFEFF" + [
+        headers.join(','),
+        ...rows.map(row => row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','))
+      ].join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `danh_sach_doi_tac_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      addToast('Xuất danh sách đối tác thành công!', 'success');
+    } catch (e: any) {
+      addToast('Lỗi khi xuất danh sách đối tác: ' + e.message, 'error');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const filtered = suppliers;
   const selectedProjects = formData.typical_projects ? formData.typical_projects.split(',').map((p: any) => p.trim()).filter(Boolean) : [];
 
@@ -314,8 +363,9 @@ export const SuppliersPage: React.FC = () => {
           <p className="page-subtitle">Quản lý danh sách các trường học, viện đào tạo và doanh nghiệp đối tác liên kết</p>
         </div>
         <div className="flex gap-3">
-          <button className="btn outline" onClick={() => addToast('Tính năng đang phát triển', 'info')}>
-            <Download size={18} /> Xuất Excel
+          <button className="btn outline hover-lift" onClick={handleExport} disabled={isExporting} title="Xuất danh sách đối tác">
+            {isExporting ? <Loader2 size={18} className="spin" /> : <Download size={18} />}
+            <span>{isExporting ? 'Đang xuất...' : 'Xuất Excel'}</span>
           </button>
           {canEdit && (
             <button className="btn primary" onClick={() => handleOpenModal()}>

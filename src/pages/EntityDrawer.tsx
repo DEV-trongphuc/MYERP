@@ -68,7 +68,7 @@ export const EntityDrawer: React.FC<EntityDrawerProps> = ({ isOpen, onClose, ent
     setTimeout(() => {
       onClose();
       setIsClosing(false);
-    }, 280);
+    }, 220);
   };
 
   useEffect(() => {
@@ -94,14 +94,16 @@ export const EntityDrawer: React.FC<EntityDrawerProps> = ({ isOpen, onClose, ent
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
             style={{
               zIndex: 1000,
               background: 'rgba(0,0,0,0.45)',
               backdropFilter: 'blur(8px)',
               position: 'fixed',
               inset: 0,
-              cursor: 'pointer'
+              cursor: 'pointer',
+              willChange: 'opacity',
+              transform: 'translate3d(0, 0, 0)'
             }}
           />
           <motion.div
@@ -109,7 +111,7 @@ export const EntityDrawer: React.FC<EntityDrawerProps> = ({ isOpen, onClose, ent
             initial={window.innerWidth <= 768 ? { y: '100%' } : { opacity: 0, x: '250px' }}
             animate={{ y: 0, x: 0, opacity: 1 }}
             exit={window.innerWidth <= 768 ? { y: '60%', opacity: 0 } : { opacity: 0, x: '60%' }}
-            transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] as any }}
           >
               {/* Header */}
               <div className={styles.header}>

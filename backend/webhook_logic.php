@@ -2053,10 +2053,10 @@ function sendDirectSaleLeadNotification($conn, $leadId, $assignedToId, $roundId 
         if (!$hasRecent) {
             $stmtDbNotif = $conn->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, 1, ?, ?, 'contact', ?)");
             if ($stmtDbNotif) {
-                $notifTitle = "🎉 Bạn nhận được Lead mới!";
+                $notifTitle = "Bạn vừa nhận được khách hàng mới!";
                 $custName = !empty($lead['name']) ? $lead['name'] : 'Khách hàng mới';
                 $custPhone = !empty($lead['phone']) ? $lead['phone'] : '';
-                $notifBody = "Khách hàng \"$custName\"" . ($custPhone ? " ($custPhone)" : "") . ($roundName ? " từ vòng \"$roundName\"" : "") . ". Nhấn để mở chi tiết.";
+                $notifBody = "Bạn vừa nhận được khách hàng \"$custName\"" . ($custPhone ? " ($custPhone)" : "") . ($roundName ? " từ vòng \"$roundName\"" : "") . ". Nhấn để mở hồ sơ chi tiết.";
                 $stmtDbNotif->bind_param("isss", $actualUserId, $notifTitle, $notifBody, $notifLink);
                 $stmtDbNotif->execute();
                 $stmtDbNotif->close();
@@ -4351,8 +4351,8 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
                                 if (!$hasRec) {
                                     $insNotif = $conn->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, 1, ?, ?, 'contact', ?)");
                                     if ($insNotif) {
-                                        $tTitle = "🔄 Bạn được phân bổ lại khách hàng cũ!";
-                                        $tBody = "Khách hàng \"$fullName\"" . ($phone ? " ($phone)" : "") . " đã được tái phân bổ cho bạn. Nhấn để mở chi tiết.";
+                                        $tTitle = "Bạn vừa nhận được khách hàng mới!";
+                                        $tBody = "Bạn vừa nhận được khách hàng \"$fullName\"" . ($phone ? " ($phone)" : "") . " (tái phân bổ). Nhấn để mở hồ sơ chi tiết.";
                                         $insNotif->bind_param("isss", $ownerUserId, $tTitle, $tBody, $tLink);
                                         $insNotif->execute();
                                         $insNotif->close();
@@ -4423,8 +4423,8 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
                         if (!$hasRec) {
                             $insNotif = $conn->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, ?, ?, ?, 'contact', ?)");
                             if ($insNotif) {
-                                $cTitle = "🎉 Bạn nhận được Lead mới!";
-                                $cBody = "Khách hàng \"$fullName\"" . ($phone ? " ($phone)" : "") . ". Nhấn để mở chi tiết.";
+                                $cTitle = "Bạn vừa nhận được khách hàng mới!";
+                                $cBody = "Bạn vừa nhận được khách hàng \"$fullName\"" . ($phone ? " ($phone)" : "") . ". Nhấn để mở hồ sơ chi tiết.";
                                 $insNotif->bind_param("iisss", $ownerUserId, $tenantId, $cTitle, $cBody, $cLink);
                                 $insNotif->execute();
                                 $insNotif->close();

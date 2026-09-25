@@ -1097,7 +1097,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.25 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
             onClick={handleRequestClose}
             style={{
               position: 'fixed',
@@ -1105,7 +1105,9 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
               zIndex: baseZIndex,
               background: 'rgba(0, 0, 0, 0.45)',
               backdropFilter: 'blur(8px)',
-              WebkitBackdropFilter: 'blur(8px)'
+              WebkitBackdropFilter: 'blur(8px)',
+              willChange: 'opacity',
+              transform: 'translate3d(0, 0, 0)'
             }}
           />
 
@@ -1113,7 +1115,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] as any }}
             style={{
               position: 'fixed',
               left: isMobile ? 0 : 'var(--sidebar-width, 220px)',
@@ -1128,7 +1130,10 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
               display: 'flex',
               flexDirection: 'column',
               zIndex: baseZIndex + 1,
-              overflow: 'hidden'
+              overflow: 'hidden',
+              willChange: 'transform, opacity',
+              transform: 'translate3d(0, 0, 0)',
+              contain: 'layout style'
             }}
           >
             {/* Drawer Header */}

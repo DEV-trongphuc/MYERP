@@ -23,12 +23,13 @@ import api from '../api/axios';
 import { Tooltip } from '../components/ui/Tooltip';
 import { useAuth } from '../contexts/AuthContext';
 import { MentionInput } from '../components/ui/MentionInput';
-import { ExpenseCreateDrawer } from '../components/ExpenseCreateDrawer';
 import { NoteDetailModal, NoteCell, renderLinkifiedText } from '../components/ui/NoteDetailModal';
 import { QrImageModal } from '../components/ui/QrImageModal';
 import { getVietQrUrl } from '../utils/vietnamBanks';
 import { AttachmentLightboxModal, type AttachmentItem } from '../components/ui/AttachmentLightboxModal';
 import { formatWaitDuration } from './Approvals';
+
+const ExpenseCreateDrawer = React.lazy(() => import('../components/ExpenseCreateDrawer').then(m => ({ default: m.ExpenseCreateDrawer })));
 
 const PAGE_SIZE = 10;
 
@@ -1907,14 +1908,16 @@ export const ExpensesPage: React.FC = () => {
 
       {/* Add/Edit Drawer */}
       {typeof document !== 'undefined' && createPortal(
-        <ExpenseCreateDrawer
-          isOpen={showModal}
-          onClose={() => setShowModal(false)}
-          editItem={editItem}
-          onSaveSuccess={fetchExpenses}
-          user={user}
-          users={users}
-        />
+        <React.Suspense fallback={null}>
+          <ExpenseCreateDrawer
+            isOpen={showModal}
+            onClose={() => setShowModal(false)}
+            editItem={editItem}
+            onSaveSuccess={fetchExpenses}
+            user={user}
+            users={users}
+          />
+        </React.Suspense>
       , document.body)}
 
       {/* Quick View Drawer */}

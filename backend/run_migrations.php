@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 287;
+$targetVersion = 289;
 $currentVersion = 186;
 
 // Query current DB version
@@ -3500,10 +3500,167 @@ try {
         }
     }
 
-    // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '287') ON DUPLICATE KEY UPDATE setting_value = '287'");
+    // ==========================================
+    // VERSION 288: TỐI ƯU COMPOSITE INDEXES TOÀN DIỆN & TỐC ĐỘ QUERY DATABASE
+    // ==========================================
+    if ($currentVersion < 288) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 288: Tối ưu Composite Indexes cho Database...", "info");
+        try {
+            $safeAddIndex = function($table, $indexName, $cols) use ($conn, $logMsg) {
+                try {
+                    $chkTable = $conn->query("SHOW TABLES LIKE '$table'");
+                    if ($chkTable && $chkTable->num_rows > 0) {
+                        $chkIdx = $conn->query("SHOW INDEX FROM `$table` WHERE Key_name = '$indexName'");
+                        if (!$chkIdx || $chkIdx->num_rows == 0) {
+                            $conn->query("ALTER TABLE `$table` ADD INDEX `$indexName` ($cols)");
+                            $logMsg("Đã tạo Composite Index `$indexName` trên bảng `$table` ($cols)", "success");
+                        }
+                    }
+                } catch (\Throwable $ex) {
+                    // Ignore if error or duplicate
+                }
+            };
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 287", "success");
+            // 1. Activities (Tasks, interaction history, timeline)
+            $safeAddIndex('activities', 'idx_act_user_status_due', '`user_id`, `status`, `type`, `due_date`');
+            $safeAddIndex('activities', 'idx_act_created_lookup', '`created_by`, `created_at`');
+            $safeAddIndex('activities', 'idx_act_contact_type_status', '`contact_id`, `type`, `status`');
+
+            // 2. Contacts (Leads, customers, students)
+            $safeAddIndex('contacts', 'idx_contacts_fast_filter', '`status`, `is_deleted`, `created_at`');
+            $safeAddIndex('contacts', 'idx_contacts_phone_idx', '`phone`');
+            $safeAddIndex('contacts', 'idx_contacts_assigned_created', '`assigned_to`, `status`, `created_at`');
+
+            // 3. Deposits & Milestones (Sales Orders)
+            $safeAddIndex('deposits', 'idx_deposits_status_accountant', '`status`, `accountant_id`, `created_at`');
+            $safeAddIndex('deposits', 'idx_deposits_contact_proj', '`contact_id`, `project_id`');
+            $safeAddIndex('deposit_milestones', 'idx_milestones_dep_status_date', '`deposit_id`, `status`, `expected_pay_date`');
+
+            // 4. Expenses (Purchase Orders & Advances)
+            $safeAddIndex('expenses', 'idx_expenses_status_approver', '`status`, `approver_id`, `created_at`');
+            $safeAddIndex('expenses', 'idx_expenses_user_date_cat', '`user_id`, `date`, `category`');
+
+            // 5. Deals & Pipelines
+            $safeAddIndex('deals', 'idx_deals_pipe_stage_status', '`pipeline_id`, `stage_id`, `status`');
+            $safeAddIndex('deals', 'idx_deals_owner_created', '`owner_id`, `created_at`');
+
+            // 6. Check-ins & Attendance
+            $safeAddIndex('check_ins', 'idx_checkins_user_date_status', '`user_id`, `date`, `status`');
+
+            // 7. Notifications
+            $safeAddIndex('notifications', 'idx_notif_user_read_created', '`user_id`, `is_read`, `created_at`');
+
+            // 8. Communication Logs
+            $safeAddIndex('communication_logs', 'idx_comm_lead_type_sent', '`lead_id`, `type`, `sent_at`');
+
+            // 9. Tickets
+            $safeAddIndex('tickets', 'idx_tickets_status_assignee', '`status`, `assigned_to`, `priority`');
+
+            // 10. System settings
+            $safeAddIndex('system_settings', 'idx_settings_key_lookup', '`setting_key`');
+
+            $logMsg("Nâng cấp lên phiên bản 288 hoàn tất: Toàn bộ Composite Indexes đã sẵn sàng!", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi nâng cấp v288: " . $e->getMessage(), "error");
+        }
+    }
+
+    // ==========================================
+    // VERSION 289: WORKSPACE TASKS, HR LEAVE & INVENTORY HIGH-THROUGHPUT INDEXES
+    // ==========================================
+    if ($currentVersion < 289) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 289: Tối ưu hoá Indexing cho Nhiệm vụ Dự án, Đơn nghỉ phép, Tăng ca & Kho vận...", "info");
+        try {
+            $safeAddIndex = function($tableName, $indexName, $columns) use ($conn, $logMsg) {
+                try {
+                    $tableCheck = $conn->query("SHOW TABLES LIKE '{$tableName}'");
+                    if (!$tableCheck || $tableCheck->num_rows === 0) return;
+                    
+                    $idxCheck = $conn->query("SHOW INDEX FROM `{$tableName}` WHERE Key_name = '{$indexName}'");
+                    if ($idxCheck && $idxCheck->num_rows > 0) return;
+
+                    $conn->query("ALTER TABLE `{$tableName}` ADD INDEX `{$indexName}` ({$columns})");
+                    $logMsg("Đã bổ sung index `{$indexName}` trên bảng `{$tableName}` ({$columns})", "success");
+                } catch (Throwable $e) {
+                    // Ignore if error or duplicate
+                }
+            };
+
+            // 1. Tasks & Workspace Subtasks
+            $safeAddIndex('workspace_tasks', 'idx_wtasks_proj_status_due', '`project_id`, `status`, `due_date`');
+            $safeAddIndex('workspace_tasks', 'idx_wtasks_parent_order', '`parent_id`, `sort_order`');
+            $safeAddIndex('workspace_tasks', 'idx_wtasks_assignee_status', '`assigned_to`, `status`, `priority`');
+
+            // 2. HR Leave & Overtime Requests
+            $safeAddIndex('leave_requests', 'idx_leave_user_status_date', '`user_id`, `status`, `start_date`, `end_date`');
+            $safeAddIndex('overtime_requests', 'idx_ot_user_status_date', '`user_id`, `status`, `date`');
+
+            // 3. Inventory Transactions & Product Catalog
+            $safeAddIndex('inventory_transactions', 'idx_inv_prod_type_created', '`product_id`, `type`, `created_at`');
+            $safeAddIndex('products', 'idx_prod_cat_status', '`category_id`, `status`, `code`');
+
+            // 4. Quotes & Quotation Line Items
+            $safeAddIndex('quotes', 'idx_quotes_cust_status_created', '`customer_id`, `status`, `created_at`');
+
+            $logMsg("Nâng cấp lên phiên bản 289 hoàn tất: Toàn bộ Composite Indexes giai đoạn 2 đã sẵn sàng!", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi nâng cấp v289: " . $e->getMessage(), "error");
+        }
+    }
+
+    // ==========================================
+    // VERSION 290: PRUNE EXCESS NOTIFICATIONS (MAX 200 PER USER)
+    // ==========================================
+    if ($currentVersion < 290 || $isForce) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 290: Dọn dẹp lưu trữ thông báo tối đa 200 thông báo gần nhất mỗi user...", "info");
+        try {
+            // Find all users who currently have > 200 notifications
+            $userCheckStmt = $conn->query("
+                SELECT user_id, COUNT(*) as cnt 
+                FROM notifications 
+                GROUP BY user_id 
+                HAVING cnt > 200
+            ");
+            $usersWithExcess = $userCheckStmt ? $userCheckStmt->fetch_all(MYSQLI_ASSOC) : [];
+            $totalPrunedCount = 0;
+
+            foreach ($usersWithExcess as $row) {
+                $uId = (int)$row['user_id'];
+                $delSql = "
+                    DELETE FROM notifications 
+                    WHERE user_id = ? 
+                      AND id NOT IN (
+                          SELECT id FROM (
+                              SELECT id FROM notifications 
+                              WHERE user_id = ? 
+                              ORDER BY created_at DESC, id DESC 
+                              LIMIT 200
+                          ) AS keep_latest
+                      )
+                ";
+                $delStmt = $conn->prepare($delSql);
+                if ($delStmt) {
+                    $delStmt->bind_param("ii", $uId, $uId);
+                    $delStmt->execute();
+                    $deleted = $delStmt->affected_rows;
+                    $totalPrunedCount += $deleted;
+                    $delStmt->close();
+                    if ($deleted > 0) {
+                        $logMsg("Đã dọn dẹp $deleted thông báo cũ vượt quá 200 cho User ID #$uId", "info");
+                    }
+                }
+            }
+
+            $logMsg("Nâng cấp lên phiên bản 290 hoàn tất: Đã dọn dẹp tổng cộng $totalPrunedCount thông báo cũ dư thừa. Tất cả user hiện lưu tối đa 200 thông báo gần nhất!", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi nâng cấp v290: " . $e->getMessage(), "error");
+        }
+    }
+
+    // Update DB version in system_settings
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '290') ON DUPLICATE KEY UPDATE setting_value = '290'");
+
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 290", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");

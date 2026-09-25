@@ -15,8 +15,14 @@ class NotificationController {
     }
 
     public function index(array $auth): void {
+        $userId = (int)$auth['user_id'];
+
+        // Tự động dọn sạch thông báo, chỉ lưu giữ tối đa 200 thông báo gần nhất cho user này
+        require_once __DIR__ . '/../NotificationService.php';
+        NotificationService::pruneUserNotifications($this->db, $userId, 200);
+
         // Tự động gộp các thông báo tải tài liệu trùng lặp / liên tiếp cho cùng đối tượng trong 24h
-        $this->consolidateUploadNotifications((int)$auth['user_id']);
+        $this->consolidateUploadNotifications($userId);
 
         // Dọn dẹp các ký tự html entities cũ như &nbsp; trong database
         try {
@@ -156,6 +162,12 @@ class NotificationController {
         $stmt->execute([$auth['user_id']]);
         
         respond(200, null, 'Đã xóa tất cả thông báo');
+    }
+
+    public function prune(array $auth): void {
+        require_once __DIR__ . '/../NotificationService.php';
+        $deleted = NotificationService::pruneUserNotifications($this->db, (int)$auth['user_id'], 200);
+        respond(200, ['deleted' => $deleted, 'max_limit' => 200], "Đã dọn dẹp và duy trì 200 thông báo gần nhất (Đã xóa $deleted thông báo cũ)");
     }
 
     public function sendReminder(array $auth): void {

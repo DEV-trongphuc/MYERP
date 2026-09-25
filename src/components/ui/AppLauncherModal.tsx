@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Search, X, LayoutGrid } from 'lucide-react';
@@ -19,12 +20,15 @@ export const AppLauncherModal: React.FC<AppLauncherModalProps> = ({ isOpen, onCl
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 600);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 600);
 
   useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth <= 600);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    if (typeof window === 'undefined') return;
+    const mql = window.matchMedia('(max-width: 600px)');
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    setIsMobile(mql.matches);
+    mql.addEventListener('change', handler);
+    return () => mql.removeEventListener('change', handler);
   }, []);
 
   useEffect(() => {
@@ -34,7 +38,7 @@ export const AppLauncherModal: React.FC<AppLauncherModalProps> = ({ isOpen, onCl
 
     if (isOpen) {
       window.addEventListener('keydown', handleKeyDown);
-      setTimeout(() => inputRef.current?.focus(), 100);
+      setTimeout(() => inputRef.current?.focus(), 80);
     } else {
       setSearch('');
     }
@@ -51,7 +55,9 @@ export const AppLauncherModal: React.FC<AppLauncherModalProps> = ({ isOpen, onCl
     onClose();
   };
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
         <>
@@ -60,14 +66,24 @@ export const AppLauncherModal: React.FC<AppLauncherModalProps> = ({ isOpen, onCl
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            transition={{ duration: 0.16, ease: 'easeOut' }}
             onClick={onClose}
-            style={{ zIndex: 1000 }}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 2147483640,
+              background: 'rgba(0, 0, 0, 0.45)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              willChange: 'opacity',
+              transform: 'translate3d(0, 0, 0)'
+            }}
           />
           <motion.div
-            initial={isMobile ? { opacity: 0, y: '100%' } : { opacity: 0, scale: 0.9, x: '-50%', y: '-40%' }}
+            initial={isMobile ? { opacity: 0, y: '100%' } : { opacity: 0, scale: 0.96, x: '-50%', y: '-46%' }}
             animate={isMobile ? { opacity: 1, y: 0 } : { opacity: 1, scale: 1, x: '-50%', y: '-50%' }}
-            exit={isMobile ? { opacity: 0, y: '100%' } : { opacity: 0, scale: 0.9, x: '-50%', y: '-40%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            exit={isMobile ? { opacity: 0, y: '100%' } : { opacity: 0, scale: 0.96, x: '-50%', y: '-46%' }}
+            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] as any }}
             style={{
               position: 'fixed',
               top: isMobile ? 'auto' : '50%',
@@ -76,16 +92,17 @@ export const AppLauncherModal: React.FC<AppLauncherModalProps> = ({ isOpen, onCl
               width: isMobile ? '100%' : '900px',
               maxWidth: isMobile ? '100vw' : 'calc(100vw - 2rem)',
               background: 'var(--color-surface)',
-              backdropFilter: 'blur(20px)',
-              WebkitBackdropFilter: 'blur(20px)',
               borderRadius: isMobile ? '24px 24px 0 0' : '32px',
               boxShadow: 'var(--shadow-2xl)',
               border: '1px solid var(--color-border)',
-              zIndex: 1001,
+              zIndex: 2147483645,
               overflow: 'hidden',
               display: 'flex',
               flexDirection: 'column',
-              maxHeight: isMobile ? '80vh' : 'auto'
+              maxHeight: isMobile ? '80vh' : 'auto',
+              willChange: 'transform, opacity',
+              transform: 'translate3d(0, 0, 0)',
+              contain: 'layout style'
             }}
           >
             {/* Header / Search */}
@@ -185,6 +202,7 @@ export const AppLauncherModal: React.FC<AppLauncherModalProps> = ({ isOpen, onCl
           </motion.div>
         </>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 };

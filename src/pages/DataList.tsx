@@ -1,9 +1,7 @@
-import { useState, useEffect, Fragment, useMemo } from 'react';
+import { useState, useEffect, Fragment, useMemo, lazy, Suspense } from 'react';
 import api from '../api/axios';
 import { createPortal } from 'react-dom';
 import { Database, Search, Filter, ChevronLeft, ChevronRight, Download, RefreshCw, User, Users, Phone, Mail, Clock, Tag, ExternalLink, AlertTriangle, CheckCircle2, XCircle, ShieldAlert, Calendar, LayoutList, Sparkles, Check, X, Edit, Bell, Copy, CheckCircle, BarChart2, Scale, Info, Ban, UserPlus, Send, Plus, Eye } from 'lucide-react';
-import { ExpenseCreateDrawer } from '../components/ExpenseCreateDrawer';
-import { DepositDetailDrawer } from '../components/DepositDetailDrawer';
 import {
   Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer,
@@ -26,7 +24,10 @@ import { CalendarSkeleton, TableSkeleton, KpiCardSkeleton, CardSkeleton, ChartSk
 import { detectCountryFromPhone } from '../utils/phoneHelper';
 import { NotificationPreviewModal } from '../components/ui/NotificationPreviewModal';
 import { RuleSettings } from './RuleSettings';
-import { ExpenseQuickViewDrawer } from '../components/ExpenseQuickViewDrawer';
+
+const ExpenseQuickViewDrawer = lazy(() => import('../components/ExpenseQuickViewDrawer').then(m => ({ default: m.ExpenseQuickViewDrawer })));
+const ExpenseCreateDrawer = lazy(() => import('../components/ExpenseCreateDrawer').then(m => ({ default: m.ExpenseCreateDrawer })));
+const DepositDetailDrawer = lazy(() => import('../components/DepositDetailDrawer').then(m => ({ default: m.DepositDetailDrawer })));
 
 
 
@@ -511,6 +512,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
   }, [statsModalOpen, statsConsultant, statsDateMode, statsStartDate, statsEndDate]);
   const [dupCheckLoading, setDupCheckLoading] = useState(false);
   const [dupCheckResult, setDupCheckResult] = useState<any>(null);
+  const [isExportingCSV, setIsExportingCSV] = useState(false);
 
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
@@ -1445,13 +1447,15 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
 
   const ITEMS_PER_PAGE = 50;
 
-  // BUG-05 fix: Implement CSV export using Backend Stream to prevent browser/server OOM
-  const handleExportCSV = () => {
+  const handleExportCSV = async () => {
+    if (isExportingCSV) return;
+    setIsExportingCSV(true);
     if (localStorage.getItem('IDEAS_DEMO_MODE') === 'true') {
       toast.loading(t('Đang chuẩn bị dữ liệu xuất CSV (Demo)...'), { id: 'export' });
       try {
         if (leads.length === 0) {
           toast.error(t('Không có dữ liệu để xuất!'), { id: 'export' });
+          setIsExportingCSV(false);
           return;
         }
 
@@ -1506,6 +1510,8 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
         toast.success(t('Đã tải xuống file CSV an toàn!'), { id: 'export' });
       } catch (err) {
         toast.error(t('Có lỗi xảy ra khi xuất dữ liệu'), { id: 'export' });
+      } finally {
+        setIsExportingCSV(false);
       }
       return;
     }
@@ -1526,6 +1532,8 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
       toast.success(t('Đang tải xuống file CSV...'), { id: 'export' });
     } catch (err) {
       toast.error(t('Có lỗi xảy ra khi xuất dữ liệu'), { id: 'export' });
+    } finally {
+      setTimeout(() => setIsExportingCSV(false), 800);
     }
   };
 
@@ -1986,6 +1994,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
               <button
                 type="button"
                 onClick={handleExportCSV}
+                disabled={isExportingCSV}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -1997,13 +2006,15 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                   color: 'var(--color-primary)',
                   fontSize: '0.78rem',
                   fontWeight: 700,
-                  cursor: 'pointer',
+                  cursor: isExportingCSV ? 'not-allowed' : 'pointer',
                   transition: 'all 0.2s',
-                  height: '28px'
+                  height: '28px',
+                  opacity: isExportingCSV ? 0.6 : 1
                 }}
-                className="btn-export-csv-compact"
+                className="btn-export-csv-compact hover-lift"
               >
-                <Download size={13} /> <span>{t('Xuất')}<span className="hide-on-mobile"> CSV</span></span>
+                {isExportingCSV ? <RefreshCw size={13} className="spin" /> : <Download size={13} />}
+                <span>{isExportingCSV ? t('Đang xuất...') : t('Xuất')}<span className="hide-on-mobile"> CSV</span></span>
               </button>
 
               {/* Separator line for mobile filter toggle */}
@@ -7306,50 +7317,50 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
         document.body
       )}
 
-      <ExpenseQuickViewDrawer
-        expenseId={activePOId}
-        onClose={() => setActivePOId(null)}
-        user={user}
-        onStatusChange={() => {
-          fetchCalendarStats();
-          if (selectedDate) handleDateClick(selectedDate);
-        }}
-        onEditClick={(item) => {
-          setEditingExpense(item);
-        }}
-      />
-
-      {typeof document !== 'undefined' && createPortal(
-        <ExpenseCreateDrawer
-          isOpen={showCreateExpenseModal || !!editingExpense}
-          onClose={() => {
-            setShowCreateExpenseModal(false);
-            setEditingExpense(null);
-          }}
-          editItem={editingExpense}
-          initialDate={selectedExpenseDate}
-          onSaveSuccess={() => {
-            fetchCalendarStats();
-            if (selectedDate) handleDateClick(selectedDate);
-          }}
+      <Suspense fallback={null}>
+        <ExpenseQuickViewDrawer
+          expenseId={activePOId}
+          onClose={() => setActivePOId(null)}
           user={user}
-        />
-      , document.body)}
-
-
-
-      {showManageModal && selectedDepForManage && (
-        <DepositDetailDrawer
-          isOpen={showManageModal}
-          onClose={() => setShowManageModal(false)}
-          deposit={selectedDepForManage}
-          onSaveSuccess={() => {
+          onStatusChange={() => {
             fetchCalendarStats();
             if (selectedDate) handleDateClick(selectedDate);
           }}
-          zIndex={2147483640}
+          onEditClick={(item) => {
+            setEditingExpense(item);
+          }}
         />
-      )}
+
+        {typeof document !== 'undefined' && (showCreateExpenseModal || !!editingExpense) && createPortal(
+          <ExpenseCreateDrawer
+            isOpen={showCreateExpenseModal || !!editingExpense}
+            onClose={() => {
+              setShowCreateExpenseModal(false);
+              setEditingExpense(null);
+            }}
+            editItem={editingExpense}
+            initialDate={selectedExpenseDate}
+            onSaveSuccess={() => {
+              fetchCalendarStats();
+              if (selectedDate) handleDateClick(selectedDate);
+            }}
+            user={user}
+          />
+        , document.body)}
+
+        {showManageModal && selectedDepForManage && (
+          <DepositDetailDrawer
+            isOpen={showManageModal}
+            onClose={() => setShowManageModal(false)}
+            deposit={selectedDepForManage}
+            onSaveSuccess={() => {
+              fetchCalendarStats();
+              if (selectedDate) handleDateClick(selectedDate);
+            }}
+            zIndex={2147483640}
+          />
+        )}
+      </Suspense>
 
       <style>{`
         @media (max-width: 768px) {

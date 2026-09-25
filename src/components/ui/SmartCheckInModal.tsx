@@ -644,7 +644,9 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
       modalClassName="checkin-modal-dark"
       zIndex={2000000000}
     >
-      {/* Late Check-In State -> Prompt to Create Attendance Update */}
+      {isOpen && (
+        <>
+          {/* Late Check-In State -> Prompt to Create Attendance Update */}
       {isBlockedLateCheckIn && !isSuccessScreen ? (
         /* 2. Blocked Late Check-In State -> Prompt to Create Attendance Update */
         <div style={{
@@ -1230,6 +1232,8 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
             )}
           </div>
         </div>
+      )}
+        </>
       )}
       </CustomModal>
 

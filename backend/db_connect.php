@@ -246,14 +246,19 @@ if (!function_exists('pruneAdminLogs')) {
 
 $db_needs_migration = false;
 try {
-    $vStmt = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'db_version' LIMIT 1");
-    if ($vStmt && $vStmt->num_rows > 0) {
-        $dbVer = (int)$vStmt->fetch_assoc()['setting_value'];
-        if ($dbVer < 208) {
+    $dbVer = (int) get_system_setting($conn, 'db_version');
+    if ($dbVer > 0 && $dbVer < 208) {
+        $db_needs_migration = true;
+    } elseif ($dbVer === 0) {
+        $vStmt = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'db_version' LIMIT 1");
+        if ($vStmt && $vStmt->num_rows > 0) {
+            $dbVer = (int)$vStmt->fetch_assoc()['setting_value'];
+            if ($dbVer < 208) {
+                $db_needs_migration = true;
+            }
+        } else {
             $db_needs_migration = true;
         }
-    } else {
-        $db_needs_migration = true;
     }
 } catch (Throwable $e) {
     $db_needs_migration = true;

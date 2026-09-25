@@ -46,6 +46,66 @@ class NotificationService {
     }
 
     /**
+     * Dọn sạch thông báo cho một user cụ thể, chỉ giữ lại tối đa $maxKeep thông báo mới nhất (mặc định 200).
+     * Tự động xóa tất cả các thông báo cũ hơn thứ hạng 200 để tối ưu dung lượng DB & tốc độ query.
+     */
+    public static function pruneUserNotifications(PDO $db, int $userId, int $maxKeep = 200): int {
+        if ($userId <= 0 || $maxKeep <= 0) return 0;
+        try {
+            // Kiểm tra nhanh tổng số thông báo của user
+            $countStmt = $db->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ?");
+            $countStmt->execute([$userId]);
+            $total = (int)$countStmt->fetchColumn();
+
+            if ($total > $maxKeep) {
+                // Xóa tất cả các thông báo nằm ngoài top $maxKeep gần nhất
+                $sql = "
+                    DELETE FROM notifications 
+                    WHERE user_id = ? 
+                      AND id NOT IN (
+                          SELECT id FROM (
+                              SELECT id FROM notifications 
+                              WHERE user_id = ? 
+                              ORDER BY created_at DESC, id DESC 
+                              LIMIT $maxKeep
+                          ) AS keep_latest
+                      )
+                ";
+                $delStmt = $db->prepare($sql);
+                $delStmt->execute([$userId, $userId]);
+                return $delStmt->rowCount();
+            }
+        } catch (\Throwable $e) {
+            error_log("pruneUserNotifications Error for User $userId: " . $e->getMessage());
+        }
+        return 0;
+    }
+
+    /**
+     * Quét và dọn sạch thông báo cho toàn bộ người dùng trong hệ thống (chỉ giữ tối đa $maxKeep mỗi user).
+     */
+    public static function pruneAllUsersNotifications(PDO $db, int $maxKeep = 200): int {
+        $totalPruned = 0;
+        try {
+            $stmt = $db->query("
+                SELECT user_id, COUNT(*) as cnt 
+                FROM notifications 
+                GROUP BY user_id 
+                HAVING cnt > $maxKeep
+            ");
+            $usersWithExcess = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+
+            foreach ($usersWithExcess as $row) {
+                $uId = (int)$row['user_id'];
+                $totalPruned += self::pruneUserNotifications($db, $uId, $maxKeep);
+            }
+        } catch (\Throwable $e) {
+            error_log("pruneAllUsersNotifications Error: " . $e->getMessage());
+        }
+        return $totalPruned;
+    }
+
+    /**
      * Dispatch notification across all 4 independent channels (In-App Bell, Zalo Bot, Telegram Bot, Email)
      * 
      * @param PDO $db
@@ -157,6 +217,7 @@ class NotificationService {
                             if ($rId > 0 && !in_array($rId, $insertedUserIds, true) && $isChannelEnabled($rId, 'bell')) {
                                 $insertedUserIds[] = $rId;
                                 $insertNotif->execute([$rId, $tenantId, $cleanTitle, $cleanBody, $type, $link]);
+                                self::pruneUserNotifications($db, $rId, 200);
                             }
                         }
                     }
@@ -1168,10 +1229,10 @@ class NotificationService {
                 $contactId = $payload['contact_id'] ?? '';
                 $phone = $payload['phone'] ?? '';
                 $link = $contactId ? "/contacts?open_contact_id=$contactId" : "/contacts";
-                $bodyText = "Bạn vừa được $actorName bàn giao khách hàng \"$custName\"" . (!empty($phone) ? " ($phone)" : "") . " (từ $oldSaleName). Nhấn để mở chi tiết.";
+                $bodyText = "Bạn vừa nhận được khách hàng \"$custName\"" . (!empty($phone) ? " ($phone)" : "") . " (bàn giao từ $oldSaleName). Nhấn để mở hồ sơ chi tiết.";
                 return [
                     'recipients' => $recipients,
-                    'title' => "🔄 Bạn được chuyển giao Lead mới!",
+                    'title' => "Bạn vừa nhận được khách hàng mới!",
                     'body' => $bodyText,
                     'type' => "contact",
                     'link' => $link,
@@ -1270,10 +1331,10 @@ class NotificationService {
                 $contactId = $payload['contact_id'] ?? '';
                 $roundName = $payload['round_name'] ?? '';
                 $link = !empty($contactId) ? "/contacts?open_contact_id=$contactId" : "/contacts";
-                $bodyText = "Khách hàng \"$custName\"" . (!empty($phone) ? " ($phone)" : "") . (!empty($roundName) ? " từ vòng \"$roundName\"" : "") . ". Nhấn để mở chi tiết.";
+                $bodyText = "Bạn vừa nhận được khách hàng \"$custName\"" . (!empty($phone) ? " ($phone)" : "") . (!empty($roundName) ? " từ vòng \"$roundName\"" : "") . ". Nhấn để mở hồ sơ chi tiết.";
                 return [
                     'recipients' => $recipients,
-                    'title' => "🎉 Bạn nhận được Lead mới!",
+                    'title' => "Bạn vừa nhận được khách hàng mới!",
                     'body' => $bodyText,
                     'type' => "contact",
                     'link' => $link,

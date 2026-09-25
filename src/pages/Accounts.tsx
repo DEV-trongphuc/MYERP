@@ -7,7 +7,6 @@ import { CustomSelect } from '../components/ui/CustomSelect';
 import { CustomCheckbox } from '../components/ui/CustomCheckbox';
 import { Avatar } from '../components/ui/Avatar';
 import { fetchAPI } from '../utils/api';
-import { AccountDetailDrawer } from '../components/AccountDetailDrawer';
 import { compressToWebP } from '../utils/imageCompress';
 import toast from 'react-hot-toast';
 import { useUIStore } from '../store/uiStore';
@@ -16,6 +15,8 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { withRouterFreezer } from '../components/RouterFreezer';
 import { useAuth } from '../contexts/AuthContext';
 import { CopyButton } from '../components/ui/CopyButton';
+
+const AccountDetailDrawer = React.lazy(() => import('../components/AccountDetailDrawer').then(m => ({ default: m.AccountDetailDrawer })));
 
 const AccountsInner = () => {
   const { t } = useLanguage();
@@ -1964,12 +1965,14 @@ const AccountsInner = () => {
         </div>
       )}
 
-      <AccountDetailDrawer 
-        isOpen={modalOpen} 
-        onClose={() => setModalOpen(false)} 
-        account={editingAccount} 
-        onSaveSuccess={fetchAccounts} 
-      />
+      <React.Suspense fallback={null}>
+        <AccountDetailDrawer 
+          isOpen={modalOpen} 
+          onClose={() => setModalOpen(false)} 
+          account={editingAccount} 
+          onSaveSuccess={fetchAccounts} 
+        />
+      </React.Suspense>
 
       <ConfirmModal 
         isOpen={confirmOpen} 

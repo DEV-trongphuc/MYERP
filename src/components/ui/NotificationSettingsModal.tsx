@@ -1188,14 +1188,18 @@ const getDefaultConfig = (key: string): EventConfig => {
                   background: '#BD1D2D',
                   border: 'none',
                   borderRadius: '12px',
-                  cursor: 'pointer',
+                  cursor: saving ? 'not-allowed' : 'pointer',
                   boxShadow: '0 4px 14px rgba(189, 29, 45, 0.28)',
                   opacity: saving ? 0.6 : 1,
                   transition: 'all 0.2s ease',
-                  whiteSpace: 'nowrap'
+                  whiteSpace: 'nowrap',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px'
                 }}
               >
-                {saving ? "Đang lưu..." : "Lưu Cấu Hình Chuyên Sâu"}
+                {saving ? <RefreshCw size={15} className="spin" /> : <Save size={15} />}
+                <span>{saving ? "Đang lưu..." : "Lưu Cấu Hình Chuyên Sâu"}</span>
               </button>
             </div>
           </div>

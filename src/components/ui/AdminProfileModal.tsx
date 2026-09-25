@@ -89,7 +89,7 @@ export const AdminProfileModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 <User size={20} className="text-primary" />
                 Cài đặt tài khoản Admin
               </h3>
-              <button onClick={onClose}><X size={20} /></button>
+              <button onClick={onClose} disabled={loading} style={{ background: 'none', border: 'none', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.6 : 1 }}><X size={20} /></button>
             </div>
 
             <div style={{ display: 'flex', background: 'var(--color-bg)', padding: '4px', margin: '1rem 1.5rem', borderRadius: '12px' }}>
@@ -131,9 +131,9 @@ export const AdminProfileModal: React.FC<Props> = ({ isOpen, onClose }) => {
                     <textarea className="form-input" rows={3} style={{ resize: 'none' }} value={formData.bio} onChange={e => setFormData({...formData, bio: e.target.value})} placeholder="Nhập một vài dòng giới thiệu về bạn..." />
                   </div>
 
-                  <button className="btn primary" onClick={handleSaveProfile} disabled={loading} style={{ marginTop: '0.5rem' }}>
+                  <button className="btn primary hover-lift" onClick={handleSaveProfile} disabled={loading} style={{ marginTop: '0.5rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                     {loading ? <Loader2 size={16} className="spin" /> : <Save size={16} />}
-                    Lưu thay đổi
+                    <span>{loading ? 'Đang lưu...' : 'Lưu thay đổi'}</span>
                   </button>
                 </div>
               ) : (
@@ -167,9 +167,9 @@ export const AdminProfileModal: React.FC<Props> = ({ isOpen, onClose }) => {
                     </div>
                   </div>
 
-                  <button className="btn primary" onClick={handleUpdatePassword} disabled={loading} style={{ marginTop: '0.5rem' }}>
+                  <button className="btn primary hover-lift" onClick={handleUpdatePassword} disabled={loading} style={{ marginTop: '0.5rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                     {loading ? <Loader2 size={16} className="spin" /> : <Save size={16} />}
-                    Cập nhật mật khẩu
+                    <span>{loading ? 'Đang cập nhật...' : 'Cập nhật mật khẩu'}</span>
                   </button>
 
                   <div style={{ marginTop: '1rem', paddingTop: '1.5rem', borderTop: '1px solid var(--color-border)' }}>

@@ -40,6 +40,7 @@ export const ProductsPage: React.FC = () => {
 
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [isExporting, setIsExporting] = useState(false);
 
   const fetchProducts = () => {
     setLoading(true);
@@ -113,6 +114,8 @@ export const ProductsPage: React.FC = () => {
   };
 
   const handleExport = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
     addToast('Đang xuất danh sách sản phẩm theo bộ lọc hiện tại...', 'info');
     try {
       await downloadExportFile({
@@ -128,6 +131,8 @@ export const ProductsPage: React.FC = () => {
       });
     } catch (err: any) {
       addToast(err?.message || 'Xuất danh sách sản phẩm thất bại', 'error');
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -143,9 +148,9 @@ export const ProductsPage: React.FC = () => {
             <Layers size={16} />
             <span className="hide-on-mobile"> Quản lý danh mục</span>
           </button>
-          <button className="btn outline" onClick={handleExport} title="Xuất Excel/CSV">
-            <Download size={16} />
-            <span className="hide-on-mobile"> Xuất file</span>
+          <button className="btn outline" onClick={handleExport} disabled={isExporting} title="Xuất Excel/CSV">
+            {isExporting ? <Loader2 size={16} className="spin" /> : <Download size={16} />}
+            <span className="hide-on-mobile"> {isExporting ? 'Đang xuất...' : 'Xuất file'}</span>
           </button>
           <button className="btn primary" onClick={() => { setEditItem(null); setForm(EMPTY); setShowModal(true); }} title="Thêm sản phẩm">
             <Plus size={16} />

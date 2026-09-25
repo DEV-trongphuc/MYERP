@@ -556,6 +556,8 @@ export default function Approvals() {
   const [allList, setAllList] = useState<ApprovalItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
+  const [isSubmittingReject, setIsSubmittingReject] = useState(false);
+  const [actionLoadingId, setActionLoadingId] = useState<string | number | null>(null);
   const [selectedItem, setSelectedItem] = useState<ApprovalItem | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [approveConfirmOpen, setApproveConfirmOpen] = useState(false);
@@ -3465,6 +3467,8 @@ export default function Approvals() {
   }, []);
 
   const handleApprove = async (item: ApprovalItem) => {
+    if (actionLoadingId) return;
+    setActionLoadingId(item.id);
     try {
       if (item.type === 'leave') {
         await fetchAPI('hrm/leaves', {
@@ -3491,6 +3495,8 @@ export default function Approvals() {
       loadData();
     } catch (err: any) {
       toast.error(err?.response?.data?.message || err?.message || t('Lỗi khi phê duyệt'));
+    } finally {
+      setActionLoadingId(null);
     }
   };
 
@@ -3502,13 +3508,14 @@ export default function Approvals() {
 
   const handleRejectSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedItem) return;
+    if (!selectedItem || isSubmittingReject) return;
     if (!rejectReason.trim()) {
       toast.error(t('Vui lòng nhập lý do từ chối!'));
       return;
     }
 
     try {
+      setIsSubmittingReject(true);
       if (selectedItem.type === 'leave') {
         await fetchAPI('hrm/leaves', {
           method: 'PUT',
@@ -3537,6 +3544,8 @@ export default function Approvals() {
       loadData();
     } catch (err: any) {
       toast.error(err?.response?.data?.message || err?.message || t('Lỗi khi từ chối'));
+    } finally {
+      setIsSubmittingReject(false);
     }
   };
 
@@ -6045,11 +6054,12 @@ export default function Approvals() {
                 placeholder={t('Ví dụ: Không hợp lệ hoặc thiếu chứng từ...')}
               />
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                <button type="button" onClick={() => setRejectModalOpen(false)} className="btn secondary">
+                <button type="button" onClick={() => setRejectModalOpen(false)} disabled={isSubmittingReject} className="btn secondary">
                   {t('Hủy')}
                 </button>
-                <button type="submit" className="btn primary" style={{ background: '#ef4444', borderColor: '#ef4444' }}>
-                  {t('Xác nhận từ chối')}
+                <button type="submit" disabled={isSubmittingReject} className="btn primary" style={{ background: '#ef4444', borderColor: '#ef4444', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {isSubmittingReject && <RefreshCw size={14} className="spin" />}
+                  {isSubmittingReject ? t('Đang từ chối...') : t('Xác nhận từ chối')}
                 </button>
               </div>
             </form>
@@ -6297,9 +6307,10 @@ export default function Approvals() {
 
                 <button 
                   onClick={async () => {
-                    setApproveConfirmOpen(false);
                     await handleApprove(itemToApprove);
+                    setApproveConfirmOpen(false);
                   }}
+                  disabled={actionLoadingId === itemToApprove.id}
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -6312,13 +6323,14 @@ export default function Approvals() {
                     fontSize: '0.875rem',
                     borderRadius: '10px',
                     fontWeight: 700,
-                    cursor: 'pointer',
+                    cursor: actionLoadingId === itemToApprove.id ? 'not-allowed' : 'pointer',
                     transition: 'all 0.15s ease',
-                    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)'
+                    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)',
+                    opacity: actionLoadingId === itemToApprove.id ? 0.7 : 1
                   }}
                 >
-                  <CheckCircle2 size={16} />
-                  {t('Phê duyệt')}
+                  {actionLoadingId === itemToApprove.id ? <RefreshCw size={16} className="spin" /> : <CheckCircle2 size={16} />}
+                  {actionLoadingId === itemToApprove.id ? t('Đang duyệt...') : t('Phê duyệt')}
                 </button>
               </div>
             </div>

@@ -1034,12 +1034,12 @@ class ContactController {
                 $custPhoneStr = !empty($phone) ? " ($phone)" : "";
                 $stmtNotifOwner = $this->db->prepare("
                     INSERT INTO notifications (user_id, tenant_id, title, body, type, link)
-                    VALUES (?, ?, '🎉 Bạn được phân bổ khách hàng mới!', ?, 'contact', ?)
+                    VALUES (?, ?, 'Bạn vừa nhận được khách hàng mới!', ?, 'contact', ?)
                 ");
                 $stmtNotifOwner->execute([
                     $assignedOwnerId,
                     $auth['tenant_id'],
-                    "Bạn vừa được $creatorName phân bổ khách hàng \"$custFullName\"$custPhoneStr. Nhấn để mở chi tiết.",
+                    "Bạn vừa nhận được khách hàng \"$custFullName\"$custPhoneStr" . (!empty($creatorName) ? " (từ $creatorName)" : "") . ". Nhấn để mở hồ sơ chi tiết.",
                     "/contacts?open_contact_id=$id"
                 ]);
             } catch (\Throwable $notifEx) {
@@ -3165,12 +3165,12 @@ class ContactController {
                 $custFullName = trim($source['full_name'] ?? '') ?: 'Khách hàng';
                 $stmtNotifOwner = $this->db->prepare("
                     INSERT INTO notifications (user_id, tenant_id, title, body, type, link)
-                    VALUES (?, ?, '🎉 Bạn được phân bổ hồ sơ nhân bản mới!', ?, 'contact', ?)
+                    VALUES (?, ?, 'Bạn vừa nhận được khách hàng mới!', ?, 'contact', ?)
                 ");
                 $stmtNotifOwner->execute([
                     $assignedOwnerId,
                     $auth['tenant_id'],
-                    "Bạn vừa được $creatorName phân bổ hồ sơ nhân bản \"$custFullName\" - Chương trình: $newProgram.",
+                    "Bạn vừa nhận được khách hàng \"$custFullName\" - Chương trình: $newProgram" . (!empty($creatorName) ? " (từ $creatorName)" : "") . ". Nhấn để mở hồ sơ chi tiết.",
                     "/contacts?open_contact_id=$newContactId"
                 ]);
             } catch (\Throwable $notifEx) {

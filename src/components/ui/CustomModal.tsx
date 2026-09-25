@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
@@ -21,6 +21,27 @@ interface CustomModalProps {
   centeredOnMobile?: boolean;
 }
 
+// Global modal stack tracker to prevent scroll-unlocking collisions with nested modals
+let globalOpenModalCount = 0;
+let originalBodyOverflow = '';
+
+const lockBodyScroll = () => {
+  if (typeof document === 'undefined') return;
+  if (globalOpenModalCount === 0) {
+    originalBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+  }
+  globalOpenModalCount++;
+};
+
+const unlockBodyScroll = () => {
+  if (typeof document === 'undefined') return;
+  globalOpenModalCount = Math.max(0, globalOpenModalCount - 1);
+  if (globalOpenModalCount === 0) {
+    document.body.style.overflow = originalBodyOverflow || 'unset';
+  }
+};
+
 export const CustomModal: React.FC<CustomModalProps> = ({
   isOpen,
   onClose,
@@ -36,25 +57,38 @@ export const CustomModal: React.FC<CustomModalProps> = ({
   modalClassName,
   centeredOnMobile = false
 }) => {
-  // Prevent body scroll when modal is open
+  // Safe body scroll lock with reference count
   useEffect(() => {
     if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
+      lockBodyScroll();
+      return () => {
+        unlockBodyScroll();
+      };
     }
-    return () => { document.body.style.overflow = 'unset'; };
   }, [isOpen]);
 
-  const [isMobile, setIsMobile] = React.useState(() => typeof window !== 'undefined' ? window.innerWidth <= 768 : false);
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth <= 768;
+  });
+
   useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth <= 768);
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    if (typeof window === 'undefined') return;
+    const mediaQuery = window.matchMedia('(max-width: 768px)');
+    const handleChange = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    setIsMobile(mediaQuery.matches);
+    
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
+    } else {
+      // Fallback for older browsers
+      mediaQuery.addListener(handleChange);
+      return () => mediaQuery.removeListener(handleChange);
+    }
   }, []);
 
-  const resolvedWidth = React.useMemo(() => {
+  const resolvedWidth = useMemo(() => {
     const formatDimension = (val: string | number) => {
       if (typeof val === 'number') return `${val}px`;
       const str = String(val).trim();
@@ -66,16 +100,17 @@ export const CustomModal: React.FC<CustomModalProps> = ({
     return '800px';
   }, [width, maxWidth]);
 
+  // Ultra-optimized 120 FPS ease curve
   const motionProps = (isMobile && !centeredOnMobile) ? {
     initial: { y: '100%', opacity: 1 },
     animate: { y: 0, opacity: 1 },
     exit: { y: '100%', opacity: 0 },
-    transition: { type: 'spring' as const, damping: 28, stiffness: 240, mass: 0.8 }
+    transition: { duration: 0.22, ease: [0.16, 1, 0.3, 1] as any }
   } : {
-    initial: { opacity: 0, scale: 0.96, y: 8 },
+    initial: { opacity: 0, scale: 0.97, y: 6 },
     animate: { opacity: 1, scale: 1, y: 0 },
-    exit: { opacity: 0, scale: 0.96, y: 8 },
-    transition: { type: 'spring' as const, damping: 26, stiffness: 220 }
+    exit: { opacity: 0, scale: 0.97, y: 6 },
+    transition: { duration: 0.16, ease: [0.16, 1, 0.3, 1] as any }
   };
 
   const dragProps = (isMobile && !centeredOnMobile) ? {
@@ -83,7 +118,7 @@ export const CustomModal: React.FC<CustomModalProps> = ({
     dragDirectionLock: true,
     dragConstraints: { top: 0 },
     dragElastic: { top: 0.05, bottom: 0.65 },
-    onDragEnd: (event: any, info: any) => {
+    onDragEnd: (_: any, info: any) => {
       if (info.offset.y > 120 || info.velocity.y > 400) {
         onClose();
       }
@@ -116,7 +151,7 @@ export const CustomModal: React.FC<CustomModalProps> = ({
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     {headerAction}
                     {showCloseIcon && (
-                      <button className={styles.closeBtn} onClick={onClose}>
+                      <button className={styles.closeBtn} onClick={onClose} aria-label="Close modal">
                         <X size={20} />
                       </button>
                     )}
@@ -124,7 +159,7 @@ export const CustomModal: React.FC<CustomModalProps> = ({
                 </div>
               )}
               {!title && showCloseIcon && (
-                <button className={`${styles.closeBtn} ${styles.floatingClose}`} onClick={onClose}>
+                <button className={`${styles.closeBtn} ${styles.floatingClose}`} onClick={onClose} aria-label="Close modal">
                   <X size={20} />
                 </button>
               )}
@@ -141,6 +176,7 @@ export const CustomModal: React.FC<CustomModalProps> = ({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
+              transition={{ duration: 0.16, ease: 'easeOut' }}
               onClick={onClose}
             />
 
@@ -157,7 +193,7 @@ export const CustomModal: React.FC<CustomModalProps> = ({
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     {headerAction}
                     {showCloseIcon && (
-                      <button className={styles.closeBtn} onClick={onClose}>
+                      <button className={styles.closeBtn} onClick={onClose} aria-label="Close modal">
                         <X size={20} />
                       </button>
                     )}
@@ -165,7 +201,7 @@ export const CustomModal: React.FC<CustomModalProps> = ({
                 </div>
               )}
               {!title && showCloseIcon && (
-                <button className={`${styles.closeBtn} ${styles.floatingClose}`} onClick={onClose}>
+                <button className={`${styles.closeBtn} ${styles.floatingClose}`} onClick={onClose} aria-label="Close modal">
                   <X size={20} />
                 </button>
               )}

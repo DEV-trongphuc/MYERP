@@ -7447,7 +7447,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                     <button
                       disabled={isSubmitting}
                       onClick={handleSave}
-                      className="btn success sm"
+                      className="btn success sm hover-lift"
                       style={{
                         padding: isMobileOrTablet ? '6px 12px' : '6px 14px',
                         borderRadius: '10px',
@@ -7462,11 +7462,12 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                         background: 'var(--color-primary)',
                         borderColor: 'var(--color-primary)',
                         color: 'white',
-                        cursor: 'pointer'
+                        cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                        opacity: isSubmitting ? 0.7 : 1
                       }}
                     >
-                      <Save size={isMobileOrTablet ? 16 : 14} />
-                      {!isMobileOrTablet && <span>Lưu</span>}
+                      {isSubmitting ? <Loader2 size={isMobileOrTablet ? 16 : 14} className="spin" /> : <Save size={isMobileOrTablet ? 16 : 14} />}
+                      {!isMobileOrTablet && <span>{isSubmitting ? 'Đang lưu...' : 'Lưu'}</span>}
                     </button>
                   </div>
                 </div>
@@ -8108,7 +8109,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                         <button
                           disabled={isSubmitting}
                           onClick={handleSave}
-                          className="btn primary"
+                          className="btn primary hover-lift"
                           style={{ 
                             display: 'flex', 
                             alignItems: 'center', 
@@ -8121,12 +8122,14 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             background: 'var(--color-primary)',
                             borderColor: 'var(--color-primary)',
                             color: 'white',
-                            cursor: 'pointer',
+                            cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                            opacity: isSubmitting ? 0.7 : 1,
                             boxShadow: 'var(--shadow-sm)',
                             transition: 'all 0.2s ease'
                           }}
                         >
-                          <Save size={14} /> Lưu thay đổi
+                          {isSubmitting ? <Loader2 size={16} className="spin" /> : <Save size={14} />}
+                          <span>{isSubmitting ? 'Đang lưu thay đổi...' : 'Lưu thay đổi'}</span>
                         </button>
                       </div>
                   </div>
@@ -12265,10 +12268,13 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   )}
                                   <button 
                                     type="button"
-                                    className="btn primary sm"
+                                    className="btn primary sm hover-lift"
                                     onClick={handleSaveCoopShares}
+                                    disabled={coopLoading}
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', opacity: coopLoading ? 0.7 : 1, cursor: coopLoading ? 'not-allowed' : 'pointer' }}
                                   >
-                                    {isRequestingChange ? 'Gửi yêu cầu thay đổi' : 'Lưu tỷ lệ mới'}
+                                    {coopLoading && <Loader2 size={14} className="spin" />}
+                                    <span>{coopLoading ? 'Đang lưu...' : (isRequestingChange ? 'Gửi yêu cầu thay đổi' : 'Lưu tỷ lệ mới')}</span>
                                   </button>
                                 </div>
                               </div>

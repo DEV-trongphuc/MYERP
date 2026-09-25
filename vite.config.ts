@@ -50,13 +50,25 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks(id) {
             if (id.includes('node_modules')) {
+              if (id.includes('xlsx')) {
+                return 'vendor-xlsx';
+              }
+              if (id.includes('pptxgenjs') || id.includes('jszip')) {
+                return 'vendor-pptx';
+              }
+              if (id.includes('framer-motion')) {
+                return 'vendor-framer';
+              }
+              if (id.includes('@dnd-kit')) {
+                return 'vendor-dnd';
+              }
               if (id.includes('recharts') || id.includes('d3')) {
                 return 'vendor-charts';
               }
               if (id.includes('lucide-react')) {
                 return 'vendor-icons';
               }
-              if (id.includes('react') || id.includes('react-dom') || id.includes('react-router') || id.includes('react-router-dom')) {
+              if (id.includes('react') || id.includes('react-dom') || id.includes('react-router') || id.includes('react-router-dom') || id.includes('zustand')) {
                 return 'vendor-react';
               }
               return 'vendor';

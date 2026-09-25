@@ -72,20 +72,22 @@ export const MobileSheet: React.FC<MobileSheetProps> = ({
             pointerEvents: 'none'
           }}
         >
-          {/* Backdrop Blur Overlay */}
+          {/* Backdrop Overlay */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.25 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
             onClick={onClose}
             style={{
               position: 'absolute',
               inset: 0,
-              background: 'rgba(0, 0, 0, 0.55)',
-              backdropFilter: 'blur(8px)',
-              WebkitBackdropFilter: 'blur(8px)',
-              pointerEvents: 'auto'
+              background: 'rgba(0, 0, 0, 0.6)',
+              backdropFilter: 'blur(4px)',
+              WebkitBackdropFilter: 'blur(4px)',
+              pointerEvents: 'auto',
+              contain: 'strict',
+              willChange: 'opacity'
             }}
           />
 
@@ -96,10 +98,8 @@ export const MobileSheet: React.FC<MobileSheetProps> = ({
             animate={isMobile ? { y: 0 } : { x: 0 }}
             exit={isMobile ? { y: '100%' } : { x: '100%' }}
             transition={{
-              type: 'spring',
-              damping: isMobile ? 32 : 34,
-              stiffness: isMobile ? 300 : 340,
-              mass: 0.85
+              duration: isMobile ? 0.22 : 0.2,
+              ease: [0.16, 1, 0.3, 1] as any
             }}
             drag={isMobile ? 'y' : false}
             dragDirectionLock={isMobile}
@@ -126,7 +126,9 @@ export const MobileSheet: React.FC<MobileSheetProps> = ({
               pointerEvents: 'auto',
               outline: 'none',
               overflow: 'hidden',
-              willChange: 'transform'
+              willChange: 'transform, opacity',
+              transform: 'translate3d(0, 0, 0)',
+              contain: 'layout style'
             }}
           >
             {/* Mobile Drag Handle */}
