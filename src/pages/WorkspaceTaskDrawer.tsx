@@ -36,7 +36,7 @@ interface WorkspaceTaskDrawerProps {
   onClose: () => void;
   task: any;
   onUpdate: () => void;
-  users: any[];
+  users?: any[];
   onOpenContact?: (contactId: number, initialData?: any) => void;
   embedMode?: boolean;
   isFocusSessionActive?: boolean;
@@ -150,7 +150,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   onClose, 
   task, 
   onUpdate, 
-  users,
+  users: externalUsers,
   onOpenContact,
   embedMode = false,
   isFocusSessionActive = false,
@@ -169,6 +169,34 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   const { user: currentUser } = useAuth();
   const { showConfirm, closeConfirm } = useUIStore();
   const [isMobileOrTablet, setIsMobileOrTablet] = useState(window.innerWidth <= 1024);
+
+  const [internalUsers, setInternalUsers] = useState<any[]>([]);
+  useEffect(() => {
+    if (isOpen && (!externalUsers || externalUsers.length === 0)) {
+      api.get('/users?all=1').then(res => {
+        if (res.data?.success) {
+          const payload = res.data.data ?? res.data;
+          let list: any[] = [];
+          if (Array.isArray(payload)) {
+            list = payload;
+          } else if (Array.isArray(payload?.users)) {
+            list = payload.users;
+          } else if (Array.isArray(payload?.items)) {
+            list = payload.items;
+          } else if (Array.isArray(res.data?.users)) {
+            list = res.data.users;
+          } else if (Array.isArray(res.data?.items)) {
+            list = res.data.items;
+          }
+          setInternalUsers(Array.isArray(list) ? list : []);
+        }
+      }).catch(() => {});
+    }
+  }, [isOpen, externalUsers]);
+
+  const users = (Array.isArray(externalUsers) && externalUsers.length > 0)
+    ? externalUsers
+    : (Array.isArray(internalUsers) ? internalUsers : []);
 
   const [internalTaskGroups, setInternalTaskGroups] = useState<any[]>([]);
   useEffect(() => {

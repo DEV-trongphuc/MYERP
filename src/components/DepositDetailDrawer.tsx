@@ -103,6 +103,80 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
   const [remindTargetManage, setRemindTargetManage] = useState(deposit ? Number(deposit.remind_target) || 2 : 2);
   const [manualRemindTarget, setManualRemindTarget] = useState<number>(2);
 
+  // Edit SO modal states (Accountant & Admin)
+  const [isEditSOOpen, setIsEditSOOpen] = useState(false);
+  const [editFullName, setEditFullName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editProjectId, setEditProjectId] = useState('');
+  const [editUnitCode, setEditUnitCode] = useState('');
+  const [editPrice, setEditPrice] = useState<number>(0);
+  const [editCurrency, setEditCurrency] = useState('VND');
+  const [editExchangeRate, setEditExchangeRate] = useState<number>(1);
+  const [editCreatedBy, setEditCreatedBy] = useState('');
+  const [editExpectedCommissionVal, setEditExpectedCommissionVal] = useState<number>(0);
+  const [editNotes, setEditNotes] = useState('');
+  const [isSavingSOInfo, setIsSavingSOInfo] = useState(false);
+  const [availableProjects, setAvailableProjects] = useState<any[]>([]);
+  const [availableUsers, setAvailableUsers] = useState<any[]>([]);
+
+  // Related Users (Watchers) states
+  const [showAddWatcherDropdown, setShowAddWatcherDropdown] = useState(false);
+  const [savingWatchers, setSavingWatchers] = useState(false);
+  const [watcherSearch, setWatcherSearch] = useState('');
+  const addWatcherDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (addWatcherDropdownRef.current && !addWatcherDropdownRef.current.contains(e.target as Node)) {
+        setShowAddWatcherDropdown(false);
+      }
+    };
+    if (showAddWatcherDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showAddWatcherDropdown]);
+
+  useEffect(() => {
+    if (isOpen && availableUsers.length === 0) {
+      fetchAPI('users').then(res => {
+        const uList = res.data?.users || res.data || (Array.isArray(res) ? res : []);
+        if (Array.isArray(uList)) setAvailableUsers(uList);
+      }).catch(err => console.error("Error loading users in DepositDetailDrawer:", err));
+    }
+  }, [isOpen, availableUsers.length]);
+
+  const handleUpdateWatchers = async (newIds: number[]) => {
+    if (!selectedDepForManage?.id) return;
+    setSavingWatchers(true);
+    try {
+      const res = await fetchAPI('hrm/approvals/update-related-users', {
+        method: 'POST',
+        body: JSON.stringify({
+          type: 'deposit',
+          id: selectedDepForManage.id,
+          related_user_ids: newIds
+        })
+      });
+      if (res.success || res.status === 'success') {
+        setSelectedDepForManage((prev: any) => ({
+          ...(prev || {}),
+          related_user_ids: newIds
+        }));
+        addToast(t('Đã cập nhật danh sách người theo dõi'), 'success');
+      } else {
+        addToast(res.message || t('Lỗi khi cập nhật người theo dõi'), 'error');
+      }
+    } catch (err: any) {
+      addToast(err?.message || t('Lỗi khi cập nhật người theo dõi'), 'error');
+    } finally {
+      setSavingWatchers(false);
+    }
+  };
+
   // Cancel transaction states
   const [isCancelOpen, setIsCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
@@ -110,10 +184,106 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
 
   const isAdmin = user && ['admin', 'superadmin', 'super_admin', 'assistant', 'manager', 'director', 'accountant', 'marketing'].includes(user.role);
   const canEditExpectedCommission = user && ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'accountant'].includes(user.role);
+  const canEditAllSOInfo = user && ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'accountant'].includes(user.role);
   const canEditMilestones = isAdmin || (selectedDepForManage && (
     String(selectedDepForManage.created_by) === String(user?.id) ||
     String(selectedDepForManage.contact_owner_id) === String(user?.id)
   ));
+
+  const handleOpenEditSO = async () => {
+    if (!selectedDepForManage) return;
+    setEditFullName(selectedDepForManage.full_name || selectedDepForManage.client_name || selectedDepForManage.contact_name || '');
+    setEditPhone(selectedDepForManage.phone || '');
+    setEditEmail(selectedDepForManage.email || '');
+    setEditProjectId(String(selectedDepForManage.project_id || ''));
+    setEditUnitCode(selectedDepForManage.unit_code || '');
+    setEditPrice(Number(selectedDepForManage.price) || 0);
+    setEditCurrency(selectedDepForManage.currency || 'VND');
+    setEditExchangeRate(Number(selectedDepForManage.exchange_rate) || 1);
+    setEditCreatedBy(String(selectedDepForManage.created_by || ''));
+    setEditExpectedCommissionVal(Number(selectedDepForManage.expected_commission) || 0);
+    setEditNotes(selectedDepForManage.notes || '');
+
+    if (availableProjects.length === 0) {
+      try {
+        const pRes = await fetchAPI('projects');
+        if (pRes?.data && Array.isArray(pRes.data)) setAvailableProjects(pRes.data);
+        else if (Array.isArray(pRes)) setAvailableProjects(pRes);
+      } catch (e) {}
+    }
+    if (availableUsers.length === 0) {
+      try {
+        const uRes = await fetchAPI('users');
+        if (uRes?.data && Array.isArray(uRes.data)) setAvailableUsers(uRes.data);
+        else if (Array.isArray(uRes)) setAvailableUsers(uRes);
+      } catch (e) {}
+    }
+
+    setIsEditSOOpen(true);
+  };
+
+  const handleSaveSOInfo = async () => {
+    if (!selectedDepForManage?.id) return;
+    if (!editFullName.trim()) {
+      addToast('Tên học viên/khách hàng không được để trống.', 'error');
+      return;
+    }
+    if (!editProjectId) {
+      addToast('Vui lòng chọn chương trình.', 'error');
+      return;
+    }
+    setIsSavingSOInfo(true);
+    try {
+      const payload = {
+        contact_name: editFullName.trim(),
+        phone: editPhone.trim(),
+        email: editEmail.trim(),
+        project_id: Number(editProjectId),
+        unit_code: editUnitCode.trim(),
+        price: editPrice,
+        currency: editCurrency,
+        exchange_rate: editExchangeRate,
+        created_by: editCreatedBy ? Number(editCreatedBy) : selectedDepForManage.created_by,
+        expected_commission: editExpectedCommissionVal,
+        notes: editNotes.trim()
+      };
+      const res = await fetchAPI(`deposits/${selectedDepForManage.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+      });
+      if (res.success) {
+        addToast('Cập nhật thông tin đơn hàng thành công!', 'success');
+        const projName = availableProjects.find(p => String(p.id) === String(editProjectId))?.name || selectedDepForManage.project_name;
+        const creatorName = availableUsers.find(u => String(u.id) === String(editCreatedBy))?.name || selectedDepForManage.creator_name;
+        
+        setSelectedDepForManage((prev: any) => ({
+          ...prev,
+          full_name: editFullName.trim(),
+          phone: editPhone.trim(),
+          email: editEmail.trim(),
+          project_id: Number(editProjectId),
+          project_name: projName,
+          unit_code: editUnitCode.trim(),
+          price: editPrice,
+          currency: editCurrency,
+          exchange_rate: editExchangeRate,
+          created_by: editCreatedBy ? Number(editCreatedBy) : prev?.created_by,
+          creator_name: creatorName,
+          expected_commission: editExpectedCommissionVal,
+          notes: editNotes.trim()
+        }));
+        setIsEditSOOpen(false);
+        onSaveSuccess();
+        loadHistory();
+      } else {
+        addToast(res.message || 'Lỗi cập nhật thông tin đơn hàng', 'error');
+      }
+    } catch (err: any) {
+      addToast(err.message || 'Lỗi kết nối', 'error');
+    } finally {
+      setIsSavingSOInfo(false);
+    }
+  };
 
   // Initialize and load dependencies when deposit changes
   useEffect(() => {
@@ -135,7 +305,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
           .then(res => {
             const c = res.data || res;
             if (c && c.email) {
-              setSelectedDepForManage(prev => prev ? { ...prev, email: c.email } : null);
+              setSelectedDepForManage((prev: any) => prev ? { ...prev, email: c.email } : null);
             }
           })
           .catch(err => console.error("Error fetching contact email:", err));
@@ -166,7 +336,19 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
       if (res.success) {
         const commentsList = res.data || [];
         setComments(commentsList);
-        if (isInitial) {
+        const searchParams = new URLSearchParams(window.location.search);
+        const highlightCommentId = searchParams.get('highlight_comment_id');
+
+        if (highlightCommentId) {
+          setActiveDrawerTab('comments');
+          setMobileDrawerTab('discussion');
+          setTimeout(() => {
+            const el = document.getElementById(`deposit-comment-${highlightCommentId}`);
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          }, 350);
+        } else if (isInitial) {
           if (commentsList.length === 0) {
             setActiveDrawerTab('history');
           } else {
@@ -174,7 +356,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
           }
         }
         setTimeout(() => {
-          if (commentsContainerRef.current) {
+          if (!highlightCommentId && commentsContainerRef.current) {
             commentsContainerRef.current.scrollTop = 0;
           }
         }, 50);
@@ -458,10 +640,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
     }
 
     const totalM = tempMilestones.reduce((acc, m) => acc + (parseFloat(String(m.expected_amount)) || 0), 0);
-    if (totalM > parseFloat(String(selectedDepForManage.price))) {
-      addToast(`Tổng tiền các đợt thanh toán (${totalM.toLocaleString()} VND) không được lớn hơn Tổng doanh thu dự kiến (${parseFloat(String(selectedDepForManage.price)).toLocaleString()} VND)`, 'error');
-      return;
-    }
+    const syncPrice = Math.max(parseFloat(String(selectedDepForManage.price)) || 0, totalM);
 
     if (isAdmin && tempSharesData && tempSharesData.length > 0) {
       const totalPct = tempSharesData.reduce((sum, s) => sum + (Number(s.percentage) || 0), 0);
@@ -475,6 +654,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
       setIsSavingMilestones(true);
       const payload: any = {
         milestones: tempMilestones,
+        price: syncPrice,
         auto_remind: autoRemindManage ? 1 : 0,
         remind_days_before: remindDaysBeforeManage,
         remind_at_hour: remindAtHourManage,
@@ -721,7 +901,36 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                 </div>
 
                 {/* Actions & Close area top right */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  {/* Sửa thông tin SO button for Accountant / Admin */}
+                  {canEditAllSOInfo && (
+                    <button
+                      type="button"
+                      onClick={handleOpenEditSO}
+                      style={{
+                        padding: '6px 12px',
+                        height: '34px',
+                        background: 'rgba(59, 130, 246, 0.08)',
+                        border: '1px solid rgba(59, 130, 246, 0.25)',
+                        color: '#2563eb',
+                        borderRadius: '8px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.15)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.08)'}
+                      title="Kế toán / Quản trị viên chỉnh sửa toàn bộ thông tin đơn hàng"
+                    >
+                      <Edit size={14} />
+                      <span>Sửa thông tin SO</span>
+                    </button>
+                  )}
+
                   {/* Hủy giao dịch button */}
                   {selectedDepForManage.status !== 'cancelled' && (() => {
                     const isCreator = String(selectedDepForManage.created_by) === String(user?.id);
@@ -1633,6 +1842,172 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                 {/* Right Pane (Thảo luận & Lịch sử) */}
                 {(!isMobile || mobileDrawerTab === 'discussion') && (
                 <div style={{ flex: isMobile ? 1 : '0 0 420px', width: isMobile ? '100%' : 'auto', minWidth: 0, display: 'flex', flexDirection: 'column', height: '100%', borderLeft: isMobile ? 'none' : '1px solid var(--color-border)', background: '#f8f9fa' }}>
+                  {/* Related Users (Watchers) Bar */}
+                  {(() => {
+                    const relIdsRaw = selectedDepForManage?.related_user_ids;
+                    let relIds: number[] = [];
+                    if (Array.isArray(relIdsRaw)) relIds = relIdsRaw.map(Number);
+                    else if (typeof relIdsRaw === 'string' && relIdsRaw.trim()) {
+                      try {
+                        const parsed = JSON.parse(relIdsRaw);
+                        if (Array.isArray(parsed)) relIds = parsed.map(Number);
+                        else relIds = relIdsRaw.split(',').map(s => Number(s.trim())).filter(Boolean);
+                      } catch {
+                        relIds = relIdsRaw.split(',').map(s => Number(s.trim())).filter(Boolean);
+                      }
+                    }
+                    const relUsers = relIds.map(numId => {
+                      const found = availableUsers.find((u: any) => Number(u.id) === numId);
+                      if (found) return found;
+                      return { id: numId, name: `User #${numId}`, full_name: `User #${numId}` };
+                    });
+
+                    const availableUsersToAdd = availableUsers.filter((u: any) => 
+                      !relIds.includes(Number(u.id)) &&
+                      (u.full_name || u.name || '').toLowerCase().includes(watcherSearch.toLowerCase())
+                    );
+
+                    return (
+                      <div style={{
+                        padding: '10px 14px',
+                        background: 'var(--color-surface)',
+                        borderBottom: '1px solid var(--color-border-light)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-text-muted)', letterSpacing: '0.05em' }}>
+                            {t('Người liên quan (Theo dõi)')} ({relUsers.length})
+                          </span>
+
+                          <div style={{ position: 'relative' }} ref={addWatcherDropdownRef}>
+                            <button
+                              type="button"
+                              onClick={() => setShowAddWatcherDropdown(!showAddWatcherDropdown)}
+                              disabled={savingWatchers}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                border: '1px dashed var(--color-primary)',
+                                background: 'rgba(189, 29, 45, 0.04)',
+                                color: 'var(--color-primary)',
+                                fontSize: '0.72rem',
+                                fontWeight: 700,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <Plus size={12} />
+                              <span>{t('Thêm')}</span>
+                            </button>
+
+                            {showAddWatcherDropdown && (
+                              <div style={{
+                                position: 'absolute',
+                                right: 0,
+                                top: '100%',
+                                marginTop: '4px',
+                                width: '240px',
+                                background: 'var(--color-surface)',
+                                border: '1px solid var(--color-border)',
+                                borderRadius: '10px',
+                                boxShadow: 'var(--shadow-lg)',
+                                padding: '8px',
+                                zIndex: 1000,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '6px'
+                              }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', background: 'var(--color-bg)', borderRadius: '6px', border: '1px solid var(--color-border-light)' }}>
+                                  <input
+                                    type="text"
+                                    placeholder={t('Tìm nhân sự...')}
+                                    value={watcherSearch}
+                                    onChange={e => setWatcherSearch(e.target.value)}
+                                    autoFocus
+                                    style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '0.75rem', width: '100%', color: 'var(--color-text)' }}
+                                  />
+                                </div>
+                                <div className="custom-scrollbar" style={{ maxHeight: '160px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                  {availableUsersToAdd.length === 0 ? (
+                                    <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', textAlign: 'center', padding: '8px' }}>
+                                      {t('Không có nhân sự phù hợp')}
+                                    </div>
+                                  ) : (
+                                    availableUsersToAdd.map((u: any) => (
+                                      <div
+                                        key={u.id}
+                                        onClick={() => {
+                                          handleUpdateWatchers([...relIds, Number(u.id)]);
+                                          setShowAddWatcherDropdown(false);
+                                          setWatcherSearch('');
+                                        }}
+                                        style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '8px',
+                                          padding: '6px 8px',
+                                          borderRadius: '6px',
+                                          cursor: 'pointer',
+                                          transition: 'background 0.15s ease'
+                                        }}
+                                        className="hover-bg"
+                                      >
+                                        <Avatar src={u.avatar_url || u.avatar} name={u.full_name || u.name} size={20} />
+                                        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            {u.full_name || u.name}
+                                          </span>
+                                          {u.role && <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>{u.role}</span>}
+                                        </div>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                          {relUsers.map((u: any) => (
+                            <div key={u.id} style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '3px 6px 3px 8px', background: 'var(--color-bg-light)', border: '1px solid var(--color-border-light)', borderRadius: '10px' }}>
+                              <Avatar src={u.avatar_url || u.avatar} name={u.full_name || u.name} size={18} />
+                              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text)' }}>{u.full_name || u.name}</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleUpdateWatchers(relIds.filter(id => id !== Number(u.id)));
+                                }}
+                                title={t('Xóa người theo dõi')}
+                                style={{
+                                  border: 'none',
+                                  background: 'transparent',
+                                  cursor: 'pointer',
+                                  color: 'var(--color-text-muted)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  padding: '1px',
+                                  borderRadius: '50%'
+                                }}
+                              >
+                                <X size={11} />
+                              </button>
+                            </div>
+                          ))}
+                          {relUsers.length === 0 && (
+                            <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                              {t('Chưa có người theo dõi. Tag @tên trong bình luận hoặc bấm "+ Thêm".')}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {/* Tabs */}
                   <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', background: '#f8f9fa', padding: '0 8px' }}>
                     <button
@@ -1700,19 +2075,24 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                               const isCurrentUserAdmin = user && ['admin', 'superadmin', 'super_admin', 'director'].includes(user.role);
                               const isCommentAuthor = user?.id && String(user.id) === String(c.user_id);
                               const canDeleteComment = isCurrentUserAdmin || isCommentAuthor;
+                              const searchParams = new URLSearchParams(window.location.search);
+                              const highlightCommentId = searchParams.get('highlight_comment_id');
+                              const isHighlighted = highlightCommentId && String(c.id) === String(highlightCommentId);
 
                               return (
                                 <div 
                                   key={c.id} 
+                                  id={`deposit-comment-${c.id}`}
                                   style={{ 
                                     display: 'flex', 
                                     gap: '12px', 
-                                    background: 'var(--color-surface, #fff)', 
-                                    border: '1px solid var(--color-border-light)', 
+                                    background: isHighlighted ? 'rgba(59, 130, 246, 0.08)' : 'var(--color-surface, #fff)', 
+                                    border: isHighlighted ? '2px solid #3b82f6' : '1px solid var(--color-border-light)', 
                                     padding: '14px 18px', 
                                     borderRadius: '16px',
-                                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
-                                    boxSizing: 'border-box'
+                                    boxShadow: isHighlighted ? '0 0 16px rgba(59, 130, 246, 0.3)' : '0 2px 8px rgba(0, 0, 0, 0.02)',
+                                    boxSizing: 'border-box',
+                                    transition: 'all 0.3s ease'
                                   }}
                                 >
                                   <Avatar src={c.avatar_url} name={c.user_name} size={32} />
@@ -1947,6 +2327,186 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
           </div>
         )}
       </AnimatePresence>
+
+      {/* Edit SO Modal for Accountant & Admin */}
+      <CustomModal
+        isOpen={isEditSOOpen}
+        onClose={() => setIsEditSOOpen(false)}
+        title="Chỉnh sửa thông tin đơn hàng / SO"
+        width="650px"
+        zIndex={baseZIndex + 60}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '75vh', overflowY: 'auto', padding: '4px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px' }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label" style={{ fontWeight: 700, fontSize: '0.8rem' }}>Họ và tên học viên / KH *</label>
+              <input
+                type="text"
+                className="form-input"
+                value={editFullName}
+                onChange={e => setEditFullName(e.target.value)}
+                placeholder="Nhập tên học viên..."
+                required
+              />
+            </div>
+
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label" style={{ fontWeight: 700, fontSize: '0.8rem' }}>Số điện thoại</label>
+              <input
+                type="text"
+                className="form-input"
+                value={editPhone}
+                onChange={e => setEditPhone(e.target.value)}
+                placeholder="09..."
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px' }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label" style={{ fontWeight: 700, fontSize: '0.8rem' }}>Email học viên</label>
+              <input
+                type="email"
+                className="form-input"
+                value={editEmail}
+                onChange={e => setEditEmail(e.target.value)}
+                placeholder="email@example.com"
+              />
+            </div>
+
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label" style={{ fontWeight: 700, fontSize: '0.8rem' }}>Chương trình đào tạo *</label>
+              <CustomSelect
+                options={availableProjects.map(p => ({ value: String(p.id), label: `${p.name} (${p.code || p.id})` }))}
+                value={editProjectId}
+                onChange={val => setEditProjectId(val)}
+                placeholder="Chọn chương trình..."
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px' }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label" style={{ fontWeight: 700, fontSize: '0.8rem' }}>Mã căn / Lớp / Hồ sơ</label>
+              <input
+                type="text"
+                className="form-input"
+                value={editUnitCode}
+                onChange={e => setEditUnitCode(e.target.value)}
+                placeholder="Mã hồ sơ, lớp..."
+              />
+            </div>
+
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label" style={{ fontWeight: 700, fontSize: '0.8rem' }}>Tư vấn viên (TVV) phụ trách</label>
+              <CustomSelect
+                options={availableUsers.map(u => ({ value: String(u.id), label: `${u.name} (${u.email || u.role})` }))}
+                value={editCreatedBy}
+                onChange={val => setEditCreatedBy(val)}
+                placeholder="Chọn tư vấn viên..."
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : (editCurrency !== 'VND' ? '1.2fr 1fr 1fr' : '1.2fr 1fr 1fr'), gap: '12px' }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label" style={{ fontWeight: 700, fontSize: '0.8rem' }}>Tổng doanh thu dự kiến *</label>
+              <CurrencyInput
+                value={editPrice}
+                onChange={val => setEditPrice(val)}
+                placeholder="0"
+                currency={editCurrency}
+              />
+            </div>
+
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label" style={{ fontWeight: 700, fontSize: '0.8rem' }}>Loại tiền tệ</label>
+              <CustomSelect
+                options={[
+                  { value: 'VND', label: 'VND (₫)' },
+                  { value: 'USD', label: 'USD ($)' },
+                  { value: 'EUR', label: 'EUR (€)' },
+                  { value: 'AUD', label: 'AUD ($)' },
+                  { value: 'GBP', label: 'GBP (£)' },
+                  { value: 'SGD', label: 'SGD ($)' }
+                ]}
+                value={editCurrency}
+                onChange={val => setEditCurrency(val)}
+              />
+            </div>
+
+            {editCurrency !== 'VND' ? (
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.8rem' }}>Tỷ giá quy đổi</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={editExchangeRate}
+                  onChange={e => setEditExchangeRate(parseFloat(e.target.value) || 1)}
+                  placeholder="25000"
+                />
+              </div>
+            ) : (
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.8rem' }}>Hoa hồng dự kiến</label>
+                <CurrencyInput
+                  value={editExpectedCommissionVal}
+                  onChange={val => setEditExpectedCommissionVal(val)}
+                  placeholder="0"
+                  currency="VND"
+                />
+              </div>
+            )}
+          </div>
+
+          {editCurrency !== 'VND' && (
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label" style={{ fontWeight: 700, fontSize: '0.8rem' }}>Hoa hồng dự kiến (VND)</label>
+              <CurrencyInput
+                value={editExpectedCommissionVal}
+                onChange={val => setEditExpectedCommissionVal(val)}
+                placeholder="0"
+                currency="VND"
+              />
+            </div>
+          )}
+
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label" style={{ fontWeight: 700, fontSize: '0.8rem' }}>Ghi chú đơn hàng</label>
+            <textarea
+              className="form-input"
+              rows={3}
+              value={editNotes}
+              onChange={e => setEditNotes(e.target.value)}
+              placeholder="Ghi chú thêm về đơn hàng hoặc các lưu ý kế toán..."
+            />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', paddingTop: '10px', borderTop: '1px solid var(--color-border-light)' }}>
+            <button
+              type="button"
+              className="btn secondary"
+              onClick={() => setIsEditSOOpen(false)}
+              disabled={isSavingSOInfo}
+            >
+              Hủy
+            </button>
+            <button
+              type="button"
+              className="btn primary"
+              onClick={handleSaveSOInfo}
+              disabled={isSavingSOInfo}
+              style={{ minWidth: '120px' }}
+            >
+              {isSavingSOInfo ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" style={{ marginRight: 6 }} /> Đang lưu...
+                </>
+              ) : 'Lưu thay đổi'}
+            </button>
+          </div>
+        </div>
+      </CustomModal>
 
       {/* Cancel Transaction Modal */}
       <CustomModal

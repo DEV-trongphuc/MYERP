@@ -825,6 +825,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   const [showTicketHelpModal, setShowTicketHelpModal] = useState(false);
   const [showDatabankHelpModal, setShowDatabankHelpModal] = useState(false);
   const [sysSettings, setSysSettings] = useState<any>(null);
+
   useEffect(() => {
     fetchAPI('get_settings').then(res => {
       if (res && res.success) {
@@ -3693,8 +3694,19 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     if (token) {
       const usersEndpoint = '/users?all=1';
       api.get(usersEndpoint).then(r => {
-        const d = r.data.data;
-        const list = Array.isArray(d) ? d : (d?.items || []);
+        const d = r.data?.data ?? r.data;
+        let list: any[] = [];
+        if (Array.isArray(d)) {
+          list = d;
+        } else if (Array.isArray(d?.users)) {
+          list = d.users;
+        } else if (Array.isArray(d?.items)) {
+          list = d.items;
+        } else if (Array.isArray(r.data?.users)) {
+          list = r.data.users;
+        } else if (Array.isArray(r.data?.items)) {
+          list = r.data.items;
+        }
         const team = list.map((u: any) => ({
           ...u,
           id: u.id,

@@ -3083,8 +3083,17 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                         <td style={{ padding: '12px', textAlign: 'right' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
                             <span style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--color-text)' }}>
-                              {formatVND(po.amount || po.total || 0)}
+                              {po.currency && po.currency !== 'VND'
+                                ? (po.currency === 'USD' 
+                                    ? `$${Number(po.original_amount || po.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`
+                                    : `${Number(po.original_amount || po.amount || 0).toLocaleString()} ${po.currency}`)
+                                : formatVND(po.amount || po.total || 0)}
                             </span>
+                            {po.currency && po.currency !== 'VND' && Number(po.exchange_rate || 0) > 1 && (
+                              <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
+                                ≈ {formatVND((Number(po.original_amount || po.amount || 0)) * Number(po.exchange_rate))}
+                              </span>
+                            )}
                             {renderPoStatusBadge(po)}
                           </div>
                         </td>

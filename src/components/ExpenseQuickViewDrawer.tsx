@@ -117,6 +117,51 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth <= 768 : false);
   const [mobileDrawerTab, setMobileDrawerTab] = useState<'info' | 'discussion'>('info');
 
+  // Related Users (Watchers) states
+  const [showAddWatcherDropdown, setShowAddWatcherDropdown] = useState(false);
+  const [savingWatchers, setSavingWatchers] = useState(false);
+  const [watcherSearch, setWatcherSearch] = useState('');
+  const addWatcherDropdownRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (addWatcherDropdownRef.current && !addWatcherDropdownRef.current.contains(e.target as Node)) {
+        setShowAddWatcherDropdown(false);
+      }
+    };
+    if (showAddWatcherDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showAddWatcherDropdown]);
+
+  const handleUpdateWatchers = async (newIds: number[]) => {
+    if (!viewItem) return;
+    setSavingWatchers(true);
+    try {
+      const res = await api.post('/hrm/approvals/update-related-users', {
+        type: 'expense',
+        id: viewItem.id,
+        related_user_ids: newIds
+      });
+      if (res.data?.success) {
+        setViewItem((prev: any) => ({
+          ...(prev || {}),
+          related_user_ids: newIds
+        }));
+        addToast('Đã cập nhật danh sách người theo dõi', 'success');
+      } else {
+        addToast(res.data?.message || 'Lỗi khi cập nhật người theo dõi', 'error');
+      }
+    } catch (err: any) {
+      addToast(err?.response?.data?.message || 'Lỗi khi cập nhật người theo dõi', 'error');
+    } finally {
+      setSavingWatchers(false);
+    }
+  };
+
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
     window.addEventListener('resize', handleResize);
@@ -2954,7 +2999,6 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                   {/* Related Persons in View Drawer */}
                   {(() => {
                     const relIdsRaw = viewItem?.related_user_ids;
-                    if (!relIdsRaw) return null;
                     let relIds: number[] = [];
                     if (Array.isArray(relIdsRaw)) relIds = relIdsRaw.map(Number);
                     else if (typeof relIdsRaw === 'string' && relIdsRaw.trim()) {
@@ -2966,23 +3010,150 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                         relIds = relIdsRaw.split(',').map(s => Number(s.trim())).filter(Boolean);
                       }
                     }
-                    const relUsers = users.filter((u: any) => relIds.includes(Number(u.id)));
-                    if (relUsers.length === 0) return null;
+                    const relUsers = relIds.map(numId => {
+                      const found = users.find((u: any) => Number(u.id) === numId);
+                      if (found) return found;
+                      return { id: numId, full_name: `User #${numId}`, name: `User #${numId}` };
+                    });
+
+                    const availableUsersToAdd = users.filter((u: any) => 
+                      !relIds.includes(Number(u.id)) &&
+                      (u.full_name || u.name || '').toLowerCase().includes(watcherSearch.toLowerCase())
+                    );
+
                     return (
                       <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--color-border-light)' }}>
-                        <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-text-muted)', letterSpacing: '0.05em', marginBottom: '8px' }}>
-                          NGƯỜI LIÊN QUAN (THEO DÕI) ({relUsers.length})
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                          <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-text-muted)', letterSpacing: '0.05em' }}>
+                            NGƯỜI LIÊN QUAN (THEO DÕI) ({relUsers.length})
+                          </div>
+                          
+                          {/* Add Watcher Button & Dropdown */}
+                          <div style={{ position: 'relative' }} ref={addWatcherDropdownRef}>
+                            <button
+                              type="button"
+                              onClick={() => setShowAddWatcherDropdown(!showAddWatcherDropdown)}
+                              disabled={savingWatchers}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                border: '1px dashed var(--color-primary)',
+                                background: 'rgba(189, 29, 45, 0.04)',
+                                color: 'var(--color-primary)',
+                                fontSize: '0.72rem',
+                                fontWeight: 700,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <span>+ Thêm</span>
+                            </button>
+
+                            {showAddWatcherDropdown && (
+                              <div style={{
+                                position: 'absolute',
+                                right: 0,
+                                top: '100%',
+                                marginTop: '4px',
+                                width: '240px',
+                                background: 'var(--color-surface)',
+                                border: '1px solid var(--color-border)',
+                                borderRadius: '10px',
+                                boxShadow: 'var(--shadow-lg)',
+                                padding: '8px',
+                                zIndex: 1000,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '6px'
+                              }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', background: 'var(--color-bg)', borderRadius: '6px', border: '1px solid var(--color-border-light)' }}>
+                                  <input
+                                    type="text"
+                                    placeholder="Tìm nhân sự..."
+                                    value={watcherSearch}
+                                    onChange={e => setWatcherSearch(e.target.value)}
+                                    autoFocus
+                                    style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '0.75rem', width: '100%', color: 'var(--color-text)' }}
+                                  />
+                                </div>
+                                <div className="custom-scrollbar" style={{ maxHeight: '160px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                  {availableUsersToAdd.length === 0 ? (
+                                    <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', textAlign: 'center', padding: '8px' }}>
+                                      Không có nhân sự phù hợp
+                                    </div>
+                                  ) : (
+                                    availableUsersToAdd.map((u: any) => (
+                                      <div
+                                        key={u.id}
+                                        onClick={() => {
+                                          handleUpdateWatchers([...relIds, Number(u.id)]);
+                                          setShowAddWatcherDropdown(false);
+                                          setWatcherSearch('');
+                                        }}
+                                        style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '8px',
+                                          padding: '6px 8px',
+                                          borderRadius: '6px',
+                                          cursor: 'pointer',
+                                          transition: 'background 0.15s ease'
+                                        }}
+                                        className="hover-bg"
+                                      >
+                                        <Avatar src={u.avatar_url || u.avatar} name={u.full_name || u.name} size={20} />
+                                        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            {u.full_name || u.name}
+                                          </span>
+                                          {u.role && <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>{u.role}</span>}
+                                        </div>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
+
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                           {relUsers.map((u: any) => (
-                            <div key={u.id} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 10px', background: 'var(--color-bg-light)', border: '1px solid var(--color-border-light)', borderRadius: '10px' }}>
+                            <div key={u.id} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 8px 4px 10px', background: 'var(--color-bg-light)', border: '1px solid var(--color-border-light)', borderRadius: '10px' }}>
                               <Avatar src={u.avatar_url || u.avatar} name={u.full_name || u.name} size={20} />
                               <div style={{ display: 'flex', flexDirection: 'column' }}>
                                 <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>{u.full_name || u.name}</span>
                                 {u.role && <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>{u.role}</span>}
                               </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleUpdateWatchers(relIds.filter(id => id !== Number(u.id)));
+                                }}
+                                title="Xóa người theo dõi"
+                                style={{
+                                  border: 'none',
+                                  background: 'transparent',
+                                  cursor: 'pointer',
+                                  color: 'var(--color-text-muted)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  padding: '2px',
+                                  borderRadius: '50%',
+                                  marginLeft: '2px'
+                                }}
+                              >
+                                <X size={12} />
+                              </button>
                             </div>
                           ))}
+                          {relUsers.length === 0 && (
+                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                              Chưa có người theo dõi nào. Tag @tên trong bình luận hoặc bấm "+ Thêm" để thêm.
+                            </div>
+                          )}
                         </div>
                       </div>
                     );

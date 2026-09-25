@@ -651,7 +651,7 @@ class FinanceController
         if (!$isAdminOrDirectorOrAccountant) {
             if ($isManager) {
                 $placeholders = implode(',', array_fill(0, count($userIds), '?'));
-                $where[] = "(e.created_by IN ($placeholders) OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ? OR e.refunder_id = ? OR e.related_user_ids LIKE ? OR e.related_user_ids LIKE ?)";
+                $where[] = "(e.created_by IN ($placeholders) OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ? OR e.refunder_id = ? OR e.related_user_ids LIKE ? OR e.related_user_ids LIKE ? OR EXISTS (SELECT 1 FROM notes n JOIN note_mentions nm ON nm.note_id = n.id WHERE n.entity_type = 'expense' AND n.entity_id = e.id AND nm.user_id = ?))";
                 $params = array_merge($params, $userIds);
                 $params[] = $uid;
                 $params[] = $uid;
@@ -659,12 +659,14 @@ class FinanceController
                 $params[] = $uid;
                 $params[] = '%"' . $uid . '"%';
                 $params[] = '%' . $uid . '%';
+                $params[] = $uid;
             } else if ($isSaleAdmin) {
                 $where[] = "(
                     e.created_by = ? 
                     OR e.approver_id = ?
                     OR e.approver_id_2 = ?
                     OR e.approver_id_3 = ?
+                    OR e.refunder_id = ?
                     OR e.related_user_ids LIKE ?
                     OR e.related_user_ids LIKE ?
                     OR EXISTS (
@@ -672,15 +674,18 @@ class FinanceController
                         JOIN contacts c ON ee.entity_type = 'contact' AND ee.entity_id = c.id
                         WHERE ee.expense_id = e.id AND c.status = 'customer'
                     )
+                    OR EXISTS (SELECT 1 FROM notes n JOIN note_mentions nm ON nm.note_id = n.id WHERE n.entity_type = 'expense' AND n.entity_id = e.id AND nm.user_id = ?)
                 )";
                 $params[] = $uid;
                 $params[] = $uid;
                 $params[] = $uid;
                 $params[] = $uid;
+                $params[] = $uid;
                 $params[] = '%"' . $uid . '"%';
                 $params[] = '%' . $uid . '%';
+                $params[] = $uid;
             } else {
-                $where[] = "(e.created_by = ? OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ? OR e.refunder_id = ? OR e.related_user_ids LIKE ? OR e.related_user_ids LIKE ?)";
+                $where[] = "(e.created_by = ? OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ? OR e.refunder_id = ? OR e.related_user_ids LIKE ? OR e.related_user_ids LIKE ? OR EXISTS (SELECT 1 FROM notes n JOIN note_mentions nm ON nm.note_id = n.id WHERE n.entity_type = 'expense' AND n.entity_id = e.id AND nm.user_id = ?))";
                 $params[] = $uid;
                 $params[] = $uid;
                 $params[] = $uid;
@@ -688,6 +693,7 @@ class FinanceController
                 $params[] = $uid;
                 $params[] = '%"' . $uid . '"%';
                 $params[] = '%' . $uid . '%';
+                $params[] = $uid;
             }
         }
         if ($status) {
@@ -935,43 +941,64 @@ class FinanceController
     {
         $sql = "SELECT e.*, u.full_name as creator_name, u.avatar_url as creator_avatar, u2.full_name as approver_name, u2.avatar_url as approver_avatar, u3.full_name as refunder_name, u3.avatar_url as refunder_avatar, u4.full_name as approver_name_2, u4.avatar_url as approver_avatar_2, u5.full_name as approver_name_3, u5.avatar_url as approver_avatar_3 FROM expenses e LEFT JOIN users u ON e.created_by=u.id LEFT JOIN users u2 ON e.approver_id=u2.id LEFT JOIN users u3 ON e.refunder_id=u3.id LEFT JOIN users u4 ON e.approver_id_2=u4.id LEFT JOIN users u5 ON e.approver_id_3=u5.id WHERE e.id=? AND e.tenant_id=? AND e.deleted_at IS NULL";
         $p = [$id, $auth['tenant_id']];
-        if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
-            $sql .= " AND (e.created_by=? OR e.approver_id=? OR e.approver_id_2=? OR e.approver_id_3=? OR e.related_user_ids LIKE ? OR e.related_user_ids LIKE ?)";
-            $p[] = $auth['user_id'];
-            $p[] = $auth['user_id'];
-            $p[] = $auth['user_id'];
-            $p[] = $auth['user_id'];
-            $p[] = '%"' . $auth['user_id'] . '"%';
-            $p[] = '%' . $auth['user_id'] . '%';
-        } else if ($auth['role'] === 'sale_admin' || $auth['role'] === 'saleadmin') {
-            $sql .= " AND (
-                e.created_by = ? 
-                OR e.approver_id = ?
-                OR e.approver_id_2 = ?
-                OR e.approver_id_3 = ?
-                OR e.related_user_ids LIKE ?
-                OR e.related_user_ids LIKE ?
-                OR EXISTS (
-                    SELECT 1 FROM expense_entities ee 
-                    JOIN contacts c ON ee.entity_type = 'contact' AND ee.entity_id = c.id
-                    WHERE ee.expense_id = e.id AND c.status = 'customer'
-                )
-            )";
-            $p[] = $auth['user_id'];
-            $p[] = $auth['user_id'];
-            $p[] = $auth['user_id'];
-            $p[] = $auth['user_id'];
-            $p[] = '%"' . $auth['user_id'] . '"%';
-            $p[] = '%' . $auth['user_id'] . '%';
-        } else if ($auth['role'] === 'manager') {
-            $sql .= " AND (e.created_by = ? OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ? OR e.related_user_ids LIKE ? OR e.related_user_ids LIKE ? OR e.created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)))";
-            $p[] = $auth['user_id'];
-            $p[] = $auth['user_id'];
-            $p[] = $auth['user_id'];
-            $p[] = $auth['user_id'];
-            $p[] = '%"' . $auth['user_id'] . '"%';
-            $p[] = '%' . $auth['user_id'] . '%';
-            $p[] = $auth['user_id'];
+        $isAdminOrDirectorOrAccountant = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'accountant'], true);
+        if (!$isAdminOrDirectorOrAccountant) {
+            if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
+                $sql .= " AND (e.created_by=? OR e.approver_id=? OR e.approver_id_2=? OR e.approver_id_3=? OR e.refunder_id=? OR e.related_user_ids LIKE ? OR e.related_user_ids LIKE ? OR EXISTS (SELECT 1 FROM notes n JOIN note_mentions nm ON nm.note_id = n.id WHERE n.entity_type = 'expense' AND n.entity_id = e.id AND nm.user_id = ?))";
+                $p[] = $auth['user_id'];
+                $p[] = $auth['user_id'];
+                $p[] = $auth['user_id'];
+                $p[] = $auth['user_id'];
+                $p[] = $auth['user_id'];
+                $p[] = '%"' . $auth['user_id'] . '"%';
+                $p[] = '%' . $auth['user_id'] . '%';
+                $p[] = $auth['user_id'];
+            } else if ($auth['role'] === 'sale_admin' || $auth['role'] === 'saleadmin') {
+                $sql .= " AND (
+                    e.created_by = ? 
+                    OR e.approver_id = ?
+                    OR e.approver_id_2 = ?
+                    OR e.approver_id_3 = ?
+                    OR e.refunder_id = ?
+                    OR e.related_user_ids LIKE ?
+                    OR e.related_user_ids LIKE ?
+                    OR EXISTS (
+                        SELECT 1 FROM expense_entities ee 
+                        JOIN contacts c ON ee.entity_type = 'contact' AND ee.entity_id = c.id
+                        WHERE ee.expense_id = e.id AND c.status = 'customer'
+                    )
+                    OR EXISTS (SELECT 1 FROM notes n JOIN note_mentions nm ON nm.note_id = n.id WHERE n.entity_type = 'expense' AND n.entity_id = e.id AND nm.user_id = ?)
+                )";
+                $p[] = $auth['user_id'];
+                $p[] = $auth['user_id'];
+                $p[] = $auth['user_id'];
+                $p[] = $auth['user_id'];
+                $p[] = $auth['user_id'];
+                $p[] = '%"' . $auth['user_id'] . '"%';
+                $p[] = '%' . $auth['user_id'] . '%';
+                $p[] = $auth['user_id'];
+            } else if ($auth['role'] === 'manager') {
+                $sql .= " AND (e.created_by = ? OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ? OR e.refunder_id = ? OR e.related_user_ids LIKE ? OR e.related_user_ids LIKE ? OR e.created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)) OR EXISTS (SELECT 1 FROM notes n JOIN note_mentions nm ON nm.note_id = n.id WHERE n.entity_type = 'expense' AND n.entity_id = e.id AND nm.user_id = ?))";
+                $p[] = $auth['user_id'];
+                $p[] = $auth['user_id'];
+                $p[] = $auth['user_id'];
+                $p[] = $auth['user_id'];
+                $p[] = $auth['user_id'];
+                $p[] = '%"' . $auth['user_id'] . '"%';
+                $p[] = '%' . $auth['user_id'] . '%';
+                $p[] = $auth['user_id'];
+                $p[] = $auth['user_id'];
+            } else {
+                $sql .= " AND (e.created_by = ? OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ? OR e.refunder_id = ? OR e.related_user_ids LIKE ? OR e.related_user_ids LIKE ? OR EXISTS (SELECT 1 FROM notes n JOIN note_mentions nm ON nm.note_id = n.id WHERE n.entity_type = 'expense' AND n.entity_id = e.id AND nm.user_id = ?))";
+                $p[] = $auth['user_id'];
+                $p[] = $auth['user_id'];
+                $p[] = $auth['user_id'];
+                $p[] = $auth['user_id'];
+                $p[] = $auth['user_id'];
+                $p[] = '%"' . $auth['user_id'] . '"%';
+                $p[] = '%' . $auth['user_id'] . '%';
+                $p[] = $auth['user_id'];
+            }
         }
         $stmt = $this->db->prepare($sql);
         $stmt->execute($p);
@@ -1950,6 +1977,37 @@ class FinanceController
         }
 
         if (!empty($mentions)) {
+            // 1. Automatically append mentioned users into related_user_ids
+            try {
+                $stmtExp = $this->db->prepare("SELECT related_user_ids FROM expenses WHERE id = ? AND tenant_id = ?");
+                $stmtExp->execute([$id, $auth['tenant_id']]);
+                $expRow = $stmtExp->fetch(PDO::FETCH_ASSOC);
+                if ($expRow) {
+                    $curRelated = [];
+                    if (!empty($expRow['related_user_ids'])) {
+                        $decoded = json_decode($expRow['related_user_ids'], true);
+                        if (is_array($decoded)) {
+                            $curRelated = array_map('intval', $decoded);
+                        } else {
+                            $curRelated = array_filter(array_map('intval', explode(',', $expRow['related_user_ids'])));
+                        }
+                    }
+                    $newRelated = $curRelated;
+                    foreach (array_keys($mentions) as $mUid) {
+                        if (!in_array((int)$mUid, $newRelated, true)) {
+                            $newRelated[] = (int)$mUid;
+                        }
+                    }
+                    if ($newRelated !== $curRelated) {
+                        $updateStmt = $this->db->prepare("UPDATE expenses SET related_user_ids = ? WHERE id = ? AND tenant_id = ?");
+                        $updateStmt->execute([json_encode(array_values(array_unique($newRelated))), $id, $auth['tenant_id']]);
+                    }
+                }
+            } catch (Throwable $e) {
+                // Keep resilient
+            }
+
+            // 2. Dispatch notifications
             require_once __DIR__ . '/../NotificationService.php';
             foreach ($mentions as $uid => $userRow) {
                 NotificationService::send($this->db, $auth['tenant_id'], 'MENTION_TAGGED', [

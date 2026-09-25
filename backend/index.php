@@ -1146,6 +1146,7 @@ switch ($resource) {
         elseif ($resourceId === 'approvals' && $subResource === 'my-requests' && $method === 'GET') $ctrl->getMyRequests($auth);
         elseif ($resourceId === 'approvals' && $subResource === 'following' && $method === 'GET') $ctrl->getFollowingRequests($auth);
         elseif ($resourceId === 'approvals' && $subResource === 'all' && $method === 'GET') $ctrl->getAllApprovals($auth);
+        elseif ($resourceId === 'approvals' && $subResource === 'update-related-users' && in_array($method, ['POST', 'PUT', 'PATCH'], true)) $ctrl->updateRelatedUsers($auth);
         else respond(404, null, 'Route không tồn tại', false);
         break;
 
@@ -1533,6 +1534,8 @@ switch ($resource) {
         elseif ($resourceId && $subResource === 'comments' && $method === 'GET') $ctrl->getComments($auth, (int)$resourceId);
         elseif ($resourceId && $subResource === 'comments' && $method === 'POST') $ctrl->addComment($auth, (int)$resourceId);
         elseif ($resourceId && $subResource === 'history' && $method === 'GET') $ctrl->getHistory($auth, (int)$resourceId);
+        elseif ($resourceId && !$subResource && $method === 'GET') $ctrl->show($auth, (int)$resourceId);
+        elseif ($resourceId && !$subResource && $method === 'PUT') $ctrl->update($auth, (int)$resourceId);
         elseif (!$resourceId && $method === 'GET')    $ctrl->index($auth);
         elseif (!$resourceId && $method === 'POST')   $ctrl->store($auth);
         else respond(404, null, 'Route không tồn tại', false);

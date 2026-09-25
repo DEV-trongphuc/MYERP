@@ -970,14 +970,16 @@ export const ExpensesPage: React.FC = () => {
   }, [users]);
 
   const creatorOptions = useMemo(() => {
-    const opts = [{ value: '', label: 'Tất cả người tạo' }];
+    const opts: Array<{ value: string; label: string; avatar?: string; sublabel?: string }> = [{ value: '', label: 'Tất cả người tạo' }];
     const sorted = [...(users || [])].sort((a: any, b: any) => 
       String(a.full_name || a.name || '').localeCompare(String(b.full_name || b.name || ''), 'vi')
     );
     sorted.forEach((u: any) => {
       opts.push({
         value: String(u.id),
-        label: u.full_name || u.name || `User #${u.id}`
+        label: u.full_name || u.name || `User #${u.id}`,
+        avatar: u.avatar_url || u.avatar || '',
+        sublabel: u.role || u.department || ''
       });
     });
     return opts;
@@ -1763,6 +1765,10 @@ export const ExpensesPage: React.FC = () => {
                 options={creatorOptions} 
                 value={creatorFilter} 
                 onChange={val => { setCreatorFilter(val.toString()); setPage(1); }} 
+                searchable={true}
+                showAvatars={true}
+                align="right"
+                placeholder="Tìm người tạo..."
               />
             </div>
             {selected.size > 0 && (

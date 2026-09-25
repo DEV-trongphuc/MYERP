@@ -37,9 +37,11 @@ class DepositController {
         ";
         $params = [$tid, $tid, $tid, $tid];
 
-        $isAdminOrDirectorOrAccountant = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'accountant', 'marketing'], true);
+        $isAdminOrDirectorOrAccountant = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'accountant', 'assistant'], true)
+            || in_array(strtolower($auth['department'] ?? ''), ['kế toán', 'admin', 'ban giám đốc'], true);
 
         if (!$isAdminOrDirectorOrAccountant) {
+            $userName = $auth['full_name'] ?? ($auth['name'] ?? '');
             if ($auth['role'] === 'manager') {
                 $sql .= " AND (
                     d.created_by = ? 
@@ -47,12 +49,35 @@ class DepositController {
                     OR d.created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)) 
                     OR c.owner_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?))
                     OR (d.participant_ids IS NOT NULL AND FIND_IN_SET(?, d.participant_ids))
+                    OR (d.id IN (SELECT note_id FROM note_mentions WHERE user_id = ?))
+                    OR EXISTS (
+                        SELECT 1 FROM notes n 
+                        JOIN note_mentions nm ON nm.note_id = n.id 
+                        WHERE ((n.entity_type = 'deposit' AND n.entity_id = d.id) OR (d.contact_id IS NOT NULL AND n.entity_type = 'contact' AND n.entity_id = d.contact_id)) 
+                          AND nm.user_id = ?
+                    )
+                    OR EXISTS (
+                        SELECT 1 FROM notifications notif 
+                        WHERE notif.user_id = ? 
+                          AND (notif.link LIKE CONCAT('%open_id=', d.id, '%') OR notif.link LIKE CONCAT('%/deposits?id=', d.id, '%') OR notif.link LIKE CONCAT('%/deposits/', d.id, '%'))
+                    )
+                    OR EXISTS (
+                        SELECT 1 FROM comments cm 
+                        WHERE cm.entity_type = 'deposit' AND cm.entity_id = d.id 
+                          AND (cm.user_id = ? OR cm.body LIKE ? OR cm.body LIKE ?)
+                    )
                 )";
                 $params[] = $auth['user_id'];
                 $params[] = $auth['user_id'];
                 $params[] = $auth['user_id'];
                 $params[] = $auth['user_id'];
                 $params[] = (string)$auth['user_id'];
+                $params[] = $auth['user_id'];
+                $params[] = $auth['user_id'];
+                $params[] = $auth['user_id'];
+                $params[] = $auth['user_id'];
+                $params[] = '%' . $userName . '%';
+                $params[] = '%' . str_replace(' ', '_', $userName) . '%';
             } else {
                 $sql .= " AND (
                     d.created_by = ? 
@@ -60,12 +85,35 @@ class DepositController {
                     OR (c.collaborator_ids IS NOT NULL AND FIND_IN_SET(?, c.collaborator_ids)) 
                     OR (d.contact_id IS NOT NULL AND d.contact_id IN (SELECT contact_id FROM quyen_truy_cap WHERE user_id = ?))
                     OR (d.participant_ids IS NOT NULL AND FIND_IN_SET(?, d.participant_ids))
+                    OR (d.id IN (SELECT note_id FROM note_mentions WHERE user_id = ?))
+                    OR EXISTS (
+                        SELECT 1 FROM notes n 
+                        JOIN note_mentions nm ON nm.note_id = n.id 
+                        WHERE ((n.entity_type = 'deposit' AND n.entity_id = d.id) OR (d.contact_id IS NOT NULL AND n.entity_type = 'contact' AND n.entity_id = d.contact_id)) 
+                          AND nm.user_id = ?
+                    )
+                    OR EXISTS (
+                        SELECT 1 FROM notifications notif 
+                        WHERE notif.user_id = ? 
+                          AND (notif.link LIKE CONCAT('%open_id=', d.id, '%') OR notif.link LIKE CONCAT('%/deposits?id=', d.id, '%') OR notif.link LIKE CONCAT('%/deposits/', d.id, '%'))
+                    )
+                    OR EXISTS (
+                        SELECT 1 FROM comments cm 
+                        WHERE cm.entity_type = 'deposit' AND cm.entity_id = d.id 
+                          AND (cm.user_id = ? OR cm.body LIKE ? OR cm.body LIKE ?)
+                    )
                 )";
                 $params[] = $auth['user_id'];
                 $params[] = $auth['user_id'];
                 $params[] = (string)$auth['user_id'];
                 $params[] = $auth['user_id'];
                 $params[] = (string)$auth['user_id'];
+                $params[] = $auth['user_id'];
+                $params[] = $auth['user_id'];
+                $params[] = $auth['user_id'];
+                $params[] = $auth['user_id'];
+                $params[] = '%' . $userName . '%';
+                $params[] = '%' . str_replace(' ', '_', $userName) . '%';
             }
         }
 
@@ -153,6 +201,185 @@ class DepositController {
         }
 
         respond(200, $deposits, 'Lấy danh sách đơn đặt hàng thành công');
+    }
+
+    public function show(array $auth, int $id): void {
+        $tid = $auth['tenant_id'];
+
+        $sql = "
+            SELECT d.*, 
+                   COALESCE(c.full_name, comp.name, sup.name) as full_name, 
+                   COALESCE(c.phone, comp.phone, sup.phone) as phone, 
+                   c.avatar_url, 
+                   COALESCE(c.email, comp.email, sup.email) as email, 
+                   p.name as project_name, u.full_name as creator_name, u.avatar_url as creator_avatar,
+                   owner.full_name as owner_name, owner.avatar_url as owner_avatar,
+                   c.owner_id as contact_owner_id, c.pipeline_status,
+                   comp.name as company_name, sup.name as supplier_name
+            FROM deposits d
+            LEFT JOIN contacts c ON d.contact_id = c.id
+            LEFT JOIN companies comp ON d.company_id = comp.id
+            LEFT JOIN suppliers sup ON d.supplier_id = sup.id
+            JOIN projects p ON d.project_id = p.id
+            JOIN users u ON d.created_by = u.id
+            LEFT JOIN users owner ON c.owner_id = owner.id
+            WHERE d.id = ? AND (
+                (d.contact_id IS NOT NULL AND c.tenant_id = ?) 
+                OR (d.company_id IS NOT NULL AND comp.tenant_id = ?) 
+                OR (d.supplier_id IS NOT NULL AND sup.tenant_id = ?)
+                OR (p.tenant_id = ?)
+            )
+        ";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([$id, $tid, $tid, $tid, $tid]);
+        $deposit = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$deposit) {
+            respond(404, null, 'Đơn đặt hàng không tồn tại', false);
+        }
+
+        // Attach milestones
+        $stmtM = $this->db->prepare("SELECT * FROM deposit_milestones WHERE deposit_id = ? ORDER BY id ASC");
+        $stmtM->execute([$id]);
+        $deposit['milestones'] = $stmtM->fetchAll(PDO::FETCH_ASSOC);
+
+        // Attach shareholders from cooperation slips
+        $deposit['shareholders'] = [];
+        if (!empty($deposit['contact_id'])) {
+            $stmtCs = $this->db->prepare("SELECT shares_json FROM cooperation_slips WHERE deposit_slip_id = ? OR (deposit_slip_id IS NULL AND contact_id = ?) LIMIT 1");
+            $stmtCs->execute([$id, $deposit['contact_id']]);
+            $cs = $stmtCs->fetch(PDO::FETCH_ASSOC);
+            if ($cs && !empty($cs['shares_json'])) {
+                $shares = json_decode($cs['shares_json'], true) ?: [];
+                $uIds = array_keys($shares);
+                if (!empty($uIds)) {
+                    $inUsers = implode(',', array_fill(0, count($uIds), '?'));
+                    $stmtU = $this->db->prepare("SELECT id, full_name, email, avatar_url FROM users WHERE id IN ($inUsers)");
+                    $stmtU->execute($uIds);
+                    $users = $stmtU->fetchAll(PDO::FETCH_ASSOC);
+                    $userMap = [];
+                    foreach ($users as $u) $userMap[(int)$u['id']] = $u;
+                    foreach ($shares as $uid => $pct) {
+                        $u = $userMap[(int)$uid] ?? null;
+                        if ($u) {
+                            $deposit['shareholders'][] = [
+                                'user_id' => (int)$uid,
+                                'name' => $u['full_name'],
+                                'email' => $u['email'],
+                                'avatar' => $u['avatar_url'] ?? null,
+                                'percentage' => (int)$pct
+                            ];
+                        }
+                    }
+                }
+            }
+        }
+
+        respond(200, $deposit, 'Lấy chi tiết đơn đặt hàng thành công');
+    }
+
+    public function update(array $auth, int $id): void {
+        $tid = $auth['tenant_id'];
+        $isPrivileged = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'accountant'], true);
+        if (!$isPrivileged) {
+            respond(403, null, 'Bạn không có quyền chỉnh sửa toàn diện đơn hàng', false);
+        }
+
+        $b = getBody();
+
+        $this->db->beginTransaction();
+        try {
+            $stmtD = $this->db->prepare("SELECT d.*, c.id as contact_id FROM deposits d LEFT JOIN contacts c ON d.contact_id = c.id WHERE d.id = ?");
+            $stmtD->execute([$id]);
+            $dep = $stmtD->fetch(PDO::FETCH_ASSOC);
+            if (!$dep) {
+                $this->db->rollBack();
+                respond(404, null, 'Đơn đặt hàng không tồn tại', false);
+            }
+
+            $fields = [];
+            $params = [];
+
+            if (isset($b['contact_id']) && !empty($b['contact_id'])) {
+                $fields[] = "contact_id = ?";
+                $params[] = (int)$b['contact_id'];
+            }
+            if (isset($b['project_id']) && !empty($b['project_id'])) {
+                $fields[] = "project_id = ?";
+                $params[] = (int)$b['project_id'];
+            }
+            if (isset($b['unit_code'])) {
+                $fields[] = "unit_code = ?";
+                $params[] = trim($b['unit_code']) ?: '—';
+            }
+            if (isset($b['price'])) {
+                $fields[] = "price = ?";
+                $params[] = (float)$b['price'];
+            }
+            if (isset($b['expected_commission'])) {
+                $fields[] = "expected_commission = ?";
+                $params[] = (float)$b['expected_commission'];
+            }
+            if (isset($b['created_by']) && !empty($b['created_by'])) {
+                $fields[] = "created_by = ?";
+                $params[] = (int)$b['created_by'];
+            }
+            if (isset($b['notes'])) {
+                $fields[] = "notes = ?";
+                $params[] = trim($b['notes']);
+            }
+            if (isset($b['currency'])) {
+                $fields[] = "currency = ?";
+                $params[] = trim($b['currency']) ?: 'VND';
+            }
+            if (isset($b['exchange_rate'])) {
+                $fields[] = "exchange_rate = ?";
+                $params[] = max(1.0, (float)$b['exchange_rate']);
+            }
+            if (isset($b['status']) && in_array($b['status'], ['pending_admin', 'approved', 'cancelled'], true)) {
+                $fields[] = "status = ?";
+                $params[] = $b['status'];
+            }
+
+            if (!empty($fields)) {
+                $params[] = $id;
+                $sqlUpd = "UPDATE deposits SET " . implode(', ', $fields) . " WHERE id = ?";
+                $stmtUpd = $this->db->prepare($sqlUpd);
+                $stmtUpd->execute($params);
+            }
+
+            // Also update contact full_name, phone, email if passed
+            $contactIdToUpdate = !empty($b['contact_id']) ? (int)$b['contact_id'] : (int)$dep['contact_id'];
+            if ($contactIdToUpdate > 0) {
+                $cFields = [];
+                $cParams = [];
+                if (!empty($b['full_name']) || !empty($b['student_name'])) {
+                    $cFields[] = "full_name = ?";
+                    $cParams[] = trim($b['full_name'] ?? $b['student_name']);
+                }
+                if (isset($b['phone'])) {
+                    $cFields[] = "phone = ?";
+                    $cParams[] = trim($b['phone']);
+                }
+                if (isset($b['email'])) {
+                    $cFields[] = "email = ?";
+                    $cParams[] = trim($b['email']);
+                }
+                if (!empty($cFields)) {
+                    $cParams[] = $contactIdToUpdate;
+                    $cParams[] = $tid;
+                    $stmtUpdC = $this->db->prepare("UPDATE contacts SET " . implode(', ', $cFields) . " WHERE id = ? AND tenant_id = ?");
+                    $stmtUpdC->execute($cParams);
+                }
+            }
+
+            $this->db->commit();
+            logActivity($this->db, $tid, $auth['user_id'], 'UPDATE_DEPOSIT', 'deposit', $id, "Kế toán / Admin cập nhật thông tin đơn hàng #$id");
+            respond(200, null, 'Cập nhật thông tin đơn hàng thành công');
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            respond(500, null, 'Lỗi cập nhật: ' . $e->getMessage(), false);
+        }
     }
 
     public function store(array $auth): void {
@@ -1603,6 +1830,36 @@ class DepositController {
         $contactId = $stmtDep->fetchColumn();
 
         if (!empty($mentions)) {
+            try {
+                // 1. Automatically append mentioned users into related_user_ids
+                $stmtDepRel = $this->db->prepare("SELECT related_user_ids FROM deposits WHERE id = ?");
+                $stmtDepRel->execute([$id]);
+                $depRow = $stmtDepRel->fetch(PDO::FETCH_ASSOC);
+                if ($depRow) {
+                    $curRelated = [];
+                    if (!empty($depRow['related_user_ids'])) {
+                        $decoded = json_decode($depRow['related_user_ids'], true);
+                        if (is_array($decoded)) {
+                            $curRelated = array_map('intval', $decoded);
+                        } else {
+                            $curRelated = array_filter(array_map('intval', explode(',', $depRow['related_user_ids'])));
+                        }
+                    }
+                    $newRelated = $curRelated;
+                    foreach (array_keys($mentions) as $mUid) {
+                        if (!in_array((int)$mUid, $newRelated, true)) {
+                            $newRelated[] = (int)$mUid;
+                        }
+                    }
+                    if ($newRelated !== $curRelated) {
+                        $updateStmt = $this->db->prepare("UPDATE deposits SET related_user_ids = ? WHERE id = ?");
+                        $updateStmt->execute([json_encode(array_values(array_unique($newRelated))), $id]);
+                    }
+                }
+            } catch (Throwable $e) {
+                // Keep resilient
+            }
+
             try {
                 require_once __DIR__ . '/../NotificationService.php';
                 $targetLink = "/deposits?open_id={$id}&highlight_comment_id={$newId}";

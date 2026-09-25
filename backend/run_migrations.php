@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 284;
+$targetVersion = 287;
 $currentVersion = 186;
 
 // Query current DB version
@@ -3392,10 +3392,118 @@ try {
         }
     }
 
-    // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '284') ON DUPLICATE KEY UPDATE setting_value = '284'");
+    // --- PHIÊN BẢN 285: TẠO TÀI KHOẢN HỌC VỤ LÊ TRẦN YẾN NHI (nhilty@ideas.edu.vn) ---
+    if ($currentVersion < 285) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 285: Tạo/cập nhật tài khoản Học vụ Lê Trần Yến Nhi (nhilty@ideas.edu.vn)...", "info");
+        try {
+            $email = 'nhilty@ideas.edu.vn';
+            $username = 'nhilty';
+            $fullName = 'Lê Trần Yến Nhi';
+            $role = 'academic';
+            $department = 'Học vụ - học thuật';
+            $teamId = 5; // Team Học vụ - học thuật
+            $pwdHash = password_hash('Ideas@123456', PASSWORD_BCRYPT, ['cost' => 12]);
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
+            $chk = $conn->query("SELECT id FROM users WHERE email = '{$email}' OR username = '{$username}' LIMIT 1");
+            if ($chk && $chk->num_rows > 0) {
+                $uid = (int)$chk->fetch_assoc()['id'];
+                $conn->query("UPDATE users SET full_name = '{$fullName}', password_hash = '{$pwdHash}', role = '{$role}', department = '{$department}', team_id = {$teamId}, is_active = 1, is_confirmed = 1, status = 'active' WHERE id = {$uid}");
+                $logMsg("Đã cập nhật thông tin tài khoản Lê Trần Yến Nhi (ID: {$uid}).", "success");
+            } else {
+                $conn->query("INSERT INTO users (tenant_id, full_name, email, username, password_hash, role, department, team_id, is_active, is_confirmed, status) VALUES (1, '{$fullName}', '{$email}', '{$username}', '{$pwdHash}', '{$role}', '{$department}', {$teamId}, 1, 1, 'active')");
+                $newId = (int)$conn->insert_id;
+                $logMsg("Đã tạo mới tài khoản Lê Trần Yến Nhi (ID: {$newId}).", "success");
+            }
+            $logMsg("Nâng cấp lên phiên bản 285 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi nâng cấp v285: " . $e->getMessage(), "error");
+        }
+    }
+
+    if ($currentVersion < 286) {
+        $logMsg("Bắt đầu nâng cấp CSDL lên phiên bản 286 (Đảm bảo cột related_user_ids cho bảng deposits)...", "info");
+        try {
+            $chkColDep = $conn->query("SHOW COLUMNS FROM `deposits` LIKE 'related_user_ids'");
+            if ($chkColDep && $chkColDep->num_rows == 0) {
+                $conn->query("ALTER TABLE `deposits` ADD COLUMN `related_user_ids` TEXT NULL AFTER `status`");
+                $logMsg("Đã thêm cột related_user_ids vào bảng deposits.", "success");
+            } else {
+                $logMsg("Cột related_user_ids đã tồn tại trong bảng deposits.", "info");
+            }
+            $logMsg("Nâng cấp lên phiên bản 286 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi nâng cấp v286: " . $e->getMessage(), "error");
+        }
+    }
+
+    if ($currentVersion < 287) {
+        $logMsg("Bắt đầu nâng cấp CSDL lên phiên bản 287 (Tự động gắn Lê Trần Yến Nhi nhilty@ideas.edu.vn vào các task chung của Phan Hiếu Ngân nganph@ideas.edu.vn)...", "info");
+        try {
+            $nganId = 100076;
+            $nhiId = 1000006;
+
+            $sqlNganTasks = "SELECT id, user_id, created_by, task_group_id, subject, participant_ids, tags, body 
+                             FROM activities 
+                             WHERE type IN ('task', 'meeting') AND deleted_at IS NULL
+                               AND (user_id = $nganId OR created_by = $nganId OR FIND_IN_SET('$nganId', participant_ids))";
+            $resTasks = $conn->query($sqlNganTasks);
+            $updatedCount = 0;
+            $skippedPersonalCount = 0;
+
+            if ($resTasks) {
+                while ($task = $resTasks->fetch_assoc()) {
+                    $tid = (int)$task['id'];
+                    $uId = (int)$task['user_id'];
+                    $cId = (int)$task['created_by'];
+                    $rawPids = trim((string)($task['participant_ids'] ?? ''));
+                    $pids = array_values(array_unique(array_filter(array_map('intval', explode(',', $rawPids)))));
+
+                    $otherPids = array_filter($pids, fn($id) => $id !== $nganId);
+                    $tagsStr = strtolower($task['tags'] ?? '');
+                    $isTaggedPersonal = str_contains($tagsStr, 'personal') || str_contains($tagsStr, 'ca_nhan');
+
+                    $isPersonal = $isTaggedPersonal || ($uId === $nganId && $cId === $nganId && empty($otherPids) && empty($task['task_group_id']) && (str_starts_with($task['subject'], 'CV ') || empty($rawPids)));
+
+                    if ($isPersonal) {
+                        $skippedPersonalCount++;
+                        continue;
+                    }
+
+                    if (!in_array($nhiId, $pids)) {
+                        $pids[] = $nhiId;
+                        $newPidsStr = implode(',', $pids);
+
+                        // Also update JSON body if it contains erp_task.participant_ids
+                        $newBody = $task['body'];
+                        if (!empty($newBody) && (str_contains($newBody, '"erp_task"') || str_contains($newBody, '{"erp_task":'))) {
+                            $parsedBody = json_decode($newBody, true);
+                            if (is_array($parsedBody) && isset($parsedBody['erp_task'])) {
+                                $parsedBody['erp_task']['participant_ids'] = $newPidsStr;
+                                $newBody = json_encode($parsedBody, JSON_UNESCAPED_UNICODE);
+                            }
+                        }
+
+                        $stmtUp = $conn->prepare("UPDATE activities SET participant_ids = ?, body = ?, updated_at = NOW() WHERE id = ?");
+                        if ($stmtUp) {
+                            $stmtUp->bind_param("ssi", $newPidsStr, $newBody, $tid);
+                            $stmtUp->execute();
+                            $stmtUp->close();
+                            $updatedCount++;
+                        }
+                    }
+                }
+            }
+            $logMsg("Đã gắn Yến Nhi vào $updatedCount task chung của Phan Hiếu Ngân (Bảo toàn $skippedPersonalCount task cá nhân).", "success");
+            $logMsg("Nâng cấp lên phiên bản 287 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi nâng cấp v287: " . $e->getMessage(), "error");
+        }
+    }
+
+    // Update DB version in system_settings
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '287') ON DUPLICATE KEY UPDATE setting_value = '287'");
+
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 287", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");

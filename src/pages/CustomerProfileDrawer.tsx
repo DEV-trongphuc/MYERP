@@ -3756,10 +3756,43 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [showQuoteEditor, setShowQuoteEditor] = useState(false);
   const [selectedQuote, setSelectedQuote] = useState<any>(null);
 
+  // Academic Program Templates configuration
+  const ACADEMIC_PROGRAM_OPTIONS = [
+    {
+      id: 'msc_ai',
+      label: 'Thạc sĩ Khoa học Trí tuệ nhân tạo (MSc AI)',
+      docLink: 'https://drive.google.com/drive/folders/1Byi7lmVQsm9sSD-OGKSHli1FfsnsvkXr'
+    },
+    {
+      id: 'mba_standard',
+      label: 'Thạc sĩ Quản trị Kinh doanh - Tiêu chuẩn (MBA / EMBA Standard)',
+      docLink: 'https://drive.google.com/drive/folders/1dvILnySA3MWKR-LutdrdXyrJPqL6ppcy'
+    },
+    {
+      id: 'bba',
+      label: 'Cử nhân Quản trị Kinh doanh (BBA)',
+      docLink: 'https://drive.google.com/drive/folders/1E1TZMRz5w05xv4wsNvP5vht3ojHeviAw'
+    },
+    {
+      id: 'mba_high',
+      label: 'Thạc sĩ Quản trị Kinh doanh - Nâng cao (MBA / EMBA High)',
+      docLink: 'https://drive.google.com/drive/folders/1FAJL1opSbPEOx9CL1L1QMiug3mfRdRWX'
+    }
+  ];
+
+  const detectAcademicProgram = (programStr: string) => {
+    const p = (programStr || '').toLowerCase();
+    if (p.includes('ai') || p.includes('msc') || p.includes('trí tuệ') || p.includes('tri tue')) return 'msc_ai';
+    if (p.includes('bba') || p.includes('cử nhân') || p.includes('cu nhan') || p.includes('bachelor')) return 'bba';
+    if (p.includes('high') || p.includes('nâng cao') || p.includes('nang cao')) return 'mba_high';
+    return 'mba_standard';
+  };
+
   // Academic Study Status & Email Notification States
   const [savingStudyStatus, setSavingStudyStatus] = useState(false);
   const [showAcademicEmailModal, setShowAcademicEmailModal] = useState(false);
   const [academicEmailTab, setAcademicEmailTab] = useState<'preview' | 'edit'>('preview');
+  const [academicEmailProgram, setAcademicEmailProgram] = useState('mba_standard');
   const [isSendingAcademicEmail, setIsSendingAcademicEmail] = useState(false);
   const [academicEmailForm, setAcademicEmailForm] = useState({
     to_email: '',
@@ -3768,8 +3801,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     content: ''
   });
 
-  const getAcademicEmailDefaultContent = useCallback((studentName: string) => {
+  const getAcademicEmailDefaultContent = useCallback((studentName: string, programKey: string = 'mba_standard') => {
     const greeting = studentName ? `Kính gửi Quý Anh/Chị học viên <strong>${studentName}</strong>,` : 'Kính gửi Quý Anh/Chị học viên,';
+    const selectedProg = ACADEMIC_PROGRAM_OPTIONS.find(opt => opt.id === programKey) || ACADEMIC_PROGRAM_OPTIONS[1];
+    const docFolderLink = selectedProg.docLink;
+
     return `<p>${greeting}</p>
 <p>Lời đầu tiên, Ban Công tác Sinh viên IDEAS xin gửi lời chúc mừng và trân trọng cảm ơn Anh/Chị đã tin chọn IDEAS làm người bạn đồng hành trên chặng đường chinh phục tấm bằng từ <strong>Đại học Swiss UMEF</strong>. Chúng tôi cam kết đồng hành và hỗ trợ Anh/Chị xuyên suốt quá trình học tập.</p>
 
@@ -3782,11 +3818,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 <p><strong style="color: #BD1D2D; font-size: 15px;">B. TÀI KHOẢN HỌC TẬP</strong></p>
 <p>Anh/Chị sẽ được cấp 3 tài khoản học tập, sử dụng xuyên suốt chương trình:</p>
 <ul style="padding-left: 20px; line-height: 1.8;">
-  <li><strong>Tài khoản LMS IDEAS</strong> (xem tài liệu, video buổi học, hỗ trợ học thuật): <a href="https://lms.ideas.edu.vn/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://lms.ideas.edu.vn/</a> | Video hướng dẫn: <a href="https://lms.ideas.edu.vn/" target="_blank" rel="noreferrer" style="color: #BD1D2D; font-weight: 600;">LINK tại đây</a></li>
-  <li><strong>Tài khoản LMS UMEF</strong> (làm bài, nộp bài, tính điểm chính thức): <a href="https://portal.swiss-umef.ch/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://portal.swiss-umef.ch/</a></li>
-  <li><strong>Platform IDEAS AI</strong> (công cụ bổ trợ học tập): <a href="https://ai.ideas.edu.vn/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://ai.ideas.edu.vn/</a></li>
+  <li><strong>1. Tài khoản LMS IDEAS</strong> (xem tài liệu, video buổi học, hỗ trợ học thuật): <a href="https://lms.ideas.edu.vn/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://lms.ideas.edu.vn/</a> | Video hướng dẫn: <a href="https://drive.google.com/file/d/1wXQtghJSd7CHoek_hPXOfXuVuGuT8bMv/view?usp=sharing" target="_blank" rel="noreferrer" style="color: #BD1D2D; font-weight: 600;">LINK tại đây</a></li>
+  <li><strong>2. Tài khoản LMS UMEF</strong> (làm bài, nộp bài, tính điểm chính thức): <a href="https://portal.swiss-umef.ch/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://portal.swiss-umef.ch/</a></li>
+  <li><strong>3. Platform IDEAS AI</strong> (công cụ bổ trợ học tập): <a href="https://ai.ideas.edu.vn/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://ai.ideas.edu.vn/</a></li>
 </ul>
-<p><em>(Thông tin tài khoản sẽ được gửi trực tiếp đến email cá nhân của học viên đã đăng ký học tập)</em></p>
+<p><em>(thông tin tài khoản sẽ được gửi trực tiếp đến email cá nhân của học viên đã đăng ký học tập)</em></p>
 
 <p><strong style="color: #BD1D2D; font-size: 15px;">C. TÀI LIỆU ĐÍNH KÈM</strong></p>
 <ul style="padding-left: 20px; line-height: 1.8;">
@@ -3794,7 +3830,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   <li>File hướng dẫn sử dụng các hệ thống học tập</li>
   <li>Hướng dẫn sử dụng Zoom Meeting &amp; Format bài làm mẫu</li>
 </ul>
-<p>Link tổng hợp tài liệu hướng dẫn: <a href="https://lms.ideas.edu.vn/" target="_blank" rel="noreferrer" style="color: #BD1D2D; font-weight: 600;">LINK tại đây</a></p>
+<p>Link tổng hợp tài liệu hướng dẫn: <a href="${docFolderLink}" target="_blank" rel="noreferrer" style="color: #BD1D2D; font-weight: 600;">LINK tại đây</a></p>
 
 <p>Nếu có bất kỳ vướng mắc nào, Anh/Chị vui lòng liên hệ CTSV để được hỗ trợ kịp thời. Chúc Anh/Chị có hành trình học tập thật thuận lợi và thành công!</p>
 
@@ -3804,14 +3840,26 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const handleOpenAcademicEmailModal = () => {
     const studentName = (formData.full_name || contact?.full_name || '').trim();
     const recipientEmail = (formData.email || contact?.email || '').trim();
+    const rawProg = formData.program || contact?.program || contact?.product_name || contact?.course || '';
+    const detectedProg = detectAcademicProgram(rawProg);
+    setAcademicEmailProgram(detectedProg);
     setAcademicEmailForm({
       to_email: recipientEmail,
       cc_email: 'student.notice@ideas.edu.vn',
       subject: `[IDEAS] Thông báo Tiếp nhận học viên & Hướng dẫn học tập - Swiss UMEF`,
-      content: getAcademicEmailDefaultContent(studentName)
+      content: getAcademicEmailDefaultContent(studentName, detectedProg)
     });
     setAcademicEmailTab('preview');
     setShowAcademicEmailModal(true);
+  };
+
+  const handleAcademicProgramChange = (progKey: string) => {
+    setAcademicEmailProgram(progKey);
+    const studentName = (formData.full_name || contact?.full_name || '').trim();
+    setAcademicEmailForm(prev => ({
+      ...prev,
+      content: getAcademicEmailDefaultContent(studentName, progKey)
+    }));
   };
 
   // Study Status Transition Modal State
@@ -18385,6 +18433,22 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
               </div>
             </div>
 
+            {/* Program Selection Dropdown */}
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label" style={{ fontWeight: 700, fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                🎓 Chương trình đào tạo áp dụng mẫu email <span style={{ color: 'var(--color-danger)' }}>*</span>
+              </label>
+              <CustomSelect
+                options={ACADEMIC_PROGRAM_OPTIONS.map(opt => ({
+                  value: opt.id,
+                  label: opt.label
+                }))}
+                value={academicEmailProgram}
+                onChange={val => handleAcademicProgramChange(val)}
+                placeholder="Chọn chương trình đào tạo..."
+              />
+            </div>
+
             {/* Email Recipients Row */}
             <div style={{ display: 'grid', gridTemplateColumns: isMobileOrTablet ? '1fr' : '1fr 1fr', gap: '1rem' }}>
               <div className="form-group" style={{ margin: 0 }}>
@@ -18507,24 +18571,32 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                       color: '#ffffff'
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.2)', paddingBottom: '10px', marginBottom: '10px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                           <div style={{
-                            width: '28px',
-                            height: '28px',
-                            borderRadius: '6px',
-                            background: 'rgba(255,255,255,0.2)',
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '8px',
+                            background: '#ffffff',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            fontWeight: 900,
-                            fontSize: '14px',
-                            color: '#ffffff'
+                            padding: '3px',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.12)',
+                            flexShrink: 0,
+                            overflow: 'hidden'
                           }}>
-                            I
+                            <img
+                              src="/LOGO.webp"
+                              alt="IDEAS"
+                              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                              onError={(e: any) => {
+                                e.currentTarget.onerror = null;
+                                e.currentTarget.src = 'https://myerp.ideas.edu.vn/LOGO.webp';
+                              }}
+                            />
                           </div>
                           <div>
-                            <div style={{ fontWeight: 900, fontSize: '1.1rem', letterSpacing: '0.05em', lineHeight: 1.1 }}>IDEAS</div>
-                            <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', opacity: 0.85, letterSpacing: '0.08em', fontWeight: 600 }}>Viện Đào tạo &amp; Phát triển Nhân lực</div>
+                            <div style={{ fontWeight: 900, fontSize: '1.15rem', letterSpacing: '0.05em', lineHeight: 1.1, color: '#ffffff' }}>IDEAS</div>
                           </div>
                         </div>
                         <div style={{ fontSize: '0.72rem', background: 'rgba(0,0,0,0.2)', padding: '3px 8px', borderRadius: '4px', opacity: 0.9 }}>

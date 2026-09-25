@@ -76,7 +76,7 @@ export const POSModal: React.FC<{ onClose: () => void; defaultContact?: Contact 
         setContacts([]);
         return;
       }
-      api.get('/contacts', { params: { search: searchContact, limit: 10 } })
+      api.get('/contacts', { params: { search: searchContact, limit: 20, mode: 'pos', all_pipeline: 1 } })
         .then(r => setContacts(r.data.data?.items || []))
         .catch(() => setContacts([]));
     }, 300);

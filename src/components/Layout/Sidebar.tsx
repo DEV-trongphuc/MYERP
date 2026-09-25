@@ -80,7 +80,7 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = [
     title: 'TÀI CHÍNH',
     items: [
       { name: 'Purchase Order', href: '/expenses', icon: CreditCard, badgeKey: 'pendingExpenses' },
-      { name: 'Sales Order', href: '/deposits', icon: Receipt, hideForRoles: ['viewer', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], badgeKey: 'pendingDeposits' },
+      { name: 'Sales Order', href: '/deposits', icon: Receipt, hideForRoles: ['viewer', 'sale_admin', 'saleadmin'], badgeKey: 'pendingDeposits' },
       { name: 'Dự báo dòng tiền', href: '/cash-flow', icon: TrendingUp, hideForRoles: ['viewer', 'marketing', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'] }
     ]
   },
@@ -197,6 +197,7 @@ const QUICK_NAV_BY_ROLE: Record<string, QuickNavItem[]> = {
     { name: 'Đối tác & GV', href: '/companies', icon: Building2 },
     { name: 'Chương trình', href: '/projects', icon: Building2 },
     { name: 'Purchase Order', href: '/expenses', icon: CreditCard, badgeKey: 'pendingExpenses' },
+    { name: 'Sales Order', href: '/deposits', icon: Receipt, badgeKey: 'pendingDeposits' },
     { name: 'Quy trình', href: '/approvals', icon: Clipboard, badgeKey: 'pendingApprovals' },
     { name: 'Phiếu lương', href: '/my-payslips', icon: FileText }
   ],
@@ -207,6 +208,7 @@ const QUICK_NAV_BY_ROLE: Record<string, QuickNavItem[]> = {
     { name: 'Đối tác & GV', href: '/companies', icon: Building2 },
     { name: 'Chương trình', href: '/projects', icon: Building2 },
     { name: 'Purchase Order', href: '/expenses', icon: CreditCard, badgeKey: 'pendingExpenses' },
+    { name: 'Sales Order', href: '/deposits', icon: Receipt, badgeKey: 'pendingDeposits' },
     { name: 'Quy trình', href: '/approvals', icon: Clipboard, badgeKey: 'pendingApprovals' },
     { name: 'Phiếu lương', href: '/my-payslips', icon: FileText }
   ],
@@ -216,6 +218,7 @@ const QUICK_NAV_BY_ROLE: Record<string, QuickNavItem[]> = {
     { name: 'Lịch học', href: '/schedules', icon: Calendar },
     { name: 'Đối tác & GV', href: '/companies', icon: Building2 },
     { name: 'Purchase Order', href: '/expenses', icon: CreditCard, badgeKey: 'pendingExpenses' },
+    { name: 'Sales Order', href: '/deposits', icon: Receipt, badgeKey: 'pendingDeposits' },
     { name: 'Quy trình', href: '/approvals', icon: Clipboard, badgeKey: 'pendingApprovals' },
     { name: 'Phiếu lương', href: '/my-payslips', icon: FileText }
   ],
@@ -224,6 +227,7 @@ const QUICK_NAV_BY_ROLE: Record<string, QuickNavItem[]> = {
     { name: 'Học viên', href: '/students', icon: GraduationCap },
     { name: 'Lịch học', href: '/schedules', icon: Calendar },
     { name: 'Purchase Order', href: '/expenses', icon: CreditCard, badgeKey: 'pendingExpenses' },
+    { name: 'Sales Order', href: '/deposits', icon: Receipt, badgeKey: 'pendingDeposits' },
     { name: 'Quy trình', href: '/approvals', icon: Clipboard, badgeKey: 'pendingApprovals' },
     { name: 'Phiếu lương', href: '/my-payslips', icon: FileText }
   ],
@@ -232,6 +236,7 @@ const QUICK_NAV_BY_ROLE: Record<string, QuickNavItem[]> = {
     { name: 'Học viên', href: '/students', icon: GraduationCap },
     { name: 'Lịch học', href: '/schedules', icon: Calendar },
     { name: 'Purchase Order', href: '/expenses', icon: CreditCard, badgeKey: 'pendingExpenses' },
+    { name: 'Sales Order', href: '/deposits', icon: Receipt, badgeKey: 'pendingDeposits' },
     { name: 'Quy trình', href: '/approvals', icon: Clipboard, badgeKey: 'pendingApprovals' },
     { name: 'Phiếu lương', href: '/my-payslips', icon: FileText }
   ],
@@ -555,7 +560,10 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
   }
 
   // Dynamic Group Re-ordering based on role
-  const activeRole = String(user?.role || '').toLowerCase();
+  let activeRole = String(user?.role || '').toLowerCase();
+  if (isAcademic(user) && (!GROUP_ORDER_BY_ROLE[activeRole] || activeRole === 'staff' || activeRole === 'employee')) {
+    activeRole = 'academic';
+  }
   const groupOrder = GROUP_ORDER_BY_ROLE[activeRole];
   if (groupOrder) {
     visibleGroups.sort((a, b) => {

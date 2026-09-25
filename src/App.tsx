@@ -6,14 +6,14 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LanguageProvider, useLanguage } from './contexts/LanguageContext';
 import { Toaster } from 'react-hot-toast';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { Keyboard } from 'lucide-react';
+import { Keyboard, ShieldAlert } from 'lucide-react';
 import { CustomModal } from './components/ui/CustomModal';
 import { getDefaultDateFilter } from './utils/api';
 import { GlobalConfirmModal } from './components/ui/GlobalConfirmModal';
 import { QRCodeCallModal } from './components/ui/QRCodeCallModal';
 import { ProfileModal } from './components/ProfileModal';
 import { hasModuleApprovalAccess } from './utils/approvalPermissions';
-import { isMarketing } from './utils/roleUtils';
+import { isMarketing, isAcademic } from './utils/roleUtils';
 import { AutoUpdateChecker } from './components/AutoUpdateChecker';
 
 
@@ -67,9 +67,40 @@ const ApiDocumentationPage = lazy(() => import('./pages/ApiDocumentationPage'));
 // Lightweight null fallback so each tab/page renders its own dedicated, tailored skeleton
 const PageLoader = () => null;
 
+const AccessDeniedView = () => (
+  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh', gap: '14px', color: 'var(--color-text-muted)' }}>
+    <ShieldAlert size={52} style={{ color: 'var(--color-warning, #f59e0b)' }} />
+    <h3 style={{ margin: 0, color: 'var(--color-text)', fontSize: '1.25rem', fontWeight: 800 }}>Không có quyền truy cập</h3>
+    <p style={{ margin: 0, fontSize: '0.875rem' }}>Bạn không có quyền truy cập vào mục này. Vui lòng liên hệ ban quản trị nếu cần phân quyền.</p>
+  </div>
+);
+
 const ProtectedRoute = ({ allowedRoles }: { allowedRoles?: ('superadmin' | 'admin' | 'manager' | 'director' | 'assistant' | 'viewer' | 'sale' | 'hr' | 'accountant' | 'marketing')[] }) => {
   const { user, token } = useAuth();
-  if (!token || !user) return <Navigate to="/login" replace />;
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setCheckingAuth(false);
+    }, 60);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const hasToken = token || (typeof window !== 'undefined' && (localStorage.getItem('Ideas_token') || localStorage.getItem('access_token')));
+  if (!hasToken) return <Navigate to="/login" replace />;
+
+  if (!user && checkingAuth) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', width: '100vw', background: 'var(--color-bg)' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+          <div className="spin animate-spin" style={{ width: '32px', height: '32px', border: '3px solid rgba(189,29,45,0.2)', borderTopColor: 'var(--color-primary)', borderRadius: '50%' }} />
+          <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Đang tải hệ thống...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) return <Navigate to="/login" replace />;
   if (allowedRoles && !allowedRoles.includes(user.role)) return <Navigate to="/" replace />;
   return (
     <Layout>
@@ -86,113 +117,20 @@ const ProtectedRoute = ({ allowedRoles }: { allowedRoles?: ('superadmin' | 'admi
 const AppTabs = () => {
   const { user } = useAuth();
   const location = useLocation();
-  const currentPath = location.pathname;
 
-  // Route protection mapping
-  const adminPaths = ['/consultants', '/rounds', '/tickets', '/rules', '/integrations', '/settings', '/accounts', '/gatekeeper', '/capi', '/ai-training', '/hrm'];
-  const userPaths = ['/', '/workspace', '/feed', '/data', '/calendar', '/personal-calendar', '/contacts', '/students', '/companies', '/deals', '/quotes', '/activities', '/products', '/expenses', '/reports-crm', '/suppliers', '/files', '/inventory', '/purchase-orders', '/sales-orders', '/projects', '/deposits', '/cash-flow', '/support-tickets', '/attendance', '/fair-share', '/account', '/my-payslips', '/approvals', '/financial-dashboard', '/schedules'];
-  const allPaths = [...userPaths, ...adminPaths];
-  const isAdminPath = adminPaths.includes(currentPath);
-
-  // Aliases redirection
-  if (currentPath === '/purchase-orders') {
-    const searchStr = location.search ? (location.search.includes('tab=') ? location.search : location.search + '&tab=purchase_orders') : '?tab=purchase_orders';
-    return <Navigate to={`/inventory${searchStr}`} replace />;
-  }
-  if (currentPath === '/sales-orders') {
-    return <Navigate to="/companies" replace />;
-  }
-
-  // Fallback for unrecognized paths
-  if (!allPaths.includes(currentPath)) {
-    console.warn("[Router] Unrecognized path, redirecting to /:", currentPath);
-    return <Navigate to="/" replace />;
-  }
-
-  if (currentPath === '/accounts') {
-    if (!['admin', 'superadmin', 'super_admin', 'director', 'hr'].includes(user?.role || '')) {
-      console.warn("[Router] Access denied for /accounts, role:", user?.role);
-      return <Navigate to="/" replace />;
-    }
-  } else if (currentPath === '/consultants') {
-    if (!['admin', 'superadmin', 'super_admin', 'manager', 'director', 'assistant', 'sale', 'sales', 'hr', 'accountant', 'sale_admin', 'saleadmin', 'marketing', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'viewer'].includes(user?.role || '') && !hasModuleApprovalAccess(user, 'attendance')) {
-      console.warn("[Router] Access denied for /consultants, role:", user?.role);
-      return <Navigate to="/" replace />;
-    }
-  } else if (currentPath === '/attendance') {
-    if ((user?.role as string) === 'viewer' && !hasModuleApprovalAccess(user, 'attendance')) {
-      console.warn("[Router] Access denied for /attendance, role:", user?.role);
-      return <Navigate to="/" replace />;
-    }
-  } else if (currentPath === '/contacts' || currentPath === '/deals') {
-    if (['hr'].includes(user?.role || '')) {
-      console.warn("[Router] Access denied for /contacts or /deals, role:", user?.role);
-      return <Navigate to="/" replace />;
-    }
-  } else if (currentPath === '/students') {
-    if (user?.role === 'hr') {
-      console.warn("[Router] Access denied for /students, role:", user?.role);
-      return <Navigate to="/" replace />;
-    }
-  } else if (['/deposits', '/cash-flow'].includes(currentPath)) {
-    if ((user?.role as string) === 'viewer' && !hasModuleApprovalAccess(user, 'deposit')) {
-      console.warn("[Router] Access denied for deposits/cashflow, role:", user?.role);
-      return <Navigate to="/" replace />;
-    }
-  } else if (currentPath === '/financial-dashboard') {
-    if (!['admin', 'superadmin', 'super_admin', 'director', 'accountant'].includes(user?.role || '')) {
-      console.warn("[Router] Access denied for /financial-dashboard, role:", user?.role);
-      return <Navigate to="/" replace />;
-    }
-
-  } else if (currentPath === '/quotes') {
-    console.warn("[Router] Redirecting /quotes to /");
-    return <Navigate to="/" replace />;
-  } else if (currentPath === '/expenses') {
-    // All authenticated roles can create and view their Purchase Orders (PO)
-  } else if (currentPath === '/tickets') {
-    if (!['admin', 'superadmin', 'super_admin', 'manager', 'director', 'assistant', 'sale', 'sales', 'marketing'].includes(user?.role || '') && !hasModuleApprovalAccess(user, 'ticket') && !isMarketing(user)) {
-      console.warn("[Router] Access denied for /tickets, role:", user?.role);
-      return <Navigate to="/" replace />;
-    }
-  } else if (currentPath === '/fair-share') {
-    if (!['admin', 'superadmin', 'super_admin', 'manager', 'director', 'assistant', 'sale', 'sales'].includes(user?.role || '')) {
-      console.warn("[Router] Access denied for /fair-share, role:", user?.role);
-      return <Navigate to="/" replace />;
-    }
-  } else if (currentPath === '/activities') {
-    const searchParams = new URLSearchParams(location.search);
-    const taskId = searchParams.get('id');
-    if (['sale', 'sales'].includes(user?.role || '')) {
-      if (taskId) {
-        return <Navigate to={`/workspace?task_id=${taskId}`} replace />;
-      }
-      return <Navigate to="/workspace" replace />;
-    }
-    return <Navigate to="/" replace />;
-  } else if (currentPath === '/hrm') {
-    if (!['admin', 'superadmin', 'super_admin', 'director', 'hr'].includes(user?.role || '')) {
-      return <Navigate to="/" replace />;
-    }
-  } else if (['/rounds', '/rules', '/integrations', '/gatekeeper'].includes(currentPath)) {
-    if (!['admin', 'superadmin', 'super_admin', 'director', 'marketing'].includes(user?.role || '') && !isMarketing(user)) {
-      return <Navigate to="/" replace />;
-    }
-  } else if (isAdminPath) {
-    if (currentPath === '/settings') {
-      if (!['admin', 'superadmin', 'super_admin'].includes(user?.role || '')) {
-        return <Navigate to="/" replace />;
-      }
-    } else if (!['admin', 'superadmin', 'super_admin', 'director'].includes(user?.role || '')) {
-      return <Navigate to="/" replace />;
-    }
+  if (!user) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', width: '100%' }}>
+        <div className="spin animate-spin" style={{ width: '32px', height: '32px', border: '3px solid rgba(189,29,45,0.2)', borderTopColor: 'var(--color-primary)', borderRadius: '50%' }} />
+      </div>
+    );
   }
 
   const renderPageComponent = (path: string) => {
     switch (path) {
       case '/':
-        if (['academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'viewer'].includes(user?.role || '')) {
-          return <Navigate to="/workspace" replace />;
+        if (isAcademic(user) || ['academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'viewer'].includes(user?.role || '')) {
+          return <SalePortal embedMode={true} activeTabProp="workspace" key="workspace" />;
         }
         return ((user?.role as any) === 'sale' || (user?.role as any) === 'sales')
           ? <SalePortal embedMode={true} activeTabProp="dashboard" key="dashboard" />
@@ -203,11 +141,11 @@ const AppTabs = () => {
         return <SalePortal embedMode={true} activeTabProp="schedule" key="schedule" />;
       case '/data':
         return user?.role === 'sale'
-          ? <Navigate to={`/contacts${location.search}`} replace />
+          ? <ContactsPage key="contacts" defaultSegment="tiem_nang" />
           : <DataList key="data" />;
       case '/calendar':
         if (String(user?.role).toLowerCase() === 'accountant') {
-          return <Navigate to="/data?view=calendar" replace />;
+          return <DataList key="data" />;
         }
         return <SalePortal embedMode={true} activeTabProp="calendar" key="calendar" />;
       case '/personal-calendar':
@@ -221,13 +159,13 @@ const AppTabs = () => {
       case '/deals':
         return <DealsPage key="deals" />;
       case '/quotes':
-        return <Navigate to="/" replace />;
+        return <QuotesPage key="quotes" />;
       case '/activities':
-        return <Navigate to="/" replace />;
+        return <ActivitiesPage key="activities" />;
       case '/feed':
         return <EnterpriseFeed key="feed" />;
       case '/products':
-        return <Navigate to="/" replace />;
+        return <ProductsPage key="products" />;
       case '/expenses':
         return <ExpensesPage key="expenses" />;
       case '/reports-crm':
@@ -237,7 +175,10 @@ const AppTabs = () => {
       case '/files':
         return <FilesPage key="files" />;
       case '/inventory':
-        return <Navigate to="/" replace />;
+      case '/purchase-orders':
+        return <InventoryPage key="inventory" />;
+      case '/sales-orders':
+        return <DepositsPage key="deposits" defaultTab="list" />;
       case '/tickets':
         return user?.role === 'sale' ? <SalePortal embedMode={true} activeTabProp="tickets" key="tickets" /> : <Tickets key="tickets" />;
       case '/support-tickets':
@@ -247,14 +188,29 @@ const AppTabs = () => {
       case '/consultants':
         return <Consultants key="consultants" />;
       case '/rounds':
+        if (!['admin', 'superadmin', 'super_admin', 'director', 'marketing'].includes(user?.role || '') && !isMarketing(user)) {
+          return <AccessDeniedView key="access-denied-rounds" />;
+        }
         return <Rounds key="rounds" />;
       case '/rules':
+        if (!['admin', 'superadmin', 'super_admin', 'director', 'marketing'].includes(user?.role || '') && !isMarketing(user)) {
+          return <AccessDeniedView key="access-denied-rules" />;
+        }
         return <RuleSettings key="rules" />;
       case '/integrations':
+        if (!['admin', 'superadmin', 'super_admin', 'director', 'marketing'].includes(user?.role || '') && !isMarketing(user)) {
+          return <AccessDeniedView key="access-denied-integrations" />;
+        }
         return <Integrations key="integrations" />;
       case '/settings':
+        if (!['admin', 'superadmin', 'super_admin'].includes(user?.role || '')) {
+          return <AccessDeniedView key="access-denied-settings" />;
+        }
         return <Settings key="settings" />;
       case '/accounts':
+        if (!['admin', 'superadmin', 'super_admin', 'director', 'hr'].includes(user?.role || '')) {
+          return <AccessDeniedView key="access-denied-accounts" />;
+        }
         return <Accounts key="accounts" />;
       case '/gatekeeper':
         return <Gatekeeper key="gatekeeper" />;
@@ -271,15 +227,21 @@ const AppTabs = () => {
       case '/cash-flow':
         return <DepositsPage key="cash-flow" defaultTab="stats" />;
       case '/hrm':
+        if (!['admin', 'superadmin', 'super_admin', 'director', 'hr'].includes(user?.role || '')) {
+          return <AccessDeniedView key="access-denied-hrm" />;
+        }
         return <HRM key="hrm" />;
       case '/my-payslips':
         return <MyPayslips key="my-payslips" />;
       case '/approvals':
         return <Approvals key="approvals" />;
       case '/financial-dashboard':
+        if (!['admin', 'superadmin', 'super_admin', 'director', 'accountant'].includes(user?.role || '')) {
+          return <AccessDeniedView key="access-denied-financial" />;
+        }
         return <FinancialDashboard key="financial-dashboard" />;
       default:
-        return <Navigate to="/" replace />;
+        return <SalePortal embedMode={true} activeTabProp="workspace" key="workspace" />;
     }
   };
 

@@ -59,51 +59,55 @@ class ContactController {
             }
         }
 
-        if ($isAcademicUser) {
-            // Học vụ chỉ được xem danh sách học viên
-            $stmtStage = $this->db->prepare("SELECT order_index FROM pipeline_stages WHERE tenant_id = ? AND system_slug IN ('application_started', 'nop_ho_so') ORDER BY order_index ASC LIMIT 1");
-            $stmtStage->execute([$tid]);
-            $minOrderIndex = $stmtStage->fetchColumn();
-            if ($minOrderIndex === false) {
-                $minOrderIndex = 9;
-            }
-            $stListStmt = $this->db->prepare("SELECT id FROM pipeline_stages WHERE tenant_id = ? AND order_index >= ?");
-            $stListStmt->execute([$tid, (int)$minOrderIndex]);
-            $allowedStageIds = $stListStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
-            if (!empty($allowedStageIds)) {
-                $where[] = "(c.stage_id IN (" . implode(',', array_map('intval', $allowedStageIds)) . ") OR c.status = 'customer' OR c.pipeline_status IN ('enrolled', 'hoc_vien', 'deposit_tuition_payment', 'dong_le_phi_ho_so', 'application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so'))";
-            } else {
-                $where[] = "(c.status = 'customer' OR c.pipeline_status IN ('enrolled', 'hoc_vien'))";
-            }
-        } elseif ($role === 'sale_admin' || $role === 'saleadmin') {
-            $stmtStage = $this->db->prepare("SELECT order_index FROM pipeline_stages WHERE tenant_id = ? AND system_slug IN ('application_started', 'nop_ho_so') ORDER BY order_index ASC LIMIT 1");
-            $stmtStage->execute([$tid]);
-            $minOrderIndex = $stmtStage->fetchColumn();
-            if ($minOrderIndex === false) {
-                $minOrderIndex = 9;
-            }
-            $stListStmt = $this->db->prepare("SELECT id FROM pipeline_stages WHERE tenant_id = ? AND order_index >= ?");
-            $stListStmt->execute([$tid, (int)$minOrderIndex]);
-            $allowedStageIds = $stListStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
-            if (!empty($allowedStageIds)) {
-                $where[] = "c.stage_id IN (" . implode(',', array_map('intval', $allowedStageIds)) . ")";
-            } else {
-                $where[] = "1=0";
-            }
-        } elseif ($role === 'accountant') {
-            $stmtStage = $this->db->prepare("SELECT order_index FROM pipeline_stages WHERE tenant_id = ? AND system_slug IN ('application_started', 'nop_ho_so') ORDER BY order_index ASC LIMIT 1");
-            $stmtStage->execute([$tid]);
-            $minOrderIndex = $stmtStage->fetchColumn();
-            if ($minOrderIndex === false) {
-                $minOrderIndex = 8;
-            }
-            $stListStmt = $this->db->prepare("SELECT id FROM pipeline_stages WHERE tenant_id = ? AND order_index >= ?");
-            $stListStmt->execute([$tid, (int)$minOrderIndex]);
-            $allowedStageIds = $stListStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
-            if (!empty($allowedStageIds)) {
-                $where[] = "(c.stage_id IN (" . implode(',', array_map('intval', $allowedStageIds)) . ") OR c.status = 'customer' OR c.pipeline_status IN ('enrolled', 'hoc_vien', 'deposit_tuition_payment', 'dong_le_phi_ho_so', 'application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so'))";
-            } else {
-                $where[] = "(c.status = 'customer' OR c.pipeline_status IN ('enrolled', 'hoc_vien', 'deposit_tuition_payment', 'dong_le_phi_ho_so', 'application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so'))";
+        $isLookupMode = !empty($_GET['is_referrer_lookup']) || (!empty($_GET['mode']) && in_array($_GET['mode'], ['referrer', 'pos', 'deposit', 'so', 'lookup'], true)) || !empty($_GET['all_scope']);
+
+        if (!$isLookupMode) {
+            if ($isAcademicUser) {
+                // Học vụ chỉ được xem danh sách học viên
+                $stmtStage = $this->db->prepare("SELECT order_index FROM pipeline_stages WHERE tenant_id = ? AND system_slug IN ('application_started', 'nop_ho_so') ORDER BY order_index ASC LIMIT 1");
+                $stmtStage->execute([$tid]);
+                $minOrderIndex = $stmtStage->fetchColumn();
+                if ($minOrderIndex === false) {
+                    $minOrderIndex = 9;
+                }
+                $stListStmt = $this->db->prepare("SELECT id FROM pipeline_stages WHERE tenant_id = ? AND order_index >= ?");
+                $stListStmt->execute([$tid, (int)$minOrderIndex]);
+                $allowedStageIds = $stListStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+                if (!empty($allowedStageIds)) {
+                    $where[] = "(c.stage_id IN (" . implode(',', array_map('intval', $allowedStageIds)) . ") OR c.status = 'customer' OR c.pipeline_status IN ('enrolled', 'hoc_vien', 'deposit_tuition_payment', 'dong_le_phi_ho_so', 'application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so'))";
+                } else {
+                    $where[] = "(c.status = 'customer' OR c.pipeline_status IN ('enrolled', 'hoc_vien'))";
+                }
+            } elseif ($role === 'sale_admin' || $role === 'saleadmin') {
+                $stmtStage = $this->db->prepare("SELECT order_index FROM pipeline_stages WHERE tenant_id = ? AND system_slug IN ('application_started', 'nop_ho_so') ORDER BY order_index ASC LIMIT 1");
+                $stmtStage->execute([$tid]);
+                $minOrderIndex = $stmtStage->fetchColumn();
+                if ($minOrderIndex === false) {
+                    $minOrderIndex = 9;
+                }
+                $stListStmt = $this->db->prepare("SELECT id FROM pipeline_stages WHERE tenant_id = ? AND order_index >= ?");
+                $stListStmt->execute([$tid, (int)$minOrderIndex]);
+                $allowedStageIds = $stListStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+                if (!empty($allowedStageIds)) {
+                    $where[] = "c.stage_id IN (" . implode(',', array_map('intval', $allowedStageIds)) . ")";
+                } else {
+                    $where[] = "1=0";
+                }
+            } elseif ($role === 'accountant') {
+                $stmtStage = $this->db->prepare("SELECT order_index FROM pipeline_stages WHERE tenant_id = ? AND system_slug IN ('application_started', 'nop_ho_so') ORDER BY order_index ASC LIMIT 1");
+                $stmtStage->execute([$tid]);
+                $minOrderIndex = $stmtStage->fetchColumn();
+                if ($minOrderIndex === false) {
+                    $minOrderIndex = 8;
+                }
+                $stListStmt = $this->db->prepare("SELECT id FROM pipeline_stages WHERE tenant_id = ? AND order_index >= ?");
+                $stListStmt->execute([$tid, (int)$minOrderIndex]);
+                $allowedStageIds = $stListStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+                if (!empty($allowedStageIds)) {
+                    $where[] = "(c.stage_id IN (" . implode(',', array_map('intval', $allowedStageIds)) . ") OR c.status = 'customer' OR c.pipeline_status IN ('enrolled', 'hoc_vien', 'deposit_tuition_payment', 'dong_le_phi_ho_so', 'application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so'))";
+                } else {
+                    $where[] = "(c.status = 'customer' OR c.pipeline_status IN ('enrolled', 'hoc_vien', 'deposit_tuition_payment', 'dong_le_phi_ho_so', 'application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so'))";
+                }
             }
         }
 
@@ -146,16 +150,18 @@ class ContactController {
             }
         }
 
-        $isReferrerLookup = !empty($_GET['is_referrer_lookup']) || (!empty($_GET['mode']) && $_GET['mode'] === 'referrer');
-        if ($isReferrerLookup) {
-            // Allow tenant-wide search for linking existing contacts as referrers
+        if ($isLookupMode) {
+            // Allow tenant-wide search for linking existing contacts as referrers / POS / Deposits
         } else {
             $scope = $this->getScope($auth, 'leads', 'read');
             if ($scope === 'all') {
                 // No filters
             } else if ($scope === 'team' || $scope === 'own') {
                 $teamMemberIds = ($scope === 'team') ? $this->getTeamUserAndConsultantIds($auth) : $this->getUserAndConsultantIds($auth);
-                $idsClause = implode(',', $teamMemberIds);
+                if (empty($teamMemberIds)) {
+                    $teamMemberIds = [(int)($auth['user_id'] ?? $auth['id'] ?? 0)];
+                }
+                $idsClause = implode(',', array_map('intval', $teamMemberIds));
                 
                 $collabChecks = [];
                 foreach ($teamMemberIds as $idVal) {
@@ -450,7 +456,7 @@ class ContactController {
                             ))
                         )";
                         $mpWhereStr = implode(' AND ', $mpWhere);
-                        $mpParams = array_merge($baseParams, [$tid, $tid, $tid, $tid]);
+                        $mpParams = array_merge($baseParams, [$tid, $tid, $tid]);
                         $mpStmt = $this->db->prepare("SELECT COUNT(*) FROM contacts c WHERE $mpWhereStr");
                         $mpStmt->execute($mpParams);
                         $stageCounts['multi_program'] = (int)$mpStmt->fetchColumn();
@@ -566,7 +572,6 @@ class ContactController {
                         OR SUM(CASE WHEN duplicate_with_id > 0 THEN 1 ELSE 0 END) > 0
                 ))
             )";
-            $params[] = $tid;
             $params[] = $tid;
             $params[] = $tid;
             $params[] = $tid;
@@ -741,7 +746,7 @@ class ContactController {
         ");
         $stmt->execute($params);
         $data = $stmt->fetchAll();
-        $this->populateLinkedProfilesCount($data, $tid);
+        $this->populateLinkedProfilesCount($data, (int)($tid ?: 1));
         // Parse JSON tags
         foreach ($data as &$row) $row['tags'] = json_decode($row['tags'] ?? '[]');
 

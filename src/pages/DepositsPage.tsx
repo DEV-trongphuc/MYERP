@@ -122,6 +122,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
   const [companies, setCompanies] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [usersList, setUsersList] = useState<any[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<any[]>([]);
   const [salesOrders, setSalesOrders] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
@@ -135,6 +136,8 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
   const [searchQuery, setSearchQuery] = useState('');
   const [filterProjectId, setFilterProjectId] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [filterSalesId, setFilterSalesId] = useState('');
+  const [filterOverdue, setFilterOverdue] = useState(false);
 
   const projectOptions = useMemo(() => {
     return [
@@ -146,6 +149,18 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
     ];
   }, [projects, t]);
 
+  const salesOptions = useMemo(() => {
+    return [
+      { value: '', label: t("Tất cả TVV") },
+      ...usersList.map(u => ({
+        value: String(u.id),
+        label: u.full_name || u.name || `TVV #${u.id}`,
+        avatar: u.avatar || u.avatar_url || '',
+        sublabel: u.role || u.department || ''
+      }))
+    ];
+  }, [usersList, t]);
+
   const statusOptions = useMemo(() => {
     return [
       { value: '', label: t("Tất cả trạng thái") },
@@ -156,6 +171,15 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
     ];
   }, [t]);
 
+  const overdueSoCount = useMemo(() => {
+    const todayStr = new Date().toISOString().substring(0, 10);
+    return deposits.filter((d: any) => {
+      if (d.status === 'cancelled') return false;
+      if (!Array.isArray(d.milestones)) return false;
+      return d.milestones.some((m: any) => m.status !== 'approved' && m.expected_pay_date && m.expected_pay_date.substring(0, 10) < todayStr);
+    }).length;
+  }, [deposits]);
+
   const filteredDepositsList = React.useMemo(() => {
     let list = deposits;
     if (user?.role === 'sale') {
@@ -165,6 +189,25 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
         (d.contact_owner_id && String(d.contact_owner_id) === String(user.id)) ||
         (d.shareholders && Array.isArray(d.shareholders) && d.shareholders.some((sh: any) => String(sh.user_id) === String(user.id)))
       );
+    }
+
+    // Filter by TVV / Sales
+    if (filterSalesId) {
+      list = list.filter((d: any) => 
+        String(d.created_by) === filterSalesId || 
+        String(d.contact_owner_id) === filterSalesId ||
+        (d.shareholders && Array.isArray(d.shareholders) && d.shareholders.some((sh: any) => String(sh.user_id) === filterSalesId))
+      );
+    }
+
+    // Filter by Overdue
+    if (filterOverdue) {
+      const todayStr = new Date().toISOString().substring(0, 10);
+      list = list.filter((d: any) => {
+        if (d.status === 'cancelled') return false;
+        if (!Array.isArray(d.milestones)) return false;
+        return d.milestones.some((m: any) => m.status !== 'approved' && m.expected_pay_date && m.expected_pay_date.substring(0, 10) < todayStr);
+      });
     }
 
     // Filter by dateRange
@@ -195,7 +238,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
 
       return matchesSearch && matchesProject && matchesStatus;
     });
-  }, [deposits, user, searchQuery, filterProjectId, filterStatus, dateRange]);
+  }, [deposits, user, searchQuery, filterProjectId, filterStatus, filterSalesId, filterOverdue, dateRange]);
 
   const paginatedDeposits = React.useMemo(() => {
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -236,7 +279,6 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
 
   // Co-op and Sales Method Selection States
   const [coopSlips, setCoopSlips] = useState<any[]>([]);
-  const [usersList, setUsersList] = useState<any[]>([]);
   const [hasExistingCoop, setHasExistingCoop] = useState(false);
   const [existingCoopShares, setExistingCoopShares] = useState<any[]>([]);
   const [isCooperation, setIsCooperation] = useState(false);
@@ -252,14 +294,6 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
     const params = new URLSearchParams(window.location.search);
     const openId = params.get('open_id') || params.get('id');
     if (openId) {
-      if (deposits.length > 0) {
-        const found = deposits.find((d: any) => String(d.id) === String(openId));
-        if (found) {
-          setSelectedDepForManage(found);
-          setShowManageModal(true);
-          return;
-        }
-      }
       api.get(`/deposits/${openId}`)
         .then(res => {
           if (res.data?.data) {
@@ -267,7 +301,14 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
             setShowManageModal(true);
           }
         })
-        .catch(err => console.error('Error fetching deposit from deep-link:', err));
+        .catch(err => {
+          console.error('Error fetching deposit from deep-link:', err);
+          const found = deposits.find((d: any) => String(d.id) === String(openId));
+          if (found) {
+            setSelectedDepForManage(found);
+            setShowManageModal(true);
+          }
+        });
     }
   }, [deposits]);
 
@@ -635,12 +676,9 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
       return;
     }
 
-    // Verify milestones total sum
+    // Auto sync price with total milestones if total milestones exceed initial price
     const totalM = milestonesInput.reduce((acc, m) => acc + (parseFloat(m.amount) || 0), 0);
-    if (totalM > parseFloat(price)) {
-      addToast(`Tổng tiền các đợt thanh toán (${totalM.toLocaleString()} VND) không được lớn hơn Tổng doanh thu dự kiến (${parseFloat(price).toLocaleString()} VND)`, 'error');
-      return;
-    }
+    const finalPrice = Math.max(parseFloat(price) || 0, totalM);
 
     // Verify cooperation shares sum
     if (!hasExistingCoop && isCooperation) {
@@ -661,7 +699,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
           contact_id: selectedContactId,
           project_id: selectedProjectId,
           unit_code: unitCode || '—',
-          price: parseFloat(price),
+          price: finalPrice,
           expected_commission: parseFloat(expectedCommission) || 0,
           currency: currency,
           milestones: milestonesInput,
@@ -1017,12 +1055,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
     }
 
     const totalM = tempMilestones.reduce((acc, m) => acc + (parseFloat(String(m.expected_amount)) || 0), 0);
-    if (totalM > parseFloat(String(selectedDepForManage.price))) {
-      addToast(`Tổng tiền các đợt thanh toán (${totalM.toLocaleString()} VND) không được lớn hơn Tổng doanh thu dự kiến (${parseFloat(String(selectedDepForManage.price)).toLocaleString()} VND)`, 'error');
-      return;
-    }
-
-
+    const syncPrice = Math.max(parseFloat(String(selectedDepForManage.price)) || 0, totalM);
 
     if (isAdmin && tempSharesData && tempSharesData.length > 0) {
       const totalPct = tempSharesData.reduce((sum, s) => sum + (Number(s.percentage) || 0), 0);
@@ -1036,6 +1069,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
       setIsSavingMilestones(true);
       const payload: any = {
         milestones: tempMilestones,
+        price: syncPrice,
         auto_remind: autoRemindManage ? 1 : 0,
         remind_days_before: remindDaysBeforeManage,
         remind_at_hour: remindAtHourManage,
@@ -1798,7 +1832,9 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
             padding: isMobile ? '8px 10px' : '12px',
             borderRadius: '12px',
             border: '1px solid var(--color-border-light)',
-            position: 'relative'
+            position: 'relative',
+            overflow: 'visible',
+            zIndex: 5
           }}>
             <div style={{ position: 'relative', flex: '1', minWidth: 0 }}>
               <input
@@ -1896,6 +1932,22 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
 
                         <div>
                           <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
+                            {t("Tư vấn viên (TVV)")}
+                          </label>
+                          <CustomSelect
+                            options={salesOptions}
+                            value={filterSalesId}
+                            onChange={(val) => { setFilterSalesId(val); setShowMobileFilters(false); }}
+                            searchable={true}
+                            showAvatars={true}
+                            placeholder={t("Tất cả TVV")}
+                            width="100%"
+                            size="xs"
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
                             {t("Trạng thái")}
                           </label>
                           <CustomSelect
@@ -1908,10 +1960,40 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                           />
                         </div>
 
-                        {(filterProjectId || filterStatus) && (
+                        <div>
                           <button
                             type="button"
-                            onClick={() => { setFilterProjectId(''); setFilterStatus(''); setShowMobileFilters(false); }}
+                            onClick={() => { setFilterOverdue(!filterOverdue); setShowMobileFilters(false); }}
+                            style={{
+                              width: '100%',
+                              padding: '8px',
+                              borderRadius: '8px',
+                              border: filterOverdue ? '1px solid #ef4444' : '1px solid var(--color-border)',
+                              background: filterOverdue ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
+                              color: filterOverdue ? '#dc2626' : 'var(--color-text)',
+                              fontSize: '0.8rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '6px'
+                            }}
+                          >
+                            <Clock size={14} />
+                            <span>{t("SO trễ hạn thanh toán")}</span>
+                            {overdueSoCount > 0 && (
+                              <span style={{ background: '#ef4444', color: '#fff', padding: '1px 6px', borderRadius: '10px', fontSize: '0.7rem' }}>
+                                {overdueSoCount}
+                              </span>
+                            )}
+                          </button>
+                        </div>
+
+                        {(filterProjectId || filterStatus || filterSalesId || filterOverdue) && (
+                          <button
+                            type="button"
+                            onClick={() => { setFilterProjectId(''); setFilterStatus(''); setFilterSalesId(''); setFilterOverdue(false); setShowMobileFilters(false); }}
                             style={{
                               marginTop: '2px',
                               padding: '6px',
@@ -1935,8 +2017,8 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
               </div>
             ) : (
               /* Desktop Filters */
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                <div style={{ width: '220px' }}>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ width: '180px' }}>
                   <CustomSelect
                     options={projectOptions}
                     value={filterProjectId}
@@ -1950,6 +2032,19 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
 
                 <div style={{ width: '180px' }}>
                   <CustomSelect
+                    options={salesOptions}
+                    value={filterSalesId}
+                    onChange={(val) => setFilterSalesId(val)}
+                    searchable={true}
+                    showAvatars={true}
+                    placeholder={t("Tất cả TVV")}
+                    width="100%"
+                    size="md"
+                  />
+                </div>
+
+                <div style={{ width: '160px' }}>
+                  <CustomSelect
                     options={statusOptions}
                     value={filterStatus}
                     onChange={(val) => setFilterStatus(val)}
@@ -1958,6 +2053,64 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                     size="md"
                   />
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => setFilterOverdue(!filterOverdue)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    height: '38px',
+                    padding: '0 12px',
+                    borderRadius: '10px',
+                    border: filterOverdue ? '1px solid #ef4444' : '1px solid var(--color-border)',
+                    background: filterOverdue ? 'rgba(239, 68, 68, 0.1)' : 'var(--color-surface)',
+                    color: filterOverdue ? '#dc2626' : 'var(--color-text-muted)',
+                    fontWeight: 700,
+                    fontSize: '0.8125rem',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    whiteSpace: 'nowrap'
+                  }}
+                  title="Lọc danh sách các đơn hàng có đợt thanh toán quá hạn chưa nộp"
+                >
+                  <Clock size={15} color={filterOverdue ? '#dc2626' : 'currentColor'} />
+                  <span>Trễ hạn</span>
+                  {overdueSoCount > 0 && (
+                    <span style={{
+                      background: filterOverdue ? '#dc2626' : 'rgba(239, 68, 68, 0.15)',
+                      color: filterOverdue ? '#ffffff' : '#dc2626',
+                      fontSize: '0.7rem',
+                      padding: '1px 6px',
+                      borderRadius: '9999px',
+                      fontWeight: 800
+                    }}>
+                      {overdueSoCount}
+                    </span>
+                  )}
+                </button>
+
+                {(filterProjectId || filterStatus || filterSalesId || filterOverdue) && (
+                  <button
+                    type="button"
+                    onClick={() => { setFilterProjectId(''); setFilterStatus(''); setFilterSalesId(''); setFilterOverdue(false); }}
+                    style={{
+                      padding: '0 10px',
+                      height: '38px',
+                      borderRadius: '10px',
+                      border: 'none',
+                      background: 'rgba(239, 68, 68, 0.08)',
+                      color: '#ef4444',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                    title="Xóa tất cả bộ lọc"
+                  >
+                    <X size={15} />
+                  </button>
+                )}
               </div>
             )}
           </div>

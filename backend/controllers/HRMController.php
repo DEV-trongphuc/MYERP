@@ -3654,6 +3654,38 @@ class HRMController {
         }
 
         if (!empty($mentions)) {
+            // 1. Automatically append mentioned users into related_user_ids
+            try {
+                $table = ($type === 'advance' || $type === 'hrm_advance') ? 'hrm_advance_requests' : 'hrm_leave_requests';
+                $stmtReq = $this->db->prepare("SELECT related_user_ids FROM `{$table}` WHERE id = ?");
+                $stmtReq->execute([$id]);
+                $reqRow = $stmtReq->fetch(PDO::FETCH_ASSOC);
+                if ($reqRow) {
+                    $curRelated = [];
+                    if (!empty($reqRow['related_user_ids'])) {
+                        $decoded = json_decode($reqRow['related_user_ids'], true);
+                        if (is_array($decoded)) {
+                            $curRelated = array_map('intval', $decoded);
+                        } else {
+                            $curRelated = array_filter(array_map('intval', explode(',', $reqRow['related_user_ids'])));
+                        }
+                    }
+                    $newRelated = $curRelated;
+                    foreach (array_keys($mentions) as $mUid) {
+                        if (!in_array((int)$mUid, $newRelated, true)) {
+                            $newRelated[] = (int)$mUid;
+                        }
+                    }
+                    if ($newRelated !== $curRelated) {
+                        $updateStmt = $this->db->prepare("UPDATE `{$table}` SET related_user_ids = ? WHERE id = ?");
+                        $updateStmt->execute([json_encode(array_values(array_unique($newRelated))), $id]);
+                    }
+                }
+            } catch (Throwable $e) {
+                // Keep resilient
+            }
+
+            // 2. Dispatch notifications
             require_once __DIR__ . '/../NotificationService.php';
             foreach ($mentions as $uid => $userRow) {
                 NotificationService::send($this->db, $auth['tenant_id'], 'MENTION_TAGGED', [
@@ -3664,5 +3696,42 @@ class HRMController {
                 ]);
             }
         }
+    }
+
+    public function updateRelatedUsers(array $auth): void {
+        $b = getBody();
+        $type = trim($b['type'] ?? $b['entity_type'] ?? '');
+        $id = (int)($b['id'] ?? $b['entity_id'] ?? 0);
+        $relatedUserIds = isset($b['related_user_ids']) ? $b['related_user_ids'] : [];
+        if (!$id || !$type) {
+            respond(422, null, 'Thiếu thông tin loại hoặc ID yêu cầu', false);
+        }
+        if (!is_array($relatedUserIds)) {
+            $relatedUserIds = array_filter(array_map('intval', explode(',', (string)$relatedUserIds)));
+        } else {
+            $relatedUserIds = array_values(array_unique(array_filter(array_map('intval', $relatedUserIds))));
+        }
+        $jsonVal = json_encode($relatedUserIds);
+
+        if ($type === 'expense' || $type === 'expenses') {
+            $stmt = $this->db->prepare("UPDATE expenses SET related_user_ids = ? WHERE id = ? AND tenant_id = ?");
+            $stmt->execute([$jsonVal, $id, $auth['tenant_id']]);
+        } elseif ($type === 'leave' || $type === 'hrm_leave') {
+            $stmt = $this->db->prepare("UPDATE hrm_leave_requests SET related_user_ids = ? WHERE id = ?");
+            $stmt->execute([$jsonVal, $id]);
+        } elseif ($type === 'advance' || $type === 'hrm_advance') {
+            $stmt = $this->db->prepare("UPDATE hrm_advance_requests SET related_user_ids = ? WHERE id = ?");
+            $stmt->execute([$jsonVal, $id]);
+        } elseif ($type === 'bulk_attendance' || $type === 'bulk' || $type === 'checkin_bulk') {
+            $stmt = $this->db->prepare("UPDATE attendance_bulk_requests SET related_user_ids = ? WHERE id = ?");
+            $stmt->execute([$jsonVal, $id]);
+        } elseif ($type === 'deposit' || $type === 'deposits') {
+            $stmt = $this->db->prepare("UPDATE deposits SET related_user_ids = ? WHERE id = ?");
+            $stmt->execute([$jsonVal, $id]);
+        } else {
+            respond(400, null, 'Loại quy trình không được hỗ trợ', false);
+        }
+
+        respond(200, ['related_user_ids' => $relatedUserIds], 'Cập nhật danh sách người liên quan thành công');
     }
 }
