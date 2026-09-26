@@ -5,7 +5,7 @@ import api from '../../api/axios';
 import { useAuth } from '../../contexts/AuthContext';
 import { Avatar } from './Avatar';
 import { toast } from 'react-hot-toast';
-import { Bold, Italic, Underline as UnderlineIcon, Link2, ImageIcon, Paperclip, List, ListOrdered, Trash2, Smile, Search, X } from 'lucide-react';
+import { Bold, Italic, Underline as UnderlineIcon, Link2, ImageIcon, Paperclip, List, ListOrdered, Trash2, Smile, Search, X, User as UserIcon, CheckSquare, FileText, Building2, ShoppingCart, Tag, Sparkles, Loader2 } from 'lucide-react';
 import { StickerPickerModal } from './StickerPickerModal';
 
 interface User {
@@ -52,6 +52,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [mentionTrigger, setMentionTrigger] = useState<'@' | '#' | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [dropdownPos, setDropdownPos] = useState<{ top?: number; left: number; bottom?: number; upwards?: boolean } | null>(null);
@@ -61,6 +62,8 @@ export const MentionInput: React.FC<MentionInputProps> = ({
   const [savedRange, setSavedRange] = useState<Range | null>(null);
   const [showStickerModal, setShowStickerModal] = useState(false);
   const [stickerAnchorEl, setStickerAnchorEl] = useState<HTMLElement | null>(null);
+  const [entityResults, setEntityResults] = useState<any[]>([]);
+  const [isLoadingEntities, setIsLoadingEntities] = useState(false);
 
   const editorRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -140,6 +143,25 @@ export const MentionInput: React.FC<MentionInputProps> = ({
     }
   }, [value]);
 
+  // Entity search for '#' mentions
+  useEffect(() => {
+    if (!showDropdown || mentionTrigger !== '#') return;
+    const cleanQ = searchQuery.trim();
+    setIsLoadingEntities(true);
+    const timer = setTimeout(() => {
+      api.get(`/search/global?q=${encodeURIComponent(cleanQ || '')}`).then(res => {
+        const d = res.data?.data || res.data;
+        const list = Array.isArray(d?.results) ? d.results : [];
+        setEntityResults(list);
+      }).catch(() => {
+        setEntityResults([]);
+      }).finally(() => {
+        setIsLoadingEntities(false);
+      });
+    }, 120);
+    return () => clearTimeout(timer);
+  }, [showDropdown, mentionTrigger, searchQuery]);
+
   const checkMentionTrigger = () => {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0 || !editorRef.current) {
@@ -177,13 +199,15 @@ export const MentionInput: React.FC<MentionInputProps> = ({
       const text = node.textContent || '';
       const textBeforeCursor = text.slice(0, offset);
 
-      const match = textBeforeCursor.match(/@([^\s@]*)$/);
+      const match = textBeforeCursor.match(/([@#])([^\s@#]*)$/);
       if (match) {
-        const query = match[1];
+        const triggerChar = match[1] as '@' | '#';
+        const query = match[2];
+        setMentionTrigger(triggerChar);
         setSearchQuery(query.toLowerCase());
         setShowDropdown(true);
 
-        const atIndex = textBeforeCursor.lastIndexOf('@');
+        const atIndex = textBeforeCursor.lastIndexOf(triggerChar);
         mentionRangeRef.current = {
           node,
           startOffset: atIndex,
@@ -191,7 +215,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
         };
 
         try {
-          // Measure the exact position of the '@' character
+          // Measure the exact position of the '@' or '#' character
           const atRange = document.createRange();
           atRange.setStart(node, atIndex);
           atRange.setEnd(node, Math.min(offset, atIndex + 1));
@@ -202,8 +226,8 @@ export const MentionInput: React.FC<MentionInputProps> = ({
           if (useRect) {
             const viewportWidth = window.innerWidth;
             const viewportHeight = window.innerHeight;
-            const dropdownWidth = 280;
-            const dropdownHeight = 240;
+            const dropdownWidth = 320;
+            const dropdownHeight = 260;
 
             const spaceBelow = viewportHeight - useRect.bottom;
             const shouldOpenUpwards = spaceBelow < dropdownHeight && useRect.top > dropdownHeight;
@@ -357,6 +381,100 @@ export const MentionInput: React.FC<MentionInputProps> = ({
     editorRef.current.focus();
   };
 
+  const getEntityBadge = (type: string) => {
+    switch (type) {
+      case 'contact':
+      case 'student':
+        return { label: 'Khách hàng', bg: 'rgba(59, 130, 246, 0.1)', color: '#2563eb', border: 'rgba(59, 130, 246, 0.25)' };
+      case 'task':
+        return { label: 'Công việc', bg: 'rgba(16, 185, 129, 0.1)', color: '#059669', border: 'rgba(16, 185, 129, 0.25)' };
+      case 'approval':
+        return { label: 'Đề xuất', bg: 'rgba(245, 158, 11, 0.1)', color: '#d97706', border: 'rgba(245, 158, 11, 0.25)' };
+      case 'po':
+      case 'po_order':
+        return { label: 'Đơn PO', bg: 'rgba(147, 51, 234, 0.1)', color: '#7c3aed', border: 'rgba(147, 51, 234, 0.25)' };
+      case 'so':
+      case 'so_order':
+        return { label: 'Đơn SO', bg: 'rgba(99, 102, 241, 0.1)', color: '#4f46e5', border: 'rgba(99, 102, 241, 0.25)' };
+      case 'company':
+        return { label: 'Công ty', bg: 'rgba(14, 165, 233, 0.1)', color: '#0284c7', border: 'rgba(14, 165, 233, 0.25)' };
+      case 'deal':
+        return { label: 'Cơ hội', bg: 'rgba(236, 72, 153, 0.1)', color: '#db2777', border: 'rgba(236, 72, 153, 0.25)' };
+      default:
+        return { label: 'Liên kết', bg: 'rgba(100, 116, 139, 0.1)', color: '#475569', border: 'rgba(100, 116, 139, 0.25)' };
+    }
+  };
+
+  const handleSelectEntity = (entity: any) => {
+    if (!mentionRangeRef.current || !editorRef.current) return;
+    const { node, startOffset, endOffset } = mentionRangeRef.current;
+    const title = entity.label || entity.title || entity.name || entity.code || `#${entity.id}`;
+    const badge = getEntityBadge(entity.type);
+
+    const span = document.createElement('span');
+    span.className = 'entity-mention';
+    span.setAttribute('data-entity-type', entity.type || 'item');
+    span.setAttribute('data-entity-id', String(entity.id));
+    if (entity.approval_type) {
+      span.setAttribute('data-approval-type', entity.approval_type);
+    }
+    span.setAttribute('data-entity-title', title);
+    span.contentEditable = 'false';
+    span.style.color = badge.color;
+    span.style.background = badge.bg;
+    span.style.border = `1px solid ${badge.border}`;
+    span.style.padding = '2px 8px';
+    span.style.borderRadius = '9999px';
+    span.style.fontWeight = '600';
+    span.style.fontSize = '0.85em';
+    span.style.margin = '0 2px';
+    span.style.display = 'inline-flex';
+    span.style.alignItems = 'center';
+    span.style.gap = '4px';
+    span.style.verticalAlign = 'middle';
+    span.style.userSelect = 'none';
+    span.style.lineHeight = '1.2';
+    span.style.maxHeight = '24px';
+    span.style.cursor = 'pointer';
+
+    const textNode = document.createElement('span');
+    textNode.textContent = `#${title}`;
+    span.appendChild(textNode);
+
+    const spaceNode = document.createTextNode('\u00A0');
+
+    const range = document.createRange();
+    try {
+      range.setStart(node, startOffset);
+      range.setEnd(node, endOffset);
+      range.deleteContents();
+      
+      range.insertNode(spaceNode);
+      range.insertNode(span);
+      
+      range.setStartAfter(spaceNode);
+      range.collapse(true);
+      
+      const sel = window.getSelection();
+      if (sel) {
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+    } catch (err) {
+      console.error(err);
+      editorRef.current.appendChild(span);
+      editorRef.current.appendChild(spaceNode);
+    }
+
+    const html = editorRef.current.innerHTML;
+    onChange({ target: { value: html } } as any);
+    checkEmpty();
+
+    setShowDropdown(false);
+    mentionRangeRef.current = null;
+    editorRef.current.focus();
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       if (onSubmitShortcut) {
@@ -369,21 +487,30 @@ export const MentionInput: React.FC<MentionInputProps> = ({
       onKeyDown(e);
       if (e.defaultPrevented) return;
     }
-    if (showDropdown && filteredUsers.length > 0) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setSelectedIndex(prev => (prev + 1) % filteredUsers.length);
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setSelectedIndex(prev => (prev - 1 + filteredUsers.length) % filteredUsers.length);
-      } else if (e.key === 'Enter' || e.key === 'Tab') {
-        e.preventDefault();
-        if (filteredUsers[selectedIndex]) {
-          handleSelectUser(filteredUsers[selectedIndex]);
+    if (showDropdown) {
+      const activeListLength = mentionTrigger === '#' ? entityResults.length : filteredUsers.length;
+      if (activeListLength > 0) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setSelectedIndex(prev => (prev + 1) % activeListLength);
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setSelectedIndex(prev => (prev - 1 + activeListLength) % activeListLength);
+        } else if (e.key === 'Enter' || e.key === 'Tab') {
+          e.preventDefault();
+          if (mentionTrigger === '#') {
+            if (entityResults[selectedIndex]) {
+              handleSelectEntity(entityResults[selectedIndex]);
+            }
+          } else {
+            if (filteredUsers[selectedIndex]) {
+              handleSelectUser(filteredUsers[selectedIndex]);
+            }
+          }
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          setShowDropdown(false);
         }
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        setShowDropdown(false);
       }
     }
   };
@@ -1003,7 +1130,11 @@ export const MentionInput: React.FC<MentionInputProps> = ({
                 }}
                 onClick={e => e.stopPropagation()}
               >
-                <Search size={13} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+                {mentionTrigger === '#' ? (
+                  <Tag size={13} style={{ color: 'var(--color-primary, #3b82f6)', flexShrink: 0 }} />
+                ) : (
+                  <Search size={13} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+                )}
                 <input
                   type="text"
                   value={searchQuery}
@@ -1011,23 +1142,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
                     setSearchQuery(e.target.value);
                     setSelectedIndex(0);
                   }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'ArrowDown') {
-                      e.preventDefault();
-                      setSelectedIndex(prev => (prev + 1) % (filteredUsers.length || 1));
-                    } else if (e.key === 'ArrowUp') {
-                      e.preventDefault();
-                      setSelectedIndex(prev => (prev - 1 + (filteredUsers.length || 1)) % (filteredUsers.length || 1));
-                    } else if (e.key === 'Enter') {
-                      e.preventDefault();
-                      if (filteredUsers[selectedIndex]) {
-                        handleSelectUser(filteredUsers[selectedIndex]);
-                      }
-                    } else if (e.key === 'Escape') {
-                      setShowDropdown(false);
-                    }
-                  }}
-                  placeholder="Tìm theo tên hoặc email..."
+                  placeholder={mentionTrigger === '#' ? "Tìm mã đơn, đề xuất, việc, khách..." : "Tìm theo tên hoặc email..."}
                   style={{
                     border: 'none',
                     outline: 'none',
@@ -1065,52 +1180,125 @@ export const MentionInput: React.FC<MentionInputProps> = ({
               </div>
 
               <div style={{ flex: 1, overflowY: 'auto', maxHeight: '220px' }}>
-                {filteredUsers.length === 0 ? (
-                  <div style={{ padding: '16px', fontSize: '0.8rem', color: 'var(--color-text-muted)', textAlign: 'center' }}>
-                    Không tìm thấy kết quả
-                  </div>
-                ) : (
-                  filteredUsers.map((u, idx) => {
-                    const fullName = u.full_name || 'Không tên';
-                    const roleName = u.role || 'user';
-                    return (
-                      <div
-                        key={u.id}
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          handleSelectUser(u);
-                        }}
-                        onClick={() => handleSelectUser(u)}
-                        style={{
-                          padding: '8px 12px',
-                          cursor: 'pointer',
-                          borderBottom: '1px solid var(--color-border-light, #f1f5f9)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '10px',
-                          color: 'var(--color-text, #1e293b)',
-                          background: idx === selectedIndex ? 'var(--color-bg, #f1f5f9)' : 'transparent',
-                          transition: 'background 0.1s ease'
-                        }}
-                        onMouseEnter={() => setSelectedIndex(idx)}
-                      >
-                        <Avatar name={fullName} src={u.avatar_url || u.avatar} size={24} />
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: '0.82rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {fullName}
+                {mentionTrigger === '#' ? (
+                  isLoadingEntities ? (
+                    <div style={{ padding: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                      <Loader2 size={16} className="animate-spin text-primary" />
+                      <span>Đang tìm kiếm dữ liệu...</span>
+                    </div>
+                  ) : entityResults.length === 0 ? (
+                    <div style={{ padding: '16px', fontSize: '0.8rem', color: 'var(--color-text-muted)', textAlign: 'center' }}>
+                      Không tìm thấy liên kết phù hợp
+                    </div>
+                  ) : (
+                    entityResults.map((item, idx) => {
+                      const badge = getEntityBadge(item.type);
+                      return (
+                        <div
+                          key={`${item.type}-${item.id}-${idx}`}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            handleSelectEntity(item);
+                          }}
+                          onClick={() => handleSelectEntity(item)}
+                          style={{
+                            padding: '8px 12px',
+                            cursor: 'pointer',
+                            borderBottom: '1px solid var(--color-border-light, #f1f5f9)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px',
+                            color: 'var(--color-text, #1e293b)',
+                            background: idx === selectedIndex ? 'var(--color-bg, #f1f5f9)' : 'transparent',
+                            transition: 'background 0.1s ease'
+                          }}
+                          onMouseEnter={() => setSelectedIndex(idx)}
+                        >
+                          <div style={{
+                            width: '28px',
+                            height: '28px',
+                            borderRadius: '8px',
+                            background: badge.bg,
+                            color: badge.color,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0
+                          }}>
+                            {item.type === 'task' && <CheckSquare size={15} />}
+                            {item.type === 'approval' && <FileText size={15} />}
+                            {(item.type === 'contact' || item.type === 'student') && <UserIcon size={15} />}
+                            {(item.type === 'po' || item.type === 'po_order') && <ShoppingCart size={15} />}
+                            {(item.type === 'so' || item.type === 'so_order') && <ShoppingCart size={15} />}
+                            {item.type === 'company' && <Building2 size={15} />}
+                            {item.type === 'deal' && <Tag size={15} />}
+                            {!['task', 'approval', 'contact', 'student', 'po', 'po_order', 'so', 'so_order', 'company', 'deal'].includes(item.type) && <Sparkles size={15} />}
                           </div>
-                          {((u as any).email || (u as any).username) && (
-                            <div style={{ fontSize: '0.675rem', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '1px' }}>
-                              {(u as any).email || `@${(u as any).username}`}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: '0.82rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {item.label || item.title || item.name}
                             </div>
-                          )}
+                            {item.sublabel && (
+                              <div style={{ fontSize: '0.675rem', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '1px' }}>
+                                {item.sublabel}
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '0.65rem', color: badge.color, background: badge.bg, border: `1px solid ${badge.border}`, padding: '2px 6px', borderRadius: '4px', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                            {badge.label}
+                          </div>
                         </div>
-                        <div style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', background: 'var(--color-bg-light, #f1f5f9)', padding: '2px 6px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
-                          {getRoleLabel(roleName)}
+                      );
+                    })
+                  )
+                ) : (
+                  filteredUsers.length === 0 ? (
+                    <div style={{ padding: '16px', fontSize: '0.8rem', color: 'var(--color-text-muted)', textAlign: 'center' }}>
+                      Không tìm thấy kết quả
+                    </div>
+                  ) : (
+                    filteredUsers.map((u, idx) => {
+                      const fullName = u.full_name || 'Không tên';
+                      const roleName = u.role || 'user';
+                      return (
+                        <div
+                          key={u.id}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            handleSelectUser(u);
+                          }}
+                          onClick={() => handleSelectUser(u)}
+                          style={{
+                            padding: '8px 12px',
+                            cursor: 'pointer',
+                            borderBottom: '1px solid var(--color-border-light, #f1f5f9)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px',
+                            color: 'var(--color-text, #1e293b)',
+                            background: idx === selectedIndex ? 'var(--color-bg, #f1f5f9)' : 'transparent',
+                            transition: 'background 0.1s ease'
+                          }}
+                          onMouseEnter={() => setSelectedIndex(idx)}
+                        >
+                          <Avatar name={fullName} src={u.avatar_url || u.avatar} size={24} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: '0.82rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {fullName}
+                            </div>
+                            {((u as any).email || (u as any).username) && (
+                              <div style={{ fontSize: '0.675rem', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '1px' }}>
+                                {(u as any).email || `@${(u as any).username}`}
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', background: 'var(--color-bg-light, #f1f5f9)', padding: '2px 6px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
+                            {getRoleLabel(roleName)}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })
+                      );
+                    })
+                  )
                 )}
               </div>
             </motion.div>

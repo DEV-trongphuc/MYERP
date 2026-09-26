@@ -78,7 +78,35 @@ export const GlobalEntityDrawers: React.FC = () => {
     window.addEventListener('open-global-task', handleOpenTask);
     window.addEventListener('open-task-drawer', handleOpenTask);
 
+    // Global click listener for .entity-mention and .mention
+    const handleGlobalEntityClick = (e: MouseEvent) => {
+      const target = (e.target as HTMLElement)?.closest?.('.entity-mention, [data-entity-type]') as HTMLElement | null;
+      if (!target) return;
+      const type = target.getAttribute('data-entity-type');
+      const id = target.getAttribute('data-entity-id');
+      const approvalType = target.getAttribute('data-approval-type') || 'expense';
+      if (!type || !id) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (type === 'contact' || type === 'customer') {
+        openCustomerDrawer(Number(id), 'info');
+      } else if (type === 'task') {
+        openTaskDrawer(Number(id));
+      } else if (type === 'approval') {
+        window.location.href = `/approvals?open_id=${id}&open_type=${approvalType}`;
+      } else if (type === 'company') {
+        window.dispatchEvent(new CustomEvent('open-company-drawer', { detail: { id: Number(id) } }));
+      } else if (type === 'deal') {
+        window.dispatchEvent(new CustomEvent('open-deal-drawer', { detail: { id: Number(id) } }));
+      }
+    };
+
+    document.addEventListener('click', handleGlobalEntityClick);
+
     return () => {
+      document.removeEventListener('click', handleGlobalEntityClick);
       window.removeEventListener('open-global-customer', handleOpenCustomer);
       window.removeEventListener('open-customer-drawer', handleOpenCustomer);
       window.removeEventListener('open-global-task', handleOpenTask);

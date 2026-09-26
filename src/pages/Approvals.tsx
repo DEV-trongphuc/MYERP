@@ -5630,215 +5630,290 @@ export default function Approvals() {
                 return (
                   <div
                     key={`${item.type}-${item.id}`}
-                    onClick={() => {
-                      if (item.is_draft || item.status === 'draft') {
-                        const d = draftsList.find(x => x.id === item.draft_id || String(x.id) === String(item.id));
-                        if (d) { handleResumeDraft(d); return; }
-                      }
-                      setSelectedTimelineItem(item);
-                    }}
                     style={{
-                      background: 'var(--color-surface)',
+                      position: 'relative',
                       borderRadius: '14px',
-                      border: '1px solid var(--color-border-light)',
-                      padding: '12px 14px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '10px',
-                      cursor: 'pointer',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-                      WebkitTextSizeAdjust: '100%'
+                      overflow: 'hidden',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
                     }}
                   >
-                    {/* Header: Icon + Creator name + Status Badge */}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                        <div style={{
-                          width: '30px', height: '30px', borderRadius: '8px',
-                          background: 'var(--color-bg-secondary)', display: 'flex',
-                          alignItems: 'center', justifyContent: 'center', flexShrink: 0
-                        }}>
-                          {getTypeIcon(item.type)}
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
-                          <Avatar src={avatarUrl} name={item.employee_name || user?.name} size={22} />
-                          <span style={{ fontSize: '0.8125rem', fontWeight: 650, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {item.employee_name || user?.name}
-                          </span>
-                        </div>
-                      </div>
-                      <div style={{ flexShrink: 0 }}>
-                        {formatBadge(item.status || 'pending', item)}
-                      </div>
-                    </div>
-
-                    {/* Title & Description with explicit font sizes */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                      <div style={{
-                        fontSize: '0.875rem',
-                        fontWeight: 700,
-                        color: 'var(--color-text)',
-                        lineHeight: 1.35,
-                        WebkitTextSizeAdjust: '100%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        flexWrap: 'wrap',
-                        gap: '6px'
-                      }}>
-                        <span style={{
-                          display: 'inline-flex',
+                    {/* Background swipe action reveal indicators */}
+                    {isPendingAction && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          borderRadius: '14px',
+                          display: 'flex',
                           alignItems: 'center',
-                          padding: '1px 6px',
-                          borderRadius: '5px',
-                          background: 'var(--color-bg-secondary, #f1f5f9)',
-                          border: '1px solid var(--color-border)',
-                          fontSize: '0.72rem',
-                          fontWeight: 700,
-                          color: 'var(--color-text-muted)',
-                          lineHeight: '1.2'
-                        }}>
-                          #{item.id}
-                        </span>
-                        <span>{getApprovalDisplayTitle(item)}</span>
+                          justifyContent: 'space-between',
+                          padding: '0 16px',
+                          background: 'linear-gradient(90deg, rgba(16, 185, 129, 0.15) 0%, rgba(241, 245, 249, 0.5) 50%, rgba(239, 68, 68, 0.15) 100%)',
+                          border: '1px solid var(--color-border-light)',
+                          pointerEvents: 'none',
+                          zIndex: 1
+                        }}
+                      >
+                        {/* Left reveal: Swipe Right -> Duyệt */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#10b981', fontWeight: 750, fontSize: '0.82rem' }}>
+                          <CheckCircle2 size={18} />
+                          <span>Duyệt nhanh</span>
+                        </div>
+                        {/* Right reveal: Swipe Left -> Từ chối */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#ef4444', fontWeight: 750, fontSize: '0.82rem' }}>
+                          <span>Từ chối</span>
+                          <XCircle size={18} />
+                        </div>
                       </div>
-                      {item.description && (
+                    )}
+
+                    <motion.div
+                      drag={isPendingAction ? "x" : false}
+                      dragConstraints={{ left: 0, right: 0 }}
+                      dragElastic={0.45}
+                      onDragEnd={(_, info) => {
+                        if (!isPendingAction) return;
+                        if (info.offset.x > 80) {
+                          handleApprove(item);
+                        } else if (info.offset.x < -80) {
+                          openRejectModal(item);
+                        }
+                      }}
+                      onClick={() => {
+                        if (item.is_draft || item.status === 'draft') {
+                          const d = draftsList.find(x => x.id === item.draft_id || String(x.id) === String(item.id));
+                          if (d) { handleResumeDraft(d); return; }
+                        }
+                        setSelectedTimelineItem(item);
+                      }}
+                      style={{
+                        background: 'var(--color-surface)',
+                        borderRadius: '14px',
+                        border: '1px solid var(--color-border-light)',
+                        padding: '12px 14px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px',
+                        cursor: 'pointer',
+                        WebkitTextSizeAdjust: '100%',
+                        position: 'relative',
+                        zIndex: 2,
+                        touchAction: isPendingAction ? 'pan-y' : 'auto'
+                      }}
+                    >
+                      {/* Swipe gesture hint badge for actionable cards */}
+                      {isPendingAction && (
                         <div style={{
-                          fontSize: '0.75rem',
-                          color: 'var(--color-text-muted)',
-                          lineHeight: 1.4,
-                          overflow: 'hidden',
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical',
-                          WebkitTextSizeAdjust: '100%'
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          fontSize: '0.675rem',
+                          background: 'rgba(59, 130, 246, 0.06)',
+                          color: 'var(--color-primary, #3b82f6)',
+                          border: '1px dashed rgba(59, 130, 246, 0.25)',
+                          borderRadius: '8px',
+                          padding: '3px 8px',
+                          margin: '-2px 0 2px 0',
+                          userSelect: 'none'
                         }}>
-                          {item.description}
+                          <span style={{ color: '#059669', fontWeight: 600 }}>👉 Vuốt Phải: Duyệt</span>
+                          <span style={{ color: '#dc2626', fontWeight: 600 }}>Vuốt Trái: Từ chối 👈</span>
                         </div>
                       )}
-                    </div>
 
-                    {/* Steps & Watchers in mobile card */}
-                    <div style={{ paddingTop: '4px' }}>
-                      {renderWorkflowStepsAndWatchers(item)}
-                    </div>
-
-                    {/* Footer: Date, Approver, and Actions */}
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      paddingTop: '8px',
-                      borderTop: '1px solid var(--color-border-light)',
-                      fontSize: '0.72rem',
-                      color: 'var(--color-text-muted)',
-                      gap: '8px',
-                      flexWrap: 'wrap'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                        <span>{new Date(item.created_at).toLocaleDateString('vi-VN')} {new Date(item.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
-                        <span>•</span>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          {renderCurrentApprover(item)}
-                        </span>
+                      {/* Header: Icon + Creator name + Status Badge */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                          <div style={{
+                            width: '30px', height: '30px', borderRadius: '8px',
+                            background: 'var(--color-bg-secondary)', display: 'flex',
+                            alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                          }}>
+                            {getTypeIcon(item.type)}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                            <Avatar src={avatarUrl} name={item.employee_name || user?.name} size={22} />
+                            <span style={{ fontSize: '0.8125rem', fontWeight: 650, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {item.employee_name || user?.name}
+                            </span>
+                          </div>
+                        </div>
+                        <div style={{ flexShrink: 0 }}>
+                          {formatBadge(item.status || 'pending', item)}
+                        </div>
                       </div>
 
-                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }} onClick={e => e.stopPropagation()}>
-                        {isPendingAction ? (
-                          <>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedItem(item);
-                                setRejectModalOpen(true);
-                              }}
-                              style={{
-                                display: 'flex', alignItems: 'center', gap: '3px',
-                                background: '#ef4444', color: 'white', border: 'none',
-                                borderRadius: '6px', padding: '4px 8px', fontSize: '0.72rem',
-                                fontWeight: 700, cursor: 'pointer'
-                              }}
-                            >
-                              <XCircle size={12} />
-                              {t('Từ chối')}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setItemToApprove(item);
-                                setApproveConfirmOpen(true);
-                              }}
-                              style={{
-                                display: 'flex', alignItems: 'center', gap: '3px',
-                                background: '#10b981', color: 'white', border: 'none',
-                                borderRadius: '6px', padding: '4px 8px', fontSize: '0.72rem',
-                                fontWeight: 700, cursor: 'pointer'
-                              }}
-                            >
-                              <CheckCircle2 size={12} />
-                              {t('Duyệt')}
-                            </button>
-                          </>
-                        ) : activeTab === 'my_requests' || item.is_draft ? (
-                          <>
-                            {item.is_draft ? (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    const d = draftsList.find(x => x.id === item.draft_id);
-                                    if (d) handleResumeDraft(d);
-                                  }}
-                                  className="btn primary"
-                                  style={{ height: '26px', padding: '0 8px', display: 'flex', alignItems: 'center', gap: '4px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 600 }}
-                                  title={t('Tiếp tục')}
-                                >
-                                  <Edit3 size={11} />
-                                  <span>{t('Tiếp tục')}</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (item.draft_id) handleDeleteDraft(item.draft_id);
-                                  }}
-                                  className="btn secondary"
-                                  style={{ height: '26px', width: '26px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-danger)' }}
-                                  title={t('Xóa')}
-                                >
-                                  <Trash2 size={12} />
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                {Number(user?.id) === Number(item.created_by || item.user_id) && ['pending', 'pending_approval', 'pending_manager', 'pending_hr'].includes(item.status) && (
+                      {/* Title & Description with explicit font sizes */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                        <div style={{
+                          fontSize: '0.875rem',
+                          fontWeight: 700,
+                          color: 'var(--color-text)',
+                          lineHeight: 1.35,
+                          WebkitTextSizeAdjust: '100%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          flexWrap: 'wrap',
+                          gap: '6px'
+                        }}>
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            padding: '1px 6px',
+                            borderRadius: '5px',
+                            background: 'var(--color-bg-secondary, #f1f5f9)',
+                            border: '1px solid var(--color-border)',
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            color: 'var(--color-text-muted)',
+                            lineHeight: '1.2'
+                          }}>
+                            #{item.id}
+                          </span>
+                          <span>{getApprovalDisplayTitle(item)}</span>
+                        </div>
+                        {item.description && (
+                          <div style={{
+                            fontSize: '0.75rem',
+                            color: 'var(--color-text-muted)',
+                            lineHeight: 1.4,
+                            overflow: 'hidden',
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            WebkitTextSizeAdjust: '100%'
+                          }}>
+                            {item.description}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Steps & Watchers in mobile card */}
+                      <div style={{ paddingTop: '4px' }}>
+                        {renderWorkflowStepsAndWatchers(item)}
+                      </div>
+
+                      {/* Footer: Date, Approver, and Actions */}
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        paddingTop: '8px',
+                        borderTop: '1px solid var(--color-border-light)',
+                        fontSize: '0.72rem',
+                        color: 'var(--color-text-muted)',
+                        gap: '8px',
+                        flexWrap: 'wrap'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          <span>{new Date(item.created_at).toLocaleDateString('vi-VN')} {new Date(item.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                          <span>•</span>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            {renderCurrentApprover(item)}
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }} onClick={e => e.stopPropagation()}>
+                          {isPendingAction ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedItem(item);
+                                  setRejectModalOpen(true);
+                                }}
+                                style={{
+                                  display: 'flex', alignItems: 'center', gap: '3px',
+                                  background: '#ef4444', color: 'white', border: 'none',
+                                  borderRadius: '6px', padding: '4px 8px', fontSize: '0.72rem',
+                                  fontWeight: 700, cursor: 'pointer'
+                                }}
+                              >
+                                <XCircle size={12} />
+                                {t('Từ chối')}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setItemToApprove(item);
+                                  setApproveConfirmOpen(true);
+                                }}
+                                style={{
+                                  display: 'flex', alignItems: 'center', gap: '3px',
+                                  background: '#10b981', color: 'white', border: 'none',
+                                  borderRadius: '6px', padding: '4px 8px', fontSize: '0.72rem',
+                                  fontWeight: 700, cursor: 'pointer'
+                                }}
+                              >
+                                <CheckCircle2 size={12} />
+                                {t('Duyệt')}
+                              </button>
+                            </>
+                          ) : activeTab === 'my_requests' || item.is_draft ? (
+                            <>
+                              {item.is_draft ? (
+                                <>
                                   <button
-                                    onClick={() => handleEditRequest(item)}
-                                    className="btn secondary"
-                                    style={{ height: '26px', width: '26px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-primary)' }}
-                                    title={t('Sửa')}
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const d = draftsList.find(x => x.id === item.draft_id);
+                                      if (d) handleResumeDraft(d);
+                                    }}
+                                    className="btn primary"
+                                    style={{ height: '26px', padding: '0 8px', display: 'flex', alignItems: 'center', gap: '4px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 600 }}
+                                    title={t('Tiếp tục')}
                                   >
-                                    <Edit size={12} />
+                                    <Edit3 size={11} />
+                                    <span>{t('Tiếp tục')}</span>
                                   </button>
-                                )}
-                                {item.status !== 'approved' && item.status !== 'completed' && (
                                   <button
-                                    onClick={() => handleDeleteRequest(item)}
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (item.draft_id) handleDeleteDraft(item.draft_id);
+                                    }}
                                     className="btn secondary"
                                     style={{ height: '26px', width: '26px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-danger)' }}
                                     title={t('Xóa')}
                                   >
                                     <Trash2 size={12} />
                                   </button>
-                                )}
-                              </>
-                            )}
-                          </>
-                        ) : null}
+                                </>
+                              ) : (
+                                <>
+                                  {Number(user?.id) === Number(item.created_by || item.user_id) && ['pending', 'pending_approval', 'pending_manager', 'pending_hr'].includes(item.status) && (
+                                    <button
+                                      onClick={() => handleEditRequest(item)}
+                                      className="btn secondary"
+                                      style={{ height: '26px', width: '26px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-primary)' }}
+                                      title={t('Sửa')}
+                                    >
+                                      <Edit size={12} />
+                                    </button>
+                                  )}
+                                  {item.status !== 'approved' && item.status !== 'completed' && (
+                                    <button
+                                      onClick={() => handleDeleteRequest(item)}
+                                      className="btn secondary"
+                                      style={{ height: '26px', width: '26px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-danger)' }}
+                                      title={t('Xóa')}
+                                    >
+                                      <Trash2 size={12} />
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                            </>
+                          ) : null}
+                        </div>
                       </div>
-                    </div>
+                    </motion.div>
                   </div>
                 );
               })}

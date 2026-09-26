@@ -366,6 +366,63 @@ class SearchController {
             error_log('SearchController Company error: ' . $e->getMessage());
         }
 
+        // 5. 📦 Orders (Purchase Orders PO & Sales Orders SO)
+        try {
+            // PO
+            $poWhere = "(po.po_number LIKE ? OR po.notes LIKE ? OR s.name LIKE ?)";
+            $pPo = [$tid, $like, $like, $like];
+            if ($searchId > 0) {
+                $poWhere = "(po.id = ? OR $poWhere)";
+                array_splice($pPo, 1, 0, [$searchId]);
+            }
+            $sqlPo = "SELECT po.id, po.po_number, po.notes, po.total, po.status, s.name as supplier_name, 'po' as type 
+                      FROM purchase_orders po 
+                      LEFT JOIN suppliers s ON po.supplier_id = s.id 
+                      WHERE po.tenant_id = ? AND $poWhere 
+                      ORDER BY (po.id = " . (int)$searchId . ") DESC, po.id DESC LIMIT 4";
+            $stmtPo = $this->db->prepare($sqlPo);
+            $stmtPo->execute($pPo);
+            foreach ($stmtPo->fetchAll(PDO::FETCH_ASSOC) as $po) {
+                $item = [
+                    'id' => (int)$po['id'],
+                    'label' => ($po['po_number'] ?: ('Đơn PO #' . $po['id'])) . ($po['supplier_name'] ? ' - ' . $po['supplier_name'] : ''),
+                    'sublabel' => 'Đơn mua hàng PO • ' . number_format((float)($po['total'] ?? 0), 0, ',', '.') . 'đ • ' . ($po['status'] ?? 'pending'),
+                    'type' => 'po',
+                    'raw' => $po
+                ];
+                $grouped['orders'][] = $item;
+                $allResults[] = $item;
+            }
+
+            // SO
+            $soWhere = "(so.so_number LIKE ? OR so.notes LIKE ? OR c.full_name LIKE ?)";
+            $pSo = [$tid, $like, $like, $like];
+            if ($searchId > 0) {
+                $soWhere = "(so.id = ? OR $soWhere)";
+                array_splice($pSo, 1, 0, [$searchId]);
+            }
+            $sqlSo = "SELECT so.id, so.so_number, so.notes, so.total, so.status, c.full_name as customer_name, 'so' as type 
+                      FROM sales_orders so 
+                      LEFT JOIN contacts c ON so.contact_id = c.id 
+                      WHERE so.tenant_id = ? AND $soWhere 
+                      ORDER BY (so.id = " . (int)$searchId . ") DESC, so.id DESC LIMIT 4";
+            $stmtSo = $this->db->prepare($sqlSo);
+            $stmtSo->execute($pSo);
+            foreach ($stmtSo->fetchAll(PDO::FETCH_ASSOC) as $so) {
+                $item = [
+                    'id' => (int)$so['id'],
+                    'label' => ($so['so_number'] ?: ('Đơn SO #' . $so['id'])) . ($so['customer_name'] ? ' - ' . $so['customer_name'] : ''),
+                    'sublabel' => 'Đơn bán hàng SO • ' . number_format((float)($so['total'] ?? 0), 0, ',', '.') . 'đ • ' . ($so['status'] ?? 'draft'),
+                    'type' => 'so',
+                    'raw' => $so
+                ];
+                $grouped['orders'][] = $item;
+                $allResults[] = $item;
+            }
+        } catch (Throwable $e) {
+            error_log('SearchController Orders error: ' . $e->getMessage());
+        }
+
         respond(200, [
             'results' => $allResults,
             'grouped' => $grouped,
