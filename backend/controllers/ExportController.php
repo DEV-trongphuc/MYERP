@@ -17,9 +17,12 @@ class ExportController {
             respond(400, null, 'Loại dữ liệu xuất không hợp lệ', false);
         }
 
+        $segmentForFile = strtolower(trim((string)($_GET['segment'] ?? '')));
+        $filenamePrefix = ($type === 'contact' && $segmentForFile === 'customer') ? 'danh_sach_hoc_vien' : ($type === 'contact' ? 'danh_sach_lien_he' : 'export_' . $type);
+
         // Prepare response headers for CSV download
         header('Content-Type: text/csv; charset=UTF-8');
-        header('Content-Disposition: attachment; filename="export_' . $type . '_' . date('Ymd_His') . '.csv"');
+        header('Content-Disposition: attachment; filename="' . $filenamePrefix . '_' . date('Ymd_His') . '.csv"');
         header('Cache-Control: no-cache, no-store, must-revalidate');
         header('Pragma: no-cache');
         header('Expires: 0');
@@ -41,7 +44,10 @@ class ExportController {
         $params = [];
 
         if ($type === 'contact') {
-            $exportMode = strtolower(trim((string)($_GET['export_mode'] ?? ($_GET['mode'] ?? 'filtered'))));
+            $exportMode    = strtolower(trim((string)($_GET['export_mode'] ?? ($_GET['mode'] ?? 'filtered'))));
+            $segment       = strtolower(trim((string)($_GET['segment'] ?? 'all')));
+            $studentSubTab = strtolower(trim((string)($_GET['student_sub_tab'] ?? '')));
+
             if ($exportMode === 'full') {
                 $baseColumns = [
                     'id' => 'ID', 
@@ -50,6 +56,30 @@ class ExportController {
                     'mobile' => 'Di động', 
                     'phone2' => 'Số điện thoại 2', 
                     'email' => 'Email', 
+                    'program' => 'Tên chương trình',
+                    'admission_date' => 'Ngày nhập học',
+                    'closed_date' => 'Ngày chốt',
+                    'student_code' => 'Mã học viên',
+                    'study_status' => 'Trạng thái học tập',
+                    'major' => 'Ngành / Khóa học',
+                    'stage_name' => 'Giai đoạn Pipeline',
+                    'lead_status' => 'Trạng thái Lead', 
+                    'status' => 'Trạng thái hệ thống', 
+                    'owner_name' => 'Sale phụ trách', 
+                    'collaborator_names' => 'Sale hỗ trợ / Đồng chăm sóc',
+                    'source' => 'Nguồn khách hàng', 
+                    'round_name' => 'Nguồn phân bổ (Đợt data)',
+                    'report_status' => 'Trạng thái Ticket lỗi / Bù',
+                    'open_deal_value' => 'Giá trị Deal đang mở',
+                    'expected_revenue' => 'Doanh thu kỳ vọng', 
+                    'budget' => 'Ngân sách',
+                    'win_probability' => 'Xác suất thành công (%)', 
+                    'lead_score' => 'Điểm tiềm năng (Score)', 
+                    'customer_type' => 'Loại khách hàng', 
+                    'temperature' => 'Nhiệt độ (Nóng/Ấm/Lạnh)', 
+                    'tags' => 'Phân loại (Tags)',
+                    'project_name' => 'Dự án quan tâm', 
+                    'campaign_name' => 'Chiến dịch', 
                     'gender' => 'Giới tính', 
                     'birthday' => 'Ngày sinh', 
                     'id_card' => 'CMND/CCCD', 
@@ -60,51 +90,74 @@ class ExportController {
                     'district' => 'Quận/Huyện', 
                     'city' => 'Tỉnh/Thành phố', 
                     'country' => 'Quốc gia', 
+                    'company_name' => 'Công ty', 
                     'job_title' => 'Chức danh', 
                     'department' => 'Phòng ban', 
-                    'company_name' => 'Công ty', 
-                    'owner_name' => 'Người phụ trách', 
-                    'source' => 'Nguồn', 
-                    'status' => 'Trạng thái', 
-                    'stage_name' => 'Giai đoạn Pipeline',
-                    'lead_status' => 'Trạng thái Lead', 
-                    'lead_score' => 'Điểm tiềm năng (Score)', 
-                    'customer_type' => 'Loại khách hàng', 
-                    'temperature' => 'Nhiệt độ (Nóng/Ấm/Lạnh)', 
-                    'expected_revenue' => 'Doanh thu kỳ vọng', 
-                    'win_probability' => 'Xác suất thành công (%)', 
-                    'student_code' => 'Mã học viên', 
-                    'admission_date' => 'Ngày nhập học', 
-                    'study_status' => 'Trạng thái học tập', 
-                    'major' => 'Ngành / Khóa học', 
-                    'project_name' => 'Dự án quan tâm', 
-                    'campaign_name' => 'Chiến dịch', 
-                    'tags' => 'Phân loại (Tags)',
+                    'last_interaction' => 'Tương tác gần nhất',
+                    'last_contact' => 'Thời gian tương tác cuối',
                     'notes' => 'Ghi chú', 
-                    'last_contact' => 'Tương tác gần nhất',
                     'created_at' => 'Ngày tạo',
                     'updated_at' => 'Cập nhật lần cuối'
+                ];
+            } elseif ($segment === 'customer') {
+                $baseColumns = [
+                    'id' => 'ID', 
+                    'full_name' => 'Họ và tên', 
+                    'phone' => 'Số điện thoại', 
+                    'email' => 'Email', 
+                    'program' => 'Tên chương trình', 
+                    'admission_date' => 'Ngày nhập học', 
+                    'closed_date' => 'Ngày chốt', 
+                    'student_code' => 'Mã học viên', 
+                    'stage_name' => 'Trạng thái / Giai đoạn', 
+                    'study_status' => 'Tình trạng học tập', 
+                    'owner_name' => 'Sale phụ trách', 
+                    'collaborator_names' => 'Sale hỗ trợ', 
+                    'source' => 'Nguồn khách hàng', 
+                    'round_name' => 'Nguồn phân bổ', 
+                    'tags' => 'Phân loại (Tags)', 
+                    'open_deal_value' => 'Doanh thu / Giá trị Deal', 
+                    'major' => 'Ngành học', 
+                    'company_name' => 'Công ty / Đơn vị', 
+                    'job_title' => 'Chức danh', 
+                    'address' => 'Địa chỉ', 
+                    'city' => 'Tỉnh/Thành phố', 
+                    'last_interaction' => 'Tương tác gần nhất', 
+                    'last_contact' => 'Thời gian tương tác cuối', 
+                    'notes' => 'Ghi chú', 
+                    'created_at' => 'Ngày tạo'
                 ];
             } else {
                 $baseColumns = [
                     'id' => 'ID', 
-                    'full_name' => 'Họ tên', 
-                    'email' => 'Email', 
+                    'full_name' => 'Họ và tên', 
                     'phone' => 'Số điện thoại', 
                     'mobile' => 'Di động', 
-                    'job_title' => 'Chức danh', 
-                    'department' => 'Phòng ban', 
-                    'source' => 'Nguồn', 
-                    'status' => 'Trạng thái', 
-                    'stage_name' => 'Giai đoạn',
-                    'company_name' => 'Công ty', 
-                    'owner_name' => 'Người phụ trách', 
-                    'tags' => 'Phân loại (Tags)',
-                    'notes' => 'Ghi chú', 
+                    'email' => 'Email', 
+                    'program' => 'Tên chương trình', 
+                    'admission_date' => 'Ngày nhập học', 
+                    'stage_name' => 'Giai đoạn Pipeline', 
+                    'lead_status' => 'Trạng thái Lead', 
+                    'owner_name' => 'Sale phụ trách', 
+                    'collaborator_names' => 'Sale hỗ trợ', 
+                    'source' => 'Nguồn khách hàng', 
+                    'round_name' => 'Nguồn phân bổ (Đợt data)', 
+                    'report_status' => 'Trạng thái Ticket lỗi / Bù', 
+                    'tags' => 'Phân loại (Tags)', 
+                    'closed_date' => 'Ngày chốt', 
+                    'student_code' => 'Mã học viên', 
+                    'study_status' => 'Trạng thái học tập', 
                     'customer_type' => 'Loại khách hàng', 
                     'temperature' => 'Nhiệt độ (Nóng/Ấm/Lạnh)', 
+                    'open_deal_value' => 'Giá trị Deal đang mở', 
                     'project_name' => 'Dự án quan tâm', 
-                    'last_contact' => 'Tương tác gần nhất',
+                    'campaign_name' => 'Chiến dịch', 
+                    'company_name' => 'Công ty', 
+                    'job_title' => 'Chức danh', 
+                    'city' => 'Tỉnh/Thành phố', 
+                    'last_interaction' => 'Tương tác gần nhất', 
+                    'last_contact' => 'Thời gian tương tác cuối', 
+                    'notes' => 'Ghi chú', 
                     'created_at' => 'Ngày tạo'
                 ];
             }
@@ -251,6 +304,19 @@ class ExportController {
                 }
             }
 
+            $multiProgram = !empty($_GET['multi_program']) && in_array(strtolower((string)$_GET['multi_program']), ['1', 'true', 'yes', '2'], true);
+            if ($multiProgram) {
+                $where[] = "(
+                    (t.person_id > 0 AND t.person_id IN (SELECT person_id FROM contacts WHERE tenant_id = ? AND deleted_at IS NULL AND person_id > 0 GROUP BY person_id HAVING COUNT(*) > 1))
+                    OR (t.duplicate_with_id > 0)
+                    OR (t.id IN (SELECT duplicate_with_id FROM contacts WHERE tenant_id = ? AND deleted_at IS NULL AND duplicate_with_id > 0))
+                    OR (t.phone != '' AND t.phone IS NOT NULL AND t.phone IN (SELECT phone FROM contacts WHERE tenant_id = ? AND deleted_at IS NULL AND phone != '' AND phone IS NOT NULL GROUP BY phone HAVING COUNT(*) > 1))
+                )";
+                $params[] = $auth['tenant_id'];
+                $params[] = $auth['tenant_id'];
+                $params[] = $auth['tenant_id'];
+            }
+
             if ($dataType === 'error_ticket') {
                 $where[] = "EXISTS (
                     SELECT 1 FROM distribution_logs dl2 
@@ -265,14 +331,58 @@ class ExportController {
                            co.name as company_name, 
                            u.full_name as owner_name, 
                            p.name as project_name,
-                           ps.name as stage_name,
-                           camp.name as campaign_name
+                           COALESCE(ps.name, ps_fb.name) as stage_name,
+                           camp.name as campaign_name,
+                           CASE 
+                               WHEN t.pipeline_status IN ('enrolled', 'hoc_vien') OR t.status = 'customer' THEN
+                                   COALESCE(
+                                       t.admission_date,
+                                       (
+                                           SELECT MIN(al.created_at)
+                                           FROM audit_logs al
+                                           WHERE al.resource = 'contact'
+                                             AND al.resource_id = t.id
+                                             AND al.action = 'MOVE_STAGE'
+                                             AND (al.new_data LIKE '%enrolled%' OR al.new_data LIKE '%hoc_vien%')
+                                       ),
+                                       (
+                                           SELECT MIN(dm.created_at)
+                                           FROM deposit_milestones dm
+                                           JOIN deposits dep ON dm.deposit_id = dep.id
+                                           WHERE dep.contact_id = t.id
+                                       ),
+                                       t.created_at
+                                   )
+                               ELSE t.created_at
+                           END as closed_date,
+                           r.round_name as round_name,
+                           dr.status as report_status,
+                           (
+                               SELECT COALESCE(SUM(d.value), 0) 
+                               FROM deals d 
+                               WHERE d.contact_id = t.id AND d.deleted_at IS NULL
+                           ) as open_deal_value,
+                           COALESCE(
+                               (SELECT n.body FROM notes n WHERE n.tenant_id = t.tenant_id AND n.entity_type = 'contact' AND n.entity_id = t.id ORDER BY n.id DESC LIMIT 1),
+                               (SELECT COALESCE(a.body, a.subject) FROM activities a WHERE a.tenant_id = t.tenant_id AND a.related_type = 'contact' AND a.related_id = t.id AND a.deleted_at IS NULL ORDER BY a.id DESC LIMIT 1)
+                           ) as last_interaction
                     FROM contacts t 
                     LEFT JOIN companies co ON t.company_id = co.id 
                     LEFT JOIN users u ON t.owner_id = u.id 
                     LEFT JOIN projects p ON t.project_id = p.id
                     LEFT JOIN pipeline_stages ps ON t.stage_id = ps.id
+                    LEFT JOIN pipeline_stages ps_fb ON (t.stage_id IS NULL AND ps_fb.system_slug = t.pipeline_status)
                     LEFT JOIN campaigns camp ON t.campaign_id = camp.id
+                    LEFT JOIN leads l ON l.id = COALESCE(
+                        (SELECT MAX(id) FROM leads WHERE t.person_id IS NOT NULL AND person_id = t.person_id),
+                        (SELECT MAX(id) FROM leads WHERE t.phone IS NOT NULL AND phone = t.phone)
+                    )
+                    LEFT JOIN distribution_logs dl ON dl.id = COALESCE(
+                        (SELECT MAX(id) FROM distribution_logs WHERE lead_id = l.id AND status IN ('assigned', 'compensation', 'rule_6_month', 'pending_work_hours', 'fallback', 'success', 'reminder')),
+                        (SELECT MAX(id) FROM distribution_logs WHERE contact_id = t.id)
+                    )
+                    LEFT JOIN rounds r ON dl.round_id = r.id
+                    LEFT JOIN distribution_reports dr ON (dr.contact_id = t.id OR (l.id IS NOT NULL AND dr.lead_id = l.id))
                     WHERE $whereStr ORDER BY t.created_at DESC";
         } elseif ($type === 'company') {
             $baseColumns = ['id' => 'ID', 'name' => 'Tên công ty', 'tax_id' => 'Mã số thuế', 'industry' => 'Ngành nghề', 'email' => 'Email', 'phone' => 'Số điện thoại', 'website' => 'Website', 'address' => 'Địa chỉ', 'city' => 'Tỉnh/Thành phố', 'size' => 'Quy mô', 'status' => 'Trạng thái', 'owner_name' => 'Người phụ trách', 'created_at' => 'Ngày tạo'];
@@ -424,6 +534,13 @@ class ExportController {
             'prospect' => 'Tiềm năng'
         ];
 
+        $userMap = [];
+        if ($type === 'contact') {
+            $userStmt = $this->db->prepare("SELECT id, full_name FROM users WHERE tenant_id = ?");
+            $userStmt->execute([$auth['tenant_id']]);
+            $userMap = $userStmt->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
+        }
+
         while (true) {
             $batchSql = $sql . " LIMIT $batchSize OFFSET $offset";
             $stmt = $this->db->prepare($batchSql);
@@ -487,12 +604,180 @@ class ExportController {
 
             // Write Rows to Output Stream
             foreach ($records as $record) {
+                if ($type === 'contact') {
+                    // 1. Program resolution
+                    $prog = trim((string)($record['program'] ?? ''));
+                    if ($prog === '' && !empty($record['tags'])) {
+                        $rawTags = is_array($record['tags']) ? $record['tags'] : (json_decode($record['tags'], true) ?: explode(',', (string)$record['tags']));
+                        if (is_array($rawTags)) {
+                            foreach ($rawTags as $t) {
+                                $lt = mb_strtolower((string)$t);
+                                if (strpos($lt, 'mba') !== false || strpos($lt, 'bba') !== false || strpos($lt, 'dba') !== false || strpos($lt, 'msc') !== false || strpos($lt, 'umef') !== false || strpos($lt, 'emba') !== false) {
+                                    $prog = preg_replace('/^\d+\.\s*(status\s*-\s*)?/i', '', (string)$t);
+                                    $prog = trim($prog);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if ($prog === '' && !empty($record['major'])) {
+                        $prog = trim((string)$record['major']);
+                    }
+                    if ($prog === '' && !empty($record['project_name'])) {
+                        $prog = trim((string)$record['project_name']);
+                    }
+                    $record['program'] = $prog;
+
+                    // 2. Admission Date
+                    if (!empty($record['admission_date'])) {
+                        $ts = strtotime($record['admission_date']);
+                        if ($ts) $record['admission_date'] = date('d/m/Y', $ts);
+                    }
+
+                    // 3. Closed Date
+                    if (!empty($record['closed_date'])) {
+                        $ts = strtotime($record['closed_date']);
+                        if ($ts) $record['closed_date'] = date('Y-m-d H:i:s', $ts);
+                    }
+
+                    // 4. Student Code / ID
+                    $record['student_code'] = !empty($record['student_code']) ? $record['student_code'] : ($record['student_id'] ?? '');
+
+                    // 5. Phone 2 / Mobile
+                    $record['phone2'] = !empty($record['phone2']) ? $record['phone2'] : ($record['mobile'] ?? '');
+
+                    // 6. ID Card / CCCD
+                    $record['id_card'] = !empty($record['id_card']) ? $record['id_card'] : (!empty($record['citizen_id']) ? $record['citizen_id'] : ($record['passport'] ?? ''));
+
+                    // 7. Birthday
+                    $bday = !empty($record['birthday']) ? $record['birthday'] : ($record['dob'] ?? '');
+                    if (!empty($bday)) {
+                        $ts = strtotime($bday);
+                        $record['birthday'] = $ts ? date('d/m/Y', $ts) : $bday;
+                    } else {
+                        $record['birthday'] = '';
+                    }
+
+                    // 8. Company name fallback
+                    if (empty($record['company_name']) && !empty($record['company'])) {
+                        $record['company_name'] = $record['company'];
+                    }
+
+                    // 9. Collaborator names
+                    $collabNames = [];
+                    if (!empty($record['collaborator_ids'])) {
+                        $cIds = explode(',', (string)$record['collaborator_ids']);
+                        foreach ($cIds as $cid) {
+                            $cid = trim($cid);
+                            if (isset($userMap[$cid])) {
+                                $collabNames[] = $userMap[$cid];
+                            }
+                        }
+                    }
+                    $record['collaborator_names'] = implode(', ', $collabNames);
+
+                    // 10. Last interaction text clean
+                    if (!empty($record['last_interaction'])) {
+                        $cleanText = preg_replace('/\s*\n?\(?Giai đoạn:.*$/si', '', $record['last_interaction']);
+                        $cleanText = preg_replace('/\s*\|\s*Lý do lost:.*$/si', '', $cleanText);
+                        $cleanText = preg_replace('/\s*\|\s*Độ nóng:.*$/si', '', $cleanText);
+                        $cleanText = strip_tags($cleanText);
+                        $record['last_interaction'] = trim(preg_replace('/\s+/', ' ', $cleanText));
+                    }
+
+                    // 11. Last contact date
+                    if (!empty($record['last_contact'])) {
+                        $ts = strtotime($record['last_contact']);
+                        if ($ts) $record['last_contact'] = date('d/m/Y H:i', $ts);
+                    }
+
+                    // 12. Friendly labels for lead_status
+                    $leadStatusMap = [
+                        'active' => 'Đang chăm sóc',
+                        'nurture' => 'Nuôi dưỡng (Nurture)',
+                        'lost' => 'Thất bại (Lost)'
+                    ];
+                    if (!empty($record['lead_status']) && isset($leadStatusMap[$record['lead_status']])) {
+                        $record['lead_status'] = $leadStatusMap[$record['lead_status']];
+                    }
+
+                    // 13. Friendly source
+                    $sourceMap = [
+                        'facebook' => 'Facebook Ads',
+                        'fb' => 'Facebook Ads',
+                        'zalo' => 'Zalo',
+                        'website' => 'Website',
+                        'hotline' => 'Hotline',
+                        'gioi_thieu' => 'Giới thiệu',
+                        'ref' => 'Giới thiệu',
+                        'referral' => 'Giới thiệu',
+                        'ca_nhan' => 'Cá nhân tự khai thác',
+                        'databank' => 'Data Bank',
+                        'event' => 'Sự kiện / Hội thảo',
+                        'direct' => 'Trực tiếp',
+                        'other' => 'Khác'
+                    ];
+                    if (!empty($record['source']) && isset($sourceMap[$record['source']])) {
+                        $record['source'] = $sourceMap[$record['source']];
+                    }
+
+                    // 14. Friendly report_status
+                    $reportStatusMap = [
+                        'pending' => 'Chờ duyệt bù',
+                        'approved' => 'Đã duyệt bù',
+                        'approved_no_comp' => 'Lỗi không bù',
+                        'rejected' => 'Từ chối bù'
+                    ];
+                    if (!empty($record['report_status']) && isset($reportStatusMap[$record['report_status']])) {
+                        $record['report_status'] = $reportStatusMap[$record['report_status']];
+                    }
+
+                    // 15. Friendly gender
+                    if (!empty($record['gender'])) {
+                        $g = mb_strtolower(trim($record['gender']));
+                        if ($g === 'male' || $g === 'nam') $record['gender'] = 'Nam';
+                        elseif ($g === 'female' || $g === 'nu' || $g === 'nữ') $record['gender'] = 'Nữ';
+                        elseif ($g === 'other' || $g === 'khac' || $g === 'khác') $record['gender'] = 'Khác';
+                    }
+
+                    // 16. Friendly study_status
+                    $studyStatusMap = [
+                        'studying' => 'Đang học',
+                        'graduated' => 'Đã tốt nghiệp',
+                        'deferred' => 'Bảo lưu',
+                        'dropped' => 'Thôi học',
+                        'enrolled' => 'Mới nhập học'
+                    ];
+                    if (!empty($record['study_status']) && isset($studyStatusMap[$record['study_status']])) {
+                        $record['study_status'] = $studyStatusMap[$record['study_status']];
+                    }
+
+                    // 17. Formatted deal / revenue numbers
+                    if (isset($record['open_deal_value']) && is_numeric($record['open_deal_value'])) {
+                        $val = (float)$record['open_deal_value'];
+                        $record['open_deal_value'] = $val > 0 ? number_format($val, 0, ',', '.') . ' đ' : '0 đ';
+                    }
+                    if (isset($record['expected_revenue']) && is_numeric($record['expected_revenue'])) {
+                        $val = (float)$record['expected_revenue'];
+                        $record['expected_revenue'] = $val > 0 ? number_format($val, 0, ',', '.') . ' đ' : '';
+                    }
+                    if (isset($record['budget']) && is_numeric($record['budget'])) {
+                        $val = (float)$record['budget'];
+                        $record['budget'] = $val > 0 ? number_format($val, 0, ',', '.') . ' đ' : '';
+                    }
+
+                    // 18. Stage name fallback
+                    if (empty($record['stage_name']) && !empty($record['pipeline_status'])) {
+                        $record['stage_name'] = $record['pipeline_status'];
+                    }
+                }
+
                 $row = [];
                 // Map base columns
                 foreach (array_keys($baseColumns) as $colKey) {
                     $val = $record[$colKey] ?? '';
                     if ($colKey === 'tags' && !empty($val)) {
-                        $decodedTags = json_decode($val, true);
+                        $decodedTags = is_array($val) ? $val : json_decode($val, true);
                         if (is_array($decodedTags)) {
                             $val = implode(', ', $decodedTags);
                         }

@@ -1425,17 +1425,16 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   const bulkExport = async (mode: 'filtered' | 'full' = 'filtered') => {
     if (isExporting) return;
     setIsExporting(true);
+    const isStudent = segment === 'customer';
     const params: Record<string, any> = {
       type: 'contact',
       export_mode: mode,
+      segment: segment || 'all',
+      ...(isStudent && studentSubTab ? { student_sub_tab: studentSubTab } : {})
     };
 
     if (mode === 'filtered') {
       params.search = debouncedSearch;
-      params.segment = segment;
-      if (segment === 'customer') {
-        params.student_sub_tab = studentSubTab;
-      }
       if (activeFilters.status) {
         if (/^\d+$/.test(activeFilters.status)) {
           params.stage_id = activeFilters.status;
@@ -1484,14 +1483,29 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       }
     }
 
-    addToast(mode === 'full' ? 'Đang xuất toàn bộ dữ liệu (100% trường)...' : 'Đang xuất dữ liệu theo bộ lọc đang xem...', 'info');
+    const filenamePrefix = isStudent 
+      ? (studentSubTab === 'chinh_thuc' ? 'danh_sach_hoc_vien_chinh_thuc' : studentSubTab === 'le_phi' ? 'danh_sach_le_phi_ho_so' : studentSubTab === 'nop_ho_so' ? 'danh_sach_nop_ho_so' : 'danh_sach_hoc_vien')
+      : 'danh_sach_lien_he';
+    const defaultFilename = mode === 'full' ? `${filenamePrefix}_tat_ca_truong_${Date.now()}.csv` : `${filenamePrefix}_${Date.now()}.csv`;
+
+    addToast(
+      mode === 'full' 
+        ? `Đang xuất toàn bộ dữ liệu ${isStudent ? 'học viên' : 'liên hệ'} (đầy đủ 100% trường)...` 
+        : `Đang xuất dữ liệu ${isStudent ? 'học viên' : 'liên hệ'} theo bộ lọc đang xem...`, 
+      'info'
+    );
     try {
       await downloadExportFile({
         endpoint: '/export',
         params,
-        defaultFilename: mode === 'full' ? `export_all_contacts_${Date.now()}.csv` : `export_contacts_${Date.now()}.csv`,
+        defaultFilename,
         onSuccess: () => {
-          addToast(mode === 'full' ? 'Tải xuống toàn bộ dữ liệu liên hệ thành công!' : 'Tải xuống danh sách liên hệ theo bộ lọc thành công!', 'success');
+          addToast(
+            mode === 'full' 
+              ? `Tải xuống toàn bộ dữ liệu ${isStudent ? 'học viên' : 'liên hệ'} thành công!` 
+              : `Tải xuống danh sách ${isStudent ? 'học viên' : 'liên hệ'} theo bộ lọc thành công!`, 
+            'success'
+          );
         },
       });
     } catch (err: any) {
