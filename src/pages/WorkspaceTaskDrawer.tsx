@@ -17,7 +17,9 @@ import { CustomSelect } from '../components/ui/CustomSelect';
 import { MentionInput } from '../components/ui/MentionInput';
 import { Avatar } from '../components/ui/Avatar';
 import styles from './EntityDrawer.module.css';
-import { Skeleton, StatRowSkeleton } from '../components/ui/Skeleton';
+import { Skeleton, StatRowSkeleton, DrawerSkeleton } from '../components/ui/Skeleton';
+import { showUndoToast } from '../components/ui/UndoToast';
+import { useAutoSaveDraft } from '../hooks/useAutoSaveDraft';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getUserDisplayRoleOrTitle } from '../utils/roleUtils';
@@ -334,6 +336,14 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   const [uploadingFile, setUploadingFile] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
+
+  // Auto-save draft for comment
+  const { clearDraft: clearCommentDraft, DraftRecoveryBanner: CommentDraftRecoveryBanner } = useAutoSaveDraft<string>({
+    key: `task_comment_${task?.id || 'new'}`,
+    data: newCommentText,
+    enabled: isOpen && Boolean(task?.id),
+    isDataEmpty: (d) => !d || !d.trim()
+  });
 
   // Subtask comments state
   const [selectedSubtask, setSelectedSubtask] = useState<any | null>(null);
@@ -2199,6 +2209,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       setNewCommentText('');
       setCommentAttachments([]);
       setReplyTo(null);
+      clearCommentDraft();
 
       const res = await api.post(`/activities/${task.id}/comments`, {
         content: commentText,
@@ -4943,6 +4954,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                           </button>
                         </div>
                       )}
+                      <CommentDraftRecoveryBanner onRestore={(val) => setNewCommentText(val)} />
                       <div style={{ position: 'relative' }}>
                         <MentionInput
                           value={newCommentText}
@@ -5625,11 +5637,21 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                           });
 
                           if (hasImage) {
+                            const prevStatus = formData.status || 'open';
+                            const prevProgress = formData.progress || 0;
                             await api.put(`/activities/${task.id}`, { status: 'done', progress: 100 });
                             setFormData((prev: any) => ({ ...prev, status: 'done', progress: 100 }));
                             triggerLocalConfetti();
                             onUpdate();
-                            toast.success(t('Đã cập nhật trạng thái lịch hẹn thành công'));
+                            showUndoToast({
+                              message: t('Đã cập nhật trạng thái lịch hẹn thành công'),
+                              subMessage: t('Bấm để hoàn tác nếu bạn thao tác nhầm'),
+                              onUndo: async () => {
+                                await api.put(`/activities/${task.id}`, { status: prevStatus, progress: prevProgress });
+                                setFormData((prev: any) => ({ ...prev, status: prevStatus, progress: prevProgress }));
+                                onUpdate();
+                              }
+                            });
                           } else {
                             setMeetingToComplete(task);
                             setProofCommentText('Ảnh minh chứng hoàn thành gặp gỡ');
@@ -7936,13 +7958,23 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                           await api.post(`/activities/${meetingToComplete.id}/comments`, payload);
 
                           // Complete activity
+                          const prevStatus = formData.status || 'open';
+                          const prevProgress = formData.progress || 0;
                           await api.put(`/activities/${meetingToComplete.id}`, { status: 'done', progress: 100 });
                           triggerLocalConfetti();
 
-                          toast.success(t('Đã tải ảnh minh chứng và hoàn thành gặp gỡ'));
                           setFormData((prev: any) => ({ ...prev, status: 'done', progress: 100 }));
                           onUpdate();
                           setMeetingToComplete(null);
+                          showUndoToast({
+                            message: t('Đã tải ảnh minh chứng và hoàn thành gặp gỡ'),
+                            subMessage: t('Bấm để hoàn tác nếu bạn thao tác nhầm'),
+                            onUndo: async () => {
+                              await api.put(`/activities/${task.id}`, { status: prevStatus, progress: prevProgress });
+                              setFormData((prev: any) => ({ ...prev, status: prevStatus, progress: prevProgress }));
+                              onUpdate();
+                            }
+                          });
                         } catch (e: any) {
                           toast.error(e.response?.data?.message || 'Có lỗi xảy ra khi lưu minh chứng');
                         } finally {

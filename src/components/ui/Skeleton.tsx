@@ -197,3 +197,91 @@ export const ChartSkeleton = ({ height = 300 }: { height?: number }) => {
     </div>
   );
 };
+
+// ─── Drawer skeleton (for Customer / Task / Expense Drawers) ─────────────────
+export const DrawerSkeleton = () => (
+  <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '20px', gap: '20px', background: 'var(--color-surface)' }}>
+    {/* Drawer Header */}
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--color-border)', paddingBottom: '16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <Skeleton width={44} height={44} borderRadius="50%" />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <Skeleton width={180} height={18} />
+          <Skeleton width={110} height={12} />
+        </div>
+      </div>
+      <Skeleton width={70} height={28} borderRadius={6} />
+    </div>
+
+    {/* Navigation Tabs */}
+    <div style={{ display: 'flex', gap: '12px', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '8px' }}>
+      <Skeleton width={80} height={24} borderRadius={6} />
+      <Skeleton width={90} height={24} borderRadius={6} />
+      <Skeleton width={75} height={24} borderRadius={6} />
+      <Skeleton width={100} height={24} borderRadius={6} />
+    </div>
+
+    {/* Form / Content Grid */}
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <Skeleton width={90} height={12} />
+        <Skeleton width="100%" height={38} borderRadius={8} />
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <Skeleton width={110} height={12} />
+        <Skeleton width="100%" height={38} borderRadius={8} />
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <Skeleton width={80} height={12} />
+        <Skeleton width="100%" height={38} borderRadius={8} />
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <Skeleton width={100} height={12} />
+        <Skeleton width="100%" height={38} borderRadius={8} />
+      </div>
+    </div>
+
+    {/* Large description area */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+      <Skeleton width={130} height={14} />
+      <Skeleton width="100%" height={120} borderRadius={10} />
+    </div>
+
+    {/* Activity Feed / Timeline items */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '10px' }}>
+      <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+        <Skeleton width={32} height={32} borderRadius="50%" />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <Skeleton width="60%" height={12} />
+          <Skeleton width="40%" height={10} />
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+        <Skeleton width={32} height={32} borderRadius="50%" />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <Skeleton width="50%" height={12} />
+          <Skeleton width="30%" height={10} />
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+// ─── Timeline skeleton ───────────────────────────────────────────────────────
+export const TimelineSkeleton = ({ count = 4 }: { count?: number }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '12px 0' }}>
+    {Array.from({ length: count }).map((_, i) => (
+      <div key={i} style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
+        <Skeleton width={34} height={34} borderRadius="50%" />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', background: 'var(--color-bg-secondary, rgba(0,0,0,0.02))', padding: '12px', borderRadius: '10px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Skeleton width={130} height={14} />
+            <Skeleton width={70} height={10} />
+          </div>
+          <Skeleton width="90%" height={12} />
+          <Skeleton width="65%" height={12} />
+        </div>
+      </div>
+    ))}
+  </div>
+);

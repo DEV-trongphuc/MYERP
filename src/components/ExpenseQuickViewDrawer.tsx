@@ -15,6 +15,7 @@ import { getVietQrUrl } from '../utils/vietnamBanks';
 import { AttachmentLightboxModal, type AttachmentItem } from './ui/AttachmentLightboxModal';
 import { CustomSelect } from './ui/CustomSelect';
 import { formatWaitDuration } from '../pages/Approvals';
+import { DrawerSkeleton } from './ui/Skeleton';
 
 const FMT = (n: number, currency: string = 'VND') => {
   const rawCurr = (currency || 'VND').toUpperCase().trim();
@@ -798,7 +799,61 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
     return () => window.removeEventListener('keydown', handleEscape);
   }, [expenseId, isClosing]);
 
-  if (!expenseId || !viewItem) return null;
+  if (!expenseId) return null;
+
+  if (!viewItem) {
+    return createPortal(
+      <AnimatePresence>
+        {!isClosing && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 2000000000, display: 'flex', justifyContent: 'flex-end' }}>
+            <motion.div
+              className="drawer-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              onClick={handleClose}
+              style={{
+                position: 'fixed',
+                inset: 0,
+                zIndex: 2000000005,
+                background: 'rgba(0, 0, 0, 0.45)',
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
+                willChange: 'opacity',
+                transform: 'translate3d(0, 0, 0)'
+              }}
+            />
+            <motion.div
+              initial={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
+              animate={{ y: 0, x: 0, opacity: 1 }}
+              exit={isMobile ? { y: '60%', opacity: 0 } : { opacity: 0, x: '60%' }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] as any }}
+              onClick={e => e.stopPropagation()}
+              style={{
+                position: 'fixed',
+                top: 0,
+                bottom: 0,
+                left: isMobile ? 0 : 'var(--sidebar-width, 220px)',
+                right: 0,
+                width: isMobile ? '100vw' : 'auto',
+                height: isMobile ? '100dvh' : '100vh',
+                backgroundColor: 'var(--color-surface)',
+                boxShadow: isMobile ? 'none' : '-10px 0 30px rgba(0, 0, 0, 0.15)',
+                display: 'flex',
+                flexDirection: 'column',
+                zIndex: 2000000010,
+                overflow: 'hidden'
+              }}
+            >
+              <DrawerSkeleton />
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>,
+      document.body
+    );
+  }
 
   return createPortal(
     <AnimatePresence>
