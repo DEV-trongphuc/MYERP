@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 292;
+$targetVersion = 293;
 $currentVersion = 186;
 
 // Query current DB version
@@ -3777,10 +3777,41 @@ try {
         }
     }
 
-    // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '292') ON DUPLICATE KEY UPDATE setting_value = '292'");
+    // ==========================================
+    // VERSION 293: CHECK_INS APPROVAL FIELDS & COLUMNS
+    // ==========================================
+    if ($currentVersion < 293 || $isForce) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 293: Bổ sung các trường duyệt check_ins và tối ưu hóa...", "info");
+        try {
+            $safeAddCol = function($tableName, $colName, $colDef) use ($conn, $logMsg) {
+                try {
+                    $tableCheck = $conn->query("SHOW TABLES LIKE '{$tableName}'");
+                    if (!$tableCheck || $tableCheck->num_rows === 0) return;
+                    
+                    $colCheck = $conn->query("SHOW COLUMNS FROM `{$tableName}` LIKE '{$colName}'");
+                    if ($colCheck && $colCheck->num_rows > 0) return;
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 292", "success");
+                    $conn->query("ALTER TABLE `{$tableName}` ADD COLUMN `{$colName}` {$colDef}");
+                    $logMsg("Đã bổ sung cột `{$colName}` trên bảng `{$tableName}`", "success");
+                } catch (Throwable $e) {
+                    // Ignore if duplicate
+                }
+            };
+
+            $safeAddCol('check_ins', 'approved_by', 'INT(11) NULL DEFAULT NULL');
+            $safeAddCol('check_ins', 'approved_at', 'DATETIME NULL DEFAULT NULL');
+            $safeAddCol('check_ins', 'manager_id', 'INT(11) NULL DEFAULT NULL');
+
+            $logMsg("Nâng cấp lên phiên bản 293 hoàn tất: Cấu trúc check_ins đã đồng bộ thành công!", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi nâng cấp v293: " . $e->getMessage(), "error");
+        }
+    }
+
+    // Update DB version in system_settings
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '293') ON DUPLICATE KEY UPDATE setting_value = '293'");
+
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 293", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");

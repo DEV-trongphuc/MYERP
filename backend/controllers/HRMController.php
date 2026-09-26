@@ -2387,12 +2387,9 @@ class HRMController {
         // 4. Pending Checkins (Loại trừ check-in của chính mình)
         if (in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'hr'], true) || !empty($managedUserIds)) {
             $sqlCheck = "SELECT c.id, u.full_name as employee_name, c.check_in_date, c.check_in_time, c.late_minutes, c.reason, c.status, 
-                                c.approved_by, c.manager_id, u_app.full_name as approved_by_name, u_mgr.full_name as manager_name,
                                 CONCAT(c.check_in_date, ' ', c.check_in_time) as created_at
                          FROM check_ins c
                          JOIN users u ON c.user_id = u.id
-                         LEFT JOIN users u_app ON c.approved_by = u_app.id
-                         LEFT JOIN users u_mgr ON c.manager_id = u_mgr.id
                          WHERE u.tenant_id = ? AND c.status = 'pending_approval' AND c.user_id != ?";
             $pCheck = [$auth['tenant_id'], $userId];
             if (!in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'hr'], true)) {
@@ -2414,9 +2411,6 @@ class HRMController {
                     'id' => (int)$c['id'],
                     'type' => 'checkin',
                     'employee_name' => $c['employee_name'],
-                    'approved_by' => $c['approved_by'] ? (int)$c['approved_by'] : null,
-                    'approved_by_name' => $c['approved_by_name'] ?? null,
-                    'manager_name' => $c['manager_name'] ?? null,
                     'title' => $title,
                     'description' => $desc,
                     'created_at' => $c['created_at']
@@ -2709,12 +2703,9 @@ class HRMController {
         // 4. My Checkins (Chỉ lấy khi là đơn đề xuất chờ duyệt hoặc có lý do giải trình thực sự từ nhân viên)
         $stmtCheckins = $this->db->prepare("
             SELECT c.id, c.check_in_date, c.check_in_time, c.late_minutes, c.reason, c.status, 
-                   c.approved_by, c.manager_id, u_app.full_name as approved_by_name, u_mgr.full_name as manager_name,
                    CONCAT(c.check_in_date, ' ', c.check_in_time) as created_at, c.user_id, u.full_name as employee_name
             FROM check_ins c
             JOIN users u ON c.user_id = u.id
-            LEFT JOIN users u_app ON c.approved_by = u_app.id
-            LEFT JOIN users u_mgr ON c.manager_id = u_mgr.id
             WHERE c.user_id = ? AND (c.status = 'pending_approval' OR (c.reason IS NOT NULL AND TRIM(c.reason) != '' AND c.reason NOT LIKE 'Duyệt%' AND c.reason NOT LIKE 'Tự động%'))
             ORDER BY c.id DESC
             LIMIT 100
@@ -2732,9 +2723,6 @@ class HRMController {
                 'type' => 'checkin',
                 'employee_name' => $c['employee_name'],
                 'user_id' => (int)$c['user_id'],
-                'approved_by' => $c['approved_by'] ? (int)$c['approved_by'] : null,
-                'approved_by_name' => $c['approved_by_name'] ?? null,
-                'manager_name' => $c['manager_name'] ?? null,
                 'title' => $title,
                 'description' => $desc,
                 'status' => $c['status'],
@@ -3374,20 +3362,17 @@ class HRMController {
         if ($isHrAdmin) {
             $stmtCheckins = $this->db->prepare("
                 SELECT c.id, c.check_in_date, c.check_in_time, c.late_minutes, c.reason, c.status, 
-                       c.approved_by, c.manager_id, u_app.full_name as approved_by_name, u_mgr.full_name as manager_name,
                        CONCAT(c.check_in_date, ' ', c.check_in_time) as created_at, c.user_id, u.full_name as employee_name
                 FROM check_ins c
                 JOIN users u ON c.user_id = u.id
-                LEFT JOIN users u_app ON c.approved_by = u_app.id
-                LEFT JOIN users u_mgr ON c.manager_id = u_mgr.id
                 WHERE u.tenant_id = ? AND $condCheckin
                 ORDER BY c.id DESC
                 LIMIT 500
             ");
             $stmtCheckins->execute([$auth['tenant_id']]);
         } else {
-            $conds = ["c.user_id = ?", "c.manager_id = ?", "c.approved_by = ?"];
-            $pC = [$auth['tenant_id'], $userId, $userId, $userId];
+            $conds = ["c.user_id = ?"];
+            $pC = [$auth['tenant_id'], $userId];
             if (!empty($managedUserIds)) {
                 $mPh = implode(',', array_fill(0, count($managedUserIds), '?'));
                 $conds[] = "c.user_id IN ($mPh)";
@@ -3395,12 +3380,9 @@ class HRMController {
             }
             $sqlC = "
                 SELECT c.id, c.check_in_date, c.check_in_time, c.late_minutes, c.reason, c.status, 
-                       c.approved_by, c.manager_id, u_app.full_name as approved_by_name, u_mgr.full_name as manager_name,
                        CONCAT(c.check_in_date, ' ', c.check_in_time) as created_at, c.user_id, u.full_name as employee_name
                 FROM check_ins c
                 JOIN users u ON c.user_id = u.id
-                LEFT JOIN users u_app ON c.approved_by = u_app.id
-                LEFT JOIN users u_mgr ON c.manager_id = u_mgr.id
                 WHERE u.tenant_id = ? AND $condCheckin AND (" . implode(' OR ', $conds) . ")
                 ORDER BY c.id DESC LIMIT 500";
             $stmtCheckins = $this->db->prepare($sqlC);
@@ -3418,9 +3400,6 @@ class HRMController {
                 'type' => 'checkin',
                 'employee_name' => $c['employee_name'],
                 'user_id' => (int)$c['user_id'],
-                'approved_by' => $c['approved_by'] ? (int)$c['approved_by'] : null,
-                'approved_by_name' => $c['approved_by_name'] ?? null,
-                'manager_name' => $c['manager_name'] ?? null,
                 'title' => $title,
                 'description' => $desc,
                 'status' => $c['status'],
