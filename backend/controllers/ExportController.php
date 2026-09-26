@@ -332,7 +332,7 @@ class ExportController {
                            u.full_name as owner_name, 
                            p.name as project_name,
                            COALESCE(ps.name, ps_fb.name) as stage_name,
-                           camp.name as campaign_name,
+                           COALESCE(camp.name, l.campaign_name) as campaign_name,
                            CASE 
                                WHEN t.pipeline_status IN ('enrolled', 'hoc_vien') OR t.status = 'customer' THEN
                                    COALESCE(
@@ -355,8 +355,8 @@ class ExportController {
                                    )
                                ELSE t.created_at
                            END as closed_date,
-                           r.round_name as round_name,
-                           COALESCE(dr.status, t.report_status) as report_status,
+                           COALESCE(r.round_name, r2.round_name) as round_name,
+                           dr.status as report_status,
                            (
                                SELECT COALESCE(SUM(d.value), 0) 
                                FROM deals d 
@@ -372,16 +372,17 @@ class ExportController {
                     LEFT JOIN projects p ON t.project_id = p.id
                     LEFT JOIN pipeline_stages ps ON t.stage_id = ps.id
                     LEFT JOIN pipeline_stages ps_fb ON (t.stage_id IS NULL AND ps_fb.system_slug = t.pipeline_status)
-                    LEFT JOIN campaigns camp ON t.campaign_id = camp.id
+                    LEFT JOIN marketing_campaigns camp ON t.campaign_id = camp.id
                     LEFT JOIN leads l ON l.id = COALESCE(
                         (SELECT MAX(id) FROM leads WHERE t.person_id IS NOT NULL AND person_id = t.person_id),
                         (SELECT MAX(id) FROM leads WHERE t.phone IS NOT NULL AND phone = t.phone)
                     )
                     LEFT JOIN distribution_logs dl ON dl.id = (
                         SELECT MAX(id) FROM distribution_logs 
-                        WHERE (lead_id = l.id AND assigned_to = t.owner_id) OR contact_id = t.id
+                        WHERE l.id IS NOT NULL AND lead_id = l.id
                     )
                     LEFT JOIN distribution_rounds r ON dl.round_id = r.id
+                    LEFT JOIN distribution_rounds r2 ON l.target_round_id = r2.id
                     LEFT JOIN data_reports dr ON dr.id = (
                         SELECT MAX(id) FROM data_reports 
                         WHERE (l.id IS NOT NULL AND lead_id = l.id AND consultant_id = t.owner_id)
