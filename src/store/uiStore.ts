@@ -45,6 +45,12 @@ interface UIStore {
   callModal: { isOpen: boolean; phone: string };
   showCall: (phone: string) => void;
   closeCall: () => void;
+  customerDrawer: { isOpen: boolean; contact: any | null; initialTab?: string };
+  openCustomerDrawer: (contactOrId: any, initialTab?: string) => void;
+  closeCustomerDrawer: () => void;
+  taskDrawer: { isOpen: boolean; task: any | null };
+  openTaskDrawer: (taskOrId: any) => void;
+  closeTaskDrawer: () => void;
 }
 
 const recentToastTimestamps = new Map<string, number>();
@@ -78,6 +84,22 @@ export const useUIStore = create<UIStore>((set) => ({
   callModal: { isOpen: false, phone: '' },
   showCall: (phone: string) => set({ callModal: { isOpen: true, phone } }),
   closeCall: () => set((state) => ({ callModal: { ...state.callModal, isOpen: false } })),
+  customerDrawer: { isOpen: false, contact: null, initialTab: 'info' },
+  openCustomerDrawer: (contactOrId: any, initialTab = 'info') => {
+    const contactObj = (typeof contactOrId === 'object' && contactOrId !== null) 
+      ? contactOrId 
+      : { id: Number(contactOrId) };
+    set({ customerDrawer: { isOpen: true, contact: contactObj, initialTab } });
+  },
+  closeCustomerDrawer: () => set({ customerDrawer: { isOpen: false, contact: null, initialTab: 'info' } }),
+  taskDrawer: { isOpen: false, task: null },
+  openTaskDrawer: (taskOrId: any) => {
+    const taskObj = (typeof taskOrId === 'object' && taskOrId !== null)
+      ? taskOrId
+      : { id: Number(taskOrId) };
+    set({ taskDrawer: { isOpen: true, task: taskObj } });
+  },
+  closeTaskDrawer: () => set({ taskDrawer: { isOpen: false, task: null } }),
   addToast: (message, type = 'info', action) => {
     // Deduplication check for string messages
     if (typeof message === 'string') {

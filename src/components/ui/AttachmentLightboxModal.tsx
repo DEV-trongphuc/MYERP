@@ -485,6 +485,7 @@ export const AttachmentLightboxModal: React.FC<AttachmentLightboxModalProps> = (
                 <img
                   src={current.url}
                   alt={current.name || 'Hình ảnh'}
+                  decoding="async"
                   style={{
                     maxWidth: '92vw',
                     maxHeight: '82vh',

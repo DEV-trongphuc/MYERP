@@ -1,0 +1,24 @@
+{
+  "name": "MYERP - Hệ Thống Quản Trị Doanh Nghiệp Thông Minh",
+  "short_name": "MYERP",
+  "description": "Hệ thống quản trị doanh nghiệp, CRM và tự động hóa quy trình AI",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#090d16",
+  "theme_color": "#090d16",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/LOGO.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/LOGO.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -41,27 +41,73 @@ class ExportController {
         $params = [];
 
         if ($type === 'contact') {
-            $baseColumns = [
-                'id' => 'ID', 
-                'full_name' => 'Họ tên', 
-                'email' => 'Email', 
-                'phone' => 'Số điện thoại', 
-                'mobile' => 'Di động', 
-                'job_title' => 'Chức danh', 
-                'department' => 'Phòng ban', 
-                'source' => 'Nguồn', 
-                'status' => 'Trạng thái', 
-                'stage_name' => 'Giai đoạn',
-                'company_name' => 'Công ty', 
-                'owner_name' => 'Người phụ trách', 
-                'tags' => 'Phân loại (Tags)',
-                'notes' => 'Ghi chú', 
-                'customer_type' => 'Loại khách hàng', 
-                'temperature' => 'Nhiệt độ (Nóng/Ấm/Lạnh)', 
-                'project_name' => 'Dự án quan tâm', 
-                'last_contact' => 'Tương tác gần nhất',
-                'created_at' => 'Ngày tạo'
-            ];
+            $exportMode = strtolower(trim((string)($_GET['export_mode'] ?? ($_GET['mode'] ?? 'filtered'))));
+            if ($exportMode === 'full') {
+                $baseColumns = [
+                    'id' => 'ID', 
+                    'full_name' => 'Họ và tên', 
+                    'phone' => 'Số điện thoại', 
+                    'mobile' => 'Di động', 
+                    'phone2' => 'Số điện thoại 2', 
+                    'email' => 'Email', 
+                    'gender' => 'Giới tính', 
+                    'birthday' => 'Ngày sinh', 
+                    'id_card' => 'CMND/CCCD', 
+                    'id_card_date' => 'Ngày cấp', 
+                    'id_card_place' => 'Nơi cấp', 
+                    'address' => 'Địa chỉ chi tiết', 
+                    'ward' => 'Phường/Xã', 
+                    'district' => 'Quận/Huyện', 
+                    'city' => 'Tỉnh/Thành phố', 
+                    'country' => 'Quốc gia', 
+                    'job_title' => 'Chức danh', 
+                    'department' => 'Phòng ban', 
+                    'company_name' => 'Công ty', 
+                    'owner_name' => 'Người phụ trách', 
+                    'source' => 'Nguồn', 
+                    'status' => 'Trạng thái', 
+                    'stage_name' => 'Giai đoạn Pipeline',
+                    'lead_status' => 'Trạng thái Lead', 
+                    'lead_score' => 'Điểm tiềm năng (Score)', 
+                    'customer_type' => 'Loại khách hàng', 
+                    'temperature' => 'Nhiệt độ (Nóng/Ấm/Lạnh)', 
+                    'expected_revenue' => 'Doanh thu kỳ vọng', 
+                    'win_probability' => 'Xác suất thành công (%)', 
+                    'student_code' => 'Mã học viên', 
+                    'admission_date' => 'Ngày nhập học', 
+                    'study_status' => 'Trạng thái học tập', 
+                    'major' => 'Ngành / Khóa học', 
+                    'project_name' => 'Dự án quan tâm', 
+                    'campaign_name' => 'Chiến dịch', 
+                    'tags' => 'Phân loại (Tags)',
+                    'notes' => 'Ghi chú', 
+                    'last_contact' => 'Tương tác gần nhất',
+                    'created_at' => 'Ngày tạo',
+                    'updated_at' => 'Cập nhật lần cuối'
+                ];
+            } else {
+                $baseColumns = [
+                    'id' => 'ID', 
+                    'full_name' => 'Họ tên', 
+                    'email' => 'Email', 
+                    'phone' => 'Số điện thoại', 
+                    'mobile' => 'Di động', 
+                    'job_title' => 'Chức danh', 
+                    'department' => 'Phòng ban', 
+                    'source' => 'Nguồn', 
+                    'status' => 'Trạng thái', 
+                    'stage_name' => 'Giai đoạn',
+                    'company_name' => 'Công ty', 
+                    'owner_name' => 'Người phụ trách', 
+                    'tags' => 'Phân loại (Tags)',
+                    'notes' => 'Ghi chú', 
+                    'customer_type' => 'Loại khách hàng', 
+                    'temperature' => 'Nhiệt độ (Nóng/Ấm/Lạnh)', 
+                    'project_name' => 'Dự án quan tâm', 
+                    'last_contact' => 'Tương tác gần nhất',
+                    'created_at' => 'Ngày tạo'
+                ];
+            }
             
             $search        = $_GET['search'] ?? '';
             $status        = $_GET['status'] ?? '';
@@ -219,12 +265,14 @@ class ExportController {
                            co.name as company_name, 
                            u.full_name as owner_name, 
                            p.name as project_name,
-                           ps.name as stage_name
+                           ps.name as stage_name,
+                           camp.name as campaign_name
                     FROM contacts t 
                     LEFT JOIN companies co ON t.company_id = co.id 
                     LEFT JOIN users u ON t.owner_id = u.id 
                     LEFT JOIN projects p ON t.project_id = p.id
                     LEFT JOIN pipeline_stages ps ON t.stage_id = ps.id
+                    LEFT JOIN campaigns camp ON t.campaign_id = camp.id
                     WHERE $whereStr ORDER BY t.created_at DESC";
         } elseif ($type === 'company') {
             $baseColumns = ['id' => 'ID', 'name' => 'Tên công ty', 'tax_id' => 'Mã số thuế', 'industry' => 'Ngành nghề', 'email' => 'Email', 'phone' => 'Số điện thoại', 'website' => 'Website', 'address' => 'Địa chỉ', 'city' => 'Tỉnh/Thành phố', 'size' => 'Quy mô', 'status' => 'Trạng thái', 'owner_name' => 'Người phụ trách', 'created_at' => 'Ngày tạo'];

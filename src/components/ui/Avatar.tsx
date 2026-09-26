@@ -164,6 +164,8 @@ export const Avatar: React.FC<AvatarProps> = ({ src, name, size = 'md', classNam
           alt={name} 
           data-avatar="true"
           data-no-lightbox="true"
+          loading="lazy"
+          decoding="async"
           className={`${styles.image} avatar-img`} 
           onError={() => setHasError(true)} 
         />
@@ -200,6 +202,8 @@ export const Avatar: React.FC<AvatarProps> = ({ src, name, size = 'md', classNam
         <img
           src="https://ideas-data.vercel.app/imgs/angry_icon.jpg"
           alt="AI Evaluation"
+          loading="lazy"
+          decoding="async"
           style={{
             position: 'absolute',
             bottom: -2,

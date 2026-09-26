@@ -411,6 +411,23 @@ class ProjectController {
         }
         $this->db->prepare("DELETE FROM comments WHERE entity_type = 'project' AND entity_id = ? AND tenant_id = ?")->execute([$id, $auth['tenant_id']]);
 
+        // Cascade delete child campaigns, their comments and attachments
+        $campStmt = $this->db->prepare("SELECT id FROM marketing_campaigns WHERE project_id = ? AND tenant_id = ?");
+        $campStmt->execute([$id, $auth['tenant_id']]);
+        $campIds = $campStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+        foreach ($campIds as $cid) {
+            $cCommStmt = $this->db->prepare("SELECT attachments, body FROM comments WHERE entity_type = 'campaign' AND entity_id = ?");
+            $cCommStmt->execute([$cid]);
+            $cComms = $cCommStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            foreach ($cComms as $cc) {
+                if (!empty($cc['attachments'])) deleteAttachmentFiles($cc['attachments']);
+                if (!empty($cc['body'])) deleteAttachmentFiles($cc['body']);
+            }
+            $this->db->prepare("DELETE FROM comments WHERE entity_type = 'campaign' AND entity_id = ?")->execute([$cid]);
+        }
+        $this->db->prepare("DELETE FROM marketing_campaigns WHERE project_id = ? AND tenant_id = ?")->execute([$id, $auth['tenant_id']]);
+        $this->db->prepare("DELETE FROM project_roster WHERE project_id = ?")->execute([$id]);
+
         $stmt = $this->db->prepare("DELETE FROM projects WHERE id = ? AND tenant_id = ?");
         $stmt->execute([$id, $auth['tenant_id']]);
 

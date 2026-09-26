@@ -39,6 +39,9 @@ export default defineConfig(({ mode }) => {
     define: {
       __APP_VERSION__: JSON.stringify(buildVersion),
     },
+    esbuild: mode === 'production' ? ({
+      drop: ['console', 'debugger'],
+    } as any) : undefined,
     plugins: [
       versionManifestPlugin(),
       react(),

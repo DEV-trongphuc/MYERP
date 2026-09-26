@@ -22,6 +22,8 @@ interface MentionInputProps {
   value: string;
   onChange: (e: any) => void;
   onBlur?: () => void;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLDivElement>) => void;
+  onSubmitShortcut?: () => void;
   users?: User[];
   onImagePaste?: (file: File) => void;
   onFilePaste?: (file: File) => void;
@@ -36,6 +38,8 @@ export const MentionInput: React.FC<MentionInputProps> = ({
   value, 
   onChange, 
   onBlur,
+  onKeyDown,
+  onSubmitShortcut,
   users: propUsers, 
   onImagePaste, 
   onFilePaste, 
@@ -239,7 +243,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
       }
       checkMentionTrigger();
     };
-    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('scroll', handleScroll, { capture: true, passive: true });
     return () => window.removeEventListener('scroll', handleScroll, true);
   }, [showDropdown]);
 
@@ -354,6 +358,17 @@ export const MentionInput: React.FC<MentionInputProps> = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      if (onSubmitShortcut) {
+        e.preventDefault();
+        onSubmitShortcut();
+        return;
+      }
+    }
+    if (onKeyDown) {
+      onKeyDown(e);
+      if (e.defaultPrevented) return;
+    }
     if (showDropdown && filteredUsers.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();

@@ -21,42 +21,100 @@ export function clearApiCache() {
   pendingRequests.clear();
 }
 
+function getActionFromConfig(config: any): string {
+  const url = String(config.url || '');
+  if (config.params?.action) {
+    return String(config.params.action).replace(/^\//, '').split('?')[0];
+  }
+  if (url.includes('action=')) {
+    const match = url.match(/[?&]action=([^&#]+)/);
+    if (match) {
+      return decodeURIComponent(match[1]).replace(/^\//, '').split('?')[0];
+    }
+  }
+  const clean = url.replace(/^\//, '').split('?')[0];
+  if (clean === 'api.php') {
+    return '';
+  }
+  return clean;
+}
+
+const CACHEABLE_ENDPOINTS = new Set([
+  'users',
+  'projects',
+  'marketing-campaigns',
+  'teams',
+  'tags',
+  'pipeline-stages',
+  'custom-fields',
+  'file-categories',
+  'departments',
+  'branches',
+  'suppliers',
+  'products',
+  'roles',
+  'workflow_task_templates',
+  'workflow-task-templates',
+  'get_settings',
+  'get_ticket_settings',
+  'get_accounts',
+  'get_consultants',
+  'get_rounds',
+  'get_connections',
+  'get_unique_sources',
+  'hrm/departments',
+  'hrm/positions',
+  'hrm/settings',
+  'attendance_configs',
+  'attendance/configs',
+  'contacts/programs'
+]);
+
 function isCacheable(config: any): boolean {
   const method = (config.method || 'get').toLowerCase();
   if (method !== 'get') {
     return false;
   }
-  const url = config.url || '';
-  let cleanUrl = url.replace(/^\//, '').split('?')[0];
-  
-  if (cleanUrl === 'api.php' && config.params?.action) {
-    cleanUrl = config.params.action.replace(/^\//, '').split('?')[0];
+  if (config.headers?.['x-bypass-cache'] || config.params?._no_cache) {
+    return false;
   }
-  
-  const cacheableEndpoints = [
-    'users',
-    'projects',
-    'marketing-campaigns',
-    'teams',
-    'tags',
-    'pipeline-stages',
-    'custom-fields'
-  ];
-  
-  return cacheableEndpoints.includes(cleanUrl);
+  const action = getActionFromConfig(config);
+  return CACHEABLE_ENDPOINTS.has(action);
 }
 
 function getCacheKey(config: any): string {
-  const url = config.url || '';
-  let cleanUrl = url.replace(/^\//, '').split('?')[0];
+  const action = getActionFromConfig(config);
   const params = { ...(config.params || {}) };
-  
-  if (cleanUrl === 'api.php' && params.action) {
-    cleanUrl = params.action.replace(/^\//, '').split('?')[0];
-    delete params.action;
+  delete params.action;
+  delete params.token;
+  delete params._method;
+  delete params._t;
+
+  const queryObj: Record<string, string> = {};
+  const url = String(config.url || '');
+  if (url.includes('?')) {
+    const qs = url.split('?')[1];
+    const sp = new URLSearchParams(qs);
+    sp.forEach((val, key) => {
+      if (key !== 'action' && key !== 'token' && key !== '_method' && key !== '_t') {
+        queryObj[key] = val;
+      }
+    });
   }
-  
-  return `${cleanUrl}::${JSON.stringify(params)}`;
+  const allParams = { ...queryObj, ...params };
+  return `${action}::${JSON.stringify(allParams)}`;
+}
+
+const MAX_CACHE_ENTRIES = 200;
+
+function setCacheEntry(key: string, data: any) {
+  if (cacheMap.size >= MAX_CACHE_ENTRIES) {
+    const oldestKey = cacheMap.keys().next().value;
+    if (oldestKey) {
+      cacheMap.delete(oldestKey);
+    }
+  }
+  cacheMap.set(key, { data, timestamp: Date.now() });
 }
 
 const originalRequest = api.request.bind(api);
@@ -80,6 +138,9 @@ api.request = function (urlOrConfig: any, config?: any) {
     const cached = cacheMap.get(key);
     
     if (cached && (Date.now() - cached.timestamp < CACHE_LIFETIME)) {
+      // Refresh key order for LRU
+      cacheMap.delete(key);
+      cacheMap.set(key, cached);
       return Promise.resolve(cached.data);
     }
     
@@ -87,7 +148,7 @@ api.request = function (urlOrConfig: any, config?: any) {
     if (!pending) {
       pending = originalRequest(urlOrConfig, config)
         .then((response) => {
-          cacheMap.set(key, { data: response, timestamp: Date.now() });
+          setCacheEntry(key, response);
           pendingRequests.delete(key);
           return response;
         })

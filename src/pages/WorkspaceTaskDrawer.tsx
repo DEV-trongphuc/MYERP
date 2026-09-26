@@ -5,7 +5,7 @@ import {
   Bold, Italic, List, ListOrdered, Image as ImageIcon, 
   Users, RefreshCw, Layers, CheckSquare2, Info, Receipt, Scale, ArrowUpRight, Search, Save, Bell, BellOff,
   Eye, EyeOff, ExternalLink, UserPlus, UserCheck, Edit3, Play, Sparkles, ArrowRight, Building2, Megaphone, Loader2, RotateCcw,
-  CheckCircle2, XCircle, Camera, Target, Shield, AlertTriangle, FileSpreadsheet, Maximize2, Download, Folder
+  CheckCircle2, XCircle, Camera, Target, Shield, AlertTriangle, FileSpreadsheet, Maximize2, Download, Folder, Copy
 } from 'lucide-react';
 import { downloadFileWithName } from '../utils/fileDownloader';
 import { triggerLocalConfetti } from '../utils/confettiHelper';
@@ -498,7 +498,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   const [activeAssigneeDropdownId, setActiveAssigneeDropdownId] = useState<string | null>(null);
   const [deleteSubtaskTarget, setDeleteSubtaskTarget] = useState<{ id: string; title: string } | null>(null);
   const [checklistPage, setChecklistPage] = useState<number>(1);
-  const CHECKLIST_PAGE_SIZE = 20;
+  const CHECKLIST_PAGE_SIZE = 50;
+  const [checklistSearch, setChecklistSearch] = useState<string>('');
+  const [checklistFilter, setChecklistFilter] = useState<'all' | 'pending' | 'completed'>('all');
+  const [hideCompletedChecklist, setHideCompletedChecklist] = useState<boolean>(false);
   const [showParticipantDropdown, setShowParticipantDropdown] = useState(false);
   const [participantSearch, setParticipantSearch] = useState('');
   const [participantModalSearch, setParticipantModalSearch] = useState('');
@@ -1653,7 +1656,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         task_group_id: formData.task_group_id ? Number(formData.task_group_id) : null
       };
 
-      if (task.id === 'new') {
+      if (task.id === 'new' || formData.id === 'new') {
         const res = await api.post('/activities', {
           ...payload,
           type: 'task'
@@ -2397,6 +2400,66 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     };
   }, [isOpen, task, embedMode]);
 
+  const handleDuplicateTask = () => {
+    // 1. Clone checklist with reset done state and reset deadline
+    const originalChecklist = Array.isArray(erpMeta.checklist) ? erpMeta.checklist : [];
+    const clonedChecklist = originalChecklist.map((item: any, idx: number) => ({
+      id: `clone_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 7)}`,
+      text: item.text || item.title || item.name || '',
+      title: item.text || item.title || item.name || '',
+      done: false,
+      checked: false,
+      status: 'pending',
+      deadline: null,
+      due_date: null,
+      sub_deadline: null,
+      user_id: item.user_id || item.assignee_id || null,
+      assignee_id: item.user_id || item.assignee_id || null,
+      assignee_name: item.assignee_name || null,
+      assignee_avatar: item.assignee_avatar || null
+    }));
+
+    // 2. Clone formData in 'new' state (not yet saved to DB)
+    const clonedFormData = {
+      ...formData,
+      id: 'new',
+      subject: formData.subject ? `${formData.subject} (Bản sao)` : 'Công việc mới',
+      status: 'open',
+      progress: 0,
+      due_date: null,
+      start_date: null,
+      deadline: null,
+      created_at: new Date().toISOString(),
+      user_id: formData.user_id || currentUser?.id,
+      participant_ids: formData.participant_ids || '',
+      priority: formData.priority || 'medium',
+      type: formData.type || 'task',
+      task_group_id: formData.task_group_id || null,
+      task_group_name: formData.task_group_name || null,
+      related_type: formData.related_type || null,
+      related_id: formData.related_id || null,
+      contact_id: formData.contact_id || null,
+      created_by: currentUser?.id,
+      created_by_name: currentUser?.name || (currentUser as any)?.full_name || '',
+      created_by_avatar: currentUser?.avatar || (currentUser as any)?.avatar_url || ''
+    };
+
+    // 3. Clone erpMeta without deadlines
+    const clonedErpMeta = {
+      ...erpMeta,
+      checklist: clonedChecklist,
+      due_sla_notified: false,
+      subtask_sla_notified: false
+    };
+
+    // 4. Update states
+    setFormData(clonedFormData);
+    setErpMeta(clonedErpMeta);
+    setComments([]);
+
+    toast.success(t('Đã nhân bản công việc! Dữ liệu đã được điền sẵn, hãy kiểm tra và bấm "Tạo việc" để lưu.'));
+  };
+
   const drawerMotionProps = embedMode ? {} : {
     initial: isMobileOrTablet ? { opacity: 0, y: '100%' } : { opacity: 0, x: '80px' },
     animate: { y: 0, x: 0, opacity: 1 },
@@ -2813,7 +2876,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     borderRadius: '4px',
                     textTransform: 'uppercase',
                     flexShrink: 0
-                  }}>#{formData.id}</span>
+                  }}>#{formData.id === 'new' ? t('MỚI') : formData.id}</span>
                   <span className={`badge ${formData.priority === 'high' ? 'danger' : formData.priority === 'low' ? 'info' : 'warning'}`} style={{
                     fontSize: '0.6rem',
                     fontWeight: 800,
@@ -2994,6 +3057,33 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
               </button>
             )}
 
+            {/* Duplicate Task Button */}
+            {formData?.id && formData.id !== 'new' && (
+              <button
+                type="button"
+                onClick={handleDuplicateTask}
+                className="hover-lift"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: isMobileOrTablet ? '32px' : '36px',
+                  height: isMobileOrTablet ? '32px' : '36px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-surface)',
+                  color: 'var(--color-text-muted)',
+                  cursor: 'pointer',
+                  boxShadow: 'var(--shadow-sm)',
+                  transition: 'all 0.2s',
+                  padding: 0
+                }}
+                title={t("Nhân bản công việc (sao chép toàn bộ nội dung, việc con, người thực hiện, bỏ deadline)")}
+              >
+                <Copy size={isMobileOrTablet ? 15 : 18} />
+              </button>
+            )}
+
             <button
               onClick={handleManualSave}
               disabled={isSaving}
@@ -3019,7 +3109,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
               }}
             >
               {isSaving ? <RefreshCw className="spin" size={14} /> : <Save size={isMobileOrTablet ? 14 : 16} />}
-              <span>{isSaving ? t('Đang lưu...') : (task?.id === 'new' ? t('Tạo việc') : (isMobileOrTablet ? t('Lưu') : t('Lưu thay đổi')))}</span>
+              <span>{isSaving ? t('Đang lưu...') : ((formData?.id === 'new' || task?.id === 'new') ? t('Tạo việc') : (isMobileOrTablet ? t('Lưu') : t('Lưu thay đổi')))}</span>
             </button>
 
             <button 
@@ -3178,22 +3268,47 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                 <label style={cardLabelStyle}>
                   {t('Checklist công việc con')}
                 </label>
-                {currentUser?.role !== 'viewer' && (
-                  <button
-                    type="button"
-                    className="btn outline sm"
-                    onClick={() => {
-                      if (!showAddChecklist && !newSubAssignee && isPersonalTask && personalUser?.id) {
-                        setNewSubAssignee(String(personalUser.id));
-                      }
-                      setShowAddChecklist(!showAddChecklist);
-                    }}
-                    style={{ fontSize: '0.72rem', padding: '3px 8px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '4px', borderColor: 'var(--color-border)', color: 'var(--color-text-light)' }}
-                  >
-                    <Plus size={12} />
-                    {t('Thêm mục')}
-                  </button>
-                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {erpMeta.checklist && erpMeta.checklist.some((x: any) => x.done) && (
+                    <button
+                      type="button"
+                      className={`btn sm ${hideCompletedChecklist ? 'primary' : 'outline'}`}
+                      onClick={() => setHideCompletedChecklist(!hideCompletedChecklist)}
+                      title={hideCompletedChecklist ? t('Hiển thị tất cả') : t('Ẩn các việc đã hoàn thành')}
+                      style={{
+                        fontSize: '0.72rem',
+                        padding: '3px 8px',
+                        borderRadius: '20px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        border: '1px solid var(--color-border)',
+                        background: hideCompletedChecklist ? 'var(--color-primary-light, rgba(59, 130, 246, 0.1))' : 'transparent',
+                        color: hideCompletedChecklist ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <EyeOff size={12} />
+                      {t('Ẩn đã xong')} ({erpMeta.checklist.filter((x: any) => x.done).length})
+                    </button>
+                  )}
+                  {currentUser?.role !== 'viewer' && (
+                    <button
+                      type="button"
+                      className="btn outline sm"
+                      onClick={() => {
+                        if (!showAddChecklist && !newSubAssignee && isPersonalTask && personalUser?.id) {
+                          setNewSubAssignee(String(personalUser.id));
+                        }
+                        setShowAddChecklist(!showAddChecklist);
+                      }}
+                      style={{ fontSize: '0.72rem', padding: '3px 8px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '4px', borderColor: 'var(--color-border)', color: 'var(--color-text-light)' }}
+                    >
+                      <Plus size={12} />
+                      {t('Thêm mục')}
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Checklist Progress Bar */}
@@ -3253,6 +3368,78 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                   </div>
                 );
               })()}
+
+              {/* Search & Filter bar for checklist */}
+              {erpMeta.checklist && erpMeta.checklist.length > 2 && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  marginBottom: '10px',
+                  flexWrap: 'wrap'
+                }}>
+                  <div style={{ position: 'relative', flex: 1, minWidth: '160px' }}>
+                    <Search size={13} style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder={t('Tìm việc con, người làm...')}
+                      value={checklistSearch}
+                      onChange={(e) => {
+                        setChecklistSearch(e.target.value);
+                        setChecklistPage(1);
+                      }}
+                      style={{
+                        paddingLeft: '28px',
+                        paddingRight: checklistSearch ? '24px' : '8px',
+                        height: '28px',
+                        fontSize: '0.75rem',
+                        borderRadius: '6px',
+                        width: '100%'
+                      }}
+                    />
+                    {checklistSearch && (
+                      <X
+                        size={12}
+                        onClick={() => {
+                          setChecklistSearch('');
+                          setChecklistPage(1);
+                        }}
+                        style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: 'var(--color-text-muted)' }}
+                      />
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                    {(['all', 'pending', 'completed'] as const).map((filterKey) => {
+                      const isActive = checklistFilter === filterKey;
+                      const label = filterKey === 'all' ? t('Tất cả') : filterKey === 'pending' ? t('Chưa xong') : t('Đã xong');
+                      return (
+                        <button
+                          key={filterKey}
+                          type="button"
+                          onClick={() => {
+                            setChecklistFilter(filterKey);
+                            setChecklistPage(1);
+                          }}
+                          style={{
+                            fontSize: '0.7rem',
+                            padding: '2px 8px',
+                            borderRadius: '12px',
+                            border: isActive ? '1px solid var(--color-primary)' : '1px solid var(--color-border-light)',
+                            background: isActive ? 'var(--color-primary-light, rgba(59, 130, 246, 0.1))' : 'var(--color-bg-alt, rgba(0,0,0,0.02))',
+                            color: isActive ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                            cursor: 'pointer',
+                            fontWeight: isActive ? 600 : 400,
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Add checklist item expander form */}
               {showAddChecklist && (
@@ -3345,21 +3532,55 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
               {/* Sub-tasks list */}
               {(() => {
-                const totalChecklistItems = erpMeta.checklist ? erpMeta.checklist.length : 0;
+                let filteredChecklist = erpMeta.checklist || [];
+
+                // Filter by hideCompletedChecklist or checklistFilter
+                if (hideCompletedChecklist || checklistFilter === 'pending') {
+                  filteredChecklist = filteredChecklist.filter((x: any) => !x.done);
+                } else if (checklistFilter === 'completed') {
+                  filteredChecklist = filteredChecklist.filter((x: any) => x.done);
+                }
+
+                // Filter by search term
+                if (checklistSearch.trim()) {
+                  const q = checklistSearch.toLowerCase().trim();
+                  filteredChecklist = filteredChecklist.filter((item: any) => {
+                    const titleMatch = (item.title || '').toLowerCase().includes(q);
+                    if (titleMatch) return true;
+                    const assignedIds = item.assignee_id ? String(item.assignee_id).split(',').map((id: string) => id.trim()).filter(Boolean) : [];
+                    const itemUsers = users.filter(u => assignedIds.includes(String(u.id)));
+                    return itemUsers.some(u => (u.full_name || '').toLowerCase().includes(q) || (u.name || '').toLowerCase().includes(q));
+                  });
+                }
+
+                const totalChecklistItems = filteredChecklist.length;
                 const totalChecklistPages = Math.ceil(totalChecklistItems / CHECKLIST_PAGE_SIZE);
                 const safeChecklistPage = Math.min(Math.max(1, checklistPage), Math.max(1, totalChecklistPages));
                 const checklistStartIndex = (safeChecklistPage - 1) * CHECKLIST_PAGE_SIZE;
                 const checklistEndIndex = safeChecklistPage * CHECKLIST_PAGE_SIZE;
-                const pagedChecklist = (erpMeta.checklist || []).slice(checklistStartIndex, checklistEndIndex);
+                const pagedChecklist = filteredChecklist.slice(checklistStartIndex, checklistEndIndex);
 
                 return (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {totalChecklistItems === 0 ? (
-                      <div style={{ textAlign: 'center', padding: '1.25rem', color: 'var(--color-text-muted)', fontSize: '0.78rem' }}>
-                        {t('Chưa có công việc con nào.')}
-                      </div>
-                    ) : (
-                      pagedChecklist.map((item: any) => {
+                    <div
+                      className="custom-scrollbar"
+                      style={{
+                        maxHeight: '390px',
+                        overflowY: 'auto',
+                        paddingRight: '4px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px'
+                      }}
+                    >
+                      {totalChecklistItems === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '1.25rem', color: 'var(--color-text-muted)', fontSize: '0.78rem' }}>
+                          {checklistSearch.trim() || checklistFilter !== 'all' || hideCompletedChecklist
+                            ? t('Không có công việc con nào khớp bộ lọc.')
+                            : t('Chưa có công việc con nào.')}
+                        </div>
+                      ) : (
+                        pagedChecklist.map((item: any) => {
                         const assignedIds = item.assignee_id ? String(item.assignee_id).split(',').map((id: string) => id.trim()).filter(Boolean) : [];
                         let itemUsers = users.filter(u => assignedIds.includes(String(u.id)));
                         if (itemUsers.length === 0 && isPersonalTask && personalUser) {
@@ -4000,6 +4221,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     );
                   })
                 )}
+                    </div>
 
                 {/* Pagination when > 20 subtasks */}
                 {totalChecklistPages > 1 && (

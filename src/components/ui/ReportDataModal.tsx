@@ -56,13 +56,15 @@ interface ReportDataModalProps {
   onClose: () => void;
   contact: any;
   onSuccess?: () => void;
+  zIndex?: number;
 }
 
 export const ReportDataModal: React.FC<ReportDataModalProps> = ({
   isOpen,
   onClose,
   contact,
-  onSuccess
+  onSuccess,
+  zIndex
 }) => {
   const { t } = useLanguage();
   const [selectedReasonId, setSelectedReasonId] = useState<string>(REPORT_REASONS[0].id);
@@ -147,7 +149,7 @@ export const ReportDataModal: React.FC<ReportDataModalProps> = ({
       }
       width="100%"
       maxWidth="560px"
-      zIndex={2000000050}
+      zIndex={zIndex || 2147483640}
     >
       {submittedSuccess ? (
         <div style={{ textAlign: 'center', padding: '2rem 1rem' }}>

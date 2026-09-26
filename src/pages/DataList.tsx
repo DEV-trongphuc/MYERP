@@ -24,6 +24,7 @@ import { CalendarSkeleton, TableSkeleton, KpiCardSkeleton, CardSkeleton, ChartSk
 import { detectCountryFromPhone } from '../utils/phoneHelper';
 import { NotificationPreviewModal } from '../components/ui/NotificationPreviewModal';
 import { RuleSettings } from './RuleSettings';
+import { TableContextMenu } from '../components/ui/TableContextMenu';
 
 const ExpenseQuickViewDrawer = lazy(() => import('../components/ExpenseQuickViewDrawer').then(m => ({ default: m.ExpenseQuickViewDrawer })));
 const ExpenseCreateDrawer = lazy(() => import('../components/ExpenseCreateDrawer').then(m => ({ default: m.ExpenseCreateDrawer })));
@@ -313,6 +314,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
 
   const [users, setUsers] = useState<any[]>([]);
   const [teamsList, setTeamsList] = useState<any[]>([]);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: any } | null>(null);
 
   useEffect(() => {
     if (userRole === 'manager') {
@@ -2526,6 +2528,21 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                         }} 
                         onMouseEnter={e => e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(255,255,255,0.01)' : '#fff9fa'} 
                         onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setContextMenu({
+                            x: e.clientX,
+                            y: e.clientY,
+                            item: {
+                              id: lead.id,
+                              name: lead.full_name || lead.name,
+                              phone: lead.phone,
+                              email: lead.email,
+                              status: lead.status
+                            }
+                          });
+                        }}
                         onClick={() => {
                           if (Number(lead.is_won) === 1) return;
                           if (isAdmin) {
@@ -7481,6 +7498,15 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
           color: var(--color-primary) !important;
         }
       `}</style>
+
+      {/* Solid Dark Table Context Menu */}
+      <TableContextMenu
+        isOpen={!!contextMenu}
+        x={contextMenu?.x || 0}
+        y={contextMenu?.y || 0}
+        item={contextMenu?.item || null}
+        onClose={() => setContextMenu(null)}
+      />
     </div>
   );
 };

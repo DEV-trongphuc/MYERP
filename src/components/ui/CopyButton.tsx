@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Copy, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { playPopSound } from '../../utils/confettiHelper';
 
 interface CopyButtonProps {
   text: string;
@@ -17,15 +18,42 @@ export const CopyButton: React.FC<CopyButtonProps> = ({ text, className = '', si
   const handleCopy = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!text) return;
+    
+    let success = false;
     try {
-      await navigator.clipboard.writeText(text);
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        success = true;
+      }
+    } catch {}
+
+    if (!success) {
+      try {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        success = document.execCommand('copy');
+        textArea.remove();
+      } catch {}
+    }
+
+    if (success) {
+      playPopSound();
       setCopied(true);
       toast.success(t('Đã sao chép vào bộ nhớ tạm!'), { id: 'copy-toast' });
       setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
+    } else {
       toast.error(t('Không thể sao chép'));
     }
   };
+
+
+
 
   return (
     <button

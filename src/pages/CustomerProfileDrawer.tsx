@@ -585,12 +585,29 @@ const ActivityComments: React.FC<{
     });
   };
   const [expanded, setExpanded] = useState(() => initialCount > 0);
-  const [text, setText] = useState('');
+  const [text, setText] = useState(() => {
+    try {
+      return localStorage.getItem(`draft_activity_comment_${activityId}`) || '';
+    } catch {
+      return '';
+    }
+  });
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [attachmentPreview, setAttachmentPreview] = useState<string | null>(null);
   const [hasFetched, setHasFetched] = useState(false);
+
+  useEffect(() => {
+    if (!activityId) return;
+    try {
+      if (text.trim()) {
+        localStorage.setItem(`draft_activity_comment_${activityId}`, text);
+      } else {
+        localStorage.removeItem(`draft_activity_comment_${activityId}`);
+      }
+    } catch {}
+  }, [text, activityId]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -708,6 +725,9 @@ const ActivityComments: React.FC<{
       }
 
       const commentText = text;
+      try {
+        localStorage.removeItem(`draft_activity_comment_${activityId}`);
+      } catch {}
       setText('');
       setReplyTo(null);
       if (attachmentPreview) {
@@ -898,10 +918,11 @@ const ActivityComments: React.FC<{
                 <MentionInput
                   className="form-input" 
                   style={{ minHeight: '60px', padding: '8px 12px', fontSize: '0.875rem', paddingRight: '40px', opacity: submitting ? 0.7 : 1, width: '100%' }} 
-                  placeholder="Viết bình luận..."
+                  placeholder="Viết bình luận (Ctrl+Enter để gửi)..."
                   value={text}
                   disabled={submitting}
                   onChange={e => setText(e.target.value)}
+                  onSubmitShortcut={submitComment}
                   onImagePaste={handleImagePaste}
                   onFilePaste={handleImagePaste}
                 />
@@ -1787,7 +1808,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     };
 
     document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('touchstart', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside, { passive: true });
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('touchstart', handleClickOutside);
@@ -2148,11 +2169,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       setSavingQuickTask(false);
     }
   };
-  const [showReportModal, setShowReportModal] = useState(false);
-  const [reportReasonType, setReportReasonType] = useState('');
-  const [reportDetails, setReportDetails] = useState('');
-  const [submittingReport, setSubmittingReport] = useState(false);
-  const [reportReasons, setReportReasons] = useState<any[]>([]);
   const [selectedTaskForDetails, setSelectedTaskForDetails] = useState<any>(null);
   const [taskComments, setTaskComments] = useState<any[]>([]);
   const [checklist, setChecklist] = useState<Array<{ text: string; checked: boolean }>>([]);
@@ -5350,14 +5366,29 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   }, [isOpen, applySettingsData, currentUser?.role]);
 
   useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        handleClose();
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!isOpen) return;
+
+      // Handle Ctrl + S / Cmd + S to save customer profile
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!isSubmitting) {
+          handleSave();
+        }
+        return;
+      }
+
+      // Handle Escape to close drawer if no sub-modal is open
+      if (e.key === 'Escape') {
+        if (!showNoteModal && !showActivityModal && !showTaskModal && !showTicketModal && !showQuickTaskModal && !showReportDataModal) {
+          handleClose();
+        }
       }
     };
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
-  }, [isOpen, handleClose]);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, handleClose, handleSave, isSubmitting, showNoteModal, showActivityModal, showTaskModal, showTicketModal, showQuickTaskModal, showReportDataModal]);
 
 
 
@@ -5699,6 +5730,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         is_heritage: 0
       });
 
+      try {
+        localStorage.removeItem(`draft_note_contact_${effectiveContactId}`);
+      } catch {}
       setNewNote('');
       if (noteAttachmentPreview) {
         URL.revokeObjectURL(noteAttachmentPreview);
@@ -5720,6 +5754,56 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       addToast(err.response?.data?.message || 'Lỗi khi lưu ghi chú', 'error');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isOpen || !effectiveContactId || editingNote) return;
+    try {
+      if (newNote.trim()) {
+        localStorage.setItem(`draft_note_contact_${effectiveContactId}`, newNote);
+      } else {
+        localStorage.removeItem(`draft_note_contact_${effectiveContactId}`);
+      }
+    } catch {}
+  }, [newNote, effectiveContactId, isOpen, editingNote]);
+
+  const handleOpenNewNoteModal = useCallback(() => {
+    setEditingNote(null);
+    try {
+      const draft = localStorage.getItem(`draft_note_contact_${effectiveContactId}`);
+      if (draft && draft.trim()) {
+        setNewNote(draft);
+        addToast('Đã tự động khôi phục bản nháp ghi chú đang nhập dở', 'info');
+      } else {
+        setNewNote('');
+      }
+    } catch {
+      setNewNote('');
+    }
+    setShowNoteModal(true);
+  }, [effectiveContactId, addToast]);
+
+  const handleSaveNoteModal = async () => {
+    if (isSubmitting || !newNote.trim()) return;
+    if (editingNote) {
+      setIsSubmitting(true);
+      try {
+        await api.put(`/notes/${editingNote.id}`, { body: newNote });
+        addToast('Cập nhật ghi chú thành công!', 'success');
+        setShowNoteModal(false);
+        setEditingNote(null);
+        setNewNote('');
+        fetchData();
+        window.dispatchEvent(new CustomEvent('contact-updated'));
+      } catch (e: any) {
+        addToast('Lỗi khi cập nhật ghi chú', 'error');
+      } finally {
+        setIsSubmitting(false);
+      }
+    } else {
+      await addNote();
+      setShowNoteModal(false);
     }
   };
 
@@ -6611,52 +6695,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       addToast(e?.response?.data?.message || 'Lỗi khi tạo ticket', 'error');
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const handleSubmitReport = async () => {
-    const leadId = formData.lead_id || contact?.lead_id;
-    const saleId = formData.owner_id || contact?.owner_id;
-    const roundId = formData.dl_round_id || contact?.dl_round_id;
-    if (!leadId || !saleId || !roundId) {
-      addToast('Thiếu thông tin phân bổ để báo lỗi', 'error');
-      return;
-    }
-    if (!reportReasonType.trim() || submittingReport) return;
-    const isOtherReason = reportReasonType.toLowerCase().includes('khác') || reportReasonType.toLowerCase().includes('other');
-    if (isOtherReason && !reportDetails.trim()) {
-      addToast('Vui lòng nhập mô tả chi tiết lý do lỗi.', 'error');
-      return;
-    }
-    setSubmittingReport(true);
-    try {
-      const finalReason = isOtherReason
-        ? `${reportReasonType}: ${reportDetails.trim()}`
-        : (reportDetails.trim() ? `${reportReasonType} (Ghi chú: ${reportDetails.trim()})` : reportReasonType);
-
-      const payload = {
-        lead_id: Number(leadId),
-        sale_id: Number(saleId),
-        round_id: Number(roundId),
-        reason: finalReason
-      };
-
-      const res = await api.post('/api.php?action=submit_report', payload);
-      if (res.data.success) {
-        if (res.data.auto_approved) {
-          addToast('Báo cáo lỗi đã được HỆ THỐNG TỰ ĐỘNG PHÊ DUYỆT & ĐỀN BÙ thành công!', 'success');
-        } else {
-          addToast('Gửi báo lỗi data thành công! Đang chờ admin duyệt bù.', 'success');
-        }
-        setShowReportModal(false);
-        fetchData();
-      } else {
-        addToast(res.data.message || 'Gửi báo lỗi thất bại', 'error');
-      }
-    } catch (err: any) {
-      addToast('Lỗi kết nối: ' + (err?.response?.data?.message || err.message || ''), 'error');
-    } finally {
-      setSubmittingReport(false);
     }
   };
 
@@ -8953,92 +8991,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                       </button>
                                     ))}
 
-                                    {group.title === 'Nghiệp vụ & Hỗ trợ' && 
-                                     !['ca_nhan', 'cold_call', 'gioi_thieu'].includes(formData.source || contact?.source) && 
-                                     (formData.dl_status || contact?.dl_status) !== 'databank_claim' && 
-                                     Number(formData.dl_round_id || contact?.dl_round_id) > 0 && (
-                                       (formData.ticket_status || contact?.ticket_status || contact?.report_status) ? (
-                                         <div
-                                           style={{
-                                             padding: '11px 0.875rem',
-                                             fontSize: '0.85rem',
-                                             display: 'flex',
-                                             alignItems: 'center',
-                                             gap: '8px',
-                                             width: '100%',
-                                             borderRadius: '6px',
-                                             fontWeight: 600,
-                                             marginTop: '0.15rem',
-                                             color: 
-                                               (formData.ticket_status || contact?.ticket_status || contact?.report_status) === 'approved' || (formData.ticket_status || contact?.ticket_status || contact?.report_status) === 'resolved' || (formData.ticket_status || contact?.ticket_status || contact?.report_status) === 'approved_no_comp' ? '#10b981' :
-                                               (formData.ticket_status || contact?.ticket_status || contact?.report_status) === 'rejected' ? '#ef4444' : '#f59e0b',
-                                             background: 
-                                               (formData.ticket_status || contact?.ticket_status || contact?.report_status) === 'approved' || (formData.ticket_status || contact?.ticket_status || contact?.report_status) === 'resolved' || (formData.ticket_status || contact?.ticket_status || contact?.report_status) === 'approved_no_comp' ? 'rgba(16, 185, 129, 0.08)' :
-                                               (formData.ticket_status || contact?.ticket_status || contact?.report_status) === 'rejected' ? 'rgba(239, 68, 68, 0.08)' : 'rgba(245, 158, 11, 0.08)',
-                                             border: '1px solid currentColor'
-                                           }}
-                                         >
-                                           {(formData.ticket_status || contact?.ticket_status || contact?.report_status) === 'approved' || (formData.ticket_status || contact?.ticket_status || contact?.report_status) === 'resolved' || (formData.ticket_status || contact?.ticket_status || contact?.report_status) === 'approved_no_comp' ? (
-                                             <>
-                                               <CheckCircle2 size={16} style={{ color: '#10b981' }} />
-                                               <span>Báo lỗi: Đã duyệt</span>
-                                             </>
-                                           ) : (formData.ticket_status || contact?.ticket_status || contact?.report_status) === 'rejected' ? (
-                                             <>
-                                               <XCircle size={16} style={{ color: '#ef4444' }} />
-                                               <span>Báo lỗi: Bị từ chối</span>
-                                             </>
-                                           ) : (
-                                             <>
-                                               <Clock size={16} style={{ color: '#f59e0b' }} />
-                                               <span>Báo lỗi: Chờ duyệt</span>
-                                             </>
-                                           )}
-                                         </div>
-                                       ) : (
-                                         <button
-                                           className={styles.sidebarTabBtn}
-                                            onClick={() => {
-                                              setReportDetails('');
-                                              if (!reportReasonType) {
-                                                setReportReasonType(reportReasons[0]?.reason || 'Sai số điện thoại / Số ảo');
-                                              }
-                                              setShowReportModal(true);
-
-                                              if (reportReasons.length === 0) {
-                                                api.get('/api.php?action=get_settings')
-                                                  .then(res => {
-                                                    if (res.data?.data?.report_error_reasons && Array.isArray(res.data.data.report_error_reasons) && res.data.data.report_error_reasons.length > 0) {
-                                                      setReportReasons(res.data.data.report_error_reasons);
-                                                    }
-                                                  })
-                                                  .catch(() => {});
-                                              }
-                                            }}
-                                           style={{
-                                             padding: '11px 0.875rem',
-                                             fontSize: '0.85rem',
-                                             display: 'flex',
-                                             alignItems: 'center',
-                                             gap: '8px',
-                                             width: '100%',
-                                             border: 'none',
-                                             background: 'transparent',
-                                             borderRadius: '6px',
-                                             textAlign: 'left',
-                                             cursor: 'pointer',
-                                             fontWeight: 600,
-                                             transition: 'all 0.15s ease',
-                                             marginTop: '0.15rem'
-                                           }}
-                                         >
-                                           <ShieldAlert size={16} style={{ color: '#ef4444' }} />
-                                           <span>Báo lỗi data</span>
-                                         </button>
-                                       )
-                                     )}
-
-
                                   </div>
                                 );
                               });
@@ -11306,11 +11258,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             <h3 style={{ fontWeight: 700, fontSize: '1.125rem', marginBottom: '0.25rem' }}>Ghi chú nội bộ</h3>
                             <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>Các ghi chú dạng giấy Note đính kèm thông tin</p>
                           </div>
-                          <button className="btn primary sm" onClick={() => {
-                            setEditingNote(null);
-                            setNewNote('');
-                            setShowNoteModal(true);
-                          }} style={{ fontWeight: 600 }}><Plus size={14} /> Thêm ghi chú</button>
+                          <button className="btn primary sm" onClick={handleOpenNewNoteModal} style={{ fontWeight: 600 }}><Plus size={14} /> Thêm ghi chú</button>
                         </div>
 
 
@@ -11376,11 +11324,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 title="Chưa có ghi chú nội bộ"
                                 description="Các ghi chú dạng giấy Note đính kèm thông tin khách hàng sẽ xuất hiện tại đây."
                                 actionText="Thêm ghi chú"
-                                onAction={() => {
-                                  setEditingNote(null);
-                                  setNewNote('');
-                                  setShowNoteModal(true);
-                                }}
+                                onAction={handleOpenNewNoteModal}
                               />
                             );
                           }
@@ -15516,6 +15460,13 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
               animate={{ opacity: 1, y: 0, scale: 1 }} 
               exit={{ opacity: 0, y: 20, scale: 0.95 }}
               onClick={e => e.stopPropagation()}
+              onKeyDown={(e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleSaveNoteModal();
+                }
+              }}
             >
               <div className="modal-header">
                 <h3>{editingNote ? 'Chỉnh sửa ghi chú' : 'Thêm ghi chú mới'}</h3>
@@ -15531,6 +15482,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                   <MentionInput
                     value={newNote || ''}
                     onChange={e => setNewNote(e.target.value)}
+                    onSubmitShortcut={handleSaveNoteModal}
                     onImagePaste={(file: File) => {
                       if (file.size > 50 * 1024 * 1024) {
                         addToast('Dung lượng tệp đính kèm không được vượt quá 50MB', 'error');
@@ -15551,7 +15503,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                       setNoteAttachmentPreview(previewUrl);
                       addToast('Đã dán tệp đính kèm từ clipboard!', 'success');
                     }}
-                    placeholder="Nhập ghi chú phản hồi khách hàng (Dán ảnh trực tiếp Ctrl+V)..."
+                    placeholder="Nhập ghi chú phản hồi khách hàng (Ctrl+Enter để lưu, dán ảnh Ctrl+V)..."
                     style={{ width: '100%', padding: '12px 16px', border: '1px solid var(--color-border)', borderRadius: '8px', fontSize: '0.875rem', lineHeight: 1.6, resize: 'vertical', minHeight: 120, color: 'var(--color-text)', outline: 'none', background: 'var(--color-surface)' }}
                   />
                 </div>
@@ -15603,27 +15555,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
               <div className="modal-footer">
                 <button type="button" className="btn outline lg" onClick={() => { setShowNoteModal(false); setEditingNote(null); }} disabled={isSubmitting}>Hủy bỏ</button>
-                <button type="button" className="btn primary lg" onClick={async () => {
-                  if (editingNote) {
-                    setIsSubmitting(true);
-                    try {
-                      await api.put(`/notes/${editingNote.id}`, { body: newNote });
-                      addToast('Cập nhật ghi chú thành công!', 'success');
-                      setShowNoteModal(false);
-                      setEditingNote(null);
-                      setNewNote('');
-                      fetchData();
-                      window.dispatchEvent(new CustomEvent('contact-updated'));
-                    } catch (e: any) {
-                      addToast('Lỗi khi cập nhật ghi chú', 'error');
-                    } finally {
-                      setIsSubmitting(false);
-                    }
-                  } else {
-                    await addNote();
-                    setShowNoteModal(false);
-                  }
-                }} disabled={isSubmitting || !newNote.trim()}>
+                <button type="button" className="btn primary lg" onClick={handleSaveNoteModal} disabled={isSubmitting || !newNote.trim()}>
                   {isSubmitting ? 'Đang lưu...' : 'Lưu ghi chú'}
                 </button>
               </div>
@@ -16589,86 +16521,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           </div>
         )}
       </AnimatePresence>
-      <CustomModal
-        isOpen={showReportModal}
-        onClose={() => setShowReportModal(false)}
-        title="Báo cáo dữ liệu lỗi / Trùng lặp"
-        zIndex={effectiveZIndex + 15}
-      >
-        <div style={{ padding: '0.5rem 0' }}>
-          <div className="form-group" style={{ marginBottom: '1.25rem' }}>
-            <label className="form-label" style={{ fontWeight: 700, marginBottom: '6px', display: 'block' }}>Lý do báo lỗi (Chọn mẫu có sẵn)</label>
-            <CustomSelect
-              options={
-                reportReasons.length > 0
-                  ? reportReasons.map(r => ({ value: r.reason, label: r.reason }))
-                  : [
-                      { value: 'Sai số điện thoại / Số ảo', label: 'Sai số điện thoại / Số ảo' },
-                      { value: 'Trùng của tôi (Trùng Saleperson)', label: 'Trùng của tôi (Trùng Saleperson)' },
-                      { value: 'Trùng của người khác (Saleperson khác đã chăm)', label: 'Trùng của người khác (Saleperson khác đã chăm)' },
-                      { value: 'Spam ảo / Junk lead', label: 'Spam ảo / Junk lead' },
-                      { value: 'Khác', label: 'Khác' }
-                    ]
-              }
-              value={reportReasonType}
-              onChange={(val) => setReportReasonType(String(val))}
-            />
-            {(() => {
-              const matchedReason = reportReasons.find(r => r.reason === reportReasonType);
-              if (matchedReason && matchedReason.note) {
-                return (
-                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '6px', background: 'var(--color-surface-hover)', padding: '8px 12px', borderRadius: '6px', borderLeft: '3px solid var(--color-primary)' }}>
-                    {matchedReason.note.replace('{n}', '6')}
-                  </div>
-                );
-              }
-              return null;
-            })()}
-          </div>
-
-          <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-            <label className="form-label" style={{ fontWeight: 700, marginBottom: '6px', display: 'block' }}>Nội dung chi tiết báo cáo</label>
-            <textarea
-              className="form-input"
-              rows={4}
-              placeholder="Nhập chi tiết lý do báo lỗi, bằng chứng cuộc gọi/hình ảnh (nếu có)..."
-              value={reportDetails}
-              onChange={e => setReportDetails(e.target.value)}
-              style={{ resize: 'none', width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)' }}
-            />
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '1.5rem' }}>
-            <button
-              className="btn outline"
-              onClick={() => setShowReportModal(false)}
-              disabled={submittingReport}
-              style={{ borderRadius: '8px', padding: '8px 16px' }}
-            >
-              Hủy
-            </button>
-            <button
-              className="btn primary"
-              onClick={handleSubmitReport}
-              disabled={submittingReport}
-              style={{
-                background: 'var(--color-danger)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '8px 16px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}
-            >
-              {submittingReport ? 'Đang gửi...' : 'Gửi báo cáo'}
-            </button>
-          </div>
-        </div>
-      </CustomModal>
       {showExpenseModal && (
         <Suspense fallback={null}>
           <ExpenseCreateDrawer
@@ -18391,6 +18243,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         <ReportDataModal
           isOpen={showReportDataModal}
           onClose={() => setShowReportDataModal(false)}
+          zIndex={effectiveZIndex + 30}
           contact={{
             ...contact,
             ...formData,

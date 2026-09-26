@@ -600,7 +600,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           if (currentPath !== '/support-tickets' && currentPath !== '/expenses') {
             if (ticketsCount > 0 || heldCount > 0 || checkinsCount > 0 || coopsCount > 0 || supportCount > 0 || expensesCount > 0 || salesPendingSignCount > 0 || localApprovals > 0) {
               const isPermanentlyDisabled = localStorage.getItem('unified_inbox_auto_open_disabled') === 'true';
-              const todayStr = new Date().toISOString().slice(0, 10);
+              const todayStr = new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0') + '-' + String(new Date().getDate()).padStart(2, '0');
               const dismissedToday = localStorage.getItem('unified_inbox_dismissed_date') === todayStr;
 
               if (!isPermanentlyDisabled && !dismissedToday && !hasAutoOpenedRef.current) {
@@ -1341,14 +1341,9 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                 type="button"
                 onClick={() => {
                   try {
-                    const isCurrentlyDisabled = localStorage.getItem('unified_inbox_auto_open_disabled') === 'true';
-                    if (isCurrentlyDisabled) {
-                      localStorage.removeItem('unified_inbox_auto_open_disabled');
-                      toast.success(t('Đã bật lại tính năng tự động hiển thị hộp thư tồn đọng.'));
-                    } else {
-                      localStorage.setItem('unified_inbox_auto_open_disabled', 'true');
-                      toast.success(t('Đã tắt tự động hiển thị hộp thư tồn đọng. Bạn vẫn có thể mở lại bất cứ lúc nào từ biểu tượng trên thanh menu.'));
-                    }
+                    localStorage.setItem('unified_inbox_auto_open_disabled', 'true');
+                    hasAutoOpenedRef.current = true;
+                    toast.success(t('Đã tắt tự động hiển thị hộp thư tồn đọng. Bạn vẫn có thể mở lại bất cứ lúc nào từ biểu tượng trên menu.'));
                   } catch (e) {}
                   setIsUnifiedInboxOpen(false);
                 }}
@@ -1375,8 +1370,9 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                 type="button"
                 onClick={() => {
                   try {
-                    const todayStr = new Date().toISOString().slice(0, 10);
+                    const todayStr = new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0') + '-' + String(new Date().getDate()).padStart(2, '0');
                     localStorage.setItem('unified_inbox_dismissed_date', todayStr);
+                    hasAutoOpenedRef.current = true;
                     toast.success(t('Hộp thư tồn đọng sẽ không tự động mở lại trong ngày hôm nay.'));
                   } catch (e) {}
                   setIsUnifiedInboxOpen(false);

@@ -72,6 +72,8 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, e
   const [proofImagePreview, setProofImagePreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const draftStorageKey = entityId ? `draft_activity_${entityType || 'contact'}_${entityId}` : null;
+
   useEffect(() => {
     if (isOpen) {
       const defaultDate = activity?.due_date ? new Date(activity.due_date) : new Date();
@@ -79,13 +81,33 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, e
       const tzOffset = defaultDate.getTimezoneOffset() * 60000;
       const localISOTime = new Date(defaultDate.getTime() - tzOffset).toISOString().slice(0, 16);
 
+      let initialBody = activity?.body || '';
+      let initialType = activity?.type || 'call';
+      let initialSubject = activity?.subject || DEFAULT_SUBJECTS[activity?.type || 'call'] || '';
+
+      // Auto-recover draft if creating new activity
+      if (!activity && draftStorageKey) {
+        try {
+          const savedDraft = localStorage.getItem(draftStorageKey);
+          if (savedDraft) {
+            const parsed = JSON.parse(savedDraft);
+            if (parsed && typeof parsed.body === 'string' && parsed.body.trim()) {
+              initialBody = parsed.body;
+              if (parsed.type) initialType = parsed.type;
+              if (parsed.subject) initialSubject = parsed.subject;
+              addToast('Đã khôi phục bản nháp nội dung tương tác', 'info');
+            }
+          }
+        } catch (e) {}
+      }
+
       setFormData({
-        type: activity?.type || 'call',
-        subject: activity?.subject || DEFAULT_SUBJECTS[activity?.type || 'call'] || '',
-        body: activity?.body || '',
+        type: initialType,
+        subject: initialSubject,
+        body: initialBody,
         due_date: localISOTime,
         priority: activity?.priority || 'medium',
-        status: activity?.status || (activity?.type === 'call' ? 'done' : 'planned'),
+        status: activity?.status || (initialType === 'call' ? 'done' : 'planned'),
         auto_trigger: false,
         call_direction: 'outbound',
         call_outcome: 'reached',
@@ -94,7 +116,24 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, e
       setProofImageFile(null);
       setProofImagePreview(null);
     }
-  }, [isOpen, activity]);
+  }, [isOpen, activity, draftStorageKey]);
+
+  // Autosave draft on body/subject/type change
+  useEffect(() => {
+    if (isOpen && !activity && draftStorageKey) {
+      const cleanBody = formData.body ? formData.body.replace(/<[^>]*>/g, '').trim() : '';
+      if (cleanBody || (formData.subject && formData.subject !== DEFAULT_SUBJECTS[formData.type])) {
+        localStorage.setItem(draftStorageKey, JSON.stringify({
+          body: formData.body,
+          type: formData.type,
+          subject: formData.subject,
+          updatedAt: Date.now()
+        }));
+      } else {
+        localStorage.removeItem(draftStorageKey);
+      }
+    }
+  }, [formData.body, formData.type, formData.subject, isOpen, activity, draftStorageKey]);
 
   if (!isOpen) return null;
 
@@ -184,6 +223,10 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, e
         });
       }
 
+      if (draftStorageKey) {
+        localStorage.removeItem(draftStorageKey);
+      }
+
       if (onSuccess) onSuccess();
       onClose();
     } catch (err: any) {
@@ -260,6 +303,12 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, e
           
           <form 
             onSubmit={handleSubmit} 
+            onKeyDown={(e) => {
+              if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                handleSubmit(e);
+              }
+            }}
             className="modal-body no-scrollbar"
             style={{
               overflowY: 'auto',
@@ -306,15 +355,19 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, e
 
             {/* Ghi chú chi tiết */}
             <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <AlignLeft size={13} /> Ghi chú chi tiết
+              <label className="form-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><AlignLeft size={13} /> Ghi chú chi tiết</span>
+                <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>💡 Phím tắt: <strong>Ctrl + Enter</strong> để lưu</span>
               </label>
               <MentionInput 
                 className="form-input" 
                 rows={isMobile ? 4 : 6} 
-                placeholder="Nhập nội dung chi tiết của hoạt động (Dán ảnh trực tiếp Ctrl+V)..."
+                placeholder="Nhập nội dung chi tiết của hoạt động (Dán ảnh Ctrl+V, nhấn Ctrl+Enter để lưu)..."
                 value={formData.body}
                 onChange={e => setFormData({ ...formData, body: e.target.value })}
+                onSubmitShortcut={() => {
+                  handleSubmit({ preventDefault: () => {} } as any);
+                }}
                 onImagePaste={(file: File) => {
                   if (file.size > 5 * 1024 * 1024) {
                     addToast('Dung lượng tệp đính kèm không được vượt quá 5MB', 'error');

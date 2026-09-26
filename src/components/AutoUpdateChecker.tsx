@@ -127,9 +127,11 @@ export const AutoUpdateChecker: React.FC = () => {
 
     checkVersion();
 
-    // Check every 2 minutes
+    // Check every 2 minutes only if tab is visible
     const interval = setInterval(() => {
-      checkVersion();
+      if (!document.hidden) {
+        checkVersion();
+      }
     }, 120000);
 
     const handleVisibilityChange = () => {

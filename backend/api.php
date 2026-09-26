@@ -2252,8 +2252,13 @@ switch ($action) {
         if ($lecturerId > 0 || $isAllLecturers) {
             $lecturerName = $isAllLecturers ? 'Tất cả giảng viên' : ($lecturers[$lecturerId] ?? 'Giảng viên');
 
-            // Query all campaigns and extract subjects matching lecturerId
-            $resCampaigns = $conn->query("SELECT id, name, project_id, subjects_json, status, thesis_milestones_json FROM marketing_campaigns");
+            // Query all campaigns and extract subjects matching lecturerId (only from active projects)
+            $resCampaigns = $conn->query("
+                SELECT mc.id, mc.name, mc.project_id, mc.subjects_json, mc.status, mc.thesis_milestones_json 
+                FROM marketing_campaigns mc
+                INNER JOIN projects p ON mc.project_id = p.id
+                WHERE mc.status != 'deleted' AND mc.status != 'archived' AND mc.status != 'inactive'
+            ");
             $matchingSubjects = [];
             $thesisMilestones = [];
 
@@ -2356,8 +2361,14 @@ switch ($action) {
         $campaign = null;
         $project = null;
 
-        // 2. Query Campaign/Course
-        $stmtC = $conn->prepare("SELECT id, name, project_id, subjects_json, status, thesis_milestones_json FROM marketing_campaigns WHERE id = ? LIMIT 1");
+        // 2. Query Campaign/Course belonging to an active project
+        $stmtC = $conn->prepare("
+            SELECT mc.id, mc.name, mc.project_id, mc.subjects_json, mc.status, mc.thesis_milestones_json 
+            FROM marketing_campaigns mc
+            INNER JOIN projects p ON mc.project_id = p.id
+            WHERE mc.id = ? AND mc.status != 'deleted' AND mc.status != 'archived'
+            LIMIT 1
+        ");
         $stmtC->bind_param("i", $campaignId);
         $stmtC->execute();
         $campaign = $stmtC->get_result()->fetch_assoc();

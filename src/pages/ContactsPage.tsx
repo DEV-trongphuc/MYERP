@@ -1,7 +1,7 @@
-import React, { useState, useMemo, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useMemo, useEffect, useRef, lazy, Suspense } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { Plus, Search, Phone, PhoneOff, Mail, Eye, EyeOff, Clock, Ban, CheckCircle2, Trash2, X, Download, Users, Tag as TagIcon, UserCheck, RefreshCw, Filter, LayoutGrid, List, ArrowDownUp, Columns, Building2, Briefcase, Loader2, User, UserPlus, Calendar, AlertTriangle, AlertCircle, CheckSquare, Layers, MoreHorizontal, ChevronRight, ChevronLeft, GraduationCap } from 'lucide-react';
+import { Plus, Search, Phone, PhoneOff, Mail, Eye, EyeOff, Clock, Ban, CheckCircle2, Trash2, X, Download, Upload, ChevronDown, Users, Tag as TagIcon, UserCheck, RefreshCw, Filter, LayoutGrid, List, ArrowDownUp, Columns, Building2, Briefcase, Loader2, User, UserPlus, Calendar, AlertTriangle, AlertCircle, CheckSquare, Layers, MoreHorizontal, ChevronRight, ChevronLeft, GraduationCap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar, getColorFromName } from '../components/ui/Avatar';
 import { useUIStore } from '../store/uiStore';
@@ -29,6 +29,7 @@ import { useDebounce } from '../hooks/useDebounce';
 import { useAuth } from '../contexts/AuthContext';
 import { isAcademic } from '../utils/roleUtils';
 import { ReportDataModal } from '../components/ui/ReportDataModal';
+import { TableContextMenu } from '../components/ui/TableContextMenu';
 
 const PAGE_SIZE = 10;
 
@@ -440,6 +441,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     return Number(sessionStorage.getItem('sale-uncontacted-count')) || 0;
   });
   const [initialMetadataLoaded, setInitialMetadataLoaded] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: any } | null>(null);
 
   useEffect(() => {
     const handleUncontactedCountChanged = (e: Event) => {
@@ -566,6 +568,23 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   const [page, setPage] = useState(1);
   const [profileContact, setProfileContact] = useState<any>(null);
   const [showImportExport, setShowImportExport] = useState(false);
+  const [showExportDropdown, setShowExportDropdown] = useState(false);
+  const exportDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (exportDropdownRef.current && !exportDropdownRef.current.contains(e.target as Node)) {
+        setShowExportDropdown(false);
+      }
+    };
+    if (showExportDropdown) {
+      document.addEventListener('mousedown', handleOutsideClick);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [showExportDropdown]);
+
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createForm, setCreateForm] = useState({ full_name: '', email: '', phone: '', company_name: '', job_title: '', status: 'lead', source: 'other', owner_id: '', city: '', ward: '', address: '' });
   const [creating, setCreating] = useState(false);
@@ -1348,72 +1367,131 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     });
   };
 
-  const bulkExport = async () => {
+  const contextStatuses = useMemo(() => {
+    const stagesToUse = (pipelineStages && pipelineStages.length > 0) ? pipelineStages : DEFAULT_PIPELINE_STAGES;
+    const list = stagesToUse.map(s => ({
+      id: String(s.id),
+      label: s.name,
+      color: s.color || '#3b82f6'
+    }));
+    list.push(
+      { id: 'nurture', label: 'Chăm sóc lại (Nurture)', color: '#0284c7' },
+      { id: 'lost', label: 'Không tiềm năng (Lost)', color: '#ef4444' }
+    );
+    return list;
+  }, [pipelineStages]);
+
+  const handleContextChangeStatus = async (item: any, newStatus: string) => {
+    try {
+      if (newStatus === 'nurture' || newStatus === 'lost') {
+        await api.put(`/contacts/${item.id}`, { lead_status: newStatus });
+        setContacts(prev => prev.map(c => c.id === item.id ? { ...c, lead_status: newStatus } : c));
+      } else {
+        await api.put(`/contacts/${item.id}`, { stage_id: Number(newStatus) });
+        const stageObj = pipelineStages.find(s => String(s.id) === String(newStatus));
+        setContacts(prev => prev.map(c => c.id === item.id ? { 
+          ...c, 
+          stage_id: Number(newStatus),
+          stage_name: stageObj?.name || c.stage_name,
+          stage_color: stageObj?.color || c.stage_color
+        } : c));
+      }
+      addToast('Đã cập nhật trạng thái liên hệ!', 'success');
+    } catch (err: any) {
+      addToast(err?.response?.data?.message || 'Không thể cập nhật trạng thái', 'error');
+    }
+  };
+
+  const handleContextDelete = (item: any) => {
+    showConfirm({
+      title: `Xóa liên hệ ${item.full_name || item.name || '#' + item.id}?`,
+      message: 'Bạn có chắc chắn muốn xóa liên hệ này? Thao tác không thể hoàn tác.',
+      isDanger: true,
+      confirmText: 'Xác nhận xóa',
+      onConfirm: async () => {
+        try {
+          await api.delete(`/contacts/${item.id}`);
+          setContacts(prev => prev.filter(c => c.id !== item.id));
+          addToast('Đã xóa liên hệ thành công', 'success');
+        } catch (err: any) {
+          addToast(err?.response?.data?.message || 'Lỗi khi xóa liên hệ', 'error');
+        } finally {
+          closeConfirm();
+        }
+      }
+    });
+  };
+
+  const bulkExport = async (mode: 'filtered' | 'full' = 'filtered') => {
     if (isExporting) return;
     setIsExporting(true);
     const params: Record<string, any> = {
       type: 'contact',
-      search: debouncedSearch,
-      segment,
+      export_mode: mode,
     };
-    if (segment === 'customer') {
-      params.student_sub_tab = studentSubTab;
-    }
-    if (activeFilters.status) {
-      if (/^\d+$/.test(activeFilters.status)) {
-        params.stage_id = activeFilters.status;
-        if (activeFilters.stageOp) params.stage_op = activeFilters.stageOp;
-      } else {
-        params.status = activeFilters.status;
-        if (activeFilters.stageOp) params.status_op = activeFilters.stageOp;
+
+    if (mode === 'filtered') {
+      params.search = debouncedSearch;
+      params.segment = segment;
+      if (segment === 'customer') {
+        params.student_sub_tab = studentSubTab;
+      }
+      if (activeFilters.status) {
+        if (/^\d+$/.test(activeFilters.status)) {
+          params.stage_id = activeFilters.status;
+          if (activeFilters.stageOp) params.stage_op = activeFilters.stageOp;
+        } else {
+          params.status = activeFilters.status;
+          if (activeFilters.stageOp) params.status_op = activeFilters.stageOp;
+        }
+      }
+
+      const effectiveLeadStatus = quickLeadStatus || activeFilters.leadStatus;
+      const effectiveLeadStatusOp = quickLeadStatus ? 'in' : (activeFilters.leadStatusOp || 'in');
+
+      if (effectiveLeadStatus) {
+        params.lead_status = effectiveLeadStatus;
+        params.lead_status_op = effectiveLeadStatusOp;
+      }
+
+      if (showLost || activeFilters.showLost || effectiveLeadStatus === 'lost') {
+        params.show_lost = 1;
+      }
+      if (activeFilters.source) params.source = activeFilters.source;
+      if (activeFilters.ownerId) params.owner_id = activeFilters.ownerId;
+      if (activeFilters.projectId) params.project_id = activeFilters.projectId;
+      if (activeFilters.campaignId) params.campaign_id = activeFilters.campaignId;
+      if (activeFilters.tag) params.tag = activeFilters.tag;
+      if (activeFilters.dataType) params.data_type = activeFilters.dataType;
+      if (activeFilters.dateActive) {
+        params.date_field = activeFilters.dateField;
+        params.date_type = activeFilters.dateType;
+        if (activeFilters.dateType === 'range') {
+          if (activeFilters.fromDate) params.from = activeFilters.fromDate;
+          if (activeFilters.toDate) params.to = activeFilters.toDate;
+        } else if (activeFilters.dateType === 'before') {
+          if (activeFilters.beforeDate) params.to = activeFilters.beforeDate;
+        } else if (activeFilters.dateType === 'after') {
+          if (activeFilters.afterDate) params.from = activeFilters.afterDate;
+        }
+      }
+      if (activeFilters.multiProgram) {
+        params.multi_program = 1;
+      }
+      const teamId = getEffectiveTeamId();
+      if (teamId) {
+        params.team_id = teamId;
       }
     }
 
-    const effectiveLeadStatus = quickLeadStatus || activeFilters.leadStatus;
-    const effectiveLeadStatusOp = quickLeadStatus ? 'in' : (activeFilters.leadStatusOp || 'in');
-
-    if (effectiveLeadStatus) {
-      params.lead_status = effectiveLeadStatus;
-      params.lead_status_op = effectiveLeadStatusOp;
-    }
-
-    if (showLost || activeFilters.showLost || effectiveLeadStatus === 'lost') {
-      params.show_lost = 1;
-    }
-    if (activeFilters.source) params.source = activeFilters.source;
-    if (activeFilters.ownerId) params.owner_id = activeFilters.ownerId;
-    if (activeFilters.projectId) params.project_id = activeFilters.projectId;
-    if (activeFilters.campaignId) params.campaign_id = activeFilters.campaignId;
-    if (activeFilters.tag) params.tag = activeFilters.tag;
-    if (activeFilters.dataType) params.data_type = activeFilters.dataType;
-    if (activeFilters.dateActive) {
-      params.date_field = activeFilters.dateField;
-      params.date_type = activeFilters.dateType;
-      if (activeFilters.dateType === 'range') {
-        if (activeFilters.fromDate) params.from = activeFilters.fromDate;
-        if (activeFilters.toDate) params.to = activeFilters.toDate;
-      } else if (activeFilters.dateType === 'before') {
-        if (activeFilters.beforeDate) params.to = activeFilters.beforeDate;
-      } else if (activeFilters.dateType === 'after') {
-        if (activeFilters.afterDate) params.from = activeFilters.afterDate;
-      }
-    }
-    if (activeFilters.multiProgram) {
-      params.multi_program = 1;
-    }
-    const teamId = getEffectiveTeamId();
-    if (teamId) {
-      params.team_id = teamId;
-    }
-
-    addToast('Đang tải xuống dữ liệu Export...', 'info');
+    addToast(mode === 'full' ? 'Đang xuất toàn bộ dữ liệu (100% trường)...' : 'Đang xuất dữ liệu theo bộ lọc đang xem...', 'info');
     try {
       await downloadExportFile({
         endpoint: '/export',
         params,
-        defaultFilename: `export_contacts_${Date.now()}.csv`,
+        defaultFilename: mode === 'full' ? `export_all_contacts_${Date.now()}.csv` : `export_contacts_${Date.now()}.csv`,
         onSuccess: () => {
-          addToast('Tải xuống danh sách liên hệ thành công!', 'success');
+          addToast(mode === 'full' ? 'Tải xuống toàn bộ dữ liệu liên hệ thành công!' : 'Tải xuống danh sách liên hệ theo bộ lọc thành công!', 'success');
         },
       });
     } catch (err: any) {
@@ -1574,16 +1652,129 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
           {!isMobile && (
             <>
               {user?.role !== 'viewer' && !isSale && (
-                <button className="btn outline" onClick={() => setShowImportExport(true)} title="Nhập/Xuất Dữ liệu">
-                  <Download size={14}/>
-                  <span className="hide-on-mobile"> Nhập/Xuất Dữ liệu</span>
+                <button 
+                  className="btn outline sm" 
+                  onClick={() => setShowImportExport(true)} 
+                  title="Nhập dữ liệu từ Excel/CSV"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', borderRadius: '8px', padding: '6px 12px', fontSize: '0.8rem', fontWeight: 600 }}
+                >
+                  <Upload size={14} />
+                  <span className="hide-on-mobile">Nhập dữ liệu</span>
                 </button>
               )}
               {user?.role !== 'viewer' && user?.role !== 'sale' && (
-                <button className="btn outline" onClick={bulkExport} disabled={isExporting} title="Xuất dữ liệu theo bộ lọc">
-                  {isExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
-                  <span> {isExporting ? 'Đang xuất...' : 'Xuất theo bộ lọc'}</span>
-                </button>
+                <div style={{ position: 'relative' }} ref={exportDropdownRef}>
+                  <button 
+                    className="btn outline sm" 
+                    onClick={() => setShowExportDropdown(!showExportDropdown)} 
+                    disabled={isExporting} 
+                    title="Xuất dữ liệu ra Excel/CSV"
+                    style={{ 
+                      display: 'inline-flex', 
+                      alignItems: 'center', 
+                      gap: '6px', 
+                      whiteSpace: 'nowrap', 
+                      borderRadius: '8px', 
+                      padding: '6px 12px', 
+                      fontSize: '0.8rem', 
+                      fontWeight: 600,
+                      background: showExportDropdown ? 'var(--color-bg-light)' : undefined,
+                      borderColor: showExportDropdown ? 'var(--color-primary)' : undefined
+                    }}
+                  >
+                    {isExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
+                    <span>{isExporting ? 'Đang xuất...' : 'Xuất dữ liệu'}</span>
+                    <ChevronDown size={13} style={{ opacity: 0.7, transform: showExportDropdown ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }} />
+                  </button>
+
+                  <AnimatePresence>
+                    {showExportDropdown && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                        transition={{ duration: 0.15 }}
+                        style={{
+                          position: 'absolute',
+                          right: 0,
+                          top: 'calc(100% + 6px)',
+                          width: '270px',
+                          background: 'var(--color-surface)',
+                          border: '1px solid var(--color-border)',
+                          borderRadius: '10px',
+                          boxShadow: 'var(--shadow-lg, 0 10px 25px rgba(0,0,0,0.12))',
+                          padding: '6px',
+                          zIndex: 1000,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '2px'
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowExportDropdown(false);
+                            bulkExport('filtered');
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: '10px',
+                            padding: '8px 10px',
+                            border: 'none',
+                            background: 'transparent',
+                            color: 'var(--color-text)',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                            transition: 'background-color 0.15s'
+                          }}
+                          className="hover-bg-alt"
+                        >
+                          <div style={{ marginTop: '2px', color: 'var(--color-primary)' }}>
+                            <Filter size={15} />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text)' }}>Xuất theo bộ lọc đang xem</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>Xuất chuẩn theo các tiêu chí & bộ lọc trên màn hình</div>
+                          </div>
+                        </button>
+
+                        <div style={{ height: '1px', background: 'var(--color-border-light)', margin: '2px 0' }} />
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowExportDropdown(false);
+                            bulkExport('full');
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: '10px',
+                            padding: '8px 10px',
+                            border: 'none',
+                            background: 'transparent',
+                            color: 'var(--color-text)',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                            transition: 'background-color 0.15s'
+                          }}
+                          className="hover-bg-alt"
+                        >
+                          <div style={{ marginTop: '2px', color: 'var(--color-success)' }}>
+                            <Download size={15} />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text)' }}>Xuất toàn bộ dữ liệu</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>Tất cả 100% trường khách hàng (hồ sơ, đào tạo, CRM...)</div>
+                          </div>
+                        </button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               )}
             </>
           )}
@@ -2056,7 +2247,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                       {(user?.role as string) !== 'viewer' && (!isSale || user?.role !== 'sale') && (
                         <>
                           <div style={{ height: '1px', background: 'var(--color-border-light)', margin: '4px 0' }} />
-                          {/* Import/Export Action */}
+                          {/* Import Action */}
                           {(user?.role as string) !== 'viewer' && !isSale && (
                             <button
                               onClick={() => {
@@ -2079,36 +2270,62 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                 cursor: 'pointer'
                               }}
                             >
-                              <Download size={12} />
-                              <span>Nhập/Xuất Dữ liệu</span>
+                              <Upload size={13} />
+                              <span>Nhập dữ liệu</span>
                             </button>
                           )}
-                          {/* Filter Export Action */}
+                          {/* Export Actions */}
                           {(user?.role as string) !== 'viewer' && user?.role !== 'sale' && (
-                            <button
-                              onClick={() => {
-                                bulkExport();
-                                setShowMobileActions(false);
-                              }}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px',
-                                width: '100%',
-                                padding: '8px 12px',
-                                border: 'none',
-                                background: 'transparent',
-                                color: 'var(--color-text)',
-                                borderRadius: '8px',
-                                fontSize: '0.75rem',
-                                fontWeight: 600,
-                                textAlign: 'left',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              <Download size={12} />
-                              <span>Xuất theo bộ lọc</span>
-                            </button>
+                            <>
+                              <button
+                                onClick={() => {
+                                  bulkExport('filtered');
+                                  setShowMobileActions(false);
+                                }}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  width: '100%',
+                                  padding: '8px 12px',
+                                  border: 'none',
+                                  background: 'transparent',
+                                  color: 'var(--color-text)',
+                                  borderRadius: '8px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600,
+                                  textAlign: 'left',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <Filter size={13} />
+                                <span>Xuất theo bộ lọc</span>
+                              </button>
+                              <button
+                                onClick={() => {
+                                  bulkExport('full');
+                                  setShowMobileActions(false);
+                                }}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  width: '100%',
+                                  padding: '8px 12px',
+                                  border: 'none',
+                                  background: 'transparent',
+                                  color: 'var(--color-text)',
+                                  borderRadius: '8px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600,
+                                  textAlign: 'left',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <Download size={13} />
+                                <span>Xuất toàn bộ (100% trường)</span>
+                              </button>
+                            </>
                           )}
                         </>
                       )}
@@ -2806,7 +3023,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
               { label:'Tag',   action:bulkTag   },
               ...(!isSale ? [
                 { label:'Gán',  action:bulkAssign},
-                { label:'Xuất', action:bulkExport },
+                { label:'Xuất', action: () => bulkExport('filtered') },
               ] : [])
             ].map(b=>(
               <button key={b.label} onClick={b.action}
@@ -3012,7 +3229,12 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                          style={{ transition: 'background 0.2s', cursor: 'pointer' }}
                          className="table-row-hover"
                          title={isUncontacted ? 'Lead mới giao hoặc giao lại chưa có tương tác mới' : undefined}
-                         onClick={() => setProfileContact(c)}>
+                         onClick={() => setProfileContact(c)}
+                         onContextMenu={(e) => {
+                           e.preventDefault();
+                           e.stopPropagation();
+                           setContextMenu({ x: e.clientX, y: e.clientY, item: c });
+                         }}>
                         {isMultiSelectMode && (
                           <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }} onClick={e => e.stopPropagation()}>
                             <CustomCheckbox 
@@ -3705,6 +3927,11 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                       initial={{ opacity: 0, scale: 0.95 }} 
                       animate={{ opacity: 1, scale: 1 }}
                       onClick={() => setProfileContact(c)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setContextMenu({ x: e.clientX, y: e.clientY, item: c });
+                      }}
                       style={{ 
                         background: 'var(--color-surface)',
                         border: '1px solid var(--color-border-light)', 
@@ -4268,6 +4495,22 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
         )}
       </AnimatePresence>
     , document.body)}
+      {/* Solid Dark Context Menu on Right Click */}
+      <TableContextMenu
+        isOpen={!!contextMenu}
+        x={contextMenu?.x || 0}
+        y={contextMenu?.y || 0}
+        item={contextMenu?.item ? {
+          ...contextMenu.item,
+          name: contextMenu.item.full_name || contextMenu.item.name,
+          phone: contextMenu.item.phone || contextMenu.item.mobile
+        } : null}
+        onClose={() => setContextMenu(null)}
+        onOpenProfile={(item) => setProfileContact(item)}
+        availableStatuses={contextStatuses}
+        onChangeStatus={handleContextChangeStatus}
+        onDelete={canAddOrAssign ? handleContextDelete : undefined}
+      />
     </div>
   );
 };

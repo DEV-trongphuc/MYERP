@@ -84,6 +84,7 @@ export const BankLogo: React.FC<BankLogoProps> = ({
         src={resolvedUrl}
         alt={typeof bank === 'string' ? bank : bank?.shortName || 'Bank'}
         loading="lazy"
+        decoding="async"
         onError={() => setHasError(true)}
         style={{
           width: '100%',

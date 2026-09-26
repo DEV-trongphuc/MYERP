@@ -15,6 +15,9 @@ import { ProfileModal } from './components/ProfileModal';
 import { hasModuleApprovalAccess } from './utils/approvalPermissions';
 import { isMarketing, isAcademic } from './utils/roleUtils';
 import { AutoUpdateChecker } from './components/AutoUpdateChecker';
+import { NetworkStatusIndicator } from './components/ui/NetworkStatusIndicator';
+import { CommandPalette } from './components/ui/CommandPalette';
+import { GlobalEntityDrawers } from './components/ui/GlobalEntityDrawers';
 
 
 // Lazy load all pages for Code Splitting (including Enterprise Social Feed)
@@ -418,6 +421,10 @@ const KeyboardShortcutsController = () => {
                   </h4>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
+                      <span style={{ color: 'var(--color-primary)', fontWeight: 700 }}>{t("Spotlight Search toàn năng")}</span>
+                      <kbd className="shortcuts-kbd" style={{ background: 'var(--color-primary)', color: '#ffffff', borderColor: 'var(--color-primary)' }}>Ctrl + K</kbd>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
                       <span style={{ color: 'var(--color-text)' }}>{t("Trang chủ Dashboard")}</span>
                       <kbd className="shortcuts-kbd">Alt + D</kbd>
                     </div>
@@ -583,12 +590,15 @@ export default function App() {
                   </Route>
                 </Routes>
                 <KeyboardShortcutsController />
+                <GlobalConfirmModal />
+                <QRCodeCallModal />
+                <ProfileModal />
+                <AutoUpdateChecker />
+                <NetworkStatusIndicator />
+                <CommandPalette />
+                <GlobalEntityDrawers />
               </Suspense>
             </Router>
-            <GlobalConfirmModal />
-            <QRCodeCallModal />
-            <ProfileModal />
-            <AutoUpdateChecker />
           </UploadProgressProvider>
         </AuthProvider>
 

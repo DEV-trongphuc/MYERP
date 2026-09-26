@@ -567,6 +567,98 @@ export default function Approvals() {
   const [users, setUsers] = useState<any[]>([]);
   const [selectedTimelineItem, setSelectedTimelineItem] = useState<ApprovalItem | null>(null);
 
+  // Auto-open requested approval from URL parameters or global custom event
+  useEffect(() => {
+    const params = new URLSearchParams(location.search || window.location.search);
+    const openId = params.get('open_id') || params.get('id');
+    const openType = params.get('open_type') || params.get('type');
+
+    if (openId && !isNaN(Number(openId))) {
+      const numId = Number(openId);
+      pendingOpenRef.current = { id: numId, type: openType || undefined };
+
+      const combined = [...pendingList, ...myRequestsList, ...followingList, ...allList];
+      const found = combined.find(it => it.id === numId && (!openType || it.type === openType)) || combined.find(it => it.id === numId);
+      if (found) {
+        setSelectedTimelineItem(found);
+      } else {
+        // Direct fetch single item if not in list
+        if (openType === 'expense' || !openType) {
+          api.get(`/expenses/${numId}`).then(res => {
+            const d = res.data?.data || res.data;
+            if (d && d.id) {
+              setSelectedTimelineItem({
+                id: d.id,
+                type: 'expense',
+                title: d.title || 'Đề xuất chi phí',
+                description: d.notes || d.description || '',
+                amount: Number(d.amount) || 0,
+                currency: d.currency || 'VND',
+                status: d.status || 'pending',
+                created_at: d.created_at || new Date().toISOString(),
+                created_by: d.created_by || d.user_id,
+                user_id: d.user_id || d.created_by,
+                employee_name: d.employee_name || d.user_name || ''
+              } as any);
+            }
+          }).catch(() => {});
+        } else if (openType === 'leave') {
+          fetchAPI('hrm/leaves').then(res => {
+            const leaves = res?.data || [];
+            const foundLv = Array.isArray(leaves) ? leaves.find((l: any) => Number(l.id) === numId) : null;
+            if (foundLv) {
+              setSelectedTimelineItem({
+                id: foundLv.id,
+                type: 'leave',
+                title: 'Đơn nghỉ phép / Đi muộn',
+                description: foundLv.reason || '',
+                status: foundLv.status || 'pending',
+                total_days: foundLv.total_days,
+                created_at: foundLv.created_at || new Date().toISOString(),
+                user_id: foundLv.user_id,
+                employee_name: foundLv.employee_name || ''
+              } as any);
+            }
+          }).catch(() => {});
+        } else if (openType === 'advance') {
+          fetchAPI('hrm/advances').then(res => {
+            const advances = res?.data || [];
+            const foundAdv = Array.isArray(advances) ? advances.find((a: any) => Number(a.id) === numId) : null;
+            if (foundAdv) {
+              setSelectedTimelineItem({
+                id: foundAdv.id,
+                type: 'advance',
+                title: 'Đề nghị tạm ứng',
+                description: foundAdv.reason || '',
+                amount: Number(foundAdv.amount) || 0,
+                status: foundAdv.status || 'pending',
+                created_at: foundAdv.created_at || new Date().toISOString(),
+                user_id: foundAdv.user_id,
+                employee_name: foundAdv.employee_name || ''
+              } as any);
+            }
+          }).catch(() => {});
+        }
+      }
+    }
+
+    const handleCustomOpen = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail) {
+        const { id, type, raw } = customEvent.detail;
+        if (raw) {
+          setSelectedTimelineItem(raw);
+        } else if (id) {
+          pendingOpenRef.current = { id: Number(id), type };
+          loadData();
+        }
+      }
+    };
+
+    window.addEventListener('open-approval-item', handleCustomOpen);
+    return () => window.removeEventListener('open-approval-item', handleCustomOpen);
+  }, [location.search, pendingList.length, myRequestsList.length, allList.length]);
+
   // Fast O(1) user lookup maps for optimal table and drawer rendering
   const usersMap = useMemo(() => {
     const map = new Map<number, any>();
@@ -4466,16 +4558,20 @@ export default function Approvals() {
         finalApproverName = (item as any).approver_name_2;
       } else if ((item as any).approver_name) {
         finalApproverName = (item as any).approver_name;
+      } else if ((item as any).manager_name) {
+        finalApproverName = (item as any).manager_name;
       }
 
       if (!finalUser && finalApproverName) {
         finalUser = usersByNameMap.get(String(finalApproverName).toLowerCase().trim());
       }
 
-      if (!finalUser) {
-        if (item.type === 'checkin' || item.type === 'attendance_bulk' || item.type === 'leave') {
-          finalUser = usersByNameMap.get('phuongntd') || usersByNameMap.get('nguyễn thị duy phương');
-        }
+      if (!finalUser && (item as any).approved_by) {
+        finalUser = users.find(u => Number(u.id) === Number((item as any).approved_by));
+      }
+
+      if (!finalUser && (item as any).manager_id) {
+        finalUser = users.find(u => Number(u.id) === Number((item as any).manager_id));
       }
 
       const displayName = finalUser?.full_name || finalUser?.name || finalApproverName || t('Đã phê duyệt');
@@ -14892,7 +14988,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
           {item.type === 'checkin' && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: isMobile ? '0.75rem' : '1rem' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Ngày giải trình')}</label>
+                <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Ngày chấm công / giải trình')}</label>
                 <input
                   type="text"
                   className="form-input"
@@ -14912,11 +15008,13 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: 'span 2' }}>
-                <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Thời gian đi trễ (phút)')}</label>
+                <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                  {Number(detail?.late_minutes) > 0 ? t('Thời gian đi trễ (phút)') : t('Hình thức / Trạng thái')}
+                </label>
                 <input
                   type="text"
                   className="form-input"
-                  value={`${detail?.late_minutes || 0} phút`}
+                  value={Number(detail?.late_minutes) > 0 ? `${detail?.late_minutes} phút` : `Bổ sung chấm công đúng giờ (${detail?.check_in_time || '08:30:00'})`}
                   disabled
                   style={{ fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
                 />

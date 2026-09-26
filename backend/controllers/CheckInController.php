@@ -859,12 +859,41 @@ class CheckInController {
 
         // Update status and admin_note, keeping original Sale reason intact
         $adminNote = (!empty($reason) && trim($reason) !== '') ? trim($reason) : null;
-        if ($status === 'approved') {
-            $upd = $this->db->prepare("UPDATE check_ins SET status = ?, admin_note = COALESCE(?, admin_note), late_minutes = 0, early_minutes = 0 WHERE id = ?");
-        } else {
-            $upd = $this->db->prepare("UPDATE check_ins SET status = ?, admin_note = COALESCE(?, admin_note) WHERE id = ?");
+        try {
+            if ($status === 'approved') {
+                $upd = $this->db->prepare("
+                    UPDATE check_ins 
+                    SET status = ?, 
+                        admin_note = COALESCE(?, admin_note), 
+                        late_minutes = 0, 
+                        early_minutes = 0,
+                        approved_by = ?,
+                        approved_at = NOW(),
+                        manager_id = COALESCE(manager_id, ?)
+                    WHERE id = ?
+                ");
+                $upd->execute([$status, $adminNote, $auth['user_id'], $auth['user_id'], $id]);
+            } else {
+                $upd = $this->db->prepare("
+                    UPDATE check_ins 
+                    SET status = ?, 
+                        admin_note = COALESCE(?, admin_note),
+                        approved_by = ?,
+                        approved_at = NOW(),
+                        manager_id = COALESCE(manager_id, ?)
+                    WHERE id = ?
+                ");
+                $upd->execute([$status, $adminNote, $auth['user_id'], $auth['user_id'], $id]);
+            }
+        } catch (\Throwable $e) {
+            // Fallback if columns are not yet added
+            if ($status === 'approved') {
+                $upd = $this->db->prepare("UPDATE check_ins SET status = ?, admin_note = COALESCE(?, admin_note), late_minutes = 0, early_minutes = 0 WHERE id = ?");
+            } else {
+                $upd = $this->db->prepare("UPDATE check_ins SET status = ?, admin_note = COALESCE(?, admin_note) WHERE id = ?");
+            }
+            $upd->execute([$status, $adminNote, $id]);
         }
-        $upd->execute([$status, $adminNote, $id]);
 
         logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'UPDATE_CHECK_IN', 'check_in', $id, json_encode([
             'old_status' => $row['status'],

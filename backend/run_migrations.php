@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 291;
+$targetVersion = 292;
 $currentVersion = 186;
 
 // Query current DB version
@@ -178,7 +178,7 @@ try {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     ");
 
-    // 3. Ensure check_ins table has all necessary columns (late_minutes, selfie_url, reason, check_out_time, early_minutes, check_out_status)
+    // 3. Ensure check_ins table has all necessary columns (late_minutes, selfie_url, reason, check_out_time, early_minutes, check_out_status, approved_by, approved_at, manager_id)
     $chkColLM = $conn->query("SHOW COLUMNS FROM check_ins LIKE 'late_minutes'");
     if (!$chkColLM || $chkColLM->num_rows == 0) {
         $conn->query("ALTER TABLE check_ins ADD COLUMN late_minutes INT DEFAULT 0 COMMENT 'Số phút đi trễ' AFTER check_in_time");
@@ -201,6 +201,18 @@ try {
         $conn->query("ALTER TABLE check_ins ADD COLUMN check_out_status VARCHAR(50) DEFAULT NULL COMMENT 'Trạng thái ra ca (on_time, early)' AFTER status");
         $logMsg("Đã bổ sung các cột chấm công ra ca (check_out_time, early_minutes, check_out_status) vào bảng check_ins.", "success");
     }
+    $chkColAppBy = $conn->query("SHOW COLUMNS FROM check_ins LIKE 'approved_by'");
+    if (!$chkColAppBy || $chkColAppBy->num_rows == 0) {
+        $conn->query("ALTER TABLE check_ins ADD COLUMN approved_by INT NULL DEFAULT NULL AFTER check_out_status");
+        $conn->query("ALTER TABLE check_ins ADD COLUMN approved_at DATETIME NULL DEFAULT NULL AFTER approved_by");
+        $conn->query("ALTER TABLE check_ins ADD COLUMN manager_id INT NULL DEFAULT NULL AFTER approved_at");
+        $logMsg("Đã bổ sung cột approved_by, approved_at, manager_id vào bảng check_ins.", "success");
+    }
+
+    // Auto-clean orphaned marketing_campaigns whose parent project has been deleted
+    try {
+        $conn->query("DELETE FROM marketing_campaigns WHERE project_id IS NOT NULL AND project_id > 0 AND project_id NOT IN (SELECT id FROM projects)");
+    } catch (\Throwable $e) {}
 
     // Ensure signature_url in users table is LONGTEXT to support Base64 images or long URLs safely
     $chkSigCol = $conn->query("SHOW COLUMNS FROM users LIKE 'signature_url'");
@@ -3717,10 +3729,58 @@ try {
         }
     }
 
-    // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '291') ON DUPLICATE KEY UPDATE setting_value = '291'");
+    // ==========================================
+    // VERSION 292: ULTRA HIGH PERFORMANCE COMPOSITE INDEXES
+    // ==========================================
+    if ($currentVersion < 292 || $isForce) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 292: Bổ sung Composite Indexes chuyên sâu cho Contacts, Notes, Approvals, Expenses & Audit Logs...", "info");
+        try {
+            $safeAddIndex = function($tableName, $indexName, $columns) use ($conn, $logMsg) {
+                try {
+                    $tableCheck = $conn->query("SHOW TABLES LIKE '{$tableName}'");
+                    if (!$tableCheck || $tableCheck->num_rows === 0) return;
+                    
+                    $idxCheck = $conn->query("SHOW INDEX FROM `{$tableName}` WHERE Key_name = '{$indexName}'");
+                    if ($idxCheck && $idxCheck->num_rows > 0) return;
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 291", "success");
+                    $conn->query("ALTER TABLE `{$tableName}` ADD INDEX `{$indexName}` ({$columns})");
+                    $logMsg("Đã bổ sung index `{$indexName}` trên bảng `{$tableName}` ({$columns})", "success");
+                } catch (Throwable $e) {
+                    // Ignore if error or duplicate
+                }
+            };
+
+            // 1. Contacts Composite Indexes
+            $safeAddIndex('contacts', 'idx_contacts_active_lookup', '`tenant_id`, `deleted_at`, `owner_id`, `stage_id`, `status`');
+            $safeAddIndex('contacts', 'idx_contacts_active_search', '`tenant_id`, `deleted_at`, `lead_status`, `created_at`');
+            $safeAddIndex('contacts', 'idx_contacts_person_dup', '`tenant_id`, `deleted_at`, `person_id`, `duplicate_with_id`');
+
+            // 2. Notes Subquery Index
+            $safeAddIndex('notes', 'idx_notes_tenant_entity_id', '`tenant_id`, `entity_type`, `entity_id`, `id`');
+
+            // 3. Activities Subquery Index
+            $safeAddIndex('activities', 'idx_activities_tenant_related_del', '`tenant_id`, `related_type`, `related_id`, `deleted_at`, `id`');
+
+            // 4. HRM Leave Requests / Approvals Index
+            $safeAddIndex('hrm_leave_requests', 'idx_leave_requests_pending_eval', '`status`, `user_id`, `created_at`');
+            $safeAddIndex('hrm_leave_requests', 'idx_leave_requests_approver_lookup', '`approver_id`, `approver_id_2`, `status_level_1`, `status_level_2`');
+
+            // 5. Expenses / Financial Records Index
+            $safeAddIndex('expenses', 'idx_expenses_tenant_status_date', '`tenant_id`, `deleted_at`, `status`, `expense_date`');
+
+            // 6. Audit Logs Lookup Index
+            $safeAddIndex('audit_logs', 'idx_audit_logs_resource_fast', '`resource`, `resource_id`, `action`, `created_at`');
+
+            $logMsg("Nâng cấp lên phiên bản 292 hoàn tất: Toàn bộ chỉ mục tốc độ cao giai đoạn 8 đã được kích hoạt!", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi nâng cấp v292: " . $e->getMessage(), "error");
+        }
+    }
+
+    // Update DB version in system_settings
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '292') ON DUPLICATE KEY UPDATE setting_value = '292'");
+
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 292", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");

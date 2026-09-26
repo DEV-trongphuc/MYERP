@@ -592,10 +592,20 @@ export const Header = ({
   useEffect(() => {
     fetchNotifications();
     fetchNotifPrefs();
-    const interval = setInterval(fetchNotifications, 8000); // Polling every 8s for responsive notifications
+    const interval = setInterval(() => {
+      if (!document.hidden) {
+        fetchNotifications();
+      }
+    }, 8000); // Polling every 8s only when tab is active
     
     const handleRealtimeUpdate = () => {
       fetchNotifications();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchNotifications();
+      }
     };
 
     const handleManualToastTest = (e: any) => {
@@ -608,6 +618,7 @@ export const Header = ({
     window.addEventListener('realtime-update-received', handleRealtimeUpdate);
     window.addEventListener('new-notification-received', handleRealtimeUpdate);
     window.addEventListener('test-notification-toast', handleManualToastTest);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     
     return () => {
       clearInterval(interval);
@@ -615,6 +626,7 @@ export const Header = ({
       window.removeEventListener('realtime-update-received', handleRealtimeUpdate);
       window.removeEventListener('new-notification-received', handleRealtimeUpdate);
       window.removeEventListener('test-notification-toast', handleManualToastTest);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [showNotifSettings]);
 
@@ -1329,7 +1341,7 @@ export const Header = ({
   const [leadResults, setLeadResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
 
-  // Listen to Cmd+K or Ctrl+K
+  // Listen to Cmd+K or Ctrl+K to trigger Spotlight Command Palette
   useEffect(() => {
     const handleSearchKeyDown = (e: KeyboardEvent) => {
       const activeEl = document.activeElement;
@@ -1346,7 +1358,7 @@ export const Header = ({
 
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        setIsSearchOpen(prev => !prev);
+        window.dispatchEvent(new CustomEvent('open-command-palette'));
       }
     };
     window.addEventListener('keydown', handleSearchKeyDown);
@@ -1414,9 +1426,7 @@ export const Header = ({
     : visibleNavItems;
 
   const handleOpenSearch = () => {
-    setSearchQuery('');
-    setLeadResults([]);
-    setIsSearchOpen(true);
+    window.dispatchEvent(new CustomEvent('open-command-palette'));
   };
 
   return (
