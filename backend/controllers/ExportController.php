@@ -356,7 +356,7 @@ class ExportController {
                                ELSE t.created_at
                            END as closed_date,
                            r.round_name as round_name,
-                           dr.status as report_status,
+                           COALESCE(dr.status, t.report_status) as report_status,
                            (
                                SELECT COALESCE(SUM(d.value), 0) 
                                FROM deals d 
@@ -377,12 +377,15 @@ class ExportController {
                         (SELECT MAX(id) FROM leads WHERE t.person_id IS NOT NULL AND person_id = t.person_id),
                         (SELECT MAX(id) FROM leads WHERE t.phone IS NOT NULL AND phone = t.phone)
                     )
-                    LEFT JOIN distribution_logs dl ON dl.id = COALESCE(
-                        (SELECT MAX(id) FROM distribution_logs WHERE lead_id = l.id AND status IN ('assigned', 'compensation', 'rule_6_month', 'pending_work_hours', 'fallback', 'success', 'reminder')),
-                        (SELECT MAX(id) FROM distribution_logs WHERE contact_id = t.id)
+                    LEFT JOIN distribution_logs dl ON dl.id = (
+                        SELECT MAX(id) FROM distribution_logs 
+                        WHERE (lead_id = l.id AND assigned_to = t.owner_id) OR contact_id = t.id
                     )
-                    LEFT JOIN rounds r ON dl.round_id = r.id
-                    LEFT JOIN distribution_reports dr ON (dr.contact_id = t.id OR (l.id IS NOT NULL AND dr.lead_id = l.id))
+                    LEFT JOIN distribution_rounds r ON dl.round_id = r.id
+                    LEFT JOIN data_reports dr ON dr.id = (
+                        SELECT MAX(id) FROM data_reports 
+                        WHERE (l.id IS NOT NULL AND lead_id = l.id AND consultant_id = t.owner_id)
+                    )
                     WHERE $whereStr ORDER BY t.created_at DESC";
         } elseif ($type === 'company') {
             $baseColumns = ['id' => 'ID', 'name' => 'Tên công ty', 'tax_id' => 'Mã số thuế', 'industry' => 'Ngành nghề', 'email' => 'Email', 'phone' => 'Số điện thoại', 'website' => 'Website', 'address' => 'Địa chỉ', 'city' => 'Tỉnh/Thành phố', 'size' => 'Quy mô', 'status' => 'Trạng thái', 'owner_name' => 'Người phụ trách', 'created_at' => 'Ngày tạo'];
