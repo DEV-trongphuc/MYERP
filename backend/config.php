@@ -29,23 +29,32 @@ if (!function_exists('deleteServerFile')) {
      */
     function deleteServerFile(?string $fileUrl): bool {
         if (empty($fileUrl)) return false;
-        
         $fileUrl = trim($fileUrl);
 
-        // Strip domain or protocol if absolute URL
-        if (preg_match('/uploads\/(.+)$/i', $fileUrl, $matches)) {
-            $relativePath = 'uploads/' . $matches[1];
-        } else {
-            $relativePath = ltrim($fileUrl, '/');
+        // Never delete system assets, stickers, icons, or static resources
+        if (stripos($fileUrl, '/stickers/') !== false || stripos($fileUrl, 'stickers/') === 0 || 
+            stripos($fileUrl, '/assets/') !== false || stripos($fileUrl, '/imgs/') !== false) {
+            return false;
+        }
+
+        // Must strictly contain uploads/
+        if (!preg_match('/uploads\/(.+)$/i', $fileUrl, $matches)) {
+            return false;
+        }
+
+        $uploadSubpath = $matches[1];
+        // Prevent path traversal
+        if (strpos($uploadSubpath, '..') !== false) {
+            return false;
         }
 
         $baseUploadDir = defined('UPLOAD_DIR') ? UPLOAD_DIR : (__DIR__ . '/uploads');
         
         $candidatePaths = [
-            __DIR__ . '/' . $relativePath,
-            $baseUploadDir . '/' . (strpos($relativePath, 'uploads/') === 0 ? substr($relativePath, 8) : $relativePath),
-            __DIR__ . '/storage/' . $relativePath,
-            __DIR__ . '/public/' . $relativePath
+            $baseUploadDir . '/' . $uploadSubpath,
+            __DIR__ . '/uploads/' . $uploadSubpath,
+            dirname(__DIR__) . '/uploads/' . $uploadSubpath,
+            dirname(__DIR__) . '/backend/uploads/' . $uploadSubpath
         ];
 
         foreach ($candidatePaths as $path) {

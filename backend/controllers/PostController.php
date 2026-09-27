@@ -254,19 +254,45 @@ class PostController {
         $userId = (int)$auth['user_id'];
         $role = strtolower($auth['role']);
 
-        $stmt = $this->db->prepare("SELECT user_id FROM enterprise_posts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
+        $stmt = $this->db->prepare("SELECT user_id, attachments_json, content FROM enterprise_posts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
         $stmt->execute([$id, $tenantId]);
-        $postAuthorId = $stmt->fetchColumn();
+        $post = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if (!$postAuthorId) {
+        if (!$post) {
             respond(404, null, 'Bài viết không tồn tại', false);
         }
 
         // Only author or admin/superadmin can delete
-        if ($userId !== (int)$postAuthorId && !in_array($role, ['admin', 'superadmin', 'super_admin', 'director'])) {
+        if ($userId !== (int)$post['user_id'] && !in_array($role, ['admin', 'superadmin', 'super_admin', 'director'])) {
             respond(403, null, 'Bạn không có quyền xóa bài viết này', false);
         }
 
+        // 1. Physically delete images attached to the post from hosting
+        if (!empty($post['attachments_json'])) {
+            deleteAttachmentFiles($post['attachments_json']);
+        }
+        if (!empty($post['content'])) {
+            deleteAttachmentFiles($post['content']);
+        }
+
+        // 2. Fetch and physically delete all attachments and images in comments under this post
+        $cmtStmt = $this->db->prepare("SELECT attachments_json, content FROM enterprise_comments WHERE post_id = ? AND tenant_id = ?");
+        $cmtStmt->execute([$id, $tenantId]);
+        $comments = $cmtStmt->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($comments as $cmt) {
+            if (!empty($cmt['attachments_json'])) {
+                deleteAttachmentFiles($cmt['attachments_json']);
+            }
+            if (!empty($cmt['content'])) {
+                deleteAttachmentFiles($cmt['content']);
+            }
+        }
+
+        // 3. Mark comments as deleted
+        $delCmtStmt = $this->db->prepare("UPDATE enterprise_comments SET deleted_at = CURRENT_TIMESTAMP WHERE post_id = ? AND tenant_id = ?");
+        $delCmtStmt->execute([$id, $tenantId]);
+
+        // 4. Mark post as deleted
         $delStmt = $this->db->prepare("UPDATE enterprise_posts SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?");
         $delStmt->execute([$id]);
 
@@ -585,18 +611,42 @@ class PostController {
         $userId = (int)$auth['user_id'];
         $role = strtolower($auth['role']);
 
-        $stmt = $this->db->prepare("SELECT user_id FROM enterprise_comments WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
+        $stmt = $this->db->prepare("SELECT user_id, attachments_json, content FROM enterprise_comments WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
         $stmt->execute([$id, $tenantId]);
-        $commentAuthorId = $stmt->fetchColumn();
+        $comment = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if (!$commentAuthorId) {
+        if (!$comment) {
             respond(404, null, 'Bình luận không tồn tại', false);
         }
 
-        if ($userId !== (int)$commentAuthorId && !in_array($role, ['admin', 'superadmin', 'super_admin', 'director'])) {
+        if ($userId !== (int)$comment['user_id'] && !in_array($role, ['admin', 'superadmin', 'super_admin', 'director'])) {
             respond(403, null, 'Bạn không có quyền xóa bình luận này', false);
         }
 
+        // 1. Physically delete attachments and uploaded images in comment
+        if (!empty($comment['attachments_json'])) {
+            deleteAttachmentFiles($comment['attachments_json']);
+        }
+        if (!empty($comment['content'])) {
+            deleteAttachmentFiles($comment['content']);
+        }
+
+        // 2. Also clean up any sub-replies
+        $subStmt = $this->db->prepare("SELECT attachments_json, content FROM enterprise_comments WHERE parent_id = ? AND tenant_id = ?");
+        $subStmt->execute([$id, $tenantId]);
+        $subComments = $subStmt->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($subComments as $sub) {
+            if (!empty($sub['attachments_json'])) {
+                deleteAttachmentFiles($sub['attachments_json']);
+            }
+            if (!empty($sub['content'])) {
+                deleteAttachmentFiles($sub['content']);
+            }
+        }
+        $delSubStmt = $this->db->prepare("UPDATE enterprise_comments SET deleted_at = CURRENT_TIMESTAMP WHERE parent_id = ? AND tenant_id = ?");
+        $delSubStmt->execute([$id, $tenantId]);
+
+        // 3. Mark comment as deleted
         $delStmt = $this->db->prepare("UPDATE enterprise_comments SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?");
         $delStmt->execute([$id]);
 
