@@ -552,9 +552,27 @@ class ChatController {
                 ")->execute([$latestMsgId, $conversationId, $uid]);
             }
 
+            // Retrieve read statuses of all participants
+            $stmtRead = $this->db->prepare("
+                SELECT cp.user_id, u.full_name, u.avatar_url, cp.last_read_message_id, cp.last_read_at,
+                       pr.last_ping_at, TIMESTAMPDIFF(SECOND, pr.last_ping_at, NOW()) as seconds_ago
+                FROM chat_participants cp
+                JOIN users u ON cp.user_id = u.id
+                LEFT JOIN chat_user_presence pr ON pr.user_id = u.id
+                WHERE cp.conversation_id = ?
+            ");
+            $stmtRead->execute([$conversationId]);
+            $participantsRead = $stmtRead->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            foreach ($participantsRead as &$pr) {
+                $pr['user_id'] = (int)$pr['user_id'];
+                $pr['last_read_message_id'] = (int)($pr['last_read_message_id'] ?? 0);
+                $pr['is_online'] = !empty($pr['last_ping_at']) && (int)($pr['seconds_ago'] ?? 999) < 180;
+            }
+
             respond(200, [
                 'messages' => $messages,
-                'has_more' => count($rawMessages) === $limit
+                'has_more' => count($rawMessages) === $limit,
+                'participants' => $participantsRead
             ]);
         } catch (\Throwable $e) {
             error_log("Get Messages Error: " . $e->getMessage());
@@ -1422,13 +1440,17 @@ class ChatController {
 
             foreach ($users as &$u) {
                 $u['id'] = (int)$u['id'];
+                $u['is_active'] = true;
                 $sec = (int)($u['seconds_ago'] ?? 999999);
-                if (!empty($u['last_ping_at']) && $sec < 60) {
+                if (!empty($u['last_ping_at']) && $sec < 180) {
                     $u['status'] = 'online';
+                    $u['is_online'] = true;
                 } elseif (!empty($u['last_ping_at']) && $sec < 900) {
                     $u['status'] = 'away';
+                    $u['is_online'] = false;
                 } else {
                     $u['status'] = 'offline';
+                    $u['is_online'] = false;
                 }
             }
 

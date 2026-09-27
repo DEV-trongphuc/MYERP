@@ -28,6 +28,15 @@ export interface ChatReaction {
   reacted_by_me: boolean;
 }
 
+export type MessageDeliveryStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'error';
+
+export interface MessageReadParticipant {
+  user_id: number;
+  full_name: string;
+  avatar_url?: string;
+  read_at?: string;
+}
+
 export interface ChatMessage {
   id: number;
   conversation_id: number;
@@ -49,6 +58,9 @@ export interface ChatMessage {
   reactions?: ChatReaction[];
   is_mine?: boolean;
   is_sending?: boolean;
+  delivery_status?: MessageDeliveryStatus;
+  temp_id?: string;
+  read_by?: MessageReadParticipant[];
 }
 
 export interface ChatConversation {

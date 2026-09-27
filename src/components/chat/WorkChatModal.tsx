@@ -7,7 +7,8 @@ import {
   Loader2, ThumbsUp, Heart, Flame, AlertCircle, CheckCircle2,
   FileSpreadsheet, FileArchive, Film, Music, Globe, ExternalLink,
   FolderArchive, MoreHorizontal, Edit3, Trash2, Copy, RotateCcw, GitBranch, Lock,
-  Clipboard, Receipt, CreditCard, Clock, Share2, Volume2, VolumeX, UploadCloud, ChevronUp, ChevronDown
+  Clipboard, Receipt, CreditCard, Clock, Share2, Volume2, VolumeX, UploadCloud, ChevronUp, ChevronDown,
+  Check, CheckCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useChatStore } from '../../store/chatStore';
@@ -309,6 +310,22 @@ export const WorkChatModal: React.FC = () => {
     if (ok) {
       setEditingMsgId(null);
       setEditingContent('');
+    }
+  };
+
+  const handleJumpToMessage = (targetMsgId: number | null | undefined) => {
+    if (!targetMsgId) return;
+    const targetEl = document.getElementById(`chat-msg-${targetMsgId}`);
+    if (targetEl) {
+      targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      targetEl.style.backgroundColor = 'rgba(254, 240, 138, 0.45)';
+      targetEl.style.boxShadow = '0 0 0 2px #f59e0b';
+      setTimeout(() => {
+        targetEl.style.backgroundColor = 'transparent';
+        targetEl.style.boxShadow = 'none';
+      }, 1800);
+    } else {
+      toast('Tin nhắn trích dẫn ở xa hơn trong lịch sử hội thoại.', { icon: 'ℹ️' });
     }
   };
 
@@ -1341,13 +1358,13 @@ export const WorkChatModal: React.FC = () => {
 
                     {(() => {
                       const isDirect = activeConversation.type === 'direct';
-                      const isOtherUserInactive = isDirect && activeConversation.other_user?.is_active === false;
                       const headerTitle = (isDirect && activeConversation.other_user?.full_name)
                         ? activeConversation.other_user.full_name
                         : (activeConversation.title || 'Cuộc trò chuyện');
                       const headerAvatar = (isDirect && activeConversation.other_user)
                         ? activeConversation.other_user.avatar_url
                         : (activeConversation.avatar_url || activeConversation.other_user?.avatar_url);
+                      const isOtherOnline = Boolean(activeConversation.other_user?.is_online);
 
                       return (
                         <>
@@ -1357,17 +1374,17 @@ export const WorkChatModal: React.FC = () => {
                               name={headerTitle}
                               size={38}
                             />
-                            {isDirect && !isOtherUserInactive && activeConversation.other_user?.is_online && (
+                            {isDirect && (
                               <span style={{
                                 position: 'absolute',
                                 bottom: 0,
                                 right: 0,
-                                width: 9,
-                                height: 9,
+                                width: 10,
+                                height: 10,
                                 borderRadius: '50%',
-                                backgroundColor: '#10b981',
+                                backgroundColor: isOtherOnline ? '#10b981' : '#cbd5e1',
                                 border: '2px solid #ffffff'
-                              }} />
+                              }} title={isOtherOnline ? 'Đang trực tuyến' : 'Ngoại tuyến'} />
                             )}
                           </div>
 
@@ -1376,23 +1393,6 @@ export const WorkChatModal: React.FC = () => {
                               <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                 {headerTitle}
                               </div>
-                              {isOtherUserInactive && (
-                                <span style={{
-                                  background: '#f1f5f9',
-                                  border: '1px solid #cbd5e1',
-                                  color: '#64748b',
-                                  fontSize: '0.66rem',
-                                  fontWeight: 750,
-                                  padding: '1px 6px',
-                                  borderRadius: '5px',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '3px',
-                                  flexShrink: 0
-                                }}>
-                                  <Lock size={10} /> Đã nghỉ việc / Inactive
-                                </span>
-                              )}
                             </div>
                             <div style={{ fontSize: '0.73rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '5px' }}>
                               {currentTypingUsers.length > 0 ? (
@@ -1401,8 +1401,6 @@ export const WorkChatModal: React.FC = () => {
                                 </span>
                               ) : activeConversation.type === 'group' ? (
                                 <span>{activeConversation.participants?.length || activeConversation.participant_count || 0} thành viên</span>
-                              ) : isOtherUserInactive ? (
-                                <span style={{ color: '#94a3b8', fontWeight: 600 }}>Tài khoản đã ngưng hoạt động</span>
                               ) : (
                                 <>
                                   {activeConversation.other_user?.job_title && (
@@ -1410,10 +1408,19 @@ export const WorkChatModal: React.FC = () => {
                                   )}
                                   {activeConversation.other_user?.job_title && <span style={{ color: '#cbd5e1' }}>•</span>}
                                   <span style={{
-                                    color: activeConversation.other_user?.is_online ? '#10b981' : '#94a3b8',
-                                    fontWeight: 650
+                                    color: isOtherOnline ? '#10b981' : '#94a3b8',
+                                    fontWeight: 650,
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '3px'
                                   }}>
-                                    {activeConversation.other_user?.is_online ? 'Đang hoạt động' : 'Ngoại tuyến'}
+                                    <span style={{
+                                      width: 5,
+                                      height: 5,
+                                      borderRadius: '50%',
+                                      backgroundColor: isOtherOnline ? '#10b981' : '#94a3b8'
+                                    }} />
+                                    {isOtherOnline ? 'Đang hoạt động' : 'Ngoại tuyến'}
                                   </span>
                                 </>
                               )}
@@ -1938,9 +1945,12 @@ export const WorkChatModal: React.FC = () => {
                       }
 
                       return (
-                        <div
+                        <motion.div
                           key={msg.id}
                           id={`chat-msg-${msg.id}`}
+                          initial={{ opacity: 0, y: 8, scale: 0.985 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          transition={{ duration: 0.18, ease: 'easeOut' }}
                           style={{
                             display: 'flex',
                             flexDirection: 'column',
@@ -2318,6 +2328,44 @@ export const WorkChatModal: React.FC = () => {
                                         </button>
                                       )}
 
+                                      {/* Action: Create Task from Message */}
+                                      {msg.content && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            navigator.clipboard.writeText(msg.content);
+                                            toast.success('Đã sao chép nội dung tin nhắn để tạo công việc!');
+                                            setActiveMenuMsgId(null);
+                                            window.dispatchEvent(new CustomEvent('myerp:create_task_from_chat', {
+                                              detail: {
+                                                title: msg.content.slice(0, 100),
+                                                description: msg.content,
+                                                sender_name: msg.sender_name
+                                              }
+                                            }));
+                                          }}
+                                          style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                            padding: '7px 10px',
+                                            borderRadius: '8px',
+                                            border: 'none',
+                                            background: 'transparent',
+                                            color: '#059669',
+                                            fontSize: '0.78rem',
+                                            fontWeight: 700,
+                                            cursor: 'pointer',
+                                            textAlign: 'left'
+                                          }}
+                                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#ecfdf5'}
+                                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                        >
+                                          <CheckSquare size={14} color="#059669" />
+                                          <span>Tạo việc cần làm từ tin này</span>
+                                        </button>
+                                      )}
+
                                       {/* Action: Forward message */}
                                       <button
                                         type="button"
@@ -2352,15 +2400,21 @@ export const WorkChatModal: React.FC = () => {
 
                               {/* Quoted message preview if any */}
                               {msg.reply_content && (
-                                <div style={{
-                                  background: isMine ? 'rgba(255, 255, 255, 0.25)' : '#e2e8f0',
-                                  padding: '4px 10px',
-                                  borderRadius: '8px 8px 0 0',
-                                  fontSize: '0.72rem',
-                                  borderLeft: '3px solid #dc2626',
-                                  color: isMine ? '#ffffff' : '#475569',
-                                  marginBottom: '-2px'
-                                }}>
+                                <div 
+                                  onClick={() => handleJumpToMessage(msg.reply_to_id)}
+                                  style={{
+                                    cursor: 'pointer',
+                                    background: isMine ? 'rgba(255, 255, 255, 0.25)' : '#e2e8f0',
+                                    padding: '4px 10px',
+                                    borderRadius: '8px 8px 0 0',
+                                    fontSize: '0.72rem',
+                                    borderLeft: '3px solid #dc2626',
+                                    color: isMine ? '#ffffff' : '#475569',
+                                    marginBottom: '-2px',
+                                    transition: 'opacity 0.15s ease'
+                                  }}
+                                  title="Bấm để cuộn đến tin nhắn gốc"
+                                >
                                   <span style={{ fontWeight: 700 }}>{msg.reply_sender_name || 'Trả lời'}: </span>
                                   <span>{msg.reply_content}</span>
                                 </div>
@@ -3028,21 +3082,115 @@ export const WorkChatModal: React.FC = () => {
                             </div>
                           </div>
 
-                          {/* Time */}
-                          <span style={{
-                            fontSize: '0.65rem',
+                          {/* Time & Delivery Status Indicator */}
+                          <div style={{
+                            fontSize: '0.66rem',
                             color: '#94a3b8',
                             marginTop: '2px',
                             marginLeft: isMine ? 0 : '38px',
                             display: 'inline-flex',
                             alignItems: 'center',
-                            gap: '4px'
+                            gap: '5px'
                           }}>
                             <span>{new Date(msg.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
                             {msg.is_edited && (
-                              <span style={{ fontStyle: 'italic', opacity: 0.85 }}>(đã chỉnh sửa)</span>
+                              <span style={{ fontStyle: 'italic', opacity: 0.85 }}>(đã sửa)</span>
                             )}
-                          </span>
+
+                            {isMine && !isRecalled && (() => {
+                              const isSending = Boolean(msg.is_sending || msg.delivery_status === 'sending');
+                              const isError = msg.delivery_status === 'error';
+
+                              if (isSending) {
+                                return (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: '#94a3b8' }} title="Đang gửi...">
+                                    <Clock size={11} style={{ animation: 'spin 2s linear infinite' }} />
+                                    <span style={{ fontSize: '0.62rem' }}>Đang gửi</span>
+                                  </span>
+                                );
+                              }
+
+                              if (isError) {
+                                return (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: '#ef4444', fontWeight: 700 }} title="Lỗi gửi tin nhắn">
+                                    <AlertCircle size={11} />
+                                    <span style={{ fontSize: '0.62rem' }}>Lỗi</span>
+                                  </span>
+                                );
+                              }
+
+                              // Compute status
+                              const isDirect = activeConversation?.type === 'direct';
+                              const otherUser = activeConversation?.other_user;
+                              const participants = activeConversation?.participants || [];
+
+                              let isRead = false;
+                              let isDelivered = false;
+                              let readCount = 0;
+
+                              if (isDirect) {
+                                const otherReadId = Number(otherUser?.last_read_message_id || 0);
+                                isRead = otherReadId >= msg.id;
+                                isDelivered = Boolean(otherUser?.is_online);
+                              } else {
+                                const readers = participants.filter(p => Number(p.user_id || (p as any).id) !== myId && Number(p.last_read_message_id || 0) >= msg.id);
+                                isRead = readers.length > 0;
+                                readCount = readers.length;
+                                isDelivered = participants.some(p => Number(p.user_id || (p as any).id) !== myId && p.is_online);
+                              }
+
+                              if (isRead) {
+                                return (
+                                  <span
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '2px',
+                                      color: '#0284c7',
+                                      fontWeight: 700,
+                                      transition: 'color 0.2s ease'
+                                    }}
+                                    title={isDirect ? 'Đã xem' : `Đã có ${readCount} người xem`}
+                                  >
+                                    <CheckCheck size={13} color="#0284c7" />
+                                    <span style={{ fontSize: '0.62rem' }}>{isDirect ? 'Đã xem' : `Đã xem (${readCount})`}</span>
+                                  </span>
+                                );
+                              }
+
+                              if (isDelivered) {
+                                return (
+                                  <span
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '2px',
+                                      color: '#64748b'
+                                    }}
+                                    title="Đã nhận trên thiết bị đối phương"
+                                  >
+                                    <CheckCheck size={13} color="#94a3b8" />
+                                    <span style={{ fontSize: '0.62rem' }}>Đã nhận</span>
+                                  </span>
+                                );
+                              }
+
+                              return (
+                                <span
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '2px',
+                                    color: '#94a3b8'
+                                  }}
+                                  title="Đã gửi lên hệ thống"
+                                >
+                                  <Check size={12} color="#94a3b8" />
+                                  <span style={{ fontSize: '0.62rem' }}>Đã gửi</span>
+                                </span>
+                              );
+                            })()}
+                          </div>
 
                           {/* SEEN AVATARS PILL (MESSENGER STYLE) - ONLY DISPLAY AT THE EXACT LATEST READ MESSAGE */}
                           {(() => {
@@ -3085,10 +3233,52 @@ export const WorkChatModal: React.FC = () => {
                               </div>
                             );
                           })()}
-                        </div>
+                        </motion.div>
                       );
                     });
                   })()}
+
+                  {/* Bouncing Waving Typing Dots Indicator */}
+                  {currentTypingUsers.length > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '6px 12px',
+                        borderRadius: '16px',
+                        background: '#f1f5f9',
+                        border: '1px solid #e2e8f0',
+                        width: 'fit-content',
+                        marginTop: '4px',
+                        marginBottom: '6px',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+                      }}
+                    >
+                      <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
+                        {[0, 1, 2].map((i) => (
+                          <motion.span
+                            key={i}
+                            animate={{ y: [0, -4, 0] }}
+                            transition={{ repeat: Infinity, duration: 0.6, delay: i * 0.15 }}
+                            style={{
+                              width: 5,
+                              height: 5,
+                              borderRadius: '50%',
+                              backgroundColor: '#64748b',
+                              display: 'inline-block'
+                            }}
+                          />
+                        ))}
+                      </div>
+                      <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 650 }}>
+                        {currentTypingUsers.map(u => u.full_name).join(', ')} đang soạn tin...
+                      </span>
+                    </motion.div>
+                  )}
+
                   <div ref={messagesEndRef} />
                 </div>
               </div>
@@ -3201,28 +3391,11 @@ export const WorkChatModal: React.FC = () => {
                   </div>
                 )}
 
-                {/* Input Bar or Inactive Notice */}
-                {activeConversation.type === 'direct' && activeConversation.other_user?.is_active === false ? (
-                  <div style={{
-                    padding: '16px 20px',
-                    background: '#f8fafc',
-                    borderTop: '1px solid #e2e8f0',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '9px',
-                    color: '#64748b',
-                    fontSize: '0.84rem',
-                    fontWeight: 650
-                  }}>
-                    <Lock size={16} color="#94a3b8" />
-                    <span>Nhân sự này đã ngừng hoạt động (Inactive). Bạn không thể gửi thêm tin nhắn.</span>
-                  </div>
-                ) : (
-                  <div style={{
-                    borderTop: '1px solid #e2e8f0',
-                    background: '#ffffff'
-                  }}>
+                {/* Input Bar */}
+                <div style={{
+                  borderTop: '1px solid #e2e8f0',
+                  background: '#ffffff'
+                }}>
                     {/* Pending Attachments Review Row */}
                     {pendingAttachments.length > 0 && (
                       <div style={{
@@ -3533,7 +3706,6 @@ export const WorkChatModal: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                )}
               </>
             ) : (
               /* No active conversation placeholder */

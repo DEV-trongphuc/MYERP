@@ -61,12 +61,9 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({ onClose, onOpenAddMember,
   const avatarUrl = (isDirect && activeConversation.other_user)
     ? activeConversation.other_user.avatar_url
     : (activeConversation.avatar_url || activeConversation.other_user?.avatar_url);
-  const isInactive = isDirect && activeConversation.other_user?.is_active === false;
   const subtitleText = isGroup 
     ? `${activeConversation.participants?.length || activeConversation.participant_count || 0} thành viên`
-    : isInactive
-    ? 'Đã nghỉ việc / Inactive'
-    : (activeConversation.other_user?.job_title || activeConversation.other_user?.role || 'Nhân sự');
+    : (activeConversation.other_user?.job_title || activeConversation.other_user?.role || (activeConversation.other_user?.is_online ? 'Đang hoạt động' : 'Ngoại tuyến'));
 
   // DRILLDOWN VIEW (When user clicks "Xem tất cả")
   if (drilldownCategory !== 'all') {
@@ -232,11 +229,8 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({ onClose, onOpenAddMember,
           </h4>
           <span style={{
             fontSize: '0.75rem',
-            color: isInactive ? '#dc2626' : '#64748b',
-            fontWeight: isInactive ? 700 : 550,
-            background: isInactive ? '#fef2f2' : 'transparent',
-            padding: isInactive ? '2px 8px' : '0',
-            borderRadius: isInactive ? '6px' : '0'
+            color: '#64748b',
+            fontWeight: 550
           }}>
             {subtitleText}
           </span>

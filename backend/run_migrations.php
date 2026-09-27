@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 295;
+$targetVersion = 296;
 $currentVersion = 186;
 
 // Query current DB version
@@ -3964,10 +3964,21 @@ try {
         }
     }
 
-    // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '295') ON DUPLICATE KEY UPDATE setting_value = '295'");
+    // --- PHIÊN BẢN 296: Khôi phục trạng thái hoạt động bình thường (active) cho toàn bộ nhân sự ---
+    if ($currentVersion < 296 && $apply) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 296: Khôi phục trạng thái hoạt động cho toàn bộ nhân sự...", "info");
+        try {
+            $conn->query("UPDATE users SET is_active = 1, status = 'active' WHERE id > 0");
+            $logMsg("Nâng cấp lên phiên bản 296 hoàn tất: Đã khôi phục trạng thái hoạt động cho toàn bộ nhân sự.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi nâng cấp v296: " . $e->getMessage(), "error");
+        }
+    }
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 295", "success");
+    // Update DB version in system_settings
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '296') ON DUPLICATE KEY UPDATE setting_value = '296'");
+
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 296", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");
