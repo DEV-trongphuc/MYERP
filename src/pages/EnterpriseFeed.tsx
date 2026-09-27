@@ -116,6 +116,15 @@ export const EnterpriseFeed: React.FC = () => {
   const [uploading, setUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Edit Post State
+  const [editingPost, setEditingPost] = useState<Post | null>(null);
+  const [editContent, setEditContent] = useState('');
+  const [editVisibility, setEditVisibility] = useState('global');
+  const [editTeamId, setEditTeamId] = useState<number | null>(null);
+  const [editAttachments, setEditAttachments] = useState<string[]>([]);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editUploading, setEditUploading] = useState(false);
+
   // Active Post Comments Drawers
   const [activeCommentsPostId, setActiveCommentsPostId] = useState<number | null>(null);
   const [commentsMap, setCommentsMap] = useState<Record<number, Comment[]>>({});
@@ -501,6 +510,92 @@ export const EnterpriseFeed: React.FC = () => {
       toast.error(t('Lỗi khi đăng bài'));
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // Handle open edit post modal
+  const handleOpenEditPost = (post: Post) => {
+    setEditingPost(post);
+    setEditContent(post.content || '');
+    setEditVisibility(post.visibility || 'global');
+    setEditTeamId(post.team_id || null);
+    setEditAttachments(post.attachments || []);
+  };
+
+  // Handle save edit post
+  const handleSaveEditPost = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!editingPost) return;
+    if (!editContent.trim() && editAttachments.length === 0) {
+      toast.error(t('Nội dung bài viết không được để trống'));
+      return;
+    }
+    if (editVisibility === 'team' && !editTeamId) {
+      toast.error(t('Vui lòng chọn phòng ban'));
+      return;
+    }
+
+    setIsSavingEdit(true);
+    try {
+      const res = await api.put(`/posts/${editingPost.id}`, {
+        content: editContent,
+        visibility: editVisibility,
+        team_id: editVisibility === 'team' ? editTeamId : null,
+        attachments: editAttachments
+      });
+      if (res.data?.success || res.status === 200) {
+        toast.success(t('Đã cập nhật bài viết thành công'));
+        const updatedTeam = teams.find(tm => tm.id === editTeamId);
+        setPosts(prev => prev.map(p => {
+          if (p.id === editingPost.id) {
+            return {
+              ...p,
+              content: editContent,
+              visibility: editVisibility,
+              team_id: editVisibility === 'team' ? editTeamId : null,
+              team_name: editVisibility === 'team' ? (updatedTeam?.name || p.team_name) : null,
+              attachments: editAttachments
+            };
+          }
+          return p;
+        }));
+        setEditingPost(null);
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || t('Lỗi khi cập nhật bài viết'));
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  // Handle image upload in edit modal
+  const handleEditImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setEditUploading(true);
+    try {
+      const uploadedUrls: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        let fileToUpload = file;
+        if (file.type.startsWith('image/')) {
+          fileToUpload = await compressToWebP(file);
+        }
+        const formData = new FormData();
+        formData.append('file', fileToUpload);
+        const res = await api.post('/upload', formData);
+        const url = res.data?.data?.url || res.data?.url;
+        if (url) uploadedUrls.push(url);
+      }
+      if (uploadedUrls.length > 0) {
+        setEditAttachments(prev => [...prev, ...uploadedUrls]);
+        toast.success(t('Đã tải ảnh lên'));
+      }
+    } catch (err) {
+      toast.error(t('Lỗi upload ảnh'));
+    } finally {
+      setEditUploading(false);
+      if (e.target) e.target.value = '';
     }
   };
 
@@ -1328,22 +1423,39 @@ export const EnterpriseFeed: React.FC = () => {
                     </div>
                   </div>
 
-                  {(user?.id === post.user_id || ['admin', 'superadmin', 'super_admin'].includes(user?.role || '')) && (
-                    <button 
-                      onClick={() => handleDeletePost(post.id)}
-                      style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: 'var(--color-text-muted)',
-                        cursor: 'pointer',
-                        padding: '6px',
-                        borderRadius: '8px'
-                      }}
-                      className="hover-bg"
-                      title={t('Xóa bài viết')}
-                    >
-                      <Trash2 size={14} style={{ color: 'var(--color-danger)' }} />
-                    </button>
+                  {(user?.id === post.user_id || ['admin', 'superadmin', 'super_admin', 'director'].includes(user?.role || '')) && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <button 
+                        onClick={() => handleOpenEditPost(post)}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'var(--color-text-muted)',
+                          cursor: 'pointer',
+                          padding: '6px',
+                          borderRadius: '8px'
+                        }}
+                        className="hover-bg"
+                        title={t('Chỉnh sửa bài viết')}
+                      >
+                        <Edit size={14} style={{ color: 'var(--color-primary)' }} />
+                      </button>
+                      <button 
+                        onClick={() => handleDeletePost(post.id)}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'var(--color-text-muted)',
+                          cursor: 'pointer',
+                          padding: '6px',
+                          borderRadius: '8px'
+                        }}
+                        className="hover-bg"
+                        title={t('Xóa bài viết')}
+                      >
+                        <Trash2 size={14} style={{ color: 'var(--color-danger)' }} />
+                      </button>
+                    </div>
                   )}
                 </div>
 
@@ -2336,6 +2448,174 @@ export const EnterpriseFeed: React.FC = () => {
           }
         }}
       />
+
+      {/* Edit Post Modal */}
+      <CustomModal
+        isOpen={Boolean(editingPost)}
+        onClose={() => setEditingPost(null)}
+        title={`✏️ ${t('Chỉnh sửa bài viết')}`}
+        width="600px"
+        zIndex={2000000}
+      >
+        {editingPost && (
+          <form onSubmit={handleSaveEditPost} style={{ padding: '8px 4px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* Visibility Selector */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <CustomSelect
+                value={editVisibility}
+                onChange={val => setEditVisibility(val)}
+                options={[
+                  { value: 'global', label: t('Công khai'), icon: <Globe size={12} /> },
+                  { value: 'team', label: t('Phòng ban'), icon: <Users size={12} /> }
+                ]}
+                width="160px"
+                size="sm"
+              />
+
+              {editVisibility === 'team' && (
+                <CustomSelect
+                  value={editTeamId ? String(editTeamId) : ''}
+                  onChange={val => setEditTeamId(val ? Number(val) : null)}
+                  options={[
+                    { value: '', label: t('Chọn phòng ban') },
+                    ...teams.map(tObj => ({
+                      value: String(tObj.id),
+                      label: tObj.name
+                    }))
+                  ]}
+                  width="180px"
+                  size="sm"
+                />
+              )}
+            </div>
+
+            {/* Content text area */}
+            <div style={{ border: '1px solid var(--color-border)', borderRadius: '12px', padding: '10px', background: 'var(--color-bg)' }}>
+              <MentionInput
+                value={editContent}
+                onChange={e => setEditContent(e.target.value)}
+                placeholder={t('Bạn đang nghĩ gì?')}
+                style={{
+                  width: '100%',
+                  minHeight: '110px',
+                  border: 'none',
+                  boxShadow: 'none',
+                  background: 'transparent',
+                  fontSize: '0.9rem',
+                  color: 'var(--color-text)'
+                }}
+                disabled={isSavingEdit}
+              />
+            </div>
+
+            {/* Attachments preview & removal */}
+            {editAttachments.length > 0 && (
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: '6px', display: 'block' }}>
+                  {t('Ảnh đính kèm')} ({editAttachments.length})
+                </label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {editAttachments.map((url, i) => (
+                    <div key={i} style={{ position: 'relative', width: '80px', height: '80px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--color-border-light)' }}>
+                      <img src={url} alt="Attachment" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <button 
+                        type="button" 
+                        onClick={() => setEditAttachments(prev => prev.filter((_, idx) => idx !== i))}
+                        style={{
+                          position: 'absolute',
+                          top: '2px',
+                          right: '2px',
+                          background: 'rgba(15, 23, 42, 0.75)',
+                          border: 'none',
+                          color: '#fff',
+                          borderRadius: '50%',
+                          width: '20px',
+                          height: '20px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          padding: 0
+                        }}
+                        title={t('Xóa ảnh')}
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Add more attachments button */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <label 
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-bg-card)',
+                  cursor: editUploading ? 'wait' : 'pointer',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  color: 'var(--color-text)'
+                }}
+              >
+                <Camera size={14} style={{ color: 'var(--color-primary)' }} />
+                <span>{editUploading ? t('Đang tải ảnh...') : t('Thêm ảnh')}</span>
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  multiple 
+                  style={{ display: 'none' }} 
+                  onChange={handleEditImageUpload}
+                  disabled={editUploading || isSavingEdit}
+                />
+              </label>
+            </div>
+
+            {/* Modal Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px', borderTop: '1px solid var(--color-border-light)', paddingTop: '12px' }}>
+              <button
+                type="button"
+                onClick={() => setEditingPost(null)}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--color-border)',
+                  background: 'transparent',
+                  color: 'var(--color-text)',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  fontSize: '0.85rem'
+                }}
+              >
+                {t('Hủy')}
+              </button>
+              <button
+                type="submit"
+                disabled={isSavingEdit || editUploading || (!editContent.trim() && editAttachments.length === 0)}
+                style={{
+                  padding: '8px 20px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: 'var(--color-primary)',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                  fontSize: '0.85rem',
+                  opacity: (isSavingEdit || editUploading || (!editContent.trim() && editAttachments.length === 0)) ? 0.6 : 1
+                }}
+              >
+                {isSavingEdit ? t('Đang lưu...') : t('Lưu thay đổi')}
+              </button>
+            </div>
+          </form>
+        )}
+      </CustomModal>
     </div>
   );
 };

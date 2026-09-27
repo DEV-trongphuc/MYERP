@@ -300,6 +300,71 @@ class PostController {
     }
 
     /**
+     * PUT /posts/{id}
+     * Update post content, visibility, and attachments
+     */
+    public function updatePost(array $auth, int $id): void {
+        $tenantId = (int)$auth['tenant_id'];
+        $userId = (int)$auth['user_id'];
+        $role = strtolower($auth['role']);
+
+        $stmt = $this->db->prepare("SELECT * FROM enterprise_posts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
+        $stmt->execute([$id, $tenantId]);
+        $post = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$post) {
+            respond(404, null, 'Bài viết không tồn tại', false);
+        }
+
+        // Only author or admin/superadmin/director can edit
+        if ($userId !== (int)$post['user_id'] && !in_array($role, ['admin', 'superadmin', 'super_admin', 'director'])) {
+            respond(403, null, 'Bạn không có quyền chỉnh sửa bài viết này', false);
+        }
+
+        $b = getBody();
+        $content = isset($b['content']) ? trim($b['content']) : $post['content'];
+        $visibility = in_array($b['visibility'] ?? '', ['global', 'team', 'public']) ? ($b['visibility'] === 'public' ? 'global' : $b['visibility']) : $post['visibility'];
+        $teamId = $visibility === 'team' ? (isset($b['team_id']) ? (int)$b['team_id'] : $post['team_id']) : null;
+        
+        $newAttachments = isset($b['attachments']) && is_array($b['attachments']) ? array_values(array_filter($b['attachments'])) : (json_decode($post['attachments_json'] ?? '[]', true) ?: []);
+        $oldAttachments = json_decode($post['attachments_json'] ?? '[]', true) ?: [];
+
+        // Purge any removed attachment files from hosting
+        $removedUrls = array_diff($oldAttachments, $newAttachments);
+        if (!empty($removedUrls)) {
+            foreach ($removedUrls as $rmUrl) {
+                deleteServerFile($rmUrl);
+            }
+        }
+
+        $tags = isset($b['tags']) && is_array($b['tags']) ? $b['tags'] : (json_decode($post['tags_json'] ?? '[]', true) ?: []);
+
+        $upStmt = $this->db->prepare("
+            UPDATE enterprise_posts 
+            SET content = ?, visibility = ?, team_id = ?, attachments_json = ?, tags_json = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND tenant_id = ?
+        ");
+        $upStmt->execute([
+            $content,
+            $visibility,
+            $teamId,
+            json_encode($newAttachments, JSON_UNESCAPED_UNICODE),
+            json_encode($tags, JSON_UNESCAPED_UNICODE),
+            $id,
+            $tenantId
+        ]);
+
+        $post['content'] = $content;
+        $post['visibility'] = $visibility;
+        $post['team_id'] = $teamId;
+        $post['attachments'] = $newAttachments;
+        $post['tags'] = $tags;
+        $post['link_metadata'] = json_decode($post['link_metadata_json'] ?? 'null', true);
+
+        respond(200, $post, 'Cập nhật bài viết thành công');
+    }
+
+    /**
      * GET /posts/{id}
      * Get a single post by ID with full hydration.
      */

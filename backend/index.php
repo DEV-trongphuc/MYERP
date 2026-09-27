@@ -1012,6 +1012,7 @@ switch ($resource) {
         elseif ($resourceId && $subResource === 'comments' && isset($segments[3]) && $method === 'DELETE') $ctrl->deleteComment($auth, (int)$segments[3]);
         elseif ($resourceId === 'comments' && $subResource && $method === 'DELETE') $ctrl->deleteComment($auth, (int)$subResource);
         elseif ($resourceId && !$subResource && $method === 'DELETE') $ctrl->destroyPost($auth, (int)$resourceId);
+        elseif ($resourceId && !$subResource && ($method === 'PUT' || $method === 'PATCH')) $ctrl->updatePost($auth, (int)$resourceId);
         elseif ($resourceId  && $subResource === 'react' && $method === 'POST') $ctrl->react($auth, (int)$resourceId);
         elseif ($resourceId  && $subResource === 'reactions' && $method === 'GET') $ctrl->getReactions($auth, (int)$resourceId);
         elseif ($resourceId  && $subResource === 'comments' && $method === 'GET') $ctrl->getComments($auth, (int)$resourceId);
