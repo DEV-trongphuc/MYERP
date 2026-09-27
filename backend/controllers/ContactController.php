@@ -3653,6 +3653,108 @@ class ContactController {
             ]
         ], "Đã cập nhật trạng thái học tập sang \"{$newStatusLabel}\" thành công");
     }
+
+    /**
+     * Heartbeat ping to register live presence when viewing a contact profile
+     * Returns other colleagues actively viewing the same contact
+     */
+    public function presencePing(array $auth, int $contactId): void {
+        if ($contactId <= 0) {
+            respond(400, null, 'ID khách hàng không hợp lệ', false);
+        }
+
+        $tenantId = (int)($auth['tenant_id'] ?? 1);
+        $userId = (int)($auth['user_id'] ?? 0);
+
+        $this->ensurePresenceTableExists();
+
+        try {
+            // 1. Upsert presence timestamp for current user
+            $stmtUpsert = $this->db->prepare("
+                INSERT INTO contact_presence (tenant_id, contact_id, user_id, last_ping_at)
+                VALUES (?, ?, ?, NOW())
+                ON DUPLICATE KEY UPDATE last_ping_at = NOW()
+            ");
+            $stmtUpsert->execute([$tenantId, $contactId, $userId]);
+
+            // 2. Fetch other colleagues viewing this contact in the last 45 seconds
+            $stmtQuery = $this->db->prepare("
+                SELECT cp.user_id, u.full_name, u.email, u.avatar_url,
+                       TIMESTAMPDIFF(SECOND, cp.last_ping_at, NOW()) AS seconds_ago,
+                       cp.last_ping_at
+                FROM contact_presence cp
+                JOIN users u ON cp.user_id = u.id
+                WHERE cp.tenant_id = ?
+                  AND cp.contact_id = ?
+                  AND cp.user_id != ?
+                  AND cp.last_ping_at >= DATE_SUB(NOW(), INTERVAL 45 SECOND)
+                ORDER BY cp.last_ping_at DESC
+            ");
+            $stmtQuery->execute([$tenantId, $contactId, $userId]);
+            $viewers = $stmtQuery->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+            // 3. Clean up stale presence records (> 5 minutes) probabilistically
+            if (mt_rand(1, 20) === 1) {
+                $this->db->exec("DELETE FROM contact_presence WHERE last_ping_at < DATE_SUB(NOW(), INTERVAL 5 MINUTE)");
+            }
+
+            respond(200, [
+                'viewers' => $viewers,
+                'count' => count($viewers)
+            ]);
+        } catch (\Throwable $e) {
+            error_log("Presence Ping Error: " . $e->getMessage());
+            respond(200, ['viewers' => [], 'count' => 0]);
+        }
+    }
+
+    /**
+     * Unregister live presence when drawer closes or user navigates away
+     */
+    public function presenceLeave(array $auth, int $contactId): void {
+        if ($contactId <= 0) {
+            respond(200, ['status' => 'ignored']);
+        }
+
+        $tenantId = (int)($auth['tenant_id'] ?? 1);
+        $userId = (int)($auth['user_id'] ?? 0);
+
+        try {
+            $stmt = $this->db->prepare("
+                DELETE FROM contact_presence
+                WHERE tenant_id = ? AND contact_id = ? AND user_id = ?
+            ");
+            $stmt->execute([$tenantId, $contactId, $userId]);
+        } catch (\Throwable $t) {
+            error_log("Presence Leave Error: " . $t->getMessage());
+        }
+
+        respond(200, ['status' => 'left']);
+    }
+
+    /**
+     * Self-healing table creation for contact_presence
+     */
+    private function ensurePresenceTableExists(): void {
+        static $checked = false;
+        if ($checked) return;
+        try {
+            $this->db->exec("
+                CREATE TABLE IF NOT EXISTS contact_presence (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    tenant_id INT NOT NULL DEFAULT 1,
+                    contact_id INT NOT NULL,
+                    user_id INT NOT NULL,
+                    last_ping_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY uk_tenant_contact_user (tenant_id, contact_id, user_id),
+                    INDEX idx_contact_ping (tenant_id, contact_id, last_ping_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            ");
+            $checked = true;
+        } catch (\Throwable $e) {
+            error_log("Ensure Presence Table Error: " . $e->getMessage());
+        }
+    }
 }
 
 

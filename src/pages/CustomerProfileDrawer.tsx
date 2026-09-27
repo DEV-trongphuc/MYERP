@@ -1737,6 +1737,54 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [cloneNotes, setCloneNotes] = useState('');
   const [cloneStageId, setCloneStageId] = useState<string>('');
 
+  // ── Live Presence: Collision Prevention ──
+  const [activeViewers, setActiveViewers] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!isOpen || !effectiveContactId) {
+      setActiveViewers([]);
+      return;
+    }
+
+    let isMounted = true;
+
+    const pingPresence = async () => {
+      try {
+        const res = await api.post(`/contacts/${effectiveContactId}/presence-ping`);
+        if (isMounted && res.data?.data?.viewers) {
+          setActiveViewers(res.data.data.viewers);
+        }
+      } catch (err) {
+        // Silently catch to avoid disrupting user experience
+      }
+    };
+
+    // Ping immediately upon opening
+    pingPresence();
+
+    // Heartbeat ping every 12 seconds
+    const intervalId = setInterval(pingPresence, 12000);
+
+    // Leave presence when closing or tab closing
+    const handleUnload = () => {
+      try {
+        const token = localStorage.getItem('Ideas_token');
+        const url = `/backend/api.php?action=contacts/${effectiveContactId}/presence-leave${token ? `&token=${token}` : ''}`;
+        navigator.sendBeacon?.(url);
+      } catch (e) {}
+    };
+    window.addEventListener('pagehide', handleUnload);
+
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+      window.removeEventListener('pagehide', handleUnload);
+      try {
+        api.post(`/contacts/${effectiveContactId}/presence-leave`).catch(() => {});
+      } catch (e) {}
+    };
+  }, [isOpen, effectiveContactId]);
+
   useEffect(() => {
     if (contact?.id) {
       setActiveContactId(contact.id);
@@ -5514,11 +5562,64 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     // Merge standalone notes from notes table if not already represented in drawerActivities
     if (Array.isArray(notes) && notes.length > 0) {
       notes.forEach((n: any) => {
+        const noteText = (n.text || '').trim();
+        const bracketMatch = noteText.match(/^\[(.*?)\]\s*(.*)$/s);
+        const bracketSubject = bracketMatch ? bracketMatch[1].trim().toLowerCase() : '';
+        const bracketBody = bracketMatch ? bracketMatch[2].trim().toLowerCase() : '';
+
         const isDuplicate = source.some((a: any) => {
           if (a.id === n.id && a.type === 'note') return true;
-          if (a.body && n.text && a.body.trim() === n.text.trim()) return true;
+          
+          const aBody = (a.body || a.note || '').trim();
+          const aSubject = (a.subject || '').trim();
+          const aBodyLower = aBody.toLowerCase();
+          const aSubjectLower = aSubject.toLowerCase();
+          const noteTextLower = noteText.toLowerCase();
+
+          // 1. Exact body match
+          if (aBody && noteText && aBody === noteText) return true;
+
+          // 2. Bracket match: note text is "[Subject] Body" matching activity subject or body
+          if (bracketSubject) {
+            if (aSubjectLower && (aSubjectLower === bracketSubject || aSubjectLower.includes(bracketSubject) || bracketSubject.includes(aSubjectLower))) {
+              return true;
+            }
+            if (bracketBody && aBodyLower && (bracketBody === aBodyLower || bracketBody.includes(aBodyLower) || aBodyLower.includes(bracketBody))) {
+              return true;
+            }
+          }
+
+          // 3. Stage change note duplicate with activity
+          if (n.note_type === 'pipeline_stage_change') {
+            if (aSubjectLower && noteTextLower.includes(aSubjectLower)) return true;
+            if (aBodyLower && noteTextLower.includes(aBodyLower)) return true;
+            if (a.created_at && n.time) {
+              const diffMs = Math.abs(new Date(a.created_at).getTime() - new Date(n.time).getTime());
+              if (diffMs < 180000 && (a.type === 'MOVE_STAGE' || a.type === 'order' || a.type === 'system' || a.type === 'note')) {
+                const cleanA = aBodyLower.replace(/^\[.*?\]\s*/, '').trim();
+                const cleanN = noteTextLower.replace(/^\[.*?\]\s*/, '').trim();
+                if (cleanA && cleanN && (cleanA.includes(cleanN) || cleanN.includes(cleanA))) {
+                  return true;
+                }
+              }
+            }
+          }
+
+          // 4. Close timeframe match (within 60s) with identical cleaned text
+          if (a.created_at && n.time) {
+            const diffMs = Math.abs(new Date(a.created_at).getTime() - new Date(n.time).getTime());
+            if (diffMs < 60000 && aBody && noteText) {
+              const cleanNote = noteTextLower.replace(/^\[.*?\]\s*/, '').trim();
+              const cleanABody = aBodyLower.replace(/^\[.*?\]\s*/, '').trim();
+              if (cleanNote && cleanABody && (cleanNote === cleanABody || cleanNote.includes(cleanABody) || cleanABody.includes(cleanNote))) {
+                return true;
+              }
+            }
+          }
+
           return false;
         });
+
         if (!isDuplicate) {
           source.push({
             id: `note-${n.id}`,
@@ -5588,8 +5689,35 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       };
     });
 
+    // Second-pass deduplication across all mapped timeline items
+    const deduplicated: any[] = [];
+    const seenEvents = new Set<string>();
+
+    for (const item of mapped) {
+      const cleanNote = (item.note || '').replace(/^\[.*?\]\s*/, '').trim().toLowerCase();
+      const cleanTitle = (item.title || '').trim().toLowerCase();
+      const timeMs = new Date(item.time).getTime();
+      const timeWindow = isNaN(timeMs) ? 0 : Math.floor(timeMs / 30000); // 30-second window
+      const userKey = (item.user || '').trim().toLowerCase();
+
+      // Check duplicate by note content or title within the same 30s window from same user
+      const eventKey1 = cleanNote ? `${userKey}_${timeWindow}_${cleanNote}` : null;
+      const eventKey2 = cleanTitle ? `${userKey}_${timeWindow}_${cleanTitle}` : null;
+
+      if (eventKey1 && seenEvents.has(eventKey1)) {
+        continue;
+      }
+      if (!cleanNote && eventKey2 && seenEvents.has(eventKey2)) {
+        continue;
+      }
+
+      if (eventKey1) seenEvents.add(eventKey1);
+      if (eventKey2) seenEvents.add(eventKey2);
+      deduplicated.push(item);
+    }
+
     // Then filter based on the normalized type
-    let filtered = mapped;
+    let filtered = deduplicated;
     if (timelineFilter !== 'all') {
       filtered = filtered.filter((item: any) => item.type === timelineFilter);
     }
@@ -8118,6 +8246,52 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           <LeadScoreRing score={score} size={44} showLabel={true} />
                         </div>
 
+                        {/* Live Presence: Active Viewers Badge */}
+                        {activeViewers.length > 0 && (
+                          <div 
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '4px 10px',
+                              borderRadius: '20px',
+                              background: '#fffbeb',
+                              border: '1px solid rgba(245, 158, 11, 0.45)',
+                              boxShadow: '0 1px 3px rgba(245, 158, 11, 0.15)',
+                              cursor: 'pointer'
+                            }}
+                            title={`Có ${activeViewers.length} đồng nghiệp đang cùng xem hồ sơ này: ${activeViewers.map(v => v.full_name).join(', ')}`}
+                          >
+                            <span 
+                              style={{ 
+                                display: 'inline-block', 
+                                width: '8px', 
+                                height: '8px', 
+                                borderRadius: '50%', 
+                                backgroundColor: '#f59e0b',
+                                boxShadow: '0 0 0 2px rgba(245, 158, 11, 0.25)'
+                              }} 
+                            />
+                            <div style={{ display: 'flex', alignItems: 'center', marginLeft: '-2px' }}>
+                              {activeViewers.slice(0, 3).map((v, i) => (
+                                <div key={v.user_id || i} style={{ marginLeft: i === 0 ? 0 : -8, zIndex: 3 - i }}>
+                                  <Avatar 
+                                    src={v.avatar_url} 
+                                    name={v.full_name || 'User'} 
+                                    size={24} 
+                                    title={`${v.full_name} (${v.seconds_ago ? `${v.seconds_ago}s trước` : 'vừa xong'})`} 
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#b45309' }}>
+                              {activeViewers.length === 1 
+                                ? `${(activeViewers[0].full_name || '').split(' ').pop()} đang xem`
+                                : `${activeViewers.length} người đang xem`}
+                            </span>
+                          </div>
+                        )}
+
                         {/* Báo lỗi data button (cho dữ liệu phân bổ từ chiến dịch) */}
                         <button
                           type="button"
@@ -8170,6 +8344,66 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           <span>{isSubmitting ? 'Đang lưu thay đổi...' : 'Lưu thay đổi'}</span>
                         </button>
                       </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Live Presence Collision Warning Banner ── */}
+              {activeViewers.length > 0 && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '9px 1.5rem',
+                  background: 'linear-gradient(90deg, #fef3c7 0%, #fffbeb 50%, #ffedd5 100%)',
+                  borderBottom: '1px solid rgba(245, 158, 11, 0.35)',
+                  boxShadow: '0 2px 6px rgba(245, 158, 11, 0.08)',
+                  color: '#92400e',
+                  fontSize: '0.825rem',
+                  fontWeight: 600,
+                  gap: '12px',
+                  flexWrap: 'wrap',
+                  zIndex: 99
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: '260px' }}>
+                    <div style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center', 
+                      width: 28, 
+                      height: 28, 
+                      borderRadius: '50%', 
+                      background: '#f59e0b', 
+                      color: '#fff', 
+                      flexShrink: 0,
+                      boxShadow: '0 2px 4px rgba(245, 158, 11, 0.3)'
+                    }}>
+                      <Users size={15} />
+                    </div>
+                    <div>
+                      <span style={{ fontWeight: 800, color: '#78350f', letterSpacing: '0.2px' }}>
+                        ⚠️ CẢNH BÁO TRÙNG LẶP CHĂM SÓC:
+                      </span>{' '}
+                      <span>
+                        Đồng nghiệp <strong style={{ color: '#1e293b' }}>{activeViewers.map(v => v.full_name).join(', ')}</strong> cũng đang cùng mở xem hồ sơ này.
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ 
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '0.75rem', 
+                    fontWeight: 700, 
+                    color: '#b45309', 
+                    background: 'rgba(255, 255, 255, 0.85)', 
+                    padding: '4px 12px', 
+                    borderRadius: '20px', 
+                    border: '1px solid rgba(245, 158, 11, 0.3)', 
+                    whiteSpace: 'nowrap',
+                    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.04)'
+                  }}>
+                    <span>💡 Lưu ý: Tránh gọi điện hoặc sửa đè dữ liệu cùng lúc</span>
                   </div>
                 </div>
               )}

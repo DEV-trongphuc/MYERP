@@ -534,9 +534,6 @@ class DepositController {
                         $stmtNote->execute([$auth['tenant_id'], $entityType, $entityId, $auth['user_id'], $bodyText]);
                         $noteId = $this->db->lastInsertId();
 
-                        // Log interaction
-                        logInteraction($this->db, $auth['tenant_id'], $auth['user_id'], 'note', 'Tạo Phiếu Thu', $bodyText, $entityType, $entityId);
-
                         // Add note mention
                         $stmtMention = $this->db->prepare("
                             INSERT INTO note_mentions (note_id, user_id)

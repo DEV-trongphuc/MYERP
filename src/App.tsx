@@ -18,6 +18,7 @@ import { AutoUpdateChecker } from './components/AutoUpdateChecker';
 import { NetworkStatusIndicator } from './components/ui/NetworkStatusIndicator';
 import { CommandPalette } from './components/ui/CommandPalette';
 import { GlobalEntityDrawers } from './components/ui/GlobalEntityDrawers';
+import { ChatFloatingLauncher } from './components/chat/ChatFloatingLauncher';
 
 
 // Lazy load all pages for Code Splitting (including Enterprise Social Feed)
@@ -597,6 +598,7 @@ export default function App() {
                 <NetworkStatusIndicator />
                 <CommandPalette />
                 <GlobalEntityDrawers />
+                <ChatFloatingLauncher />
               </Suspense>
             </Router>
           </UploadProgressProvider>

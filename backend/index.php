@@ -321,18 +321,8 @@ function logInteraction(PDO $db, $tid, $uid, string $type, string $subject, ?str
         $stmt->execute([$tid, $uid, $uid, $type, $subject, $body, $relType, $relId]);
     }
 
-    // Also write to notes table if related to contact so both tabs display seamlessly
-    if ($cid || ($relType === 'contact' && $relId)) {
-        $targetContactId = $cid ?: (int)$relId;
-        try {
-            $stmtNote = $db->prepare("
-                INSERT INTO notes (tenant_id, user_id, entity_type, entity_id, body, note_type, created_at, updated_at)
-                VALUES (?, ?, 'contact', ?, ?, 'pipeline_stage_change', NOW(), NOW())
-            ");
-            $noteBody = "[$subject] " . ($body ?: '');
-            $stmtNote->execute([$tid, $uid, $targetContactId, $noteBody]);
-        } catch (Exception $e) {}
-    }
+    // Activities table is the canonical interaction timeline.
+    // Do not double-insert synthetic bracketed notes into the notes table.
 }
 
 function autoAdvanceContactOnInteraction(PDO $db, int $tenantId, int $contactId, int $userId): bool {
@@ -600,6 +590,7 @@ require_once __DIR__ . '/controllers/CheckInController.php';
 require_once __DIR__ . '/controllers/TeamController.php';
 require_once __DIR__ . '/controllers/WorkflowTaskTemplateController.php';
 require_once __DIR__ . '/controllers/PostController.php';
+require_once __DIR__ . '/controllers/ChatController.php';
 
 // ── Parse route ───────────────────────────────────────────────
 $rawAction = $_GET['action'] ?? '';
@@ -923,11 +914,54 @@ switch ($resource) {
         elseif ($resourceId  && $subResource === 'release-databank' && $method === 'POST') $ctrl->releaseDatabank($auth, (int)$resourceId);
         elseif ($resourceId  && $subResource === 'collaborators' && $method === 'GET') $ctrl->getCollaborators($auth, (int)$resourceId);
         elseif ($resourceId  && $subResource === 'send-academic-email' && $method === 'POST') $ctrl->sendAcademicEmail($auth, (int)$resourceId);
-        elseif ($resourceId  && $subResource === 'study-status' && in_array($method, ['POST', 'PUT', 'PATCH'], true)) $ctrl->updateStudyStatus($auth, (int)$resourceId);
+        elseif ($resourceId  && in_array($subResource, ['presence-ping', 'ping'], true) && in_array($method, ['POST', 'GET'], true)) $ctrl->presencePing($auth, (int)$resourceId);
+        elseif ($resourceId  && in_array($subResource, ['presence-leave', 'leave'], true) && in_array($method, ['POST', 'GET'], true)) $ctrl->presenceLeave($auth, (int)$resourceId);
         elseif ($resourceId  && $method === 'GET')    $ctrl->show($auth, (int)$resourceId);
         elseif ($resourceId  && $method === 'PUT')    $ctrl->update($auth, (int)$resourceId);
         elseif ($resourceId  && $method === 'DELETE') $ctrl->destroy($auth, (int)$resourceId);
         else respond(404, null, 'Route không tồn tại', false);
+        break;
+
+    case 'contact_presence_ping':
+        $auth = requireAuth();
+        $ctrl = new ContactController($db);
+        $cId = (int)($_GET['contact_id'] ?? $_POST['contact_id'] ?? (getBody()['contact_id'] ?? 0));
+        $ctrl->presencePing($auth, $cId);
+        break;
+
+    case 'contact_presence_leave':
+        $auth = requireAuth();
+        $ctrl = new ContactController($db);
+        $cId = (int)($_GET['contact_id'] ?? $_POST['contact_id'] ?? (getBody()['contact_id'] ?? 0));
+        $ctrl->presenceLeave($auth, $cId);
+        break;
+
+    // WORKCHAT / MESSENGER SUITE
+    case 'chat':
+        $auth = requireAuth();
+        $ctrl = new ChatController($db);
+        $subId = $segments[3] ?? null;
+        if ($resourceId === 'conversations' && !$subResource && $method === 'GET') $ctrl->getConversations($auth);
+        elseif ($resourceId === 'conversations' && !$subResource && $method === 'POST') $ctrl->createConversation($auth);
+        elseif ($resourceId === 'conversations' && $subResource && !$subId && $method === 'GET') $ctrl->getConversationDetails($auth, (int)$subResource);
+        elseif ($resourceId === 'conversations' && $subResource && !$subId && in_array($method, ['PUT', 'PATCH'], true)) $ctrl->updateConversation($auth, (int)$subResource);
+        elseif ($resourceId === 'conversations' && $subResource && !$subId && $method === 'DELETE') $ctrl->deleteConversation($auth, (int)$subResource);
+        elseif ($resourceId === 'conversations' && $subResource && $subId === 'messages' && $method === 'GET') $ctrl->getMessages($auth, (int)$subResource);
+        elseif ($resourceId === 'conversations' && $subResource && $subId === 'read' && $method === 'POST') $ctrl->markAsRead($auth, (int)$subResource);
+        elseif ($resourceId === 'conversations' && $subResource && $subId === 'participants' && in_array($method, ['POST', 'PUT', 'DELETE'], true)) $ctrl->manageParticipants($auth, (int)$subResource, $method);
+        elseif ($resourceId === 'conversations' && $subResource && $subId === 'pin' && $method === 'POST') $ctrl->togglePinMessage($auth, (int)$subResource);
+        elseif ($resourceId === 'messages' && !$subResource && $method === 'POST') $ctrl->sendMessage($auth);
+        elseif ($resourceId === 'messages' && $subResource && $subId === 'reactions' && $method === 'POST') $ctrl->reactMessage($auth, (int)$subResource);
+        elseif ($resourceId === 'messages' && $subResource && in_array($method, ['PUT', 'PATCH'], true)) $ctrl->editMessage($auth, (int)$subResource);
+        elseif ($resourceId === 'messages' && $subResource && $method === 'DELETE') $ctrl->deleteMessage($auth, (int)$subResource);
+        elseif ($resourceId === 'sync' && in_array($method, ['GET', 'POST'], true)) $ctrl->syncDelta($auth);
+        elseif ($resourceId === 'staff' && $method === 'GET') $ctrl->getStaffDirectory($auth);
+        elseif ($resourceId === 'search-erp' && $method === 'GET') $ctrl->searchErpEntities($auth);
+        elseif ($resourceId === 'upload' && $method === 'POST') $ctrl->uploadChatFile($auth);
+        elseif ($resourceId === 'typing' && $method === 'POST') $ctrl->typingPing($auth);
+        elseif ($resourceId === 'vault' && $method === 'GET') $ctrl->getVaultItems($auth);
+        elseif ($resourceId === 'link-preview' && $method === 'GET') $ctrl->getLinkPreview($auth);
+        else respond(404, null, 'Chat route không tồn tại', false);
         break;
 
     // COMPANIES

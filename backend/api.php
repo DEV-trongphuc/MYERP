@@ -120,7 +120,8 @@ if (in_array($baseAction, [
     'import',
     'system',
     'test-benchmark',
-    'hrm'
+    'hrm',
+    'chat'
 ], true)) {
     $_SERVER['REQUEST_URI'] = '/backend/' . $action . (!empty($_GET) ? '?' . http_build_query($_GET) : '');
     require_once __DIR__ . '/index.php';
@@ -17372,17 +17373,6 @@ switch ($action) {
                     $stmtAct->bind_param("iisii", $actorId, $actorId, $reassignHistoryMsg, $contactIdForLead, $contactIdForLead);
                     $stmtAct->execute();
                     $stmtAct->close();
-                }
-
-                $stmtNote = $conn->prepare("
-                    INSERT INTO notes (tenant_id, user_id, entity_type, entity_id, body, note_type, created_at, updated_at)
-                    VALUES (1, ?, 'contact', ?, ?, 'pipeline_stage_change', NOW(), NOW())
-                ");
-                if ($stmtNote) {
-                    $noteBody = "[Bàn giao Lead] $reassignHistoryMsg";
-                    $stmtNote->bind_param("iis", $actorId, $contactIdForLead, $noteBody);
-                    $stmtNote->execute();
-                    $stmtNote->close();
                 }
             }
 

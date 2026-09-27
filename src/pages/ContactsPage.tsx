@@ -151,7 +151,7 @@ const renderInteractionInfo = (c: any, onReportClick?: (c: any) => void) => {
           Nhắc lại
         </span>
       )}
-      {isReportedError ? (
+      {isReportedError && (
         <span style={{ 
           fontSize: '0.625rem', 
           fontWeight: 700, 
@@ -167,33 +167,7 @@ const renderInteractionInfo = (c: any, onReportClick?: (c: any) => void) => {
         }}>
           <AlertCircle size={9} /> Đã báo lỗi
         </span>
-      ) : isEligibleForReport && onReportClick ? (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onReportClick(c);
-          }}
-          title="Báo cáo data lỗi (sai số, rác, trùng) để bù vòng chia"
-          style={{
-            fontSize: '0.625rem',
-            fontWeight: 700,
-            padding: '1px 6px',
-            borderRadius: '4px',
-            background: 'rgba(239, 68, 68, 0.08)',
-            color: '#dc2626',
-            border: '1px solid rgba(239, 68, 68, 0.2)',
-            cursor: 'pointer',
-            lineHeight: '1.2',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '3px'
-          }}
-          className="hover-lift"
-        >
-          <AlertTriangle size={9} /> Báo lỗi
-        </button>
-      ) : null}
+      )}
     </div>
   );
 };

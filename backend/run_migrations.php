@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 293;
+$targetVersion = 295;
 $currentVersion = 186;
 
 // Query current DB version
@@ -3808,10 +3808,166 @@ try {
         }
     }
 
-    // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '293') ON DUPLICATE KEY UPDATE setting_value = '293'");
+    // ==========================================
+    // VERSION 294: WORKCHAT PERFORMANCE COMPOSITE INDEXES & SCHEMA OPTIMIZATION
+    // ==========================================
+    if ($currentVersion < 294 || $isForce) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 294: Đồng bộ bảng WorkChat và bổ sung Composite Performance Indexes...", "info");
+        try {
+            // 1. Ensure chat tables exist
+            $conn->query("
+                CREATE TABLE IF NOT EXISTS `chat_conversations` (
+                    `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    `tenant_id` INT NOT NULL DEFAULT 1,
+                    `type` ENUM('direct', 'group') NOT NULL DEFAULT 'direct',
+                    `title` VARCHAR(255) NULL,
+                    `avatar_url` TEXT NULL,
+                    `created_by` INT NOT NULL DEFAULT 0,
+                    `last_message_id` BIGINT NULL,
+                    `last_message_at` DATETIME NULL,
+                    `pinned_message_id` BIGINT NULL,
+                    `settings` TEXT NULL,
+                    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    INDEX `idx_tenant_updated` (`tenant_id`, `updated_at`),
+                    INDEX `idx_tenant_type` (`tenant_id`, `type`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            ");
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 293", "success");
+            $conn->query("
+                CREATE TABLE IF NOT EXISTS `chat_participants` (
+                    `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    `tenant_id` INT NOT NULL DEFAULT 1,
+                    `conversation_id` BIGINT NOT NULL,
+                    `user_id` INT NOT NULL,
+                    `role` ENUM('owner', 'admin', 'member') NOT NULL DEFAULT 'member',
+                    `nickname` VARCHAR(100) NULL,
+                    `last_read_message_id` BIGINT DEFAULT 0,
+                    `last_read_at` DATETIME NULL,
+                    `is_muted` TINYINT(1) DEFAULT 0,
+                    `is_pinned` TINYINT(1) DEFAULT 0,
+                    `joined_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY `uk_conv_user` (`conversation_id`, `user_id`),
+                    INDEX `idx_user_tenant` (`user_id`, `tenant_id`),
+                    INDEX `idx_conv` (`conversation_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            ");
+
+            $conn->query("
+                CREATE TABLE IF NOT EXISTS `chat_messages` (
+                    `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    `tenant_id` INT NOT NULL DEFAULT 1,
+                    `conversation_id` BIGINT NOT NULL,
+                    `sender_id` INT NOT NULL,
+                    `message_type` ENUM('text', 'image', 'file', 'sticker', 'erp_card', 'system_event') NOT NULL DEFAULT 'text',
+                    `content` TEXT NULL,
+                    `metadata` LONGTEXT NULL,
+                    `reply_to_id` BIGINT NULL,
+                    `is_pinned` TINYINT(1) DEFAULT 0,
+                    `is_edited` TINYINT(1) DEFAULT 0,
+                    `edited_at` DATETIME NULL,
+                    `deleted_at` DATETIME NULL,
+                    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    INDEX `idx_conv_id` (`conversation_id`, `id`),
+                    INDEX `idx_conv_created` (`conversation_id`, `created_at`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            ");
+
+            $conn->query("
+                CREATE TABLE IF NOT EXISTS `chat_message_reactions` (
+                    `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    `tenant_id` INT NOT NULL DEFAULT 1,
+                    `message_id` BIGINT NOT NULL,
+                    `user_id` INT NOT NULL,
+                    `reaction_type` VARCHAR(30) NOT NULL,
+                    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY `uk_msg_user_reaction` (`message_id`, `user_id`, `reaction_type`),
+                    INDEX `idx_message_id` (`message_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            ");
+
+            $conn->query("
+                CREATE TABLE IF NOT EXISTS `chat_attachments_vault` (
+                    `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    `tenant_id` INT NOT NULL DEFAULT 1,
+                    `conversation_id` BIGINT NOT NULL,
+                    `message_id` BIGINT NOT NULL,
+                    `uploader_id` INT NOT NULL,
+                    `category` ENUM('image', 'video', 'document', 'link') NOT NULL DEFAULT 'document',
+                    `file_name` VARCHAR(255) NOT NULL,
+                    `file_url` TEXT NOT NULL,
+                    `file_size` BIGINT DEFAULT 0,
+                    `mime_type` VARCHAR(100) NULL,
+                    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    INDEX `idx_conv_category` (`conversation_id`, `category`, `id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            ");
+
+            $conn->query("
+                CREATE TABLE IF NOT EXISTS `chat_user_presence` (
+                    `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    `tenant_id` INT NOT NULL DEFAULT 1,
+                    `user_id` INT NOT NULL,
+                    `status` ENUM('online', 'busy', 'away', 'offline') NOT NULL DEFAULT 'online',
+                    `custom_status` VARCHAR(255) NULL,
+                    `typing_conversation_id` BIGINT NULL,
+                    `last_ping_at` DATETIME NOT NULL,
+                    UNIQUE KEY `uk_tenant_user` (`tenant_id`, `user_id`),
+                    INDEX `idx_last_ping` (`last_ping_at`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            ");
+
+            // 2. Safe Add Composite Performance Indexes
+            $safeAddIndex = function($tableName, $indexName, $columns) use ($conn, $logMsg) {
+                try {
+                    $idxCheck = $conn->query("SHOW INDEX FROM `{$tableName}` WHERE Key_name = '{$indexName}'");
+                    if ($idxCheck && $idxCheck->num_rows > 0) return;
+                    $conn->query("ALTER TABLE `{$tableName}` ADD INDEX `{$indexName}` ({$columns})");
+                    $logMsg("Đã tạo composite index `{$indexName}` trên bảng `{$tableName}`", "success");
+                } catch (Throwable $e) {}
+            };
+
+            $safeAddIndex('chat_messages', 'idx_msg_conv_delta', '`conversation_id`, `id`, `sender_id`, `deleted_at`');
+            $safeAddIndex('chat_messages', 'idx_msg_unread', '`conversation_id`, `sender_id`, `deleted_at`, `id`');
+            $safeAddIndex('chat_messages', 'idx_msg_conv_edited', '`conversation_id`, `tenant_id`, `edited_at`');
+            $safeAddIndex('chat_messages', 'idx_msg_conv_deleted', '`conversation_id`, `tenant_id`, `deleted_at`');
+            $safeAddIndex('chat_participants', 'idx_part_user_read', '`user_id`, `last_read_message_id`, `tenant_id`');
+            $safeAddIndex('chat_user_presence', 'idx_presence_user_ping', '`user_id`, `last_ping_at`');
+
+            $logMsg("Nâng cấp lên phiên bản 294 hoàn tất: Cấu trúc chat và composite indexes tối ưu thành công!", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi nâng cấp v294: " . $e->getMessage(), "error");
+        }
+    }
+
+    // --- PHIÊN BẢN 295: Cập nhật trạng thái nghỉ việc (inactive) cho nhân sự đã nghỉ việc ---
+    if ($currentVersion < 295 && $apply) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 295: Cập nhật trạng thái nhân sự đã nghỉ việc...", "info");
+        try {
+            $inactiveIds = [
+                1000003, // Vi Văn Trịnh
+                1000004, // Võ Trùng Dương
+                100070,  // Trần Kim Ngân
+                999906,  // Phạm Quang Vinh
+                999907,  // Phạm Phương Lan
+                100076,  // Phan Hiếu Ngân
+                100071,  // Trần Ngọc Thùy Dương
+                100069,  // Trịnh Đình Thanh
+                100078,  // Trương Thị Bảo Trân
+                100077   // Vũ Trí Nhân
+            ];
+            $idList = implode(',', $inactiveIds);
+            $conn->query("UPDATE users SET is_active = 0, status = 'inactive' WHERE id IN ({$idList})");
+            $logMsg("Nâng cấp lên phiên bản 295 hoàn tất: Đã chuyển trạng thái nghỉ việc cho nhân sự nghỉ việc.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi nâng cấp v295: " . $e->getMessage(), "error");
+        }
+    }
+
+    // Update DB version in system_settings
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '295') ON DUPLICATE KEY UPDATE setting_value = '295'");
+
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 295", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");
