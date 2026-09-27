@@ -583,7 +583,7 @@ export default function Approvals() {
         setSelectedTimelineItem(found);
       } else {
         // Direct fetch single item if not in list
-        if (openType === 'expense' || !openType) {
+        if (openType === 'expense' || openType === 'po' || openType === 'purchase_order' || !openType) {
           api.get(`/expenses/${numId}`).then(res => {
             const d = res.data?.data || res.data;
             if (d && d.id) {
@@ -601,7 +601,27 @@ export default function Approvals() {
                 employee_name: d.employee_name || d.user_name || ''
               } as any);
             }
-          }).catch(() => {});
+          }).catch(() => {
+            // Intelligent fallback: check /purchase-orders/:id if not an expense
+            api.get(`/purchase-orders/${numId}`).then(poRes => {
+              const po = poRes.data?.data || poRes.data;
+              if (po && (po.id || po.po_number)) {
+                setSelectedTimelineItem({
+                  id: po.id,
+                  type: 'expense',
+                  title: po.po_number ? `Đơn hàng ${po.po_number}` : (po.notes || `Đơn hàng PO #${po.id}`),
+                  description: po.notes || '',
+                  amount: Number(po.total || po.subtotal || 0),
+                  currency: 'VND',
+                  status: po.status === 'pending_approval' ? 'pending' : (po.status || 'pending'),
+                  created_at: po.created_at || new Date().toISOString(),
+                  created_by: po.created_by,
+                  user_id: po.created_by,
+                  employee_name: po.creator_name || ''
+                } as any);
+              }
+            }).catch(() => {});
+          });
         } else if (openType === 'leave') {
           fetchAPI('hrm/leaves').then(res => {
             const leaves = res?.data || [];

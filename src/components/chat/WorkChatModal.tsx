@@ -3604,8 +3604,15 @@ export const WorkChatModal: React.FC = () => {
                                               } else {
                                                 window.dispatchEvent(new CustomEvent('open-deal-drawer', { detail: { id: Number(meta.entity_id) } }));
                                               }
-                                            } else if (eType === 'po' || eType === 'workflow') {
+                                            } else if (eType === 'po') {
                                               openExpenseDrawer(Number(meta.entity_id));
+                                            } else if (eType === 'workflow') {
+                                              const subType = String(meta.sub_type || '').toLowerCase();
+                                              if (['leave', 'ot', 'wfh', 'late_early'].includes(subType)) {
+                                                window.location.href = `/approvals?open_id=${meta.entity_id}&open_type=leave`;
+                                              } else {
+                                                openExpenseDrawer(Number(meta.entity_id));
+                                              }
                                             } else {
                                               toast.success(`Đang mở đối tượng ERP #${meta.entity_id}`);
                                             }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, XCircle, CheckCircle2, Pencil, Wallet, Clock, Package, MessageSquare, Loader2, Coffee, Trash2, Upload, Send, Info, Copy, Activity, Bell, FileText, Landmark, QrCode, Receipt } from 'lucide-react';
+import { X, XCircle, CheckCircle2, Pencil, Wallet, Clock, Package, MessageSquare, Loader2, Coffee, Trash2, Upload, Send, Info, Copy, Activity, Bell, FileText, Landmark, QrCode, Receipt, Eye } from 'lucide-react';
 import api from '../api/axios';
 import { Avatar } from './ui/Avatar';
 import { useUIStore } from '../store/uiStore';
@@ -176,11 +176,69 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
     setLoading(true);
     try {
       const r = await api.get(`/expenses/${id}`);
-      if (r.data?.success) {
+      if (r.data?.success && r.data.data) {
         setViewItem(r.data.data);
+        return;
       }
     } catch (e: any) {
-      addToast('Không thể tải chi tiết chi phí: ' + e.message, 'error');
+      // Intelligent fallback 1: If /expenses/:id returned 404, check /purchase-orders/:id
+      try {
+        const poRes = await api.get(`/purchase-orders/${id}`);
+        const poData = poRes.data?.data || poRes.data;
+        if (poData && (poData.id || poData.po_number)) {
+          setViewItem({
+            ...poData,
+            id: poData.id,
+            isPurchaseOrder: true,
+            po_number: poData.po_number,
+            title: poData.po_number ? `Đơn mua hàng ${poData.po_number}` : (poData.notes || `Đơn hàng PO #${poData.id}`),
+            amount: Number(poData.total || poData.subtotal || 0),
+            currency: 'VND',
+            status: poData.status === 'pending_approval' ? 'pending' : (poData.status || 'pending'),
+            date: poData.order_date || poData.created_at,
+            creator_name: poData.creator_name,
+            vendor_name: poData.supplier_name,
+            notes: poData.notes,
+            items: Array.isArray(poData.items) ? poData.items.map((it: any) => ({
+              id: it.id,
+              content: it.name || it.product_name,
+              quantity: it.quantity,
+              price: it.unit_cost,
+              vat: 0
+            })) : [],
+            approver_name: poData.approver_name_1,
+            approver_name_2: poData.approver_name_2,
+            approver_name_3: poData.approver_name_3,
+            status_level_1: poData.status_level_1,
+            status_level_2: poData.status_level_2,
+            status_level_3: poData.status_level_3
+          });
+          return;
+        }
+      } catch (errPo) {
+        // Intelligent fallback 2: Check /hrm/leaves if this ID was a leave/WFH request
+        try {
+          const lvRes = await api.get(`/hrm/leaves/${id}`);
+          const lv = lvRes.data?.data || lvRes.data;
+          if (lv && lv.id) {
+            setViewItem({
+              ...lv,
+              id: lv.id,
+              isLeaveRequest: true,
+              title: `Đơn nghỉ phép / công tác #${lv.id} - ${lv.reason || ''}`,
+              amount: 0,
+              currency: 'VND',
+              status: lv.status || 'pending',
+              date: lv.start_date || lv.created_at,
+              creator_name: lv.employee_name || lv.user_name || lv.creator_name,
+              notes: `Thời gian: ${lv.start_date || ''} -> ${lv.end_date || ''}\nLý do: ${lv.reason || ''}`,
+              approver_name: lv.approver_name
+            });
+            return;
+          }
+        } catch (errLv) {}
+      }
+      addToast('Không thể tải chi tiết chi phí: ' + (e?.response?.data?.message || e.message), 'error');
     } finally {
       setLoading(false);
     }
@@ -192,7 +250,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
       const res = await api.get(`/expenses/${id}/comments`);
       setComments(res.data.data || []);
     } catch (err) {
-      console.error('Error fetching comments:', err);
+      setComments([]);
     } finally {
       setLoadingComments(false);
     }
@@ -204,7 +262,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
       const res = await api.get(`/expenses/${id}/history`);
       setHistoryLogs(res.data.data || []);
     } catch (err) {
-      console.error('Error fetching history:', err);
+      setHistoryLogs([]);
     } finally {
       setLoadingHistory(false);
     }
@@ -288,14 +346,14 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
   const isMyTurnToApprove = (item: any) => {
     if (!item) return false;
     const overall = String(item.status || 'pending').toLowerCase();
-    if (overall !== 'pending') return false;
+    if (overall !== 'pending' && overall !== 'pending_approval') return false;
 
     const role = String(user?.role || '').toLowerCase();
     const userId = Number(user?.id || 0);
     if (Number(item.created_by || (item as any)?.user_id) === userId) {
       return false; // Creator cannot approve their own expense
     }
-    const isSuperAdmin = ['superadmin', 'super_admin', 'admin'].includes(role);
+    const isSuperAdmin = ['superadmin', 'super_admin', 'admin', 'director'].includes(role);
 
     const s1 = String(item.status_level_1 || 'pending').toLowerCase();
     const s2 = String(item.status_level_2 || 'pending').toLowerCase();
@@ -746,13 +804,18 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
     if (!viewItem || isProcessingApproval) return;
     setIsProcessingApproval('approve');
     try {
-      await api.patch(`/expenses/${viewItem.id}`, { status: 'approved' });
-      addToast('Đã phê duyệt chi phí', 'success');
+      if (viewItem.isPurchaseOrder) {
+        await api.post(`/purchase-orders/${viewItem.id}/approve`, { status: 'approved' });
+        addToast('Đã phê duyệt đơn hàng PO thành công', 'success');
+      } else {
+        await api.patch(`/expenses/${viewItem.id}`, { status: 'approved' });
+        addToast('Đã phê duyệt chi phí', 'success');
+      }
       fetchExpenseDetails(viewItem.id);
       if (onStatusChange) onStatusChange();
       window.dispatchEvent(new Event('refresh-pending-counts'));
     } catch (e: any) {
-      addToast('Lỗi khi phê duyệt chi phí', 'error');
+      addToast(e?.response?.data?.message || e?.message || 'Lỗi khi phê duyệt chi phí', 'error');
     } finally {
       setIsProcessingApproval(null);
     }
@@ -762,13 +825,18 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
     if (!viewItem || isProcessingApproval) return;
     setIsProcessingApproval('reject');
     try {
-      await api.patch(`/expenses/${viewItem.id}`, { status: 'rejected' });
-      addToast('Đã từ chối chi phí', 'success');
+      if (viewItem.isPurchaseOrder) {
+        await api.post(`/purchase-orders/${viewItem.id}/approve`, { status: 'rejected' });
+        addToast('Đã từ chối đơn hàng PO', 'success');
+      } else {
+        await api.patch(`/expenses/${viewItem.id}`, { status: 'rejected' });
+        addToast('Đã từ chối chi phí', 'success');
+      }
       fetchExpenseDetails(viewItem.id);
       if (onStatusChange) onStatusChange();
       window.dispatchEvent(new Event('refresh-pending-counts'));
     } catch (e: any) {
-      addToast('Lỗi khi từ chối chi phí', 'error');
+      addToast(e?.response?.data?.message || e?.message || 'Lỗi khi từ chối chi phí', 'error');
     } finally {
       setIsProcessingApproval(null);
     }
@@ -938,10 +1006,49 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                 <X size={20} />
               </button>
               <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, color: 'var(--color-text)' }}>
-                {Number(viewItem.amount || 0) === 0 || String(viewItem.title).toLowerCase().includes('văn phòng phẩm') || (viewItem.notes || '').includes('DANH SÁCH VĂN PHÒNG PHẨM') ? `Chi tiết đề xuất #EXP-${viewItem.id}` : `Chi tiết phiếu chi #EXP-${viewItem.id}`}
+                {viewItem.isPurchaseOrder
+                  ? `Chi tiết đơn mua hàng #${viewItem.po_number || viewItem.id}`
+                  : Number(viewItem.amount || 0) === 0 || String(viewItem.title).toLowerCase().includes('văn phòng phẩm') || (viewItem.notes || '').includes('DANH SÁCH VĂN PHÒNG PHẨM')
+                    ? `Chi tiết đề xuất #EXP-${viewItem.id}`
+                    : `Chi tiết phiếu chi #EXP-${viewItem.id}`}
               </h2>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              {/* Permission & Status Pill */}
+              {isMyTurnToApprove(viewItem) ? (
+                <div style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '5px 12px',
+                  borderRadius: '20px',
+                  background: 'rgba(245, 158, 11, 0.12)',
+                  border: '1px solid rgba(245, 158, 11, 0.35)',
+                  color: '#d97706',
+                  fontSize: '0.74rem',
+                  fontWeight: 700
+                }}>
+                  <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#d97706', display: 'inline-block' }} />
+                  Đến lượt bạn duyệt
+                </div>
+              ) : (
+                <div style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '5px 12px',
+                  borderRadius: '20px',
+                  background: 'var(--color-bg-light, #f1f5f9)',
+                  border: '1px solid var(--color-border-light, #e2e8f0)',
+                  color: 'var(--color-text-muted, #64748b)',
+                  fontSize: '0.74rem',
+                  fontWeight: 600
+                }}>
+                  <Eye size={13} />
+                  Chế độ chỉ xem
+                </div>
+              )}
+
               {isMyTurnToApprove(viewItem) && (
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button 
@@ -1526,7 +1633,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
               })()}
 
               {/* Action Buttons 50/50 below money banner */}
-              {isMyTurnToApprove(viewItem) && (
+              {isMyTurnToApprove(viewItem) ? (
                 <div style={{ display: 'flex', gap: '12px', width: '100%', flexShrink: 0 }}>
                   <button 
                     className="btn danger hover-lift" 
@@ -1546,6 +1653,25 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                     {isProcessingApproval === 'approve' ? <Loader2 size={16} className="spin" /> : <CheckCircle2 size={16} />}
                     <span>{isProcessingApproval === 'approve' ? 'Đang duyệt...' : 'Phê duyệt'}</span>
                   </button>
+                </div>
+              ) : (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  width: '100%',
+                  padding: '9px 14px',
+                  background: 'var(--color-bg-light, #f8fafc)',
+                  border: '1px solid var(--color-border-light, #e2e8f0)',
+                  borderRadius: '12px',
+                  color: 'var(--color-text-muted, #64748b)',
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  boxSizing: 'border-box'
+                }}>
+                  <Eye size={14} />
+                  <span>Chế độ xem thông tin (Chỉ người có thẩm quyền mới được duyệt)</span>
                 </div>
               )}
 

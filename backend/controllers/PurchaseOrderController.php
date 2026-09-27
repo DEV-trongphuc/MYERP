@@ -37,8 +37,12 @@ class PurchaseOrderController {
         }
 
         $isAdminOrDirectorOrAccountant = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'accountant'], true);
+        $specificId = (int)($_GET['id'] ?? ($_GET['open_id'] ?? 0));
 
-        if (!$isAdminOrDirectorOrAccountant) {
+        if ($specificId > 0) {
+            $where[] = "po.id = ?";
+            $params[] = $specificId;
+        } elseif (!$isAdminOrDirectorOrAccountant) {
             if ($isManager) {
                 $placeholders = implode(',', array_fill(0, count($userIds), '?'));
                 $where[] = "(po.created_by IN ($placeholders) OR po.approver_id = ? OR po.approver_id_2 = ? OR po.approver_id_3 = ?)";

@@ -111,8 +111,10 @@ export const GlobalEntityDrawers: React.FC = () => {
         openCustomerDrawer(Number(id), 'info');
       } else if (type === 'task') {
         openTaskDrawer(Number(id));
-      } else if (type === 'approval') {
+      } else if (type === 'approval' || type === 'po' || type === 'purchase_order' || type === 'po_order' || type === 'expense') {
         openExpenseDrawer(Number(id));
+      } else if (type === 'leave' || type === 'wfh' || type === 'ot') {
+        window.location.href = `/approvals?open_id=${id}&open_type=leave`;
       } else if (type === 'company') {
         window.dispatchEvent(new CustomEvent('open-company-drawer', { detail: { id: Number(id) } }));
       } else if (type === 'deal') {

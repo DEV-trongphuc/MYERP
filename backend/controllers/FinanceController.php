@@ -647,8 +647,12 @@ class FinanceController
         }
 
         $isAdminOrDirectorOrAccountant = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'accountant'], true);
+        $specificId = (int)($_GET['id'] ?? ($_GET['open_id'] ?? 0));
 
-        if (!$isAdminOrDirectorOrAccountant) {
+        if ($specificId > 0) {
+            $where[] = 'e.id = ?';
+            $params[] = $specificId;
+        } elseif (!$isAdminOrDirectorOrAccountant) {
             if ($isManager) {
                 $placeholders = implode(',', array_fill(0, count($userIds), '?'));
                 $where[] = "(e.created_by IN ($placeholders) OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ? OR e.refunder_id = ? OR e.related_user_ids LIKE ? OR e.related_user_ids LIKE ? OR EXISTS (SELECT 1 FROM notes n JOIN note_mentions nm ON nm.note_id = n.id WHERE n.entity_type = 'expense' AND n.entity_id = e.id AND nm.user_id = ?))";
