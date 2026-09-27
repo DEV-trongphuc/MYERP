@@ -375,7 +375,7 @@ export const StickerPickerModal: React.FC<StickerPickerModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setIdeasGender('male')}
-                    title="Bộ Nam (12 nhãn dán)"
+                    title="Bộ Nam (24 nhãn dán)"
                     style={{
                       flex: 1,
                       padding: '7px 12px',
@@ -401,7 +401,7 @@ export const StickerPickerModal: React.FC<StickerPickerModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setIdeasGender('female')}
-                    title="Bộ Nữ (12 nhãn dán)"
+                    title="Bộ Nữ (24 nhãn dán)"
                     style={{
                       flex: 1,
                       padding: '7px 12px',
@@ -432,8 +432,8 @@ export const StickerPickerModal: React.FC<StickerPickerModalProps> = ({
                 let itemNumbers: number[] = [];
                 if (currentPack.id === 'ideas') {
                   itemNumbers = ideasGender === 'male'
-                    ? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-                    : [13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24];
+                    ? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36]
+                    : [13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48];
                 } else {
                   itemNumbers = Array.from({ length: currentPack.count }).map((_, i) => i + 1);
                 }
