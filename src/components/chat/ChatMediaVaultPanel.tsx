@@ -217,7 +217,7 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({ onClose, onOpenAddMember,
                   onClick={() => setSelectedPreviewImage(it.file_url)}
                   style={{ width: '100%', aspectRatio: '1', borderRadius: '8px', overflow: 'hidden', cursor: 'pointer', background: '#f1f5f9', position: 'relative' }}
                 >
-                  <img src={it.file_url} alt={it.file_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <img src={it.file_url} alt={it.file_name} loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 </div>
               ))}
             </div>
@@ -416,7 +416,7 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({ onClose, onOpenAddMember,
                         onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.04)'}
                         onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
                       >
-                        <img src={it.file_url} alt={it.file_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <img src={it.file_url} alt={it.file_name} loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       </div>
                     ))}
                   </div>

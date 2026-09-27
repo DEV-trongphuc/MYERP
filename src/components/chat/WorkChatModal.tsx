@@ -279,10 +279,17 @@ const ChatImageBubble: React.FC<{
 });
 ChatImageBubble.displayName = 'ChatImageBubble';
 
+// Regex cache cho tin nhắn text tránh split lặp lại khi re-render
+const formattedTextCache = new Map<string, React.ReactNode>();
+
 const renderFormattedText = (text: string, isMine?: boolean) => {
   if (!text) return null;
+  const cacheKey = `${isMine ? '1' : '0'}_${text}`;
+  const cached = formattedTextCache.get(cacheKey);
+  if (cached) return cached;
+
   const parts = text.split(/(@[\w\s\u00C0-\u1EF9]+(?=\s|$)|https?:\/\/[^\s()<>]+)/g);
-  return (
+  const result = (
     <span>
       {parts.map((part, idx) => {
         if (part.startsWith('http://') || part.startsWith('https://')) {
@@ -325,6 +332,12 @@ const renderFormattedText = (text: string, isMine?: boolean) => {
       })}
     </span>
   );
+
+  if (formattedTextCache.size > 500) {
+    formattedTextCache.clear();
+  }
+  formattedTextCache.set(cacheKey, result);
+  return result;
 };
 
 
@@ -999,19 +1012,72 @@ export const WorkChatModal: React.FC = () => {
     });
   };
 
+  // Memoized filtered conversations
+  const filteredConversations = useMemo(() => {
+    if (!searchFilter.trim()) return conversations;
+    const q = searchFilter.toLowerCase();
+    return conversations.filter((c) =>
+      c.title?.toLowerCase().includes(q) ||
+      c.last_msg_content?.toLowerCase().includes(q)
+    );
+  }, [conversations, searchFilter]);
+
+  // Memoized filtered staff directory
+  const filteredStaff = useMemo(() => {
+    if (!searchFilter.trim()) return staffDirectory;
+    const q = searchFilter.toLowerCase();
+    return staffDirectory.filter((s) =>
+      s.full_name?.toLowerCase().includes(q) ||
+      s.job_title?.toLowerCase().includes(q) ||
+      s.team_name?.toLowerCase().includes(q)
+    );
+  }, [staffDirectory, searchFilter]);
+
+  // Memoized read avatars map (Messenger style)
+  const participantReadMsgMap = useMemo(() => {
+    const map = new Map<number, { id: number; name: string; avatar?: string }[]>();
+    if (!activeConversation || currentMessages.length === 0) return map;
+
+    const pList: any[] = (activeConversation.participants && activeConversation.participants.length > 0)
+      ? activeConversation.participants
+      : (activeConversation.other_user ? [activeConversation.other_user] : []);
+
+    const myId = Number(user?.id || (user as any)?.user_id || 0);
+    const lastMsg = currentMessages[currentMessages.length - 1];
+
+    pList.forEach((p: any) => {
+      const pUid = Number(p.user_id || p.id || 0);
+      if (pUid === myId) return;
+
+      const pReadId = Number(p.last_read_message_id || 0);
+      if (pReadId <= 0) return;
+
+      let targetMsgId: number | null = null;
+      if (pReadId >= lastMsg.id) {
+        targetMsgId = lastMsg.id;
+      } else {
+        for (let i = currentMessages.length - 1; i >= 0; i--) {
+          if (currentMessages[i].id <= pReadId) {
+            targetMsgId = currentMessages[i].id;
+            break;
+          }
+        }
+      }
+
+      if (targetMsgId !== null) {
+        const list = map.get(targetMsgId) || [];
+        list.push({
+          id: pUid,
+          name: p.full_name || p.name || 'Đồng nghiệp',
+          avatar: p.avatar_url || p.avatar
+        });
+        map.set(targetMsgId, list);
+      }
+    });
+    return map;
+  }, [activeConversation, currentMessages, user?.id]);
+
   if (!isOpen) return null;
-
-  // Filtered lists
-  const filteredConversations = conversations.filter((c) =>
-    c.title?.toLowerCase().includes(searchFilter.toLowerCase()) ||
-    c.last_msg_content?.toLowerCase().includes(searchFilter.toLowerCase())
-  );
-
-  const filteredStaff = staffDirectory.filter((s) =>
-    s.full_name?.toLowerCase().includes(searchFilter.toLowerCase()) ||
-    s.job_title?.toLowerCase().includes(searchFilter.toLowerCase()) ||
-    s.team_name?.toLowerCase().includes(searchFilter.toLowerCase())
-  );
 
   return (
     <>
@@ -2121,57 +2187,16 @@ export const WorkChatModal: React.FC = () => {
                       <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600 }}>Chưa có tin nhắn nào</p>
                       <p style={{ margin: '4px 0 0', fontSize: '0.78rem' }}>Gửi lời chào hoặc chia sẻ công việc để bắt đầu trò chuyện!</p>
                     </div>
-                  ) : (() => {
-                    // Pre-calculate which message ID each participant's read avatar should be placed on (Messenger style)
-                    const participantReadMsgMap = new Map<number, { id: number; name: string; avatar?: string }[]>();
-
-                    if (activeConversation) {
-                      const pList: any[] = (activeConversation.participants && activeConversation.participants.length > 0)
-                        ? activeConversation.participants
-                        : (activeConversation.other_user ? [activeConversation.other_user] : []);
-
-                      pList.forEach((p: any) => {
-                        const pUid = Number(p.user_id || p.id || 0);
-                        if (pUid === Number(user?.id)) return; // Do not show myself in seen avatars
-
-                        const pReadId = Number(p.last_read_message_id || 0);
-                        if (pReadId <= 0 || currentMessages.length === 0) return;
-
-                        let targetMsgId: number | null = null;
-                        const lastMsg = currentMessages[currentMessages.length - 1];
-
-                        if (pReadId >= lastMsg.id) {
-                          targetMsgId = lastMsg.id;
-                        } else {
-                          for (let i = currentMessages.length - 1; i >= 0; i--) {
-                            if (currentMessages[i].id <= pReadId) {
-                              targetMsgId = currentMessages[i].id;
-                              break;
-                            }
-                          }
-                        }
-
-                        if (targetMsgId !== null) {
-                          const list = participantReadMsgMap.get(targetMsgId) || [];
-                          list.push({
-                            id: pUid,
-                            name: p.full_name || p.name || 'Đồng nghiệp',
-                            avatar: p.avatar_url || p.avatar
-                          });
-                          participantReadMsgMap.set(targetMsgId, list);
-                        }
-                      });
-                    }
-
-                    return visibleMessages.map((msg, index) => {
+                  ) : (
+                    visibleMessages.map((msg, index) => {
                       const myId = Number(user?.id || (user as any)?.user_id || 0);
                       const isMine = Boolean(msg.is_mine) || (myId > 0 && Number(msg.sender_id) === myId);
                       const isRecalled = Boolean(msg.deleted_at);
                       const isConvAdmin = (activeConversation as any)?.my_role === 'owner' || (activeConversation as any)?.my_role === 'admin' || user?.role === 'superadmin' || user?.role === 'admin';
                       const canRecall = !isRecalled && (isMine || isConvAdmin);
 
-                      const seenUsers = (() => {
-                        if (!activeConversation) return [];
+                      // Chỉ tính toán seenUsers chi tiết khi người dùng đang mở dropdown menu của tin nhắn này
+                      const seenUsers = (activeMenuMsgId === msg.id && activeConversation) ? (() => {
                         const pList: any[] = (activeConversation.participants && activeConversation.participants.length > 0)
                           ? activeConversation.participants
                           : (activeConversation.other_user ? [activeConversation.other_user] : []);
@@ -2186,7 +2211,7 @@ export const WorkChatModal: React.FC = () => {
                           name: p.full_name || p.name || 'Đồng nghiệp',
                           avatar: p.avatar_url || p.avatar
                         }));
-                      })();
+                      })() : [];
 
                       if (msg.message_type === 'system_event') {
                         const isTaskEvent = msg.metadata?.event_type === 'task_created';
@@ -3561,8 +3586,8 @@ export const WorkChatModal: React.FC = () => {
                           })()}
                         </motion.div>
                       );
-                    });
-                  })()}
+                    })
+                  )}
 
                   {/* Bouncing Waving Typing Dots Indicator */}
                   {currentTypingUsers.length > 0 && (

@@ -692,35 +692,76 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         }
       }
 
-      // 3. Typing indicator
-      if (activeConversationId && data.typing_users) {
-        set((state) => ({
-          typingByConvId: {
-            ...state.typingByConvId,
-            [activeConversationId]: data.typing_users
-          }
-        }));
+      // 3. Typing indicator (Chỉ cập nhật state khi thực sự có thay đổi)
+      if (activeConversationId && Array.isArray(data.typing_users)) {
+        const currentTyping = get().typingByConvId[activeConversationId] || [];
+        const isSameLength = currentTyping.length === data.typing_users.length;
+        const isSameContent = isSameLength && currentTyping.every((u: any, idx: number) => u.id === data.typing_users[idx]?.id);
+
+        if (!isSameContent) {
+          set((state) => ({
+            typingByConvId: {
+              ...state.typingByConvId,
+              [activeConversationId]: data.typing_users
+            }
+          }));
+        }
       }
 
-      // 4. Total unread badge
-      if (typeof data.total_unread === 'number') {
+      // 4. Total unread badge (Chỉ cập nhật khi số lượng thay đổi)
+      if (typeof data.total_unread === 'number' && get().unreadTotal !== data.total_unread) {
         set({ unreadTotal: data.total_unread });
       }
 
-      // 5. Update participants & other_user in activeConversation (so seen avatar moves down in real-time & presence updates)
+      // 5. Update participants & other_user in activeConversation (Chỉ cập nhật khi có thay đổi thực tế về seen message hay online status)
       if (activeConversationId && (data.participants || data.other_user)) {
-        set((state) => {
-          if (!state.activeConversation || state.activeConversation.id !== activeConversationId) {
-            return state;
-          }
-          return {
-            activeConversation: {
-              ...state.activeConversation,
-              ...(data.participants && data.participants.length > 0 ? { participants: data.participants } : {}),
-              ...(data.other_user ? { other_user: data.other_user } : {})
+        const currentConv = get().activeConversation;
+        if (currentConv && currentConv.id === activeConversationId) {
+          let hasChanged = false;
+
+          // Kiểm tra xem danh sách participants có thay đổi last_read_message_id hoặc online không
+          if (Array.isArray(data.participants) && data.participants.length > 0) {
+            const oldList = currentConv.participants || [];
+            if (oldList.length !== data.participants.length) {
+              hasChanged = true;
+            } else {
+              for (let i = 0; i < data.participants.length; i++) {
+                const np = data.participants[i];
+                const op = oldList.find((p: any) => (p.user_id || p.id) === (np.user_id || np.id));
+                if (!op || op.last_read_message_id !== np.last_read_message_id || op.is_online !== np.is_online) {
+                  hasChanged = true;
+                  break;
+                }
+              }
             }
-          };
-        });
+          }
+
+          // Kiểm tra xem other_user có thay đổi không
+          if (data.other_user && currentConv.other_user) {
+            if (
+              currentConv.other_user.is_online !== data.other_user.is_online ||
+              currentConv.other_user.last_read_message_id !== data.other_user.last_read_message_id ||
+              currentConv.other_user.is_active !== data.other_user.is_active
+            ) {
+              hasChanged = true;
+            }
+          }
+
+          if (hasChanged) {
+            set((state) => {
+              if (!state.activeConversation || state.activeConversation.id !== activeConversationId) {
+                return state;
+              }
+              return {
+                activeConversation: {
+                  ...state.activeConversation,
+                  ...(data.participants && data.participants.length > 0 ? { participants: data.participants } : {}),
+                  ...(data.other_user ? { other_user: data.other_user } : {})
+                }
+              };
+            });
+          }
+        }
       }
     } catch (e) {}
   }
