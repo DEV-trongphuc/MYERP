@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 296;
+$targetVersion = 297;
 $currentVersion = 186;
 
 // Query current DB version
@@ -3975,10 +3975,31 @@ try {
         }
     }
 
-    // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '296') ON DUPLICATE KEY UPDATE setting_value = '296'");
+    // --- PHIÊN BẢN 297: Bổ sung liên kết Chat vào bảng activities (conversation_id, chat_message_id) ---
+    if ($currentVersion < 297 && $apply) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 297: Bổ sung liên kết Chat vào bảng activities...", "info");
+        try {
+            $checkCol1 = $conn->query("SHOW COLUMNS FROM activities LIKE 'conversation_id'");
+            if ($checkCol1 && $checkCol1->num_rows === 0) {
+                $conn->query("ALTER TABLE activities ADD COLUMN conversation_id BIGINT NULL DEFAULT NULL");
+                $conn->query("ALTER TABLE activities ADD INDEX idx_act_conv (tenant_id, conversation_id)");
+                $logMsg("Đã thêm cột conversation_id và index idx_act_conv vào bảng activities.", "success");
+            }
+            $checkCol2 = $conn->query("SHOW COLUMNS FROM activities LIKE 'chat_message_id'");
+            if ($checkCol2 && $checkCol2->num_rows === 0) {
+                $conn->query("ALTER TABLE activities ADD COLUMN chat_message_id BIGINT NULL DEFAULT NULL");
+                $logMsg("Đã thêm cột chat_message_id vào bảng activities.", "success");
+            }
+            $logMsg("Nâng cấp lên phiên bản 297 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi nâng cấp v297: " . $e->getMessage(), "error");
+        }
+    }
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 296", "success");
+    // Update DB version in system_settings
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '297') ON DUPLICATE KEY UPDATE setting_value = '297'");
+
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 297", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");

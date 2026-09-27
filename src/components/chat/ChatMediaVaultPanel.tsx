@@ -2,11 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, Image as ImageIcon, FileText, Link2, Users, Download, 
   ExternalLink, ChevronDown, ChevronUp, ChevronLeft, Check,
-  FileArchive, FileSpreadsheet, Film, Globe, Search, Trash2
+  FileArchive, FileSpreadsheet, Film, Globe, Search, Trash2,
+  CheckSquare, Plus, Clock, AlertCircle
 } from 'lucide-react';
+import api from '../../api/axios';
 import { useChatStore } from '../../store/chatStore';
+import { useUIStore } from '../../store/uiStore';
 import { Avatar } from '../ui/Avatar';
 import { DeleteConversationModal } from './DeleteConversationModal';
+import { CreateTaskFromChatModal } from './CreateTaskFromChatModal';
 import { getFileFormatConfig, formatFileSize } from '../../utils/chatFileUtils';
 
 interface Props {
@@ -17,6 +21,7 @@ interface Props {
 }
 
 export const ChatMediaVaultPanel: React.FC<Props> = ({ onClose, onOpenAddMember, isMaximized, onCloseChat }) => {
+  const { openTaskDrawer } = useUIStore();
   const { 
     activeConversation, 
     vaultItems, 
@@ -24,20 +29,38 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({ onClose, onOpenAddMember,
     loadingVault 
   } = useChatStore();
 
-  const [expandedSections, setExpandedSections] = useState<{ media: boolean; file: boolean; link: boolean }>({
+  const [expandedSections, setExpandedSections] = useState<{ media: boolean; file: boolean; link: boolean; task: boolean }>({
     media: true,
     file: true,
-    link: true
+    link: true,
+    task: true
   });
-  const [drilldownCategory, setDrilldownCategory] = useState<'all' | 'image' | 'document' | 'link'>('all');
+  const [drilldownCategory, setDrilldownCategory] = useState<'all' | 'image' | 'document' | 'link' | 'task'>('all');
   const [drilldownSearch, setDrilldownSearch] = useState('');
   const [selectedPreviewImage, setSelectedPreviewImage] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
 
-  // Initial fetch all items in vault when panel mounts or conversation changes
+  const fetchTasks = async (convId: number) => {
+    setLoadingTasks(true);
+    try {
+      const res = await api.get(`/chat/conversations/${convId}/tasks`);
+      const list = res.data?.data?.tasks || res.data?.tasks || [];
+      setTasks(list);
+    } catch (e) {
+      console.error('Failed to fetch conversation tasks:', e);
+    } finally {
+      setLoadingTasks(false);
+    }
+  };
+
+  // Initial fetch all items in vault and tasks when panel mounts or conversation changes
   useEffect(() => {
     if (activeConversation) {
       fetchVault(activeConversation.id, 'all');
+      fetchTasks(activeConversation.id);
     }
   }, [activeConversation?.id]);
 
@@ -50,7 +73,7 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({ onClose, onOpenAddMember,
   const fileItems = vaultItems.filter((i) => i.category === 'document');
   const linkItems = vaultItems.filter((i) => i.category === 'link');
 
-  const toggleSection = (section: 'media' | 'file' | 'link') => {
+  const toggleSection = (section: 'media' | 'file' | 'link' | 'task') => {
     setExpandedSections((prev) => ({ ...prev, [section]: !prev[section] }));
   };
 
@@ -67,9 +90,18 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({ onClose, onOpenAddMember,
 
   // DRILLDOWN VIEW (When user clicks "Xem tất cả")
   if (drilldownCategory !== 'all') {
-    const categoryTitle = drilldownCategory === 'image' ? 'Media' : drilldownCategory === 'document' ? 'File tệp tin' : 'Liên kết Link';
-    const items = (drilldownCategory === 'image' ? mediaItems : drilldownCategory === 'document' ? fileItems : linkItems)
-      .filter((i) => !drilldownSearch || i.file_name?.toLowerCase().includes(drilldownSearch.toLowerCase()) || i.file_url?.toLowerCase().includes(drilldownSearch.toLowerCase()));
+    const categoryTitle = drilldownCategory === 'image' 
+      ? 'Media' 
+      : drilldownCategory === 'document' 
+      ? 'File tệp tin' 
+      : drilldownCategory === 'link' 
+      ? 'Liên kết Link'
+      : 'Công việc liên kết (Task)';
+
+    const items = drilldownCategory === 'task'
+      ? tasks.filter((t) => !drilldownSearch || t.subject?.toLowerCase().includes(drilldownSearch.toLowerCase()) || t.assignee_name?.toLowerCase().includes(drilldownSearch.toLowerCase()))
+      : (drilldownCategory === 'image' ? mediaItems : drilldownCategory === 'document' ? fileItems : linkItems)
+        .filter((i) => !drilldownSearch || i.file_name?.toLowerCase().includes(drilldownSearch.toLowerCase()) || i.file_url?.toLowerCase().includes(drilldownSearch.toLowerCase()));
 
     return (
       <div style={{ width: '100%', height: '100%', background: '#ffffff', display: 'flex', flexDirection: 'column', borderLeft: '1px solid #e2e8f0' }}>
@@ -106,6 +138,76 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({ onClose, onOpenAddMember,
           {items.length === 0 ? (
             <div style={{ textAlign: 'center', color: '#94a3b8', padding: '40px 10px', fontSize: '0.85rem' }}>
               Không tìm thấy mục nào
+            </div>
+          ) : drilldownCategory === 'task' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {items.map((t) => {
+                const statBadge = t.status === 'done'
+                  ? { label: 'Hoàn thành', bg: '#ecfdf5', text: '#047857' }
+                  : t.status === 'in_progress'
+                  ? { label: 'Đang làm', bg: '#eff6ff', text: '#1d4ed8' }
+                  : { label: 'Chưa xong', bg: '#fffbeb', text: '#b45309' };
+                const prioColor = t.priority === 'urgent' ? '#dc2626' : t.priority === 'high' ? '#ea580c' : '#64748b';
+
+                return (
+                  <div
+                    key={t.id}
+                    onClick={() => openTaskDrawer(t.id)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '10px',
+                      padding: '10px 12px',
+                      background: '#f8fafc',
+                      borderRadius: '10px',
+                      border: '1px solid #e2e8f0',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
+                  >
+                    <div style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: '8px',
+                      background: '#ecfdf5',
+                      color: '#059669',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                      <CheckSquare size={16} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                        <span style={{ fontSize: '0.66rem', fontWeight: 800, padding: '1px 6px', borderRadius: '4px', background: statBadge.bg, color: statBadge.text }}>
+                          {statBadge.label}
+                        </span>
+                        {t.priority && (
+                          <span style={{ fontSize: '0.66rem', fontWeight: 700, color: prioColor }}>
+                            • {t.priority === 'urgent' ? 'Khẩn' : t.priority === 'high' ? 'Cao' : 'Thường'}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a', lineHeight: 1.3, marginBottom: '6px' }}>
+                        {t.subject}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.7rem', color: '#64748b' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Avatar src={t.assignee_avatar} name={t.assignee_name || 'U'} size={16} />
+                          <span>{t.assignee_name || 'Chưa giao'}</span>
+                        </div>
+                        {t.due_date && (
+                          <span>• Hạn: {new Date(t.due_date).toLocaleDateString('vi-VN')}</span>
+                        )}
+                      </div>
+                    </div>
+                    <ExternalLink size={14} color="#94a3b8" />
+                  </div>
+                );
+              })}
             </div>
           ) : drilldownCategory === 'image' ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
@@ -543,6 +645,137 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({ onClose, onOpenAddMember,
             </>
           )}
 
+          {/* ══════════════════════════════════════════════════════════════════════
+              SECTION 4: TASK (Công việc liên kết với hội thoại)
+             ══════════════════════════════════════════════════════════════════════ */}
+          <div style={{ borderTop: '1px solid #f1f5f9', padding: '12px 14px' }}>
+            <div
+              onClick={() => toggleSection('task')}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', marginBottom: '10px' }}
+            >
+              <div style={{ fontSize: '0.85rem', fontWeight: 750, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <CheckSquare size={16} color="#059669" />
+                <span>Task liên kết</span>
+                <span style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 700 }}>({tasks.length})</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowCreateTaskModal(true);
+                  }}
+                  style={{
+                    background: '#ecfdf5',
+                    border: '1px solid #a7f3d0',
+                    color: '#059669',
+                    borderRadius: '6px',
+                    padding: '2px 8px',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                  title="Tạo công việc mới từ cuộc trò chuyện này"
+                >
+                  + Tạo việc
+                </button>
+                {expandedSections.task ? <ChevronUp size={16} color="#64748b" /> : <ChevronDown size={16} color="#64748b" />}
+              </div>
+            </div>
+
+            {expandedSections.task && (
+              <>
+                {tasks.length === 0 ? (
+                  <div style={{ fontSize: '0.78rem', color: '#94a3b8', padding: '8px 0', textAlign: 'center' }}>
+                    Chưa có công việc nào được liên kết
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {tasks.slice(0, 4).map((t) => {
+                      const statBadge = t.status === 'done'
+                        ? { label: 'Hoàn thành', bg: '#ecfdf5', text: '#047857' }
+                        : t.status === 'in_progress'
+                        ? { label: 'Đang làm', bg: '#eff6ff', text: '#1d4ed8' }
+                        : { label: 'Chưa xong', bg: '#fffbeb', text: '#b45309' };
+
+                      return (
+                        <div
+                          key={t.id}
+                          onClick={() => openTaskDrawer(t.id)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: '10px',
+                            padding: '8px 10px',
+                            borderRadius: '8px',
+                            background: '#f8fafc',
+                            border: '1px solid #e2e8f0',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
+                        >
+                          <div style={{
+                            width: 28,
+                            height: 28,
+                            borderRadius: '7px',
+                            background: '#ecfdf5',
+                            color: '#059669',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0
+                          }}>
+                            <CheckSquare size={14} />
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '2px' }}>
+                              <span style={{ fontSize: '0.62rem', fontWeight: 800, padding: '1px 5px', borderRadius: '4px', background: statBadge.bg, color: statBadge.text }}>
+                                {statBadge.label}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {t.subject}
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.68rem', color: '#64748b', marginTop: '2px' }}>
+                              <Avatar src={t.assignee_avatar} name={t.assignee_name || 'U'} size={14} />
+                              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.assignee_name || 'Chưa giao'}</span>
+                              {t.due_date && (
+                                <span style={{ flexShrink: 0 }}>• {new Date(t.due_date).toLocaleDateString('vi-VN')}</span>
+                              )}
+                            </div>
+                          </div>
+                          <ExternalLink size={13} color="#94a3b8" style={{ marginTop: '2px', flexShrink: 0 }} />
+                        </div>
+                      );
+                    })}
+
+                    {tasks.length > 4 && (
+                      <button
+                        type="button"
+                        onClick={() => setDrilldownCategory('task')}
+                        style={{
+                          width: '100%',
+                          padding: '7px 0',
+                          background: '#f1f5f9',
+                          border: 'none',
+                          borderRadius: '8px',
+                          color: '#059669',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Xem tất cả ({tasks.length})
+                      </button>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
           {/* Danger zone: Delete conversation & clean physical files */}
           <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid #fee2e2' }}>
             <button
@@ -588,6 +821,17 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({ onClose, onOpenAddMember,
         onSuccess={() => {
           setShowDeleteModal(false);
           onClose();
+        }}
+      />
+
+      {/* Create Task Modal */}
+      <CreateTaskFromChatModal
+        isOpen={showCreateTaskModal}
+        onClose={() => setShowCreateTaskModal(false)}
+        targetMessage={null}
+        conversation={activeConversation}
+        onTaskCreated={() => {
+          if (activeConversation) fetchTasks(activeConversation.id);
         }}
       />
 

@@ -950,6 +950,8 @@ switch ($resource) {
         elseif ($resourceId === 'conversations' && $subResource && $subId === 'read' && $method === 'POST') $ctrl->markAsRead($auth, (int)$subResource);
         elseif ($resourceId === 'conversations' && $subResource && $subId === 'participants' && in_array($method, ['POST', 'PUT', 'DELETE'], true)) $ctrl->manageParticipants($auth, (int)$subResource, $method);
         elseif ($resourceId === 'conversations' && $subResource && $subId === 'pin' && $method === 'POST') $ctrl->togglePinMessage($auth, (int)$subResource);
+        elseif ($resourceId === 'conversations' && $subResource && $subId === 'tasks' && $method === 'GET') $ctrl->getConversationTasks($auth, (int)$subResource);
+        elseif ($resourceId === 'conversations' && $subResource && $subId === 'tasks' && $method === 'POST') $ctrl->createTaskFromChat($auth, (int)$subResource);
         elseif ($resourceId === 'messages' && !$subResource && $method === 'POST') $ctrl->sendMessage($auth);
         elseif ($resourceId === 'messages' && $subResource && $subId === 'reactions' && $method === 'POST') $ctrl->reactMessage($auth, (int)$subResource);
         elseif ($resourceId === 'messages' && $subResource && in_array($method, ['PUT', 'PATCH'], true)) $ctrl->editMessage($auth, (int)$subResource);

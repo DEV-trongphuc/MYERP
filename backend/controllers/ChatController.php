@@ -2203,4 +2203,235 @@ class ChatController {
             'server_time' => time()
         ]);
     }
+
+    /**
+     * POST /chat/conversations/{id}/tasks
+     * Create a new task linked to this conversation and optionally to a specific message.
+     */
+    public function createTaskFromChat(array $auth, int $conversationId): void {
+        $tid = (int)($auth['tenant_id'] ?? 1);
+        $uid = (int)($auth['user_id'] ?? 0);
+        $creatorName = $auth['full_name'] ?? 'Đồng nghiệp';
+        $body = getBody();
+
+        if ($conversationId <= 0) {
+            respond(400, null, 'ID cuộc trò chuyện không hợp lệ', false);
+        }
+
+        $subject = trim($body['subject'] ?? '');
+        if (empty($subject)) {
+            respond(400, null, 'Tên công việc không được để trống', false);
+        }
+
+        $description = trim($body['description'] ?? $body['body'] ?? '');
+        $priority = in_array($body['priority'] ?? '', ['low', 'medium', 'high', 'urgent'], true) ? $body['priority'] : 'medium';
+        $dueDate = !empty($body['due_date']) ? date('Y-m-d H:i:s', strtotime($body['due_date'])) : null;
+        $startDate = !empty($body['start_date']) ? date('Y-m-d H:i:s', strtotime($body['start_date'])) : null;
+        $chatMessageId = !empty($body['chat_message_id']) ? (int)$body['chat_message_id'] : null;
+
+        // Verify conversation membership
+        $stmtConv = $this->db->prepare("
+            SELECT id, type, title, last_message_id
+            FROM chat_conversations
+            WHERE id = ? AND tenant_id = ?
+        ");
+        $stmtConv->execute([$conversationId, $tid]);
+        $conv = $stmtConv->fetch(PDO::FETCH_ASSOC);
+        if (!$conv) {
+            respond(404, null, 'Không tìm thấy cuộc trò chuyện', false);
+        }
+
+        $stmtPart = $this->db->prepare("
+            SELECT cp.user_id, u.full_name, u.avatar_url
+            FROM chat_participants cp
+            JOIN users u ON cp.user_id = u.id
+            WHERE cp.conversation_id = ? AND cp.tenant_id = ?
+        ");
+        $stmtPart->execute([$conversationId, $tid]);
+        $allParticipants = $stmtPart->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $participantUserIds = array_map(fn($p) => (int)$p['user_id'], $allParticipants);
+
+        if (!in_array($uid, $participantUserIds, true)) {
+            respond(403, null, 'Bạn không phải là thành viên của cuộc trò chuyện này', false);
+        }
+
+        // Determine Assignee (Người thực hiện)
+        $targetUserId = !empty($body['user_id']) ? (int)$body['user_id'] : (!empty($body['assignee_id']) ? (int)$body['assignee_id'] : 0);
+        if ($targetUserId <= 0) {
+            if ($conv['type'] === 'direct') {
+                foreach ($participantUserIds as $pUid) {
+                    if ($pUid !== $uid) {
+                        $targetUserId = $pUid;
+                        break;
+                    }
+                }
+                if ($targetUserId <= 0) $targetUserId = $uid;
+            } else {
+                $targetUserId = $uid;
+            }
+        }
+
+        // Look up Assignee name
+        $assigneeName = 'Chưa phân công';
+        foreach ($allParticipants as $p) {
+            if ((int)$p['user_id'] === $targetUserId) {
+                $assigneeName = $p['full_name'];
+                break;
+            }
+        }
+        if ($assigneeName === 'Chưa phân công') {
+            $stmtUser = $this->db->prepare("SELECT full_name FROM users WHERE id = ?");
+            $stmtUser->execute([$targetUserId]);
+            $uRow = $stmtUser->fetch(PDO::FETCH_ASSOC);
+            if ($uRow) $assigneeName = $uRow['full_name'];
+        }
+
+        // Determine Collaborators (Người liên quan)
+        $requestedParticipants = !empty($body['participant_ids']) 
+            ? (is_array($body['participant_ids']) ? $body['participant_ids'] : explode(',', (string)$body['participant_ids']))
+            : [];
+        $collabIds = array_filter(array_map('intval', $requestedParticipants), fn($id) => $id > 0);
+
+        if (empty($collabIds)) {
+            $collabIds = $participantUserIds;
+        } else {
+            $collabIds = array_values(array_unique(array_merge($collabIds, $participantUserIds)));
+        }
+        $collabIdsStr = !empty($collabIds) ? implode(',', $collabIds) : null;
+
+        try {
+            $this->db->beginTransaction();
+
+            // 1. Insert into activities
+            $stmtAct = $this->db->prepare("
+                INSERT INTO activities (
+                    tenant_id, user_id, created_by, type, subject, body, status, priority,
+                    start_date, due_date, participant_ids, conversation_id, chat_message_id, created_at, updated_at
+                ) VALUES (?, ?, ?, 'task', ?, ?, 'planned', ?, ?, ?, ?, ?, ?, NOW(), NOW())
+            ");
+            $stmtAct->execute([
+                $tid,
+                $targetUserId,
+                $uid,
+                $subject,
+                $description ?: null,
+                $priority,
+                $startDate,
+                $dueDate,
+                $collabIdsStr,
+                $conversationId,
+                $chatMessageId
+            ]);
+            $taskId = (int)$this->db->lastInsertId();
+
+            // 2. Insert system_event message into chat_messages
+            $systemEventContent = "📋 {$creatorName} vừa tạo công việc: \"{$subject}\" (Người thực hiện: {$assigneeName})";
+            $eventMetadata = [
+                'event_type' => 'task_created',
+                'task_id' => $taskId,
+                'subject' => $subject,
+                'assignee_id' => $targetUserId,
+                'assignee_name' => $assigneeName,
+                'priority' => $priority,
+                'due_date' => $dueDate,
+                'created_by' => $uid,
+                'creator_name' => $creatorName
+            ];
+            $metaJson = json_encode($eventMetadata, JSON_UNESCAPED_UNICODE);
+
+            $stmtMsg = $this->db->prepare("
+                INSERT INTO chat_messages (tenant_id, conversation_id, sender_id, message_type, content, metadata, created_at)
+                VALUES (?, ?, ?, 'system_event', ?, ?, NOW())
+            ");
+            $stmtMsg->execute([$tid, $conversationId, $uid, $systemEventContent, $metaJson]);
+            $sysMsgId = (int)$this->db->lastInsertId();
+
+            // 3. Update conversation last_message
+            $this->db->prepare("
+                UPDATE chat_conversations 
+                SET last_message_id = ?, last_message_at = NOW(), updated_at = NOW() 
+                WHERE id = ?
+            ")->execute([$sysMsgId, $conversationId]);
+
+            // 4. Update sender read status
+            $this->db->prepare("
+                UPDATE chat_participants 
+                SET last_read_message_id = ?, last_read_at = NOW() 
+                WHERE conversation_id = ? AND user_id = ?
+            ")->execute([$sysMsgId, $conversationId, $uid]);
+
+            $this->db->commit();
+
+            $sysMsg = [
+                'id' => $sysMsgId,
+                'conversation_id' => $conversationId,
+                'sender_id' => $uid,
+                'sender_name' => $creatorName,
+                'message_type' => 'system_event',
+                'content' => $systemEventContent,
+                'metadata' => $eventMetadata,
+                'is_mine' => true,
+                'created_at' => date('Y-m-d H:i:s')
+            ];
+
+            respond(200, [
+                'task_id' => $taskId,
+                'system_message' => $sysMsg
+            ], 'Tạo công việc từ hội thoại thành công');
+
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            error_log("Create Task From Chat Error: " . $e->getMessage());
+            respond(500, null, 'Lỗi khi tạo công việc: ' . $e->getMessage(), false);
+        }
+    }
+
+    /**
+     * GET /chat/conversations/{id}/tasks
+     * List all tasks linked to this conversation
+     */
+    public function getConversationTasks(array $auth, int $conversationId): void {
+        $tid = (int)($auth['tenant_id'] ?? 1);
+        $uid = (int)($auth['user_id'] ?? 0);
+
+        if ($conversationId <= 0) {
+            respond(400, null, 'ID cuộc trò chuyện không hợp lệ', false);
+        }
+
+        try {
+            $stmt = $this->db->prepare("
+                SELECT a.id, a.tenant_id, a.subject, a.body, a.status, a.priority, a.progress, 
+                       a.start_date, a.due_date, a.created_at, a.updated_at, a.user_id, a.created_by,
+                       a.participant_ids, a.conversation_id, a.chat_message_id,
+                       u.full_name as assignee_name, u.avatar_url as assignee_avatar,
+                       creator.full_name as creator_name, creator.avatar_url as creator_avatar
+                FROM activities a
+                LEFT JOIN users u ON a.user_id = u.id
+                LEFT JOIN users creator ON a.created_by = creator.id
+                WHERE a.conversation_id = ? AND a.tenant_id = ? AND a.deleted_at IS NULL
+                ORDER BY a.id DESC
+            ");
+            $stmt->execute([$conversationId, $tid]);
+            $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+            foreach ($tasks as &$t) {
+                $t['id'] = (int)$t['id'];
+                $t['user_id'] = (int)$t['user_id'];
+                $t['created_by'] = (int)$t['created_by'];
+                $t['conversation_id'] = (int)$t['conversation_id'];
+                $t['chat_message_id'] = $t['chat_message_id'] ? (int)$t['chat_message_id'] : null;
+                $t['progress'] = (int)($t['progress'] ?? 0);
+            }
+
+            respond(200, [
+                'tasks' => $tasks,
+                'total' => count($tasks)
+            ]);
+        } catch (\Throwable $e) {
+            error_log("Get Conversation Tasks Error: " . $e->getMessage());
+            respond(500, null, 'Lỗi khi lấy danh sách công việc: ' . $e->getMessage(), false);
+        }
+    }
 }

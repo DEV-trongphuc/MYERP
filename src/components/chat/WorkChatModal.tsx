@@ -20,6 +20,7 @@ import { ChatErpCardModal } from './ChatErpCardModal';
 import { CreateChatGroupModal } from './CreateChatGroupModal';
 import { ChatMediaVaultPanel } from './ChatMediaVaultPanel';
 import { ChatForwardModal } from './ChatForwardModal';
+import { CreateTaskFromChatModal } from './CreateTaskFromChatModal';
 import { isChatSoundEnabled, setChatSoundEnabled } from '../../utils/chatSound';
 import type { ChatMessage, ErpEntitySearchResult, MessageType } from '../../types/chat';
 import api from '../../api/axios';
@@ -289,6 +290,7 @@ export const WorkChatModal: React.FC = () => {
   const [editingMsgId, setEditingMsgId] = useState<number | null>(null);
   const [editingContent, setEditingContent] = useState('');
   const [activeMenuMsgId, setActiveMenuMsgId] = useState<number | null>(null);
+  const [taskModalTargetMsg, setTaskModalTargetMsg] = useState<ChatMessage | null>(null);
 
   useEffect(() => {
     const handleGlobalClick = () => {
@@ -1922,27 +1924,79 @@ export const WorkChatModal: React.FC = () => {
                       })();
 
                       if (msg.message_type === 'system_event') {
+                        const isTaskEvent = msg.metadata?.event_type === 'task_created';
+                        const taskId = Number(msg.metadata?.task_id || 0);
+
                         return (
-                          <div key={msg.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '8px 0' }}>
-                            <div style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              background: 'rgba(241, 245, 249, 0.95)',
-                              border: '1px solid #e2e8f0',
-                              color: '#64748b',
-                              fontSize: '0.74rem',
-                              padding: '4px 14px',
-                              borderRadius: '20px',
-                              fontWeight: 600,
-                              boxShadow: '0 1px 2px rgba(0, 0, 0, 0.03)'
-                            }}>
-                              <span style={{ display: 'inline-block', width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#94a3b8' }} />
-                              <span>{msg.content}</span>
-                            </div>
+                          <div key={msg.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '10px 0' }}>
+                            {isTaskEvent && taskId > 0 ? (
+                              <motion.button
+                                type="button"
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
+                                onClick={() => openTaskDrawer(taskId)}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  background: 'linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%)',
+                                  border: '1.5px solid #a7f3d0',
+                                  color: '#065f46',
+                                  fontSize: '0.78rem',
+                                  padding: '6px 16px',
+                                  borderRadius: '24px',
+                                  fontWeight: 700,
+                                  boxShadow: '0 2px 8px rgba(5, 150, 105, 0.12)',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s ease'
+                                }}
+                                title="Bấm để mở chi tiết công việc"
+                              >
+                                <span style={{
+                                  width: 20,
+                                  height: 20,
+                                  borderRadius: '50%',
+                                  background: '#10b981',
+                                  color: '#ffffff',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontSize: '0.65rem'
+                                }}>
+                                  <CheckSquare size={12} />
+                                </span>
+                                <span>{msg.content}</span>
+                                <span style={{ fontSize: '0.7rem', color: '#059669', opacity: 0.85, display: 'flex', alignItems: 'center', gap: '2px' }}>
+                                  <span>Chi tiết</span>
+                                  <ExternalLink size={11} />
+                                </span>
+                              </motion.button>
+                            ) : (
+                              <div style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                background: 'rgba(241, 245, 249, 0.95)',
+                                border: '1px solid #e2e8f0',
+                                color: '#64748b',
+                                fontSize: '0.74rem',
+                                padding: '4px 14px',
+                                borderRadius: '20px',
+                                fontWeight: 600,
+                                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.03)'
+                              }}>
+                                <span style={{ display: 'inline-block', width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#94a3b8' }} />
+                                <span>{msg.content}</span>
+                              </div>
+                            )}
                           </div>
                         );
                       }
+
+                      const isMentionedMe = !isMine && Boolean(
+                        msg.content?.includes('@all') ||
+                        (user?.full_name && msg.content?.includes(`@${user.full_name}`))
+                      );
 
                       return (
                         <motion.div
@@ -1958,6 +2012,11 @@ export const WorkChatModal: React.FC = () => {
                             position: 'relative',
                             borderRadius: '12px',
                             transition: 'box-shadow 0.3s ease, background-color 0.3s ease',
+                            ...(isMentionedMe ? {
+                              borderLeft: '3px solid #f59e0b',
+                              paddingLeft: '6px',
+                              backgroundColor: 'rgba(254, 243, 199, 0.22)'
+                            } : {}),
                             ...(highlightedMsgId === msg.id ? {
                               boxShadow: '0 0 0 3px rgba(220, 38, 38, 0.45), 0 4px 14px rgba(220, 38, 38, 0.2)',
                               backgroundColor: 'rgba(254, 226, 226, 0.25)',
@@ -1976,6 +2035,27 @@ export const WorkChatModal: React.FC = () => {
                             setActiveMenuMsgId(activeMenuMsgId === msg.id ? null : msg.id);
                           }}
                         >
+                          {/* Mention highlight alert badge */}
+                          {isMentionedMe && (
+                            <div style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontSize: '0.66rem',
+                              fontWeight: 800,
+                              color: '#b45309',
+                              background: '#fef3c7',
+                              border: '1px solid #fde68a',
+                              borderRadius: '6px',
+                              padding: '2px 8px',
+                              marginBottom: '4px',
+                              marginLeft: isMine ? 0 : '38px',
+                              boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+                            }}>
+                              <span>🔔 Bạn được nhắc tên</span>
+                            </div>
+                          )}
+
                           {/* Sender name for group chats */}
                           {!isMine && activeConversation.type === 'group' && (
                             <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, marginBottom: '2px', marginLeft: '38px' }}>
@@ -2333,16 +2413,8 @@ export const WorkChatModal: React.FC = () => {
                                         <button
                                           type="button"
                                           onClick={() => {
-                                            navigator.clipboard.writeText(msg.content);
-                                            toast.success('Đã sao chép nội dung tin nhắn để tạo công việc!');
+                                            setTaskModalTargetMsg(msg);
                                             setActiveMenuMsgId(null);
-                                            window.dispatchEvent(new CustomEvent('myerp:create_task_from_chat', {
-                                              detail: {
-                                                title: msg.content.slice(0, 100),
-                                                description: msg.content,
-                                                sender_name: msg.sender_name
-                                              }
-                                            }));
                                           }}
                                           style={{
                                             display: 'flex',
@@ -3357,37 +3429,77 @@ export const WorkChatModal: React.FC = () => {
                 {/* Mentions Dropdown - ONLY IN GROUP CHATS */}
                 {activeConversation.type === 'group' && mentionQuery !== null && (
                   <div style={{
-                    maxHeight: '160px',
+                    maxHeight: '190px',
                     overflowY: 'auto',
                     background: '#ffffff',
                     borderTop: '1px solid #e2e8f0',
-                    boxShadow: '0 -4px 12px rgba(0,0,0,0.08)'
+                    boxShadow: '0 -4px 16px rgba(0,0,0,0.1)',
+                    borderRadius: '12px 12px 0 0'
                   }}>
-                    <div
-                      onClick={() => handleMentionSelect('all')}
-                      style={{ padding: '8px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #f1f5f9' }}
-                    >
-                      <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#f59e0b', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 800 }}>
-                        @
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '0.8rem', fontWeight: 750, color: '#b45309' }}>@all (Toàn bộ thành viên)</div>
-                        <div style={{ fontSize: '0.68rem', color: '#64748b' }}>Gửi thông báo đến mọi người trong nhóm</div>
-                      </div>
-                    </div>
-                    {staffDirectory
-                      .filter((s) => s.full_name?.toLowerCase().includes(mentionQuery))
-                      .slice(0, 5)
-                      .map((s) => (
-                        <div
-                          key={s.id}
-                          onClick={() => handleMentionSelect(s.full_name)}
-                          style={{ padding: '6px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
-                        >
-                          <Avatar src={s.avatar_url} name={s.full_name} size={24} />
-                          <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#1e293b' }}>{s.full_name}</div>
+                    {/* Option 1: @all */}
+                    {(!mentionQuery || 'all'.includes(mentionQuery) || 'tat ca'.includes(mentionQuery)) && (
+                      <div
+                        onClick={() => handleMentionSelect('all')}
+                        style={{ padding: '8px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid #f1f5f9', background: '#fffbeb' }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef3c7'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fffbeb'}
+                      >
+                        <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#f59e0b', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 800 }}>
+                          @
                         </div>
-                      ))}
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#b45309' }}>@all (Toàn bộ thành viên)</div>
+                          <div style={{ fontSize: '0.68rem', color: '#78350f' }}>Gửi thông báo & nhắc tên tất cả mọi người trong nhóm</div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Group members list */}
+                    {(() => {
+                      const pList = (activeConversation.participants && activeConversation.participants.length > 0)
+                        ? activeConversation.participants.map((p: any) => ({
+                            id: Number(p.user_id || p.id),
+                            full_name: p.full_name || p.name || 'Thành viên',
+                            avatar_url: p.avatar_url || p.avatar,
+                            role_label: p.role === 'owner' ? 'Trưởng nhóm' : p.role === 'admin' ? 'Quản trị' : (p.job_title || 'Thành viên')
+                          }))
+                        : staffDirectory.map(s => ({
+                            id: s.id,
+                            full_name: s.full_name,
+                            avatar_url: s.avatar_url,
+                            role_label: s.job_title || 'Nhân sự'
+                          }));
+
+                      const filtered = pList.filter(p => !mentionQuery || p.full_name.toLowerCase().includes(mentionQuery));
+
+                      if (filtered.length === 0) {
+                        return (
+                          <div style={{ padding: '12px 14px', fontSize: '0.76rem', color: '#94a3b8', textAlign: 'center' }}>
+                            Không tìm thấy thành viên phù hợp
+                          </div>
+                        );
+                      }
+
+                      return filtered.slice(0, 8).map((p) => (
+                        <div
+                          key={p.id}
+                          onClick={() => handleMentionSelect(p.full_name)}
+                          style={{ padding: '7px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', transition: 'background-color 0.12s' }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                        >
+                          <Avatar src={p.avatar_url} name={p.full_name} size={26} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: '0.82rem', fontWeight: 650, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {p.full_name}
+                            </div>
+                            <div style={{ fontSize: '0.67rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {p.role_label}
+                            </div>
+                          </div>
+                        </div>
+                      ));
+                    })()}
                   </div>
                 )}
 
@@ -3771,6 +3883,17 @@ export const WorkChatModal: React.FC = () => {
         isOpen={Boolean(forwardingMsg)}
         onClose={() => setForwardingMsg(null)}
         message={forwardingMsg}
+      />
+
+      {/* Create Task Modal */}
+      <CreateTaskFromChatModal
+        isOpen={Boolean(taskModalTargetMsg)}
+        onClose={() => setTaskModalTargetMsg(null)}
+        targetMessage={taskModalTargetMsg}
+        conversation={activeConversation}
+        onTaskCreated={() => {
+          syncDelta();
+        }}
       />
 
       {/* Lightbox for previewing image */}
