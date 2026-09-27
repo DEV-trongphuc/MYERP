@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   X, CheckSquare, Calendar, User, Users, Flag, AlignLeft, 
-  Loader2, Check, Clock, AlertCircle 
+  Loader2, Check, Clock, AlertCircle, UserPlus, Search 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../api/axios';
@@ -9,6 +9,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useChatStore } from '../../store/chatStore';
 import { useUIStore } from '../../store/uiStore';
 import { Avatar } from '../ui/Avatar';
+import { CustomSelect } from '../ui/CustomSelect';
 import toast from 'react-hot-toast';
 import type { ChatConversation, ChatMessage } from '../../types/chat';
 
@@ -19,6 +20,25 @@ interface Props {
   conversation: ChatConversation | null;
   onTaskCreated?: (taskId: number) => void;
 }
+
+const formatStaffTitle = (user: { job_title?: string; role?: string; team_name?: string }) => {
+  const isCodeRole = (val?: string) => {
+    if (!val) return true;
+    const v = val.toLowerCase().trim();
+    return ['sales', 'sale_admin', 'academic', 'staff', 'admin', 'user', 'manager', 'superadmin', 'super_admin'].includes(v);
+  };
+
+  const title = !isCodeRole(user.job_title) ? (user.job_title || '').trim() : '';
+  const team = (user.team_name || '').trim();
+
+  if (title && team) {
+    if (title.toLowerCase() === team.toLowerCase()) {
+      return title;
+    }
+    return `${title} • ${team}`;
+  }
+  return title || team || 'Nhân sự';
+};
 
 export const CreateTaskFromChatModal: React.FC<Props> = ({
   isOpen,
@@ -39,8 +59,28 @@ export const CreateTaskFromChatModal: React.FC<Props> = ({
   const [dueDate, setDueDate] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Collaborator dropdown & search state
+  const [showCollabDropdown, setShowCollabDropdown] = useState(false);
+  const [collabSearch, setCollabSearch] = useState('');
+  const collabDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (collabDropdownRef.current && !collabDropdownRef.current.contains(e.target as Node)) {
+        setShowCollabDropdown(false);
+      }
+    };
+    if (showCollabDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showCollabDropdown]);
+
   // Available participants in this conversation
-  const participants = React.useMemo(() => {
+  const participants = useMemo(() => {
     if (!conversation) return [];
     if (conversation.type === 'group' && conversation.participants && conversation.participants.length > 0) {
       return conversation.participants.map((p: any) => ({
@@ -75,6 +115,96 @@ export const CreateTaskFromChatModal: React.FC<Props> = ({
     return list;
   }, [conversation, user]);
 
+  // Options for Assignee CustomSelect (Avatars + names)
+  const assigneeOptions = useMemo(() => {
+    const map = new Map<number, any>();
+    participants.forEach((p) => {
+      map.set(p.id, {
+        value: String(p.id),
+        label: p.full_name + (p.id === Number(user?.id) ? ' (Bạn)' : ''),
+        avatar: p.avatar_url,
+        sublabel: p.job_title || 'Thành viên hội thoại'
+      });
+    });
+    if (staffDirectory && staffDirectory.length > 0) {
+      staffDirectory.forEach((s) => {
+        if (!map.has(s.id)) {
+          map.set(s.id, {
+            value: String(s.id),
+            label: s.full_name + (s.id === Number(user?.id) ? ' (Bạn)' : ''),
+            avatar: s.avatar_url,
+            sublabel: formatStaffTitle(s)
+          });
+        }
+      });
+    }
+    return Array.from(map.values());
+  }, [participants, staffDirectory, user]);
+
+  // Candidates for collaborators: All members EXCEPT assigneeId!
+  const availableCollabs = useMemo(() => {
+    const map = new Map<number, any>();
+    participants.forEach((p) => {
+      if (p.id !== assigneeId) {
+        map.set(p.id, {
+          id: p.id,
+          full_name: p.full_name,
+          avatar_url: p.avatar_url,
+          job_title: p.job_title || 'Thành viên'
+        });
+      }
+    });
+    if (staffDirectory && staffDirectory.length > 0) {
+      staffDirectory.forEach((s) => {
+        if (s.id !== assigneeId && !map.has(s.id)) {
+          map.set(s.id, {
+            id: s.id,
+            full_name: s.full_name,
+            avatar_url: s.avatar_url,
+            job_title: formatStaffTitle(s)
+          });
+        }
+      });
+    }
+    return Array.from(map.values());
+  }, [participants, staffDirectory, assigneeId]);
+
+  // Filtered available collabs based on search
+  const filteredCollabs = useMemo(() => {
+    if (!collabSearch.trim()) return availableCollabs;
+    const q = collabSearch.toLowerCase();
+    return availableCollabs.filter(
+      (c) => c.full_name?.toLowerCase().includes(q) || c.job_title?.toLowerCase().includes(q)
+    );
+  }, [availableCollabs, collabSearch]);
+
+  // Selected collaborator objects for avatar display
+  const selectedCollaborators = useMemo(() => {
+    const list: any[] = [];
+    selectedCollabIds.forEach((id) => {
+      const found =
+        availableCollabs.find((c) => c.id === id) ||
+        participants.find((p) => p.id === id) ||
+        staffDirectory.find((s) => s.id === id);
+      if (found) {
+        list.push({
+          id,
+          full_name: found.full_name || (found as any).name || 'Nhân sự',
+          avatar_url: found.avatar_url,
+          job_title: found.job_title
+        });
+      }
+    });
+    return list;
+  }, [selectedCollabIds, availableCollabs, participants, staffDirectory]);
+
+  // Change assignee -> automatically remove assignee from collaborators
+  const handleAssigneeChange = (val: any) => {
+    const newId = Number(val);
+    setAssigneeId(newId);
+    setSelectedCollabIds((prev) => prev.filter((id) => id !== newId));
+  };
+
   // Initialize form fields whenever modal opens or target message changes
   useEffect(() => {
     if (!isOpen || !conversation) return;
@@ -104,27 +234,31 @@ export const CreateTaskFromChatModal: React.FC<Props> = ({
 
     if (conversation.type === 'group') {
       // In group: default assignee is creator (or first member)
-      setAssigneeId(myId || (participants[0]?.id || 0));
-      // Auto-include ALL members in group as collaborators (participant_ids)
-      const allIds = participants.map(p => p.id);
-      setSelectedCollabIds(allIds);
+      const defaultAssignee = myId || (participants[0]?.id || 0);
+      setAssigneeId(defaultAssignee);
+      // Auto-include other members in group as collaborators (EXCLUDING assignee)
+      const otherIds = participants.map((p) => p.id).filter((id) => id !== defaultAssignee);
+      setSelectedCollabIds(otherIds);
     } else {
       // In direct chat: default assignee is the other user
       const otherId = Number(conversation.other_user?.id || 0);
-      setAssigneeId(otherId || myId);
-      // Collaborators include both users
-      const directIds = Array.from(new Set([myId, otherId].filter(id => id > 0)));
-      setSelectedCollabIds(directIds);
+      const defaultAssignee = otherId || myId;
+      setAssigneeId(defaultAssignee);
+      // Collaborator is the creator / other person, NOT the assignee
+      const collabId = defaultAssignee === otherId ? myId : otherId;
+      setSelectedCollabIds(collabId > 0 && collabId !== defaultAssignee ? [collabId] : []);
     }
 
     setPriority('medium');
+    setShowCollabDropdown(false);
+    setCollabSearch('');
   }, [isOpen, targetMessage, conversation, participants, user]);
 
   if (!isOpen || !conversation) return null;
 
   const toggleCollaborator = (id: number) => {
-    setSelectedCollabIds(prev => 
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    setSelectedCollabIds((prev) => 
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
   };
 
@@ -322,80 +456,214 @@ export const CreateTaskFromChatModal: React.FC<Props> = ({
                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 750, color: '#1e293b', marginBottom: '6px' }}>
                   Người thực hiện chính <span style={{ color: '#ef4444' }}>*</span>
                 </label>
-                <div style={{ position: 'relative' }}>
-                  <select
-                    value={assigneeId}
-                    onChange={(e) => setAssigneeId(Number(e.target.value))}
-                    style={{
-                      width: '100%',
-                      padding: '9px 12px',
-                      borderRadius: '10px',
-                      border: '1.5px solid #e2e8f0',
-                      outline: 'none',
-                      fontSize: '0.85rem',
-                      background: '#ffffff',
-                      boxSizing: 'border-box',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {participants.map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.full_name} ({p.job_title}) {p.id === Number(user?.id) ? '— [Bạn]' : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <CustomSelect
+                  options={assigneeOptions}
+                  value={String(assigneeId || '')}
+                  onChange={handleAssigneeChange}
+                  searchable
+                  showAvatars
+                  placeholder="Chọn người thực hiện chính..."
+                />
               </div>
 
-              {/* Người liên quan (Collaborators / In-charge) */}
+              {/* NGƯỜI LIÊN QUAN (Y hệt mẫu) */}
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 750, color: '#1e293b' }}>
-                    Người liên quan ({selectedCollabIds.length}/{participants.length})
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    NGƯỜI LIÊN QUAN {selectedCollabIds.length > 0 ? `(${selectedCollabIds.length})` : ''}
                   </label>
-                  <span style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 700 }}>
-                    {conversation.type === 'group' ? '✓ Tự động bao gồm nhóm' : '✓ Cả 2 thành viên'}
-                  </span>
+                  {selectedCollabIds.length > 0 && (
+                    <span style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 700 }}>
+                      ✓ {selectedCollabIds.length} nhân sự
+                    </span>
+                  )}
                 </div>
-                <div style={{
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  gap: '6px',
-                  maxHeight: '120px',
-                  overflowY: 'auto',
-                  padding: '8px',
-                  background: '#f8fafc',
-                  borderRadius: '10px',
-                  border: '1px solid #e2e8f0'
-                }}>
-                  {participants.map(p => {
-                    const isSelected = selectedCollabIds.includes(p.id);
-                    return (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => toggleCollaborator(p.id)}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          padding: '4px 8px',
-                          borderRadius: '8px',
-                          border: isSelected ? '1px solid #059669' : '1px solid #cbd5e1',
-                          background: isSelected ? '#ecfdf5' : '#ffffff',
-                          color: isSelected ? '#065f46' : '#64748b',
-                          cursor: 'pointer',
-                          fontSize: '0.74rem',
-                          fontWeight: 650,
-                          transition: 'all 0.15s ease'
-                        }}
-                      >
-                        <Avatar src={p.avatar_url} name={p.full_name} size={18} />
-                        <span>{p.full_name}</span>
-                        {isSelected && <Check size={12} color="#059669" />}
-                      </button>
-                    );
-                  })}
+
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
+                  {/* Selected participant avatars */}
+                  {selectedCollaborators.length > 0 && (
+                    <div style={{ display: 'inline-flex', alignItems: 'center' }}>
+                      {selectedCollaborators.map((u, idx) => (
+                        <div
+                          key={u.id}
+                          style={{
+                            marginLeft: idx === 0 ? 0 : -8,
+                            border: '2px solid #ffffff',
+                            borderRadius: '50%',
+                            overflow: 'hidden',
+                            zIndex: 20 - idx,
+                            boxShadow: '0 2px 5px rgba(0, 0, 0, 0.12)',
+                            display: 'flex',
+                            cursor: 'pointer',
+                            transition: 'transform 0.15s ease'
+                          }}
+                          className="hover-scale"
+                          title={`${u.full_name} (${u.job_title || ''}) - Bấm để bỏ chọn`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            toggleCollaborator(u.id);
+                          }}
+                        >
+                          <Avatar src={u.avatar_url} name={u.full_name} size={28} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Dash add button - y hệt ảnh user gửi */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setShowCollabDropdown(!showCollabDropdown);
+                    }}
+                    style={{
+                      border: '1px dashed var(--color-primary, #dc2626)',
+                      background: 'rgba(220, 38, 38, 0.05)',
+                      width: '28px',
+                      height: '28px',
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      padding: 0,
+                      transition: 'all 0.15s ease'
+                    }}
+                    title="Thêm người liên quan"
+                  >
+                    <UserPlus size={14} color="var(--color-primary, #dc2626)" />
+                  </button>
+
+                  {/* Collaborator Dropdown Popover */}
+                  {showCollabDropdown && (
+                    <div
+                      ref={collabDropdownRef}
+                      style={{
+                        position: 'absolute',
+                        top: 'calc(100% + 8px)',
+                        left: 0,
+                        zIndex: 99999,
+                        background: '#ffffff',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '12px',
+                        boxShadow: '0 12px 30px rgba(0, 0, 0, 0.18)',
+                        width: '300px',
+                        maxHeight: '280px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        overflow: 'hidden'
+                      }}
+                    >
+                      <div style={{ padding: '8px 10px', borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}>
+                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                          <Search size={13} style={{ position: 'absolute', left: '8px', color: '#94a3b8', pointerEvents: 'none' }} />
+                          <input
+                            type="text"
+                            placeholder="Tìm người liên quan..."
+                            value={collabSearch}
+                            onChange={(e) => setCollabSearch(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                              width: '100%',
+                              padding: '5px 8px 5px 26px',
+                              fontSize: '0.78rem',
+                              borderRadius: '6px',
+                              border: '1px solid #cbd5e1',
+                              background: '#ffffff',
+                              outline: 'none',
+                              boxSizing: 'border-box'
+                            }}
+                            autoFocus
+                          />
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '6px' }}>
+                          <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>
+                            Đã chọn: {selectedCollabIds.length}
+                          </span>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const allCandidateIds = availableCollabs.map((c) => c.id);
+                                setSelectedCollabIds(allCandidateIds);
+                              }}
+                              style={{ background: 'none', border: 'none', color: '#dc2626', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', padding: 0 }}
+                            >
+                              Chọn tất cả
+                            </button>
+                            {selectedCollabIds.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setSelectedCollabIds([])}
+                                style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '0.72rem', cursor: 'pointer', padding: 0 }}
+                              >
+                                Bỏ chọn
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ flex: 1, overflowY: 'auto', padding: '4px' }}>
+                        {filteredCollabs.length === 0 ? (
+                          <div style={{ padding: '16px', textAlign: 'center', fontSize: '0.78rem', color: '#94a3b8' }}>
+                            Không tìm thấy nhân sự phù hợp
+                          </div>
+                        ) : (
+                          filteredCollabs.map((c) => {
+                            const isSelected = selectedCollabIds.includes(c.id);
+                            return (
+                              <div
+                                key={c.id}
+                                onClick={() => toggleCollaborator(c.id)}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  padding: '6px 8px',
+                                  borderRadius: '6px',
+                                  background: isSelected ? '#fef2f2' : 'transparent',
+                                  cursor: 'pointer',
+                                  transition: 'background-color 0.1s ease'
+                                }}
+                                onMouseEnter={(e) => {
+                                  if (!isSelected) e.currentTarget.style.background = '#f8fafc';
+                                }}
+                                onMouseLeave={(e) => {
+                                  if (!isSelected) e.currentTarget.style.background = 'transparent';
+                                }}
+                              >
+                                <Avatar src={c.avatar_url} name={c.full_name} size={24} />
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {c.full_name}
+                                  </div>
+                                  <div style={{ fontSize: '0.68rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {c.job_title}
+                                  </div>
+                                </div>
+                                <div
+                                  style={{
+                                    width: 16,
+                                    height: 16,
+                                    borderRadius: '4px',
+                                    border: isSelected ? '1px solid #dc2626' : '1px solid #cbd5e1',
+                                    background: isSelected ? '#dc2626' : '#ffffff',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center'
+                                  }}
+                                >
+                                  {isSelected && <Check size={11} color="#ffffff" />}
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

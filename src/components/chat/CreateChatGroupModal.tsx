@@ -9,6 +9,25 @@ interface Props {
   onClose: () => void;
 }
 
+const formatStaffTitle = (user: { job_title?: string; role?: string; team_name?: string }) => {
+  const isCodeRole = (val?: string) => {
+    if (!val) return true;
+    const v = val.toLowerCase().trim();
+    return ['sales', 'sale_admin', 'academic', 'staff', 'admin', 'user', 'manager', 'superadmin', 'super_admin'].includes(v);
+  };
+
+  const title = !isCodeRole(user.job_title) ? (user.job_title || '').trim() : '';
+  const team = (user.team_name || '').trim();
+
+  if (title && team) {
+    if (title.toLowerCase() === team.toLowerCase()) {
+      return title;
+    }
+    return `${title} • ${team}`;
+  }
+  return title || team || 'Nhân sự';
+};
+
 export const CreateChatGroupModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const { staffDirectory, createGroup } = useChatStore();
   const [groupTitle, setGroupTitle] = useState('');
@@ -245,7 +264,7 @@ export const CreateChatGroupModal: React.FC<Props> = ({ isOpen, onClose }) => {
                         {u.full_name}
                       </div>
                       <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                        {u.job_title || u.role || 'Nhân sự'} {u.team_name ? `• ${u.team_name}` : ''}
+                        {formatStaffTitle(u)}
                       </div>
                     </div>
                   </div>

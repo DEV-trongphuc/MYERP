@@ -14,6 +14,8 @@ import { Avatar } from '../ui/Avatar';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { CustomModal } from '../ui/CustomModal';
 import { NotificationSettingsModal } from '../ui/NotificationSettingsModal';
+import { useChatStore } from '../../store/chatStore';
+import { FeatureIntroModal } from '../chat/FeatureIntroModal';
 import { fetchAPI } from '../../utils/api';
 import { cleanNotificationText } from '../../utils/textUtils';
 import { prewarmSmartCheckInGPS } from '../ui/SmartCheckInModal';
@@ -207,6 +209,20 @@ export const Header = ({
   const location = useLocation();
   const isWs = isWorkspace ?? (location.pathname === '/workspace' || location.pathname === '/portal');
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const { openChat, unreadTotal } = useChatStore();
+  const [showFeatureIntro, setShowFeatureIntro] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      const hasSeen = localStorage.getItem('has_seen_workchat_intro_v2');
+      if (!hasSeen) {
+        const timer = setTimeout(() => {
+          setShowFeatureIntro(true);
+        }, 1500);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [user]);
 
   // Compute shift schedule and work hours for today
   const todayScheduleInfo = useMemo(() => {
@@ -1833,6 +1849,80 @@ export const Header = ({
           </button>
         )}
 
+        {/* WorkChat Icon Button with NEW Badge */}
+        <button
+          onClick={() => openChat()}
+          style={{
+            width: 36,
+            height: 36,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: isWs ? 'rgba(255, 255, 255, 0.85)' : 'var(--color-text-light)',
+            borderRadius: 8,
+            border: 'none',
+            background: 'none',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            position: 'relative',
+            outline: 'none',
+            filter: isWs ? 'drop-shadow(0 1px 2px rgba(0,0,0,0.5))' : 'none'
+          }}
+          title={t("WorkChat - Trò chuyện nội bộ & Nhãn dán IDEAS")}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = isWs ? 'rgba(255,255,255,0.1)' : 'var(--color-bg)';
+            e.currentTarget.style.color = isWs ? '#ffffff' : 'var(--color-primary)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = 'none';
+            e.currentTarget.style.color = isWs ? 'rgba(255, 255, 255, 0.85)' : 'var(--color-text-light)';
+          }}
+        >
+          <MessageSquare size={19} />
+          {unreadTotal > 0 ? (
+            <span style={{
+              position: 'absolute',
+              top: 2,
+              right: 2,
+              minWidth: 16,
+              height: 16,
+              borderRadius: 8,
+              background: '#ef4444',
+              color: 'white',
+              fontSize: '10px',
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '0 4px',
+              boxShadow: isWs ? '0 0 0 1.5px rgba(0, 0, 0, 0.5)' : '0 0 0 2px var(--color-surface)',
+              lineHeight: 1
+            }}>
+              {unreadTotal > 99 ? '99+' : unreadTotal}
+            </span>
+          ) : (
+            <span style={{
+              position: 'absolute',
+              top: -1,
+              right: -3,
+              padding: '1.5px 4px',
+              borderRadius: '6px',
+              background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+              color: 'white',
+              fontSize: '7.5px',
+              fontWeight: 900,
+              letterSpacing: '0.04em',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 2px 5px rgba(220, 38, 38, 0.45)',
+              lineHeight: 1
+            }}>
+              NEW
+            </span>
+          )}
+        </button>
+
         {/* Notification Bell Button */}
         <button
           onClick={() => setIsNotifModalOpen(true)}
@@ -3197,7 +3287,7 @@ export const Header = ({
                 onClick={handleClick}
                 style={{
                   position: 'fixed',
-                  bottom: typeof window !== 'undefined' && window.innerWidth <= 768 ? 'calc(var(--mobile-bottom-nav-height, 62px) + env(safe-area-inset-bottom, 0px) + 16px)' : 24,
+                  bottom: typeof window !== 'undefined' && window.innerWidth <= 768 ? 'calc(var(--mobile-bottom-nav-height, 62px) + env(safe-area-inset-bottom, 0px) + 78px)' : 86,
                   right: typeof window !== 'undefined' && window.innerWidth <= 768 ? 16 : 24,
                   width: 52,
                   height: 52,
@@ -4017,6 +4107,12 @@ export const Header = ({
           setIsMatrixModalOpen(false);
           setIsNotifModalOpen(true);
         }}
+      />
+
+      {/* WorkChat Feature Intro Modal */}
+      <FeatureIntroModal
+        isOpen={showFeatureIntro}
+        onClose={() => setShowFeatureIntro(false)}
       />
     </header>
   );

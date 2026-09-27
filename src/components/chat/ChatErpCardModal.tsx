@@ -3,9 +3,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Search, CheckSquare, FileText, X, ArrowRight, 
   Calendar, Clock, Briefcase, UserPlus,
-  Clipboard, Receipt, CreditCard, Users, ChevronRight
+  Clipboard, Receipt, CreditCard, Users, ChevronRight, Send
 } from 'lucide-react';
 import api from '../../api/axios';
+import { Avatar } from '../ui/Avatar';
 import type { ErpEntitySearchResult } from '../../types/chat';
 
 interface Props {
@@ -15,11 +16,41 @@ interface Props {
 }
 
 const TABS = [
-  { key: 'workflow', label: 'Quy trình', icon: Clipboard },
-  { key: 'task', label: 'Task / Todo', icon: CheckSquare },
-  { key: 'so', label: 'Đơn cọc (SO)', icon: Receipt },
-  { key: 'po', label: 'Chi phí (PO)', icon: CreditCard },
-  { key: 'contact', label: 'Khách hàng', icon: Users },
+  { 
+    key: 'workflow', 
+    label: 'Quy trình', 
+    icon: Clipboard,
+    gradient: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)',
+    shadow: '0 3px 8px rgba(220, 38, 38, 0.35)'
+  },
+  { 
+    key: 'task', 
+    label: 'Task / Todo', 
+    icon: CheckSquare,
+    gradient: 'linear-gradient(135deg, #f97316 0%, #c2410c 100%)',
+    shadow: '0 3px 8px rgba(234, 88, 12, 0.35)'
+  },
+  { 
+    key: 'so', 
+    label: 'Đơn cọc (SO)', 
+    icon: Receipt,
+    gradient: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+    shadow: '0 3px 8px rgba(37, 99, 235, 0.35)'
+  },
+  { 
+    key: 'po', 
+    label: 'Chi phí (PO)', 
+    icon: CreditCard,
+    gradient: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+    shadow: '0 3px 8px rgba(5, 150, 105, 0.35)'
+  },
+  { 
+    key: 'contact', 
+    label: 'Khách hàng', 
+    icon: Users,
+    gradient: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)',
+    shadow: '0 3px 8px rgba(99, 102, 241, 0.35)'
+  },
 ] as const;
 
 type TabKey = typeof TABS[number]['key'];
@@ -29,6 +60,13 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<ErpEntitySearchResult[]>([]);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Fast In-Memory Cache (tab::query -> results)
   const cacheRef = useRef<Map<string, ErpEntitySearchResult[]>>(new Map());
@@ -229,7 +267,7 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 2147483647,
-            padding: '16px'
+            padding: isMobile ? 0 : '16px'
           }} 
           onClick={onClose}
         >
@@ -266,33 +304,33 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
             exit={{ opacity: 0, scale: 0.96, y: 10 }}
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             style={{
-              width: '96%',
-              maxWidth: '1120px',
-              height: '760px',
-              maxHeight: '92vh',
+              width: isMobile ? '100vw' : '96%',
+              maxWidth: isMobile ? '100vw' : '1120px',
+              height: isMobile ? '100dvh' : '760px',
+              maxHeight: isMobile ? '100dvh' : '92vh',
               background: '#ffffff',
-              borderRadius: '18px',
-              boxShadow: '0 25px 70px -12px rgba(0, 0, 0, 0.65)',
+              borderRadius: isMobile ? 0 : '18px',
+              boxShadow: isMobile ? 'none' : '0 25px 70px -12px rgba(0, 0, 0, 0.65)',
               overflow: 'hidden',
               display: 'flex',
               flexDirection: 'column',
-              border: '1px solid rgba(226, 232, 240, 0.8)'
+              border: isMobile ? 'none' : '1px solid rgba(226, 232, 240, 0.8)'
             }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
             <div style={{
-              padding: '18px 24px',
+              padding: isMobile ? '12px 16px' : '18px 24px',
               borderBottom: '1px solid #e2e8f0',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               background: 'linear-gradient(135deg, #f8fafc 0%, #ffffff 100%)'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
                 <div style={{
-                  width: 38,
-                  height: 38,
+                  width: isMobile ? 32 : 38,
+                  height: isMobile ? 32 : 38,
                   borderRadius: '10px',
                   background: '#fef2f2',
                   border: '1px solid #fee2e2',
@@ -302,15 +340,17 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                   color: '#dc2626',
                   flexShrink: 0
                 }}>
-                  <Briefcase size={20} />
+                  <Briefcase size={isMobile ? 17 : 20} />
                 </div>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.01em' }}>
-                    Đính kèm Đối tượng Nghiệp vụ (ERP TAG)
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <h3 style={{ margin: 0, fontSize: isMobile ? '0.96rem' : '1.1rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    Đính kèm Nghiệp vụ (ERP TAG)
                   </h3>
-                  <p style={{ margin: '3px 0 0', fontSize: '0.8rem', color: '#64748b' }}>
-                    Gắn thẻ Quy trình phê duyệt, Task công việc, Đơn cọc SO, Chi phí PO hoặc Khách hàng trực tiếp vào chat
-                  </p>
+                  {!isMobile && (
+                    <p style={{ margin: '3px 0 0', fontSize: '0.8rem', color: '#64748b' }}>
+                      Gắn thẻ Quy trình phê duyệt, Task công việc, Đơn cọc SO, Chi phí PO hoặc Khách hàng trực tiếp vào chat
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -321,14 +361,16 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                   background: '#f1f5f9',
                   border: 'none',
                   borderRadius: '50%',
-                  width: 36,
-                  height: 36,
+                  width: 32,
+                  height: 32,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: 'pointer',
                   color: '#64748b',
-                  transition: 'all 0.15s ease'
+                  transition: 'all 0.15s ease',
+                  flexShrink: 0,
+                  marginLeft: '8px'
                 }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = '#fee2e2'; e.currentTarget.style.color = '#dc2626'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.color = '#64748b'; }}
@@ -339,22 +381,22 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
             </div>
 
             {/* Search input & Tabs */}
-            <div style={{ padding: '14px 24px', borderBottom: '1px solid #f1f5f9', background: '#ffffff' }}>
+            <div style={{ padding: isMobile ? '10px 14px' : '14px 24px', borderBottom: '1px solid #f1f5f9', background: '#ffffff' }}>
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
                 background: '#f8fafc',
                 border: '1.5px solid #cbd5e1',
                 borderRadius: '12px',
-                padding: '10px 14px',
+                padding: '8px 12px',
                 gap: '10px',
                 transition: 'border-color 0.2s',
                 boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.03)'
               }}>
-                <Search size={18} color="#64748b" style={{ flexShrink: 0 }} />
+                <Search size={17} color="#64748b" style={{ flexShrink: 0 }} />
                 <input 
                   type="text"
-                  placeholder="Nhập từ khóa tìm kiếm: tên quy trình, mã #ID, task, khách hàng (tên, SĐT, email), đơn cọc, chi phí..."
+                  placeholder={isMobile ? "Tìm quy trình, task, cọc SO, chi phí, khách..." : "Nhập từ khóa tìm kiếm: tên quy trình, mã #ID, task, khách hàng (tên, SĐT, email), đơn cọc, chi phí..."}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   autoFocus
@@ -379,7 +421,7 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                 )}
               </div>
 
-              <div style={{ display: 'flex', gap: '8px', marginTop: '12px', overflowX: 'auto', paddingBottom: '2px' }}>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '12px', overflowX: 'auto', paddingBottom: '4px' }}>
                 {TABS.map((tab) => {
                   const Icon = tab.icon;
                   const isActive = activeTab === tab.key;
@@ -392,42 +434,36 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                         position: 'relative',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '7px',
-                        padding: '7px 16px',
-                        borderRadius: '24px',
+                        gap: '9px',
+                        padding: '6px 14px 6px 8px',
+                        borderRadius: '12px',
                         border: '1.5px solid',
                         borderColor: isActive ? '#dc2626' : '#e2e8f0',
                         background: isActive ? '#fef2f2' : '#ffffff',
-                        color: isActive ? '#dc2626' : '#64748b',
-                        fontSize: '0.82rem',
+                        color: isActive ? '#dc2626' : '#475569',
+                        fontSize: '0.84rem',
                         fontWeight: isActive ? 750 : 600,
                         cursor: 'pointer',
                         whiteSpace: 'nowrap',
-                        boxShadow: isActive ? '0 1px 4px rgba(220, 38, 38, 0.18)' : 'none',
-                        transition: 'color 0.15s ease, border-color 0.15s ease',
-                        overflow: 'hidden'
+                        boxShadow: isActive ? '0 2px 8px rgba(220, 38, 38, 0.16)' : '0 1px 2px rgba(0, 0, 0, 0.03)',
+                        transition: 'all 0.15s ease'
                       }}
                     >
-                      {isActive && (
-                        <motion.div
-                          layoutId="erpTabHighlight"
-                          style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            background: '#fef2f2',
-                            borderRadius: '24px',
-                            zIndex: 0
-                          }}
-                          transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-                        />
-                      )}
-                      <span style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: '7px' }}>
-                        <Icon size={15} color={isActive ? '#dc2626' : '#64748b'} />
-                        <span>{tab.label}</span>
-                      </span>
+                      <div style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: '8px',
+                        background: tab.gradient,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#ffffff',
+                        boxShadow: tab.shadow,
+                        flexShrink: 0
+                      }}>
+                        <Icon size={15} strokeWidth={2.4} />
+                      </div>
+                      <span style={{ position: 'relative', zIndex: 1 }}>{tab.label}</span>
                     </button>
                   );
                 })}
@@ -491,9 +527,9 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                   </p>
                 </div>
               ) : (
-                <div style={{ minWidth: '960px' }}>
+                <div style={{ minWidth: isMobile ? '100%' : '960px' }}>
                   {/* 1. Workflow Header */}
-                  {activeTab === 'workflow' && (
+                  {!isMobile && activeTab === 'workflow' && (
                     <div className="erp-table-header">
                       <div style={{ flex: 1, minWidth: 260 }}>YÊU CẦU & NỘI DUNG</div>
                       <div style={{ width: 175, flexShrink: 0 }}>NGƯỜI TẠO & THỜI GIAN</div>
@@ -504,7 +540,7 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                   )}
 
                   {/* 2. Task Header */}
-                  {activeTab === 'task' && (
+                  {!isMobile && activeTab === 'task' && (
                     <div className="erp-table-header">
                       <div style={{ flex: 1, minWidth: 260 }}>CÔNG VIỆC & TIẾN ĐỘ</div>
                       <div style={{ width: 175, flexShrink: 0 }}>NGƯỜI GIAO & THỜI GIAN</div>
@@ -515,7 +551,7 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                   )}
 
                   {/* 3. SO Header */}
-                  {activeTab === 'so' && (
+                  {!isMobile && activeTab === 'so' && (
                     <div className="erp-table-header">
                       <div style={{ flex: 1, minWidth: 260 }}>ĐƠN CỌC & SỐ TIỀN</div>
                       <div style={{ width: 175, flexShrink: 0 }}>NGƯỜI TẠO & THỜI GIAN</div>
@@ -526,7 +562,7 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                   )}
 
                   {/* 4. PO Header */}
-                  {activeTab === 'po' && (
+                  {!isMobile && activeTab === 'po' && (
                     <div className="erp-table-header">
                       <div style={{ flex: 1, minWidth: 260 }}>HỒ SƠ CHI & SỐ TIỀN</div>
                       <div style={{ width: 175, flexShrink: 0 }}>NGƯỜI ĐỀ XUẤT & THỜI GIAN</div>
@@ -537,7 +573,7 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                   )}
 
                   {/* 5. Contact Header (matching CRM Contacts table screenshot) */}
-                  {activeTab === 'contact' && (
+                  {!isMobile && activeTab === 'contact' && (
                     <div className="erp-table-header">
                       <div style={{ flex: 1.1, minWidth: 210 }}>HỌ TÊN</div>
                       <div style={{ width: 180, flexShrink: 0 }}>LIÊN LẠC</div>
@@ -557,6 +593,102 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                       const isSo = item.entity_type === 'so';
                       const isPo = item.entity_type === 'po';
                       const isContact = item.entity_type === 'contact';
+
+                      // Dedicated Mobile Card View
+                      if (isMobile) {
+                        return (
+                          <motion.div
+                            key={`${item.entity_type}_${item.id}`}
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.16, delay: Math.min(idx * 0.02, 0.15) }}
+                            onClick={() => { onSelect(item); onClose(); }}
+                            style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '8px',
+                              padding: '12px 14px',
+                              borderRadius: '12px',
+                              border: '1px solid #e2e8f0',
+                              background: '#ffffff',
+                              cursor: 'pointer',
+                              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.03)'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flex: 1 }}>
+                                <span style={{
+                                  fontSize: '0.7rem',
+                                  fontWeight: 800,
+                                  padding: '1px 6px',
+                                  borderRadius: '4px',
+                                  background: '#f1f5f9',
+                                  color: '#475569',
+                                  border: '1px solid #e2e8f0',
+                                  flexShrink: 0
+                                }}>
+                                  {item.code || `#${item.id}`}
+                                </span>
+                                <span style={{
+                                  fontSize: '0.86rem',
+                                  fontWeight: 750,
+                                  color: '#0f172a',
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis'
+                                }}>
+                                  {item.title}
+                                </span>
+                              </div>
+                              <span style={{
+                                fontSize: '0.68rem',
+                                fontWeight: 750,
+                                padding: '2px 7px',
+                                borderRadius: '8px',
+                                background: sBadge.bg,
+                                color: sBadge.text,
+                                border: `1px solid ${sBadge.border}`,
+                                flexShrink: 0
+                              }}>
+                                {sBadge.label}
+                              </span>
+                            </div>
+
+                            {item.subtitle && (
+                              <div style={{ fontSize: '0.75rem', color: '#64748b', lineHeight: 1.35 }}>
+                                {item.subtitle}
+                                {typeof item.amount === 'number' && item.amount > 0 && (
+                                  <span style={{ marginLeft: '6px', color: '#059669', fontWeight: 800 }}>
+                                    • {item.amount.toLocaleString('vi-VN')} đ
+                                  </span>
+                                )}
+                              </div>
+                            )}
+
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #f1f5f9', paddingTop: '8px', marginTop: '2px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.73rem', color: '#64748b' }}>
+                                <Avatar src={item.creator_avatar || item.assignee_avatar} name={item.creator_name || item.assignee_name || 'U'} size={20} />
+                                <span style={{ fontWeight: 600, color: '#334155' }}>{item.creator_name || item.assignee_name || 'Nhân sự'}</span>
+                                {item.created_at && <span style={{ color: '#94a3b8' }}>• {item.created_at}</span>}
+                              </div>
+                              <div style={{
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                background: '#eff6ff',
+                                color: '#2563eb',
+                                fontSize: '0.72rem',
+                                fontWeight: 700,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '3px'
+                              }}>
+                                <span>Đính kèm</span>
+                                <ArrowRight size={11} />
+                              </div>
+                            </div>
+                          </motion.div>
+                        );
+                      }
 
                       const creatorInitials = getInitials(item.creator_name);
                       const creatorBg = getAvatarBg(item.creator_name);
@@ -641,13 +773,7 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
 
                             {/* Col 2: Người tạo & Thời gian */}
                             <div style={{ width: 175, flexShrink: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              {item.creator_avatar ? (
-                                <img src={item.creator_avatar} alt="" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-                              ) : (
-                                <div style={{ width: 32, height: 32, borderRadius: '50%', background: creatorBg, color: '#ffffff', fontSize: '0.74rem', fontWeight: 750, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                  {creatorInitials}
-                                </div>
-                              )}
+                              <Avatar src={item.creator_avatar} name={item.creator_name || 'Nhân sự'} size={32} />
                               <div style={{ minWidth: 0, flex: 1 }}>
                                 <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                   {item.creator_name || 'Nhân sự'}
@@ -666,26 +792,15 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                                     <div 
                                       title={st.name}
                                       style={{
-                                        width: 26,
-                                        height: 26,
-                                        borderRadius: '50%',
-                                        border: '1.5px solid #f59e0b',
-                                        overflow: 'hidden',
-                                        display: 'flex',
+                                        display: 'inline-flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
-                                        background: getAvatarBg(st.name),
-                                        color: '#ffffff',
-                                        fontSize: '0.66rem',
-                                        fontWeight: 750,
+                                        borderRadius: '50%',
+                                        border: '1.5px solid #f59e0b',
                                         flexShrink: 0
                                       }}
                                     >
-                                      {st.avatar ? (
-                                        <img src={st.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                      ) : (
-                                        getInitials(st.name)
-                                      )}
+                                      <Avatar src={st.avatar} name={st.name || 'Bước'} size={24} />
                                     </div>
                                     {sIdx < item.steps.length - 1 && (
                                       <ChevronRight size={13} color="#94a3b8" />
@@ -694,12 +809,12 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                                 ))
                               ) : (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                              <div style={{ width: 26, height: 26, borderRadius: '50%', background: creatorBg, color: '#ffffff', fontSize: '0.66rem', fontWeight: 750, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                {creatorInitials}
+                              <div style={{ borderRadius: '50%', border: '1px solid #e2e8f0', display: 'inline-flex' }}>
+                                <Avatar src={item.creator_avatar} name={item.creator_name || 'Nhân sự'} size={24} />
                               </div>
                               <ChevronRight size={13} color="#94a3b8" />
-                              <div style={{ width: 26, height: 26, borderRadius: '50%', border: '1.5px solid #f59e0b', background: approverBg, color: '#ffffff', fontSize: '0.66rem', fontWeight: 750, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                {approverInitials}
+                              <div style={{ borderRadius: '50%', border: '1.5px solid #f59e0b', display: 'inline-flex' }}>
+                                <Avatar src={item.approver_avatar} name={item.approver_name || 'Người duyệt'} size={24} />
                               </div>
                             </div>
                           )}
@@ -707,12 +822,8 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
 
                             {/* Col 4: Người duyệt */}
                             <div style={{ width: 155, flexShrink: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <div style={{ width: 32, height: 32, borderRadius: '50%', border: '2px solid #f59e0b', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: approverBg, color: '#ffffff', fontSize: '0.74rem', fontWeight: 750, flexShrink: 0 }}>
-                                {item.approver_avatar ? (
-                                  <img src={item.approver_avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                ) : (
-                                  approverInitials
-                                )}
+                              <div style={{ borderRadius: '50%', border: '2px solid #f59e0b', display: 'inline-flex', flexShrink: 0 }}>
+                                <Avatar src={item.approver_avatar} name={item.approver_name || 'Chờ phân bổ'} size={32} />
                               </div>
                               <div style={{ minWidth: 0, flex: 1 }}>
                                 <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -727,7 +838,7 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                             {/* Col 5: Thao tác */}
                             <div style={{ width: 105, flexShrink: 0, textAlign: 'right' }}>
                               <div style={{ padding: '6px 12px', borderRadius: '8px', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', fontSize: '0.78rem', fontWeight: 750, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                <span>Đính kèm</span>
+                                <span>Gửi chat</span>
                                 <ArrowRight size={13} />
                               </div>
                             </div>
@@ -842,12 +953,8 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
 
                             {/* Col 4: Người thực hiện & Trạng thái */}
                             <div style={{ width: 155, flexShrink: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <div style={{ width: 32, height: 32, borderRadius: '50%', border: '1.5px solid #cbd5e1', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: assigneeBg, color: '#ffffff', fontSize: '0.74rem', fontWeight: 750, flexShrink: 0 }}>
-                                {item.assignee_avatar ? (
-                                  <img src={item.assignee_avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                ) : (
-                                  assigneeInitials
-                                )}
+                              <div style={{ borderRadius: '50%', border: '1.5px solid #cbd5e1', display: 'inline-flex', flexShrink: 0 }}>
+                                <Avatar src={item.assignee_avatar} name={item.assignee_name || 'Chưa giao'} size={32} />
                               </div>
                               <div style={{ minWidth: 0, flex: 1 }}>
                                 <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -862,7 +969,7 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                             {/* Col 5: Thao tác */}
                             <div style={{ width: 105, flexShrink: 0, textAlign: 'right' }}>
                               <div style={{ padding: '6px 12px', borderRadius: '8px', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', fontSize: '0.78rem', fontWeight: 750, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                <span>Đính kèm</span>
+                                <span>Gửi chat</span>
                                 <ArrowRight size={13} />
                               </div>
                             </div>
@@ -976,7 +1083,7 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                             {/* Col 5: Thao tác */}
                             <div style={{ width: 105, flexShrink: 0, textAlign: 'right' }}>
                               <div style={{ padding: '6px 12px', borderRadius: '8px', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', fontSize: '0.78rem', fontWeight: 750, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                <span>Đính kèm</span>
+                                <span>Gửi chat</span>
                                 <ArrowRight size={13} />
                               </div>
                             </div>
@@ -1045,13 +1152,7 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
 
                             {/* Col 2: Người đề xuất & Thời gian */}
                             <div style={{ width: 175, flexShrink: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              {item.creator_avatar ? (
-                                <img src={item.creator_avatar} alt="" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-                              ) : (
-                                <div style={{ width: 32, height: 32, borderRadius: '50%', background: creatorBg, color: '#ffffff', fontSize: '0.74rem', fontWeight: 750, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                  {creatorInitials}
-                                </div>
-                              )}
+                              <Avatar src={item.creator_avatar} name={item.creator_name || 'Nhân sự'} size={32} />
                               <div style={{ minWidth: 0, flex: 1 }}>
                                 <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                   {item.creator_name || 'Nhân sự'}
@@ -1074,12 +1175,8 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
 
                             {/* Col 4: Người duyệt & Trạng thái */}
                             <div style={{ width: 155, flexShrink: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <div style={{ width: 32, height: 32, borderRadius: '50%', border: '2px solid #f59e0b', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: approverBg, color: '#ffffff', fontSize: '0.74rem', fontWeight: 750, flexShrink: 0 }}>
-                                {item.approver_avatar ? (
-                                  <img src={item.approver_avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                ) : (
-                                  approverInitials
-                                )}
+                              <div style={{ borderRadius: '50%', border: '2px solid #f59e0b', display: 'inline-flex', flexShrink: 0 }}>
+                                <Avatar src={item.approver_avatar} name={item.approver_name || 'Kế toán trưởng'} size={32} />
                               </div>
                               <div style={{ minWidth: 0, flex: 1 }}>
                                 <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -1094,7 +1191,7 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                             {/* Col 5: Thao tác */}
                             <div style={{ width: 105, flexShrink: 0, textAlign: 'right' }}>
                               <div style={{ padding: '6px 12px', borderRadius: '8px', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', fontSize: '0.78rem', fontWeight: 750, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                <span>Đính kèm</span>
+                                <span>Gửi chat</span>
                                 <ArrowRight size={13} />
                               </div>
                             </div>
@@ -1246,13 +1343,7 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
 
                             {/* Col 5: SALE PHỤ TRÁCH */}
                             <div style={{ width: 175, flexShrink: 0, display: 'flex', alignItems: 'center', gap: '8px', paddingRight: '10px' }}>
-                              {item.owner_avatar ? (
-                                <img src={item.owner_avatar} alt="" style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-                              ) : (
-                                <div style={{ width: 30, height: 30, borderRadius: '50%', background: ownerBg, color: '#ffffff', fontSize: '0.72rem', fontWeight: 750, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                  {ownerInitials}
-                                </div>
-                              )}
+                              <Avatar src={item.owner_avatar} name={item.owner_name || 'Chưa phân bổ'} size={30} />
                               <div style={{ minWidth: 0, flex: 1 }}>
                                 <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                   {item.owner_name || 'Chưa phân bổ'}
@@ -1284,7 +1375,7 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                             {/* Col 7: THAO TÁC */}
                             <div style={{ width: 95, flexShrink: 0, textAlign: 'right' }}>
                               <div style={{ padding: '6px 10px', borderRadius: '8px', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', fontSize: '0.76rem', fontWeight: 750, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                                <span>Đính kèm</span>
+                                <span>Gửi chat</span>
                                 <ArrowRight size={12} />
                               </div>
                             </div>

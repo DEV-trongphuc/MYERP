@@ -65,8 +65,8 @@ export const ChatFloatingLauncher: React.FC = () => {
         style={{
           position: 'fixed',
           bottom: isMobile 
-            ? 'calc(var(--mobile-bottom-nav-height, 62px) + env(safe-area-inset-bottom, 0px) + 78px)' 
-            : '86px',
+            ? 'calc(var(--mobile-bottom-nav-height, 62px) + env(safe-area-inset-bottom, 0px) + 16px)' 
+            : '24px',
           right: isMobile ? '17px' : '25px',
           width: '52px',
           height: '52px',

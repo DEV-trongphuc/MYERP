@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 297;
+$targetVersion = 299;
 $currentVersion = 186;
 
 // Query current DB version
@@ -3947,7 +3947,6 @@ try {
             $inactiveIds = [
                 1000003, // Vi Văn Trịnh
                 1000004, // Võ Trùng Dương
-                100070,  // Trần Kim Ngân
                 999906,  // Phạm Quang Vinh
                 999907,  // Phạm Phương Lan
                 100076,  // Phan Hiếu Ngân
@@ -3996,10 +3995,46 @@ try {
         }
     }
 
-    // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '297') ON DUPLICATE KEY UPDATE setting_value = '297'");
+    // --- PHIÊN BẢN 298: Cập nhật trạng thái nghỉ việc (inactive) cho nhân sự đã nghỉ việc ---
+    if ($currentVersion < 298 && $apply) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 298: Cập nhật trạng thái nhân sự đã nghỉ việc...", "info");
+        try {
+            $inactiveIds = [
+                1000003, // Vi Văn Trịnh
+                1000004, // Võ Trùng Dương
+                999906,  // Phạm Quang Vinh
+                999907,  // Phạm Phương Lan
+                100076,  // Phan Hiếu Ngân
+                100071,  // Trần Ngọc Thùy Dương
+                100069,  // Trịnh Đình Thanh
+                100078,  // Trương Thị Bảo Trân
+                100077   // Vũ Trí Nhân
+            ];
+            $idList = implode(',', $inactiveIds);
+            $conn->query("UPDATE users SET is_active = 0, status = 'inactive' WHERE id IN ({$idList})");
+            $conn->query("UPDATE chat_user_presence SET status = 'offline' WHERE user_id IN ({$idList})");
+            $logMsg("Nâng cấp lên phiên bản 298 hoàn tất: Đã chuyển trạng thái nghỉ việc cho nhân sự nghỉ việc.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi nâng cấp v298: " . $e->getMessage(), "error");
+        }
+    }
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 297", "success");
+    // --- PHIÊN BẢN 299: Khôi phục tài khoản nhân sự Trần Kim Ngân (ngantk - ID 100070) ---
+    if ($currentVersion < 299 && $apply) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 299: Khôi phục tài khoản Trần Kim Ngân (ngantk)...", "info");
+        try {
+            $conn->query("UPDATE users SET is_active = 1, status = 'active' WHERE id = 100070");
+            $conn->query("UPDATE chat_user_presence SET status = 'offline' WHERE user_id = 100070");
+            $logMsg("Nâng cấp lên phiên bản 299 hoàn tất: Đã kích hoạt lại tài khoản Trần Kim Ngân.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi nâng cấp v299: " . $e->getMessage(), "error");
+        }
+    }
+
+    // Update DB version in system_settings
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '299') ON DUPLICATE KEY UPDATE setting_value = '299'");
+
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 299", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");

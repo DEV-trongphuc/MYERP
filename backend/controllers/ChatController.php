@@ -174,7 +174,13 @@ class ChatController {
                              AND cm.deleted_at IS NULL
                        ) as unread_count,
                        m.id as last_msg_id, m.sender_id as last_msg_sender_id,
-                       m.message_type as last_msg_type, m.content as last_msg_content,
+                       m.message_type as last_msg_type,
+                       CASE 
+                           WHEN m.deleted_at IS NOT NULL THEN 
+                               CASE WHEN m.message_type = 'sticker' THEN 'Nhãn dán đã được thu hồi' ELSE 'Tin nhắn đã được thu hồi' END
+                           ELSE m.content 
+                       END as last_msg_content,
+                       m.deleted_at as last_msg_deleted_at,
                        m.created_at as last_msg_created_at,
                        u.full_name as last_msg_sender_name,
                        (SELECT COUNT(*) FROM chat_participants cp_all WHERE cp_all.conversation_id = c.id) as participant_count
@@ -225,7 +231,12 @@ class ChatController {
                 while ($other = $pStmt->fetch(PDO::FETCH_ASSOC)) {
                     $other['id'] = (int)$other['id'];
                     $other['is_online'] = !empty($other['last_ping_at']) && (int)($other['seconds_ago'] ?? 999) < 180;
-                    $other['is_active'] = ($other['is_active'] === null || (int)$other['is_active'] === 1) && (($other['user_status'] ?? '') !== 'inactive');
+                    $isUserActive = ((int)($other['is_active'] ?? 1) === 1) && !in_array($other['user_status'] ?? '', ['inactive', 'resigned', 'terminated'], true);
+                    $other['is_active'] = $isUserActive;
+                    if (!$isUserActive) {
+                        $other['is_online'] = false;
+                        $other['online_status'] = 'offline';
+                    }
                     $otherMap[(int)$other['conversation_id']] = $other;
                 }
 
@@ -235,6 +246,44 @@ class ChatController {
                         $cv['other_user'] = $other;
                         $cv['title'] = $other['full_name'];
                         $cv['avatar_url'] = $other['avatar_url'];
+                    }
+                }
+            }
+
+            // Batch load participants for group chats (for GroupClusterAvatar)
+            $groupConvIds = [];
+            foreach ($convs as &$cv) {
+                if ($cv['type'] === 'group') {
+                    $groupConvIds[] = (int)$cv['id'];
+                }
+            }
+            if (!empty($groupConvIds)) {
+                $gInClause = implode(',', array_fill(0, count($groupConvIds), '?'));
+                $gpStmt = $this->db->prepare("
+                    SELECT cp.conversation_id, u.id, u.full_name, u.avatar_url, cp.role, u.job_title
+                    FROM chat_participants cp
+                    JOIN users u ON cp.user_id = u.id
+                    WHERE cp.conversation_id IN ($gInClause)
+                    ORDER BY FIELD(cp.role, 'owner', 'admin', 'member'), cp.id ASC
+                ");
+                $gpStmt->execute($groupConvIds);
+                $groupPartsMap = [];
+                while ($gp = $gpStmt->fetch(PDO::FETCH_ASSOC)) {
+                    $cId = (int)$gp['conversation_id'];
+                    if (!isset($groupPartsMap[$cId])) $groupPartsMap[$cId] = [];
+                    $groupPartsMap[$cId][] = [
+                        'id' => (int)$gp['id'],
+                        'full_name' => $gp['full_name'],
+                        'name' => $gp['full_name'],
+                        'avatar_url' => $gp['avatar_url'],
+                        'avatar' => $gp['avatar_url'],
+                        'role' => $gp['role'],
+                        'job_title' => $gp['job_title']
+                    ];
+                }
+                foreach ($convs as &$cv) {
+                    if ($cv['type'] === 'group') {
+                        $cv['participants'] = $groupPartsMap[$cv['id']] ?? [];
                     }
                 }
             }
@@ -513,11 +562,13 @@ class ChatController {
                             'type' => $rType,
                             'count' => 0,
                             'users' => [],
+                            'user_ids' => [],
                             'reacted_by_me' => false
                         ];
                     }
                     $reactionsMap[$mId][$rType]['count']++;
                     $reactionsMap[$mId][$rType]['users'][] = $rx['full_name'];
+                    $reactionsMap[$mId][$rType]['user_ids'][] = (int)$rx['user_id'];
                     if ((int)$rx['user_id'] === $uid) {
                         $reactionsMap[$mId][$rType]['reacted_by_me'] = true;
                     }
@@ -953,7 +1004,7 @@ class ChatController {
 
         try {
             $stmt = $this->db->prepare("
-                SELECT m.id, m.sender_id, m.conversation_id, cp.role
+                SELECT m.id, m.sender_id, m.conversation_id, m.message_type, cp.role
                 FROM chat_messages m
                 LEFT JOIN chat_participants cp ON m.conversation_id = cp.conversation_id AND cp.user_id = ?
                 WHERE m.id = ?
@@ -973,8 +1024,12 @@ class ChatController {
                 respond(403, null, 'Bạn chỉ có thể thu hồi tin nhắn của chính mình', false);
             }
 
-            $this->db->prepare("UPDATE chat_messages SET deleted_at = NOW(), content = 'Tin nhắn đã được thu hồi' WHERE id = ?")
-                     ->execute([$messageId]);
+            $recalledContent = (($msg['message_type'] ?? '') === 'sticker') 
+                ? 'Nhãn dán đã được thu hồi' 
+                : 'Tin nhắn đã được thu hồi';
+
+            $this->db->prepare("UPDATE chat_messages SET deleted_at = NOW(), content = ? WHERE id = ?")
+                     ->execute([$recalledContent, $messageId]);
 
             // If this message was pinned, auto unpin it
             $this->db->prepare("UPDATE chat_conversations SET pinned_message_id = NULL WHERE id = ? AND pinned_message_id = ?")
@@ -1426,13 +1481,17 @@ class ChatController {
                 SELECT u.id, u.full_name, u.email, u.phone, u.avatar_url, u.role, u.job_title,
                        u.team_id, t.name as team_name,
                        pr.status as custom_status, pr.last_ping_at,
-                       TIMESTAMPDIFF(SECOND, pr.last_ping_at, NOW()) as seconds_ago
+                       COALESCE(pr.last_ping_at, u.last_login_at) as last_active_at,
+                       TIMESTAMPDIFF(SECOND, COALESCE(pr.last_ping_at, u.last_login_at), NOW()) as seconds_ago
                 FROM users u
                 LEFT JOIN teams t ON u.team_id = t.id
                 LEFT JOIN chat_user_presence pr ON pr.user_id = u.id
                 WHERE u.id != ? 
-                  AND u.is_active = 1
+                  AND (u.is_active = 1 OR u.is_active IS NULL)
                   AND (u.status = 'active' OR u.status IS NULL OR u.status = '')
+                  AND u.status != 'inactive'
+                  AND u.email != 'info@ideas.edu.vn'
+                  AND u.role NOT IN ('superadmin', 'super_admin')
                 ORDER BY u.full_name ASC
             ");
             $stmt->execute([$uid]);
@@ -1441,7 +1500,7 @@ class ChatController {
             foreach ($users as &$u) {
                 $u['id'] = (int)$u['id'];
                 $u['is_active'] = true;
-                $sec = (int)($u['seconds_ago'] ?? 999999);
+                $sec = isset($u['seconds_ago']) && $u['seconds_ago'] !== null ? (int)$u['seconds_ago'] : 999999;
                 if (!empty($u['last_ping_at']) && $sec < 180) {
                     $u['status'] = 'online';
                     $u['is_online'] = true;
@@ -1868,10 +1927,13 @@ class ChatController {
                 $params[] = $category;
             }
 
-            $sql = "SELECT id, message_id, uploader_id, category, file_name, file_url, file_size, mime_type, created_at
-                    FROM chat_attachments_vault
+            $sql = "SELECT v.id, v.message_id, v.uploader_id, v.uploader_id AS sender_id, 
+                           COALESCE(u.full_name, 'Đồng nghiệp') AS sender_name,
+                           v.category, v.file_name, v.file_url, v.file_size, v.mime_type, v.created_at
+                    FROM chat_attachments_vault v
+                    LEFT JOIN users u ON v.uploader_id = u.id
                     WHERE " . implode(' AND ', $where) . "
-                    ORDER BY id DESC LIMIT $limit";
+                    ORDER BY v.id DESC LIMIT $limit";
 
             $stmt = $this->db->prepare($sql);
             $stmt->execute($params);
@@ -2142,8 +2204,12 @@ class ChatController {
                 $participants = $stmtP->fetchAll(PDO::FETCH_ASSOC) ?: [];
                 foreach ($participants as &$p) {
                     $p['is_online'] = !empty($p['last_ping_at']) && (int)($p['seconds_ago'] ?? 999) < 180;
-                    $p['user_id'] = (int)$p['user_id'];
-                    $p['is_active'] = ($p['is_active'] === null || (int)$p['is_active'] === 1) && (($p['user_status'] ?? '') !== 'inactive');
+                    $isPActive = ((int)($p['is_active'] ?? 1) === 1) && !in_array($p['user_status'] ?? '', ['inactive', 'resigned', 'terminated'], true);
+                    $p['is_active'] = $isPActive;
+                    if (!$isPActive) {
+                        $p['is_online'] = false;
+                        $p['online_status'] = 'offline';
+                    }
                     $p['last_read_message_id'] = (int)($p['last_read_message_id'] ?? 0);
                     if ($p['user_id'] !== $uid && !$otherUser) {
                         $otherUser = [
@@ -2286,16 +2352,14 @@ class ChatController {
             if ($uRow) $assigneeName = $uRow['full_name'];
         }
 
-        // Determine Collaborators (Người liên quan)
+        // Determine Collaborators (Người liên quan) - Người thực hiện chính không cần để ở người liên quan
         $requestedParticipants = !empty($body['participant_ids']) 
             ? (is_array($body['participant_ids']) ? $body['participant_ids'] : explode(',', (string)$body['participant_ids']))
             : [];
-        $collabIds = array_filter(array_map('intval', $requestedParticipants), fn($id) => $id > 0);
-
-        if (empty($collabIds)) {
-            $collabIds = $participantUserIds;
+        if (isset($body['participant_ids'])) {
+            $collabIds = array_values(array_filter(array_map('intval', $requestedParticipants), fn($id) => $id > 0 && $id !== $targetUserId));
         } else {
-            $collabIds = array_values(array_unique(array_merge($collabIds, $participantUserIds)));
+            $collabIds = array_values(array_filter($participantUserIds, fn($id) => $id !== $targetUserId));
         }
         $collabIdsStr = !empty($collabIds) ? implode(',', $collabIds) : null;
 

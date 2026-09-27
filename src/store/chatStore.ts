@@ -33,8 +33,11 @@ interface ChatStore {
   vaultItems: ChatVaultItem[];
   loadingVault: boolean;
 
+  activeSidebarTab: 'chats' | 'staff';
+  setActiveSidebarTab: (tab: 'chats' | 'staff') => void;
+
   // Actions
-  openChat: (conversationId?: number) => void;
+  openChat: (conversationId?: number, tab?: 'chats' | 'staff') => void;
   closeChat: () => void;
   toggleMaximize: () => void;
   setReplyingTo: (msg: ChatMessage | null) => void;
@@ -69,6 +72,8 @@ interface ChatStore {
   deleteConversation: (convId: number) => Promise<boolean>;
 }
 
+let selectConversationToken = 0;
+
 export const useChatStore = create<ChatStore>((set, get) => ({
   isOpen: false,
   isMaximized: false,
@@ -87,14 +92,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   mediaVaultTab: 'image',
   vaultItems: [],
   loadingVault: false,
+  activeSidebarTab: 'chats',
+  setActiveSidebarTab: (tab) => set({ activeSidebarTab: tab }),
 
-  openChat: (conversationId) => {
-    set({ isOpen: true });
+  openChat: (conversationId, tab) => {
+    set({ 
+      isOpen: true,
+      ...(tab ? { activeSidebarTab: tab } : {})
+    });
     get().fetchConversations();
     get().fetchStaffDirectory();
     if (conversationId) {
       get().selectConversation(conversationId);
-    } else if (!get().activeConversationId && get().conversations.length > 0) {
+    } else if (tab !== 'staff' && !get().activeConversationId && get().conversations.length > 0) {
       get().selectConversation(get().conversations[0].id);
     }
   },
@@ -136,16 +146,26 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   selectConversation: async (id: number) => {
+    selectConversationToken++;
+    const thisToken = selectConversationToken;
+
     const existingConv = get().conversations.find((c) => c.id === id);
+    const cachedMsgs = get().messagesByConvId[id];
+    const hasCache = Array.isArray(cachedMsgs) && cachedMsgs.length > 0;
     set({
       activeConversationId: id,
       activeConversation: existingConv || null,
-      loadingMessages: true,
+      loadingMessages: !hasCache,
       replyingTo: null
     });
+
     try {
-      // 1. Fetch details
-      const detailRes = await api.get(`/chat/conversations/${id}`);
+      // 1 & 2. Concurrently fetch details and initial messages
+      const [detailRes, msgRes] = await Promise.all([
+        api.get(`/chat/conversations/${id}`),
+        api.get(`/chat/conversations/${id}/messages`, { params: { limit: 35 } })
+      ]);
+
       const rawDetail: ChatConversation = detailRes.data?.data || detailRes.data || {};
       const targetOtherUser = rawDetail.other_user || existingConv?.other_user;
       const isDirect = (rawDetail.type === 'direct') || (existingConv?.type === 'direct');
@@ -161,8 +181,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           : (rawDetail.avatar_url || existingConv?.avatar_url),
       };
 
-      // 2. Fetch initial messages
-      const msgRes = await api.get(`/chat/conversations/${id}/messages`, { params: { limit: 35 } });
       const msgData = msgRes.data?.data || msgRes.data || {};
       const rawMsgs: ChatMessage[] = Array.isArray(msgData) ? msgData : (msgData.messages || []);
       const hasMore: boolean = msgData.has_more ?? false;
@@ -177,6 +195,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       } catch (e) {}
       const msgs = rawMsgs.filter((m) => !hiddenSet.has(m.id));
 
+      // CRITICAL RACE CONDITION GUARD:
+      // If user switched to another conversation while requests were in-flight,
+      // store the fetched messages into cache without overwriting the newly selected conversation!
+      if (thisToken !== selectConversationToken || get().activeConversationId !== id) {
+        set((state) => ({
+          messagesByConvId: { ...state.messagesByConvId, [id]: msgs },
+          hasMoreByConvId: { ...state.hasMoreByConvId, [id]: hasMore }
+        }));
+        return;
+      }
+
       set((state) => ({
         activeConversation: convDetail,
         loadingMessages: false,
@@ -190,7 +219,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // 3. Mark read on server
       get().markConversationAsRead(id);
     } catch (err) {
-      set({ loadingMessages: false });
+      if (thisToken === selectConversationToken) {
+        set({ loadingMessages: false });
+      }
     }
   },
 
@@ -327,16 +358,22 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       await api.delete(`/chat/messages/${msgId}`);
       set((state) => {
         const isCurrentlyPinned = state.activeConversation?.pinned_message_id === msgId;
+        const targetMsg = (state.messagesByConvId[activeConversationId] || []).find((m) => m.id === msgId);
+        const recalledText = targetMsg?.message_type === 'sticker' ? 'Nhãn dán đã được thu hồi' : 'Tin nhắn đã được thu hồi';
+
         return {
           activeConversation: isCurrentlyPinned && state.activeConversation ? {
             ...state.activeConversation,
             pinned_message_id: null,
             pinned_message: null
           } : state.activeConversation,
+          conversations: state.conversations.map((c) =>
+            c.last_msg_id === msgId ? { ...c, last_msg_content: recalledText } : c
+          ),
           messagesByConvId: {
             ...state.messagesByConvId,
             [activeConversationId]: (state.messagesByConvId[activeConversationId] || []).map((m) =>
-              m.id === msgId ? { ...m, deleted_at: new Date().toISOString(), content: 'Tin nhắn đã được thu hồi', metadata: null } : m
+              m.id === msgId ? { ...m, deleted_at: new Date().toISOString(), content: recalledText, metadata: null } : m
             )
           }
         };

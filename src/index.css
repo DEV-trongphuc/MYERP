@@ -4119,11 +4119,20 @@ table td {
   height: 34px !important;
 }
 
-textarea, .form-textarea, textarea.form-input, textarea.form-control {
+textarea:not(.chat-input-textarea), .form-textarea, textarea.form-input, textarea.form-control {
   height: auto !important;
   min-height: 140px !important;
   resize: vertical !important;
   line-height: 1.5 !important;
+}
+
+/* Specific compact styling for WorkChat input textarea */
+.chat-input-textarea {
+  min-height: 36px !important;
+  max-height: 88px !important;
+  resize: none !important;
+  line-height: 1.4 !important;
+  box-sizing: border-box !important;
 }
 
 .btn {

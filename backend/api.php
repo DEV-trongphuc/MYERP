@@ -2437,6 +2437,10 @@ switch ($action) {
         $stmt->close();
         if ($res->num_rows > 0) {
             $user = $res->fetch_assoc();
+            if ((int)($user['is_active'] ?? 1) === 0) {
+                echo json_encode(['success' => false, 'message' => 'Tài khoản của bạn đang bị khóa và không thể truy cập hệ thống. Vui lòng liên hệ Quản trị viên.']);
+                break;
+            }
             if (password_verify($password, $user['password_hash'])) {
 
                 // Update last_login
@@ -2540,6 +2544,11 @@ switch ($action) {
 
         if ($res->num_rows > 0) {
             $user = $res->fetch_assoc();
+
+            if ((int)($user['is_active'] ?? 1) === 0) {
+                echo json_encode(['success' => false, 'message' => 'Tài khoản của bạn đang bị khóa và không thể truy cập hệ thống. Vui lòng liên hệ Quản trị viên.']);
+                break;
+            }
 
             // Auto confirm email if not already
             if ((int) $user['is_confirmed'] === 0) {

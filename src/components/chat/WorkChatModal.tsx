@@ -8,21 +8,23 @@ import {
   FileSpreadsheet, FileArchive, Film, Music, Globe, ExternalLink,
   FolderArchive, MoreHorizontal, Edit3, Trash2, Copy, RotateCcw, GitBranch, Lock,
   Clipboard, Receipt, CreditCard, Clock, Share2, Volume2, VolumeX, UploadCloud, ChevronUp, ChevronDown,
-  Check, CheckCheck
+  Check, CheckCheck, Bell, BellOff
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useChatStore } from '../../store/chatStore';
 import { useUIStore } from '../../store/uiStore';
 import { useAuth } from '../../contexts/AuthContext';
 import { Avatar } from '../ui/Avatar';
+import { GroupClusterAvatar } from './GroupClusterAvatar';
 import { CHAT_STICKERS } from './ChatStickers';
 import { ChatErpCardModal } from './ChatErpCardModal';
 import { CreateChatGroupModal } from './CreateChatGroupModal';
 import { ChatMediaVaultPanel } from './ChatMediaVaultPanel';
 import { ChatForwardModal } from './ChatForwardModal';
 import { CreateTaskFromChatModal } from './CreateTaskFromChatModal';
+import { StickerPickerModal } from '../ui/StickerPickerModal';
 import { isChatSoundEnabled, setChatSoundEnabled } from '../../utils/chatSound';
-import type { ChatMessage, ErpEntitySearchResult, MessageType } from '../../types/chat';
+import type { ChatMessage, ChatConversation, ErpEntitySearchResult, MessageType } from '../../types/chat';
 import api from '../../api/axios';
 import toast from 'react-hot-toast';
 
@@ -181,6 +183,140 @@ const LinkPreviewCard: React.FC<{ url: string; isMine?: boolean }> = ({ url, isM
         )}
       </div>
     </a>
+  );
+};
+
+// Rich Link Preview inside Input Composer (Live Detection on Paste/Type)
+const ComposerLinkPreview: React.FC<{ url: string; onDismiss: () => void }> = ({ url, onDismiss }) => {
+  const [data, setData] = useState<{ title: string; description: string; image: string; domain: string } | null>(() => linkPreviewCache.get(url) || null);
+  const [loading, setLoading] = useState(!data);
+
+  useEffect(() => {
+    if (data) return;
+    let isMounted = true;
+    setLoading(true);
+    api.get('/chat/link-preview', { params: { url } })
+      .then((res) => {
+        if (!isMounted) return;
+        const d = res.data?.data || res.data;
+        if (d && (d.title || d.description || d.domain)) {
+          linkPreviewCache.set(url, d);
+          setData(d);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+    return () => { isMounted = false; };
+  }, [url]);
+
+  let domain = data?.domain;
+  if (!domain) {
+    try { domain = new URL(url).hostname; } catch {}
+  }
+
+  if (loading) {
+    return (
+      <div style={{
+        marginBottom: '8px',
+        padding: '8px 12px',
+        borderRadius: '10px',
+        background: '#1e293b',
+        color: '#94a3b8',
+        fontSize: '0.74rem',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} />
+          <span>Đang tạo xem trước liên kết...</span>
+        </div>
+        <button
+          type="button"
+          onClick={onDismiss}
+          style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 0 }}
+        >
+          <X size={14} />
+        </button>
+      </div>
+    );
+  }
+
+  if (!data || (!data.title && !data.description)) return null;
+
+  return (
+    <div style={{
+      position: 'relative',
+      marginBottom: '8px',
+      padding: '10px 14px',
+      borderRadius: '10px',
+      background: '#1e293b',
+      borderLeft: '3.5px solid #38bdf8',
+      color: '#ffffff',
+      boxShadow: '0 4px 14px rgba(0,0,0,0.2)',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '3px'
+    }}>
+      <button
+        type="button"
+        onClick={onDismiss}
+        style={{
+          position: 'absolute',
+          top: 8,
+          right: 8,
+          background: 'rgba(255, 255, 255, 0.1)',
+          border: 'none',
+          borderRadius: '50%',
+          width: 20,
+          height: 20,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          color: '#94a3b8',
+          transition: 'all 0.15s ease'
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+          e.currentTarget.style.color = '#ef4444';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+          e.currentTarget.style.color = '#94a3b8';
+        }}
+        title="Tắt xem trước"
+      >
+        <X size={12} />
+      </button>
+
+      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#ffffff', paddingRight: '22px' }}>
+        {data.title || domain}
+      </div>
+
+      {data.description && (
+        <div style={{
+          fontSize: '0.74rem',
+          color: '#cbd5e1',
+          lineHeight: 1.35,
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden'
+        }}>
+          {data.description}
+        </div>
+      )}
+
+      {domain && (
+        <div style={{ fontSize: '0.72rem', color: '#38bdf8', fontWeight: 650, marginTop: '2px' }}>
+          {domain}
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -358,6 +494,56 @@ const formatMessageFullTime = (isoString?: string) => {
   }
 };
 
+const formatStaffLastActive = (st: any): { text: string; isOnline: boolean; isAway?: boolean } => {
+  if (st.status === 'online') {
+    return { text: 'Online', isOnline: true };
+  }
+  if (st.status === 'away') {
+    return { text: 'Vắng', isOnline: false, isAway: true };
+  }
+
+  const sec = st.seconds_ago !== undefined && st.seconds_ago !== null ? Number(st.seconds_ago) : null;
+  if (sec !== null && !isNaN(sec) && sec >= 0 && sec < 31536000) {
+    if (sec < 60) return { text: 'Vừa xong', isOnline: false };
+    if (sec < 3600) return { text: `${Math.floor(sec / 60)}p trước`, isOnline: false };
+    if (sec < 86400) return { text: `${Math.floor(sec / 3600)}h trước`, isOnline: false };
+    if (sec < 172800) return { text: 'Hôm qua', isOnline: false };
+  }
+
+  if (st.last_active_at) {
+    try {
+      const d = new Date(st.last_active_at.replace(/-/g, '/'));
+      const now = new Date();
+      const isToday = d.toDateString() === now.toDateString();
+      if (isToday) {
+        return { text: d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }), isOnline: false };
+      }
+      return { text: `${d.getDate()}/${d.getMonth() + 1}`, isOnline: false };
+    } catch {}
+  }
+
+  return { text: 'Chưa truy cập', isOnline: false };
+};
+
+const formatStaffCleanTitle = (user: { job_title?: string; role?: string; team_name?: string }) => {
+  const isCodeRole = (val?: string) => {
+    if (!val) return true;
+    const v = val.toLowerCase().trim();
+    return ['sales', 'sale_admin', 'academic', 'staff', 'admin', 'user', 'manager', 'superadmin', 'super_admin'].includes(v);
+  };
+
+  const title = !isCodeRole(user.job_title) ? (user.job_title || '').trim() : '';
+  const team = (user.team_name || '').trim();
+
+  if (title && team) {
+    if (title.toLowerCase() === team.toLowerCase()) {
+      return title;
+    }
+    return `${title} • ${team}`;
+  }
+  return title || team || 'Nhân sự';
+};
+
 export const WorkChatModal: React.FC = () => {
   const { user } = useAuth();
   const {
@@ -390,7 +576,9 @@ export const WorkChatModal: React.FC = () => {
     showMediaVault,
     setShowMediaVault,
     loadMoreMessages,
-    hasMoreByConvId
+    hasMoreByConvId,
+    activeSidebarTab,
+    setActiveSidebarTab
   } = useChatStore();
 
   const { openCustomerDrawer, openTaskDrawer } = useUIStore();
@@ -450,9 +638,28 @@ export const WorkChatModal: React.FC = () => {
 
   // Local state
   const [inputText, setInputText] = useState('');
-  const [activeTab, setActiveTab] = useState<'chats' | 'staff'>('chats');
+  const [activeTab, setActiveTab] = useState<'chats' | 'staff'>(() => activeSidebarTab || 'chats');
   const [searchFilter, setSearchFilter] = useState('');
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
+  const [showMobileHeaderMenu, setShowMobileHeaderMenu] = useState(false);
+  const [dismissedPreviewUrl, setDismissedPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (activeSidebarTab) {
+      setActiveTab(activeSidebarTab);
+    }
+  }, [activeSidebarTab]);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   const [showStickerPicker, setShowStickerPicker] = useState(false);
+  const [showPackStickerModal, setShowPackStickerModal] = useState(false);
+  const [packStickerInitialTab, setPackStickerInitialTab] = useState<string>('ideas');
+  const [confirmRecallMsg, setConfirmRecallMsg] = useState<ChatMessage | null>(null);
+  const [stickerAnchorEl, setStickerAnchorEl] = useState<HTMLElement | null>(null);
   const [showErpModal, setShowErpModal] = useState(false);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
@@ -490,6 +697,24 @@ export const WorkChatModal: React.FC = () => {
   // Reaction menu on hover
   const [hoveredMsgId, setHoveredMsgId] = useState<number | null>(null);
   const [showReactionMenuId, setShowReactionMenuId] = useState<number | null>(null);
+
+  // Floating reactions burst animation
+  const [floatingReactions, setFloatingReactions] = useState<Array<{ id: number; emoji: string; x: number; y: number }>>([]);
+
+  const triggerReactionBurst = (emoji: string, e?: React.MouseEvent) => {
+    const burstId = Date.now() + Math.random();
+    let x = window.innerWidth / 2;
+    let y = window.innerHeight / 2;
+    if (e && e.currentTarget) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      x = rect.left + rect.width / 2;
+      y = rect.top;
+    }
+    setFloatingReactions((prev) => [...prev, { id: burstId, emoji, x, y }]);
+    setTimeout(() => {
+      setFloatingReactions((prev) => prev.filter((p) => p.id !== burstId));
+    }, 1100);
+  };
 
   // File & media review queue before sending
   interface PendingAttachment {
@@ -671,17 +896,19 @@ export const WorkChatModal: React.FC = () => {
     };
   }, [isOpen, activeConversationId]);
 
-  // Auto resize textarea - compact initial height 38px, auto expands up to 96px
+  // Auto resize textarea - comfortable initial height, auto expands up to 130px
   useEffect(() => {
     if (textareaRef.current) {
+      const minH = isMobile ? 56 : 64;
+      const maxH = 130;
       if (!inputText) {
-        textareaRef.current.style.height = '38px';
+        textareaRef.current.style.height = `${minH}px`;
       } else {
         textareaRef.current.style.height = 'auto';
-        textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 96)}px`;
+        textareaRef.current.style.height = `${Math.min(Math.max(textareaRef.current.scrollHeight, minH), maxH)}px`;
       }
     }
-  }, [inputText]);
+  }, [inputText, isMobile]);
 
   // Handle typing ping
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -854,7 +1081,8 @@ export const WorkChatModal: React.FC = () => {
     setInputText('');
     setMentionQuery(null);
     setPendingAttachments([]);
-    if (textareaRef.current) textareaRef.current.style.height = '38px';
+    setDismissedPreviewUrl(null);
+    if (textareaRef.current) textareaRef.current.style.height = `${isMobile ? 56 : 64}px`;
 
     if (attachmentsToSend.length > 0) {
       setIsUploading(true);
@@ -967,6 +1195,20 @@ export const WorkChatModal: React.FC = () => {
     });
   };
 
+  const handleSendPackSticker = async (url: string, packId: string) => {
+    if (!activeConversationId) return;
+    setShowPackStickerModal(false);
+    await sendMessage({
+      content: url,
+      message_type: 'sticker',
+      metadata: {
+        url,
+        sticker_pack: packId,
+        is_pack_sticker: true
+      }
+    });
+  };
+
   const handleSendErpCard = async (entity: ErpEntitySearchResult) => {
     if (!activeConversationId) return;
     await sendMessage({
@@ -1010,6 +1252,33 @@ export const WorkChatModal: React.FC = () => {
         date: entity.date
       }
     });
+  };
+
+  // Format preview for last message in conversation list
+  const formatConversationPreview = (c: ChatConversation) => {
+    if (!c.last_msg_content && !c.last_msg_type) {
+      return 'Bắt đầu cuộc trò chuyện';
+    }
+    const raw = c.last_msg_content || '';
+    let text = raw;
+
+    if ((c as any).last_msg_deleted_at) {
+      text = c.last_msg_type === 'sticker' ? 'Nhãn dán đã được thu hồi' : 'Tin nhắn đã được thu hồi';
+    } else if (c.last_msg_type === 'sticker' || raw.startsWith('/stickers/')) {
+      text = 'Nhãn dán';
+    } else if (c.last_msg_type === 'image' || raw.match(/\.(png|jpe?g|gif|webp)(\?.*)?$/i)) {
+      text = 'Một hình ảnh';
+    } else if (c.last_msg_type === 'file') {
+      text = '1 file';
+    } else if (c.last_msg_type === 'erp_card') {
+      text = '[Thẻ dữ liệu ERP]';
+    }
+
+    if (c.type === 'group' && c.last_msg_sender_name) {
+      const shortName = c.last_msg_sender_name.trim().split(' ').pop() || c.last_msg_sender_name;
+      return `${shortName}: ${text}`;
+    }
+    return text;
   };
 
   // Memoized filtered conversations
@@ -1090,7 +1359,24 @@ export const WorkChatModal: React.FC = () => {
           style={{
             position: 'fixed',
             zIndex: 2147483640,
-            ...(isMaximized
+            ...(isMobile
+              ? {
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  width: '100vw',
+                  height: '100dvh',
+                  maxWidth: '100vw',
+                  maxHeight: '100dvh',
+                  borderRadius: 0,
+                  border: 'none',
+                  margin: 0,
+                  padding: 0,
+                  boxShadow: 'none',
+                  zIndex: 2147483647
+                }
+              : isMaximized
               ? {
                   top: 0,
                   left: 0,
@@ -1108,12 +1394,12 @@ export const WorkChatModal: React.FC = () => {
                   zIndex: 2147483647
                 }
               : {
-                  bottom: '24px',
+                  bottom: '32px',
                   right: '24px',
                   width: '560px',
                   maxWidth: 'calc(100vw - 32px)',
-                  height: '740px',
-                  maxHeight: 'calc(100vh - 48px)',
+                  height: '630px',
+                  maxHeight: 'calc(100vh - 64px)',
                   borderRadius: '20px',
                   boxShadow: '0 24px 60px -12px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(220, 38, 38, 0.08)'
                 }),
@@ -1127,15 +1413,27 @@ export const WorkChatModal: React.FC = () => {
              ══════════════════════════════════════════════════════════════════════ */}
           <motion.div
             key="chat-col-1"
-            initial={!isMaximized && activeConversationId ? false : { opacity: 0, x: -16 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.18, ease: 'easeOut' }}
+            initial={false}
+            animate={
+              (isMaximized && !isMobile)
+                ? { x: '0%', opacity: 1 }
+                : activeConversationId
+                ? { x: '-30%', opacity: 0 }
+                : { x: '0%', opacity: 1 }
+            }
+            transition={{ duration: 0.24, ease: [0.25, 1, 0.5, 1] }}
             style={{
-              width: isMaximized ? '330px' : (activeConversationId ? '0px' : '100%'),
-              minWidth: isMaximized ? '330px' : (activeConversationId ? '0px' : '100%'),
-              borderRight: isMaximized ? '1px solid #e2e8f0' : 'none',
+              width: (isMaximized && !isMobile) ? '330px' : '100%',
+              minWidth: (isMaximized && !isMobile) ? '330px' : '100%',
+              borderRight: (isMaximized && !isMobile) ? '1px solid #e2e8f0' : 'none',
               background: '#f8fafc',
-              display: !isMaximized && activeConversationId ? 'none' : 'flex',
+              position: (isMaximized && !isMobile) ? 'relative' : 'absolute',
+              top: 0,
+              left: 0,
+              bottom: 0,
+              zIndex: (isMaximized && !isMobile) ? 1 : (activeConversationId ? 1 : 2),
+              pointerEvents: (isMaximized && !isMobile) ? 'auto' : (activeConversationId ? 'none' : 'auto'),
+              display: 'flex',
               flexDirection: 'column',
               height: '100%',
               overflow: 'hidden'
@@ -1218,34 +1516,6 @@ export const WorkChatModal: React.FC = () => {
                   <UserPlus size={16} />
                 </button>
 
-                {/* Maximize / Minimize Button */}
-                <button
-                  type="button"
-                  onClick={toggleMaximize}
-                  style={{
-                    background: '#f8fafc',
-                    border: '1px solid #e2e8f0',
-                    color: '#64748b',
-                    borderRadius: '8px',
-                    padding: '6px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'all 0.15s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = '#f1f5f9';
-                    e.currentTarget.style.color = '#0f172a';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = '#f8fafc';
-                    e.currentTarget.style.color = '#64748b';
-                  }}
-                  title={isMaximized ? 'Thu nhỏ cửa sổ' : 'Phóng to toàn màn hình'}
-                >
-                  {isMaximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
-                </button>
 
                 {/* Close Button - hide when maximized so there's only one close button on far right */}
                 {!isMaximized && (
@@ -1428,11 +1698,20 @@ export const WorkChatModal: React.FC = () => {
                         )}
 
                         <div style={{ position: 'relative', flexShrink: 0 }}>
-                          <Avatar
-                            src={itemAvatar}
-                            name={itemTitle}
-                            size={38}
-                          />
+                          {c.type === 'group' ? (
+                            <GroupClusterAvatar
+                              participants={c.participants}
+                              avatarUrl={itemAvatar}
+                              name={itemTitle}
+                              size={38}
+                            />
+                          ) : (
+                            <Avatar
+                              src={itemAvatar}
+                              name={itemTitle}
+                              size={38}
+                            />
+                          )}
                           {isDirect && c.other_user?.is_online && (
                             <span style={{
                               position: 'absolute',
@@ -1497,7 +1776,7 @@ export const WorkChatModal: React.FC = () => {
                               overflow: 'hidden',
                               textOverflow: 'ellipsis'
                             }}>
-                              {c.last_msg_content || 'Bắt đầu cuộc trò chuyện'}
+                              {formatConversationPreview(c)}
                             </span>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0, marginLeft: '6px' }}>
                               {c.unread_count > 0 && (
@@ -1570,21 +1849,25 @@ export const WorkChatModal: React.FC = () => {
                             {st.full_name}
                           </div>
                           <div style={{ fontSize: '0.72rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {st.job_title || st.team_name || 'Nhân sự'}
+                            {formatStaffCleanTitle(st)}
                           </div>
                         </div>
                       </div>
 
-                      <span style={{
-                        fontSize: '0.68rem',
-                        fontWeight: 700,
-                        color: st.status === 'online' ? '#059669' : st.status === 'away' ? '#d97706' : '#94a3b8',
-                        background: st.status === 'online' ? '#ecfdf5' : st.status === 'away' ? '#fef3c7' : '#f1f5f9',
-                        padding: '2px 6px',
-                        borderRadius: '6px'
-                      }}>
-                        {st.status === 'online' ? 'Online' : st.status === 'away' ? 'Vắng' : 'Offline'}
-                      </span>
+                      {(() => {
+                        const act = formatStaffLastActive(st);
+                        return (
+                          <span style={{
+                            fontSize: '0.72rem',
+                            fontWeight: act.isOnline ? 600 : 400,
+                            color: act.isOnline ? '#10b981' : '#94a3b8',
+                            whiteSpace: 'nowrap',
+                            flexShrink: 0
+                          }}>
+                            {act.text}
+                          </span>
+                        );
+                      })()}
                     </div>
                   ))}
                 </div>
@@ -1597,12 +1880,27 @@ export const WorkChatModal: React.FC = () => {
              ══════════════════════════════════════════════════════════════════════ */}
           <motion.div
             key="chat-col-2"
-            initial={!isMaximized && !activeConversationId ? false : { opacity: 0, x: 16 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.18, ease: 'easeOut' }}
+            initial={false}
+            animate={
+              isMaximized
+                ? { x: '0%', opacity: 1 }
+                : activeConversationId
+                ? { x: '0%', opacity: 1 }
+                : { x: '100%', opacity: 0 }
+            }
+            transition={{ duration: 0.24, ease: [0.25, 1, 0.5, 1] }}
             style={{
-              flex: 1,
-              display: !isMaximized && !activeConversationId ? 'none' : 'flex',
+              flex: isMaximized ? 1 : 'none',
+              width: isMaximized ? 'auto' : '100%',
+              minWidth: isMaximized ? 'auto' : '100%',
+              position: isMaximized ? 'relative' : 'absolute',
+              top: 0,
+              right: 0,
+              bottom: 0,
+              left: isMaximized ? 'auto' : 0,
+              zIndex: isMaximized ? 2 : (activeConversationId ? 3 : 1),
+              pointerEvents: isMaximized ? 'auto' : (activeConversationId ? 'auto' : 'none'),
+              display: 'flex',
               flexDirection: 'column',
               height: '100%',
               overflow: 'hidden',
@@ -1620,8 +1918,8 @@ export const WorkChatModal: React.FC = () => {
                   justifyContent: 'space-between',
                   background: '#ffffff'
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-                    {!isMaximized && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '8px' : '10px', minWidth: 0, flex: 1 }}>
+                    {(!isMaximized || isMobile) && (
                       <button
                         onClick={() => selectConversation(0)}
                         style={{
@@ -1633,7 +1931,8 @@ export const WorkChatModal: React.FC = () => {
                           borderRadius: '8px',
                           display: 'flex',
                           alignItems: 'center',
-                          transition: 'all 0.15s ease'
+                          transition: 'all 0.15s ease',
+                          flexShrink: 0
                         }}
                         onMouseEnter={(e) => e.currentTarget.style.background = '#f1f5f9'}
                         onMouseLeave={(e) => e.currentTarget.style.background = '#f8fafc'}
@@ -1645,29 +1944,42 @@ export const WorkChatModal: React.FC = () => {
 
                     {(() => {
                       const isDirect = activeConversation.type === 'direct';
+                      const isOtherInactive = isDirect && (
+                        activeConversation.other_user?.is_active === false || 
+                        activeConversation.other_user?.user_status === 'inactive'
+                      );
                       const headerTitle = (isDirect && activeConversation.other_user?.full_name)
                         ? activeConversation.other_user.full_name
                         : (activeConversation.title || 'Cuộc trò chuyện');
                       const headerAvatar = (isDirect && activeConversation.other_user)
                         ? activeConversation.other_user.avatar_url
                         : (activeConversation.avatar_url || activeConversation.other_user?.avatar_url);
-                      const isOtherOnline = Boolean(activeConversation.other_user?.is_online);
+                      const isOtherOnline = Boolean(activeConversation.other_user?.is_online) && !isOtherInactive;
 
                       return (
                         <>
                           <div style={{ position: 'relative', flexShrink: 0 }}>
-                            <Avatar
-                              src={headerAvatar}
-                              name={headerTitle}
-                              size={38}
-                            />
-                            {isDirect && (
+                            {activeConversation.type === 'group' ? (
+                              <GroupClusterAvatar
+                                participants={activeConversation.participants}
+                                avatarUrl={headerAvatar}
+                                name={headerTitle}
+                                size={isMobile ? 34 : 38}
+                              />
+                            ) : (
+                              <Avatar
+                                src={headerAvatar}
+                                name={headerTitle}
+                                size={isMobile ? 34 : 38}
+                              />
+                            )}
+                            {isDirect && !isOtherInactive && (
                               <span style={{
                                 position: 'absolute',
                                 bottom: 0,
                                 right: 0,
-                                width: 10,
-                                height: 10,
+                                width: 9,
+                                height: 9,
                                 borderRadius: '50%',
                                 backgroundColor: isOtherOnline ? '#10b981' : '#cbd5e1',
                                 border: '2px solid #ffffff'
@@ -1675,13 +1987,27 @@ export const WorkChatModal: React.FC = () => {
                             )}
                           </div>
 
-                          <div style={{ minWidth: 0 }}>
+                          <div style={{ minWidth: 0, flex: 1 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              <div style={{ fontSize: isMobile ? '0.9rem' : '0.96rem', fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                 {headerTitle}
                               </div>
+                              {isOtherInactive && (
+                                <span style={{
+                                  fontSize: '0.64rem',
+                                  background: '#f1f5f9',
+                                  color: '#64748b',
+                                  padding: '1px 5px',
+                                  borderRadius: '4px',
+                                  fontWeight: 700,
+                                  border: '1px solid #cbd5e1',
+                                  flexShrink: 0
+                                }}>
+                                  Đã nghỉ việc
+                                </span>
+                              )}
                             </div>
-                            <div style={{ fontSize: '0.73rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <div style={{ fontSize: '0.72rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                               {currentTypingUsers.length > 0 ? (
                                 <span style={{ color: '#dc2626', fontWeight: 700 }}>
                                   {currentTypingUsers.map((u) => u.full_name).join(', ')} đang soạn tin...
@@ -1690,25 +2016,29 @@ export const WorkChatModal: React.FC = () => {
                                 <span>{activeConversation.participants?.length || activeConversation.participant_count || 0} thành viên</span>
                               ) : (
                                 <>
-                                  {activeConversation.other_user?.job_title && (
-                                    <span style={{ color: '#475569', fontWeight: 650 }}>{activeConversation.other_user.job_title}</span>
+                                  {formatStaffCleanTitle(activeConversation.other_user) && (
+                                    <span style={{ color: '#475569', fontWeight: 650, overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatStaffCleanTitle(activeConversation.other_user)}</span>
                                   )}
-                                  {activeConversation.other_user?.job_title && <span style={{ color: '#cbd5e1' }}>•</span>}
-                                  <span style={{
-                                    color: isOtherOnline ? '#10b981' : '#94a3b8',
-                                    fontWeight: 650,
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '3px'
-                                  }}>
+                                  {formatStaffCleanTitle(activeConversation.other_user) && <span style={{ color: '#cbd5e1' }}>•</span>}
+                                  {isOtherInactive ? (
+                                    <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Tài khoản đã ngưng hoạt động</span>
+                                  ) : (
                                     <span style={{
-                                      width: 5,
-                                      height: 5,
-                                      borderRadius: '50%',
-                                      backgroundColor: isOtherOnline ? '#10b981' : '#94a3b8'
-                                    }} />
-                                    {isOtherOnline ? 'Đang hoạt động' : 'Ngoại tuyến'}
-                                  </span>
+                                      color: isOtherOnline ? '#10b981' : '#94a3b8',
+                                      fontWeight: 650,
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '3px'
+                                    }}>
+                                      <span style={{
+                                        width: 5,
+                                        height: 5,
+                                        borderRadius: '50%',
+                                        backgroundColor: isOtherOnline ? '#10b981' : '#94a3b8'
+                                      }} />
+                                      {isOtherOnline ? 'Đang hoạt động' : 'Ngoại tuyến'}
+                                    </span>
+                                  )}
                                 </>
                               )}
                             </div>
@@ -1718,89 +2048,127 @@ export const WorkChatModal: React.FC = () => {
                     })()}
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    {/* In-chat search toggle */}
-                    <button
-                      onClick={() => {
-                        setShowInChatSearch(!showInChatSearch);
-                        if (showInChatSearch) {
-                          setInChatSearchQuery('');
-                          setHighlightedMsgId(null);
-                        }
-                      }}
-                      style={{
-                        background: showInChatSearch ? '#fef2f2' : '#f8fafc',
-                        border: showInChatSearch ? '1px solid #fecaca' : '1px solid #e2e8f0',
-                        color: showInChatSearch ? '#dc2626' : '#64748b',
-                        borderRadius: '8px',
-                        padding: '6px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        transition: 'all 0.15s ease'
-                      }}
-                      title={showInChatSearch ? 'Đóng tìm kiếm trong chat' : 'Tìm kiếm tin nhắn trong hội thoại này'}
-                    >
-                      <Search size={16} />
-                    </button>
+                  {/* Header Actions */}
+                  {isMobile ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}>
+                      {/* Media Vault Button */}
+                      <button
+                        onClick={() => setShowMediaVault(!showMediaVault)}
+                        style={{
+                          background: showMediaVault ? '#fef2f2' : '#f8fafc',
+                          border: showMediaVault ? '1px solid #fecaca' : '1px solid #e2e8f0',
+                          color: showMediaVault ? '#dc2626' : '#64748b',
+                          borderRadius: '8px',
+                          padding: '6px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                        title="Kho lưu trữ tệp, ảnh & thông tin"
+                      >
+                        <FolderArchive size={16} />
+                      </button>
 
-                    {/* Sound notification toggle */}
-                    <button
-                      onClick={handleToggleSound}
-                      style={{
-                        background: '#f8fafc',
-                        border: '1px solid #e2e8f0',
-                        color: soundEnabled ? '#10b981' : '#94a3b8',
-                        borderRadius: '8px',
-                        padding: '6px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        transition: 'all 0.15s ease'
-                      }}
-                      title={soundEnabled ? 'Âm thanh thông báo: Đang bật (nhấn để tắt)' : 'Âm thanh thông báo: Đang tắt (nhấn để bật)'}
-                    >
-                      {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
-                    </button>
+                      {/* Mobile More Options Menu Button '...' */}
+                      <div style={{ position: 'relative' }}>
+                        <button
+                          onClick={() => setShowMobileHeaderMenu(!showMobileHeaderMenu)}
+                          style={{
+                            background: showMobileHeaderMenu ? '#fee2e2' : '#f8fafc',
+                            border: showMobileHeaderMenu ? '1px solid #fecaca' : '1px solid #e2e8f0',
+                            color: showMobileHeaderMenu ? '#dc2626' : '#64748b',
+                            borderRadius: '8px',
+                            padding: '6px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                          title="Tùy chọn khác"
+                        >
+                          <MoreVertical size={16} />
+                        </button>
 
-                    <button
-                      onClick={() => setShowMediaVault(!showMediaVault)}
-                      style={{
-                        background: showMediaVault ? '#fef2f2' : '#f8fafc',
-                        border: showMediaVault ? '1px solid #fecaca' : '1px solid #e2e8f0',
-                        color: showMediaVault ? '#dc2626' : '#64748b',
-                        borderRadius: '8px',
-                        padding: '6px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        transition: 'all 0.15s ease'
-                      }}
-                      title="Kho lưu trữ tệp, ảnh & liên kết"
-                    >
-                      <FolderArchive size={16} />
-                    </button>
+                        {showMobileHeaderMenu && (
+                          <>
+                            <div
+                              style={{ position: 'fixed', inset: 0, zIndex: 998 }}
+                              onClick={() => setShowMobileHeaderMenu(false)}
+                            />
+                            <div style={{
+                              position: 'absolute',
+                              top: '125%',
+                              right: 0,
+                              zIndex: 999,
+                              background: '#ffffff',
+                              borderRadius: '10px',
+                              boxShadow: '0 10px 25px -4px rgba(0, 0, 0, 0.22), 0 0 0 1px rgba(0, 0, 0, 0.08)',
+                              minWidth: '200px',
+                              padding: '6px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '2px'
+                            }}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setShowMobileHeaderMenu(false);
+                                  setShowInChatSearch(!showInChatSearch);
+                                }}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  padding: '8px 10px',
+                                  borderRadius: '6px',
+                                  border: 'none',
+                                  background: 'transparent',
+                                  color: '#334155',
+                                  fontSize: '0.8rem',
+                                  fontWeight: 650,
+                                  cursor: 'pointer',
+                                  textAlign: 'left'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = '#f1f5f9'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                              >
+                                <Search size={15} />
+                                <span>{showInChatSearch ? 'Đóng tìm kiếm' : 'Tìm kiếm trong chat'}</span>
+                              </button>
 
-                    <button
-                      onClick={toggleMaximize}
-                      style={{
-                        background: '#f8fafc',
-                        border: '1px solid #e2e8f0',
-                        color: '#64748b',
-                        borderRadius: '8px',
-                        padding: '6px',
-                        cursor: 'pointer'
-                      }}
-                      title={isMaximized ? 'Thu nhỏ' : 'Phóng to toàn màn hình'}
-                    >
-                      {isMaximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-                    </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setShowMobileHeaderMenu(false);
+                                  handleToggleSound();
+                                }}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  padding: '8px 10px',
+                                  borderRadius: '6px',
+                                  border: 'none',
+                                  background: 'transparent',
+                                  color: '#334155',
+                                  fontSize: '0.8rem',
+                                  fontWeight: 650,
+                                  cursor: 'pointer',
+                                  textAlign: 'left'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = '#f1f5f9'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                              >
+                                {soundEnabled ? <Bell size={15} /> : <BellOff size={15} />}
+                                <span>{soundEnabled ? 'Tắt âm thanh chuông' : 'Bật âm thanh chuông'}</span>
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
 
-                    {/* Hide close button if maximized and media vault is open (media vault will have the single rightmost X) */}
-                    {!(isMaximized && showMediaVault) && (
+                      {/* Close button */}
                       <button
                         onClick={closeChat}
                         style={{
@@ -1815,8 +2183,108 @@ export const WorkChatModal: React.FC = () => {
                       >
                         <X size={16} />
                       </button>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      {/* In-chat search toggle */}
+                      <button
+                        onClick={() => {
+                          setShowInChatSearch(!showInChatSearch);
+                          if (showInChatSearch) {
+                            setInChatSearchQuery('');
+                            setHighlightedMsgId(null);
+                          }
+                        }}
+                        style={{
+                          background: showInChatSearch ? '#fef2f2' : '#f8fafc',
+                          border: showInChatSearch ? '1px solid #fecaca' : '1px solid #e2e8f0',
+                          color: showInChatSearch ? '#dc2626' : '#64748b',
+                          borderRadius: '8px',
+                          padding: '6px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          transition: 'all 0.15s ease'
+                        }}
+                        title={showInChatSearch ? 'Đóng tìm kiếm trong chat' : 'Tìm kiếm tin nhắn trong hội thoại này'}
+                      >
+                        <Search size={16} />
+                      </button>
+
+                      {/* Sound notification toggle */}
+                      <button
+                        onClick={handleToggleSound}
+                        style={{
+                          background: '#f8fafc',
+                          border: '1px solid #e2e8f0',
+                          color: soundEnabled ? '#64748b' : '#94a3b8',
+                          borderRadius: '8px',
+                          padding: '6px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          transition: 'all 0.15s ease'
+                        }}
+                        title={soundEnabled ? 'Âm thanh thông báo: Đang bật (nhấn để tắt)' : 'Âm thanh thông báo: Đang tắt (nhấn để bật)'}
+                      >
+                        {soundEnabled ? <Bell size={16} /> : <BellOff size={16} />}
+                      </button>
+
+                      <button
+                        onClick={() => setShowMediaVault(!showMediaVault)}
+                        style={{
+                          background: showMediaVault ? '#fef2f2' : '#f8fafc',
+                          border: showMediaVault ? '1px solid #fecaca' : '1px solid #e2e8f0',
+                          color: showMediaVault ? '#dc2626' : '#64748b',
+                          borderRadius: '8px',
+                          padding: '6px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          transition: 'all 0.15s ease'
+                        }}
+                        title="Kho lưu trữ tệp, ảnh & liên kết"
+                      >
+                        <FolderArchive size={16} />
+                      </button>
+
+                      <button
+                        onClick={toggleMaximize}
+                        style={{
+                          background: '#f8fafc',
+                          border: '1px solid #e2e8f0',
+                          color: '#64748b',
+                          borderRadius: '8px',
+                          padding: '6px',
+                          cursor: 'pointer'
+                        }}
+                        title={isMaximized ? 'Thu nhỏ' : 'Phóng to toàn màn hình'}
+                      >
+                        {isMaximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                      </button>
+
+                      {/* Hide close button if maximized and media vault is open */}
+                      {!(isMaximized && showMediaVault) && (
+                        <button
+                          onClick={closeChat}
+                          style={{
+                            background: '#f8fafc',
+                            border: '1px solid #e2e8f0',
+                            color: '#64748b',
+                            borderRadius: '8px',
+                            padding: '6px',
+                            cursor: 'pointer'
+                          }}
+                          title="Đóng chat"
+                        >
+                          <X size={16} />
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* In-chat search bar */}
@@ -2135,7 +2603,7 @@ export const WorkChatModal: React.FC = () => {
                       </div>
                     )}
 
-                  {loadingMessages ? (
+                  {loadingMessages && currentMessages.length === 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', padding: '16px 8px' }}>
                       {[
                         { mine: false, w: '48%', h: 36 },
@@ -2265,17 +2733,21 @@ export const WorkChatModal: React.FC = () => {
                               <div style={{
                                 display: 'inline-flex',
                                 alignItems: 'center',
-                                gap: '6px',
+                                gap: '7px',
                                 background: 'rgba(241, 245, 249, 0.95)',
                                 border: '1px solid #e2e8f0',
-                                color: '#64748b',
+                                color: '#475569',
                                 fontSize: '0.74rem',
-                                padding: '4px 14px',
+                                padding: '3px 12px 3px 6px',
                                 borderRadius: '20px',
                                 fontWeight: 600,
                                 boxShadow: '0 1px 2px rgba(0, 0, 0, 0.03)'
                               }}>
-                                <span style={{ display: 'inline-block', width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#94a3b8' }} />
+                                <Avatar
+                                  src={msg.sender_avatar || activeConversation?.participants?.find((p: any) => Number(p.user_id) === Number(msg.sender_id))?.avatar_url}
+                                  name={msg.sender_name || 'U'}
+                                  size={18}
+                                />
                                 <span>{msg.content}</span>
                               </div>
                             )}
@@ -2381,8 +2853,13 @@ export const WorkChatModal: React.FC = () => {
                                   {['👍', '❤️', '🔥', '😂'].map((emoji) => (
                                     <button
                                       key={emoji}
-                                      onClick={() => reactMessage(msg.id, emoji === '👍' ? 'like' : emoji === '❤️' ? 'love' : emoji === '🔥' ? 'fire' : 'haha')}
-                                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.85rem', padding: '2px' }}
+                                      onClick={(e) => {
+                                        triggerReactionBurst(emoji, e);
+                                        reactMessage(msg.id, emoji === '👍' ? 'like' : emoji === '❤️' ? 'love' : emoji === '🔥' ? 'fire' : 'haha');
+                                      }}
+                                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.85rem', padding: '2px', transition: 'transform 0.15s ease' }}
+                                      onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.25)'}
+                                      onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
                                     >
                                       {emoji}
                                     </button>
@@ -2489,34 +2966,67 @@ export const WorkChatModal: React.FC = () => {
                                       fontSize: '0.68rem'
                                     }}>
                                       <Eye size={12} color={seenUsers.length > 0 ? '#2563eb' : '#94a3b8'} style={{ marginTop: '2px', flexShrink: 0 }} />
-                                      {seenUsers.length > 0 ? (
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                            <span style={{ fontWeight: 750, color: '#334155' }}>Đã xem ({seenUsers.length}):</span>
-                                            <div style={{ display: 'inline-flex', alignItems: 'center' }}>
-                                              {seenUsers.slice(0, 4).map((su, suIdx) => (
-                                                <div key={su.id} style={{ marginLeft: suIdx > 0 ? '-4px' : '0', zIndex: 10 - suIdx }}>
-                                                  <Avatar src={su.avatar} name={su.name} size={15} />
-                                                </div>
-                                              ))}
-                                              {seenUsers.length > 4 && (
-                                                <span style={{ fontSize: '0.6rem', fontWeight: 800, color: '#64748b', marginLeft: '3px' }}>
-                                                  +{seenUsers.length - 4}
-                                                </span>
-                                              )}
+                                      {seenUsers.length > 0 ? (() => {
+                                        const userRxMap = new Map<string, string>();
+                                        (msg.reactions || []).forEach((rx) => {
+                                          const em = rx.type === 'love' ? '❤️' : rx.type === 'like' ? '👍' : rx.type === 'fire' ? '🔥' : rx.type === 'haha' ? '😂' : '❤️';
+                                          (rx.users || []).forEach((un: string) => userRxMap.set(un.toLowerCase().trim(), em));
+                                          ((rx as any).user_ids || []).forEach((uid: number) => userRxMap.set(String(uid), em));
+                                        });
+
+                                        return (
+                                          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                              <span style={{ fontWeight: 750, color: '#334155' }}>Đã xem ({seenUsers.length}):</span>
+                                              <div style={{ display: 'inline-flex', alignItems: 'center' }}>
+                                                {seenUsers.slice(0, 4).map((su, suIdx) => {
+                                                  const rxEm = userRxMap.get(String(su.id)) || userRxMap.get((su.name || '').toLowerCase().trim());
+                                                  return (
+                                                    <div key={su.id} style={{ marginLeft: suIdx > 0 ? '-4px' : '0', zIndex: 10 - suIdx, position: 'relative' }}>
+                                                      <Avatar src={su.avatar} name={su.name} size={15} />
+                                                      {rxEm && (
+                                                        <span style={{
+                                                          position: 'absolute',
+                                                          bottom: -3,
+                                                          right: -3,
+                                                          fontSize: '0.55rem',
+                                                          lineHeight: 1
+                                                        }}>
+                                                          {rxEm}
+                                                        </span>
+                                                      )}
+                                                    </div>
+                                                  );
+                                                })}
+                                                {seenUsers.length > 4 && (
+                                                  <span style={{ fontSize: '0.6rem', fontWeight: 800, color: '#64748b', marginLeft: '3px' }}>
+                                                    +{seenUsers.length - 4}
+                                                  </span>
+                                                )}
+                                              </div>
+                                            </div>
+                                            <div style={{
+                                              color: '#64748b',
+                                              lineHeight: 1.35,
+                                              fontSize: '0.66rem',
+                                              maxHeight: '44px',
+                                              overflowY: 'auto'
+                                            }}>
+                                              {seenUsers.map((su, suI) => {
+                                                const rxEm = userRxMap.get(String(su.id)) || userRxMap.get((su.name || '').toLowerCase().trim());
+                                                return (
+                                                  <span key={su.id}>
+                                                    {suI > 0 && ', '}
+                                                    <span style={{ color: rxEm === '❤️' ? '#e11d48' : '#475569', fontWeight: rxEm ? 750 : 500 }}>
+                                                      {su.name} {rxEm ? `(${rxEm})` : ''}
+                                                    </span>
+                                                  </span>
+                                                );
+                                              })}
                                             </div>
                                           </div>
-                                          <div style={{
-                                            color: '#64748b',
-                                            lineHeight: 1.25,
-                                            fontSize: '0.66rem',
-                                            maxHeight: '44px',
-                                            overflowY: 'auto'
-                                          }}>
-                                            {seenUsers.map(su => su.name).join(', ')}
-                                          </div>
-                                        </div>
-                                      ) : (
+                                        );
+                                      })() : (
                                         <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Chưa ai xem</span>
                                       )}
                                     </div>
@@ -2527,7 +3037,7 @@ export const WorkChatModal: React.FC = () => {
                                     <button
                                       type="button"
                                       onClick={() => {
-                                        deleteMessage(msg.id);
+                                        setConfirmRecallMsg(msg);
                                         setActiveMenuMsgId(null);
                                       }}
                                       style={{
@@ -2865,46 +3375,106 @@ export const WorkChatModal: React.FC = () => {
                                 </div>
                               ) : (
                                 <div style={{
-                                  padding: msg.message_type === 'sticker' ? '0' : '10px 14px',
+                                  padding: (msg.message_type === 'sticker' || (msg.message_type === 'image' && (!msg.content || msg.content === msg.metadata?.file_name)))
+                                    ? '0'
+                                    : msg.message_type === 'file'
+                                      ? '4px'
+                                      : '10px 14px',
                                   borderRadius: isMine ? '16px 16px 2px 16px' : '16px 16px 16px 2px',
                                   background: msg.message_type === 'sticker' 
                                     ? 'transparent'
-                                    : isMine 
-                                      ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' 
-                                      : '#ffffff',
+                                    : (msg.message_type === 'image' && (!msg.content || msg.content === msg.metadata?.file_name))
+                                      ? 'transparent'
+                                      : isMine 
+                                        ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' 
+                                        : '#ffffff',
                                   color: isMine ? '#ffffff' : '#0f172a',
-                                  border: (isMine || msg.message_type === 'sticker') ? 'none' : '1px solid #e2e8f0',
-                                  boxShadow: msg.message_type === 'sticker' ? 'none' : '0 1px 3px rgba(0, 0, 0, 0.05)',
+                                  border: (isMine || msg.message_type === 'sticker' || (msg.message_type === 'image' && (!msg.content || msg.content === msg.metadata?.file_name)))
+                                    ? 'none'
+                                    : '1px solid #e2e8f0',
+                                  boxShadow: (msg.message_type === 'sticker' || (msg.message_type === 'image' && (!msg.content || msg.content === msg.metadata?.file_name)))
+                                    ? 'none'
+                                    : '0 1px 3px rgba(0, 0, 0, 0.05)',
                                   wordBreak: 'break-word',
                                   fontSize: '0.875rem'
                                 }}>
                                   {/* STICKER */}
                                   {msg.message_type === 'sticker' ? (
-                                    <div 
-                                      onContextMenu={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        setActiveMenuMsgId(activeMenuMsgId === msg.id ? null : msg.id);
-                                      }}
-                                      style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '8px',
-                                        padding: '8px 14px',
-                                        borderRadius: '16px',
-                                        background: msg.metadata?.bgGradient || '#2563eb',
-                                        color: '#ffffff',
-                                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                                        userSelect: 'none',
-                                        transition: 'transform 0.15s ease'
-                                      }}
-                                      title="Chuột phải để mở tùy chọn tin nhắn"
-                                    >
-                                      <span style={{ fontSize: '1.4rem' }}>{msg.metadata?.icon || '🌟'}</span>
-                                      <span style={{ fontSize: '0.85rem', fontWeight: 800, letterSpacing: '0.3px' }}>
-                                        {msg.metadata?.badgeText || msg.content}
-                                      </span>
-                                    </div>
+                                    (() => {
+                                      const isPackSticker = Boolean(
+                                        msg.content?.startsWith('/stickers/') ||
+                                        msg.metadata?.is_pack_sticker ||
+                                        (typeof msg.metadata?.url === 'string' && msg.metadata.url.startsWith('/stickers/'))
+                                      );
+                                      const stickerUrl = msg.metadata?.url || msg.content;
+
+                                      if (isPackSticker) {
+                                        return (
+                                          <div 
+                                            onContextMenu={(e) => {
+                                              e.preventDefault();
+                                              e.stopPropagation();
+                                              setActiveMenuMsgId(activeMenuMsgId === msg.id ? null : msg.id);
+                                            }}
+                                            style={{
+                                              cursor: 'pointer',
+                                              userSelect: 'none',
+                                              transition: 'transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'center',
+                                              padding: '2px'
+                                            }}
+                                            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.08)'}
+                                            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                                            title="Chuột phải để mở tùy chọn"
+                                          >
+                                            <img
+                                              src={stickerUrl}
+                                              alt="Nhãn dán"
+                                              loading="lazy"
+                                              style={{
+                                                width: '120px',
+                                                height: '120px',
+                                                maxWidth: '120px',
+                                                maxHeight: '120px',
+                                                objectFit: 'contain',
+                                                display: 'block',
+                                                filter: 'drop-shadow(0 2px 6px rgba(0, 0, 0, 0.08))'
+                                              }}
+                                            />
+                                          </div>
+                                        );
+                                      }
+
+                                      return (
+                                        <div 
+                                          onContextMenu={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            setActiveMenuMsgId(activeMenuMsgId === msg.id ? null : msg.id);
+                                          }}
+                                          style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                            padding: '8px 14px',
+                                            borderRadius: '16px',
+                                            background: msg.metadata?.bgGradient || '#2563eb',
+                                            color: '#ffffff',
+                                            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                                            userSelect: 'none',
+                                            transition: 'transform 0.15s ease'
+                                          }}
+                                          title="Chuột phải để mở tùy chọn tin nhắn"
+                                        >
+                                          <span style={{ fontSize: '1.4rem' }}>{msg.metadata?.icon || '🌟'}</span>
+                                          <span style={{ fontSize: '0.85rem', fontWeight: 800, letterSpacing: '0.3px' }}>
+                                            {msg.metadata?.badgeText || msg.content}
+                                          </span>
+                                        </div>
+                                      );
+                                    })()
                                   ) : msg.message_type === 'image' ? (
                                   /* IMAGE WITH ZERO CLS & LAZY LOAD */
                                   <ChatImageBubble
@@ -3408,7 +3978,10 @@ export const WorkChatModal: React.FC = () => {
                                     return (
                                       <div
                                         key={rx.type}
-                                        onClick={() => reactMessage(msg.id, rx.type)}
+                                        onClick={(e) => {
+                                          triggerReactionBurst(emojiMap[rx.type] || '👍', e);
+                                          reactMessage(msg.id, rx.type);
+                                        }}
                                         style={{
                                           display: 'flex',
                                           alignItems: 'center',
@@ -3419,8 +3992,11 @@ export const WorkChatModal: React.FC = () => {
                                           padding: '1px 6px',
                                           fontSize: '0.72rem',
                                           cursor: 'pointer',
-                                          boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+                                          boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                                          transition: 'transform 0.15s ease'
                                         }}
+                                        onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+                                        onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
                                         title={rx.users.join(', ')}
                                       >
                                         <span>{emojiMap[rx.type] || '👍'}</span>
@@ -3818,11 +4394,40 @@ export const WorkChatModal: React.FC = () => {
                   </div>
                 )}
 
-                {/* Input Bar */}
-                <div style={{
-                  borderTop: '1px solid #e2e8f0',
-                  background: '#ffffff'
-                }}>
+                {/* Input Bar or Inactive Lock Banner */}
+                {(() => {
+                  const isDirect = activeConversation.type === 'direct';
+                  const isOtherInactive = isDirect && (
+                    activeConversation.other_user?.is_active === false || 
+                    activeConversation.other_user?.user_status === 'inactive'
+                  );
+
+                  if (isOtherInactive) {
+                    return (
+                      <div style={{
+                        padding: '16px 20px',
+                        background: '#f8fafc',
+                        borderTop: '1px solid #e2e8f0',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '10px',
+                        color: '#64748b',
+                        fontSize: '0.82rem',
+                        fontWeight: 650,
+                        textAlign: 'center'
+                      }}>
+                        <Lock size={16} color="#94a3b8" />
+                        <span>Nhân sự này đã nghỉ việc. Cuộc trò chuyện đã được khóa và chỉ lưu trữ để tra cứu lịch sử.</span>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div style={{
+                      borderTop: '1px solid #e2e8f0',
+                      background: '#ffffff'
+                    }}>
                     {/* Pending Attachments Review Row */}
                     {pendingAttachments.length > 0 && (
                       <div style={{
@@ -4003,16 +4608,83 @@ export const WorkChatModal: React.FC = () => {
                       </div>
                     )}
 
-                    <div style={{ padding: '7px 12px' }}>
+                    <div style={{ padding: '7px 12px 14px 12px' }}>
                       {/* Action Icons */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                        {/* Smile button: mở StickerPickerModal (Meep, Fox Love, Buffalo, Minions, Emoji như bên Comment) */}
                         <button
                           type="button"
-                          onClick={() => setShowStickerPicker(!showStickerPicker)}
-                          style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', padding: '4px' }}
-                          title="Gửi Sticker"
+                          onClick={(e) => {
+                            setStickerAnchorEl(e.currentTarget);
+                            setPackStickerInitialTab('ideas');
+                            setShowPackStickerModal(prev => !prev);
+                            setShowStickerPicker(false);
+                          }}
+                          style={{
+                            background: showPackStickerModal && packStickerInitialTab !== 'ideas' ? '#fef3c7' : 'none',
+                            border: 'none',
+                            color: showPackStickerModal && packStickerInitialTab !== 'ideas' ? '#d97706' : '#64748b',
+                            cursor: 'pointer',
+                            padding: '4px',
+                            borderRadius: '6px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            transition: 'all 0.15s ease'
+                          }}
+                          title="Gửi Nhãn dán Sticker & Emoji"
                         >
-                          <Sparkles size={18} color="#f59e0b" />
+                          <Smile size={18} color={showPackStickerModal && packStickerInitialTab !== 'ideas' ? '#d97706' : '#f59e0b'} />
+                        </button>
+
+                        {/* Nút Mascot Chibi IDEAS: mở nhanh bộ sticker độc quyền "IDEAS with love" */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            setStickerAnchorEl(e.currentTarget);
+                            setPackStickerInitialTab('ideas');
+                            setShowPackStickerModal(true);
+                            setShowStickerPicker(false);
+                          }}
+                          style={{
+                            background: showPackStickerModal && packStickerInitialTab === 'ideas' ? '#fee2e2' : 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            padding: '3px 4px',
+                            borderRadius: '6px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            transition: 'all 0.15s ease'
+                          }}
+                          title="Mở bộ nhãn dán độc quyền IDEAS with love"
+                        >
+                          <img
+                            src="/stickers/ideas/ideas_1.webp"
+                            alt="IDEAS with love"
+                            style={{ width: 20, height: 20, objectFit: 'contain' }}
+                          />
+                        </button>
+
+                        {/* Sparkles button: mở Sticker Doanh nghiệp (Đã duyệt, Chốt đơn, Họp gấp...) */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowStickerPicker(prev => !prev);
+                            setShowPackStickerModal(false);
+                          }}
+                          style={{
+                            background: showStickerPicker ? '#ede9fe' : 'none',
+                            border: 'none',
+                            color: showStickerPicker ? '#7c3aed' : '#64748b',
+                            cursor: 'pointer',
+                            padding: '4px',
+                            borderRadius: '6px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            transition: 'all 0.15s ease'
+                          }}
+                          title="Bộ Sticker Doanh nghiệp"
+                        >
+                          <Sparkles size={18} color={showStickerPicker ? '#7c3aed' : '#8b5cf6'} />
                         </button>
 
                         <button
@@ -4089,15 +4761,30 @@ export const WorkChatModal: React.FC = () => {
                         />
                       </div>
 
+                      {/* Live Link Preview inside Composer (detect URL while typing/pasting) */}
+                      {(() => {
+                        const detectedUrl = extractFirstUrl(inputText);
+                        if (detectedUrl && detectedUrl !== dismissedPreviewUrl) {
+                          return (
+                            <ComposerLinkPreview
+                              url={detectedUrl}
+                              onDismiss={() => setDismissedPreviewUrl(detectedUrl)}
+                            />
+                          );
+                        }
+                        return null;
+                      })()}
+
                       {/* Textarea - Full width, send via Enter */}
                       <div style={{ display: 'flex', alignItems: 'flex-end', width: '100%' }}>
                         <textarea
                           ref={textareaRef}
                           rows={1}
+                          className="chat-input-textarea"
                           placeholder={
                             activeConversation.type === 'direct'
-                              ? `Nhập tin nhắn tới ${activeConversation.other_user?.full_name || 'đồng nghiệp'}...`
-                              : 'Nhập @, tin nhắn tới nhóm (Enter để gửi, Shift+Enter xuống dòng, Ctrl+V dán ảnh)...'
+                              ? (isMobile ? 'Nhập tin nhắn...' : `Nhập tin nhắn tới ${activeConversation.other_user?.full_name || 'đồng nghiệp'}...`)
+                              : (isMobile ? 'Nhập tin nhắn tới nhóm...' : 'Nhập @, tin nhắn tới nhóm (Enter để gửi, Shift+Enter xuống dòng, Ctrl+V dán ảnh)...')
                           }
                           value={inputText}
                           onChange={handleInputChange}
@@ -4105,17 +4792,17 @@ export const WorkChatModal: React.FC = () => {
                           onPaste={handlePaste}
                           style={{
                             width: '100%',
-                            height: '38px',
-                            minHeight: '38px',
-                            maxHeight: '96px',
-                            padding: '8px 12px',
-                            borderRadius: '10px',
+                            height: `${isMobile ? 56 : 64}px`,
+                            minHeight: `${isMobile ? 56 : 64}px`,
+                            maxHeight: '130px',
+                            padding: '12px 14px',
+                            borderRadius: '12px',
                             border: '1.5px solid #e2e8f0',
                             outline: 'none',
-                            fontSize: '0.85rem',
+                            fontSize: '0.88rem',
                             resize: 'none',
                             fontFamily: 'inherit',
-                            lineHeight: '1.4',
+                            lineHeight: '1.45',
                             background: '#f8fafc',
                             boxSizing: 'border-box',
                             overflowY: 'auto',
@@ -4133,7 +4820,9 @@ export const WorkChatModal: React.FC = () => {
                       </div>
                     </div>
                   </div>
-              </>
+                );
+              })()}
+            </>
             ) : (
               /* No active conversation placeholder */
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8' }}>
@@ -4147,33 +4836,37 @@ export const WorkChatModal: React.FC = () => {
           {/* ══════════════════════════════════════════════════════════════════════
               COLUMN 3: GROUP INFO & MEDIA VAULT (COLLAPSIBLE / DOCKED ON MAXIMIZED)
              ══════════════════════════════════════════════════════════════════════ */}
-          {showMediaVault && activeConversation && (
-            <motion.div
-              initial={isMaximized ? { width: 0, opacity: 0 } : { x: '100%', opacity: 0 }}
-              animate={isMaximized ? { width: '340px', opacity: 1 } : { x: 0, opacity: 1 }}
-              exit={isMaximized ? { width: 0, opacity: 0 } : { x: '100%', opacity: 0 }}
-              transition={{ type: 'spring', damping: 28, stiffness: 320 }}
-              style={{
-                width: isMaximized ? '340px' : '100%',
-                minWidth: isMaximized ? '340px' : '100%',
-                height: '100%',
-                position: isMaximized ? 'relative' : 'absolute',
-                top: 0,
-                right: 0,
-                bottom: 0,
-                zIndex: isMaximized ? 10 : 35,
-                boxShadow: isMaximized ? 'none' : '-8px 0 24px rgba(0, 0, 0, 0.15)',
-                background: '#ffffff'
-              }}
-            >
-              <ChatMediaVaultPanel
-                onClose={() => setShowMediaVault(false)}
-                onOpenAddMember={() => setShowAddMemberModal(true)}
-                isMaximized={isMaximized}
-                onCloseChat={closeChat}
-              />
-            </motion.div>
-          )}
+          <AnimatePresence>
+            {showMediaVault && activeConversation && (
+              <motion.div
+                key="chat-col-3-vault"
+                initial={(isMaximized && !isMobile) ? { width: 0, opacity: 0 } : { x: '100%', opacity: 0 }}
+                animate={(isMaximized && !isMobile) ? { width: '340px', opacity: 1 } : { x: 0, opacity: 1 }}
+                exit={(isMaximized && !isMobile) ? { width: 0, opacity: 0 } : { x: '100%', opacity: 0 }}
+                transition={{ type: 'spring', damping: 28, stiffness: 320 }}
+                style={{
+                  width: (isMaximized && !isMobile) ? '340px' : '100%',
+                  minWidth: (isMaximized && !isMobile) ? '340px' : '100%',
+                  height: '100%',
+                  position: (isMaximized && !isMobile) ? 'relative' : 'absolute',
+                  top: 0,
+                  right: 0,
+                  bottom: 0,
+                  zIndex: (isMaximized && !isMobile) ? 10 : 35,
+                  boxShadow: (isMaximized && !isMobile) ? 'none' : '-8px 0 24px rgba(0, 0, 0, 0.15)',
+                  background: '#ffffff',
+                  overflow: 'hidden'
+                }}
+              >
+                <ChatMediaVaultPanel
+                  onClose={() => setShowMediaVault(false)}
+                  onOpenAddMember={() => setShowAddMemberModal(true)}
+                  isMaximized={isMaximized}
+                  onCloseChat={closeChat}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
       </AnimatePresence>
 
@@ -4236,6 +4929,145 @@ export const WorkChatModal: React.FC = () => {
           />
         </div>
       )}
+
+      {/* Sticker Picker Modal (Mặt cười) */}
+      <StickerPickerModal
+        isOpen={showPackStickerModal}
+        onClose={() => setShowPackStickerModal(false)}
+        anchorEl={stickerAnchorEl}
+        initialTab={packStickerInitialTab}
+        onSelectSticker={(url, packId) => handleSendPackSticker(url, packId)}
+        onSelectEmoji={(emoji) => {
+          setInputText(prev => prev + emoji);
+        }}
+        zIndex={2147483647}
+      />
+
+      {/* Modal Xác nhận Thu hồi Tin nhắn an toàn */}
+      {confirmRecallMsg && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2147483647,
+            backdropFilter: 'blur(4px)',
+            padding: '16px'
+          }}
+          onClick={() => setConfirmRecallMsg(null)}
+        >
+          <div
+            style={{
+              background: '#ffffff',
+              borderRadius: '20px',
+              padding: '24px',
+              width: '100%',
+              maxWidth: '380px',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              textAlign: 'center',
+              animation: 'featureIntroZoomIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                width: 52,
+                height: 52,
+                borderRadius: '50%',
+                background: '#fee2e2',
+                color: '#dc2626',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 16px',
+                boxShadow: '0 4px 12px rgba(220, 38, 38, 0.2)'
+              }}
+            >
+              <RotateCcw size={24} />
+            </div>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#1e293b', margin: '0 0 8px' }}>
+              Thu hồi tin nhắn này?
+            </h3>
+            <p style={{ fontSize: '0.84rem', color: '#64748b', margin: '0 0 20px', lineHeight: 1.5 }}>
+              Bạn có chắc chắn muốn thu hồi tin nhắn này với tất cả mọi người trong cuộc trò chuyện không? Tin nhắn sẽ được gỡ bỏ ngay lập tức.
+            </p>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setConfirmRecallMsg(null)}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  borderRadius: '12px',
+                  border: '1px solid #e2e8f0',
+                  background: '#ffffff',
+                  color: '#475569',
+                  fontWeight: 700,
+                  fontSize: '0.85rem',
+                  cursor: 'pointer'
+                }}
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirmRecallMsg) {
+                    deleteMessage(confirmRecallMsg.id);
+                    setConfirmRecallMsg(null);
+                  }
+                }}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                  color: '#ffffff',
+                  fontWeight: 700,
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(220, 38, 38, 0.35)'
+                }}
+              >
+                Thu hồi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Reaction Animation Particles */}
+      <AnimatePresence>
+        {floatingReactions.map((p) => (
+          <motion.div
+            key={p.id}
+            initial={{ opacity: 1, scale: 0.7, y: 0, x: 0 }}
+            animate={{ 
+              opacity: [1, 1, 0], 
+              scale: [0.7, 1.4, 2], 
+              y: -110,
+              x: [(Math.random() - 0.5) * 50]
+            }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1.05, ease: 'easeOut' }}
+            style={{
+              position: 'fixed',
+              left: p.x - 16,
+              top: p.y - 16,
+              fontSize: '2.2rem',
+              pointerEvents: 'none',
+              zIndex: 2147483647,
+              filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.3))'
+            }}
+          >
+            {p.emoji}
+          </motion.div>
+        ))}
+      </AnimatePresence>
     </>
   );
 };

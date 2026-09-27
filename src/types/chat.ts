@@ -15,6 +15,7 @@ export interface ChatParticipant {
   system_role?: string;
   is_online?: boolean;
   is_active?: boolean;
+  user_status?: string;
   online_status?: UserOnlineStatus;
   last_ping_at?: string;
   seconds_ago?: number;
@@ -96,6 +97,7 @@ export interface ChatConversation {
     role?: string;
     is_online?: boolean;
     is_active?: boolean;
+    user_status?: string;
     online_status?: UserOnlineStatus;
     last_read_message_id?: number;
   };
@@ -123,6 +125,7 @@ export interface StaffDirectoryUser {
   status: UserOnlineStatus;
   custom_status?: string;
   last_ping_at?: string;
+  last_active_at?: string;
   seconds_ago?: number;
 }
 
@@ -130,6 +133,8 @@ export interface ChatVaultItem {
   id: number;
   message_id: number;
   uploader_id: number;
+  sender_id?: number;
+  sender_name?: string;
   category: 'image' | 'video' | 'document' | 'link';
   file_name: string;
   file_url: string;

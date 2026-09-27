@@ -182,3 +182,35 @@ export const extractFirstUrl = (text?: string): string | null => {
   const match = text.match(/https?:\/\/[^\s()<>]+/i);
   return match ? match[0] : null;
 };
+
+export const formatStaffCleanTitle = (user?: { job_title?: string; role?: string; team_name?: string } | null): string => {
+  if (!user) return 'Nhân sự';
+  const roleMap: Record<string, string> = {
+    director: 'Giám đốc',
+    superadmin: 'Quản trị cấp cao',
+    super_admin: 'Quản trị cấp cao',
+    admin: 'Quản trị viên',
+    manager: 'Quản lý',
+    sales: 'Chuyên viên Tư vấn',
+    sale_admin: 'Sale Admin',
+    academic: 'Học vụ',
+    accountant: 'Kế toán',
+    staff: 'Nhân viên'
+  };
+
+  const isCodeRole = (val?: string) => {
+    if (!val) return true;
+    const v = val.toLowerCase().trim();
+    return Boolean(roleMap[v]) || ['user'].includes(v);
+  };
+
+  const rawTitle = (user.job_title || '').trim();
+  const rawRole = (user.role || '').toLowerCase().trim();
+  const title = (!isCodeRole(rawTitle) && rawTitle) ? rawTitle : (roleMap[rawRole] || rawTitle || 'Nhân sự');
+  const team = (user.team_name || '').trim();
+
+  if (title && team && title.toLowerCase() !== team.toLowerCase()) {
+    return `${title} • ${team}`;
+  }
+  return title || team || 'Nhân sự';
+};
