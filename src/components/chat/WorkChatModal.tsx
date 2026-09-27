@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
 import { 
   X, Maximize2, Minimize2, Search, Plus, UserPlus, Paperclip, 
   Image as ImageIcon, Smile, Briefcase, Pin, MoreVertical, 
@@ -113,6 +113,7 @@ const LinkPreviewCard: React.FC<{ url: string; isMine?: boolean }> = ({ url, isM
             onError={() => setImgError(true)}
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             loading="lazy"
+            decoding="async"
           />
           <div style={{
             position: 'absolute',
@@ -182,6 +183,101 @@ const LinkPreviewCard: React.FC<{ url: string; isMine?: boolean }> = ({ url, isM
     </a>
   );
 };
+
+// Memoized Zero-CLS Lazy Image Bubble
+const ChatImageBubble: React.FC<{
+  url?: string;
+  content?: string;
+  fileName?: string;
+  onPreview: (url: string) => void;
+}> = React.memo(({ url, content, fileName, onPreview }) => {
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [isError, setIsError] = useState(false);
+
+  if (!url) return null;
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <div
+        style={{
+          position: 'relative',
+          minWidth: '160px',
+          minHeight: '130px',
+          maxWidth: '280px',
+          maxHeight: '280px',
+          borderRadius: '10px',
+          overflow: 'hidden',
+          backgroundColor: '#f1f5f9',
+          cursor: 'pointer',
+          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
+          transition: 'transform 0.15s ease'
+        }}
+        onClick={() => onPreview(url)}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = 'scale(1.015)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = 'scale(1)';
+        }}
+      >
+        {!isLoaded && !isError && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: '#f1f5f9',
+              color: '#94a3b8'
+            }}
+          >
+            <Loader2 size={20} style={{ animation: 'spin 1.2s linear infinite' }} />
+          </div>
+        )}
+        {isError ? (
+          <div
+            style={{
+              minHeight: '110px',
+              padding: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              color: '#94a3b8',
+              fontSize: '0.75rem'
+            }}
+          >
+            <AlertCircle size={20} color="#f87171" />
+            <span>Không tải được hình ảnh</span>
+          </div>
+        ) : (
+          <img
+            src={url}
+            alt="Hình ảnh đính kèm"
+            loading="lazy"
+            decoding="async"
+            onLoad={() => setIsLoaded(true)}
+            onError={() => setIsError(true)}
+            style={{
+              display: 'block',
+              width: '100%',
+              maxHeight: '280px',
+              objectFit: 'cover',
+              opacity: isLoaded ? 1 : 0,
+              transition: 'opacity 0.2s ease-in-out'
+            }}
+          />
+        )}
+      </div>
+      {content && content !== fileName && (
+        <div style={{ marginTop: '4px', fontSize: '0.85rem' }}>{content}</div>
+      )}
+    </div>
+  );
+});
+ChatImageBubble.displayName = 'ChatImageBubble';
 
 const renderFormattedText = (text: string, isMine?: boolean) => {
   if (!text) return null;
@@ -407,6 +503,136 @@ export const WorkChatModal: React.FC = () => {
   const currentMessages = activeConversationId ? (messagesByConvId[activeConversationId] || []) : [];
   const currentTypingUsers = activeConversationId ? (typingByConvId[activeConversationId] || []) : [];
 
+  // Windowed Progressive Rendering & Scroll Anchor States (chỉ nạp 10 tin cuối, cuộn lên mở rộng)
+  const [visibleCount, setVisibleCount] = useState<number>(10);
+  const [isLoadingOlder, setIsLoadingOlder] = useState<boolean>(false);
+  const [showScrollBottomBtn, setShowScrollBottomBtn] = useState<boolean>(false);
+  const prevScrollHeightRef = useRef<number>(0);
+  const prevScrollTopRef = useRef<number>(0);
+  const isPrependingRef = useRef<boolean>(false);
+  const shouldScrollBottomRef = useRef<boolean>(true);
+  const isUserAtBottomRef = useRef<boolean>(true);
+  const lastActiveConvIdRef = useRef<number | null>(null);
+  const prevMessagesCountRef = useRef<number>(0);
+
+  // 10 tin nhắn mới nhất hoặc số lượng đã mở rộng khi cuộn lên
+  const visibleMessages = useMemo(() => {
+    if (currentMessages.length <= visibleCount) return currentMessages;
+    return currentMessages.slice(-visibleCount);
+  }, [currentMessages, visibleCount]);
+
+  // Reset windowed slice khi đổi cuộc trò chuyện
+  useEffect(() => {
+    if (activeConversationId !== lastActiveConvIdRef.current) {
+      lastActiveConvIdRef.current = activeConversationId;
+      setVisibleCount(10);
+      shouldScrollBottomRef.current = true;
+      isUserAtBottomRef.current = true;
+      setShowScrollBottomBtn(false);
+      prevMessagesCountRef.current = currentMessages.length;
+    }
+  }, [activeConversationId, currentMessages.length]);
+
+  // Scroll Anchor Compensation - giữ nguyên tầm mắt khi mở rộng thêm tin cũ ở đỉnh
+  useLayoutEffect(() => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+
+    if (isPrependingRef.current) {
+      const heightDiff = el.scrollHeight - prevScrollHeightRef.current;
+      if (heightDiff > 0) {
+        el.scrollTop = prevScrollTopRef.current + heightDiff;
+      }
+      isPrependingRef.current = false;
+      return;
+    }
+
+    if (shouldScrollBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
+      shouldScrollBottomRef.current = false;
+    }
+  }, [visibleMessages.length, activeConversationId]);
+
+  // Tự động cuộn xuống đáy khi có tin nhắn mới tới (nếu là tin của mình hoặc đang ở gần đáy)
+  useEffect(() => {
+    if (!activeConversationId || currentMessages.length === 0) return;
+
+    if (currentMessages.length > prevMessagesCountRef.current && !isPrependingRef.current) {
+      const lastMsg = currentMessages[currentMessages.length - 1];
+      const myId = Number(user?.id || (user as any)?.user_id || 0);
+      const isMine = Boolean(lastMsg?.is_mine) || (myId > 0 && Number(lastMsg?.sender_id) === myId);
+
+      // Tăng visibleCount thêm 1 để không làm đẩy mất tin cũ đang xem
+      setVisibleCount((prev) => (prev < currentMessages.length ? prev + 1 : prev));
+
+      if (isMine || isUserAtBottomRef.current) {
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, 40);
+      } else {
+        setShowScrollBottomBtn(true);
+      }
+    }
+    prevMessagesCountRef.current = currentMessages.length;
+  }, [currentMessages.length, activeConversationId, user?.id]);
+
+  // Cuộn lên đỉnh để nạp thêm tin nhắn cũ hơn
+  const handleMessagesScroll = useCallback(async () => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const atBottom = distFromBottom < 100;
+    isUserAtBottomRef.current = atBottom;
+    setShowScrollBottomBtn(!atBottom && distFromBottom > 220);
+
+    // Khi cuộn lên gần đỉnh (< 120px) và không đang tải
+    if (el.scrollTop < 120 && !isLoadingOlder) {
+      const remainingInLocal = currentMessages.length - visibleCount;
+
+      if (remainingInLocal > 0) {
+        prevScrollHeightRef.current = el.scrollHeight;
+        prevScrollTopRef.current = el.scrollTop;
+        isPrependingRef.current = true;
+        setVisibleCount((prev) => Math.min(prev + 15, currentMessages.length));
+      } else if (activeConversation && hasMoreByConvId[activeConversation.id]) {
+        prevScrollHeightRef.current = el.scrollHeight;
+        prevScrollTopRef.current = el.scrollTop;
+        isPrependingRef.current = true;
+        setIsLoadingOlder(true);
+        try {
+          await loadMoreMessages(activeConversation.id);
+          setVisibleCount((prev) => prev + 15);
+        } finally {
+          setIsLoadingOlder(false);
+        }
+      }
+    }
+  }, [activeConversation, currentMessages.length, visibleCount, isLoadingOlder, hasMoreByConvId, loadMoreMessages]);
+
+  // Tải thêm tin cũ hơn thủ công
+  const handleManualLoadOlder = async () => {
+    const el = messagesContainerRef.current;
+    if (!el || isLoadingOlder) return;
+
+    prevScrollHeightRef.current = el.scrollHeight;
+    prevScrollTopRef.current = el.scrollTop;
+    isPrependingRef.current = true;
+
+    const remainingInLocal = currentMessages.length - visibleCount;
+    if (remainingInLocal > 0) {
+      setVisibleCount((prev) => Math.min(prev + 15, currentMessages.length));
+    } else if (activeConversation && hasMoreByConvId[activeConversation.id]) {
+      setIsLoadingOlder(true);
+      try {
+        await loadMoreMessages(activeConversation.id);
+        setVisibleCount((prev) => prev + 15);
+      } finally {
+        setIsLoadingOlder(false);
+      }
+    }
+  };
+
   // Polling loop: 2.8s when open, adaptive when tab is hidden
   useEffect(() => {
     if (!isOpen) return;
@@ -431,13 +657,6 @@ export const WorkChatModal: React.FC = () => {
       document.removeEventListener('visibilitychange', handleVisChange);
     };
   }, [isOpen, activeConversationId]);
-
-  // Scroll to bottom on new message
-  useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [currentMessages.length, activeConversationId]);
 
   // Auto resize textarea - compact initial height 38px, auto expands up to 96px
   useEffect(() => {
@@ -1775,34 +1994,80 @@ export const WorkChatModal: React.FC = () => {
                   {/* Message List */}
                   <div
                     ref={messagesContainerRef}
-                  style={{
-                    flex: 1,
-                    overflowY: 'auto',
-                    padding: '16px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '12px',
-                    background: '#f8fafc'
-                  }}
-                >
-                  {hasMoreByConvId[activeConversation.id] && (
-                    <div style={{ textAlign: 'center', margin: '4px 0' }}>
-                      <button
-                        onClick={() => loadMoreMessages(activeConversation.id)}
-                        style={{
-                          background: '#ffffff',
-                          border: '1px solid #cbd5e1',
-                          borderRadius: '16px',
-                          padding: '4px 14px',
-                          fontSize: '0.72rem',
-                          color: '#64748b',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Tải thêm tin nhắn cũ hơn
-                      </button>
-                    </div>
-                  )}
+                    onScroll={handleMessagesScroll}
+                    style={{
+                      flex: 1,
+                      overflowY: 'auto',
+                      padding: '16px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '12px',
+                      background: '#f8fafc'
+                    }}
+                  >
+                    {/* Indicator đang tải thêm tin nhắn cũ */}
+                    {isLoadingOlder && (
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        padding: '6px 14px',
+                        background: 'rgba(255, 255, 255, 0.9)',
+                        backdropFilter: 'blur(4px)',
+                        borderRadius: '20px',
+                        margin: '2px auto 8px',
+                        width: 'fit-content',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                        border: '1px solid #e2e8f0',
+                        color: '#64748b',
+                        fontSize: '0.74rem',
+                        fontWeight: 650
+                      }}>
+                        <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} />
+                        <span>Đang tải thêm tin nhắn cũ hơn...</span>
+                      </div>
+                    )}
+
+                    {/* Nút xem thêm tin nhắn cũ thủ công nếu còn tin nhắn */}
+                    {!isLoadingOlder && (currentMessages.length > visibleCount || (activeConversation && Boolean(hasMoreByConvId[activeConversation.id]))) && (
+                      <div style={{ textAlign: 'center', margin: '4px 0 8px' }}>
+                        <button
+                          type="button"
+                          onClick={handleManualLoadOlder}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            background: '#ffffff',
+                            border: '1px solid #cbd5e1',
+                            borderRadius: '20px',
+                            padding: '4px 14px',
+                            fontSize: '0.72rem',
+                            fontWeight: 650,
+                            color: '#475569',
+                            cursor: 'pointer',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                            transition: 'all 0.15s ease'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.borderColor = '#94a3b8';
+                            e.currentTarget.style.color = '#0f172a';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.borderColor = '#cbd5e1';
+                            e.currentTarget.style.color = '#475569';
+                          }}
+                        >
+                          <ChevronUp size={13} />
+                          <span>
+                            {currentMessages.length > visibleCount
+                              ? `Xem thêm ${Math.min(currentMessages.length - visibleCount, 15)} tin cũ hơn (còn ${currentMessages.length - visibleCount} tin)`
+                              : 'Tải thêm tin nhắn cũ hơn từ máy chủ'}
+                          </span>
+                        </button>
+                      </div>
+                    )}
 
                   {loadingMessages ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', padding: '16px 8px' }}>
@@ -1898,7 +2163,7 @@ export const WorkChatModal: React.FC = () => {
                       });
                     }
 
-                    return currentMessages.map((msg, index) => {
+                    return visibleMessages.map((msg, index) => {
                       const myId = Number(user?.id || (user as any)?.user_id || 0);
                       const isMine = Boolean(msg.is_mine) || (myId > 0 && Number(msg.sender_id) === myId);
                       const isRecalled = Boolean(msg.deleted_at);
@@ -2616,24 +2881,13 @@ export const WorkChatModal: React.FC = () => {
                                       </span>
                                     </div>
                                   ) : msg.message_type === 'image' ? (
-                                  /* IMAGE */
-                                  <div>
-                                    <img
-                                      src={msg.metadata?.url}
-                                      alt="Photo"
-                                      onClick={() => setSelectedPreviewImage(msg.metadata?.url)}
-                                      style={{
-                                        maxWidth: '260px',
-                                        maxHeight: '260px',
-                                        borderRadius: '10px',
-                                        cursor: 'pointer',
-                                        objectFit: 'cover'
-                                      }}
-                                    />
-                                    {msg.content && msg.content !== msg.metadata?.file_name && (
-                                      <div style={{ marginTop: '4px' }}>{msg.content}</div>
-                                    )}
-                                  </div>
+                                  /* IMAGE WITH ZERO CLS & LAZY LOAD */
+                                  <ChatImageBubble
+                                    url={msg.metadata?.url}
+                                    content={msg.content}
+                                    fileName={msg.metadata?.file_name}
+                                    onPreview={(url) => setSelectedPreviewImage(url)}
+                                  />
                                 ) : msg.message_type === 'file' ? (
                                   /* FILE WITH SMART FORMAT UI */
                                   (() => {
@@ -2788,7 +3042,7 @@ export const WorkChatModal: React.FC = () => {
                                             <audio 
                                               controls 
                                               src={fileUrl} 
-                                              preload="metadata" 
+                                              preload="none" 
                                               style={{ width: '100%', height: '30px', outline: 'none' }} 
                                             />
                                           </div>
@@ -2805,7 +3059,7 @@ export const WorkChatModal: React.FC = () => {
                                             <video
                                               controls
                                               src={fileUrl}
-                                              preload="metadata"
+                                              preload="none"
                                               style={{
                                                 width: '100%',
                                                 maxHeight: '220px',
@@ -3353,6 +3607,42 @@ export const WorkChatModal: React.FC = () => {
 
                   <div ref={messagesEndRef} />
                 </div>
+
+                {/* Floating Scroll to Bottom Button */}
+                <AnimatePresence>
+                  {showScrollBottomBtn && (
+                    <motion.button
+                      type="button"
+                      initial={{ opacity: 0, y: 10, scale: 0.8 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.8 }}
+                      transition={{ duration: 0.15 }}
+                      onClick={() => {
+                        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+                      }}
+                      style={{
+                        position: 'absolute',
+                        right: '18px',
+                        bottom: '14px',
+                        zIndex: 25,
+                        width: '36px',
+                        height: '36px',
+                        borderRadius: '50%',
+                        background: '#ffffff',
+                        border: '1.5px solid #cbd5e1',
+                        color: '#2563eb',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 4px 14px rgba(0, 0, 0, 0.15)',
+                        cursor: 'pointer'
+                      }}
+                      title="Cuộn xuống tin nhắn mới nhất"
+                    >
+                      <ArrowDown size={18} />
+                    </motion.button>
+                  )}
+                </AnimatePresence>
               </div>
 
                 {/* Replying banner */}
