@@ -5515,11 +5515,11 @@ a,
     padding-bottom: env(safe-area-inset-bottom, 0px) !important;
   }
 
-  /* Floating check-in button on mobile: sit neatly above bottom nav & all bottom sheets */
+  /* Floating check-in button on mobile: sit neatly above bottom nav & chat button */
   .floating-checkin-btn {
-    bottom: calc(76px + env(safe-area-inset-bottom, 0px)) !important;
+    bottom: calc(var(--mobile-bottom-nav-height, 62px) + env(safe-area-inset-bottom, 0px) + 76px) !important;
     right: 16px !important;
-    z-index: 2147483646 !important;
+    z-index: 2147483640 !important;
   }
 
   /* Mobile page scroll spacing:
@@ -5573,6 +5573,12 @@ a,
     font-size: 0.8rem !important;
     line-height: 1.4 !important;
   }
+}
+
+/* WorkChat High Performance Message Row (Zero-clipping for popups/dropdowns) */
+.chat-message-row {
+  position: relative;
+  will-change: transform, opacity;
 }
 
 /* AI Face Scanner & Success Screen Animations */

@@ -430,7 +430,10 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
       setRole(account.role || 'sale');
       setAvatar(account.avatar || '');
       setPhone(account.phone || '');
-      setIsActive(String(account.is_active ?? '1'));
+      const initialActive = account.is_active !== undefined && account.is_active !== null
+        ? String(account.is_active)
+        : (account.status === 'inactive' ? '0' : '1');
+      setIsActive(initialActive);
       const isSelf = currentUser && (String(currentUser.id) === String(account.id));
       setSignatureUrl(account.signature_url || account.signature_img || (isSelf ? (currentUser?.signature_url || null) : null));
 
@@ -441,6 +444,11 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
           const res = await fetchAPI(`consultant-profile?${param}`);
           if (res.success && res.data) {
             const d = res.data;
+            if (d.is_active !== undefined && d.is_active !== null) {
+              setIsActive(String(d.is_active));
+            } else if (d.status) {
+              setIsActive(d.status === 'inactive' ? '0' : '1');
+            }
             if (d.signature_url) {
               setSignatureUrl(d.signature_url);
             }
@@ -1143,8 +1151,12 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
         });
       }
 
-      if (account && String(account.id) === String(currentUser?.id)) {
-        updateUser({ job_title: jobTitle });
+      if (account) {
+        account.is_active = Number(isActive);
+        account.status = isActive === '1' ? 'active' : 'inactive';
+        if (String(account.id) === String(currentUser?.id)) {
+          updateUser({ job_title: jobTitle });
+        }
       }
 
       toast.success(account ? t('Cập nhật nhân sự thành công!') : t('Thêm mới nhân sự thành công!'));

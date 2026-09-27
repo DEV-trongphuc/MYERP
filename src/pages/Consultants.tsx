@@ -998,9 +998,9 @@ const ConsultantsInner = () => {
     }
   }, [statsModalOpen, statsConsultant, statsDateMode, statsStartDate, statsEndDate]);
 
-  const activeCount = users.filter(u => u.status === 'active').length;
+  const activeCount = users.filter(u => String(u.is_active) === '1' || (u.is_active === undefined && u.status === 'active')).length;
   const leaveCount = users.filter(u => u.status === 'leave').length;
-  const inactiveCount = users.filter(u => u.status === 'inactive').length;
+  const inactiveCount = users.filter(u => String(u.is_active) === '0' || (u.is_active === undefined && u.status === 'inactive')).length;
 
   const filteredUsers = React.useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
@@ -1040,7 +1040,7 @@ const ConsultantsInner = () => {
       <div className={isMobile ? "" : "page-header"} style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '16px', marginBottom: '1.5rem', position: 'relative', zIndex: 50 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: isMobile ? '1.25rem' : '1.75rem', flexWrap: 'wrap' }}>
-            {activeTab === 'teams' ? t('Quản lý Phòng ban') : t('Quản lý Tư vấn viên')}
+            {activeTab === 'teams' ? t('Quản lý Phòng ban') : t('Nhân sự công ty')}
             <button
               onClick={() => setShowInfoModal(true)}
               style={{
@@ -1232,7 +1232,7 @@ const ConsultantsInner = () => {
               </svg>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <span className="stat-label" style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('Đang nhận Data')}</span>
+              <span className="stat-label" style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('Đang hoạt động')}</span>
               <div className="stat-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.08)', color: 'var(--color-success)', flexShrink: 0 }}>
                 <CheckCircle size={16} />
               </div>

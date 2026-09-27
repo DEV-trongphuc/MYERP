@@ -51,6 +51,9 @@ interface UIStore {
   taskDrawer: { isOpen: boolean; task: any | null };
   openTaskDrawer: (taskOrId: any) => void;
   closeTaskDrawer: () => void;
+  expenseDrawer: { isOpen: boolean; expenseId: number | null };
+  openExpenseDrawer: (expenseId: number) => void;
+  closeExpenseDrawer: () => void;
 }
 
 const recentToastTimestamps = new Map<string, number>();
@@ -100,6 +103,11 @@ export const useUIStore = create<UIStore>((set) => ({
     set({ taskDrawer: { isOpen: true, task: taskObj } });
   },
   closeTaskDrawer: () => set({ taskDrawer: { isOpen: false, task: null } }),
+  expenseDrawer: { isOpen: false, expenseId: null },
+  openExpenseDrawer: (expenseId: number) => {
+    set({ expenseDrawer: { isOpen: true, expenseId: Number(expenseId) } });
+  },
+  closeExpenseDrawer: () => set({ expenseDrawer: { isOpen: false, expenseId: null } }),
   addToast: (message, type = 'info', action) => {
     // Deduplication check for string messages
     if (typeof message === 'string') {

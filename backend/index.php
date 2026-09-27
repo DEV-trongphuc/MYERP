@@ -957,6 +957,7 @@ switch ($resource) {
         elseif ($resourceId === 'messages' && $subResource && in_array($method, ['PUT', 'PATCH'], true)) $ctrl->editMessage($auth, (int)$subResource);
         elseif ($resourceId === 'messages' && $subResource && $method === 'DELETE') $ctrl->deleteMessage($auth, (int)$subResource);
         elseif ($resourceId === 'sync' && in_array($method, ['GET', 'POST'], true)) $ctrl->syncDelta($auth);
+        elseif ($resourceId === 'stream' && $method === 'GET') $ctrl->streamEvents($auth);
         elseif ($resourceId === 'staff' && $method === 'GET') $ctrl->getStaffDirectory($auth);
         elseif ($resourceId === 'search-erp' && $method === 'GET') $ctrl->searchErpEntities($auth);
         elseif ($resourceId === 'upload' && $method === 'POST') $ctrl->uploadChatFile($auth);

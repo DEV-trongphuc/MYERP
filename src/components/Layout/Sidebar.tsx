@@ -17,6 +17,7 @@ export interface SidebarItem {
   adminOnly?: boolean;
   badgeKey?: string;
   hideForRoles?: string[];
+  isChat?: boolean;
 }
 
 export interface SidebarGroup {

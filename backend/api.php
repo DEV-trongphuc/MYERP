@@ -6313,6 +6313,7 @@ switch ($action) {
                 c.vacation_mode, 
                 c.overtime_mode,
                 c.status,
+                COALESCE(c.is_active, a.is_active, 1) AS is_active,
                 c.last_login_at AS last_login,
                 IF(c.use_custom_work_hours = 1, c.work_start_time, (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_start_time' LIMIT 1)) AS work_start_time,
                 IF(c.use_custom_work_hours = 1, c.work_end_time, (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_end_time' LIMIT 1)) AS work_end_time,
@@ -6320,6 +6321,7 @@ switch ($action) {
                 t.name as team_name, 
                 t.branch as team_branch 
             FROM users c 
+            LEFT JOIN accounts a ON c.id = a.id
             LEFT JOIN teams t ON c.team_id = t.id 
             $where
             ORDER BY c.full_name ASC
@@ -14142,6 +14144,15 @@ switch ($action) {
             }
 
             if ($stmt->execute()) {
+                // Sync is_active & status to users table
+                $statusStr = ((int)$is_active === 1) ? 'active' : 'inactive';
+                $stmtUAct = $conn->prepare("UPDATE users SET is_active = ?, status = ? WHERE id = ?");
+                if ($stmtUAct) {
+                    $stmtUAct->bind_param("isi", $is_active, $statusStr, $id);
+                    $stmtUAct->execute();
+                    $stmtUAct->close();
+                }
+
                 // Sync job_title from input or address payload if available
                 $jt = $input['job_title'] ?? null;
                 if ($jt === null && !empty($address)) {
@@ -14378,7 +14389,7 @@ switch ($action) {
             exit;
         }
 
-        $stmtP = $conn->prepare("SELECT u.id, u.full_name AS name, u.email, u.phone, a.role, u.job_title, u.team_id, t.name AS team_name, u.status, u.leave_start, u.leave_end, u.work_start_time, u.work_end_time, u.work_schedule, u.avatar_url AS avatar, u.signature_url, u.vacation_mode, u.dob, u.gender, u.citizen_id, u.address, u.bank_name, u.bank_account, u.zalo_chat_id, u.telegram_chat_id, u.overtime_mode, u.permissions_json, u.extra_fields_json, u.manager_behavior_mode, u.use_custom_work_hours, u.bio FROM users u LEFT JOIN accounts a ON u.id = a.id LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ?");
+        $stmtP = $conn->prepare("SELECT u.id, u.full_name AS name, u.email, u.phone, a.role, u.job_title, u.team_id, t.name AS team_name, u.status, COALESCE(u.is_active, a.is_active, 1) AS is_active, u.leave_start, u.leave_end, u.work_start_time, u.work_end_time, u.work_schedule, u.avatar_url AS avatar, u.signature_url, u.vacation_mode, u.dob, u.gender, u.citizen_id, u.address, u.bank_name, u.bank_account, u.zalo_chat_id, u.telegram_chat_id, u.overtime_mode, u.permissions_json, u.extra_fields_json, u.manager_behavior_mode, u.use_custom_work_hours, u.bio FROM users u LEFT JOIN accounts a ON u.id = a.id LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ?");
         $stmtP->bind_param("i", $targetUserId);
         $stmtP->execute();
         $consultantProfile = $stmtP->get_result()->fetch_assoc();

@@ -8,29 +8,72 @@ import { BrandChatIcon } from './BrandChatIcon';
 
 export const ChatFloatingLauncher: React.FC = () => {
   const { user, token } = useAuth();
-  const { isOpen, openChat, closeChat, unreadTotal, fetchConversations, syncDelta, fetchStaffDirectory } = useChatStore();
+  const { 
+    isOpen, 
+    openChat, 
+    closeChat, 
+    unreadTotal, 
+    fetchConversations, 
+    syncDelta, 
+    fetchStaffDirectory,
+    initRealtimeSSE,
+    disconnectRealtimeSSE,
+    isRealtimeConnected
+  } = useChatStore();
 
-  // Intelligent adaptive polling with Page Visibility API (prevents bottleneck when inactive)
+  // 1. Establish Real-time SSE Stream for instant (< 50ms) push notifications
+  useEffect(() => {
+    if (!token || !user) return;
+    initRealtimeSSE(token);
+    return () => {
+      disconnectRealtimeSSE();
+    };
+  }, [token, user]);
+
+  // 2. Intelligent adaptive polling (acts as presence heartbeat & instant fallback)
   useEffect(() => {
     if (!token || !user) return;
     fetchConversations();
     fetchStaffDirectory();
 
     let timer: any = null;
+    let lastActiveTime = Date.now();
+
+    const onUserInteraction = () => {
+      lastActiveTime = Date.now();
+    };
+
+    window.addEventListener('mousemove', onUserInteraction, { passive: true });
+    window.addEventListener('keydown', onUserInteraction, { passive: true });
+    window.addEventListener('touchstart', onUserInteraction, { passive: true });
 
     const runPolling = () => {
       syncDelta();
-      const delay = document.hidden ? 25000 : 5000;
+      const isHidden = document.hidden;
+      const isIdle = Date.now() - lastActiveTime > 180000; // 3 minutes idle
+
+      let delay = 5000;
+      if (isHidden) {
+        delay = 35000; // 35s when tab is backgrounded
+      } else if (isRealtimeConnected) {
+        // SSE delivers messages in < 50ms, so polling is relaxed to a lightweight heartbeat
+        delay = isOpen ? 12000 : 25000;
+      } else if (isIdle && !isOpen) {
+        delay = 18000; // 18s when user hasn't interacted in 3 mins
+      } else if (isOpen) {
+        delay = 4000;  // 4s fallback when chat modal is open
+      }
       timer = setTimeout(runPolling, delay);
     };
 
-    timer = setTimeout(runPolling, 5000);
+    timer = setTimeout(runPolling, isRealtimeConnected ? 12000 : 5000);
 
     const handleVisibilityChange = () => {
       if (!document.hidden) {
         if (timer) clearTimeout(timer);
+        lastActiveTime = Date.now();
         syncDelta();
-        timer = setTimeout(runPolling, 5000);
+        timer = setTimeout(runPolling, isOpen ? 4000 : 5000);
       }
     };
 
@@ -39,8 +82,11 @@ export const ChatFloatingLauncher: React.FC = () => {
     return () => {
       if (timer) clearTimeout(timer);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('mousemove', onUserInteraction);
+      window.removeEventListener('keydown', onUserInteraction);
+      window.removeEventListener('touchstart', onUserInteraction);
     };
-  }, [token, user]);
+  }, [token, user, isOpen, isRealtimeConnected]);
 
   if (!token || !user) return null;
 

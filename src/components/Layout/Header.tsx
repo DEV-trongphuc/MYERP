@@ -16,6 +16,7 @@ import { CustomModal } from '../ui/CustomModal';
 import { NotificationSettingsModal } from '../ui/NotificationSettingsModal';
 import { useChatStore } from '../../store/chatStore';
 import { FeatureIntroModal } from '../chat/FeatureIntroModal';
+import { BrandChatIcon } from '../chat/BrandChatIcon';
 import { fetchAPI } from '../../utils/api';
 import { cleanNotificationText } from '../../utils/textUtils';
 import { prewarmSmartCheckInGPS } from '../ui/SmartCheckInModal';
@@ -209,19 +210,27 @@ export const Header = ({
   const location = useLocation();
   const isWs = isWorkspace ?? (location.pathname === '/workspace' || location.pathname === '/portal');
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
-  const { openChat, unreadTotal } = useChatStore();
+  const { openChat, unreadTotal, isOpen: isChatOpen } = useChatStore();
   const [showFeatureIntro, setShowFeatureIntro] = useState(false);
 
   useEffect(() => {
+    const handleOpenIntro = () => setShowFeatureIntro(true);
+    window.addEventListener('open-workchat-intro', handleOpenIntro);
+    (window as any).openWorkChatIntro = handleOpenIntro;
+
     if (user) {
-      const hasSeen = localStorage.getItem('has_seen_workchat_intro_v2');
+      const hasSeen = localStorage.getItem('has_seen_workchat_intro_v3');
       if (!hasSeen) {
         const timer = setTimeout(() => {
           setShowFeatureIntro(true);
-        }, 1500);
-        return () => clearTimeout(timer);
+        }, 1200);
+        return () => {
+          clearTimeout(timer);
+          window.removeEventListener('open-workchat-intro', handleOpenIntro);
+        };
       }
     }
+    return () => window.removeEventListener('open-workchat-intro', handleOpenIntro);
   }, [user]);
 
   // Compute shift schedule and work hours for today
@@ -1878,12 +1887,12 @@ export const Header = ({
             e.currentTarget.style.color = isWs ? 'rgba(255, 255, 255, 0.85)' : 'var(--color-text-light)';
           }}
         >
-          <MessageSquare size={19} />
+          <BrandChatIcon size={26} variant="squircle-red" />
           {unreadTotal > 0 ? (
             <span style={{
               position: 'absolute',
-              top: 2,
-              right: 2,
+              top: -2,
+              right: -2,
               minWidth: 16,
               height: 16,
               borderRadius: 8,
@@ -1901,25 +1910,28 @@ export const Header = ({
               {unreadTotal > 99 ? '99+' : unreadTotal}
             </span>
           ) : (
-            <span style={{
-              position: 'absolute',
-              top: -1,
-              right: -3,
-              padding: '1.5px 4px',
-              borderRadius: '6px',
-              background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-              color: 'white',
-              fontSize: '7.5px',
-              fontWeight: 900,
-              letterSpacing: '0.04em',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 2px 5px rgba(220, 38, 38, 0.45)',
-              lineHeight: 1
-            }}>
-              NEW
-            </span>
+            <div
+              style={{
+                position: 'absolute',
+                top: -9,
+                right: -7,
+                width: 23,
+                height: 23,
+                pointerEvents: 'none',
+                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.28))',
+                transition: 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)'
+              }}
+            >
+              <img
+                src="/stickers/ideas/ideas_1.webp"
+                alt="IDEAS Sticker"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain'
+                }}
+              />
+            </div>
           )}
         </button>
 
@@ -2463,11 +2475,13 @@ export const Header = ({
             if (lowercase === 'nhân sự công ty' || lowercase === 'nhân sự & lương') return { bg: 'linear-gradient(135deg, #8b5cf6, #5b21b6)', color: '#ffffff' };
             if (lowercase === 'lịch trình') return { bg: 'linear-gradient(135deg, #6366f1, #4338ca)', color: '#ffffff' };
             if (lowercase === 'phiếu lương cá nhân' || lowercase === 'phiếu lương') return { bg: 'linear-gradient(135deg, #ec4899, #be185d)', color: '#ffffff' };
+            if (lowercase === 'workchat' || lowercase === 'tin nhắn' || lowercase === 'tin nhắn nội bộ') return { bg: 'linear-gradient(135deg, #ef4444, #991b1b)', color: '#ffffff' };
             if (lowercase === 'ticket hỗ trợ' || lowercase === 'helpdesk') return { bg: 'linear-gradient(135deg, #ff7a00, #d05300)', color: '#ffffff' };
             if (lowercase === 'cài đặt hệ thống') return { bg: 'linear-gradient(135deg, #0ea5e9, #0284c7)', color: '#ffffff' };
             if (lowercase === 'huấn luyện ai') return { bg: 'linear-gradient(135deg, #bd1d2d, #8b101b)', color: '#ffffff' };
 
             // 2. Keyword fallback checks (ordered from specific to general)
+            if (lowercase.includes('workchat') || lowercase.includes('tin nhắn') || lowercase.includes('chat')) return { bg: 'linear-gradient(135deg, #ef4444, #991b1b)', color: '#ffffff' };
             if (lowercase.includes('dashboard')) return { bg: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', color: '#ffffff' };
             if (lowercase.includes('chấm công')) return { bg: 'linear-gradient(135deg, #ff7a00, #d05300)', color: '#ffffff' };
             if (lowercase.includes('bàn làm việc') || lowercase.includes('hoạt động')) return { bg: 'linear-gradient(135deg, #10b981, #047857)', color: '#ffffff' };
@@ -2501,6 +2515,8 @@ export const Header = ({
           };
 
           const ITEM_DESC: Record<string, string> = {
+            'WorkChat': 'Nhắn tin trao đổi công việc nội bộ và chia sẻ tài liệu',
+            'Tin nhắn nội bộ': 'Nhắn tin trao đổi công việc nội bộ và chia sẻ tài liệu',
             'Dashboard': 'Biểu đồ, chỉ số doanh thu và hiệu năng kinh doanh',
             'Bàn làm việc': 'Lịch trình cá nhân, danh sách nhiệm vụ và chấm công',
             'Báo cáo': 'Thống kê chi tiết, doanh thu và năng suất nhân sự',
@@ -2589,6 +2605,17 @@ export const Header = ({
             }
           }
 
+          // Ensure WorkChat is present in TỔNG QUAN for all roles in App Launcher
+          const overviewGroup = visibleGroups.find(g => g.title === 'TỔNG QUAN');
+          if (overviewGroup && !overviewGroup.items.some((it: any) => it.name === 'WorkChat')) {
+            overviewGroup.items.push({
+              name: 'WorkChat',
+              href: '#chat',
+              icon: MessageSquare,
+              isChat: true
+            });
+          }
+
           // Dynamic Group Re-ordering based on role - Put QUY TRÌNH & PHÊ DUYỆT at the beginning
           const GROUP_ORDER_BY_ROLE: Record<string, string[]> = {
             admin: ['QUY TRÌNH & PHÊ DUYỆT', 'TỔNG QUAN', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ', 'CÀI ĐẶT HỆ THỐNG'],
@@ -2629,6 +2656,7 @@ export const Header = ({
               'Quản lý công',
               'Dashboard',
               'Bàn làm việc',
+              'WorkChat',
               'Báo cáo',
               'Tiềm năng',
               'Pipeline',
@@ -2641,6 +2669,7 @@ export const Header = ({
               'Quản lý công',
               'Dashboard',
               'Bàn làm việc',
+              'WorkChat',
               'Báo cáo',
               'Tiềm năng',
               'Pipeline',
@@ -2653,6 +2682,7 @@ export const Header = ({
               'Quản lý công',
               'Dashboard',
               'Bàn làm việc',
+              'WorkChat',
               'Báo cáo',
               'Tiềm năng',
               'Pipeline',
@@ -2665,6 +2695,7 @@ export const Header = ({
               'Quản lý công',
               'Dashboard',
               'Bàn làm việc',
+              'WorkChat',
               'Báo cáo',
               'Tiềm năng',
               'Pipeline',
@@ -2677,6 +2708,7 @@ export const Header = ({
               'Quản lý công',
               'Dashboard',
               'Bàn làm việc',
+              'WorkChat',
               'Tiềm năng',
               'Pipeline',
               'Báo cáo',
@@ -2689,6 +2721,7 @@ export const Header = ({
               'Quản lý công',
               'Dashboard',
               'Bàn làm việc',
+              'WorkChat',
               'Tiềm năng',
               'Pipeline',
               'Báo cáo',
@@ -2699,6 +2732,7 @@ export const Header = ({
               'Quy trình',
               'Quản lý công',
               'Bàn làm việc',
+              'WorkChat',
               'Tiềm năng',
               'Pipeline',
               'Phiếu lương',
@@ -2711,6 +2745,7 @@ export const Header = ({
               'Quy trình',
               'Quản lý công',
               'Bàn làm việc',
+              'WorkChat',
               'Tiềm năng',
               'Pipeline',
               'Phiếu lương',
@@ -2723,6 +2758,7 @@ export const Header = ({
               'Quy trình',
               'Quản lý công',
               'Dashboard',
+              'WorkChat',
               'Sales Order',
               'Purchase Order',
               'Phiếu lương',
@@ -2736,6 +2772,7 @@ export const Header = ({
               'Quản lý công',
               'Nhân sự & Lương',
               'Phiếu lương',
+              'WorkChat',
               'Phòng ban',
               'Nhân sự công ty',
               'Lịch trình',
@@ -2745,6 +2782,7 @@ export const Header = ({
             marketing: [
               'Quy trình',
               'Quản lý công',
+              'WorkChat',
               'Chiến dịch',
               'Tiềm năng',
               'Nhật ký Data',
@@ -2758,6 +2796,7 @@ export const Header = ({
               'Quản lý công',
               'Dashboard',
               'Bàn làm việc',
+              'WorkChat',
               'Tiềm năng',
               'Pipeline',
               'Phiếu lương',
@@ -2769,6 +2808,7 @@ export const Header = ({
               'Quản lý công',
               'Dashboard',
               'Bàn làm việc',
+              'WorkChat',
               'Tiềm năng',
               'Pipeline',
               'Phiếu lương',
@@ -2782,6 +2822,7 @@ export const Header = ({
             'Quản lý công',
             'Dashboard',
             'Bàn làm việc',
+            'WorkChat',
             'Tiềm năng',
             'Pipeline',
             'Báo cáo',
@@ -2842,6 +2883,11 @@ export const Header = ({
                           <div
                             key={item.name}
                             onClick={() => {
+                              if (item.name === 'WorkChat' || item.name === 'Tin nhắn nội bộ' || (item as any).isChat || item.href === '#chat') {
+                                openChat();
+                                setIsAppLauncherOpen(false);
+                                return;
+                              }
                               navigate(item.href);
                               setIsAppLauncherOpen(false);
                             }}
@@ -2909,6 +2955,11 @@ export const Header = ({
                             <div
                               key={item.name}
                               onClick={() => {
+                                if (item.name === 'WorkChat' || item.name === 'Tin nhắn nội bộ' || (item as any).isChat || item.href === '#chat') {
+                                  openChat();
+                                  setIsAppLauncherOpen(false);
+                                  return;
+                                }
                                 navigate(item.href);
                                 setIsAppLauncherOpen(false);
                               }}
@@ -2976,6 +3027,11 @@ export const Header = ({
                               <div
                                 key={item.name}
                                 onClick={() => {
+                                  if (item.name === 'WorkChat' || item.name === 'Tin nhắn nội bộ' || (item as any).isChat || item.href === '#chat') {
+                                    openChat();
+                                    setIsAppLauncherOpen(false);
+                                    return;
+                                  }
                                   navigate(item.href);
                                   setIsAppLauncherOpen(false);
                                 }}
@@ -3197,9 +3253,9 @@ export const Header = ({
           <style>{`
             @media (max-width: 768px) {
               .floating-checkin-btn {
-                bottom: 80px !important;
+                bottom: calc(var(--mobile-bottom-nav-height, 62px) + env(safe-area-inset-bottom, 0px) + 76px) !important;
                 right: 16px !important;
-                z-index: 2147483646 !important;
+                z-index: 2147483640 !important;
               }
             }
             @keyframes pulse-ring {
@@ -3212,6 +3268,7 @@ export const Header = ({
             }
           `}</style>
           {(() => {
+            if (isChatOpen) return null;
             const activeCheckIn = todayCheckIn || headerCheckIn;
             const isStillLoadingCheckIn = !activeCheckIn && (isCheckInLoading !== undefined ? isCheckInLoading : internalCheckInLoading);
             if (isStillLoadingCheckIn) return null;
@@ -3300,7 +3357,7 @@ export const Header = ({
                   justifyContent: 'center',
                   cursor: 'pointer',
                   boxShadow: btnShadow,
-                  zIndex: 2147483646,
+                  zIndex: 2147483640,
                   transition: 'all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)',
                   outline: 'none'
                 }}

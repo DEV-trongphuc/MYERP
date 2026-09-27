@@ -375,50 +375,54 @@ export const StickerPickerModal: React.FC<StickerPickerModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setIdeasGender('male')}
+                    title="Bộ Nam (12 nhãn dán)"
                     style={{
                       flex: 1,
-                      padding: '6px 10px',
+                      padding: '7px 12px',
                       borderRadius: '8px',
                       border: 'none',
                       background: ideasGender === 'male' ? '#ffffff' : 'transparent',
-                      color: ideasGender === 'male' ? '#dc2626' : '#64748b',
-                      fontWeight: ideasGender === 'male' ? 800 : 600,
-                      fontSize: '0.78rem',
+                      color: ideasGender === 'male' ? '#2563eb' : '#94a3b8',
                       cursor: 'pointer',
-                      boxShadow: ideasGender === 'male' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
+                      boxShadow: ideasGender === 'male' ? '0 2px 6px rgba(37, 99, 235, 0.15)' : 'none',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: '5px',
+                      gap: '6px',
                       transition: 'all 0.15s ease'
                     }}
                   >
-                    <span>👨 Chàng cử nhân</span>
-                    <span style={{ fontSize: '0.7rem', opacity: 0.8 }}>(12)</span>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: ideasGender === 'male' ? '#2563eb' : '#94a3b8' }}>
+                      <circle cx="10" cy="14" r="5" />
+                      <line x1="19" y1="5" x2="13.6" y2="10.4" />
+                      <polyline points="19 11 19 5 13 5" />
+                    </svg>
                   </button>
                   <button
                     type="button"
                     onClick={() => setIdeasGender('female')}
+                    title="Bộ Nữ (12 nhãn dán)"
                     style={{
                       flex: 1,
-                      padding: '6px 10px',
+                      padding: '7px 12px',
                       borderRadius: '8px',
                       border: 'none',
                       background: ideasGender === 'female' ? '#ffffff' : 'transparent',
-                      color: ideasGender === 'female' ? '#dc2626' : '#64748b',
-                      fontWeight: ideasGender === 'female' ? 800 : 600,
-                      fontSize: '0.78rem',
+                      color: ideasGender === 'female' ? '#ec4899' : '#94a3b8',
                       cursor: 'pointer',
-                      boxShadow: ideasGender === 'female' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
+                      boxShadow: ideasGender === 'female' ? '0 2px 6px rgba(236, 72, 153, 0.15)' : 'none',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: '5px',
+                      gap: '6px',
                       transition: 'all 0.15s ease'
                     }}
                   >
-                    <span>👩 Nàng cử nhân</span>
-                    <span style={{ fontSize: '0.7rem', opacity: 0.8 }}>(12)</span>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: ideasGender === 'female' ? '#ec4899' : '#94a3b8' }}>
+                      <circle cx="12" cy="9" r="5" />
+                      <line x1="12" y1="14" x2="12" y2="21" />
+                      <line x1="9" y1="18" x2="15" y2="18" />
+                    </svg>
                   </button>
                 </div>
               )}

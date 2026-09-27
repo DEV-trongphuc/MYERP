@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUIStore } from '../../store/uiStore';
 import { AppIcon } from '../common/AppIcons';
+import { useChatStore } from '../../store/chatStore';
 import api from '../../api/axios';
 
 interface SearchItem {
@@ -105,6 +106,8 @@ export const CommandPalette: React.FC = () => {
         items: [
           { name: 'Dashboard', title: 'Tổng quan CRM (Dashboard)', subtitle: 'Biểu đồ, chỉ số doanh thu và hiệu năng kinh doanh', route: '/', iconName: 'Dashboard' },
           { name: 'Bàn làm việc', title: 'Bàn làm việc (Workspace)', subtitle: 'Lịch trình cá nhân, danh sách nhiệm vụ và trợ lý AI', route: '/workspace', iconName: 'Bàn làm việc' },
+          { name: 'WorkChat', title: 'WorkChat - Tin nhắn nội bộ', subtitle: 'Trò chuyện 1-1, nhóm phòng ban, gửi ảnh & sticker', route: '#chat', iconName: 'WorkChat' },
+          { name: 'Giới thiệu WorkChat', title: 'Giới thiệu WorkChat & Bộ Nhãn Dán IDEAS', subtitle: 'Xem bảng giới thiệu tính năng WorkChat & bộ sticker 3D Pixar', route: '#workchat-intro', iconName: 'WorkChat' },
           { name: 'Lịch trình', title: 'Lịch trình & Lịch biểu', subtitle: 'Thời khóa biểu đào tạo, sự kiện & lịch học', route: '/calendar', iconName: 'Lịch trình' },
           { name: 'Bảng tin nội bộ', title: 'Bảng tin Doanh nghiệp (Feed)', subtitle: 'Tin tức nội bộ, thông báo & vinh danh nhân viên', route: '/feed', iconName: 'Bảng tin nội bộ' }
         ]
@@ -160,12 +163,13 @@ export const CommandPalette: React.FC = () => {
     })).filter(g => g.items.length > 0);
   }, [isGlobalAdmin, isHR, isAccountant, isMarketing]);
 
-  // Top 7 Pinned / Recent Launcher items
+  // Top 8 Pinned / Recent Launcher items
   const recentQuickLaunch = useMemo(() => [
     { name: 'Quy trình', label: 'Quy trình', route: '/approvals' },
     { name: 'Quản lý công', label: 'Quản lý công', route: '/attendance' },
     { name: 'Dashboard', label: 'Dashboard', route: '/' },
     { name: 'Bàn làm việc', label: 'Bàn làm việc', route: '/workspace' },
+    { name: 'WorkChat', label: 'WorkChat', route: '#chat', isChat: true },
     { name: 'Tiềm năng', label: 'Tiềm năng', route: '/contacts' },
     { name: 'Pipeline', label: 'Pipeline', route: '/deals' },
     { name: 'Nhật ký Data', label: 'Nhật ký Data', route: '/data' }
@@ -317,7 +321,13 @@ export const CommandPalette: React.FC = () => {
             iconName: nav.iconName,
             action: () => {
               setOpen(false);
-              navigate(nav.route);
+              if (nav.route === '#workchat-intro') {
+                window.dispatchEvent(new CustomEvent('open-workchat-intro'));
+              } else if (nav.route === '#chat' || nav.iconName === 'WorkChat') {
+                useChatStore.getState().openChat();
+              } else {
+                navigate(nav.route);
+              }
             }
           });
         }
@@ -530,7 +540,7 @@ export const CommandPalette: React.FC = () => {
 
                   <div style={{
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(7, 1fr)',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(72px, 1fr))',
                     gap: '10px'
                   }}>
                     {recentQuickLaunch.map(item => (
@@ -538,7 +548,11 @@ export const CommandPalette: React.FC = () => {
                         key={item.name}
                         onClick={() => {
                           setOpen(false);
-                          navigate(item.route);
+                          if (item.route === '#chat' || (item as any).isChat) {
+                            useChatStore.getState().openChat();
+                          } else {
+                            navigate(item.route);
+                          }
                         }}
                         style={{
                           display: 'flex',

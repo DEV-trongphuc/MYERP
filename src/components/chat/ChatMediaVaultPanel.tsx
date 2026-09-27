@@ -4,7 +4,7 @@ import {
   ExternalLink, ChevronDown, ChevronUp, ChevronLeft, Check,
   FileArchive, FileSpreadsheet, Film, Globe, Search, Trash2,
   CheckSquare, Plus, Clock, AlertCircle, Shield, Crown, LogOut,
-  MoreVertical, UserMinus, Loader2
+  MoreVertical, UserMinus, Loader2, Info, Share2
 } from 'lucide-react';
 import api from '../../api/axios';
 import { useChatStore } from '../../store/chatStore';
@@ -22,9 +22,16 @@ interface Props {
   onOpenAddMember: () => void;
   isMaximized?: boolean;
   onCloseChat?: () => void;
+  initialCategory?: 'all' | 'image' | 'document' | 'link' | 'task';
 }
 
-export const ChatMediaVaultPanel: React.FC<Props> = ({ onClose, onOpenAddMember, isMaximized, onCloseChat }) => {
+export const ChatMediaVaultPanel: React.FC<Props> = ({ 
+  onClose, 
+  onOpenAddMember, 
+  isMaximized, 
+  onCloseChat,
+  initialCategory = 'image'
+}) => {
   const { openTaskDrawer } = useUIStore();
   const { user } = useAuth();
   const { 
@@ -43,7 +50,7 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({ onClose, onOpenAddMember,
     link: true,
     task: true
   });
-  const [drilldownCategory, setDrilldownCategory] = useState<'all' | 'image' | 'document' | 'link' | 'task'>('all');
+  const [drilldownCategory, setDrilldownCategory] = useState<'all' | 'image' | 'document' | 'link' | 'task'>(initialCategory);
   const [drilldownSearch, setDrilldownSearch] = useState('');
   const [selectedSenderId, setSelectedSenderId] = useState<number | 'all'>('all');
   const [selectedDateFilter, setSelectedDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
@@ -206,10 +213,16 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({ onClose, onOpenAddMember,
 
   const isGroup = activeConversation.type === 'group';
 
-  // Group vault items
-  const mediaItems = vaultItems.filter((i) => i.category === 'image' || i.category === 'video');
-  const fileItems = vaultItems.filter((i) => i.category === 'document');
-  const linkItems = vaultItems.filter((i) => i.category === 'link');
+  // Group vault items (ordered strictly newest to oldest)
+  const mediaItems = vaultItems
+    .filter((i) => i.category === 'image' || i.category === 'video')
+    .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime() || b.id - a.id);
+  const fileItems = vaultItems
+    .filter((i) => i.category === 'document')
+    .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime() || b.id - a.id);
+  const linkItems = vaultItems
+    .filter((i) => i.category === 'link')
+    .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime() || b.id - a.id);
 
   // Senders list for filter dropdown
   const sendersList = React.useMemo(() => {
@@ -313,34 +326,67 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({ onClose, onOpenAddMember,
       : 'công việc';
 
     return (
-      <div style={{ width: '100%', height: '100%', background: '#ffffff', display: 'flex', flexDirection: 'column', borderLeft: '1px solid #e2e8f0' }}>
-        {/* Header: < Kho lưu trữ     Chọn */}
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc' }}>
-          <button
-            type="button"
-            onClick={() => {
-              setDrilldownCategory('all');
-              setIsSelectMode(false);
-              setSelectedItemIds([]);
-            }}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', color: '#0f172a', fontWeight: 700, fontSize: '0.85rem', padding: 0 }}
-            title="Quay lại thông tin hội thoại"
-          >
-            <ChevronLeft size={20} />
-          </button>
-          <span style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a' }}>
-            Kho lưu trữ
-          </span>
-          <button
-            type="button"
-            onClick={() => {
-              setIsSelectMode(!isSelectMode);
-              setSelectedItemIds([]);
-            }}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2563eb', fontWeight: 700, fontSize: '0.85rem', padding: '2px 4px' }}
-          >
-            {isSelectMode ? 'Hủy' : 'Chọn'}
-          </button>
+      <div style={{ width: '100%', height: '100%', background: '#ffffff', display: 'flex', flexDirection: 'column', borderLeft: '1px solid #e2e8f0', color: '#0f172a' }}>
+        {/* Header: < Kho lưu trữ        (Info)  Chọn  X */}
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#ffffff' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button
+              type="button"
+              onClick={() => {
+                setDrilldownCategory('all');
+                setIsSelectMode(false);
+                setSelectedItemIds([]);
+              }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#334155', padding: '4px', borderRadius: '6px' }}
+              title="Quay lại thông tin hội thoại"
+            >
+              <ChevronLeft size={22} />
+            </button>
+            <span style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.2px' }}>
+              Kho lưu trữ
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <button
+              type="button"
+              onClick={() => {
+                setDrilldownCategory('all');
+                setIsSelectMode(false);
+                setSelectedItemIds([]);
+              }}
+              style={{ background: '#f8fafc', border: '1px solid #e2e8f0', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', padding: '5px 7px', borderRadius: '6px' }}
+              title="Thông tin cuộc trò chuyện"
+            >
+              <Info size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsSelectMode(!isSelectMode);
+                setSelectedItemIds([]);
+              }}
+              style={{
+                background: isSelectMode ? '#fef2f2' : '#f8fafc',
+                border: isSelectMode ? '1px solid #fecaca' : '1px solid #e2e8f0',
+                cursor: 'pointer',
+                color: isSelectMode ? '#dc2626' : '#2563eb',
+                fontWeight: 700,
+                fontSize: '0.8rem',
+                padding: '4px 9px',
+                borderRadius: '6px'
+              }}
+            >
+              {isSelectMode ? 'Hủy' : 'Chọn'}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', padding: '4px', borderRadius: '6px' }}
+              title="Đóng kho lưu trữ"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         {/* Navigation Tabs: Ảnh/Video | Files | Links */}
@@ -362,10 +408,10 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({ onClose, onOpenAddMember,
                   padding: '10px 0',
                   background: 'none',
                   border: 'none',
-                  borderBottom: isActive ? '2.5px solid #2563eb' : '2.5px solid transparent',
-                  color: isActive ? '#2563eb' : '#64748b',
-                  fontWeight: isActive ? 800 : 600,
-                  fontSize: '0.825rem',
+                  borderBottom: isActive ? '2.5px solid #dc2626' : '2.5px solid transparent',
+                  color: isActive ? '#dc2626' : '#64748b',
+                  fontWeight: isActive ? 750 : 600,
+                  fontSize: '0.84rem',
                   cursor: 'pointer',
                   transition: 'all 0.15s ease'
                 }}
@@ -376,69 +422,77 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({ onClose, onOpenAddMember,
           })}
         </div>
 
-        {/* Filter Dropdowns: [Người gửi ▾]  [Ngày gửi ▾] */}
-        <div style={{ padding: '8px 12px', display: 'flex', gap: '8px', borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}>
-          <select
-            value={selectedSenderId}
-            onChange={(e) => setSelectedSenderId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-            style={{
-              flex: 1,
-              padding: '6px 8px',
-              borderRadius: '8px',
-              border: '1px solid #cbd5e1',
-              background: '#ffffff',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              color: '#334155',
-              outline: 'none',
-              cursor: 'pointer'
-            }}
-          >
-            <option value="all">Người gửi ▾</option>
-            {sendersList.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
+        {/* Filter Dropdown Pills: [Người gửi ▾]  [Ngày gửi ▾] */}
+        <div style={{ padding: '8px 14px', display: 'flex', gap: '8px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+          <div style={{ position: 'relative', flex: 1 }}>
+            <select
+              value={selectedSenderId}
+              onChange={(e) => setSelectedSenderId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+              style={{
+                width: '100%',
+                padding: '6px 26px 6px 12px',
+                borderRadius: '20px',
+                border: '1px solid #cbd5e1',
+                background: '#ffffff',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                color: '#1e293b',
+                appearance: 'none',
+                outline: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              <option value="all">Người gửi</option>
+              {sendersList.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+            <ChevronDown size={14} color="#64748b" style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+          </div>
 
-          <select
-            value={selectedDateFilter}
-            onChange={(e) => setSelectedDateFilter(e.target.value as any)}
-            style={{
-              flex: 1,
-              padding: '6px 8px',
-              borderRadius: '8px',
-              border: '1px solid #cbd5e1',
-              background: '#ffffff',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              color: '#334155',
-              outline: 'none',
-              cursor: 'pointer'
-            }}
-          >
-            <option value="all">Ngày gửi ▾</option>
-            <option value="today">Hôm nay</option>
-            <option value="week">7 ngày qua</option>
-            <option value="month">30 ngày qua</option>
-          </select>
+          <div style={{ position: 'relative', flex: 1 }}>
+            <select
+              value={selectedDateFilter}
+              onChange={(e) => setSelectedDateFilter(e.target.value as any)}
+              style={{
+                width: '100%',
+                padding: '6px 26px 6px 12px',
+                borderRadius: '20px',
+                border: '1px solid #cbd5e1',
+                background: '#ffffff',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                color: '#1e293b',
+                appearance: 'none',
+                outline: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              <option value="all">Ngày gửi</option>
+              <option value="today">Hôm nay</option>
+              <option value="week">7 ngày qua</option>
+              <option value="month">30 ngày qua</option>
+            </select>
+            <ChevronDown size={14} color="#64748b" style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+          </div>
         </div>
 
         {/* Optional Search */}
-        <div style={{ padding: '6px 12px', borderBottom: '1px solid #f1f5f9' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#f1f5f9', borderRadius: '8px', padding: '5px 10px' }}>
-            <Search size={13} color="#94a3b8" />
+        <div style={{ padding: '8px 14px', background: '#ffffff', borderBottom: '1px solid #f1f5f9' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#f8fafc', borderRadius: '8px', padding: '6px 12px', border: '1px solid #e2e8f0' }}>
+            <Search size={14} color="#64748b" />
             <input
               type="text"
               placeholder="Tìm kiếm nội dung..."
               value={drilldownSearch}
               onChange={(e) => setDrilldownSearch(e.target.value)}
-              style={{ background: 'transparent', border: 'none', outline: 'none', fontSize: '0.78rem', width: '100%' }}
+              style={{ background: 'transparent', border: 'none', outline: 'none', fontSize: '0.8rem', width: '100%', color: '#0f172a' }}
             />
           </div>
         </div>
 
         {/* Items Grouped by Date */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 14px', background: '#f8fafc' }}>
           {filteredItems.length === 0 ? (
             <div style={{ textAlign: 'center', color: '#94a3b8', padding: '40px 10px', fontSize: '0.85rem' }}>
               Chưa có {categoryItemName} nào phù hợp
@@ -446,13 +500,13 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({ onClose, onOpenAddMember,
           ) : (
             dateGroups.map((grp) => (
               <div key={grp.dateLabel} style={{ marginBottom: '18px' }}>
-                {/* Date header: e.g. "Ngày 27 Tháng 9" */}
-                <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f172a', marginBottom: '8px' }}>
+                {/* Date header */}
+                <div style={{ fontSize: '0.82rem', fontWeight: 750, color: '#475569', marginBottom: '8px', marginTop: '4px' }}>
                   {grp.dateLabel}
                 </div>
 
                 {activeTab === 'image' ? (
-                  /* 3-column media grid */
+                  /* 3-column media grid with square aspect ratio */
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
                     {grp.items.map((it) => {
                       const isSelected = selectedItemIds.includes(it.id);
@@ -475,6 +529,7 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({ onClose, onOpenAddMember,
                             background: '#f1f5f9',
                             position: 'relative',
                             border: isSelected ? '2.5px solid #2563eb' : '1px solid #e2e8f0',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
                             transition: 'transform 0.15s ease'
                           }}
                           className="hover-scale"
@@ -490,19 +545,19 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({ onClose, onOpenAddMember,
                             <div
                               style={{
                                 position: 'absolute',
-                                top: '6px',
-                                right: '6px',
+                                top: '5px',
+                                right: '5px',
                                 width: '20px',
                                 height: '20px',
                                 borderRadius: '50%',
-                                background: isSelected ? '#2563eb' : 'rgba(0, 0, 0, 0.4)',
+                                background: isSelected ? '#2563eb' : 'rgba(0, 0, 0, 0.45)',
                                 border: '1.5px solid #ffffff',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center'
                               }}
                             >
-                              {isSelected && <Check size={12} color="#ffffff" />}
+                              {isSelected && <Check size={12} color="#ffffff" strokeWidth={3} />}
                             </div>
                           )}
                         </div>
@@ -510,7 +565,7 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({ onClose, onOpenAddMember,
                     })}
                   </div>
                 ) : activeTab === 'document' ? (
-                  /* Document file list */
+                  /* Document file list grouped by date */
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {grp.items.map((it) => {
                       const fmt = getFileFormatConfig(it.file_name || it.file_url);
@@ -525,21 +580,22 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({ onClose, onOpenAddMember,
                             display: 'flex',
                             alignItems: 'center',
                             gap: '10px',
-                            padding: '8px 10px',
-                            background: isSelected ? '#eff6ff' : '#f8fafc',
-                            borderRadius: '10px',
+                            padding: '10px 12px',
+                            background: isSelected ? '#eff6ff' : '#ffffff',
+                            borderRadius: '8px',
                             border: isSelected ? '1.5px solid #2563eb' : '1px solid #e2e8f0',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
                             cursor: isSelectMode ? 'pointer' : 'default'
                           }}
                         >
-                          <div style={{ width: 34, height: 34, borderRadius: '8px', background: fmt.bg || '#f1f5f9', color: fmt.text || '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <div style={{ width: 36, height: 36, borderRadius: '8px', background: fmt.bg || '#f1f5f9', color: fmt.text || '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                             <FileText size={18} />
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: '0.82rem', fontWeight: 650, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <div style={{ fontSize: '0.84rem', fontWeight: 650, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                               {it.file_name || it.file_url}
                             </div>
-                            <div style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                            <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px' }}>
                               {it.file_size ? formatFileSize(it.file_size) : ''} • {it.sender_name || 'Đồng nghiệp'}
                             </div>
                           </div>
@@ -548,22 +604,23 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({ onClose, onOpenAddMember,
                             target="_blank"
                             download={it.file_name}
                             rel="noreferrer"
-                            style={{ color: '#64748b', padding: '6px' }}
+                            style={{ color: '#64748b', padding: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                             onClick={(e) => e.stopPropagation()}
                             title="Tải xuống"
                           >
-                            <Download size={15} />
+                            <Download size={16} />
                           </a>
                         </div>
                       );
                     })}
                   </div>
                 ) : activeTab === 'link' ? (
-                  /* Shared link list */
+                  /* Shared link list grouped by date */
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {grp.items.map((it) => {
                       let hostname = 'liên kết';
                       try { hostname = new URL(it.file_url).hostname; } catch {}
+                      const isSelected = selectedItemIds.includes(it.id);
                       return (
                         <a
                           key={it.id}
@@ -574,25 +631,26 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({ onClose, onOpenAddMember,
                             display: 'flex',
                             alignItems: 'center',
                             gap: '10px',
-                            padding: '8px 10px',
-                            borderRadius: '10px',
-                            background: '#f8fafc',
-                            border: '1px solid #e2e8f0',
+                            padding: '10px 12px',
+                            borderRadius: '8px',
+                            background: isSelected ? '#eff6ff' : '#ffffff',
+                            border: isSelected ? '1.5px solid #2563eb' : '1px solid #e2e8f0',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
                             textDecoration: 'none'
                           }}
                         >
-                          <div style={{ width: 34, height: 34, borderRadius: '8px', background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                            <Globe size={16} />
+                          <div style={{ width: 36, height: 36, borderRadius: '8px', background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <Globe size={18} />
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: '0.82rem', fontWeight: 650, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <div style={{ fontSize: '0.84rem', fontWeight: 650, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                               {it.file_name || it.file_url}
                             </div>
-                            <div style={{ fontSize: '0.7rem', color: '#2563eb', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <div style={{ fontSize: '0.72rem', color: '#2563eb', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '2px' }}>
                               {hostname} • {it.sender_name || 'Đồng nghiệp'}
                             </div>
                           </div>
-                          <ExternalLink size={14} color="#94a3b8" />
+                          <ExternalLink size={15} color="#94a3b8" />
                         </a>
                       );
                     })}
@@ -609,9 +667,10 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({ onClose, onOpenAddMember,
                           alignItems: 'flex-start',
                           gap: '10px',
                           padding: '10px 12px',
-                          background: '#f8fafc',
-                          borderRadius: '10px',
+                          background: '#ffffff',
+                          borderRadius: '8px',
                           border: '1px solid #e2e8f0',
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
                           cursor: 'pointer'
                         }}
                       >
@@ -637,10 +696,104 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({ onClose, onOpenAddMember,
           )}
         </div>
 
-        {/* Footer: e.g. "2 ảnh trong 2026" */}
-        <div style={{ padding: '10px 16px', textAlign: 'center', fontSize: '0.78rem', color: '#64748b', borderTop: '1px solid #e2e8f0', background: '#f8fafc', fontWeight: 550 }}>
-          {filteredItems.length} {categoryItemName} trong {new Date().getFullYear()}
-        </div>
+        {/* Bottom bar when in Select Mode */}
+        {isSelectMode ? (
+          <div style={{
+            padding: '10px 16px',
+            background: '#ffffff',
+            borderTop: '1px solid #e2e8f0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between'
+          }}>
+            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+              Đã chọn <strong style={{ color: '#0f172a' }}>{selectedItemIds.length}</strong> mục
+            </span>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                disabled={selectedItemIds.length === 0}
+                onClick={() => {
+                  selectedItemIds.forEach((id) => {
+                    const it = vaultItems.find((v) => v.id === id);
+                    if (it?.file_url) {
+                      const a = document.createElement('a');
+                      a.href = it.file_url;
+                      a.download = it.file_name || 'download';
+                      a.target = '_blank';
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                    }
+                  });
+                  toast.success(`Đang tải xuống ${selectedItemIds.length} tệp`);
+                }}
+                style={{
+                  background: selectedItemIds.length > 0 ? '#2563eb' : '#f1f5f9',
+                  color: selectedItemIds.length > 0 ? '#ffffff' : '#94a3b8',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '6px 14px',
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  cursor: selectedItemIds.length > 0 ? 'pointer' : 'not-allowed'
+                }}
+              >
+                Tải xuống
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* Footer: e.g. "24 ảnh trong 2026" */
+          <div style={{ padding: '10px 16px', textAlign: 'center', fontSize: '0.78rem', color: '#64748b', borderTop: '1px solid #e2e8f0', background: '#ffffff', fontWeight: 550 }}>
+            {filteredItems.length} {categoryItemName} trong {new Date().getFullYear()}
+          </div>
+        )}
+
+        {/* Lightbox Preview Modal */}
+        {selectedPreviewImage && (
+          <div
+            onClick={() => setSelectedPreviewImage(null)}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0, 0, 0, 0.92)',
+              backdropFilter: 'blur(8px)',
+              zIndex: 2147483647,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '20px'
+            }}
+          >
+            <img
+              src={selectedPreviewImage}
+              alt="Preview"
+              style={{ maxWidth: '92vw', maxHeight: '88vh', borderRadius: '10px', objectFit: 'contain', boxShadow: '0 20px 50px rgba(0,0,0,0.7)' }}
+              onClick={(e) => e.stopPropagation()}
+            />
+            <button
+              onClick={() => setSelectedPreviewImage(null)}
+              style={{
+                position: 'absolute',
+                top: '20px',
+                right: '20px',
+                background: 'rgba(255, 255, 255, 0.15)',
+                border: 'none',
+                borderRadius: '50%',
+                width: '40px',
+                height: '40px',
+                color: '#ffffff',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <X size={20} />
+            </button>
+          </div>
+        )}
       </div>
     );
   }

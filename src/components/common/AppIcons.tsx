@@ -868,6 +868,33 @@ export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '
     );
   }
 
+  // 38. WORKCHAT / TIN NHẮN (Đỏ Ruby - Thẻ Hội Thoại 2 Chiều Đồng Bộ Chuẩn)
+  if (normName.includes('workchat') || normName.includes('chat') || normName.includes('tin nhắn') || normName.includes('tin nhan') || normName.includes('trò chuyện') || normName.includes('tro chuyen') || normName === 'message' || normName === 'messages') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_wc_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#ef4444" />
+            <stop offset="100%" stopColor="#991b1b" />
+          </linearGradient>
+          {filterDef('ai_wc_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_wc_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        {/* White Card base */}
+        <rect x="13" y="14" width="30" height="28" rx="5.5" fill="#ffffff" filter="url(#ai_wc_sh)" />
+        {/* Outgoing Red Bubble */}
+        <path d="M21 18H35C36.6569 18 38 19.3431 38 21V25C38 26.6569 36.6569 28 35 28H25L21 31.5V28C19.8954 28 19 27.1046 19 26V20C19 18.8954 19.8954 18 21 18Z" fill="#dc2626" />
+        <circle cx="25" cy="23" r="1.3" fill="#ffffff" />
+        <circle cx="28.5" cy="23" r="1.3" fill="#ffffff" />
+        <circle cx="32" cy="23" r="1.3" fill="#ffffff" />
+        {/* Incoming Grey Bubble */}
+        <path d="M17 33C17 31.8954 17.8954 31 19 31H31C32.1046 31 33 31.8954 33 33V35.5C33 36.6046 32.1046 37.5 31 37.5H29L26 39.5V37.5H19C17.8954 37.5 17 36.6046 17 35.5V33Z" fill="#f1f5f9" stroke="#e2e8f0" strokeWidth="0.8" />
+        <rect x="20" y="33.8" width="8" height="1.4" rx="0.7" fill="#94a3b8" />
+      </svg>
+    );
+  }
+
   // DEFAULT FALLBACK (Xanh Dương - Square Widget)
   return (
     <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>

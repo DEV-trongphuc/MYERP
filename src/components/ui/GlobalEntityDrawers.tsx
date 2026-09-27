@@ -1,12 +1,19 @@
 import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { useUIStore } from '../../store/uiStore';
+import { useAuthStore } from '../../store/authStore';
 import api from '../../api/axios';
 
 const CustomerProfileDrawer = lazy(() => import('../../pages/CustomerProfileDrawer').then(module => ({ default: module.CustomerProfileDrawer })));
 const WorkspaceTaskDrawer = lazy(() => import('../../pages/WorkspaceTaskDrawer').then(module => ({ default: module.WorkspaceTaskDrawer })));
+const ExpenseQuickViewDrawer = lazy(() => import('../ExpenseQuickViewDrawer').then(module => ({ default: module.ExpenseQuickViewDrawer })));
 
 export const GlobalEntityDrawers: React.FC = () => {
-  const { customerDrawer, closeCustomerDrawer, openCustomerDrawer, taskDrawer, closeTaskDrawer, openTaskDrawer } = useUIStore();
+  const {
+    customerDrawer, closeCustomerDrawer, openCustomerDrawer,
+    taskDrawer, closeTaskDrawer, openTaskDrawer,
+    expenseDrawer, closeExpenseDrawer, openExpenseDrawer
+  } = useUIStore();
+  const currentUser = useAuthStore(state => state.user);
   const [fullContact, setFullContact] = useState<any>(null);
   const [fullTask, setFullTask] = useState<any>(null);
 
@@ -73,10 +80,20 @@ export const GlobalEntityDrawers: React.FC = () => {
       }
     };
 
+    const handleOpenExpense = (e: Event) => {
+      const custom = e as CustomEvent;
+      if (custom.detail) {
+        const id = custom.detail.id || custom.detail.expenseId || custom.detail.open_id;
+        if (id) openExpenseDrawer(Number(id));
+      }
+    };
+
     window.addEventListener('open-global-customer', handleOpenCustomer);
     window.addEventListener('open-customer-drawer', handleOpenCustomer);
     window.addEventListener('open-global-task', handleOpenTask);
     window.addEventListener('open-task-drawer', handleOpenTask);
+    window.addEventListener('open-expense-drawer', handleOpenExpense);
+    window.addEventListener('open-global-expense', handleOpenExpense);
 
     // Global click listener for .entity-mention and .mention
     const handleGlobalEntityClick = (e: MouseEvent) => {
@@ -95,7 +112,7 @@ export const GlobalEntityDrawers: React.FC = () => {
       } else if (type === 'task') {
         openTaskDrawer(Number(id));
       } else if (type === 'approval') {
-        window.location.href = `/approvals?open_id=${id}&open_type=${approvalType}`;
+        openExpenseDrawer(Number(id));
       } else if (type === 'company') {
         window.dispatchEvent(new CustomEvent('open-company-drawer', { detail: { id: Number(id) } }));
       } else if (type === 'deal') {
@@ -111,8 +128,10 @@ export const GlobalEntityDrawers: React.FC = () => {
       window.removeEventListener('open-customer-drawer', handleOpenCustomer);
       window.removeEventListener('open-global-task', handleOpenTask);
       window.removeEventListener('open-task-drawer', handleOpenTask);
+      window.removeEventListener('open-expense-drawer', handleOpenExpense);
+      window.removeEventListener('open-global-expense', handleOpenExpense);
     };
-  }, [openCustomerDrawer, openTaskDrawer]);
+  }, [openCustomerDrawer, openTaskDrawer, openExpenseDrawer]);
 
   return (
     <>
@@ -144,6 +163,16 @@ export const GlobalEntityDrawers: React.FC = () => {
                 openCustomerDrawer(Number(contactId), 'info');
               }
             }}
+          />
+        </Suspense>
+      )}
+
+      {expenseDrawer.isOpen && expenseDrawer.expenseId && (
+        <Suspense fallback={null}>
+          <ExpenseQuickViewDrawer
+            expenseId={expenseDrawer.expenseId}
+            onClose={closeExpenseDrawer}
+            user={currentUser}
           />
         </Suspense>
       )}

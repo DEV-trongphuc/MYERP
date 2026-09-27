@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Search, CheckSquare, FileText, X, ArrowRight, 
   Calendar, Clock, Briefcase, UserPlus,
-  Clipboard, Receipt, CreditCard, Users, ChevronRight, Send
+  Clipboard, Receipt, CreditCard, Users, ChevronRight, Send, MessageSquare
 } from 'lucide-react';
 import api from '../../api/axios';
 import { Avatar } from '../ui/Avatar';
@@ -277,24 +277,22 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
               50% { opacity: 0.38; }
             }
             .erp-card-row {
-              transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+              transition: background-color 0.15s ease;
             }
             .erp-card-row:hover {
-              border-color: #3b82f6 !important;
-              background-color: #ffffff !important;
-              box-shadow: 0 6px 18px -2px rgba(59, 130, 246, 0.16) !important;
-              transform: translateY(-1.5px);
+              background-color: #f8fafc !important;
             }
             .erp-table-header {
               display: flex;
               align-items: center;
-              padding: 6px 16px 10px;
+              padding: 11px 16px;
               font-size: 0.72rem;
               font-weight: 750;
-              color: #94a3b8;
+              color: #64748b;
               letter-spacing: 0.04em;
               text-transform: uppercase;
-              min-width: 960px;
+              background: #f8fafc;
+              border-bottom: 1px solid #e2e8f0;
             }
           `}</style>
 
@@ -527,15 +525,22 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                   </p>
                 </div>
               ) : (
-                <div style={{ minWidth: isMobile ? '100%' : '960px' }}>
+                <div style={{
+                  minWidth: isMobile ? '100%' : '960px',
+                  background: isMobile ? 'transparent' : '#ffffff',
+                  borderRadius: isMobile ? 0 : '14px',
+                  border: isMobile ? 'none' : '1px solid #e2e8f0',
+                  boxShadow: isMobile ? 'none' : '0 1px 4px rgba(0, 0, 0, 0.04)',
+                  overflow: 'hidden'
+                }}>
                   {/* 1. Workflow Header */}
                   {!isMobile && activeTab === 'workflow' && (
                     <div className="erp-table-header">
                       <div style={{ flex: 1, minWidth: 260 }}>YÊU CẦU & NỘI DUNG</div>
                       <div style={{ width: 175, flexShrink: 0 }}>NGƯỜI TẠO & THỜI GIAN</div>
-                      <div style={{ width: 155, flexShrink: 0 }}>CÁC BƯỚC LIÊN QUAN</div>
+                      <div style={{ width: 155, flexShrink: 0 }}>CÁC BƯỚC & NGƯỜI LIÊN QUAN</div>
                       <div style={{ width: 155, flexShrink: 0 }}>NGƯỜI DUYỆT</div>
-                      <div style={{ width: 105, flexShrink: 0, textAlign: 'right' }}>THAO TÁC</div>
+                      <div style={{ width: 60, flexShrink: 0, textAlign: 'right' }}>THAO TÁC</div>
                     </div>
                   )}
 
@@ -546,7 +551,7 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                       <div style={{ width: 175, flexShrink: 0 }}>NGƯỜI GIAO & THỜI GIAN</div>
                       <div style={{ width: 155, flexShrink: 0 }}>ĐỘ ƯU TIÊN & HẠN</div>
                       <div style={{ width: 155, flexShrink: 0 }}>NGƯỜI THỰC HIỆN</div>
-                      <div style={{ width: 105, flexShrink: 0, textAlign: 'right' }}>THAO TÁC</div>
+                      <div style={{ width: 60, flexShrink: 0, textAlign: 'right' }}>THAO TÁC</div>
                     </div>
                   )}
 
@@ -557,7 +562,7 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                       <div style={{ width: 175, flexShrink: 0 }}>NGƯỜI TẠO & THỜI GIAN</div>
                       <div style={{ width: 155, flexShrink: 0 }}>KHÁCH HÀNG LIÊN QUAN</div>
                       <div style={{ width: 155, flexShrink: 0 }}>TRẠNG THÁI</div>
-                      <div style={{ width: 105, flexShrink: 0, textAlign: 'right' }}>THAO TÁC</div>
+                      <div style={{ width: 60, flexShrink: 0, textAlign: 'right' }}>THAO TÁC</div>
                     </div>
                   )}
 
@@ -565,10 +570,9 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                   {!isMobile && activeTab === 'po' && (
                     <div className="erp-table-header">
                       <div style={{ flex: 1, minWidth: 260 }}>HỒ SƠ CHI & SỐ TIỀN</div>
-                      <div style={{ width: 175, flexShrink: 0 }}>NGƯỜI ĐỀ XUẤT & THỜI GIAN</div>
-                      <div style={{ width: 155, flexShrink: 0 }}>NHÀ CUNG CẤP / DANH MỤC</div>
-                      <div style={{ width: 155, flexShrink: 0 }}>NGƯỜI DUYỆT & TRẠNG THÁI</div>
-                      <div style={{ width: 105, flexShrink: 0, textAlign: 'right' }}>THAO TÁC</div>
+                      <div style={{ width: 185, flexShrink: 0 }}>NGƯỜI ĐỀ XUẤT & THỜI GIAN</div>
+                      <div style={{ width: 175, flexShrink: 0 }}>NGƯỜI DUYỆT & TRẠNG THÁI</div>
+                      <div style={{ width: 60, flexShrink: 0, textAlign: 'right' }}>THAO TÁC</div>
                     </div>
                   )}
 
@@ -581,11 +585,11 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                       <div style={{ width: 180, flexShrink: 0 }}>TRẠNG THÁI</div>
                       <div style={{ width: 175, flexShrink: 0 }}>SALE PHỤ TRÁCH</div>
                       <div style={{ width: 110, flexShrink: 0 }}>NGÀY TẠO</div>
-                      <div style={{ width: 95, flexShrink: 0, textAlign: 'right' }}>THAO TÁC</div>
+                      <div style={{ width: 60, flexShrink: 0, textAlign: 'right' }}>THAO TÁC</div>
                     </div>
                   )}
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '9px' : 0 }}>
                     {results.map((item, idx) => {
                       const sBadge = getStatusBadge(item.status, item.entity_type);
                       const isWf = item.entity_type === 'workflow';
@@ -711,29 +715,13 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                               display: 'flex',
                               alignItems: 'center',
                               padding: '12px 16px',
-                              borderRadius: '13px',
-                              border: '1px solid #e2e8f0',
                               background: '#ffffff',
-                              cursor: 'pointer',
-                              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.03)'
+                              borderBottom: idx === results.length - 1 ? 'none' : '1px solid #f1f5f9',
+                              cursor: 'pointer'
                             }}
                           >
                             {/* Col 1: Yêu cầu & Nội dung */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 260, flex: 1, paddingRight: '12px' }}>
-                              <div style={{
-                                width: 38,
-                                height: 38,
-                                borderRadius: '9px',
-                                background: isOtWfh ? '#fff5f5' : '#ecfeff',
-                                border: `1px solid ${isOtWfh ? '#fecaca' : '#a5f3fc'}`,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                flexShrink: 0
-                              }}>
-                                {isOtWfh ? <Calendar size={18} color="#ef4444" /> : <FileText size={18} color="#0891b2" />}
-                              </div>
-
+                            <div style={{ display: 'flex', alignItems: 'center', minWidth: 260, flex: 1, paddingRight: '12px' }}>
                               <div style={{ minWidth: 0, flex: 1 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
                                   <span style={{
@@ -836,10 +824,23 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                             </div>
 
                             {/* Col 5: Thao tác */}
-                            <div style={{ width: 105, flexShrink: 0, textAlign: 'right' }}>
-                              <div style={{ padding: '6px 12px', borderRadius: '8px', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', fontSize: '0.78rem', fontWeight: 750, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                <span>Gửi chat</span>
-                                <ArrowRight size={13} />
+                            <div style={{ width: 60, flexShrink: 0, display: 'flex', justifyContent: 'flex-end' }}>
+                              <div 
+                                title="Gửi vào đoạn chat"
+                                style={{ 
+                                  width: 32, 
+                                  height: 32, 
+                                  borderRadius: '8px', 
+                                  background: '#eff6ff', 
+                                  color: '#2563eb', 
+                                  border: '1px solid #bfdbfe', 
+                                  display: 'inline-flex', 
+                                  alignItems: 'center', 
+                                  justifyContent: 'center', 
+                                  transition: 'all 0.18s ease' 
+                                }}
+                              >
+                                <MessageSquare size={15} />
                               </div>
                             </div>
                           </motion.div>
@@ -864,29 +865,13 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                               display: 'flex',
                               alignItems: 'center',
                               padding: '12px 16px',
-                              borderRadius: '13px',
-                              border: '1px solid #e2e8f0',
                               background: '#ffffff',
-                              cursor: 'pointer',
-                              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.03)'
+                              borderBottom: idx === results.length - 1 ? 'none' : '1px solid #f1f5f9',
+                              cursor: 'pointer'
                             }}
                           >
                             {/* Col 1: Công việc & Tiến độ */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 260, flex: 1, paddingRight: '12px' }}>
-                              <div style={{
-                                width: 38,
-                                height: 38,
-                                borderRadius: '9px',
-                                background: '#eff6ff',
-                                border: '1px solid #bfdbfe',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                flexShrink: 0
-                              }}>
-                                <CheckSquare size={18} color="#2563eb" />
-                              </div>
-
+                            <div style={{ display: 'flex', alignItems: 'center', minWidth: 260, flex: 1, paddingRight: '12px' }}>
                               <div style={{ minWidth: 0, flex: 1 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
                                   <span style={{ fontSize: '0.72rem', fontWeight: 800, padding: '1px 6px', borderRadius: '4px', background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', flexShrink: 0 }}>
@@ -967,10 +952,23 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                             </div>
 
                             {/* Col 5: Thao tác */}
-                            <div style={{ width: 105, flexShrink: 0, textAlign: 'right' }}>
-                              <div style={{ padding: '6px 12px', borderRadius: '8px', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', fontSize: '0.78rem', fontWeight: 750, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                <span>Gửi chat</span>
-                                <ArrowRight size={13} />
+                            <div style={{ width: 60, flexShrink: 0, display: 'flex', justifyContent: 'flex-end' }}>
+                              <div 
+                                title="Gửi vào đoạn chat"
+                                style={{ 
+                                  width: 32, 
+                                  height: 32, 
+                                  borderRadius: '8px', 
+                                  background: '#eff6ff', 
+                                  color: '#2563eb', 
+                                  border: '1px solid #bfdbfe', 
+                                  display: 'inline-flex', 
+                                  alignItems: 'center', 
+                                  justifyContent: 'center', 
+                                  transition: 'all 0.18s ease' 
+                                }}
+                              >
+                                <MessageSquare size={15} />
                               </div>
                             </div>
                           </motion.div>
@@ -991,29 +989,13 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                               display: 'flex',
                               alignItems: 'center',
                               padding: '12px 16px',
-                              borderRadius: '13px',
-                              border: '1px solid #e2e8f0',
                               background: '#ffffff',
-                              cursor: 'pointer',
-                              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.03)'
+                              borderBottom: idx === results.length - 1 ? 'none' : '1px solid #f1f5f9',
+                              cursor: 'pointer'
                             }}
                           >
                             {/* Col 1: Đơn cọc & Số tiền */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 260, flex: 1, paddingRight: '12px' }}>
-                              <div style={{
-                                width: 38,
-                                height: 38,
-                                borderRadius: '9px',
-                                background: '#ecfdf5',
-                                border: '1px solid #a7f3d0',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                flexShrink: 0
-                              }}>
-                                <Receipt size={18} color="#059669" />
-                              </div>
-
+                            <div style={{ display: 'flex', alignItems: 'center', minWidth: 260, flex: 1, paddingRight: '12px' }}>
                               <div style={{ minWidth: 0, flex: 1 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
                                   <span style={{ fontSize: '0.72rem', fontWeight: 800, padding: '1px 6px', borderRadius: '4px', background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', flexShrink: 0 }}>
@@ -1081,10 +1063,23 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                             </div>
 
                             {/* Col 5: Thao tác */}
-                            <div style={{ width: 105, flexShrink: 0, textAlign: 'right' }}>
-                              <div style={{ padding: '6px 12px', borderRadius: '8px', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', fontSize: '0.78rem', fontWeight: 750, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                <span>Gửi chat</span>
-                                <ArrowRight size={13} />
+                            <div style={{ width: 60, flexShrink: 0, display: 'flex', justifyContent: 'flex-end' }}>
+                              <div 
+                                title="Gửi vào đoạn chat"
+                                style={{ 
+                                  width: 32, 
+                                  height: 32, 
+                                  borderRadius: '8px', 
+                                  background: '#eff6ff', 
+                                  color: '#2563eb', 
+                                  border: '1px solid #bfdbfe', 
+                                  display: 'inline-flex', 
+                                  alignItems: 'center', 
+                                  justifyContent: 'center', 
+                                  transition: 'all 0.18s ease' 
+                                }}
+                              >
+                                <MessageSquare size={15} />
                               </div>
                             </div>
                           </motion.div>
@@ -1108,29 +1103,13 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                               display: 'flex',
                               alignItems: 'center',
                               padding: '12px 16px',
-                              borderRadius: '13px',
-                              border: '1px solid #e2e8f0',
                               background: '#ffffff',
-                              cursor: 'pointer',
-                              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.03)'
+                              borderBottom: idx === results.length - 1 ? 'none' : '1px solid #f1f5f9',
+                              cursor: 'pointer'
                             }}
                           >
                             {/* Col 1: Hồ sơ chi & Số tiền */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 260, flex: 1, paddingRight: '12px' }}>
-                              <div style={{
-                                width: 38,
-                                height: 38,
-                                borderRadius: '9px',
-                                background: '#fffbeb',
-                                border: '1px solid #fde68a',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                flexShrink: 0
-                              }}>
-                                <CreditCard size={18} color="#d97706" />
-                              </div>
-
+                            <div style={{ display: 'flex', alignItems: 'center', minWidth: 260, flex: 1, paddingRight: '12px' }}>
                               <div style={{ minWidth: 0, flex: 1 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
                                   <span style={{ fontSize: '0.72rem', fontWeight: 800, padding: '1px 6px', borderRadius: '4px', background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', flexShrink: 0 }}>
@@ -1151,7 +1130,7 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                             </div>
 
                             {/* Col 2: Người đề xuất & Thời gian */}
-                            <div style={{ width: 175, flexShrink: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ width: 185, flexShrink: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <Avatar src={item.creator_avatar} name={item.creator_name || 'Nhân sự'} size={32} />
                               <div style={{ minWidth: 0, flex: 1 }}>
                                 <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -1163,18 +1142,8 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                               </div>
                             </div>
 
-                            {/* Col 3: Nhà cung cấp / Danh mục */}
-                            <div style={{ width: 155, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                              <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                🏢 {item.vendor_name || 'Chưa có NCC'}
-                              </span>
-                              <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                                {item.category || 'Chi phí nội bộ'}
-                              </span>
-                            </div>
-
-                            {/* Col 4: Người duyệt & Trạng thái */}
-                            <div style={{ width: 155, flexShrink: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {/* Col 3: Người duyệt & Trạng thái */}
+                            <div style={{ width: 175, flexShrink: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <div style={{ borderRadius: '50%', border: '2px solid #f59e0b', display: 'inline-flex', flexShrink: 0 }}>
                                 <Avatar src={item.approver_avatar} name={item.approver_name || 'Kế toán trưởng'} size={32} />
                               </div>
@@ -1188,11 +1157,24 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                               </div>
                             </div>
 
-                            {/* Col 5: Thao tác */}
-                            <div style={{ width: 105, flexShrink: 0, textAlign: 'right' }}>
-                              <div style={{ padding: '6px 12px', borderRadius: '8px', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', fontSize: '0.78rem', fontWeight: 750, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                <span>Gửi chat</span>
-                                <ArrowRight size={13} />
+                            {/* Col 4: Thao tác */}
+                            <div style={{ width: 60, flexShrink: 0, display: 'flex', justifyContent: 'flex-end' }}>
+                              <div 
+                                title="Gửi vào đoạn chat"
+                                style={{ 
+                                  width: 32, 
+                                  height: 32, 
+                                  borderRadius: '8px', 
+                                  background: '#eff6ff', 
+                                  color: '#2563eb', 
+                                  border: '1px solid #bfdbfe', 
+                                  display: 'inline-flex', 
+                                  alignItems: 'center', 
+                                  justifyContent: 'center', 
+                                  transition: 'all 0.18s ease' 
+                                }}
+                              >
+                                <MessageSquare size={15} />
                               </div>
                             </div>
                           </motion.div>
@@ -1229,11 +1211,9 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                               display: 'flex',
                               alignItems: 'center',
                               padding: '12px 16px',
-                              borderRadius: '13px',
-                              border: '1px solid #e2e8f0',
                               background: '#ffffff',
-                              cursor: 'pointer',
-                              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.03)'
+                              borderBottom: idx === results.length - 1 ? 'none' : '1px solid #f1f5f9',
+                              cursor: 'pointer'
                             }}
                           >
                             {/* Col 1: HỌ TÊN (Avatar initials + Bold Name) */}
@@ -1373,10 +1353,23 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                             </div>
 
                             {/* Col 7: THAO TÁC */}
-                            <div style={{ width: 95, flexShrink: 0, textAlign: 'right' }}>
-                              <div style={{ padding: '6px 10px', borderRadius: '8px', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', fontSize: '0.76rem', fontWeight: 750, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                                <span>Gửi chat</span>
-                                <ArrowRight size={12} />
+                            <div style={{ width: 60, flexShrink: 0, display: 'flex', justifyContent: 'flex-end' }}>
+                              <div 
+                                title="Gửi vào đoạn chat"
+                                style={{ 
+                                  width: 32, 
+                                  height: 32, 
+                                  borderRadius: '8px', 
+                                  background: '#eff6ff', 
+                                  color: '#2563eb', 
+                                  border: '1px solid #bfdbfe', 
+                                  display: 'inline-flex', 
+                                  alignItems: 'center', 
+                                  justifyContent: 'center', 
+                                  transition: 'all 0.18s ease' 
+                                }}
+                              >
+                                <MessageSquare size={15} />
                               </div>
                             </div>
                           </motion.div>
