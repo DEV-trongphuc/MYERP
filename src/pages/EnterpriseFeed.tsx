@@ -659,30 +659,39 @@ export const EnterpriseFeed: React.FC = () => {
     setUploading(true);
 
     try {
-      let fileToUpload = files[0];
-      if (fileToUpload.type.startsWith('image/')) {
-        try {
-          fileToUpload = await compressToWebP(fileToUpload);
-        } catch (compressErr) {
-          console.warn('Image compression failed, using raw file', compressErr);
+      const uploadedUrls: string[] = [];
+      for (const rawFile of Array.from(files)) {
+        let fileToUpload = rawFile;
+        if (fileToUpload.type.startsWith('image/')) {
+          try {
+            fileToUpload = await compressToWebP(fileToUpload);
+          } catch (compressErr) {
+            console.warn('Image compression failed, using raw file', compressErr);
+          }
+        }
+
+        const formData = new FormData();
+        formData.append('file', fileToUpload);
+
+        const res = await api.post('/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+
+        const fileUrl = res.data?.data?.url || res.data?.url || res.data?.file_url;
+        if (fileUrl && typeof fileUrl === 'string') {
+          uploadedUrls.push(fileUrl);
         }
       }
 
-      const formData = new FormData();
-      formData.append('file', fileToUpload);
-
-      const res = await api.post('/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-
-      if (res.data && res.data.success) {
-        setAttachments(prev => [...prev, res.data.file_url]);
-        toast.success(t('Đã tải lên tệp tin'));
+      if (uploadedUrls.length > 0) {
+        setAttachments(prev => [...prev, ...uploadedUrls]);
+        toast.success(t(`Đã tải lên ${uploadedUrls.length} tệp tin`));
       }
     } catch (err) {
       toast.error(t('Lỗi tải tệp lên server'));
     } finally {
       setUploading(false);
+      e.target.value = '';
     }
   };
 
@@ -851,9 +860,15 @@ export const EnterpriseFeed: React.FC = () => {
   };
 
   // Grid layout helper for multi-image attachments
-  const renderAttachmentsGrid = (urls: string[]) => {
+  const renderAttachmentsGrid = (rawUrls: string[]) => {
+    const urls = (rawUrls || []).filter(u => Boolean(u && typeof u === 'string'));
     if (urls.length === 0) return null;
-    const isImage = (url: string) => /\.(jpg|jpeg|png|webp|gif)$/i.test(url);
+    const isImage = (url: string) => {
+      if (!url || typeof url !== 'string') return true;
+      const cleanUrl = url.split('?')[0].toLowerCase();
+      if (/\.(mp4|webm|mov|ogg|m4v)$/i.test(cleanUrl)) return false;
+      return true; // Default fallback to image instead of video controls
+    };
 
     if (urls.length === 1) {
       const url = urls[0];

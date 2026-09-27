@@ -142,7 +142,7 @@ export const GlobalEntityDrawers: React.FC = () => {
             onClose={closeCustomerDrawer}
             contact={fullContact}
             initialTab={customerDrawer.initialTab || 'info'}
-            zIndex={10060}
+            zIndex={2147483645}
           />
         </Suspense>
       )}
@@ -153,7 +153,7 @@ export const GlobalEntityDrawers: React.FC = () => {
             isOpen={taskDrawer.isOpen}
             onClose={closeTaskDrawer}
             task={fullTask}
-            zIndex={10060}
+            zIndex={2147483645}
             onUpdate={() => {
               // Trigger refresh on window event if someone is listening
               window.dispatchEvent(new CustomEvent('task-updated', { detail: fullTask }));
@@ -173,6 +173,7 @@ export const GlobalEntityDrawers: React.FC = () => {
             expenseId={expenseDrawer.expenseId}
             onClose={closeExpenseDrawer}
             user={currentUser}
+            zIndex={2147483645}
           />
         </Suspense>
       )}

@@ -77,6 +77,7 @@ interface ExpenseQuickViewDrawerProps {
   user: any;
   onStatusChange?: () => void;
   onEditClick?: (item: any) => void;
+  zIndex?: number;
 }
 
 export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
@@ -84,7 +85,8 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
   onClose,
   user,
   onStatusChange,
-  onEditClick
+  onEditClick,
+  zIndex
 }) => {
   const { addToast } = useUIStore();
   const [viewItem, setViewItem] = useState<any>(null);
@@ -801,11 +803,13 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
 
   if (!expenseId) return null;
 
+  const baseZIndex = zIndex || 2147483640;
+
   if (!viewItem) {
     return createPortal(
       <AnimatePresence>
         {!isClosing && (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 2000000000, display: 'flex', justifyContent: 'flex-end' }}>
+          <div style={{ position: 'fixed', inset: 0, zIndex: baseZIndex, display: 'flex', justifyContent: 'flex-end' }}>
             <motion.div
               className="drawer-backdrop"
               initial={{ opacity: 0 }}
@@ -816,7 +820,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
               style={{
                 position: 'fixed',
                 inset: 0,
-                zIndex: 2000000005,
+                zIndex: baseZIndex + 1,
                 background: 'rgba(0, 0, 0, 0.45)',
                 backdropFilter: 'blur(8px)',
                 WebkitBackdropFilter: 'blur(8px)',
@@ -842,7 +846,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                 boxShadow: isMobile ? 'none' : '-10px 0 30px rgba(0, 0, 0, 0.15)',
                 display: 'flex',
                 flexDirection: 'column',
-                zIndex: 2000000010,
+                zIndex: baseZIndex + 2,
                 overflow: 'hidden'
               }}
             >
@@ -858,7 +862,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
   return createPortal(
     <AnimatePresence>
       {!isClosing && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 2000000000, display: 'flex', justifyContent: 'flex-end' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: baseZIndex, display: 'flex', justifyContent: 'flex-end' }}>
           <motion.div
             className="drawer-backdrop"
             initial={{ opacity: 0 }}
@@ -869,7 +873,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
             style={{
               position: 'fixed',
               inset: 0,
-              zIndex: 2000000005,
+              zIndex: baseZIndex + 1,
               background: 'rgba(0, 0, 0, 0.45)',
               backdropFilter: 'blur(8px)',
               WebkitBackdropFilter: 'blur(8px)',
@@ -897,7 +901,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
               boxShadow: isMobile ? 'none' : '-10px 0 30px rgba(0, 0, 0, 0.15)',
               display: 'flex',
               flexDirection: 'column',
-              zIndex: 2000000010,
+              zIndex: baseZIndex + 2,
               overflow: 'hidden',
               willChange: 'transform, opacity',
               transform: 'translate3d(0, 0, 0)',

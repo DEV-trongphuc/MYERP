@@ -9,7 +9,7 @@ import {
   FileSpreadsheet, FileArchive, Film, Music, Globe, ExternalLink,
   FolderArchive, MoreHorizontal, Edit3, Trash2, Copy, RotateCcw, GitBranch, Lock,
   Clipboard, Receipt, CreditCard, Clock, Share2, Volume2, VolumeX, UploadCloud, ChevronUp, ChevronDown,
-  Check, CheckCheck, Bell, BellOff, Send
+  Check, CheckCheck, Bell, BellOff, Send, Phone, Mail, Calendar
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useChatStore } from '../../store/chatStore';
@@ -1380,7 +1380,7 @@ export const WorkChatModal: React.FC = () => {
           transition={{ type: 'spring', damping: 28, stiffness: 360, mass: 0.8 }}
           style={{
             position: 'fixed',
-            zIndex: 2147483647,
+            zIndex: 2147483600,
             ...(isMobile
               ? {
                   top: 0,
@@ -1396,7 +1396,7 @@ export const WorkChatModal: React.FC = () => {
                   margin: 0,
                   padding: 0,
                   boxShadow: 'none',
-                  zIndex: 2147483647
+                  zIndex: 2147483600
                 }
               : isMaximized
               ? {
@@ -1413,7 +1413,7 @@ export const WorkChatModal: React.FC = () => {
                   margin: 0,
                   padding: 0,
                   boxShadow: 'none',
-                  zIndex: 2147483647
+                  zIndex: 2147483600
                 }
               : {
                   bottom: '32px',
@@ -2691,6 +2691,23 @@ export const WorkChatModal: React.FC = () => {
                       );
                       const canRecall = !isRecalled && (isMine || isGroupAdmin);
 
+                      // Smart Burst Grouping: Same sender within 5 minutes (< 300s)
+                      const nextMsg = visibleMessages[index + 1];
+                      const isSameSenderAsNext = Boolean(
+                        nextMsg &&
+                        nextMsg.message_type !== 'system_event' &&
+                        Number(nextMsg.sender_id) === Number(msg.sender_id)
+                      );
+                      const timeDiffNextMs = nextMsg ? Math.abs(new Date(nextMsg.created_at).getTime() - new Date(msg.created_at).getTime()) : Infinity;
+                      const isWithin5MinWithNext = timeDiffNextMs < 5 * 60 * 1000;
+                      const isLastInBurst = !isSameSenderAsNext || !isWithin5MinWithNext;
+                      const isSameMinuteAsNext = Boolean(
+                        isSameSenderAsNext &&
+                        isWithin5MinWithNext &&
+                        new Date(msg.created_at).getMinutes() === new Date(nextMsg.created_at).getMinutes()
+                      );
+                      const showTimestamp = isLastInBurst || !isSameMinuteAsNext || hoveredMsgId === msg.id;
+
                       if (msg.message_type === 'system_event') {
                         const isTaskEvent = msg.metadata?.event_type === 'task_created';
                         const taskId = Number(msg.metadata?.task_id || 0);
@@ -3418,14 +3435,20 @@ export const WorkChatModal: React.FC = () => {
                                         </div>
 
                                         {/* Rich Content Details */}
-                                        <div style={{ fontSize: '0.74rem', color: '#64748b', display: 'flex', flexDirection: 'column', gap: '2px', marginBottom: '8px' }}>
+                                        <div style={{ fontSize: '0.74rem', color: '#64748b', display: 'flex', flexDirection: 'column', gap: '5px', marginBottom: '8px' }}>
                                           {eType === 'task' && (
                                             <>
                                               {meta.assignee_name && (
-                                                <div>👤 Phụ trách: <strong style={{ color: '#334155' }}>{meta.assignee_name}</strong></div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                  <Avatar src={meta.assignee_avatar} name={meta.assignee_name} size={18} />
+                                                  <span>Phụ trách: <strong style={{ color: '#334155' }}>{meta.assignee_name}</strong></span>
+                                                </div>
                                               )}
                                               {meta.due_date && (
-                                                <div>📅 Hạn: <strong style={{ color: '#334155' }}>{new Date(meta.due_date).toLocaleDateString('vi-VN')}</strong></div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                  <Calendar size={13} color="#64748b" />
+                                                  <span>Hạn: <strong style={{ color: '#334155' }}>{new Date(meta.due_date).toLocaleDateString('vi-VN')}</strong></span>
+                                                </div>
                                               )}
                                               {typeof meta.progress === 'number' && (
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
@@ -3442,16 +3465,28 @@ export const WorkChatModal: React.FC = () => {
                                           {eType === 'workflow' && (
                                             <>
                                               {meta.creator_name && (
-                                                <div>👤 Người gửi: <strong style={{ color: '#334155' }}>{meta.creator_name}</strong> {meta.created_at ? `(${meta.created_at})` : ''}</div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                  <Avatar src={meta.creator_avatar} name={meta.creator_name} size={18} />
+                                                  <span>Người gửi: <strong style={{ color: '#334155' }}>{meta.creator_name}</strong> {meta.created_at ? <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>({meta.created_at})</span> : ''}</span>
+                                                </div>
                                               )}
                                               {meta.approver_name && (
-                                                <div>📋 Người duyệt: <strong style={{ color: '#334155' }}>{meta.approver_name}</strong></div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                  <Avatar src={meta.approver_avatar} name={meta.approver_name} size={18} />
+                                                  <span>Người duyệt: <strong style={{ color: '#334155' }}>{meta.approver_name}</strong></span>
+                                                </div>
                                               )}
-                                              {meta.amount && Number(meta.amount) > 0 && (
-                                                <div>💰 Số tiền: <strong style={{ color: '#7c3aed', fontSize: '0.82rem' }}>{Number(meta.amount).toLocaleString('vi-VN')} VNĐ</strong></div>
+                                              {Boolean(Number(meta.amount) > 0) && (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                  <DollarSign size={13} color="#7c3aed" />
+                                                  <span>Số tiền: <strong style={{ color: '#7c3aed', fontSize: '0.82rem' }}>{Number(meta.amount).toLocaleString('vi-VN')} VNĐ</strong></span>
+                                                </div>
                                               )}
                                               {meta.date && (
-                                                <div>📅 Ngày: <strong style={{ color: '#334155' }}>{new Date(meta.date).toLocaleDateString('vi-VN')}</strong></div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                  <Clock size={13} color="#64748b" />
+                                                  <span>Thời gian: <strong style={{ color: '#334155' }}>{meta.date}</strong></span>
+                                                </div>
                                               )}
                                             </>
                                           )}
@@ -3459,23 +3494,34 @@ export const WorkChatModal: React.FC = () => {
                                           {eType === 'so' && (
                                             <>
                                               {meta.contact_name && (
-                                                <div>👤 Khách hàng: <strong style={{ color: '#334155' }}>{meta.contact_name}</strong></div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                  <Avatar src={meta.contact_avatar} name={meta.contact_name} size={18} />
+                                                  <span>Khách hàng: <strong style={{ color: '#334155' }}>{meta.contact_name}</strong></span>
+                                                </div>
                                               )}
-                                              {meta.amount && Number(meta.amount) > 0 && (
-                                                <div>💵 Tiền cọc: <strong style={{ color: '#059669', fontSize: '0.85rem' }}>{Number(meta.amount).toLocaleString('vi-VN')} VNĐ</strong></div>
+                                              {meta.owner_name && (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                  <Avatar src={meta.owner_avatar} name={meta.owner_name} size={18} />
+                                                  <span>Sale: <strong style={{ color: '#334155' }}>{meta.owner_name}</strong></span>
+                                                </div>
+                                              )}
+                                              {Boolean(Number(meta.amount) > 0) && (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                  <DollarSign size={13} color="#059669" />
+                                                  <span>Tiền cọc: <strong style={{ color: '#059669', fontSize: '0.85rem' }}>{Number(meta.amount).toLocaleString('vi-VN')} VNĐ</strong></span>
+                                                </div>
                                               )}
                                             </>
                                           )}
 
                                           {eType === 'po' && (
-                                            <div style={{
-                                              borderTop: '1px solid #fef08a',
-                                              paddingTop: '4px',
-                                              marginTop: '4px',
-                                              marginBottom: '1px'
-                                            }}>
-                                              {meta.amount && Number(meta.amount) > 0 && (
+                                            <>
+                                              {Boolean(Number(meta.amount) > 0) && (
                                                 <div style={{
+                                                  borderTop: '1px solid #fef08a',
+                                                  paddingTop: '4px',
+                                                  marginTop: '2px',
+                                                  marginBottom: '2px',
                                                   fontSize: '0.98rem',
                                                   fontWeight: 800,
                                                   color: '#d97706',
@@ -3485,26 +3531,56 @@ export const WorkChatModal: React.FC = () => {
                                                   {Number(meta.amount).toLocaleString('vi-VN')} VNĐ
                                                 </div>
                                               )}
-                                            </div>
+                                              {(meta.creator_name || meta.owner_name) && (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                  <Avatar src={meta.creator_avatar || meta.owner_avatar} name={meta.creator_name || meta.owner_name} size={18} />
+                                                  <span>Đề xuất: <strong style={{ color: '#334155' }}>{meta.creator_name || meta.owner_name}</strong></span>
+                                                </div>
+                                              )}
+                                              {meta.approver_name && (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                  <Avatar src={meta.approver_avatar} name={meta.approver_name} size={18} />
+                                                  <span>Người duyệt: <strong style={{ color: '#334155' }}>{meta.approver_name}</strong></span>
+                                                </div>
+                                              )}
+                                              {meta.vendor_name && (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                  <Briefcase size={13} color="#64748b" />
+                                                  <span>NCC: <strong style={{ color: '#334155' }}>{meta.vendor_name}</strong></span>
+                                                </div>
+                                              )}
+                                            </>
                                           )}
 
                                           {eType === 'contact' && (
                                             <>
                                               {meta.phone && (
-                                                <div>📞 SĐT: <strong style={{ color: '#0369a1' }}>{meta.phone}</strong></div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                  <Phone size={13} color="#0284c7" />
+                                                  <span>SĐT: <strong style={{ color: '#0369a1' }}>{meta.phone}</strong></span>
+                                                </div>
                                               )}
                                               {meta.email && (
-                                                <div>✉️ Email: <strong style={{ color: '#0369a1' }}>{meta.email}</strong></div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                  <Mail size={13} color="#0284c7" />
+                                                  <span>Email: <strong style={{ color: '#0369a1' }}>{meta.email}</strong></span>
+                                                </div>
                                               )}
                                               {meta.owner_name && (
-                                                <div>👤 Phụ trách: <strong style={{ color: '#334155' }}>{meta.owner_name}</strong></div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                                                  <Avatar src={meta.owner_avatar} name={meta.owner_name} size={18} />
+                                                  <span>Phụ trách: <strong style={{ color: '#334155' }}>{meta.owner_name}</strong></span>
+                                                </div>
                                               )}
                                             </>
                                           )}
 
                                           {/* Fallback subtitle if empty */}
                                           {eType !== 'po' && !meta.assignee_name && !meta.contact_name && !meta.phone && meta.subtitle && (
-                                            <div>{meta.subtitle}</div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                              <Clock size={13} color="#64748b" />
+                                              <span>{meta.subtitle}</span>
+                                            </div>
                                           )}
                                         </div>
 
@@ -3513,6 +3589,11 @@ export const WorkChatModal: React.FC = () => {
                                           type="button"
                                           onClick={(e) => {
                                             e.stopPropagation();
+                                            if (isMobile) {
+                                              closeChat();
+                                            } else if (isMaximized) {
+                                              toggleMaximize();
+                                            }
                                             if (eType === 'contact') {
                                               openCustomerDrawer(meta.entity_id);
                                             } else if (eType === 'task') {
@@ -3687,114 +3768,118 @@ export const WorkChatModal: React.FC = () => {
                           </div>
 
                           {/* Time & Delivery Status Indicator */}
-                          <div style={{
-                            fontSize: '0.66rem',
-                            color: '#94a3b8',
-                            marginTop: '2px',
-                            marginLeft: isMine ? 0 : '38px',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '5px'
-                          }}>
-                            <span>{new Date(msg.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
-                            {Boolean(msg.is_edited) && (
-                              <span style={{ fontStyle: 'italic', opacity: 0.85 }}>(đã sửa)</span>
-                            )}
+                          {(showTimestamp || Boolean(msg.is_edited) || (isMine && !isRecalled && isLastInBurst)) && (
+                            <div style={{
+                              fontSize: '0.66rem',
+                              color: '#94a3b8',
+                              marginTop: '2px',
+                              marginLeft: isMine ? 0 : '38px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px'
+                            }}>
+                              {showTimestamp && (
+                                <span>{new Date(msg.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                              )}
+                              {Boolean(msg.is_edited) && (
+                                <span style={{ fontStyle: 'italic', opacity: 0.85 }}>(đã sửa)</span>
+                              )}
 
-                            {isMine && !isRecalled && (() => {
-                              const isSending = Boolean(msg.is_sending || msg.delivery_status === 'sending');
-                              const isError = msg.delivery_status === 'error';
+                              {isMine && !isRecalled && isLastInBurst && (() => {
+                                const isSending = Boolean(msg.is_sending || msg.delivery_status === 'sending');
+                                const isError = msg.delivery_status === 'error';
 
-                              if (isSending) {
-                                return (
-                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: '#94a3b8' }} title="Đang gửi...">
-                                    <Clock size={11} style={{ animation: 'spin 2s linear infinite' }} />
-                                    <span style={{ fontSize: '0.62rem' }}>Đang gửi</span>
-                                  </span>
-                                );
-                              }
+                                if (isSending) {
+                                  return (
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: '#94a3b8' }} title="Đang gửi...">
+                                      <Clock size={11} style={{ animation: 'spin 2s linear infinite' }} />
+                                      <span style={{ fontSize: '0.62rem' }}>Đang gửi</span>
+                                    </span>
+                                  );
+                                }
 
-                              if (isError) {
-                                return (
-                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: '#ef4444', fontWeight: 700 }} title="Lỗi gửi tin nhắn">
-                                    <AlertCircle size={11} />
-                                    <span style={{ fontSize: '0.62rem' }}>Lỗi</span>
-                                  </span>
-                                );
-                              }
+                                if (isError) {
+                                  return (
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: '#ef4444', fontWeight: 700 }} title="Lỗi gửi tin nhắn">
+                                      <AlertCircle size={11} />
+                                      <span style={{ fontSize: '0.62rem' }}>Lỗi</span>
+                                    </span>
+                                  );
+                                }
 
-                              // Compute status
-                              const isDirect = activeConversation?.type === 'direct';
-                              const otherUser = activeConversation?.other_user;
-                              const participants = activeConversation?.participants || [];
+                                // Compute status
+                                const isDirect = activeConversation?.type === 'direct';
+                                const otherUser = activeConversation?.other_user;
+                                const participants = activeConversation?.participants || [];
 
-                              let isRead = false;
-                              let isDelivered = false;
-                              let readCount = 0;
+                                let isRead = false;
+                                let isDelivered = false;
+                                let readCount = 0;
 
-                              if (isDirect) {
-                                const otherReadId = Number(otherUser?.last_read_message_id || 0);
-                                isRead = otherReadId >= msg.id;
-                                isDelivered = Boolean(otherUser?.is_online);
-                              } else {
-                                const readers = participants.filter(p => Number(p.user_id || (p as any).id) !== myId && Number(p.last_read_message_id || 0) >= msg.id);
-                                isRead = readers.length > 0;
-                                readCount = readers.length;
-                                isDelivered = participants.some(p => Number(p.user_id || (p as any).id) !== myId && p.is_online);
-                              }
+                                if (isDirect) {
+                                  const otherReadId = Number(otherUser?.last_read_message_id || 0);
+                                  isRead = otherReadId >= msg.id;
+                                  isDelivered = Boolean(otherUser?.is_online);
+                                } else {
+                                  const readers = participants.filter(p => Number(p.user_id || (p as any).id) !== myId && Number(p.last_read_message_id || 0) >= msg.id);
+                                  isRead = readers.length > 0;
+                                  readCount = readers.length;
+                                  isDelivered = participants.some(p => Number(p.user_id || (p as any).id) !== myId && p.is_online);
+                                }
 
-                              if (isRead) {
+                                if (isRead) {
+                                  return (
+                                    <span
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '2px',
+                                        color: '#0284c7',
+                                        fontWeight: 700,
+                                        transition: 'color 0.2s ease'
+                                      }}
+                                      title={isDirect ? 'Đã xem' : `Đã có ${readCount} người xem`}
+                                    >
+                                      <CheckCheck size={13} color="#0284c7" />
+                                      <span style={{ fontSize: '0.62rem' }}>{isDirect ? 'Đã xem' : `Đã xem (${readCount})`}</span>
+                                    </span>
+                                  );
+                                }
+
+                                if (isDelivered) {
+                                  return (
+                                    <span
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '2px',
+                                        color: '#64748b'
+                                      }}
+                                      title="Đã nhận trên thiết bị đối phương"
+                                    >
+                                      <CheckCheck size={13} color="#94a3b8" />
+                                      <span style={{ fontSize: '0.62rem' }}>Đã nhận</span>
+                                    </span>
+                                  );
+                                }
+
                                 return (
                                   <span
                                     style={{
                                       display: 'inline-flex',
                                       alignItems: 'center',
                                       gap: '2px',
-                                      color: '#0284c7',
-                                      fontWeight: 700,
-                                      transition: 'color 0.2s ease'
+                                      color: '#94a3b8'
                                     }}
-                                    title={isDirect ? 'Đã xem' : `Đã có ${readCount} người xem`}
+                                    title="Đã gửi lên hệ thống"
                                   >
-                                    <CheckCheck size={13} color="#0284c7" />
-                                    <span style={{ fontSize: '0.62rem' }}>{isDirect ? 'Đã xem' : `Đã xem (${readCount})`}</span>
+                                    <Check size={12} color="#94a3b8" />
+                                    <span style={{ fontSize: '0.62rem' }}>Đã gửi</span>
                                   </span>
                                 );
-                              }
-
-                              if (isDelivered) {
-                                return (
-                                  <span
-                                    style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: '2px',
-                                      color: '#64748b'
-                                    }}
-                                    title="Đã nhận trên thiết bị đối phương"
-                                  >
-                                    <CheckCheck size={13} color="#94a3b8" />
-                                    <span style={{ fontSize: '0.62rem' }}>Đã nhận</span>
-                                  </span>
-                                );
-                              }
-
-                              return (
-                                <span
-                                  style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '2px',
-                                    color: '#94a3b8'
-                                  }}
-                                  title="Đã gửi lên hệ thống"
-                                >
-                                  <Check size={12} color="#94a3b8" />
-                                  <span style={{ fontSize: '0.62rem' }}>Đã gửi</span>
-                                </span>
-                              );
-                            })()}
-                          </div>
+                              })()}
+                            </div>
+                          )}
 
                           {/* SEEN AVATARS PILL (MESSENGER STYLE) - ONLY DISPLAY AT THE EXACT LATEST READ MESSAGE */}
                           {(() => {
