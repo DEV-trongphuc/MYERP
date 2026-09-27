@@ -873,11 +873,11 @@ export const EnterpriseFeed: React.FC = () => {
     if (urls.length === 1) {
       const url = urls[0];
       return (
-        <div style={{ marginTop: '0.75rem', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--color-border-light)' }}>
+        <div style={{ marginTop: '0.75rem', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--color-border-light)', lineHeight: 0 }}>
           {isImage(url) ? (
-            <img src={url} alt="Attachment" style={{ width: '100%', maxHeight: '450px', objectFit: 'cover' }} />
+            <img src={url} alt="Attachment" style={{ display: 'block', width: '100%', maxHeight: '450px', objectFit: 'cover' }} />
           ) : (
-            <video src={url} controls style={{ width: '100%', maxHeight: '450px' }} />
+            <video src={url} controls style={{ display: 'block', width: '100%', maxHeight: '450px' }} />
           )}
         </div>
       );
@@ -885,13 +885,13 @@ export const EnterpriseFeed: React.FC = () => {
 
     if (urls.length === 2) {
       return (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '0.75rem', borderRadius: '12px', overflow: 'hidden' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '0.75rem', borderRadius: '12px', overflow: 'hidden', lineHeight: 0 }}>
           {urls.map((url, i) => (
-            <div key={i} style={{ height: '220px', background: 'var(--color-bg)' }}>
+            <div key={i} style={{ height: '220px', background: 'var(--color-bg)', overflow: 'hidden' }}>
               {isImage(url) ? (
-                <img src={url} alt="Attachment" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <img src={url} alt="Attachment" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
-                <video src={url} controls style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <video src={url} controls style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
               )}
             </div>
           ))}
@@ -901,21 +901,21 @@ export const EnterpriseFeed: React.FC = () => {
 
     // 3 or more attachments layout
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '8px', marginTop: '0.75rem', borderRadius: '12px', overflow: 'hidden' }}>
-        <div style={{ height: '320px', background: 'var(--color-bg)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '8px', marginTop: '0.75rem', borderRadius: '12px', overflow: 'hidden', lineHeight: 0 }}>
+        <div style={{ height: '320px', background: 'var(--color-bg)', overflow: 'hidden' }}>
           {isImage(urls[0]) ? (
-            <img src={urls[0]} alt="Attachment" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <img src={urls[0]} alt="Attachment" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : (
-            <video src={urls[0]} controls style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <video src={urls[0]} controls style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
           )}
         </div>
         <div style={{ display: 'grid', gridTemplateRows: '1fr 1fr', gap: '8px', height: '320px' }}>
           {urls.slice(1, 3).map((url, i) => (
-            <div key={i} style={{ height: '100%', position: 'relative', background: 'var(--color-bg)' }}>
+            <div key={i} style={{ height: '100%', position: 'relative', background: 'var(--color-bg)', overflow: 'hidden' }}>
               {isImage(url) ? (
-                <img src={url} alt="Attachment" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <img src={url} alt="Attachment" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
-                <video src={url} controls style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <video src={url} controls style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
               )}
               {i === 1 && urls.length > 3 && (
                 <div style={{
@@ -1142,7 +1142,7 @@ export const EnterpriseFeed: React.FC = () => {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '4px' }}>
             {attachments.map((url, i) => (
               <div key={i} style={{ position: 'relative', width: '80px', height: '80px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--color-border-light)' }}>
-                <img src={url} alt="Uploaded" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <img src={url} alt="Uploaded" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
                 <button 
                   type="button" 
                   onClick={() => setAttachments(prev => prev.filter((_, idx) => idx !== i))}
@@ -1374,7 +1374,7 @@ export const EnterpriseFeed: React.FC = () => {
                         <img 
                           src={post.link_metadata.image} 
                           alt="Preview" 
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                          style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} 
                         />
                       </div>
                     )}

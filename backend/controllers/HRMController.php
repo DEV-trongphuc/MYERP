@@ -402,16 +402,7 @@ class HRMController {
         if (!is_array($relArr)) $relArr = [];
         $relArr = array_map('intval', $relArr);
 
-        $hasPermission = $this->isAdmin($auth) ||
-            (int)$row['user_id'] === $userId ||
-            (int)$row['approver_id'] === $userId ||
-            (int)($row['approver_id_2'] ?? 0) === $userId ||
-            in_array($userId, $relArr, true);
-
-        if (!$hasPermission) {
-            respond(403, null, 'Bạn không có quyền xem đơn này', false);
-            return;
-        }
+        // Allow read-only viewing for all users in the same tenant (e.g. WorkChat preview / Drawer)
 
         $row['annual_leave_total'] = (float)$row['annual_leave_total'];
         $row['annual_leave_used'] = (float)$row['annual_leave_used'];
@@ -1020,16 +1011,7 @@ class HRMController {
         if (!is_array($relArr)) $relArr = [];
         $relArr = array_map('intval', $relArr);
 
-        $hasPermission = $this->isAdmin($auth) ||
-            (int)$row['user_id'] === $userId ||
-            (int)$row['approver_id'] === $userId ||
-            (int)($row['approver_id_2'] ?? 0) === $userId ||
-            in_array($userId, $relArr, true);
-
-        if (!$hasPermission) {
-            respond(403, null, 'Bạn không có quyền xem đề xuất này', false);
-            return;
-        }
+        // Allow read-only viewing for all users in the same tenant (e.g. WorkChat preview / Drawer)
 
         respond(200, $row);
     }

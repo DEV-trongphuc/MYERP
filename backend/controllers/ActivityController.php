@@ -993,11 +993,7 @@ class ActivityController {
         $stmt->execute([$id, $auth['tenant_id']]);
         $row=$stmt->fetch(); if(!$row) respond(404,null,'Không tìm thấy',false);
 
-        // Access check for sales/manager role
-        if (!$this->hasAccess($auth, $row)) {
-            respond(403, null, 'Bạn không có quyền truy cập hoạt động này', false);
-        }
-
+        // Allow read-only viewing for all users in the same tenant (e.g. when opening from WorkChat)
         $row['first_image_url'] = $this->getFirstImageUrl($row);
         respond(200,$row);
     }
@@ -1583,12 +1579,7 @@ class ActivityController {
         $check = $this->db->prepare("SELECT * FROM activities WHERE id=? AND tenant_id=? AND deleted_at IS NULL");
         $check->execute([$id, $auth['tenant_id']]);
         $activity = $check->fetch();
-        if (!$activity) respond(404, null, 'Không tìm thấy hoạt động hoặc không có quyền truy cập', false);
-
-        if (!$this->hasAccess($auth, $activity)) {
-            respond(403, null, 'Bạn không có quyền truy cập hoạt động này', false);
-        }
-
+        // Allow reading comments for all users in the same tenant (e.g. when viewing from WorkChat drawer)
         $subtaskId = isset($_GET['subtask_id']) && $_GET['subtask_id'] !== '' ? $_GET['subtask_id'] : null;
 
         if ($subtaskId) {
@@ -1629,10 +1620,7 @@ class ActivityController {
         $activity = $check->fetch();
         if (!$activity) respond(404, null, 'Không tìm thấy hoạt động hoặc không có quyền truy cập', false);
 
-        if (!$this->hasAccess($auth, $activity)) {
-            respond(403, null, 'Bạn không có quyền truy cập hoạt động này', false);
-        }
-
+        // Allow reading comment counts for all users in the same tenant
         $stmt = $this->db->prepare("
             SELECT subtask_id, COUNT(*) as count 
             FROM activity_comments 
@@ -2342,10 +2330,7 @@ class ActivityController {
         $activity = $check->fetch(PDO::FETCH_ASSOC);
         if (!$activity) respond(404, null, 'Không tìm thấy hoạt động', false);
 
-        if (!$this->hasAccess($auth, $activity)) {
-            respond(403, null, 'Bạn không có quyền xem hoạt động này', false);
-        }
-
+        // Allow reading timeline for all users in the same tenant
         $stmt = $this->db->prepare("
             SELECT l.*, u.full_name as user_name, u.avatar_url as user_avatar
             FROM audit_logs l

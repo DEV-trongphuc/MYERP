@@ -941,65 +941,7 @@ class FinanceController
     {
         $sql = "SELECT e.*, u.full_name as creator_name, u.avatar_url as creator_avatar, u2.full_name as approver_name, u2.avatar_url as approver_avatar, u3.full_name as refunder_name, u3.avatar_url as refunder_avatar, u4.full_name as approver_name_2, u4.avatar_url as approver_avatar_2, u5.full_name as approver_name_3, u5.avatar_url as approver_avatar_3 FROM expenses e LEFT JOIN users u ON e.created_by=u.id LEFT JOIN users u2 ON e.approver_id=u2.id LEFT JOIN users u3 ON e.refunder_id=u3.id LEFT JOIN users u4 ON e.approver_id_2=u4.id LEFT JOIN users u5 ON e.approver_id_3=u5.id WHERE e.id=? AND e.tenant_id=? AND e.deleted_at IS NULL";
         $p = [$id, $auth['tenant_id']];
-        $isAdminOrDirectorOrAccountant = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'accountant'], true);
-        if (!$isAdminOrDirectorOrAccountant) {
-            if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
-                $sql .= " AND (e.created_by=? OR e.approver_id=? OR e.approver_id_2=? OR e.approver_id_3=? OR e.refunder_id=? OR e.related_user_ids LIKE ? OR e.related_user_ids LIKE ? OR EXISTS (SELECT 1 FROM notes n JOIN note_mentions nm ON nm.note_id = n.id WHERE n.entity_type = 'expense' AND n.entity_id = e.id AND nm.user_id = ?))";
-                $p[] = $auth['user_id'];
-                $p[] = $auth['user_id'];
-                $p[] = $auth['user_id'];
-                $p[] = $auth['user_id'];
-                $p[] = $auth['user_id'];
-                $p[] = '%"' . $auth['user_id'] . '"%';
-                $p[] = '%' . $auth['user_id'] . '%';
-                $p[] = $auth['user_id'];
-            } else if ($auth['role'] === 'sale_admin' || $auth['role'] === 'saleadmin') {
-                $sql .= " AND (
-                    e.created_by = ? 
-                    OR e.approver_id = ?
-                    OR e.approver_id_2 = ?
-                    OR e.approver_id_3 = ?
-                    OR e.refunder_id = ?
-                    OR e.related_user_ids LIKE ?
-                    OR e.related_user_ids LIKE ?
-                    OR EXISTS (
-                        SELECT 1 FROM expense_entities ee 
-                        JOIN contacts c ON ee.entity_type = 'contact' AND ee.entity_id = c.id
-                        WHERE ee.expense_id = e.id AND c.status = 'customer'
-                    )
-                    OR EXISTS (SELECT 1 FROM notes n JOIN note_mentions nm ON nm.note_id = n.id WHERE n.entity_type = 'expense' AND n.entity_id = e.id AND nm.user_id = ?)
-                )";
-                $p[] = $auth['user_id'];
-                $p[] = $auth['user_id'];
-                $p[] = $auth['user_id'];
-                $p[] = $auth['user_id'];
-                $p[] = $auth['user_id'];
-                $p[] = '%"' . $auth['user_id'] . '"%';
-                $p[] = '%' . $auth['user_id'] . '%';
-                $p[] = $auth['user_id'];
-            } else if ($auth['role'] === 'manager') {
-                $sql .= " AND (e.created_by = ? OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ? OR e.refunder_id = ? OR e.related_user_ids LIKE ? OR e.related_user_ids LIKE ? OR e.created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)) OR EXISTS (SELECT 1 FROM notes n JOIN note_mentions nm ON nm.note_id = n.id WHERE n.entity_type = 'expense' AND n.entity_id = e.id AND nm.user_id = ?))";
-                $p[] = $auth['user_id'];
-                $p[] = $auth['user_id'];
-                $p[] = $auth['user_id'];
-                $p[] = $auth['user_id'];
-                $p[] = $auth['user_id'];
-                $p[] = '%"' . $auth['user_id'] . '"%';
-                $p[] = '%' . $auth['user_id'] . '%';
-                $p[] = $auth['user_id'];
-                $p[] = $auth['user_id'];
-            } else {
-                $sql .= " AND (e.created_by = ? OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ? OR e.refunder_id = ? OR e.related_user_ids LIKE ? OR e.related_user_ids LIKE ? OR EXISTS (SELECT 1 FROM notes n JOIN note_mentions nm ON nm.note_id = n.id WHERE n.entity_type = 'expense' AND n.entity_id = e.id AND nm.user_id = ?))";
-                $p[] = $auth['user_id'];
-                $p[] = $auth['user_id'];
-                $p[] = $auth['user_id'];
-                $p[] = $auth['user_id'];
-                $p[] = $auth['user_id'];
-                $p[] = '%"' . $auth['user_id'] . '"%';
-                $p[] = '%' . $auth['user_id'] . '%';
-                $p[] = $auth['user_id'];
-            }
-        }
+        // Allow all users in the same tenant to view expense details (e.g. when shared in WorkChat drawer)
         $stmt = $this->db->prepare($sql);
         $stmt->execute($p);
         $row = $stmt->fetch();
