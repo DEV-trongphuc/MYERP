@@ -3344,10 +3344,10 @@ export const Header = ({
                 onClick={handleClick}
                 style={{
                   position: 'fixed',
-                  bottom: typeof window !== 'undefined' && window.innerWidth <= 768 ? 'calc(var(--mobile-bottom-nav-height, 62px) + env(safe-area-inset-bottom, 0px) + 78px)' : 86,
+                  bottom: typeof window !== 'undefined' && window.innerWidth <= 768 ? 'calc(var(--mobile-bottom-nav-height, 62px) + env(safe-area-inset-bottom, 0px) + 72px)' : 86,
                   right: typeof window !== 'undefined' && window.innerWidth <= 768 ? 16 : 24,
-                  width: 52,
-                  height: 52,
+                  width: typeof window !== 'undefined' && window.innerWidth <= 768 ? 48 : 52,
+                  height: typeof window !== 'undefined' && window.innerWidth <= 768 ? 48 : 52,
                   borderRadius: '50%',
                   background: btnBg,
                   color: 'white',

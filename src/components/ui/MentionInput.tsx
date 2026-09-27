@@ -963,7 +963,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
           type="button"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => handleEditorCommand('bold')}
-          style={{ padding: '4px 6px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text)' }}
+          style={{ flexShrink: 0, padding: '4px 6px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text)' }}
           title="In đậm"
         >
           <Bold size={13} />
@@ -972,7 +972,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
           type="button"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => handleEditorCommand('italic')}
-          style={{ padding: '4px 6px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text)' }}
+          style={{ flexShrink: 0, padding: '4px 6px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text)' }}
           title="In nghiêng"
         >
           <Italic size={13} />
@@ -981,17 +981,17 @@ export const MentionInput: React.FC<MentionInputProps> = ({
           type="button"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => handleEditorCommand('underline')}
-          style={{ padding: '4px 6px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text)' }}
+          style={{ flexShrink: 0, padding: '4px 6px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text)' }}
           title="Gạch chân"
         >
           <UnderlineIcon size={13} />
         </button>
-        <div style={{ width: '1px', height: '14px', background: 'var(--color-border)', margin: '0 4px' }} />
+        <div style={{ flexShrink: 0, width: '1px', height: '14px', background: 'var(--color-border)', margin: '0 4px' }} />
         <button
           type="button"
           onMouseDown={(e) => e.preventDefault()}
           onClick={handleEditorAddLink}
-          style={{ padding: '4px 6px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text)' }}
+          style={{ flexShrink: 0, padding: '4px 6px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text)' }}
           title="Chèn liên kết"
         >
           <Link2 size={13} />
@@ -1000,7 +1000,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
           type="button"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => triggerFileUpload('*/*')}
-          style={{ padding: '4px 6px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text)' }}
+          style={{ flexShrink: 0, padding: '4px 6px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text)' }}
           title="Đính kèm tệp / tài liệu (PDF, Word, Excel, ZIP...)"
         >
           <Paperclip size={13} />
@@ -1009,7 +1009,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
           type="button"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => triggerFileUpload('image/*')}
-          style={{ padding: '4px 6px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text)' }}
+          style={{ flexShrink: 0, padding: '4px 6px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text)' }}
           title="Chèn hình ảnh"
         >
           <ImageIcon size={13} />
@@ -1027,7 +1027,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
             setStickerAnchorEl(e.currentTarget);
             setShowStickerModal(true);
           }}
-          style={{ padding: '4px 6px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f59e0b' }}
+          style={{ flexShrink: 0, padding: '4px 6px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f59e0b' }}
           title="Biểu cảm & Nhãn dán Sticker"
         >
           <Smile size={14} />
@@ -1037,7 +1037,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
           type="button"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => handleEditorCommand('insertUnorderedList')}
-          style={{ padding: '4px 6px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text)' }}
+          style={{ flexShrink: 0, padding: '4px 6px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text)' }}
           title="Danh sách dấu chấm"
         >
           <List size={13} />
@@ -1046,7 +1046,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
           type="button"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => handleEditorCommand('insertOrderedList')}
-          style={{ padding: '4px 6px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text)' }}
+          style={{ flexShrink: 0, padding: '4px 6px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text)' }}
           title="Danh sách số"
         >
           <ListOrdered size={13} />
@@ -1055,7 +1055,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
           type="button"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => handleEditorCommand('removeFormat')}
-          style={{ padding: '4px 6px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-muted)' }}
+          style={{ flexShrink: 0, padding: '4px 6px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-muted)' }}
           title="Xóa định dạng"
         >
           <Trash2 size={13} />

@@ -111,11 +111,11 @@ export const ChatFloatingLauncher: React.FC = () => {
         style={{
           position: 'fixed',
           bottom: isMobile 
-            ? 'calc(var(--mobile-bottom-nav-height, 62px) + env(safe-area-inset-bottom, 0px) + 16px)' 
+            ? 'calc(var(--mobile-bottom-nav-height, 62px) + env(safe-area-inset-bottom, 0px) + 14px)' 
             : '24px',
-          right: isMobile ? '17px' : '25px',
-          width: '52px',
-          height: '52px',
+          right: isMobile ? '16px' : '25px',
+          width: isMobile ? '48px' : '52px',
+          height: isMobile ? '48px' : '52px',
           borderRadius: '50%',
           background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
           color: '#ffffff',

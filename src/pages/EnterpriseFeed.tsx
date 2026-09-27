@@ -968,7 +968,7 @@ export const EnterpriseFeed: React.FC = () => {
     if (urls.length === 1) {
       const url = urls[0];
       return (
-        <div style={{ marginTop: '0.75rem', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--color-border-light)', lineHeight: 0 }}>
+        <div className="feed-attachment-single" style={{ marginTop: '0.75rem', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--color-border-light)', lineHeight: 0 }}>
           {isImage(url) ? (
             <img src={url} alt="Attachment" style={{ display: 'block', width: '100%', maxHeight: '450px', objectFit: 'cover' }} />
           ) : (
@@ -980,9 +980,9 @@ export const EnterpriseFeed: React.FC = () => {
 
     if (urls.length === 2) {
       return (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '0.75rem', borderRadius: '12px', overflow: 'hidden', lineHeight: 0 }}>
+        <div className="feed-attachment-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '0.75rem', borderRadius: '12px', overflow: 'hidden', lineHeight: 0 }}>
           {urls.map((url, i) => (
-            <div key={i} style={{ height: '220px', background: 'var(--color-bg)', overflow: 'hidden' }}>
+            <div key={i} className="feed-attachment-cell-2" style={{ height: '220px', background: 'var(--color-bg)', overflow: 'hidden' }}>
               {isImage(url) ? (
                 <img src={url} alt="Attachment" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
@@ -996,15 +996,15 @@ export const EnterpriseFeed: React.FC = () => {
 
     // 3 or more attachments layout
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '8px', marginTop: '0.75rem', borderRadius: '12px', overflow: 'hidden', lineHeight: 0 }}>
-        <div style={{ height: '320px', background: 'var(--color-bg)', overflow: 'hidden' }}>
+      <div className="feed-attachment-grid-3" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '8px', marginTop: '0.75rem', borderRadius: '12px', overflow: 'hidden', lineHeight: 0 }}>
+        <div className="feed-attachment-cell-3-main" style={{ height: '320px', background: 'var(--color-bg)', overflow: 'hidden' }}>
           {isImage(urls[0]) ? (
             <img src={urls[0]} alt="Attachment" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : (
             <video src={urls[0]} controls style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
           )}
         </div>
-        <div style={{ display: 'grid', gridTemplateRows: '1fr 1fr', gap: '8px', height: '320px' }}>
+        <div className="feed-attachment-cell-3-sub" style={{ display: 'grid', gridTemplateRows: '1fr 1fr', gap: '8px', height: '320px' }}>
           {urls.slice(1, 3).map((url, i) => (
             <div key={i} style={{ height: '100%', position: 'relative', background: 'var(--color-bg)', overflow: 'hidden' }}>
               {isImage(url) ? (
@@ -1099,7 +1099,66 @@ export const EnterpriseFeed: React.FC = () => {
         }
         @media (max-width: 768px) {
           .feed-container {
-            padding: 1rem 0.75rem 120px 0.75rem !important;
+            padding: 0.75rem 0.5rem calc(var(--mobile-bottom-nav-height, 62px) + env(safe-area-inset-bottom, 0px) + 140px) 0.5rem !important;
+          }
+          .feed-composer {
+            padding: 12px !important;
+            border-radius: 14px !important;
+            margin-bottom: 12px !important;
+          }
+          .feed-composer-top {
+            gap: 8px !important;
+          }
+          .composer-actions-bar {
+            flex-wrap: wrap !important;
+            gap: 8px !important;
+            padding-top: 8px !important;
+          }
+          .composer-left-tools {
+            flex: 1 1 auto !important;
+            display: flex !important;
+            align-items: center !important;
+            gap: 6px !important;
+            flex-wrap: wrap !important;
+          }
+          .composer-submit-btn {
+            white-space: nowrap !important;
+            padding: 6px 16px !important;
+            min-width: 84px !important;
+            height: 34px !important;
+            flex-shrink: 0 !important;
+            font-size: 0.78rem !important;
+          }
+          .feed-post-card {
+            padding: 12px 14px !important;
+            border-radius: 14px !important;
+            margin-bottom: 12px !important;
+          }
+          .feed-attachment-single img, .feed-attachment-single video {
+            max-height: 320px !important;
+          }
+          .feed-attachment-grid-2 {
+            gap: 4px !important;
+          }
+          .feed-attachment-cell-2 {
+            height: 160px !important;
+          }
+          .feed-attachment-grid-3 {
+            gap: 4px !important;
+          }
+          .feed-attachment-cell-3-main {
+            height: 220px !important;
+          }
+          .feed-attachment-cell-3-sub {
+            gap: 4px !important;
+            height: 220px !important;
+          }
+          .post-action-btn {
+            font-size: 0.75rem !important;
+            height: 34px !important;
+          }
+          .post-action-btn span {
+            font-size: 0.75rem !important;
           }
         }
       `}</style>
@@ -1196,7 +1255,7 @@ export const EnterpriseFeed: React.FC = () => {
       </div>
 
       {/* Post Creator Box */}
-      <form onSubmit={handlePostSubmit} style={{
+      <form onSubmit={handlePostSubmit} className="feed-composer" style={{
         background: 'var(--color-surface)',
         borderRadius: '16px',
         padding: '1.25rem',
@@ -1207,11 +1266,11 @@ export const EnterpriseFeed: React.FC = () => {
         flexDirection: 'column',
         gap: '12px'
       }}>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+        <div className="feed-composer-top" style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
           <Avatar 
             src={user?.avatar_url || user?.avatar} 
             name={user?.name || 'User'} 
-            size={40} 
+            size={38} 
           />
           <div style={{ flex: 1, minWidth: 0 }}>
             <MentionInput
@@ -1265,14 +1324,14 @@ export const EnterpriseFeed: React.FC = () => {
           </div>
         )}
 
-        <div style={{
+        <div className="composer-actions-bar" style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           borderTop: '1px solid var(--color-border-light)',
           paddingTop: '10px'
         }}>
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div className="composer-left-tools" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <label style={{
               display: 'flex',
               alignItems: 'center',
@@ -1324,7 +1383,7 @@ export const EnterpriseFeed: React.FC = () => {
                     label: tObj.name
                   }))
                 ]}
-                width="180px"
+                width="160px"
                 size="sm"
               />
             )}
@@ -1332,6 +1391,7 @@ export const EnterpriseFeed: React.FC = () => {
 
           <button 
             type="submit" 
+            className="composer-submit-btn"
             disabled={isSubmitting || uploading || (!content.trim() && attachments.length === 0)}
             style={{
               background: 'var(--color-primary)',
@@ -1344,12 +1404,15 @@ export const EnterpriseFeed: React.FC = () => {
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'center',
               gap: '6px',
-              boxShadow: 'var(--shadow-sm)'
+              boxShadow: 'var(--shadow-sm)',
+              whiteSpace: 'nowrap',
+              flexShrink: 0
             }}
           >
-            <Send size={12} />
-            {isSubmitting ? t('Đang đăng...') : t('Đăng tin')}
+            <Send size={12} style={{ flexShrink: 0 }} />
+            <span style={{ whiteSpace: 'nowrap' }}>{isSubmitting ? t('Đang đăng...') : t('Đăng tin')}</span>
           </button>
         </div>
       </form>
@@ -1382,6 +1445,7 @@ export const EnterpriseFeed: React.FC = () => {
               <div 
                 key={post.id} 
                 id={`post-${post.id}`}
+                className="feed-post-card"
                 style={{
                   background: 'var(--color-surface)',
                   borderRadius: '16px',
@@ -1620,7 +1684,7 @@ export const EnterpriseFeed: React.FC = () => {
                       color: hasReacted ? (currentReactionObj?.color || '#3b82f6') : 'var(--color-text-muted)',
                       padding: 0
                     }}
-                    className="hover-bg"
+                    className="hover-bg post-action-btn"
                   >
                     <div
                       onMouseEnter={() => handleMouseEnterLike(post.id)}
@@ -1661,7 +1725,7 @@ export const EnterpriseFeed: React.FC = () => {
                       borderRadius: '8px',
                       color: activeCommentsPostId === post.id ? 'var(--color-primary)' : 'var(--color-text-muted)'
                     }}
-                    className="hover-bg"
+                    className="hover-bg post-action-btn"
                   >
                     <MessageCircle size={16} />
                     <span>{t('Bình luận')} ({post.comments_count})</span>
