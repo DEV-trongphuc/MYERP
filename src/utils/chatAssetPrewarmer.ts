@@ -2,7 +2,7 @@
 // Preloads stickers and frequently accessed avatars into browser image cache
 // to eliminate visual blank flashes (0ms instantaneous image display)
 
-const IDEAS_STICKER_COUNT = 16;
+const IDEAS_STICKER_COUNT = 48;
 let hasPrewarmedStickers = false;
 const prewarmedAvatars = new Set<string>();
 

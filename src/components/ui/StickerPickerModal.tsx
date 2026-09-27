@@ -17,7 +17,7 @@ export const STICKER_PACKS: StickerPack[] = [
     id: 'ideas',
     name: 'IDEAS with love',
     icon: '/stickers/ideas/ideas_1.webp',
-    count: 24,
+    count: 48,
     ext: 'webp',
     isBrand: true,
     badge: 'Thương hiệu'

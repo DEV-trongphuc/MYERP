@@ -9,11 +9,15 @@ def process_ideas_stickers():
     
     session = new_session("u2netp")
     
-    for i in range(1, 25):
+    for i in range(1, 49):
         jpg_path = os.path.join(ideas_dir, f"ideas_{i}.jpg")
         png_path = os.path.join(ideas_dir, f"ideas_{i}.png")
         webp_path = os.path.join(ideas_dir, f"ideas_{i}.webp")
         
+        # If webp already exists for 1-24, we don't need to reprocess unless forced
+        if i <= 24 and os.path.exists(webp_path):
+            continue
+            
         src_path = None
         if os.path.exists(jpg_path):
             src_path = jpg_path
@@ -21,7 +25,7 @@ def process_ideas_stickers():
             src_path = png_path
             
         if not src_path:
-            print(f"[{i}/24] Skipped (not found)")
+            print(f"[{i}/48] Skipped (not found)")
             continue
             
         try:
@@ -51,11 +55,12 @@ def process_ideas_stickers():
             
             final_sticker = canvas.resize((256, 256), Image.Resampling.LANCZOS)
             final_sticker.save(webp_path, "WEBP", quality=85, method=6)
+            final_sticker.save(png_path, "PNG")
             
             size_kb = os.path.getsize(webp_path) / 1024
-            print(f"[{i}/24] Done -> {webp_path} ({size_kb:.1f} KB)")
+            print(f"[{i}/48] Done -> {webp_path} ({size_kb:.1f} KB)")
         except Exception as e:
-            print(f"[{i}/24] Error on {src_path}: {e}")
+            print(f"[{i}/48] Error on {src_path}: {e}")
 
     # Remove temporary test file if present
     test_path = os.path.join(ideas_dir, "test_1.webp")
