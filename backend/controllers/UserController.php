@@ -9,7 +9,16 @@ class UserController {
         // Allow all authenticated users within the same tenant to retrieve the user list (e.g., for task assignment and mentions)
         
         
-        $where = ["tenant_id = ? AND is_active = 1"];
+        $where = [
+            "tenant_id = ?",
+            "is_active = 1",
+            "(status = 'active' OR status IS NULL OR status = '')",
+            "status != 'inactive'",
+            "email != 'info@ideas.edu.vn'",
+            "email != 'nhatmvh@ideas.edu.vn'",
+            "full_name NOT LIKE '%Mang Viên Hoàng Nhật%'",
+            "id NOT IN (999992, 999993, 999994, 999995, 999996, 999997, 999998, 999999, 1000000, 1000001, 1000002, 1000003, 1000004, 999906, 999907, 100071, 100069, 100078, 100077)"
+        ];
         $params = [$auth['tenant_id']];
         
         $teamOnly = isset($_GET['team_only']) && (string)$_GET['team_only'] === '1';
@@ -37,16 +46,16 @@ class UserController {
         $whereClause = implode(" AND ", $where);
         
         try {
-            $stmt=$this->db->prepare("SELECT id,email,full_name,role,job_title,avatar_url,signature_url,phone,is_active,last_login_at,created_at,dob,gender,citizen_id,address,bank_name,bank_account,team_id,permissions_json,bio,extra_fields_json,manager_behavior_mode FROM users WHERE $whereClause ORDER BY full_name");
+            $stmt=$this->db->prepare("SELECT id,email,full_name,role,status,job_title,avatar_url,signature_url,phone,is_active,last_login_at,created_at,dob,gender,citizen_id,address,bank_name,bank_account,team_id,permissions_json,bio,extra_fields_json,manager_behavior_mode FROM users WHERE $whereClause ORDER BY full_name");
             $stmt->execute($params);
             respond(200,$stmt->fetchAll());
         } catch (Throwable $e) {
             try {
-                $stmt=$this->db->prepare("SELECT id,email,full_name,role,avatar_url,phone,is_active,last_login_at,created_at,team_id FROM users WHERE $whereClause ORDER BY full_name");
+                $stmt=$this->db->prepare("SELECT id,email,full_name,role,status,avatar_url,phone,is_active,last_login_at,created_at,team_id FROM users WHERE $whereClause ORDER BY full_name");
                 $stmt->execute($params);
                 respond(200,$stmt->fetchAll());
             } catch (Throwable $e2) {
-                $stmt=$this->db->prepare("SELECT id,email,full_name,role,phone,is_active,created_at,team_id FROM users WHERE $whereClause ORDER BY full_name");
+                $stmt=$this->db->prepare("SELECT id,email,full_name,role,status,phone,is_active,created_at,team_id FROM users WHERE $whereClause ORDER BY full_name");
                 $stmt->execute($params);
                 respond(200,$stmt->fetchAll());
             }

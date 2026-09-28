@@ -1135,17 +1135,38 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   // All day personnel aggregation (Full active user list merged with checkins and leave requests)
   const allDayPersonnel = useMemo(() => {
     if (!selectedDateForDetail) return [];
-    const activeUsers = usersList.filter(u => 
-      (u.is_active === 1 || u.is_active === undefined || u.is_active === null || String(u.is_active) === '1') && 
-      u.status !== 'inactive' && 
-      u.email !== 'info@ideas.edu.vn'
-    );
-    
+
+    const inactiveUserIds = new Set([
+      999992, 999993, 999994, 999995, 999996, 999997, 999998, 999999,
+      1000000, 1000001, 1000002, 1000003, 1000004, 999906, 999907,
+      100071, 100069, 100078, 100077
+    ]);
+    const inactiveNames = new Set([
+      'mang viên hoàng nhật', 'lương văn trí', 'lê thanh nhân', 
+      'mai nhật huyền', 'nguyễn châu vỹ ái', 'nguyễn ngọc quỳnh', 'nguyễn quốc an'
+    ]);
+
     const dayCheckIns = calendarCheckIns.filter(c => c.check_in_date === selectedDateForDetail);
     const dayLeaves = calendarLeaves.filter(l => {
       const s = l.start_date_only || (l.start_date ? String(l.start_date).slice(0, 10) : '');
       const e = l.end_date_only || (l.end_date ? String(l.end_date).slice(0, 10) : '');
       return s <= selectedDateForDetail && e >= selectedDateForDetail;
+    });
+
+    const activeUsers = usersList.filter(u => {
+      const uId = Number(u.id);
+      const name = (u.full_name || u.name || '').toLowerCase().trim();
+      const hasCheckIn = dayCheckIns.some(c => Number(c.user_id) === uId);
+
+      // If user has a check-in on this date, show them even if inactive
+      if (hasCheckIn) return true;
+
+      if (inactiveUserIds.has(uId)) return false;
+      if (inactiveNames.has(name)) return false;
+      if (u.email === 'info@ideas.edu.vn' || u.email === 'nhatmvh@ideas.edu.vn') return false;
+      if (u.status === 'inactive' || u.status === 'resigned' || u.status === 'terminated') return false;
+      if (u.is_active === 0 || u.is_active === false || String(u.is_active) === '0') return false;
+      return true;
     });
 
     return activeUsers.map(u => {

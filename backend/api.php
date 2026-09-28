@@ -6313,7 +6313,7 @@ switch ($action) {
                 c.vacation_mode, 
                 c.overtime_mode,
                 c.status,
-                COALESCE(c.is_active, a.is_active, 1) AS is_active,
+                IF(c.is_active = 0 OR a.is_active = 0, 0, COALESCE(c.is_active, a.is_active, 1)) AS is_active,
                 c.last_login_at AS last_login,
                 IF(c.use_custom_work_hours = 1, c.work_start_time, (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_start_time' LIMIT 1)) AS work_start_time,
                 IF(c.use_custom_work_hours = 1, c.work_end_time, (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_end_time' LIMIT 1)) AS work_end_time,

@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 300;
+$targetVersion = 301;
 $currentVersion = 186;
 
 // Query current DB version
@@ -3963,15 +3963,9 @@ try {
         }
     }
 
-    // --- PHIÊN BẢN 296: Khôi phục trạng thái hoạt động bình thường (active) cho toàn bộ nhân sự ---
+    // --- PHIÊN BẢN 296: Khôi phục trạng thái hoạt động (Đã vô hiệu hóa để bảo vệ danh sách nghỉ việc) ---
     if ($currentVersion < 296 && $apply) {
-        $logMsg("Bắt đầu nâng cấp lên phiên bản 296: Khôi phục trạng thái hoạt động cho toàn bộ nhân sự...", "info");
-        try {
-            $conn->query("UPDATE users SET is_active = 1, status = 'active' WHERE id > 0");
-            $logMsg("Nâng cấp lên phiên bản 296 hoàn tất: Đã khôi phục trạng thái hoạt động cho toàn bộ nhân sự.", "success");
-        } catch (Throwable $e) {
-            $logMsg("Lỗi khi nâng cấp v296: " . $e->getMessage(), "error");
-        }
+        $logMsg("Bỏ qua khôi phục v296 để tránh ghi đè trạng thái nhân sự đã nghỉ việc.", "info");
     }
 
     // --- PHIÊN BẢN 297: Bổ sung liên kết Chat vào bảng activities (conversation_id, chat_message_id) ---
@@ -4120,10 +4114,55 @@ try {
         }
     }
 
-    // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '300') ON DUPLICATE KEY UPDATE setting_value = '300'");
+    // --- PHIÊN BẢN 301: Cập nhật triệt để trạng thái nghỉ việc (inactive) cho toàn bộ nhân sự đã nghỉ ---
+    if ($currentVersion < 301 && $apply) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 301: Cập nhật trạng thái nhân sự nghỉ việc triệt để...", "info");
+        try {
+            $inactiveIds = [
+                999992,  // Nguyễn Thị Thuyền
+                999993,  // Lương Văn Trí
+                999994,  // Phạm Hoàng Phú
+                999995,  // Mai Nhật Huyền
+                999996,  // Nguyễn Châu Vỹ Ái
+                999997,  // Nguyễn Ngọc Quỳnh
+                999998,  // Nguyễn Quốc An
+                999999,  // Nguyễn Quỳnh Anh
+                1000000, // Nguyễn Thị Kim Thoa
+                1000001, // Nguyễn Trần Khánh Uyên
+                1000002, // Lê Thanh Nhân
+                1000003, // Vi Văn Trịnh
+                1000004, // Võ Trùng Dương
+                999906,  // Phạm Quang Vinh
+                999907,  // Phạm Phương Lan
+                100071,  // Trần Ngọc Thùy Dương
+                100069,  // Trịnh Đình Thanh
+                100078,  // Trương Thị Bảo Trân
+                100077   // Vũ Trí Nhân
+            ];
+            $idList = implode(',', $inactiveIds);
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 300", "success");
+            // 1. Cập nhật bảng users theo ID và tên/email đặc biệt
+            $conn->query("UPDATE users SET is_active = 0, status = 'inactive' WHERE id IN ({$idList}) OR full_name LIKE '%Mang Viên Hoàng Nhật%' OR email = 'nhatmvh@ideas.edu.vn'");
+
+            // 2. Đồng bộ trạng thái inactive từ bảng accounts sang users
+            $conn->query("UPDATE users u JOIN accounts a ON (u.id = a.id OR u.email = a.email) SET u.is_active = 0, u.status = 'inactive' WHERE a.is_active = 0");
+
+            // 3. Đảm bảo bảng accounts cũng mang is_active = 0 đối với các ID này
+            $conn->query("UPDATE accounts SET is_active = 0 WHERE id IN ({$idList}) OR email = 'nhatmvh@ideas.edu.vn'");
+
+            // 4. Set offline trong chat_user_presence
+            $conn->query("UPDATE chat_user_presence SET status = 'offline' WHERE user_id IN ({$idList}) OR user_id IN (SELECT id FROM users WHERE is_active = 0)");
+
+            $logMsg("Nâng cấp lên phiên bản 301 hoàn tất: Đã làm sạch toàn bộ nhân sự đã nghỉ việc.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi nâng cấp v301: " . $e->getMessage(), "error");
+        }
+    }
+
+    // Update DB version in system_settings
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '301') ON DUPLICATE KEY UPDATE setting_value = '301'");
+
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 301", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");

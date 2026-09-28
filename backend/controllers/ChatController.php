@@ -1669,13 +1669,18 @@ class ChatController {
                        COALESCE(pr.last_ping_at, u.last_login_at) as last_active_at,
                        TIMESTAMPDIFF(SECOND, COALESCE(pr.last_ping_at, u.last_login_at), NOW()) as seconds_ago
                 FROM users u
+                LEFT JOIN accounts a ON (u.id = a.id OR u.email = a.email)
                 LEFT JOIN teams t ON u.team_id = t.id
                 LEFT JOIN chat_user_presence pr ON pr.user_id = u.id
                 WHERE u.id != ? 
-                  AND (u.is_active = 1 OR u.is_active IS NULL)
+                  AND u.is_active = 1
                   AND (u.status = 'active' OR u.status IS NULL OR u.status = '')
                   AND u.status != 'inactive'
+                  AND (a.is_active = 1 OR a.is_active IS NULL)
                   AND u.email != 'info@ideas.edu.vn'
+                  AND u.email != 'nhatmvh@ideas.edu.vn'
+                  AND u.full_name NOT LIKE '%Mang Viên Hoàng Nhật%'
+                  AND u.id NOT IN (999992, 999993, 999994, 999995, 999996, 999997, 999998, 999999, 1000000, 1000001, 1000002, 1000003, 1000004, 999906, 999907, 100071, 100069, 100078, 100077)
                   AND u.role NOT IN ('superadmin', 'super_admin')
                 ORDER BY u.full_name ASC
             ");
