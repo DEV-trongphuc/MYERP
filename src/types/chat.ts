@@ -26,6 +26,8 @@ export interface ChatReaction {
   type: string;
   count: number;
   users: string[];
+  user_ids?: number[];
+  details?: Array<{ user_id: number; full_name: string; avatar_url?: string }>;
   reacted_by_me: boolean;
 }
 
@@ -99,6 +101,7 @@ export interface ChatConversation {
     is_active?: boolean;
     user_status?: string;
     online_status?: UserOnlineStatus;
+    last_ping_at?: string;
     last_read_message_id?: number;
   };
   participants?: ChatParticipant[];

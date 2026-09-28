@@ -12887,7 +12887,7 @@ export default function Approvals() {
 }
 
 // Side-Drawer Component detailing step-by-step progress
-export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onReject, isAdmin, onDuplicate, onEdit, onDelete }: {
+export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onReject, isAdmin, onDuplicate, onEdit, onDelete, zIndex }: {
   item: ApprovalItem;
   onClose: () => void;
   users: any[];
@@ -12898,6 +12898,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
   onDuplicate?: (item: ApprovalItem) => void;
   onEdit?: (item: ApprovalItem) => void;
   onDelete?: (item: ApprovalItem) => void;
+  zIndex?: number;
 }) {
   const [detail, setDetail] = useState<any>(item || null);
   const [senderLeaveBalance, setSenderLeaveBalance] = useState<any>(null);
@@ -17415,7 +17416,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 background: 'rgba(0, 0, 0, 0.45)',
                 backdropFilter: 'blur(8px)',
                 WebkitBackdropFilter: 'blur(8px)',
-                zIndex: 1000005
+                zIndex: zIndex || 1000005
               }}
             />
 
@@ -17437,7 +17438,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 display: 'flex',
                 flexDirection: 'column',
                 boxSizing: 'border-box',
-                zIndex: 1000010,
+                zIndex: (zIndex ? zIndex + 1 : 1000010),
                 overflow: 'hidden'
               }} 
               onClick={e => e.stopPropagation()}

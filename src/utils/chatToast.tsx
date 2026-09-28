@@ -16,6 +16,7 @@ export interface ChatToastPayload {
 
 // Track recently toasted message IDs to prevent duplicates
 const toastedMessageIds = new Set<number>();
+const activeChatToastIds: string[] = [];
 
 export const showChatNotificationToast = (payload: ChatToastPayload) => {
   if (toastedMessageIds.has(payload.messageId)) return;
@@ -25,6 +26,12 @@ export const showChatNotificationToast = (payload: ChatToastPayload) => {
   if (toastedMessageIds.size > 200) {
     const arr = Array.from(toastedMessageIds);
     arr.slice(0, 100).forEach((id) => toastedMessageIds.delete(id));
+  }
+
+  // Dismiss oldest toast if more than 2 active toasts are already shown to prevent screen crowding
+  if (activeChatToastIds.length >= 2) {
+    const oldestId = activeChatToastIds.shift();
+    if (oldestId) toast.dismiss(oldestId);
   }
 
   // Play pleasant notification sound chime
@@ -42,7 +49,7 @@ export const showChatNotificationToast = (payload: ChatToastPayload) => {
     previewText = '📊 Đã chia sẻ liên kết dữ liệu ERP';
   }
 
-  toast.custom(
+  const toastId = toast.custom(
     (t) => (
       <div
         onClick={() => {
@@ -215,4 +222,5 @@ export const showChatNotificationToast = (payload: ChatToastPayload) => {
       position: 'top-right'
     }
   );
+  activeChatToastIds.push(toastId);
 };

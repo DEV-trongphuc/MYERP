@@ -4133,6 +4133,17 @@ textarea:not(.chat-input-textarea), .form-textarea, textarea.form-input, textare
   resize: none !important;
   line-height: 1.4 !important;
   box-sizing: border-box !important;
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.chat-input-textarea:focus,
+.chat-input-textarea:focus-visible,
+.chat-input-textarea:active {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 .btn {

@@ -220,9 +220,14 @@ export const Header = ({
 
     if (user) {
       const hasSeen = localStorage.getItem('has_seen_workchat_intro_v3');
-      if (!hasSeen) {
+      const shownCount = parseInt(localStorage.getItem('workchat_intro_shown_count_v3') || '0', 10);
+      if (!hasSeen && shownCount < 2) {
         const timer = setTimeout(() => {
           setShowFeatureIntro(true);
+          try {
+            const currentCount = parseInt(localStorage.getItem('workchat_intro_shown_count_v3') || '0', 10);
+            localStorage.setItem('workchat_intro_shown_count_v3', String(currentCount + 1));
+          } catch (e) {}
         }, 1200);
         return () => {
           clearTimeout(timer);

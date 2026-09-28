@@ -32,6 +32,11 @@ import toast from 'react-hot-toast';
 import { getFileFormatConfig, formatFileSize, extractFirstUrl } from '../../utils/chatFileUtils';
 import { compressImageFile } from '../../utils/imageCompressor';
 
+const EMOJI_MAP: Record<string, string> = {
+  like: '👍', love: '❤️', fire: '🔥', haha: '😂',
+  wow: '😮', sad: '😢', angry: '😡'
+};
+
 const linkPreviewCache = new Map<string, { title: string; description: string; image: string; domain: string }>();
 
 const LinkPreviewCard: React.FC<{ url: string; isMine?: boolean }> = ({ url, isMine }) => {
@@ -583,7 +588,7 @@ export const WorkChatModal: React.FC = () => {
     setActiveSidebarTab
   } = useChatStore();
 
-  const { openCustomerDrawer, openTaskDrawer, openExpenseDrawer } = useUIStore();
+  const { openCustomerDrawer, openTaskDrawer, openExpenseDrawer, openApprovalDrawer } = useUIStore();
 
   // Message edit & floating context menu state
   const [editingMsgId, setEditingMsgId] = useState<number | null>(null);
@@ -600,6 +605,17 @@ export const WorkChatModal: React.FC = () => {
     setFloatingMenu(null);
   }, []);
   const [taskModalTargetMsg, setTaskModalTargetMsg] = useState<ChatMessage | null>(null);
+
+  // Persistent tracking of highest delivered message ID per conversation (Monotonic delivery)
+  const maxDeliveredIdRef = useRef<Map<number, number>>(new Map());
+
+  // Modal for viewing all readers of a message
+  const [selectedSeenDetailMessage, setSelectedSeenDetailMessage] = useState<ChatMessage | null>(null);
+  const [seenSearchQuery, setSeenSearchQuery] = useState('');
+
+  // Modal for viewing who reacted to a message
+  const [selectedReactionMessage, setSelectedReactionMessage] = useState<ChatMessage | null>(null);
+  const [reactionActiveTab, setReactionActiveTab] = useState<string>('all');
 
 
 
@@ -680,8 +696,17 @@ export const WorkChatModal: React.FC = () => {
   // In-chat search
   const [showInChatSearch, setShowInChatSearch] = useState(false);
   const [inChatSearchQuery, setInChatSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
   const [highlightedMsgId, setHighlightedMsgId] = useState<number | null>(null);
+
+  // Debounce in-chat search query by 250ms for buttery-smooth 60fps typing
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(inChatSearchQuery);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [inChatSearchQuery]);
 
   // Drag & drop files onto message area
   const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -743,6 +768,7 @@ export const WorkChatModal: React.FC = () => {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const typingTimerRef = useRef<any>(null);
+  const lastTypingPingRef = useRef<number>(0);
 
   // Current conversation messages
   const currentMessages = activeConversationId ? (messagesByConvId[activeConversationId] || []) : [];
@@ -937,11 +963,19 @@ export const WorkChatModal: React.FC = () => {
     }
 
     if (activeConversationId) {
-      sendTyping(activeConversationId, true);
+      const now = Date.now();
+      // Throttle typing ping to at most once every 3s to prevent HTTP flood on every keystroke
+      if (now - lastTypingPingRef.current > 3000) {
+        lastTypingPingRef.current = now;
+        sendTyping(activeConversationId, true);
+      }
       if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
       typingTimerRef.current = setTimeout(() => {
-        if (activeConversationId) sendTyping(activeConversationId, false);
-      }, 2500);
+        if (activeConversationId) {
+          lastTypingPingRef.current = 0;
+          sendTyping(activeConversationId, false);
+        }
+      }, 3000);
     }
   };
 
@@ -957,12 +991,15 @@ export const WorkChatModal: React.FC = () => {
   // Queue files for review before sending
   const handleQueueFiles = (files: File[], defaultCategory?: 'image' | 'file') => {
     const added: PendingAttachment[] = files.map((file) => {
-      const isImg = defaultCategory === 'image' || file.type.startsWith('image/');
+      // User rule: All photos sent as image category are compressed to WebP.
+      // If user explicitly chooses 'file' picker, keep strictly as uncompressed raw document/file for 100% clarity.
+      const isExplicitFile = defaultCategory === 'file';
+      const isImg = !isExplicitFile && (defaultCategory === 'image' || file.type.startsWith('image/'));
       return {
         id: `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
         file,
         previewUrl: isImg ? URL.createObjectURL(file) : '',
-        category: isImg ? 'image' : 'file',
+        category: isExplicitFile ? 'file' : (isImg ? 'image' : 'file'),
         name: file.name,
         size: file.size
       };
@@ -990,10 +1027,10 @@ export const WorkChatModal: React.FC = () => {
       .toLowerCase();
   };
 
-  // Messages matching in-chat search
+  // Messages matching in-chat search (Debounced 250ms for smooth 60fps typing across thousands of messages)
   const matchedMessageIds = useMemo(() => {
-    if (!inChatSearchQuery.trim() || !activeConversationId) return [];
-    const q = removeVietnameseAccents(inChatSearchQuery.trim());
+    if (!debouncedSearchQuery.trim() || !activeConversationId) return [];
+    const q = removeVietnameseAccents(debouncedSearchQuery.trim());
     const msgs = messagesByConvId[activeConversationId] || [];
     return msgs
       .filter((m) => {
@@ -1003,7 +1040,7 @@ export const WorkChatModal: React.FC = () => {
         return content.includes(q) || sender.includes(q);
       })
       .map((m) => m.id);
-  }, [inChatSearchQuery, activeConversationId, messagesByConvId]);
+  }, [debouncedSearchQuery, activeConversationId, messagesByConvId]);
 
   const handleJumpToMatch = useCallback((index: number) => {
     if (matchedMessageIds.length === 0) return;
@@ -1110,9 +1147,11 @@ export const WorkChatModal: React.FC = () => {
         });
 
         let fileToUpload = item.file;
-        if (item.category === 'image' || fileToUpload.type.startsWith('image/')) {
+        // Automatic WebP compression for all image category attachments
+        // If sent under 'file' category, original raw file is kept uncompressed for maximum clarity
+        if (item.category === 'image') {
           try {
-            fileToUpload = await compressImageFile(fileToUpload, { maxWidth: 1920, maxHeight: 1920, quality: 0.85 });
+            fileToUpload = await compressImageFile(fileToUpload, { maxWidth: 1920, maxHeight: 1920, quality: 0.82 });
           } catch (e) {}
         }
 
@@ -2390,7 +2429,7 @@ export const WorkChatModal: React.FC = () => {
                         )}
                       </div>
 
-                      {inChatSearchQuery.trim() && (
+                      {(inChatSearchQuery.trim() || debouncedSearchQuery.trim()) && (
                         <div style={{
                           fontSize: '0.74rem',
                           color: matchedMessageIds.length > 0 ? '#334155' : '#dc2626',
@@ -2398,9 +2437,13 @@ export const WorkChatModal: React.FC = () => {
                           whiteSpace: 'nowrap',
                           padding: '0 4px'
                         }}>
-                          {matchedMessageIds.length > 0
-                            ? `${currentMatchIndex + 1}/${matchedMessageIds.length}`
-                            : '0 kết quả'}
+                          {inChatSearchQuery !== debouncedSearchQuery ? (
+                            <span style={{ color: '#94a3b8' }}>Đang tìm...</span>
+                          ) : (
+                            matchedMessageIds.length > 0
+                              ? `${currentMatchIndex + 1}/${matchedMessageIds.length}`
+                              : '0 kết quả'
+                          )}
                         </div>
                       )}
 
@@ -3602,14 +3645,20 @@ export const WorkChatModal: React.FC = () => {
                                               if (meta.contact_id) {
                                                 openCustomerDrawer(meta.contact_id, 'deals');
                                               } else {
-                                                window.dispatchEvent(new CustomEvent('open-deal-drawer', { detail: { id: Number(meta.entity_id) } }));
+                                                window.dispatchEvent(new CustomEvent('open-deposit-drawer', { detail: { id: Number(meta.entity_id), depositId: Number(meta.entity_id) } }));
                                               }
                                             } else if (eType === 'po') {
                                               openExpenseDrawer(Number(meta.entity_id));
                                             } else if (eType === 'workflow') {
                                               const subType = String(meta.sub_type || '').toLowerCase();
                                               if (['leave', 'ot', 'wfh', 'late_early'].includes(subType)) {
-                                                window.location.href = `/approvals?open_id=${meta.entity_id}&open_type=leave`;
+                                                openApprovalDrawer({
+                                                  id: Number(meta.entity_id),
+                                                  type: 'leave',
+                                                  title: meta.title,
+                                                  status: meta.status,
+                                                  employee_name: meta.creator_name
+                                                });
                                               } else {
                                                 openExpenseDrawer(Number(meta.entity_id));
                                               }
@@ -3736,16 +3785,13 @@ export const WorkChatModal: React.FC = () => {
                                   justifyContent: isMine ? 'flex-end' : 'flex-start'
                                 }}>
                                   {msg.reactions.map((rx) => {
-                                    const emojiMap: Record<string, string> = {
-                                      like: '👍', love: '❤️', fire: '🔥', haha: '😂',
-                                      wow: '😮', sad: '😢', angry: '😡'
-                                    };
                                     return (
                                       <div
                                         key={rx.type}
                                         onClick={(e) => {
-                                          triggerReactionBurst(emojiMap[rx.type] || '👍', e);
-                                          reactMessage(msg.id, rx.type);
+                                          e.stopPropagation();
+                                          setSelectedReactionMessage(msg);
+                                          setReactionActiveTab(rx.type);
                                         }}
                                         style={{
                                           display: 'flex',
@@ -3762,10 +3808,10 @@ export const WorkChatModal: React.FC = () => {
                                         }}
                                         onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
                                         onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                                        title={rx.users.join(', ')}
+                                        title={`${rx.users?.join(', ') || ''} (Nhấp để xem danh sách)`}
                                       >
-                                        <span>{emojiMap[rx.type] || '👍'}</span>
-                                        <span style={{ fontWeight: 700, color: '#475569' }}>{rx.count}</span>
+                                        <span>{EMOJI_MAP[rx.type] || '👍'}</span>
+                                        <span style={{ fontWeight: 700, color: rx.reacted_by_me ? '#2563eb' : '#475569' }}>{rx.count}</span>
                                       </div>
                                     );
                                   })}
@@ -3818,21 +3864,41 @@ export const WorkChatModal: React.FC = () => {
                                 const isDirect = activeConversation?.type === 'direct';
                                 const otherUser = activeConversation?.other_user;
                                 const participants = activeConversation?.participants || [];
+                                const convId = activeConversation?.id || 0;
 
                                 let isRead = false;
                                 let isDelivered = false;
                                 let readCount = 0;
 
+                                const msgTime = new Date(msg.created_at).getTime();
+                                let isCurrentlyDelivered = false;
+
                                 if (isDirect) {
                                   const otherReadId = Number(otherUser?.last_read_message_id || 0);
                                   isRead = otherReadId >= msg.id;
-                                  isDelivered = Boolean(otherUser?.is_online);
+
+                                  const otherPingTime = otherUser?.last_ping_at ? new Date(otherUser.last_ping_at).getTime() : 0;
+                                  const wasActiveAfterMsg = otherPingTime >= msgTime;
+                                  isCurrentlyDelivered = Boolean(otherUser?.is_online) || wasActiveAfterMsg || isRead;
                                 } else {
                                   const readers = participants.filter(p => Number(p.user_id || (p as any).id) !== myId && Number(p.last_read_message_id || 0) >= msg.id);
                                   isRead = readers.length > 0;
                                   readCount = readers.length;
-                                  isDelivered = participants.some(p => Number(p.user_id || (p as any).id) !== myId && p.is_online);
+
+                                  const anyActiveAfterMsg = participants.some(p => {
+                                    if (Number(p.user_id || (p as any).id) === myId) return false;
+                                    const pingTime = p.last_ping_at ? new Date(p.last_ping_at).getTime() : 0;
+                                    return Boolean(p.is_online) || (pingTime >= msgTime);
+                                  });
+                                  isCurrentlyDelivered = anyActiveAfterMsg || isRead;
                                 }
+
+                                const prevMax = maxDeliveredIdRef.current.get(convId) || 0;
+                                if (isCurrentlyDelivered && msg.id > prevMax) {
+                                  maxDeliveredIdRef.current.set(convId, msg.id);
+                                }
+                                const highestDelivered = maxDeliveredIdRef.current.get(convId) || 0;
+                                isDelivered = isCurrentlyDelivered || msg.id <= highestDelivered;
 
                                 if (isRead) {
                                   return (
@@ -4565,6 +4631,9 @@ export const WorkChatModal: React.FC = () => {
 
                       {/* Textarea & Send Button - Contained unified input bar */}
                       <div
+                        onClick={() => {
+                          textareaRef.current?.focus();
+                        }}
                         style={{
                           display: 'flex',
                           alignItems: 'center',
@@ -4573,12 +4642,13 @@ export const WorkChatModal: React.FC = () => {
                           maxHeight: '130px',
                           padding: '4px 6px 4px 14px',
                           borderRadius: '16px',
-                          border: isInputFocused ? '1.5px solid #cbd5e1' : '1.5px solid #e2e8f0',
+                          border: isInputFocused ? '1.5px solid #dc2626' : '1.5px solid #e2e8f0',
                           background: '#ffffff',
                           boxSizing: 'border-box',
                           gap: '8px',
-                          transition: 'border-color 0.15s ease, background-color 0.15s ease',
-                          boxShadow: 'none'
+                          transition: 'border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease',
+                          boxShadow: isInputFocused ? '0 0 0 3px rgba(220, 38, 38, 0.12)' : 'none',
+                          cursor: 'text'
                         }}
                       >
                         <textarea
@@ -4604,6 +4674,7 @@ export const WorkChatModal: React.FC = () => {
                             padding: '6px 0',
                             border: 'none',
                             outline: 'none',
+                            boxShadow: 'none',
                             fontSize: '0.88rem',
                             resize: 'none',
                             fontFamily: 'inherit',
@@ -4618,7 +4689,10 @@ export const WorkChatModal: React.FC = () => {
                         <button
                           type="button"
                           disabled={!inputText.trim() && pendingAttachments.length === 0}
-                          onClick={() => handleSend()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSend();
+                          }}
                           style={{
                             flexShrink: 0,
                             width: isMobile ? '34px' : '36px',
@@ -4770,6 +4844,443 @@ export const WorkChatModal: React.FC = () => {
         }}
         zIndex={2147483647}
       />
+
+      {/* MODAL: XEM DANH SÁCH NGƯỜI ĐÃ XEM (CÓ TÌM KIẾM & NÚT XEM TẤT CẢ) */}
+      {selectedSeenDetailMessage && (() => {
+        const msgId = selectedSeenDetailMessage.id;
+        const currentUserId = Number(user?.id || (user as any)?.user_id || 0);
+        const seenList = (activeConversation?.participants || []).filter((p: any) => {
+          const uid = Number(p.user_id || p.id);
+          if (uid === currentUserId) return false;
+          return Number(p.last_read_message_id || 0) >= msgId;
+        }).map((p: any) => ({
+          id: Number(p.user_id || p.id),
+          name: p.full_name || p.name || 'Thành viên',
+          avatar: p.avatar_url || (p as any).avatar,
+          title: p.job_title || p.role || 'Thành viên',
+          read_at: p.last_read_at || null
+        }));
+
+        const filteredSeen = seenList.filter((u: any) =>
+          !seenSearchQuery ||
+          u.name.toLowerCase().includes(seenSearchQuery.toLowerCase()) ||
+          u.title.toLowerCase().includes(seenSearchQuery.toLowerCase())
+        );
+
+        const userRxMap = new Map<number, string>();
+        (selectedSeenDetailMessage.reactions || []).forEach((rx: any) => {
+          const em = EMOJI_MAP[rx.type] || '❤️';
+          (rx.user_ids || []).forEach((uid: number) => userRxMap.set(uid, em));
+          (rx.details || []).forEach((d: any) => userRxMap.set(Number(d.user_id), em));
+        });
+
+        return (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 2147483647,
+              background: 'rgba(15, 23, 42, 0.45)',
+              backdropFilter: 'blur(3px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '16px'
+            }}
+            onClick={() => {
+              setSelectedSeenDetailMessage(null);
+              setSeenSearchQuery('');
+            }}
+          >
+            <div
+              style={{
+                background: '#ffffff',
+                borderRadius: '16px',
+                width: '100%',
+                maxWidth: '440px',
+                maxHeight: '80vh',
+                display: 'flex',
+                flexDirection: 'column',
+                boxShadow: '0 20px 40px -15px rgba(0,0,0,0.25)',
+                border: '1px solid #e2e8f0',
+                overflow: 'hidden'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div style={{
+                padding: '14px 18px',
+                borderBottom: '1px solid #f1f5f9',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: '#f8fafc'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Eye size={18} color="#2563eb" />
+                  <h3 style={{ margin: 0, fontSize: '0.96rem', fontWeight: 800, color: '#0f172a' }}>
+                    Người đã xem ({seenList.length})
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedSeenDetailMessage(null);
+                    setSeenSearchQuery('');
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#64748b',
+                    cursor: 'pointer',
+                    padding: '4px',
+                    borderRadius: '6px'
+                  }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Search input if > 5 */}
+              {seenList.length > 5 && (
+                <div style={{ padding: '10px 16px', borderBottom: '1px solid #f1f5f9' }}>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    background: '#f1f5f9',
+                    borderRadius: '8px',
+                    padding: '6px 10px'
+                  }}>
+                    <Search size={14} color="#94a3b8" />
+                    <input
+                      type="text"
+                      placeholder="Tìm người đã xem..."
+                      value={seenSearchQuery}
+                      onChange={(e) => setSeenSearchQuery(e.target.value)}
+                      style={{
+                        border: 'none',
+                        background: 'none',
+                        outline: 'none',
+                        fontSize: '0.82rem',
+                        width: '100%',
+                        color: '#0f172a'
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* User List */}
+              <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
+                {filteredSeen.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '32px 0', color: '#94a3b8', fontSize: '0.84rem' }}>
+                    Chưa có ai xem tin nhắn này
+                  </div>
+                ) : (
+                  filteredSeen.map((su: any) => {
+                    const rxEm = userRxMap.get(su.id);
+                    return (
+                      <div
+                        key={su.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '8px 10px',
+                          borderRadius: '10px',
+                          transition: 'background 0.15s ease'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                          <div style={{ position: 'relative', flexShrink: 0 }}>
+                            <Avatar src={su.avatar} name={su.name} size={36} />
+                            {rxEm && (
+                              <span style={{
+                                position: 'absolute',
+                                bottom: -2,
+                                right: -2,
+                                fontSize: '0.75rem',
+                                background: '#ffffff',
+                                borderRadius: '50%',
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+                                width: '18px',
+                                height: '18px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}>
+                                {rxEm}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: '0.86rem', fontWeight: 750, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {su.name}
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {su.title}
+                            </div>
+                          </div>
+                        </div>
+
+                        {su.read_at && (
+                          <div style={{ fontSize: '0.72rem', color: '#94a3b8', flexShrink: 0, textAlign: 'right' }}>
+                            {new Date(su.read_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* MODAL: XEM DANH SÁCH NGƯỜI ĐÃ BÀY TỎ CẢM XÚC (PHÂN THEO TAB EMOJI) */}
+      {selectedReactionMessage && (() => {
+        const reactions = selectedReactionMessage.reactions || [];
+        const totalReactions = reactions.reduce((sum: number, r: any) => sum + (r.count || 0), 0);
+        const currentUserId = Number(user?.id || (user as any)?.user_id || 0);
+
+        const allReactors: Array<{
+          userId: number;
+          name: string;
+          avatar?: string;
+          type: string;
+          emoji: string;
+          isMe: boolean;
+        }> = [];
+
+        reactions.forEach((rx: any) => {
+          const em = EMOJI_MAP[rx.type] || '👍';
+          if (Array.isArray(rx.details) && rx.details.length > 0) {
+            rx.details.forEach((d: any) => {
+              allReactors.push({
+                userId: Number(d.user_id),
+                name: d.full_name || 'Thành viên',
+                avatar: d.avatar_url,
+                type: rx.type,
+                emoji: em,
+                isMe: Number(d.user_id) === currentUserId
+              });
+            });
+          } else {
+            (rx.users || []).forEach((uName: string, idx: number) => {
+              const uId = rx.user_ids?.[idx] || 0;
+              const foundUser = (activeConversation?.participants || []).find((p: any) => Number(p.user_id || p.id) === uId)
+                || staffDirectory.find((s: any) => s.id === uId);
+              allReactors.push({
+                userId: uId,
+                name: uName,
+                avatar: foundUser?.avatar_url || (foundUser as any)?.avatar,
+                type: rx.type,
+                emoji: em,
+                isMe: uId === currentUserId || Boolean(rx.reacted_by_me && idx === 0)
+              });
+            });
+          }
+        });
+
+        const displayedReactors = reactionActiveTab === 'all'
+          ? allReactors
+          : allReactors.filter((r) => r.type === reactionActiveTab);
+
+        return (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 2147483647,
+              background: 'rgba(15, 23, 42, 0.45)',
+              backdropFilter: 'blur(3px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '16px'
+            }}
+            onClick={() => setSelectedReactionMessage(null)}
+          >
+            <div
+              style={{
+                background: '#ffffff',
+                borderRadius: '16px',
+                width: '100%',
+                maxWidth: '440px',
+                maxHeight: '80vh',
+                display: 'flex',
+                flexDirection: 'column',
+                boxShadow: '0 20px 40px -15px rgba(0,0,0,0.25)',
+                border: '1px solid #e2e8f0',
+                overflow: 'hidden'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div style={{
+                padding: '12px 18px',
+                borderBottom: '1px solid #f1f5f9',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: '#f8fafc'
+              }}>
+                <h3 style={{ margin: 0, fontSize: '0.96rem', fontWeight: 800, color: '#0f172a' }}>
+                  Biểu cảm tin nhắn ({totalReactions})
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setSelectedReactionMessage(null)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#64748b',
+                    cursor: 'pointer',
+                    padding: '4px',
+                    borderRadius: '6px'
+                  }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Reaction Tabs */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 14px',
+                borderBottom: '1px solid #f1f5f9',
+                background: '#ffffff',
+                overflowX: 'auto'
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setReactionActiveTab('all')}
+                  style={{
+                    padding: '5px 12px',
+                    borderRadius: '20px',
+                    border: 'none',
+                    fontSize: '0.78rem',
+                    fontWeight: 750,
+                    cursor: 'pointer',
+                    background: reactionActiveTab === 'all' ? '#2563eb' : '#f1f5f9',
+                    color: reactionActiveTab === 'all' ? '#ffffff' : '#64748b',
+                    transition: 'all 0.15s ease',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  Tất cả ({totalReactions})
+                </button>
+
+                {reactions.map((rx: any) => {
+                  const em = EMOJI_MAP[rx.type] || '👍';
+                  const isActive = reactionActiveTab === rx.type;
+                  return (
+                    <button
+                      key={rx.type}
+                      type="button"
+                      onClick={() => setReactionActiveTab(rx.type)}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: '20px',
+                        border: 'none',
+                        fontSize: '0.78rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        background: isActive ? '#eff6ff' : '#f8fafc',
+                        borderBottom: isActive ? '2px solid #2563eb' : '2px solid transparent',
+                        color: isActive ? '#2563eb' : '#475569',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        transition: 'all 0.15s ease',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      <span>{em}</span>
+                      <span>{rx.count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Reactors List */}
+              <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
+                {displayedReactors.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '32px 0', color: '#94a3b8', fontSize: '0.84rem' }}>
+                    Chưa có ai thả biểu cảm này
+                  </div>
+                ) : (
+                  displayedReactors.map((reactor, rIdx) => (
+                    <div
+                      key={`${reactor.userId}_${reactor.type}_${rIdx}`}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '8px 10px',
+                        borderRadius: '10px',
+                        transition: 'background 0.15s ease'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                        <Avatar src={reactor.avatar} name={reactor.name} size={36} />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: '0.86rem', fontWeight: 750, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <span>{reactor.name}</span>
+                            {reactor.isMe && (
+                              <span style={{ fontSize: '0.68rem', color: '#2563eb', fontWeight: 600 }}>
+                                (Bạn)
+                              </span>
+                            )}
+                          </div>
+                          {reactor.isMe && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                await reactMessage(selectedReactionMessage.id, reactor.type);
+                                setSelectedReactionMessage(null);
+                              }}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                padding: 0,
+                                fontSize: '0.7rem',
+                                color: '#dc2626',
+                                cursor: 'pointer',
+                                textDecoration: 'underline'
+                              }}
+                            >
+                              Nhấp để gỡ biểu cảm
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div style={{ fontSize: '1.25rem', paddingLeft: '8px' }}>
+                        {reactor.emoji}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Modal Xác nhận Thu hồi Tin nhắn an toàn */}
       {confirmRecallMsg && (
@@ -5023,7 +5534,17 @@ export const WorkChatModal: React.FC = () => {
                       return (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ fontWeight: 750, color: '#334155' }}>Đã xem ({seenUsers.length}):</span>
+                            <span
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setFloatingMenu(null);
+                                setSelectedSeenDetailMessage(fMsg);
+                              }}
+                              style={{ fontWeight: 750, color: '#334155', cursor: 'pointer' }}
+                              title="Bấm để xem danh sách chi tiết"
+                            >
+                              Đã xem ({seenUsers.length}):
+                            </span>
                             <div style={{ display: 'inline-flex', alignItems: 'center' }}>
                               {seenUsers.slice(0, 4).map((su, suIdx) => {
                                 const rxEm = userRxMap.get(String(su.id)) || userRxMap.get((su.name || '').toLowerCase().trim());
@@ -5045,7 +5566,14 @@ export const WorkChatModal: React.FC = () => {
                                 );
                               })}
                               {seenUsers.length > 4 && (
-                                <span style={{ fontSize: '0.6rem', fontWeight: 800, color: '#64748b', marginLeft: '3px' }}>
+                                <span
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setFloatingMenu(null);
+                                    setSelectedSeenDetailMessage(fMsg);
+                                  }}
+                                  style={{ fontSize: '0.6rem', fontWeight: 800, color: '#2563eb', marginLeft: '3px', cursor: 'pointer' }}
+                                >
                                   +{seenUsers.length - 4}
                                 </span>
                               )}
@@ -5054,11 +5582,9 @@ export const WorkChatModal: React.FC = () => {
                           <div style={{
                             color: '#64748b',
                             lineHeight: 1.35,
-                            fontSize: '0.66rem',
-                            maxHeight: '44px',
-                            overflowY: 'auto'
+                            fontSize: '0.66rem'
                           }}>
-                            {seenUsers.map((su, suI) => {
+                            {seenUsers.slice(0, 3).map((su, suI) => {
                               const rxEm = userRxMap.get(String(su.id)) || userRxMap.get((su.name || '').toLowerCase().trim());
                               return (
                                 <span key={su.id}>
@@ -5069,6 +5595,31 @@ export const WorkChatModal: React.FC = () => {
                                 </span>
                               );
                             })}
+                            {seenUsers.length > 3 && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setFloatingMenu(null);
+                                  setSelectedSeenDetailMessage(fMsg);
+                                }}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  marginLeft: '4px',
+                                  color: '#2563eb',
+                                  background: 'none',
+                                  border: 'none',
+                                  padding: 0,
+                                  fontWeight: 750,
+                                  fontSize: '0.66rem',
+                                  cursor: 'pointer',
+                                  textDecoration: 'underline'
+                                }}
+                              >
+                                Xem tất cả ({seenUsers.length})
+                              </button>
+                            )}
                           </div>
                         </div>
                       );
@@ -5077,6 +5628,37 @@ export const WorkChatModal: React.FC = () => {
                     )}
                   </div>
                 </div>
+
+                {/* Xem người bày tỏ cảm xúc */}
+                {fMsg.reactions && fMsg.reactions.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFloatingMenu(null);
+                      setSelectedReactionMessage(fMsg);
+                      setReactionActiveTab('all');
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '7px 10px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: 'transparent',
+                      color: '#1e293b',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      textAlign: 'left'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = '#f1f5f9'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <Smile size={15} color="#f59e0b" />
+                    <span>Xem người thả biểu cảm ({fMsg.reactions.reduce((sum: number, r: any) => sum + (r.count || 0), 0)})</span>
+                  </button>
+                )}
 
                 {/* Action: Recall for everyone */}
                 {canRecall && (

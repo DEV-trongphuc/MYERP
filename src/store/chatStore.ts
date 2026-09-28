@@ -17,6 +17,15 @@ import type {
 } from '../types/chat';
 
 let lastSyncTimestamp = Math.floor(Date.now() / 1000) - 30;
+const markReadDebounceTimers: Record<number, any> = {};
+
+const isMediaOrLinkMsg = (msg: any): boolean => {
+  if (!msg) return false;
+  if (['image', 'file'].includes(msg.message_type)) return true;
+  if (msg.metadata?.url && msg.message_type !== 'sticker') return true;
+  if (msg.message_type === 'text' && typeof msg.content === 'string' && /https?:\/\/[^\s]+/i.test(msg.content)) return true;
+  return false;
+};
 
 interface ChatStore {
   isOpen: boolean;
@@ -69,7 +78,7 @@ interface ChatStore {
   changeRole: (convId: number, userId: number, role: ParticipantRole) => Promise<void>;
   fetchVault: (convId: number, category?: string) => Promise<void>;
   syncDelta: () => Promise<void>;
-  markConversationAsRead: (convId: number) => Promise<void>;
+  markConversationAsRead: (convId: number, specificMsgId?: number) => Promise<void>;
   editMessage: (messageId: number, content: string) => Promise<boolean>;
   hideMessageLocally: (convId: number, messageId: number) => void;
   forwardMessage: (sourceMsg: ChatMessage, targetConversationIds: number[]) => Promise<boolean>;
@@ -221,6 +230,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           )
         }));
         chatBroadcaster.post({ type: 'NEW_MESSAGE', message: serverMsg });
+        if (isMediaOrLinkMsg(serverMsg)) {
+          get().fetchVault(item.conversation_id, 'all');
+        }
         sentCount++;
       } catch (e) {
         // If sending still fails, return item to queue
@@ -544,6 +556,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           // Broadcast new message to other open tabs
           chatBroadcaster.post({ type: 'NEW_MESSAGE', message: serverMsg });
 
+          // If message is image, file, or has link, refresh media vault
+          if (isMediaOrLinkMsg(serverMsg)) {
+            get().fetchVault(activeConversationId, 'all');
+          }
+
           // Stop typing
           get().sendTyping(activeConversationId, false);
           persistMessagesToCache(get().messagesByConvId);
@@ -595,19 +612,75 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const { activeConversationId } = get();
     if (!activeConversationId) return;
 
+    // 1. OPTIMISTIC UI: Instant feedback in 0ms to eliminate button spamming
+    const currentMsgs = get().messagesByConvId[activeConversationId] || [];
+    const targetMsg = currentMsgs.find((m) => m.id === msgId);
+    const originalReactions = targetMsg?.reactions ? [...targetMsg.reactions] : [];
+
+    let updatedOptimistic = originalReactions.map((r) => ({ ...r, users: [...(r.users || [])] }));
+    const existingIndex = updatedOptimistic.findIndex((r) => r.type === reactionType);
+
+    if (existingIndex >= 0) {
+      const rx = { ...updatedOptimistic[existingIndex] };
+      if (rx.reacted_by_me) {
+        // Toggle off
+        rx.count = Math.max(0, rx.count - 1);
+        rx.reacted_by_me = false;
+        if (rx.count === 0) {
+          updatedOptimistic.splice(existingIndex, 1);
+        } else {
+          updatedOptimistic[existingIndex] = rx;
+        }
+      } else {
+        // Toggle on
+        rx.count += 1;
+        rx.reacted_by_me = true;
+        updatedOptimistic[existingIndex] = rx;
+      }
+    } else {
+      // Add new reaction type
+      updatedOptimistic.push({
+        type: reactionType,
+        count: 1,
+        reacted_by_me: true,
+        users: []
+      });
+    }
+
+    set((state) => ({
+      messagesByConvId: {
+        ...state.messagesByConvId,
+        [activeConversationId]: (state.messagesByConvId[activeConversationId] || []).map((m) =>
+          m.id === msgId ? { ...m, reactions: updatedOptimistic } : m
+        )
+      }
+    }));
+
     try {
       const res = await api.post(`/chat/messages/${msgId}/reactions`, { reaction_type: reactionType });
-      const updatedReactions = res.data?.data?.reactions || [];
+      const updatedReactions = res.data?.data?.reactions;
 
+      if (Array.isArray(updatedReactions)) {
+        set((state) => ({
+          messagesByConvId: {
+            ...state.messagesByConvId,
+            [activeConversationId]: (state.messagesByConvId[activeConversationId] || []).map((m) =>
+              m.id === msgId ? { ...m, reactions: updatedReactions } : m
+            )
+          }
+        }));
+      }
+    } catch (e) {
+      // Rollback to original on failure
       set((state) => ({
         messagesByConvId: {
           ...state.messagesByConvId,
           [activeConversationId]: (state.messagesByConvId[activeConversationId] || []).map((m) =>
-            m.id === msgId ? { ...m, reactions: updatedReactions } : m
+            m.id === msgId ? { ...m, reactions: originalReactions } : m
           )
         }
       }));
-    } catch (e) {}
+    }
   },
 
   deleteMessage: async (msgId: number) => {
@@ -824,10 +897,22 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   updateGroupInfo: async (convId: number, data) => {
     try {
+      set((state) => {
+        const updatedConvs = state.conversations.map((c) =>
+          c.id === convId ? { ...c, ...data } : c
+        );
+        const updatedActive = state.activeConversation?.id === convId
+          ? { ...state.activeConversation, ...data }
+          : state.activeConversation;
+        return { conversations: updatedConvs, activeConversation: updatedActive };
+      });
       await api.put(`/chat/conversations/${convId}`, data);
       await get().selectConversation(convId);
       await get().fetchConversations();
-    } catch (e) {}
+    } catch (e) {
+      console.error('Error updating group info:', e);
+      throw e;
+    }
   },
 
   addParticipants: async (convId: number, userIds: number[]) => {
@@ -865,11 +950,24 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
   },
 
-  markConversationAsRead: async (convId: number) => {
-    try {
-      await api.post(`/chat/conversations/${convId}/read`);
-      chatBroadcaster.post({ type: 'CONVERSATION_READ', conversationId: convId, userId: 0 });
-    } catch (e) {}
+  markConversationAsRead: async (convId: number, specificMsgId?: number) => {
+    if (!convId) return;
+
+    const msgs = get().messagesByConvId[convId] || [];
+    const targetMsgId = specificMsgId || (msgs.length > 0 ? msgs[msgs.length - 1].id : 0);
+
+    // Debounce per conversation (350ms) to prevent spamming server during fast scrolling / multiple messages
+    if (markReadDebounceTimers[convId]) {
+      clearTimeout(markReadDebounceTimers[convId]);
+    }
+
+    markReadDebounceTimers[convId] = setTimeout(async () => {
+      delete markReadDebounceTimers[convId];
+      try {
+        await api.post(`/chat/conversations/${convId}/read`, { last_message_id: targetMsgId });
+        chatBroadcaster.post({ type: 'CONVERSATION_READ', conversationId: convId, userId: 0, last_message_id: targetMsgId });
+      } catch (e) {}
+    }, 350);
   },
 
   syncDelta: async () => {
@@ -920,6 +1018,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
         // Mark as read immediately since user is actively in this conversation
         get().markConversationAsRead(activeConversationId);
+
+        // If any incoming message has media or link, refresh vault
+        if (incoming.some(isMediaOrLinkMsg)) {
+          get().fetchVault(activeConversationId, 'all');
+        }
+
         persistMessagesToCache(get().messagesByConvId);
       }
 
@@ -1153,6 +1257,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
             if (hasNewInActive) {
               playChatNotificationSound();
+              if (activeConversationId && incoming.some(isMediaOrLinkMsg)) {
+                get().fetchVault(activeConversationId, 'all');
+              }
             }
 
             if (needsConvRefresh) {
@@ -1240,6 +1347,9 @@ chatBroadcaster.subscribe((event) => {
 
     if (isOpen && activeConversationId === convId) {
       store.markConversationAsRead(convId);
+      if (isMediaOrLinkMsg(msg)) {
+        store.fetchVault(convId, 'all');
+      }
     }
   } else if (event.type === 'CONVERSATION_READ') {
     useChatStore.setState((state) => ({

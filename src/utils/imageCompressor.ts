@@ -17,8 +17,8 @@ export async function compressImageFile(
     return file;
   }
 
-  // If already under 180KB, keep original
-  if (file.size <= 180 * 1024) {
+  // If already WebP and small (under 120KB), keep original
+  if (file.type === 'image/webp' && file.size <= 120 * 1024) {
     return file;
   }
 

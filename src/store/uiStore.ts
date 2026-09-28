@@ -54,6 +54,9 @@ interface UIStore {
   expenseDrawer: { isOpen: boolean; expenseId: number | null };
   openExpenseDrawer: (expenseId: number) => void;
   closeExpenseDrawer: () => void;
+  approvalDrawer: { isOpen: boolean; item: any | null };
+  openApprovalDrawer: (itemOrId: any, type?: string) => void;
+  closeApprovalDrawer: () => void;
 }
 
 const recentToastTimestamps = new Map<string, number>();
@@ -108,6 +111,17 @@ export const useUIStore = create<UIStore>((set) => ({
     set({ expenseDrawer: { isOpen: true, expenseId: Number(expenseId) } });
   },
   closeExpenseDrawer: () => set({ expenseDrawer: { isOpen: false, expenseId: null } }),
+  approvalDrawer: { isOpen: false, item: null },
+  openApprovalDrawer: (itemOrId: any, type = 'leave') => {
+    let itemObj: any = null;
+    if (typeof itemOrId === 'object' && itemOrId !== null) {
+      itemObj = itemOrId;
+    } else {
+      itemObj = { id: Number(itemOrId), type: type || 'leave' };
+    }
+    set({ approvalDrawer: { isOpen: true, item: itemObj } });
+  },
+  closeApprovalDrawer: () => set({ approvalDrawer: { isOpen: false, item: null } }),
   addToast: (message, type = 'info', action) => {
     // Deduplication check for string messages
     if (typeof message === 'string') {

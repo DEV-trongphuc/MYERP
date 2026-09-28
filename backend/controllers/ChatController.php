@@ -12,11 +12,9 @@ class ChatController {
     public function __construct(PDO $db) {
         $this->db = $db;
         $this->initRedis();
-        // Schema is handled by migrations (v294); run check at most once per process lifetime
-        if (!self::$tablesChecked) {
-            $this->ensureChatTablesExist();
-            self::$tablesChecked = true;
-        }
+        // Schema is permanently handled by database migrations (v294/v299).
+        // Avoid running heavy DDL checks on request init to prevent MySQL metadata locks under high concurrency.
+        self::$tablesChecked = true;
     }
 
     /**
@@ -290,15 +288,18 @@ class ChatController {
                 while ($gp = $gpStmt->fetch(PDO::FETCH_ASSOC)) {
                     $cId = (int)$gp['conversation_id'];
                     if (!isset($groupPartsMap[$cId])) $groupPartsMap[$cId] = [];
-                    $groupPartsMap[$cId][] = [
-                        'id' => (int)$gp['id'],
-                        'full_name' => $gp['full_name'],
-                        'name' => $gp['full_name'],
-                        'avatar_url' => $gp['avatar_url'],
-                        'avatar' => $gp['avatar_url'],
-                        'role' => $gp['role'],
-                        'job_title' => $gp['job_title']
-                    ];
+                    // Limit to top 4 members per group for cluster avatar rendering to prevent payload bloat
+                    if (count($groupPartsMap[$cId]) < 4) {
+                        $groupPartsMap[$cId][] = [
+                            'id' => (int)$gp['id'],
+                            'full_name' => $gp['full_name'],
+                            'name' => $gp['full_name'],
+                            'avatar_url' => $gp['avatar_url'],
+                            'avatar' => $gp['avatar_url'],
+                            'role' => $gp['role'],
+                            'job_title' => $gp['job_title']
+                        ];
+                    }
                 }
                 foreach ($convs as &$cv) {
                     if ($cv['type'] === 'group') {
@@ -484,7 +485,8 @@ class ChatController {
                             'role' => $p['system_role'] ?? $p['role'],
                             'is_online' => $p['is_online'],
                             'is_active' => $p['is_active'],
-                            'last_read_message_id' => (int)($p['last_read_message_id'] ?? 0)
+                            'last_read_message_id' => (int)($p['last_read_message_id'] ?? 0),
+                            'last_ping_at' => $p['last_ping_at'] ?? null
                         ];
                         $conv['title'] = $p['full_name'];
                         $conv['avatar_url'] = $p['avatar_url'];
@@ -604,7 +606,7 @@ class ChatController {
             if (!empty($messageIds)) {
                 $inQuery = implode(',', array_fill(0, count($messageIds), '?'));
                 $stmtRx = $this->db->prepare("
-                    SELECT mr.message_id, mr.reaction_type, mr.user_id, u.full_name
+                    SELECT mr.message_id, mr.reaction_type, mr.user_id, u.full_name, u.avatar_url
                     FROM chat_message_reactions mr
                     JOIN users u ON mr.user_id = u.id
                     WHERE mr.message_id IN ($inQuery)
@@ -622,12 +624,18 @@ class ChatController {
                             'count' => 0,
                             'users' => [],
                             'user_ids' => [],
+                            'details' => [],
                             'reacted_by_me' => false
                         ];
                     }
                     $reactionsMap[$mId][$rType]['count']++;
                     $reactionsMap[$mId][$rType]['users'][] = $rx['full_name'];
                     $reactionsMap[$mId][$rType]['user_ids'][] = (int)$rx['user_id'];
+                    $reactionsMap[$mId][$rType]['details'][] = [
+                        'user_id' => (int)$rx['user_id'],
+                        'full_name' => $rx['full_name'],
+                        'avatar_url' => $rx['avatar_url']
+                    ];
                     if ((int)$rx['user_id'] === $uid) {
                         $reactionsMap[$mId][$rType]['reacted_by_me'] = true;
                     }
@@ -871,37 +879,85 @@ class ChatController {
 
             if (empty($targets)) return;
 
-            $senderName = $this->db->query("SELECT full_name FROM users WHERE id = $senderId")->fetchColumn() ?: 'Đồng nghiệp';
+            $stmtSender = $this->db->prepare("SELECT full_name FROM users WHERE id = ?");
+            $stmtSender->execute([$senderId]);
+            $senderName = $stmtSender->fetchColumn() ?: 'Đồng nghiệp';
 
+            $notifTitle = "Tin nhắn nhắc tên trong " . mb_substr($convTitle, 0, 80);
+            $notifMsg = "{$senderName} đã nhắc đến bạn: " . mb_substr($content, 0, 90);
+            $notifLink = "/chat?conversation_id={$conversationId}";
+
+            // 1. High-concurrency Bulk INSERT for In-App Notifications (Chunks of 100)
+            $targetChunks = array_chunk($targets, 100);
+            foreach ($targetChunks as $chunk) {
+                $placeholders = [];
+                $params = [];
+                foreach ($chunk as $target) {
+                    $placeholders[] = "(?, ?, ?, ?, 'chat', 0, NOW())";
+                    $params[] = (int)$target['user_id'];
+                    $params[] = $notifTitle;
+                    $params[] = $notifMsg;
+                    $params[] = $notifLink;
+                }
+                if (!empty($placeholders)) {
+                    $bulkSql = "INSERT INTO notifications (user_id, title, message, link, type, is_read, created_at) VALUES " . implode(', ', $placeholders);
+                    $this->db->prepare($bulkSql)->execute($params);
+                }
+            }
+
+            // 2. High-performance Asynchronous Email Queueing
             if (!function_exists('sendEmailNotification')) {
                 @require_once __DIR__ . '/../mailer.php';
             }
 
-            foreach ($targets as $target) {
-                $targetId = (int)$target['user_id'];
-                $targetEmail = $target['email'] ?? '';
-                $targetName = $target['full_name'] ?? 'Bạn';
+            // For mass mentions (@all / large groups), only queue emails if target count is <= 25 to prevent mailbox spam and queue saturation
+            // For targeted @Name mentions, queue for the specific users
+            $emailTargets = ($isAll && count($targets) > 25) ? [] : $targets;
 
-                // 1. In-App Notification (always)
-                $this->db->prepare("
-                    INSERT INTO notifications (user_id, title, message, link, type, is_read, created_at)
-                    VALUES (?, ?, ?, ?, 'chat', 0, NOW())
-                ")->execute([
-                    $targetId,
-                    "Tin nhắn nhắc tên trong {$convTitle}",
-                    "{$senderName} đã nhắc đến bạn: " . mb_substr($content, 0, 90),
-                    "/chat?conversation_id={$conversationId}"
-                ]);
-
-                // 2. Email Notification (for @mentions / @all)
-                if (!empty($targetEmail) && function_exists('sendEmailNotification')) {
+            if (!empty($emailTargets) && function_exists('sendEmailNotification')) {
+                if (count($emailTargets) <= 5) {
+                    foreach ($emailTargets as $target) {
+                        $targetEmail = $target['email'] ?? '';
+                        $targetName = $target['full_name'] ?? 'Bạn';
+                        if (!empty($targetEmail)) {
+                            $emailSubj = "[MYERP WorkChat] {$senderName} đã nhắc tên bạn trong {$convTitle}";
+                            $emailTitle = "TIN NHẮN NHẮC TÊN MỚI";
+                            $emailBody = "Xin chào <b>{$targetName}</b>,<br><br><b>{$senderName}</b> vừa nhắc đến bạn trong cuộc trò chuyện <b>{$convTitle}</b>:<br><div style='padding:12px 16px; background:#f8fafc; border-left:4px solid #2563eb; border-radius:6px; margin:14px 0; color:#1e293b; font-size:14px; line-height:1.5;'>" . nl2br(htmlspecialchars($content)) . "</div><br><p style='color:#64748b; font-size:13px;'>Vui lòng đăng nhập hệ thống MYERP để theo dõi và trao đổi chi tiết.</p>";
+                            try {
+                                sendEmailNotification($targetEmail, $emailSubj, $emailTitle, $emailBody, '', false);
+                            } catch (\Throwable $mEx) {
+                                error_log("Mention Email Send Error: " . $mEx->getMessage());
+                            }
+                        }
+                    }
+                } else {
+                    // Bulk insert directly into mail_queue in 1 single transaction
+                    $mailPlaceholders = [];
+                    $mailParams = [];
                     $emailSubj = "[MYERP WorkChat] {$senderName} đã nhắc tên bạn trong {$convTitle}";
                     $emailTitle = "TIN NHẮN NHẮC TÊN MỚI";
-                    $emailBody = "Xin chào <b>{$targetName}</b>,<br><br><b>{$senderName}</b> vừa nhắc đến bạn trong cuộc trò chuyện <b>{$convTitle}</b>:<br><div style='padding:12px 16px; background:#f8fafc; border-left:4px solid #2563eb; border-radius:6px; margin:14px 0; color:#1e293b; font-size:14px; line-height:1.5;'>" . nl2br(htmlspecialchars($content)) . "</div><br><p style='color:#64748b; font-size:13px;'>Vui lòng đăng nhập hệ thống MYERP để theo dõi và trao đổi chi tiết.</p>";
-                    try {
-                        sendEmailNotification($targetEmail, $emailSubj, $emailTitle, $emailBody, '', false);
-                    } catch (\Throwable $mEx) {
-                        error_log("Mention Email Send Error: " . $mEx->getMessage());
+
+                    foreach ($emailTargets as $target) {
+                        $targetEmail = trim($target['email'] ?? '');
+                        $targetName = $target['full_name'] ?? 'Bạn';
+                        if (!empty($targetEmail) && filter_var($targetEmail, FILTER_VALIDATE_EMAIL)) {
+                            $emailBody = "Xin chào <b>{$targetName}</b>,<br><br><b>{$senderName}</b> vừa nhắc đến bạn trong cuộc trò chuyện <b>{$convTitle}</b>:<br><div style='padding:12px 16px; background:#f8fafc; border-left:4px solid #2563eb; border-radius:6px; margin:14px 0; color:#1e293b; font-size:14px; line-height:1.5;'>" . nl2br(htmlspecialchars($content)) . "</div><br><p style='color:#64748b; font-size:13px;'>Vui lòng đăng nhập hệ thống MYERP để theo dõi và trao đổi chi tiết.</p>";
+                            $htmlBody = function_exists('_getBaseHtml') ? _getBaseHtml($emailTitle, '', $emailBody, false) : $emailBody;
+
+                            $mailPlaceholders[] = "(?, '', ?, ?, 'pending', NOW())";
+                            $mailParams[] = $targetEmail;
+                            $mailParams[] = $emailSubj;
+                            $mailParams[] = $htmlBody;
+                        }
+                    }
+
+                    if (!empty($mailPlaceholders)) {
+                        $mailSql = "INSERT INTO mail_queue (to_email, cc_email, subject, body_html, status, created_at) VALUES " . implode(', ', $mailPlaceholders);
+                        try {
+                            $this->db->prepare($mailSql)->execute($mailParams);
+                        } catch (\Throwable $qEx) {
+                            error_log("Bulk Mail Queue Error: " . $qEx->getMessage());
+                        }
                     }
                 }
             }
@@ -1024,26 +1080,49 @@ class ChatController {
                 $action = 'added';
             }
 
-            // Return updated aggregated reactions for this message
+            // Return updated aggregated reactions for this message (Optimized for high burst concurrency)
+            // 1. Direct index-based count per reaction_type without joining users table
             $stmtAgg = $this->db->prepare("
-                SELECT mr.reaction_type, COUNT(*) as cnt,
-                       MAX(CASE WHEN mr.user_id = ? THEN 1 ELSE 0 END) as reacted_by_me,
-                       GROUP_CONCAT(u.full_name SEPARATOR ', ') as user_names
-                FROM chat_message_reactions mr
-                JOIN users u ON mr.user_id = u.id
-                WHERE mr.message_id = ?
-                GROUP BY mr.reaction_type
+                SELECT reaction_type, COUNT(*) as cnt,
+                       MAX(CASE WHEN user_id = ? THEN 1 ELSE 0 END) as reacted_by_me
+                FROM chat_message_reactions
+                WHERE message_id = ?
+                GROUP BY reaction_type
             ");
             $stmtAgg->execute([$uid, $messageId]);
             $rows = $stmtAgg->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
+            // 2. Fetch recent user names and avatars for tooltip and reaction detail modal
+            $userNamesStmt = $this->db->prepare("
+                SELECT mr.reaction_type, u.id as user_id, u.full_name, u.avatar_url
+                FROM chat_message_reactions mr
+                JOIN users u ON mr.user_id = u.id
+                WHERE mr.message_id = ?
+                ORDER BY mr.id DESC
+                LIMIT 50
+            ");
+            $userNamesStmt->execute([$messageId]);
+            $userRows = $userNamesStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            $namesByType = [];
+            $detailsByType = [];
+            foreach ($userRows as $ur) {
+                $namesByType[$ur['reaction_type']][] = $ur['full_name'];
+                $detailsByType[$ur['reaction_type']][] = [
+                    'user_id' => (int)$ur['user_id'],
+                    'full_name' => $ur['full_name'],
+                    'avatar_url' => $ur['avatar_url']
+                ];
+            }
+
             $formatted = [];
             foreach ($rows as $r) {
+                $rType = $r['reaction_type'];
                 $formatted[] = [
-                    'type' => $r['reaction_type'],
+                    'type' => $rType,
                     'count' => (int)$r['cnt'],
                     'reacted_by_me' => (bool)$r['reacted_by_me'],
-                    'users' => explode(', ', $r['user_names'])
+                    'users' => $namesByType[$rType] ?? [],
+                    'details' => $detailsByType[$rType] ?? []
                 ];
             }
 
@@ -1186,16 +1265,25 @@ class ChatController {
      */
     public function markAsRead(array $auth, int $conversationId): void {
         $uid = (int)($auth['user_id'] ?? 0);
+        $body = getBody();
+        $targetMsgId = (int)($body['last_message_id'] ?? $_GET['last_message_id'] ?? 0);
 
         try {
-            $maxId = (int)$this->db->query("SELECT MAX(id) FROM chat_messages WHERE conversation_id = $conversationId")->fetchColumn();
-            $this->db->prepare("
-                UPDATE chat_participants 
-                SET last_read_message_id = GREATEST(COALESCE(last_read_message_id, 0), ?), last_read_at = NOW() 
-                WHERE conversation_id = ? AND user_id = ?
-            ")->execute([$maxId, $conversationId, $uid]);
+            if ($targetMsgId <= 0) {
+                $stmtMax = $this->db->prepare("SELECT MAX(id) FROM chat_messages WHERE conversation_id = ?");
+                $stmtMax->execute([$conversationId]);
+                $targetMsgId = (int)$stmtMax->fetchColumn();
+            }
 
-            respond(200, ['success' => true, 'last_read_message_id' => $maxId]);
+            if ($targetMsgId > 0) {
+                $this->db->prepare("
+                    UPDATE chat_participants 
+                    SET last_read_message_id = GREATEST(COALESCE(last_read_message_id, 0), ?), last_read_at = NOW() 
+                    WHERE conversation_id = ? AND user_id = ?
+                ")->execute([$targetMsgId, $conversationId, $uid]);
+            }
+
+            respond(200, ['success' => true, 'last_read_message_id' => $targetMsgId]);
         } catch (\Throwable $e) {
             error_log("Mark As Read Error: " . $e->getMessage());
             respond(500, null, 'Lỗi khi đánh dấu đã đọc: ' . $e->getMessage(), false);
@@ -1235,8 +1323,16 @@ class ChatController {
                 ")->execute([$auth['tenant_id'] ?? 1, $conversationId, $uid, $sysText]);
             }
             if (isset($body['avatar_url'])) {
+                $newAvatar = trim($body['avatar_url']);
                 $fields[] = "avatar_url = ?";
-                $params[] = trim($body['avatar_url']);
+                $params[] = $newAvatar;
+
+                $actorName = $auth['full_name'] ?? 'Thành viên';
+                $sysText = "{$actorName} đã cập nhật ảnh đại diện nhóm";
+                $this->db->prepare("
+                    INSERT INTO chat_messages (tenant_id, conversation_id, sender_id, message_type, content, created_at)
+                    VALUES (?, ?, ?, 'system_event', ?, NOW())
+                ")->execute([$auth['tenant_id'] ?? 1, $conversationId, $uid, $sysText]);
             }
             if (isset($body['settings'])) {
                 $fields[] = "settings = ?";
@@ -2415,60 +2511,67 @@ class ChatController {
         }
 
         $startTime = time();
-        $maxLifetime = 50; // Reconnect every 50 seconds to release PHP workers cleanly
+        $maxLifetime = 15; // Reconnect every 15 seconds to release PHP-FPM workers cleanly and avoid pool starvation
 
         while (time() - $startTime < $maxLifetime) {
             if (connection_aborted()) {
                 break;
             }
 
-            // 1. Keep presence alive in Redis
+            // 1. Keep presence alive in Redis if available
             if ($this->redis) {
                 try {
                     $this->redis->setex("chat:presence:{$tid}:{$uid}", 60, time());
                 } catch (\Throwable $e) {}
             }
 
-            // 2. Fetch new messages across user's conversations
+            // 2. High-performance Global Index Check:
+            // Only execute the 4-table JOIN if there is actually a newer message in the database!
             try {
-                $stmt = $this->db->prepare("
-                    SELECT cm.id, cm.conversation_id, cm.sender_id, cm.message_type, cm.content,
-                           cm.metadata, cm.reply_to_id, cm.is_pinned, cm.is_edited, cm.created_at,
-                           u.full_name as sender_name, u.avatar_url as sender_avatar,
-                           c.title as conversation_title, c.type as conversation_type
-                    FROM chat_messages cm
-                    JOIN chat_participants cp ON cm.conversation_id = cp.conversation_id
-                    JOIN chat_conversations c ON cm.conversation_id = c.id
-                    LEFT JOIN users u ON cm.sender_id = u.id
-                    WHERE cp.user_id = ? 
-                      AND (cp.tenant_id = ? OR cp.tenant_id IS NULL OR cp.tenant_id = 0)
-                      AND cm.sender_id != ?
-                      AND cm.id > ?
-                      AND cm.deleted_at IS NULL
-                    ORDER BY cm.id ASC
-                    LIMIT 20
-                ");
-                $stmt->execute([$uid, $tid, $uid, $lastSeenMessageId]);
-                $newMsgs = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-                if (!empty($newMsgs)) {
-                    foreach ($newMsgs as &$m) {
-                        $m['id'] = (int)$m['id'];
-                        $m['conversation_id'] = (int)$m['conversation_id'];
-                        $m['sender_id'] = (int)$m['sender_id'];
-                        $m['reply_to_id'] = !empty($m['reply_to_id']) ? (int)$m['reply_to_id'] : null;
-                        $m['is_mine'] = false;
-                        $m['reactions'] = [];
-                        $m['metadata'] = !empty($m['metadata']) ? json_decode($m['metadata'], true) : null;
-                        if ($m['id'] > $lastSeenMessageId) {
-                            $lastSeenMessageId = $m['id'];
+                $globalMax = (int)$this->db->query("SELECT MAX(id) FROM chat_messages")->fetchColumn();
+                if ($globalMax > $lastSeenMessageId) {
+                    $stmt = $this->db->prepare("
+                        SELECT cm.id, cm.conversation_id, cm.sender_id, cm.message_type, cm.content,
+                               cm.metadata, cm.reply_to_id, cm.is_pinned, cm.is_edited, cm.created_at,
+                               u.full_name as sender_name, u.avatar_url as sender_avatar,
+                               c.title as conversation_title, c.type as conversation_type
+                        FROM chat_messages cm
+                        JOIN chat_participants cp ON cm.conversation_id = cp.conversation_id
+                        JOIN chat_conversations c ON cm.conversation_id = c.id
+                        LEFT JOIN users u ON cm.sender_id = u.id
+                        WHERE cp.user_id = ? 
+                          AND (cp.tenant_id = ? OR cp.tenant_id IS NULL OR cp.tenant_id = 0)
+                          AND cm.sender_id != ?
+                          AND cm.id > ?
+                          AND cm.deleted_at IS NULL
+                        ORDER BY cm.id ASC
+                        LIMIT 20
+                    ");
+                    $stmt->execute([$uid, $tid, $uid, $lastSeenMessageId]);
+                    $newMsgs = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                    if (!empty($newMsgs)) {
+                        foreach ($newMsgs as &$m) {
+                            $m['id'] = (int)$m['id'];
+                            $m['conversation_id'] = (int)$m['conversation_id'];
+                            $m['sender_id'] = (int)$m['sender_id'];
+                            $m['reply_to_id'] = !empty($m['reply_to_id']) ? (int)$m['reply_to_id'] : null;
+                            $m['is_mine'] = false;
+                            $m['reactions'] = [];
+                            $m['metadata'] = !empty($m['metadata']) ? json_decode($m['metadata'], true) : null;
+                            if ($m['id'] > $lastSeenMessageId) {
+                                $lastSeenMessageId = $m['id'];
+                            }
                         }
+                        echo "event: new_messages\ndata: " . json_encode([
+                            'messages' => $newMsgs,
+                            'last_message_id' => $lastSeenMessageId,
+                            'server_time' => time()
+                        ]) . "\n\n";
+                        @flush();
+                    } else {
+                        // Message belonged to another conversation user isn't in; advance tracker to skip redundant queries
+                        $lastSeenMessageId = $globalMax;
                     }
-                    echo "event: new_messages\ndata: " . json_encode([
-                        'messages' => $newMsgs,
-                        'last_message_id' => $lastSeenMessageId,
-                        'server_time' => time()
-                    ]) . "\n\n";
-                    @flush();
                 }
             } catch (\Throwable $e) {}
 

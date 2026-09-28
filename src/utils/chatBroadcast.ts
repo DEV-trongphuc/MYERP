@@ -5,7 +5,7 @@
 
 export type ChatBroadcastEvent =
   | { type: 'NEW_MESSAGE'; message: any }
-  | { type: 'CONVERSATION_READ'; conversationId: number; userId: number }
+  | { type: 'CONVERSATION_READ'; conversationId: number; userId: number; last_message_id?: number }
   | { type: 'CONVERSATIONS_UPDATED' }
   | { type: 'MESSAGE_EDITED'; messageId: number; content: string }
   | { type: 'MESSAGE_DELETED'; conversationId: number; messageId: number }

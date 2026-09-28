@@ -19,8 +19,14 @@ export const setChatSoundEnabled = (enabled: boolean): void => {
  * Web Audio API synthesized notification chime for WorkChat
  * Plays a clean, pleasant 2-tone melodic chime without downloading external files
  */
+let lastSoundPlayedTime = 0;
+
 export const playChatNotificationSound = () => {
   if (!isChatSoundEnabled()) return;
+  const now = Date.now();
+  // Throttle chimes: avoid overlapping audio contexts when multiple messages arrive in burst
+  if (now - lastSoundPlayedTime < 1200) return;
+  lastSoundPlayedTime = now;
   try {
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioContextClass) return;

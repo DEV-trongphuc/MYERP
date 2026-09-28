@@ -596,6 +596,9 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           setPendingExpensesCount(Math.max(Number(expensesCount) || 0, localApprovals));
           setSalesPendingSignCount(salesPendingSignCount);
 
+          // Tạm thời tắt tự động mở popup hộp thư tồn đọng mặc định theo yêu cầu
+          // Người dùng vẫn có thể bấm nút trên Header để mở bất kỳ lúc nào
+          /*
           const currentPath = window.location.pathname;
           if (currentPath !== '/support-tickets' && currentPath !== '/expenses') {
             if (ticketsCount > 0 || heldCount > 0 || checkinsCount > 0 || coopsCount > 0 || supportCount > 0 || expensesCount > 0 || salesPendingSignCount > 0 || localApprovals > 0) {
@@ -619,6 +622,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
               }
             }
           }
+          */
         }
       })
       .catch(err => {

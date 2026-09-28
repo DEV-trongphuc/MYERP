@@ -4,7 +4,7 @@ import {
   ExternalLink, ChevronDown, ChevronUp, ChevronLeft, Check,
   FileArchive, FileSpreadsheet, Film, Globe, Search, Trash2,
   CheckSquare, Plus, Clock, AlertCircle, Shield, Crown, LogOut,
-  MoreVertical, UserMinus, Loader2, Info, Share2
+  MoreVertical, UserMinus, Loader2, Info, Share2, Camera
 } from 'lucide-react';
 import api from '../../api/axios';
 import { useChatStore } from '../../store/chatStore';
@@ -16,6 +16,8 @@ import { GroupClusterAvatar } from './GroupClusterAvatar';
 import { DeleteConversationModal } from './DeleteConversationModal';
 import { CreateTaskFromChatModal } from './CreateTaskFromChatModal';
 import { getFileFormatConfig, formatFileSize, formatStaffCleanTitle } from '../../utils/chatFileUtils';
+import { compressImageFile } from '../../utils/imageCompressor';
+import { chatBroadcaster } from '../../utils/chatBroadcast';
 
 interface Props {
   onClose: () => void;
@@ -41,8 +43,53 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({
     loadingVault,
     selectConversation,
     fetchConversations,
-    deleteConversation
+    deleteConversation,
+    updateGroupInfo,
+    messagesByConvId
   } = useChatStore();
+
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const groupAvatarInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleGroupAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeConversation) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Vui lòng chọn tệp tin hình ảnh');
+      return;
+    }
+
+    try {
+      setUploadingAvatar(true);
+      const loadingToast = toast.loading('Đang nén và cập nhật ảnh đại diện nhóm...');
+      
+      // Auto-compress WebP
+      const finalFile = await compressImageFile(file, { quality: 0.85, maxWidth: 1024, maxHeight: 1024 });
+
+      const formData = new FormData();
+      formData.append('file', finalFile);
+      const uploadRes = await api.post('/chat/upload', formData);
+      const uploadedUrl = uploadRes.data?.data?.url || uploadRes.data?.url;
+
+      if (!uploadedUrl) {
+        throw new Error('Không nhận được đường dẫn ảnh sau khi tải lên');
+      }
+
+      await updateGroupInfo(activeConversation.id, { avatar_url: uploadedUrl });
+      chatBroadcaster.post({ type: 'CONVERSATIONS_UPDATED' });
+      toast.dismiss(loadingToast);
+      toast.success('Đã cập nhật ảnh đại diện nhóm thành công!');
+    } catch (err: any) {
+      console.error('Lỗi cập nhật ảnh đại diện nhóm:', err);
+      toast.error(err.response?.data?.message || err.message || 'Không thể cập nhật ảnh đại diện nhóm');
+    } finally {
+      setUploadingAvatar(false);
+      if (groupAvatarInputRef.current) {
+        groupAvatarInputRef.current.value = '';
+      }
+    }
+  };
 
   const [expandedSections, setExpandedSections] = useState<{ media: boolean; file: boolean; link: boolean; task: boolean }>({
     media: true,
@@ -201,13 +248,26 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({
     }
   };
 
-  // Initial fetch all items in vault and tasks when panel mounts or conversation changes
+  const convMessages = activeConversation ? (messagesByConvId[activeConversation.id] || []) : [];
+  
+  // Track the most recent media/file message so the vault automatically refetches if an image/file is sent or received while this panel is open
+  const latestMediaKey = React.useMemo(() => {
+    for (let i = convMessages.length - 1; i >= 0; i--) {
+      const m = convMessages[i];
+      if (['image', 'file'].includes(m.message_type) || (m.metadata?.url && m.message_type !== 'sticker') || (m.message_type === 'text' && typeof m.content === 'string' && /https?:\/\/[^\s]+/i.test(m.content))) {
+        return `${m.id}_${m.created_at || ''}`;
+      }
+    }
+    return '';
+  }, [convMessages]);
+
+  // Initial fetch all items in vault and tasks when panel mounts, conversation changes, or new media arrives
   useEffect(() => {
     if (activeConversation) {
       fetchVault(activeConversation.id, 'all');
       fetchTasks(activeConversation.id);
     }
-  }, [activeConversation?.id]);
+  }, [activeConversation?.id, latestMediaKey]);
 
   if (!activeConversation) return null;
 
@@ -940,6 +1000,35 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({
                       <span>Rời khỏi nhóm</span>
                     </button>
 
+                    {isGroup && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowPanelActionsMenu(false);
+                          groupAvatarInputRef.current?.click();
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          padding: '8px 10px',
+                          borderRadius: '6px',
+                          border: 'none',
+                          background: 'transparent',
+                          color: '#1e293b',
+                          fontSize: '0.8rem',
+                          fontWeight: 650,
+                          cursor: 'pointer',
+                          textAlign: 'left'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = '#f1f5f9'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                      >
+                        <Camera size={15} color="#2563eb" />
+                        <span>Đổi ảnh nhóm</span>
+                      </button>
+                    )}
+
                     {isAdmin && (
                       <button
                         type="button"
@@ -996,7 +1085,42 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({
           alignItems: 'center'
         }}>
           {isGroup ? (
-            <GroupClusterAvatar participants={activeConversation.participants} avatarUrl={avatarUrl} name={titleText} size={64} />
+            <div style={{ position: 'relative', display: 'inline-block' }}>
+              <GroupClusterAvatar participants={activeConversation.participants} avatarUrl={avatarUrl} name={titleText} size={68} />
+              <button
+                type="button"
+                onClick={() => groupAvatarInputRef.current?.click()}
+                disabled={uploadingAvatar}
+                title="Đổi ảnh đại diện nhóm"
+                style={{
+                  position: 'absolute',
+                  bottom: -2,
+                  right: -2,
+                  background: '#ffffff',
+                  border: '1.5px solid #e2e8f0',
+                  borderRadius: '50%',
+                  padding: '5px',
+                  cursor: uploadingAvatar ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 2px 5px rgba(0,0,0,0.15)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#2563eb',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+                onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+              >
+                {uploadingAvatar ? <Loader2 size={13} className="animate-spin" /> : <Camera size={13} />}
+              </button>
+              <input
+                type="file"
+                ref={groupAvatarInputRef}
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={handleGroupAvatarChange}
+              />
+            </div>
           ) : (
             <Avatar src={avatarUrl} name={titleText} size={64} />
           )}

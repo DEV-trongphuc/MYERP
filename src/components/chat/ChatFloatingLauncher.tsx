@@ -52,16 +52,16 @@ export const ChatFloatingLauncher: React.FC = () => {
       const isHidden = document.hidden;
       const isIdle = Date.now() - lastActiveTime > 180000; // 3 minutes idle
 
-      let delay = 5000;
+      let delay = 6000;
       if (isHidden) {
-        delay = 35000; // 35s when tab is backgrounded
+        delay = 45000; // 45s when tab is backgrounded
       } else if (isRealtimeConnected) {
-        // SSE delivers messages in < 50ms, so polling is relaxed to a lightweight heartbeat
-        delay = isOpen ? 12000 : 25000;
+        // SSE delivers messages in real-time, so polling is relaxed to a lightweight heartbeat
+        delay = isOpen ? 8000 : 25000;
       } else if (isIdle && !isOpen) {
-        delay = 18000; // 18s when user hasn't interacted in 3 mins
+        delay = 20000; // 20s when user hasn't interacted in 3 mins
       } else if (isOpen) {
-        delay = 4000;  // 4s fallback when chat modal is open
+        delay = 3000;  // 3s snappy fallback when chat modal is open
       }
       timer = setTimeout(runPolling, delay);
     };
