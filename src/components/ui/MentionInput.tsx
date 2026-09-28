@@ -27,6 +27,7 @@ interface MentionInputProps {
   users?: User[];
   onImagePaste?: (file: File) => void;
   onFilePaste?: (file: File) => void;
+  enterSubmits?: boolean;
   placeholder?: string;
   disabled?: boolean;
   style?: React.CSSProperties;
@@ -40,6 +41,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
   onBlur,
   onKeyDown,
   onSubmitShortcut,
+  enterSubmits,
   users: propUsers, 
   onImagePaste, 
   onFilePaste, 
@@ -476,26 +478,17 @@ export const MentionInput: React.FC<MentionInputProps> = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-      if (onSubmitShortcut) {
-        e.preventDefault();
-        onSubmitShortcut();
-        return;
-      }
-    }
-    if (onKeyDown) {
-      onKeyDown(e);
-      if (e.defaultPrevented) return;
-    }
     if (showDropdown) {
       const activeListLength = mentionTrigger === '#' ? entityResults.length : filteredUsers.length;
       if (activeListLength > 0) {
         if (e.key === 'ArrowDown') {
           e.preventDefault();
           setSelectedIndex(prev => (prev + 1) % activeListLength);
+          return;
         } else if (e.key === 'ArrowUp') {
           e.preventDefault();
           setSelectedIndex(prev => (prev - 1 + activeListLength) % activeListLength);
+          return;
         } else if (e.key === 'Enter' || e.key === 'Tab') {
           e.preventDefault();
           if (mentionTrigger === '#') {
@@ -507,11 +500,34 @@ export const MentionInput: React.FC<MentionInputProps> = ({
               handleSelectUser(filteredUsers[selectedIndex]);
             }
           }
+          return;
         } else if (e.key === 'Escape') {
           e.preventDefault();
           setShowDropdown(false);
+          return;
         }
       }
+    }
+
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      if (onSubmitShortcut) {
+        e.preventDefault();
+        onSubmitShortcut();
+        return;
+      }
+    }
+
+    if (enterSubmits && !showDropdown && e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      if (onSubmitShortcut) {
+        e.preventDefault();
+        onSubmitShortcut();
+        return;
+      }
+    }
+
+    if (onKeyDown) {
+      onKeyDown(e);
+      if (e.defaultPrevented) return;
     }
   };
 
@@ -723,6 +739,29 @@ export const MentionInput: React.FC<MentionInputProps> = ({
   const handlePaste = async (e: React.ClipboardEvent<HTMLDivElement>) => {
     const items = e.clipboardData?.items;
     const files = e.clipboardData?.files;
+
+    if (onImagePaste) {
+      if (files && files.length > 0) {
+        const imageFile = Array.from(files).find(f => f.type.startsWith('image/'));
+        if (imageFile) {
+          e.preventDefault();
+          onImagePaste(imageFile);
+          return;
+        }
+      }
+      if (items) {
+        for (let i = 0; i < items.length; i++) {
+          if (items[i].type.startsWith('image/')) {
+            const file = items[i].getAsFile();
+            if (file) {
+              e.preventDefault();
+              onImagePaste(file);
+              return;
+            }
+          }
+        }
+      }
+    }
 
     if (files && files.length > 0) {
       e.preventDefault();

@@ -4,7 +4,8 @@ import DOMPurify from 'dompurify';
 import { 
   ThumbsUp, Heart, Laugh, Angry, MessageCircle, Share2, 
   Send, Trash2, Globe, Lock, Users, Link as LinkIcon, Paperclip, X, Camera, 
-  MessageSquare, MoreHorizontal, Filter, Search, Tag, Eye, Edit, Smile
+  MessageSquare, MoreHorizontal, Filter, Search, Tag, Eye, Edit, Smile,
+  ArrowUp, Check, Link2
 } from 'lucide-react';
 import api from '../api/axios';
 import { useAuth } from '../contexts/AuthContext';
@@ -18,6 +19,7 @@ import { CustomModal } from '../components/ui/CustomModal';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { MentionInput } from '../components/ui/MentionInput';
 import { StickerPickerModal } from '../components/ui/StickerPickerModal';
+import { AttachmentLightboxModal, type AttachmentItem } from '../components/ui/AttachmentLightboxModal';
 import { useUIStore } from '../store/uiStore';
 
 // High-performance DOMPurify HTML sanitizer cache (avoids repeated synchronous parsing)
@@ -140,11 +142,13 @@ const PostCommentBox: React.FC<PostCommentBoxProps> = ({
         <MentionInput
           placeholder={
             replyToId 
-              ? `${t('Phản hồi bình luận')}...` 
-              : `${t('Viết bình luận')}...`
+              ? `${t('Phản hồi bình luận')}... (Enter để gửi)` 
+              : `${t('Viết bình luận')}... (Enter để gửi)`
           }
           value={text}
           onChange={val => setText(val.target.value)}
+          enterSubmits={true}
+          onSubmitShortcut={handleSend}
           style={{
             width: '100%',
             minHeight: '48px',
@@ -295,6 +299,24 @@ export const EnterpriseFeed: React.FC = () => {
   // Floating reactions active state per post
   const [hoveredPostId, setHoveredPostId] = useState<number | null>(null);
   const hoverTimeoutRef = useRef<Record<number, any>>({});
+
+  // Lightbox modal state for full-screen image inspection
+  const [lightboxData, setLightboxData] = useState<{ items: AttachmentItem[]; initialIndex: number } | null>(null);
+
+  // Floating Back-to-Top button state
+  const [showBackToTop, setShowBackToTop] = useState(false);
+
+  // Edit comment state
+  const [editingComment, setEditingComment] = useState<{ id: number; postId: number; content: string } | null>(null);
+  const [isSavingCommentEdit, setIsSavingCommentEdit] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowBackToTop(window.scrollY > 400);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const bottomObserverRef = useRef<HTMLDivElement | null>(null);
   const isFetchingRef = useRef(false);
@@ -904,6 +926,82 @@ export const EnterpriseFeed: React.FC = () => {
     }
   };
 
+  // Handle save edited comment
+  const handleSaveEditComment = async (commentId: number, postId: number, updatedText: string) => {
+    if (!updatedText.trim()) return;
+    setIsSavingCommentEdit(true);
+    try {
+      const res = await api.put(`/comments/${commentId}`, { content: updatedText.trim() });
+      if (res.data && res.data.success) {
+        setCommentsMap(prev => {
+          const postComments = prev[postId] || [];
+          return {
+            ...prev,
+            [postId]: postComments.map(c => {
+              if (c.id === commentId) {
+                return { ...c, content: updatedText.trim() };
+              }
+              if (c.replies) {
+                return {
+                  ...c,
+                  replies: c.replies.map(r => r.id === commentId ? { ...r, content: updatedText.trim() } : r)
+                };
+              }
+              return c;
+            })
+          };
+        });
+        setEditingComment(null);
+        toast.success(t('Đã cập nhật bình luận!'));
+      }
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || t('Lỗi khi cập nhật bình luận'));
+    } finally {
+      setIsSavingCommentEdit(false);
+    }
+  };
+
+  // Handle copy post direct link
+  const handleCopyPostLink = (postId: number) => {
+    const url = `${window.location.origin}${window.location.pathname}?post_id=${postId}`;
+    navigator.clipboard.writeText(url).then(() => {
+      toast.success(t('Đã sao chép liên kết bài viết!'));
+    }).catch(() => {
+      toast(url, { icon: '🔗' });
+    });
+  };
+
+  // Handle pasted image from clipboard into composer
+  const handlePastedImage = async (file: File) => {
+    setUploading(true);
+    const toastId = toast.loading(t('Đang xử lý ảnh từ clipboard...'));
+    try {
+      let fileToUpload = file;
+      try {
+        fileToUpload = await compressToWebP(file);
+      } catch (err) {}
+
+      const formData = new FormData();
+      formData.append('file', fileToUpload);
+
+      const res = await api.post('/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      const fileUrl = res.data?.data?.url || res.data?.url || res.data?.file_url;
+      if (fileUrl && typeof fileUrl === 'string') {
+        setAttachments(prev => [...prev, fileUrl]);
+        toast.success(t('Đã dán ảnh từ clipboard!'), { id: toastId });
+      } else {
+        toast.error(t('Không lấy được URL ảnh'), { id: toastId });
+      }
+    } catch (e) {
+      toast.error(t('Lỗi khi tải ảnh từ clipboard'), { id: toastId });
+    } finally {
+      setUploading(false);
+    }
+  };
+
   // File Upload Handler
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -1126,12 +1224,29 @@ export const EnterpriseFeed: React.FC = () => {
       return true; // Default fallback to image instead of video controls
     };
 
+    const handleOpenLightbox = (index: number) => {
+      const items: AttachmentItem[] = urls.map(u => ({
+        url: u,
+        type: isImage(u) ? 'image' : 'other',
+        name: u.split('/').pop() || 'Attachment'
+      }));
+      setLightboxData({ items, initialIndex: index });
+    };
+
     if (urls.length === 1) {
       const url = urls[0];
       return (
         <div className="feed-attachment-single" style={{ marginTop: '0.75rem', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--color-border-light)', lineHeight: 0 }}>
           {isImage(url) ? (
-            <img src={url} alt="Attachment" loading="lazy" decoding="async" style={{ display: 'block', width: '100%', maxHeight: '450px', objectFit: 'cover' }} />
+            <img 
+              src={url} 
+              alt="Attachment" 
+              loading="lazy" 
+              decoding="async" 
+              onClick={() => handleOpenLightbox(0)}
+              style={{ display: 'block', width: '100%', maxHeight: '450px', objectFit: 'cover', cursor: 'pointer' }} 
+              title={t('Click để phóng to ảnh')}
+            />
           ) : (
             <video src={url} controls preload="none" style={{ display: 'block', width: '100%', maxHeight: '450px' }} />
           )}
@@ -1145,7 +1260,15 @@ export const EnterpriseFeed: React.FC = () => {
           {urls.map((url, i) => (
             <div key={i} className="feed-attachment-cell-2" style={{ height: '220px', background: 'var(--color-bg)', overflow: 'hidden' }}>
               {isImage(url) ? (
-                <img src={url} alt="Attachment" loading="lazy" decoding="async" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
+                <img 
+                  src={url} 
+                  alt="Attachment" 
+                  loading="lazy" 
+                  decoding="async" 
+                  onClick={() => handleOpenLightbox(i)}
+                  style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }} 
+                  title={t('Click để phóng to ảnh')}
+                />
               ) : (
                 <video src={url} controls preload="none" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
               )}
@@ -1160,7 +1283,15 @@ export const EnterpriseFeed: React.FC = () => {
       <div className="feed-attachment-grid-3" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '8px', marginTop: '0.75rem', borderRadius: '12px', overflow: 'hidden', lineHeight: 0 }}>
         <div className="feed-attachment-cell-3-main" style={{ height: '320px', background: 'var(--color-bg)', overflow: 'hidden' }}>
           {isImage(urls[0]) ? (
-            <img src={urls[0]} alt="Attachment" loading="lazy" decoding="async" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
+            <img 
+              src={urls[0]} 
+              alt="Attachment" 
+              loading="lazy" 
+              decoding="async" 
+              onClick={() => handleOpenLightbox(0)}
+              style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }} 
+              title={t('Click để phóng to ảnh')}
+            />
           ) : (
             <video src={urls[0]} controls preload="none" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
           )}
@@ -1169,25 +1300,38 @@ export const EnterpriseFeed: React.FC = () => {
           {urls.slice(1, 3).map((url, i) => (
             <div key={i} style={{ height: '100%', position: 'relative', background: 'var(--color-bg)', overflow: 'hidden' }}>
               {isImage(url) ? (
-                <img src={url} alt="Attachment" loading="lazy" decoding="async" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
+                <img 
+                  src={url} 
+                  alt="Attachment" 
+                  loading="lazy" 
+                  decoding="async" 
+                  onClick={() => handleOpenLightbox(i + 1)}
+                  style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }} 
+                  title={t('Click để phóng to ảnh')}
+                />
               ) : (
                 <video src={url} controls preload="none" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
               )}
               {i === 1 && urls.length > 3 && (
-                <div style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  background: 'rgba(15, 23, 42, 0.65)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#ffffff',
-                  fontSize: '1.25rem',
-                  fontWeight: 800
-                }}>
+                <div 
+                  onClick={() => handleOpenLightbox(2)}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'rgba(15, 23, 42, 0.65)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#ffffff',
+                    fontSize: '1.25rem',
+                    fontWeight: 800,
+                    cursor: 'pointer'
+                  }}
+                  title={t('Xem tất cả ảnh')}
+                >
                   +{urls.length - 3}
                 </div>
               )}
@@ -1446,6 +1590,7 @@ export const EnterpriseFeed: React.FC = () => {
               placeholder={`${t('Bạn đang nghĩ gì thế')}, ${user?.name || ''}?`}
               value={content}
               onChange={e => setContent(e.target.value)}
+              onImagePaste={handlePastedImage}
               style={{
                 width: '100%',
                 minHeight: '80px',
@@ -1656,40 +1801,59 @@ export const EnterpriseFeed: React.FC = () => {
                     </div>
                   </div>
 
-                  {(user?.id === post.user_id || ['admin', 'superadmin', 'super_admin', 'director'].includes(user?.role || '')) && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <button 
-                        onClick={() => handleOpenEditPost(post)}
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          color: 'var(--color-text-muted)',
-                          cursor: 'pointer',
-                          padding: '6px',
-                          borderRadius: '8px'
-                        }}
-                        className="hover-bg"
-                        title={t('Chỉnh sửa bài viết')}
-                      >
-                        <Edit size={14} style={{ color: 'var(--color-primary)' }} />
-                      </button>
-                      <button 
-                        onClick={() => handleDeletePost(post.id)}
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          color: 'var(--color-text-muted)',
-                          cursor: 'pointer',
-                          padding: '6px',
-                          borderRadius: '8px'
-                        }}
-                        className="hover-bg"
-                        title={t('Xóa bài viết')}
-                      >
-                        <Trash2 size={14} style={{ color: 'var(--color-danger)' }} />
-                      </button>
-                    </div>
-                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <button 
+                      type="button"
+                      onClick={() => handleCopyPostLink(post.id)}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--color-text-muted)',
+                        cursor: 'pointer',
+                        padding: '6px',
+                        borderRadius: '8px'
+                      }}
+                      className="hover-bg"
+                      title={t('Sao chép liên kết bài viết')}
+                    >
+                      <Share2 size={14} />
+                    </button>
+
+                    {(user?.id === post.user_id || ['admin', 'superadmin', 'super_admin', 'director'].includes(user?.role || '')) && (
+                      <>
+                        <button 
+                          onClick={() => handleOpenEditPost(post)}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--color-text-muted)',
+                            cursor: 'pointer',
+                            padding: '6px',
+                            borderRadius: '8px'
+                          }}
+                          className="hover-bg"
+                          title={t('Chỉnh sửa bài viết')}
+                        >
+                          <Edit size={14} style={{ color: 'var(--color-primary)' }} />
+                        </button>
+                        <button 
+                          onClick={() => handleDeletePost(post.id)}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--color-text-muted)',
+                            cursor: 'pointer',
+                            padding: '6px',
+                            borderRadius: '8px'
+                          }}
+                          className="hover-bg"
+                          title={t('Xóa bài viết')}
+                        >
+                          <Trash2 size={14} style={{ color: 'var(--color-danger)' }} />
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
 
                 {/* Post Content */}
@@ -1979,7 +2143,64 @@ export const EnterpriseFeed: React.FC = () => {
                                             {new Date(comment.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
                                           </span>
                                         </div>
-                                        {renderCommentContent(comment.content)}
+                                        {editingComment?.id === comment.id ? (
+                                          <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                            <MentionInput
+                                              placeholder={t('Chỉnh sửa bình luận...')}
+                                              value={editingComment.content}
+                                              onChange={e => setEditingComment(prev => prev ? { ...prev, content: e.target.value } : null)}
+                                              enterSubmits={true}
+                                              onSubmitShortcut={() => handleSaveEditComment(comment.id, post.id, editingComment.content)}
+                                              style={{
+                                                width: '100%',
+                                                minHeight: '44px',
+                                                padding: '6px 10px',
+                                                fontSize: '0.8rem',
+                                                borderRadius: '8px',
+                                                border: '1px solid var(--color-primary)',
+                                                background: 'var(--color-bg-secondary)'
+                                              }}
+                                            />
+                                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', alignItems: 'center' }}>
+                                              <button 
+                                                type="button"
+                                                onClick={() => setEditingComment(null)}
+                                                disabled={isSavingCommentEdit}
+                                                style={{
+                                                  padding: '3px 8px',
+                                                  fontSize: '0.7rem',
+                                                  borderRadius: '6px',
+                                                  border: '1px solid var(--color-border)',
+                                                  background: 'transparent',
+                                                  color: 'var(--color-text-muted)',
+                                                  cursor: 'pointer'
+                                                }}
+                                              >
+                                                {t('Hủy')}
+                                              </button>
+                                              <button 
+                                                type="button"
+                                                onClick={() => handleSaveEditComment(comment.id, post.id, editingComment.content)}
+                                                disabled={isSavingCommentEdit || !editingComment.content.trim()}
+                                                style={{
+                                                  padding: '3px 10px',
+                                                  fontSize: '0.7rem',
+                                                  borderRadius: '6px',
+                                                  border: 'none',
+                                                  background: 'var(--color-primary)',
+                                                  color: '#ffffff',
+                                                  fontWeight: 600,
+                                                  cursor: 'pointer',
+                                                  opacity: isSavingCommentEdit ? 0.6 : 1
+                                                }}
+                                              >
+                                                {isSavingCommentEdit ? t('Đang lưu...') : t('Lưu')}
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ) : (
+                                          renderCommentContent(comment.content)
+                                        )}
                                       </div>
                                       
                                       {/* Comment Actions - Aligned Right */}
@@ -1990,6 +2211,14 @@ export const EnterpriseFeed: React.FC = () => {
                                         >
                                           {t('Phản hồi')}
                                         </button>
+                                        {(user?.id === comment.user_id || ['admin', 'superadmin', 'super_admin', 'director'].includes(user?.role || '')) && !isSticker && (
+                                          <button 
+                                            onClick={() => setEditingComment({ id: comment.id, postId: post.id, content: comment.content })}
+                                            style={{ background: 'transparent', border: 'none', color: 'inherit', fontWeight: 600, cursor: 'pointer', padding: 0 }}
+                                          >
+                                            {t('Sửa')}
+                                          </button>
+                                        )}
                                         {(user?.id === comment.user_id || ['admin', 'superadmin', 'super_admin', 'director'].includes(user?.role || '')) && (
                                           <button 
                                             onClick={() => setCommentToDelete({ postId: post.id, commentId: comment.id })}
@@ -2043,7 +2272,64 @@ export const EnterpriseFeed: React.FC = () => {
                                           {new Date(reply.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
                                         </span>
                                       </div>
-                                      {renderCommentContent(reply.content)}
+                                      {editingComment?.id === reply.id ? (
+                                        <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                          <MentionInput
+                                            placeholder={t('Chỉnh sửa phản hồi...')}
+                                            value={editingComment.content}
+                                            onChange={e => setEditingComment(prev => prev ? { ...prev, content: e.target.value } : null)}
+                                            enterSubmits={true}
+                                            onSubmitShortcut={() => handleSaveEditComment(reply.id, post.id, editingComment.content)}
+                                            style={{
+                                              width: '100%',
+                                              minHeight: '40px',
+                                              padding: '5px 8px',
+                                              fontSize: '0.75rem',
+                                              borderRadius: '8px',
+                                              border: '1px solid var(--color-primary)',
+                                              background: 'var(--color-bg-secondary)'
+                                            }}
+                                          />
+                                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', alignItems: 'center' }}>
+                                            <button 
+                                              type="button"
+                                              onClick={() => setEditingComment(null)}
+                                              disabled={isSavingCommentEdit}
+                                              style={{
+                                                padding: '2px 8px',
+                                                fontSize: '0.7rem',
+                                                borderRadius: '6px',
+                                                border: '1px solid var(--color-border)',
+                                                background: 'transparent',
+                                                color: 'var(--color-text-muted)',
+                                                cursor: 'pointer'
+                                              }}
+                                            >
+                                              {t('Hủy')}
+                                            </button>
+                                            <button 
+                                              type="button"
+                                              onClick={() => handleSaveEditComment(reply.id, post.id, editingComment.content)}
+                                              disabled={isSavingCommentEdit || !editingComment.content.trim()}
+                                              style={{
+                                                padding: '2px 10px',
+                                                fontSize: '0.7rem',
+                                                borderRadius: '6px',
+                                                border: 'none',
+                                                background: 'var(--color-primary)',
+                                                color: '#ffffff',
+                                                fontWeight: 600,
+                                                cursor: 'pointer',
+                                                opacity: isSavingCommentEdit ? 0.6 : 1
+                                              }}
+                                            >
+                                              {isSavingCommentEdit ? t('Đang lưu...') : t('Lưu')}
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        renderCommentContent(reply.content)
+                                      )}
                                     </div>
                                     {/* Reply Actions - Aligned Right */}
                                     <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '12px', fontSize: '0.7rem', color: 'var(--color-text-muted)', padding: '3px 4px 0 4px' }}>
@@ -2053,6 +2339,14 @@ export const EnterpriseFeed: React.FC = () => {
                                       >
                                         {t('Phản hồi')}
                                       </button>
+                                      {(user?.id === reply.user_id || ['admin', 'superadmin', 'super_admin', 'director'].includes(user?.role || '')) && !isReplySticker && (
+                                        <button 
+                                          onClick={() => setEditingComment({ id: reply.id, postId: post.id, content: reply.content })}
+                                          style={{ background: 'transparent', border: 'none', color: 'inherit', fontWeight: 600, cursor: 'pointer', padding: 0 }}
+                                        >
+                                          {t('Sửa')}
+                                        </button>
+                                      )}
                                       {(user?.id === reply.user_id || ['admin', 'superadmin', 'super_admin', 'director'].includes(user?.role || '')) && (
                                         <button 
                                           onClick={() => setCommentToDelete({ postId: post.id, commentId: reply.id })}
@@ -2790,6 +3084,48 @@ export const EnterpriseFeed: React.FC = () => {
           </form>
         )}
       </CustomModal>
+
+      {/* Lightbox Modal for Fullscreen Image Viewing */}
+      <AttachmentLightboxModal
+        isOpen={Boolean(lightboxData)}
+        onClose={() => setLightboxData(null)}
+        items={lightboxData?.items || []}
+        initialIndex={lightboxData?.initialIndex || 0}
+      />
+
+      {/* Floating Back to Top Button */}
+      <AnimatePresence>
+        {showBackToTop && (
+          <motion.button
+            type="button"
+            initial={{ opacity: 0, scale: 0.8, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.8, y: 20 }}
+            transition={{ duration: 0.2 }}
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            style={{
+              position: 'fixed',
+              bottom: '24px',
+              right: '24px',
+              width: '42px',
+              height: '42px',
+              borderRadius: '50%',
+              backgroundColor: 'var(--color-primary)',
+              color: '#ffffff',
+              border: 'none',
+              boxShadow: '0 4px 14px rgba(0, 0, 0, 0.25)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              zIndex: 99
+            }}
+            title={t('Cuộn lên đầu trang')}
+          >
+            <ArrowUp size={20} />
+          </motion.button>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

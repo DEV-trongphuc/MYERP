@@ -662,6 +662,39 @@ class PostController {
     }
 
     /**
+     * PUT /comments/{id}
+     */
+    public function updateComment(array $auth, int $id): void {
+        $tenantId = (int)$auth['tenant_id'];
+        $userId = (int)$auth['user_id'];
+        $role = strtolower($auth['role']);
+
+        $stmt = $this->db->prepare("SELECT user_id, post_id FROM enterprise_comments WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
+        $stmt->execute([$id, $tenantId]);
+        $comment = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$comment) {
+            respond(404, null, 'Bình luận không tồn tại', false);
+        }
+
+        if ($userId !== (int)$comment['user_id'] && !in_array($role, ['admin', 'superadmin', 'super_admin', 'director'])) {
+            respond(403, null, 'Bạn không có quyền chỉnh sửa bình luận này', false);
+        }
+
+        $input = json_decode(file_get_contents('php://input'), true);
+        $content = trim($input['content'] ?? '');
+
+        if (empty($content)) {
+            respond(422, null, 'Nội dung bình luận không được để trống', false);
+        }
+
+        $upStmt = $this->db->prepare("UPDATE enterprise_comments SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
+        $upStmt->execute([$content, $id]);
+
+        respond(200, ['success' => true, 'id' => $id, 'post_id' => (int)$comment['post_id'], 'content' => $content]);
+    }
+
+    /**
      * DELETE /comments/{id}
      */
     public function deleteComment(array $auth, int $id): void {
