@@ -1199,6 +1199,7 @@ class FinanceController
     public function updateExpense(array $auth, int $id): void
     {
         if ($auth['role'] === 'viewer') respond(403, null, 'Bạn không có quyền cập nhật chi phí', false);
+        $data = getBody();
         $isAdminOrFinance = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'accountant'], true);
         $fields = [
             'title',
