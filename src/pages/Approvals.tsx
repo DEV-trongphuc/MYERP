@@ -242,7 +242,7 @@ const diffHours = (start: string, end: string) => {
 
 export interface ApprovalItem {
   id: number;
-  type: 'leave' | 'advance' | 'expense' | 'checkin' | 'attendance_bulk';
+  type: 'leave' | 'advance' | 'expense' | 'checkin' | 'attendance_bulk' | 'po' | 'purchase_order';
   user_id?: number;
   created_by?: number;
   employee_name?: string;
@@ -608,8 +608,8 @@ export default function Approvals() {
               if (po && (po.id || po.po_number)) {
                 setSelectedTimelineItem({
                   id: po.id,
-                  type: 'expense',
-                  title: po.po_number ? `Đơn hàng ${po.po_number}` : (po.notes || `Đơn hàng PO #${po.id}`),
+                  type: 'po',
+                  title: po.po_number ? `Đơn mua hàng ${po.po_number}` : (po.notes || `Đơn hàng PO #${po.id}`),
                   description: po.notes || '',
                   amount: Number(po.total || po.subtotal || 0),
                   currency: 'VND',
@@ -3609,6 +3609,8 @@ export default function Approvals() {
         });
       } else if (item.type === 'expense') {
         await api.patch(`/expenses/${item.id}`, { status: 'approved' });
+      } else if (item.type === 'po' || item.type === 'purchase_order') {
+        await api.post(`/purchase-orders/${item.id}/approve`, { status: 'approved' });
       } else if (item.type === 'checkin') {
         await api.put(`/check-ins/${item.id}`, { status: 'approved' });
       } else if (item.type === 'attendance_bulk') {
@@ -3655,6 +3657,8 @@ export default function Approvals() {
         });
       } else if (selectedItem.type === 'expense') {
         await api.patch(`/expenses/${selectedItem.id}`, { status: 'rejected', reject_reason: rejectReason });
+      } else if (selectedItem.type === 'po' || selectedItem.type === 'purchase_order') {
+        await api.post(`/purchase-orders/${selectedItem.id}/approve`, { status: 'rejected', reject_reason: rejectReason });
       } else if (selectedItem.type === 'checkin') {
         await api.put(`/check-ins/${selectedItem.id}`, { status: 'rejected', reason: rejectReason });
       } else if (selectedItem.type === 'attendance_bulk') {

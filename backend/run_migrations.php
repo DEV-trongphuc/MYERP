@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 301;
+$targetVersion = 302;
 $currentVersion = 186;
 
 // Query current DB version
@@ -4159,10 +4159,75 @@ try {
         }
     }
 
-    // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '301') ON DUPLICATE KEY UPDATE setting_value = '301'");
+    // 89. Upgrade to 302: Synchronize PO, SO, Invoices, Expenses and eliminate DDL overhead from runtime index.php
+    if ($currentVersion < 302) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 302: Chuẩn hóa Schema PO, SO, Hóa đơn và Quy trình duyệt...", "info");
+        try {
+            // Helper to safely add column if not exists
+            $addColumnIfNotExists = function($table, $column, $definition) use ($conn, $logMsg) {
+                try {
+                    $chk = $conn->query("SHOW COLUMNS FROM `{$table}` LIKE '{$column}'");
+                    if (!$chk || $chk->num_rows === 0) {
+                        $conn->query("ALTER TABLE `{$table}` ADD COLUMN `{$column}` {$definition}");
+                        $logMsg("Đã thêm cột `{$column}` vào bảng `{$table}`.", "success");
+                    }
+                } catch (\Throwable $e) {}
+            };
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 301", "success");
+            // Helper to safely add index if not exists
+            $addIndexIfNotExists = function($table, $indexName, $indexDef) use ($conn, $logMsg) {
+                try {
+                    $chk = $conn->query("SHOW INDEX FROM `{$table}` WHERE Key_name = '{$indexName}'");
+                    if (!$chk || $chk->num_rows === 0) {
+                        $conn->query("ALTER TABLE `{$table}` ADD INDEX `{$indexName}` {$indexDef}");
+                        $logMsg("Đã thêm index `{$indexName}` vào bảng `{$table}`.", "success");
+                    }
+                } catch (\Throwable $e) {}
+            };
+
+            // 1. PO: Add approved_by_3
+            $addColumnIfNotExists('purchase_orders', 'approved_by_3', 'INT NULL DEFAULT NULL AFTER approved_by_2');
+
+            // 2. SO: Add invoice_id and index
+            $addColumnIfNotExists('sales_orders', 'invoice_id', 'INT NULL DEFAULT NULL AFTER quote_id');
+            $addIndexIfNotExists('sales_orders', 'idx_so_invoice_id', '(invoice_id)');
+
+            // 3. Invoices: Add so_id and index
+            $addColumnIfNotExists('invoices', 'so_id', 'INT NULL DEFAULT NULL AFTER deal_id');
+            $addIndexIfNotExists('invoices', 'idx_inv_so_id', '(so_id)');
+
+            // 4. Expenses: Add approved_by_2, approved_by_3
+            $addColumnIfNotExists('expenses', 'approved_by_2', 'INT NULL DEFAULT NULL AFTER approved_by');
+            $addColumnIfNotExists('expenses', 'approved_by_3', 'INT NULL DEFAULT NULL AFTER approved_by_2');
+
+            // 5. attendance_bulk_requests columns
+            $addColumnIfNotExists('attendance_bulk_requests', 'approved_at', 'TIMESTAMP NULL DEFAULT NULL AFTER admin_note');
+            $addColumnIfNotExists('attendance_bulk_requests', 'approved_by', 'INT NULL DEFAULT NULL AFTER approved_at');
+            $addColumnIfNotExists('attendance_bulk_requests', 'related_user_ids', 'LONGTEXT NULL DEFAULT NULL AFTER manager_id');
+            $addColumnIfNotExists('attendance_bulk_requests', 'approver2_id', 'INT NULL DEFAULT NULL AFTER manager_id');
+            $addColumnIfNotExists('attendance_bulk_requests', 'updated_at', 'TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at');
+
+            // 6. contacts avatar_url
+            $addColumnIfNotExists('contacts', 'avatar_url', 'TEXT NULL DEFAULT NULL AFTER full_name');
+
+            // 7. hrm_leave_requests salary_rate
+            $addColumnIfNotExists('hrm_leave_requests', 'salary_rate', "DECIMAL(5,2) DEFAULT 100.00 COMMENT 'Tỷ lệ % hưởng lương (0-100). WFH mặc định 50%' AFTER ot_rate");
+
+            // 8. deposits columns
+            $addColumnIfNotExists('deposits', 'company_id', 'INT NULL DEFAULT NULL AFTER contact_id');
+            $addColumnIfNotExists('deposits', 'supplier_id', 'INT NULL DEFAULT NULL AFTER company_id');
+            try { $conn->query("ALTER TABLE deposits MODIFY COLUMN contact_id INT NULL DEFAULT NULL"); } catch (\Throwable $e) {}
+
+            $logMsg("Nâng cấp lên phiên bản 302 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi nâng cấp v302: " . $e->getMessage(), "error");
+        }
+    }
+
+    // Update DB version in system_settings
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '302') ON DUPLICATE KEY UPDATE setting_value = '302'");
+
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 302", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");

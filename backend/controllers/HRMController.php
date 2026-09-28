@@ -3458,6 +3458,69 @@ class HRMController {
             ];
         }
 
+        // 6. Purchase Orders (PO waiting approval)
+        $poSelect = "
+            SELECT po.*, s.name as supplier_name, u.full_name as creator_name,
+                   app1.full_name as approver_name,
+                   app2.full_name as approver_name_2,
+                   app3.full_name as approver_name_3
+            FROM purchase_orders po
+            LEFT JOIN suppliers s ON po.supplier_id = s.id
+            JOIN users u ON po.created_by = u.id
+            LEFT JOIN users app1 ON po.approver_id = app1.id
+            LEFT JOIN users app2 ON po.approver_id_2 = app2.id
+            LEFT JOIN users app3 ON po.approver_id_3 = app3.id
+        ";
+        if ($isFinanceAdmin || $isGlobalAdmin) {
+            $stmtPOs = $this->db->prepare($poSelect . "
+                WHERE po.tenant_id = ?
+                ORDER BY po.created_at DESC
+                LIMIT 300
+            ");
+            $stmtPOs->execute([$auth['tenant_id']]);
+        } else {
+            $conds = ["po.created_by = ?", "po.approver_id = ?", "po.approver_id_2 = ?", "po.approver_id_3 = ?"];
+            $pPO = [$auth['tenant_id'], $userId, $userId, $userId, $userId];
+            if (!empty($managedUserIds)) {
+                $mPh = implode(',', array_fill(0, count($managedUserIds), '?'));
+                $conds[] = "po.created_by IN ($mPh)";
+                $pPO = array_merge($pPO, $managedUserIds);
+            }
+            $sqlPO = $poSelect . "
+                WHERE po.tenant_id = ? AND (" . implode(' OR ', $conds) . ")
+                ORDER BY po.created_at DESC LIMIT 300";
+            $stmtPOs = $this->db->prepare($sqlPO);
+            $stmtPOs->execute($pPO);
+        }
+        $pos = $stmtPOs->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($pos as $p) {
+            $relArr = !empty($p['related_user_ids']) ? array_filter(array_map('intval', explode(',', (string)$p['related_user_ids']))) : [];
+            $all[] = [
+                'id' => (int)$p['id'],
+                'type' => 'po',
+                'employee_name' => $p['creator_name'],
+                'user_id' => (int)$p['created_by'],
+                'created_by' => (int)$p['created_by'],
+                'approver_id' => (int)($p['approver_id'] ?? 0),
+                'approver_id_2' => (int)($p['approver_id_2'] ?? 0),
+                'approver_id_3' => (int)($p['approver_id_3'] ?? 0),
+                'approver_name' => $p['approver_name'] ?? null,
+                'approver_name_2' => $p['approver_name_2'] ?? null,
+                'approver_name_3' => $p['approver_name_3'] ?? null,
+                'status_level_1' => $p['status_level_1'] ?? 'pending',
+                'status_level_2' => $p['status_level_2'] ?? 'none',
+                'status_level_3' => $p['status_level_3'] ?? 'none',
+                'approval_status' => $p['approval_status'] ?? 'pending',
+                'amount' => (float)($p['total'] ?? 0),
+                'currency' => 'VND',
+                'related_user_ids' => array_values($relArr),
+                'title' => 'Đơn mua hàng: ' . ($p['po_number'] ?: ('#' . $p['id'])) . ($p['supplier_name'] ? (' - ' . $p['supplier_name']) : ''),
+                'description' => $p['notes'] ?: ('Đơn mua hàng ' . $p['po_number']),
+                'status' => ($p['status'] === 'pending_approval' ? 'pending' : ($p['approval_status'] === 'approved' ? 'approved' : ($p['status'] === 'cancelled' ? 'rejected' : $p['status']))),
+                'created_at' => $p['created_at']
+            ];
+        }
+
         usort($all, function($a, $b) {
             return strcmp($b['created_at'], $a['created_at']);
         });

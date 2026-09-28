@@ -470,6 +470,16 @@ class FinanceController
                 $this->db->prepare("UPDATE invoices SET is_inventory_deducted=0 WHERE id=?")->execute([$id]);
             }
 
+            // Sync SO payment status if invoice becomes paid
+            if (isset($data['status']) && $data['status'] === 'paid') {
+                $stmtSo = $this->db->prepare("SELECT so_id FROM invoices WHERE id = ?");
+                $stmtSo->execute([$id]);
+                $soId = $stmtSo->fetchColumn();
+                if ($soId) {
+                    $this->db->prepare("UPDATE sales_orders SET payment_status = 'paid', paid_amount = total WHERE id = ?")->execute([$soId]);
+                }
+            }
+
             logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'UPDATE', 'invoice', $id, json_encode($data));
             $this->db->commit();
             $this->syncInvoiceContact($auth['tenant_id'], $id);
@@ -594,6 +604,14 @@ class FinanceController
 
             if (!$inv['is_inventory_deducted']) {
                 $this->triggerStockDeduction($auth, $id, $inv['invoice_number']);
+            }
+
+            // Sync SO payment status if linked
+            $stmtSo = $this->db->prepare("SELECT so_id FROM invoices WHERE id = ?");
+            $stmtSo->execute([$id]);
+            $soId = $stmtSo->fetchColumn();
+            if ($soId) {
+                $this->db->prepare("UPDATE sales_orders SET payment_status = 'paid', paid_amount = total WHERE id = ?")->execute([$soId]);
             }
 
             // Update contact's last_contact
@@ -1181,7 +1199,7 @@ class FinanceController
     public function updateExpense(array $auth, int $id): void
     {
         if ($auth['role'] === 'viewer') respond(403, null, 'Bạn không có quyền cập nhật chi phí', false);
-        $data = getBody();
+        $isAdminOrFinance = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'accountant'], true);
         $fields = [
             'title',
             'category',
@@ -1189,7 +1207,6 @@ class FinanceController
             'currency',
             'vat_amount',
             'date',
-            'status',
             'notes',
             'items',
             'vendor_name',
@@ -1199,12 +1216,11 @@ class FinanceController
             'approver_id',
             'approver_id_2',
             'approver_id_3',
-            'status_level_1',
-            'status_level_2',
-            'status_level_3',
-            'approval_status',
             'related_user_ids'
         ];
+        if ($isAdminOrFinance) {
+            $fields = array_merge($fields, ['status', 'approval_status', 'status_level_1', 'status_level_2', 'status_level_3']);
+        }
         if (array_key_exists('items', $data) && is_array($data['items'])) {
             $data['items'] = json_encode($data['items'], JSON_UNESCAPED_UNICODE);
         }
@@ -1241,7 +1257,7 @@ class FinanceController
         $this->db->beginTransaction();
         try {
             // Check permission and get current amount if not provided
-            $sqlCheck = "SELECT id, amount, created_by, title FROM expenses WHERE id=? AND tenant_id=?";
+            $sqlCheck = "SELECT id, amount, created_by, title, status, approval_status, is_refunded FROM expenses WHERE id=? AND tenant_id=?";
             $cp = [$id, $auth['tenant_id']];
             if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
                 $sqlCheck .= " AND created_by=?";
@@ -1260,6 +1276,9 @@ class FinanceController
 
             $isCreator = (int)($row['created_by'] ?? 0) === (int)$auth['user_id'];
             $updatingGeneralFields = !empty(array_intersect(array_keys($data), ['title', 'category', 'amount', 'currency', 'items', 'vat_amount', 'date', 'notes', 'vendor_name', 'entities']));
+            if (!$isAdminOrFinance && ($row['status'] === 'approved' || $row['approval_status'] === 'approved' || !empty($row['is_refunded'])) && $updatingGeneralFields) {
+                respond(422, null, 'Đề xuất chi phí/tạm ứng đã được phê duyệt hoặc hoàn tất thanh toán, không thể chỉnh sửa thông tin', false);
+            }
             if (!$isCreator && $updatingGeneralFields) {
                 respond(403, null, 'Chỉ người tạo phiếu mới có quyền chỉnh sửa chi phí', false);
             }
@@ -1580,7 +1599,14 @@ class FinanceController
                     $nextStatus = 'approved';
                 }
 
-                $setApprovedBy = ($nextStatus === 'approved') ? ", approved_by = " . (int)$userId : "";
+                $setApprovedBy = "";
+                if ($currentLevel === 1) {
+                    $setApprovedBy = ", approved_by = " . (int)$userId;
+                } elseif ($currentLevel === 2) {
+                    $setApprovedBy = ", approved_by_2 = " . (int)$userId;
+                } elseif ($currentLevel === 3) {
+                    $setApprovedBy = ", approved_by_3 = " . (int)$userId;
+                }
                 $this->db->prepare("UPDATE expenses SET status=?, approval_status=?, $levelStatusField='approved', $levelTimeField=NOW() $setApprovedBy WHERE id=?")
                     ->execute([$nextStatus, $nextApprovalStatus, $id]);
             }

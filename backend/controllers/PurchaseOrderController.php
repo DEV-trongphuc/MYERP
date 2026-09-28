@@ -320,13 +320,19 @@ class PurchaseOrderController {
             SELECT po.*, s.name as supplier_name, u.full_name as creator_name,
                    app1.full_name as approver_name_1, app1.email as approver_email_1,
                    app2.full_name as approver_name_2, app2.email as approver_email_2,
-                   app3.full_name as approver_name_3, app3.email as approver_email_3
+                   app3.full_name as approver_name_3, app3.email as approver_email_3,
+                   real1.full_name as approved_by_name_1,
+                   real2.full_name as approved_by_name_2,
+                   real3.full_name as approved_by_name_3
             FROM purchase_orders po
             LEFT JOIN suppliers s ON po.supplier_id = s.id
             LEFT JOIN users u ON po.created_by = u.id
             LEFT JOIN users app1 ON po.approver_id = app1.id
             LEFT JOIN users app2 ON po.approver_id_2 = app2.id
             LEFT JOIN users app3 ON po.approver_id_3 = app3.id
+            LEFT JOIN users real1 ON po.approved_by = real1.id
+            LEFT JOIN users real2 ON po.approved_by_2 = real2.id
+            LEFT JOIN users real3 ON po.approved_by_3 = real3.id
             WHERE po.id = ? AND po.tenant_id = ?
         ");
         $stmt->execute([$id, $auth['tenant_id']]);
@@ -360,9 +366,9 @@ class PurchaseOrderController {
                 $this->db->rollBack();
                 respond(422, null, 'Đơn hàng này đã bị hủy, không thể nhập kho', false);
             }
-            if ($po['approval_status'] !== 'approved') {
+            if ($po['approval_status'] !== 'approved' && $po['status'] !== 'ordered') {
                 $this->db->rollBack();
-                respond(422, null, 'Đơn hàng chưa được phê duyệt đầy đủ, không thể nhập kho', false);
+                respond(422, null, 'Đơn hàng chưa được phê duyệt đầy đủ hoặc chưa được chuyển sang trạng thái đặt hàng', false);
             }
 
             // 2. Update status
@@ -490,6 +496,9 @@ class PurchaseOrderController {
                 $updateParams[] = $userId;
             } elseif ($currentLevel === 2) {
                 $updateFields[] = "approved_by_2 = ?";
+                $updateParams[] = $userId;
+            } elseif ($currentLevel === 3) {
+                $updateFields[] = "approved_by_3 = ?";
                 $updateParams[] = $userId;
             }
 

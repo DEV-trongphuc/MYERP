@@ -363,6 +363,131 @@ class SalesOrderController {
     }
 
     /**
+     * Cập nhật Đơn bán hàng (Chỉ cho phép sửa khi còn ở trạng thái nháp)
+     */
+    public function update(array $auth, int $id): void {
+        $tenantId = (int)$auth['tenant_id'];
+        $userId = (int)$auth['user_id'];
+
+        $stmt = $this->db->prepare("SELECT * FROM sales_orders WHERE id = ? AND tenant_id = ? FOR UPDATE");
+        $stmt->execute([$id, $tenantId]);
+        $so = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$so) {
+            respond(404, null, 'Đơn bán hàng không tồn tại', false);
+        }
+
+        $isAdmin = in_array($auth['role'] ?? '', ['admin', 'superadmin', 'director']);
+        if (!$isAdmin && $so['created_by'] != $userId && $auth['role'] !== 'manager') {
+            respond(403, null, 'Bạn không có quyền chỉnh sửa đơn bán hàng này', false);
+        }
+
+        if ($so['status'] !== 'draft' && !$isAdmin) {
+            respond(422, null, 'Chỉ có thể chỉnh sửa đơn bán hàng khi ở trạng thái Nháp', false);
+        }
+
+        $data = json_decode(file_get_contents('php://input'), true);
+        if (!$data) {
+            respond(400, null, 'Dữ liệu không hợp lệ', false);
+        }
+
+        $contactId = !empty($data['contact_id']) ? (int)$data['contact_id'] : $so['contact_id'];
+        $companyId = !empty($data['company_id']) ? (int)$data['company_id'] : $so['company_id'];
+        $dealId = !empty($data['deal_id']) ? (int)$data['deal_id'] : $so['deal_id'];
+        $quoteId = !empty($data['quote_id']) ? (int)$data['quote_id'] : $so['quote_id'];
+        $orderDate = !empty($data['order_date']) ? trim($data['order_date']) : $so['order_date'];
+        $deliveryDate = !empty($data['delivery_date']) ? trim($data['delivery_date']) : $so['delivery_date'];
+        $notes = array_key_exists('notes', $data) ? trim($data['notes']) : $so['notes'];
+        $terms = array_key_exists('terms', $data) ? trim($data['terms']) : $so['terms'];
+        $discountTotal = array_key_exists('discount', $data) ? max(0, (float)$data['discount']) : (float)$so['discount'];
+        $taxPct = array_key_exists('tax_percent', $data) ? min(100, max(0, (float)$data['tax_percent'])) : 0;
+
+        $items = isset($data['items']) && is_array($data['items']) ? $data['items'] : null;
+
+        $this->db->beginTransaction();
+        try {
+            if ($items !== null) {
+                if (empty($items)) {
+                    $this->db->rollBack();
+                    respond(422, null, 'Đơn bán hàng cần có ít nhất một sản phẩm / dịch vụ', false);
+                }
+
+                $subtotal = 0;
+                foreach ($items as $it) {
+                    $qty = max(0.01, (float)($it['quantity'] ?? 1));
+                    $price = max(0, (float)($it['unit_price'] ?? 0));
+                    $discPct = min(100, max(0, (float)($it['discount'] ?? 0)));
+                    $subtotal += $qty * $price * (1 - $discPct / 100);
+                }
+
+                $taxTotal = $subtotal * ($taxPct / 100);
+                $total = $subtotal + $taxTotal - $discountTotal;
+
+                $updateStmt = $this->db->prepare("
+                    UPDATE sales_orders SET
+                        contact_id = ?, company_id = ?, deal_id = ?, quote_id = ?,
+                        order_date = ?, delivery_date = ?, subtotal = ?, discount = ?,
+                        tax_percent = ?, tax = ?, total = ?, notes = ?, terms = ?
+                    WHERE id = ?
+                ");
+                $updateStmt->execute([
+                    $contactId, $companyId, $dealId, $quoteId,
+                    $orderDate, $deliveryDate, $subtotal, $discountTotal,
+                    $taxPct, $taxTotal, $total, $notes, $terms,
+                    $id
+                ]);
+
+                // Xóa và ghi lại chi tiết sản phẩm
+                $this->db->prepare("DELETE FROM sales_order_items WHERE so_id = ?")->execute([$id]);
+
+                $itemInsert = $this->db->prepare("
+                    INSERT INTO sales_order_items (so_id, product_id, name, description, quantity, unit_price, discount, subtotal, sort_order)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ");
+
+                foreach ($items as $idx => $it) {
+                    $qty = max(0.01, (float)($it['quantity'] ?? 1));
+                    $price = max(0, (float)($it['unit_price'] ?? 0));
+                    $discPct = min(100, max(0, (float)($it['discount'] ?? 0)));
+                    $itemSub = $qty * $price * (1 - $discPct / 100);
+
+                    $itemInsert->execute([
+                        $id,
+                        !empty($it['product_id']) ? (int)$it['product_id'] : null,
+                        $it['name'] ?? 'Sản phẩm',
+                        $it['description'] ?? '',
+                        $qty,
+                        $price,
+                        $discPct,
+                        $itemSub,
+                        $idx
+                    ]);
+                }
+            } else {
+                $updateStmt = $this->db->prepare("
+                    UPDATE sales_orders SET
+                        contact_id = ?, company_id = ?, deal_id = ?, quote_id = ?,
+                        order_date = ?, delivery_date = ?, notes = ?, terms = ?
+                    WHERE id = ?
+                ");
+                $updateStmt->execute([
+                    $contactId, $companyId, $dealId, $quoteId,
+                    $orderDate, $deliveryDate, $notes, $terms,
+                    $id
+                ]);
+            }
+
+            $this->db->commit();
+            respond(200, ['id' => $id], 'Cập nhật đơn bán hàng thành công');
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            respond(500, null, 'Lỗi cập nhật đơn bán hàng: ' . $e->getMessage(), false);
+        }
+    }
+
+    /**
      * Phê duyệt Đơn bán hàng
      */
     public function approve(array $auth, int $id): void {
@@ -373,8 +498,8 @@ class SalesOrderController {
         if (!$so) {
             respond(404, null, 'Đơn bán hàng không tồn tại', false);
         }
-        if ($so['status'] !== 'draft') {
-            respond(422, null, 'Chỉ có thể phê duyệt đơn bán hàng nháp', false);
+        if ($so['status'] !== 'draft' && $so['status'] !== 'pending') {
+            respond(422, null, 'Chỉ có thể phê duyệt đơn bán hàng ở trạng thái nháp hoặc chờ duyệt', false);
         }
 
         $update = $this->db->prepare("UPDATE sales_orders SET status = 'approved' WHERE id = ?");
@@ -394,6 +519,99 @@ class SalesOrderController {
         }
 
         respond(200, ['id' => $id, 'status' => 'approved'], 'Phê duyệt đơn bán hàng thành công');
+    }
+
+    /**
+     * Từ chối Đơn bán hàng
+     */
+    public function reject(array $auth, int $id): void {
+        $data = json_decode(file_get_contents('php://input'), true) ?? [];
+        $reason = trim($data['reason'] ?? $data['reject_reason'] ?? '');
+
+        $stmt = $this->db->prepare("SELECT * FROM sales_orders WHERE id = ? AND tenant_id = ? FOR UPDATE");
+        $stmt->execute([$id, $auth['tenant_id']]);
+        $so = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$so) {
+            respond(404, null, 'Đơn bán hàng không tồn tại', false);
+        }
+        if ($so['status'] !== 'draft' && $so['status'] !== 'pending') {
+            respond(422, null, 'Chỉ có thể từ chối đơn bán hàng ở trạng thái nháp hoặc chờ duyệt', false);
+        }
+
+        $notes = $so['notes'] ?? '';
+        if (!empty($reason)) {
+            $notes = trim($notes . "\n[Từ chối ngày " . date('d/m/Y H:i') . " bởi " . ($auth['full_name'] ?? 'Quản lý') . "]: " . $reason);
+        }
+
+        $update = $this->db->prepare("UPDATE sales_orders SET status = 'rejected', notes = ? WHERE id = ?");
+        $update->execute([$notes, $id]);
+
+        // Dispatch rejection notification to SO creator
+        try {
+            require_once __DIR__ . '/../NotificationService.php';
+            NotificationService::send($this->db, (int)$auth['tenant_id'], 'SO_REJECTED', [
+                'so_id' => $id,
+                'so_number' => $so['so_number'],
+                'target_user_id' => (int)$so['created_by'],
+                'approver_name' => $auth['full_name'] ?? 'Quản lý',
+                'reason' => $reason
+            ]);
+        } catch (\Throwable $soRejEx) {
+            error_log("SO Reject Notification Error: " . $soRejEx->getMessage());
+        }
+
+        respond(200, ['id' => $id, 'status' => 'rejected'], 'Từ chối đơn bán hàng thành công');
+    }
+
+    /**
+     * Hủy Đơn bán hàng
+     */
+    public function cancel(array $auth, int $id): void {
+        $stmt = $this->db->prepare("SELECT * FROM sales_orders WHERE id = ? AND tenant_id = ? FOR UPDATE");
+        $stmt->execute([$id, $auth['tenant_id']]);
+        $so = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$so) {
+            respond(404, null, 'Đơn bán hàng không tồn tại', false);
+        }
+        if ($so['status'] === 'completed') {
+            respond(422, null, 'Không thể hủy đơn bán hàng đã hoàn thành', false);
+        }
+
+        $this->db->prepare("UPDATE sales_orders SET status = 'cancelled' WHERE id = ?")->execute([$id]);
+        respond(200, ['id' => $id, 'status' => 'cancelled'], 'Hủy đơn bán hàng thành công');
+    }
+
+    /**
+     * Xóa Đơn bán hàng (chỉ cho phép xóa khi là nháp hoặc người dùng có quyền admin)
+     */
+    public function destroy(array $auth, int $id): void {
+        $stmt = $this->db->prepare("SELECT * FROM sales_orders WHERE id = ? AND tenant_id = ? FOR UPDATE");
+        $stmt->execute([$id, $auth['tenant_id']]);
+        $so = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$so) {
+            respond(404, null, 'Đơn bán hàng không tồn tại', false);
+        }
+
+        $isAdmin = in_array($auth['role'] ?? '', ['admin', 'superadmin', 'director']);
+        if (!$isAdmin && $so['status'] !== 'draft') {
+            respond(403, null, 'Chỉ có thể xóa đơn bán hàng khi ở trạng thái Nháp', false);
+        }
+
+        $this->db->beginTransaction();
+        try {
+            $this->db->prepare("DELETE FROM sales_order_items WHERE so_id = ?")->execute([$id]);
+            $this->db->prepare("DELETE FROM sales_orders WHERE id = ?")->execute([$id]);
+            $this->db->commit();
+            respond(200, ['id' => $id], 'Xóa đơn bán hàng thành công');
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            respond(500, null, 'Lỗi xóa đơn bán hàng: ' . $e->getMessage(), false);
+        }
     }
 
     /**
@@ -429,13 +647,14 @@ class SalesOrderController {
             $dueDate = date('Y-m-d', strtotime('+30 days'));
 
             $invInsert = $this->db->prepare("
-                INSERT INTO invoices (tenant_id, deal_id, company_id, contact_id, created_by, invoice_number, title, status, issue_date, due_date, subtotal, discount, tax, total, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO invoices (tenant_id, deal_id, company_id, contact_id, created_by, invoice_number, title, status, issue_date, due_date, subtotal, discount, tax, total, notes, so_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             $invInsert->execute([
                 $tenantId, $so['deal_id'], $so['company_id'], $so['contact_id'], $userId,
                 $invNumber, "Hóa đơn xuất từ SO #" . $so['so_number'], $issueDate, $dueDate,
-                $so['subtotal'], $so['discount'], $so['tax'], $so['total'], "Được sinh tự động từ SO " . $so['so_number']
+                $so['subtotal'], $so['discount'], $so['tax'], $so['total'], "Được sinh tự động từ SO " . $so['so_number'],
+                $id
             ]);
             $invId = (int)$this->db->lastInsertId();
 
@@ -451,8 +670,8 @@ class SalesOrderController {
                 ]);
             }
 
-            // Cập nhật SO sang completed
-            $this->db->prepare("UPDATE sales_orders SET status = 'completed' WHERE id = ?")->execute([$id]);
+            // Cập nhật SO sang completed và lưu invoice_id
+            $this->db->prepare("UPDATE sales_orders SET status = 'completed', invoice_id = ? WHERE id = ?")->execute([$invId, $id]);
 
             $this->db->commit();
             respond(201, ['invoice_id' => $invId, 'invoice_number' => $invNumber], 'Chuyển đơn bán hàng thành Hóa đơn thành công');

@@ -648,46 +648,50 @@ try {
         }
     }
 
-    // Ensure columns exist on attendance_bulk_requests
-    try {
-        $cols = $db->query("SHOW COLUMNS FROM attendance_bulk_requests")->fetchAll(PDO::FETCH_COLUMN) ?: [];
-        if (!in_array('approved_at', $cols, true)) {
-            $db->exec("ALTER TABLE attendance_bulk_requests ADD COLUMN approved_at TIMESTAMP NULL DEFAULT NULL AFTER admin_note");
-        }
-        if (!in_array('approved_by', $cols, true)) {
-            $db->exec("ALTER TABLE attendance_bulk_requests ADD COLUMN approved_by INT NULL DEFAULT NULL AFTER approved_at");
-        }
-        if (!in_array('related_user_ids', $cols, true)) {
-            $db->exec("ALTER TABLE attendance_bulk_requests ADD COLUMN related_user_ids LONGTEXT NULL DEFAULT NULL AFTER manager_id");
-        }
-        if (!in_array('approver2_id', $cols, true)) {
-            $db->exec("ALTER TABLE attendance_bulk_requests ADD COLUMN approver2_id INT NULL DEFAULT NULL AFTER manager_id");
-        }
-        if (!in_array('updated_at', $cols, true)) {
-            $db->exec("ALTER TABLE attendance_bulk_requests ADD COLUMN updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at");
-        }
+    // One-time schema check (guarded to avoid table metadata lock on every request)
+    if (!in_array('runtime_schema_v302', $applied, true)) {
+        try {
+            $cols = $db->query("SHOW COLUMNS FROM attendance_bulk_requests")->fetchAll(PDO::FETCH_COLUMN) ?: [];
+            if (!in_array('approved_at', $cols, true)) {
+                $db->exec("ALTER TABLE attendance_bulk_requests ADD COLUMN approved_at TIMESTAMP NULL DEFAULT NULL AFTER admin_note");
+            }
+            if (!in_array('approved_by', $cols, true)) {
+                $db->exec("ALTER TABLE attendance_bulk_requests ADD COLUMN approved_by INT NULL DEFAULT NULL AFTER approved_at");
+            }
+            if (!in_array('related_user_ids', $cols, true)) {
+                $db->exec("ALTER TABLE attendance_bulk_requests ADD COLUMN related_user_ids LONGTEXT NULL DEFAULT NULL AFTER manager_id");
+            }
+            if (!in_array('approver2_id', $cols, true)) {
+                $db->exec("ALTER TABLE attendance_bulk_requests ADD COLUMN approver2_id INT NULL DEFAULT NULL AFTER manager_id");
+            }
+            if (!in_array('updated_at', $cols, true)) {
+                $db->exec("ALTER TABLE attendance_bulk_requests ADD COLUMN updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at");
+            }
 
-        // Ensure contacts table has avatar_url column
-        $contactCols = $db->query("SHOW COLUMNS FROM contacts")->fetchAll(PDO::FETCH_COLUMN) ?: [];
-        if (!in_array('avatar_url', $contactCols, true)) {
-            $db->exec("ALTER TABLE contacts ADD COLUMN avatar_url TEXT NULL DEFAULT NULL AFTER full_name");
-        }
+            // Ensure contacts table has avatar_url column
+            $contactCols = $db->query("SHOW COLUMNS FROM contacts")->fetchAll(PDO::FETCH_COLUMN) ?: [];
+            if (!in_array('avatar_url', $contactCols, true)) {
+                $db->exec("ALTER TABLE contacts ADD COLUMN avatar_url TEXT NULL DEFAULT NULL AFTER full_name");
+            }
 
-        // Ensure salary_rate exists on hrm_leave_requests
-        $hlrCols = $db->query("SHOW COLUMNS FROM hrm_leave_requests")->fetchAll(PDO::FETCH_COLUMN) ?: [];
-        if (!in_array('salary_rate', $hlrCols, true)) {
-            $db->exec("ALTER TABLE hrm_leave_requests ADD COLUMN salary_rate DECIMAL(5,2) DEFAULT 100.00 COMMENT 'Tỷ lệ % hưởng lương (0-100). WFH mặc định 50%' AFTER ot_rate");
-        }
+            // Ensure salary_rate exists on hrm_leave_requests
+            $hlrCols = $db->query("SHOW COLUMNS FROM hrm_leave_requests")->fetchAll(PDO::FETCH_COLUMN) ?: [];
+            if (!in_array('salary_rate', $hlrCols, true)) {
+                $db->exec("ALTER TABLE hrm_leave_requests ADD COLUMN salary_rate DECIMAL(5,2) DEFAULT 100.00 COMMENT 'Tỷ lệ % hưởng lương (0-100). WFH mặc định 50%' AFTER ot_rate");
+            }
 
-        $depositCols = $db->query("SHOW COLUMNS FROM deposits")->fetchAll(PDO::FETCH_COLUMN) ?: [];
-        if (!in_array('company_id', $depositCols, true)) {
-            $db->exec("ALTER TABLE deposits ADD COLUMN company_id INT NULL DEFAULT NULL AFTER contact_id");
-        }
-        if (!in_array('supplier_id', $depositCols, true)) {
-            $db->exec("ALTER TABLE deposits ADD COLUMN supplier_id INT NULL DEFAULT NULL AFTER company_id");
-        }
-        $db->exec("ALTER TABLE deposits MODIFY COLUMN contact_id INT NULL DEFAULT NULL");
-    } catch (\Throwable $e) {}
+            $depositCols = $db->query("SHOW COLUMNS FROM deposits")->fetchAll(PDO::FETCH_COLUMN) ?: [];
+            if (!in_array('company_id', $depositCols, true)) {
+                $db->exec("ALTER TABLE deposits ADD COLUMN company_id INT NULL DEFAULT NULL AFTER contact_id");
+            }
+            if (!in_array('supplier_id', $depositCols, true)) {
+                $db->exec("ALTER TABLE deposits ADD COLUMN supplier_id INT NULL DEFAULT NULL AFTER company_id");
+            }
+            try { $db->exec("ALTER TABLE deposits MODIFY COLUMN contact_id INT NULL DEFAULT NULL"); } catch (\Throwable $e) {}
+
+            $db->prepare("INSERT INTO schema_migrations (migration) VALUES (?)")->execute(['runtime_schema_v302']);
+        } catch (\Throwable $e) {}
+    }
 
     // Migration: restore_exp_19_and_audit_cleanup_v3
     if (!in_array('restore_exp_19_and_audit_cleanup_v3', $applied, true)) {
@@ -1448,7 +1452,11 @@ switch ($resource) {
         if     (!$resourceId && $method === 'GET')    $ctrl->index($auth);
         elseif (!$resourceId && $method === 'POST')   $ctrl->store($auth);
         elseif ($resourceId  && $method === 'GET')    $ctrl->show($auth, (int)$resourceId);
+        elseif ($resourceId  && $method === 'PUT')    $ctrl->update($auth, (int)$resourceId);
+        elseif ($resourceId  && $method === 'DELETE') $ctrl->destroy($auth, (int)$resourceId);
         elseif ($subResource === 'approve' && $method === 'POST') $ctrl->approve($auth, (int)$resourceId);
+        elseif ($subResource === 'reject' && $method === 'POST')  $ctrl->reject($auth, (int)$resourceId);
+        elseif ($subResource === 'cancel' && $method === 'POST')  $ctrl->cancel($auth, (int)$resourceId);
         elseif ($subResource === 'convert-to-invoice' && $method === 'POST') $ctrl->convertToInvoice($auth, (int)$resourceId);
         else respond(404, null, 'Route không tồn tại', false);
         break;

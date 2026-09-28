@@ -1221,6 +1221,78 @@ class NotificationService {
                                     "Vui lòng truy cập CRM để theo dõi tiến độ đơn hàng."
                 ];
 
+            case 'SO_WAITING_APPROVAL':
+                $targetApproverId = (int)($payload['approver_id'] ?? 0);
+                if ($targetApproverId > 0) {
+                    $recipients = self::getRecipientById($db, $targetApproverId);
+                } else {
+                    $recipients = self::getAdminsAndManagers($db, $tenantId);
+                }
+                $soId = $payload['so_id'] ?? '0';
+                $soNumber = $payload['so_number'] ?? "#SO-$soId";
+                $creatorName = $payload['creator_name'] ?? $userName;
+                $soTotal = !empty($payload['total']) ? number_format((float)$payload['total'], 0, ',', '.') . 'đ' : '';
+                return [
+                    'recipients' => $recipients,
+                    'title' => "Đơn bán hàng mới cần duyệt ($soNumber)",
+                    'body' => "Nhân viên $creatorName vừa tạo Đơn bán hàng $soNumber" . ($soTotal ? " ($soTotal)" : "") . " đang chờ phê duyệt",
+                    'type' => "sales_order",
+                    'link' => "/sales-orders",
+                    'zalo_msg' => "📦 [ ĐƠN BÁN HÀNG CHỜ PHÊ DUYỆT ]\n\n"
+                        . "Nhân viên $creatorName vừa tạo đơn bán hàng:\n"
+                        . "  • Mã SO: $soNumber\n"
+                        . ($soTotal ? "  • Tổng tiền: $soTotal\n" : "")
+                        . "  • Trạng thái: Chờ duyệt\n\n"
+                        . "Vui lòng truy cập hệ thống để phê duyệt.",
+                    'tg_msg' => "📦 <b>[ ĐƠN BÁN HÀNG CHỜ PHÊ DUYỆT ]</b>\n\n"
+                        . "Nhân viên <b>$creatorName</b> vừa tạo đơn bán hàng:\n"
+                        . "  • Mã SO: <b>$soNumber</b>\n"
+                        . ($soTotal ? "  • Tổng tiền: <b>$soTotal</b>\n" : "")
+                        . "  • Trạng thái: Chờ duyệt\n\n"
+                        . "Vui lòng truy cập hệ thống để phê duyệt.",
+                    'email_subject' => "[IDEAS] Đơn bán hàng mới $soNumber đang chờ duyệt",
+                    'email_title' => "PHÊ DUYỆT ĐƠN BÁN HÀNG $soNumber",
+                    'email_content' => "Chào quản trị viên,<br/><br/>" .
+                                    "Nhân viên <strong>$creatorName</strong> vừa tạo Đơn bán hàng <strong>$soNumber</strong>" .
+                                    ($soTotal ? " với tổng tiền <strong>$soTotal</strong>" : "") . ".<br/>" .
+                                    "Vui lòng truy cập CRM để phê duyệt."
+                ];
+
+            case 'SO_APPROVED':
+            case 'SO_REJECTED':
+                $isApproved = ($eventType === 'SO_APPROVED');
+                $targetUserId = (int)($payload['target_user_id'] ?? 0);
+                $recipients = $targetUserId > 0 ? self::getRecipientById($db, $targetUserId) : [];
+                $soId = $payload['so_id'] ?? '0';
+                $soNumber = $payload['so_number'] ?? "#SO-$soId";
+                $approverName = $payload['approver_name'] ?? 'Quản lý';
+                $soReason = $payload['reason'] ?? '';
+                $statusWord = $isApproved ? 'phê duyệt' : 'từ chối';
+                $statusIcon = $isApproved ? '✅' : '❌';
+                return [
+                    'recipients' => $recipients,
+                    'title' => "Đơn bán hàng $soNumber đã được $statusWord",
+                    'body' => "$approverName đã $statusWord Đơn bán hàng $soNumber của bạn" . (!$isApproved && !empty($soReason) ? ". Lý do: $soReason" : ""),
+                    'type' => "sales_order",
+                    'link' => "/sales-orders",
+                    'zalo_msg' => "$statusIcon [ ĐƠN BÁN HÀNG " . ($isApproved ? "ĐÃ PHÊ DUYỆT" : "BỊ TỪ CHỐI") . " ]\n\n"
+                        . "$approverName đã $statusWord đơn bán hàng của bạn:\n"
+                        . "  • Mã SO: $soNumber\n"
+                        . (!$isApproved && !empty($soReason) ? "  • Lý do: $soReason\n" : "")
+                        . "\nVui lòng xem chi tiết trên hệ thống.",
+                    'tg_msg' => "$statusIcon <b>[ ĐƠN BÁN HÀNG " . ($isApproved ? "ĐÃ PHÊ DUYỆT" : "BỊ TỪ CHỐI") . " ]</b>\n\n"
+                        . "<b>$approverName</b> đã <b>$statusWord</b> đơn bán hàng của bạn:\n"
+                        . "  • Mã SO: <b>$soNumber</b>\n"
+                        . (!$isApproved && !empty($soReason) ? "  • Lý do: <i>" . htmlspecialchars($soReason) . "</i>\n" : "")
+                        . "\nVui lòng xem chi tiết trên hệ thống.",
+                    'email_subject' => "[IDEAS] Đơn bán hàng $soNumber đã được $statusWord",
+                    'email_title' => "KẾT QUẢ PHÊ DUYỆT ĐƠN BÁN HÀNG $soNumber",
+                    'email_content' => "Chào bạn,<br/><br/>" .
+                                    "Đơn bán hàng <strong>$soNumber</strong> của bạn đã được <strong>$approverName</strong> $statusWord.<br/>" .
+                                    (!$isApproved && !empty($soReason) ? "Lý do: <em>\"" . htmlspecialchars($soReason) . "\"</em>.<br/>" : "") .
+                                    "Vui lòng truy cập CRM để xem chi tiết."
+                ];
+
             case 'LEAD_HANDOVER_NEW_SALE':
                 $recipients = self::getRecipientById($db, $payload['user_id'] ?? 0);
                 $custName = $payload['customer_name'] ?? 'Khách hàng';
