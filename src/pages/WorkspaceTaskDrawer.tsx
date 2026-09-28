@@ -1601,6 +1601,9 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       } else if (updatedMeta.team_id) {
         relType = 'team';
         relId = updatedMeta.team_id;
+      } else if (formData.related_type && ['deal', 'company', 'project', 'campaign', 'team'].includes(formData.related_type) && formData.related_id) {
+        relType = formData.related_type;
+        relId = formData.related_id;
       } else if (formData.contact_id || formData.related_id) {
         relType = 'contact';
         relId = formData.contact_id || formData.related_id;
@@ -1728,6 +1731,9 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       } else if (updatedErpMeta.team_id) {
         relType = 'team';
         relId = updatedErpMeta.team_id;
+      } else if (formData.related_type && ['deal', 'company', 'project', 'campaign', 'team'].includes(formData.related_type) && formData.related_id) {
+        relType = formData.related_type;
+        relId = formData.related_id;
       } else if (formData.contact_id || formData.related_id) {
         relType = 'contact';
         relId = formData.contact_id || formData.related_id;
@@ -1998,18 +2004,19 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   const handleToggleChecklist = (itemId: string) => {
     const updatedChecklist = erpMeta.checklist.map((item: any) => {
       if (item.id === itemId) {
-        const nextDone = !item.done;
+        const isCurrentDone = item.done !== undefined ? Boolean(item.done) : Boolean(item.checked);
+        const nextDone = !isCurrentDone;
         if (nextDone) {
           triggerLocalConfetti();
         }
-        return { ...item, done: nextDone };
+        return { ...item, done: nextDone, checked: nextDone };
       }
       return item;
     });
 
     const updatedMeta = { ...erpMeta, checklist: updatedChecklist };
     const totalItems = updatedChecklist.length;
-    const completedItems = updatedChecklist.filter((x: any) => x.done).length;
+    const completedItems = updatedChecklist.filter((x: any) => x.done || x.checked).length;
     const newProgress = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
     handleSaveMeta(updatedMeta, newProgress);
   };

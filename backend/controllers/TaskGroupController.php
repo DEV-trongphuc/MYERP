@@ -23,7 +23,7 @@ class TaskGroupController {
         $stmt = $this->db->prepare("
             SELECT tg.id, tg.tenant_id, tg.user_id, tg.name, tg.color, tg.icon, tg.order_index, tg.is_pinned, tg.created_at,
                    COUNT(a.id) as total_tasks,
-                   COALESCE(SUM(CASE WHEN a.status IN ('done', 'completed') THEN 1 ELSE 0 END), 0) as completed_tasks
+                   COALESCE(SUM(CASE WHEN a.status IN ('done', 'completed') OR COALESCE(a.progress, 0) >= 100 THEN 1 ELSE 0 END), 0) as completed_tasks
             FROM task_groups tg
             LEFT JOIN activities a ON a.task_group_id = tg.id 
                                   AND a.deleted_at IS NULL 
@@ -60,7 +60,7 @@ class TaskGroupController {
         $stmtUnassigned = $this->db->prepare("
             SELECT 
                 COUNT(a.id) as total_tasks,
-                COALESCE(SUM(CASE WHEN a.status IN ('done', 'completed') THEN 1 ELSE 0 END), 0) as completed_tasks
+                COALESCE(SUM(CASE WHEN a.status IN ('done', 'completed') OR COALESCE(a.progress, 0) >= 100 THEN 1 ELSE 0 END), 0) as completed_tasks
             FROM activities a
             WHERE a.tenant_id = ? 
               AND a.deleted_at IS NULL 
@@ -77,7 +77,7 @@ class TaskGroupController {
         $stmtAll = $this->db->prepare("
             SELECT 
                 COUNT(a.id) as total_tasks,
-                COALESCE(SUM(CASE WHEN a.status IN ('done', 'completed') THEN 1 ELSE 0 END), 0) as completed_tasks
+                COALESCE(SUM(CASE WHEN a.status IN ('done', 'completed') OR COALESCE(a.progress, 0) >= 100 THEN 1 ELSE 0 END), 0) as completed_tasks
             FROM activities a
             WHERE a.tenant_id = ? 
               AND a.deleted_at IS NULL 
