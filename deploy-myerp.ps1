@@ -28,7 +28,8 @@ $sshPort = "2210"
 # 0. Smart Change Detection if neither BackendOnly nor FrontendOnly specified
 if (-not $BackendOnly -and -not $FrontendOnly) {
     try {
-        $gitDiff = git diff --name-only HEAD~1 2>$null
+        $gitDiff = git diff --name-only origin/main 2>$null
+        if (-not $gitDiff) { $gitDiff = git diff --name-only HEAD~5 2>$null }
         $gitStatus = git status --porcelain 2>$null
         $allChanges = @($gitDiff) + @($gitStatus)
         $hasBE = $false
