@@ -2382,18 +2382,20 @@ export default function Approvals() {
       }));
   }, [users]);
 
-  // Auto-fill manager approver whenever proposer, workflow or teams change
+  // Auto-fill manager approver whenever proposer, workflow or teams change (CHỈ ÁP DỤNG KHI TẠO MỚI)
   useEffect(() => {
+    if (editingItemId || editingItemIdRef.current) return;
     if (users.length > 0) {
       const leader = getDefaultManagerApprover(proposerUser || user, selectedWorkflowDef);
       if (leader) {
         setCustomApprover1(leader);
       }
     }
-  }, [users, teams, proposerUser, selectedWorkflowDef]);
+  }, [users, teams, proposerUser, selectedWorkflowDef, editingItemId]);
 
-  // Initialize proposer user as current logged in user
+  // Initialize proposer user as current logged in user (CHỈ ÁP DỤNG KHI TẠO MỚI)
   useEffect(() => {
+    if (editingItemId || editingItemIdRef.current) return;
     if (user && users.length > 0) {
       const found = users.find(u => Number(u.id) === Number(user.id));
       if (found) {
@@ -2401,7 +2403,7 @@ export default function Approvals() {
         if (found.role) setJobPosition(found.role);
       }
     }
-  }, [user, users]);
+  }, [user, users, editingItemId]);
 
   // Set default steps whenever the form type changes
   useEffect(() => {
@@ -3744,22 +3746,41 @@ export default function Approvals() {
     }
 
     const restoreApproversAndRelated = (data: any) => {
-      if (data.approver_id) setCustomApprover1(users.find(u => Number(u.id) === Number(data.approver_id)) || null);
-      else setCustomApprover1(null);
-      if (data.approver_id_2) setCustomApprover2(users.find(u => Number(u.id) === Number(data.approver_id_2)) || null);
-      else setCustomApprover2(null);
-      if (data.approver_id_3) setCustomApprover3(users.find(u => Number(u.id) === Number(data.approver_id_3)) || null);
-      else setCustomApprover3(null);
+      const app1Id = data.approver_id ? Number(data.approver_id) : (item.approver_id ? Number(item.approver_id) : null);
+      const app2Id = data.approver_id_2 ? Number(data.approver_id_2) : (item.approver_id_2 ? Number(item.approver_id_2) : null);
+      const app3Id = data.approver_id_3 ? Number(data.approver_id_3) : (item.approver_id_3 ? Number(item.approver_id_3) : null);
 
-      setShowStepManager(!!data.approver_id);
-      setShowStepAccountant(!!data.approver_id_2);
-      setShowStepDirector(!!data.approver_id_3);
+      if (app1Id) {
+        const u = users.find(x => Number(x.id) === app1Id);
+        setCustomApprover1(u || (data.approver_name ? { id: app1Id, full_name: data.approver_name, avatar_url: data.approver_avatar } : { id: app1Id, full_name: `User #${app1Id}` }));
+      } else {
+        setCustomApprover1(null);
+      }
 
-      if (data.related_user_ids) {
+      if (app2Id) {
+        const u = users.find(x => Number(x.id) === app2Id);
+        setCustomApprover2(u || (data.approver_name_2 ? { id: app2Id, full_name: data.approver_name_2, avatar_url: data.approver_avatar_2 } : { id: app2Id, full_name: `User #${app2Id}` }));
+      } else {
+        setCustomApprover2(null);
+      }
+
+      if (app3Id) {
+        const u = users.find(x => Number(x.id) === app3Id);
+        setCustomApprover3(u || (data.approver_name_3 ? { id: app3Id, full_name: data.approver_name_3, avatar_url: data.approver_avatar_3 } : { id: app3Id, full_name: `User #${app3Id}` }));
+      } else {
+        setCustomApprover3(null);
+      }
+
+      setShowStepManager(!!app1Id);
+      setShowStepAccountant(!!app2Id);
+      setShowStepDirector(!!app3Id);
+
+      const rawRelated = data.related_user_ids !== undefined ? data.related_user_ids : item.related_user_ids;
+      if (rawRelated) {
         try {
-          const rIds = typeof data.related_user_ids === 'string'
-            ? JSON.parse(data.related_user_ids)
-            : data.related_user_ids;
+          const rIds = typeof rawRelated === 'string'
+            ? JSON.parse(rawRelated)
+            : rawRelated;
           if (Array.isArray(rIds)) setRelatedUserIds(rIds.map(Number));
           else setRelatedUserIds([]);
         } catch {
