@@ -93,37 +93,28 @@ class PostController {
             $postIds = array_map(function($p) { return (int)$p['id']; }, $posts);
             $placeholders = implode(',', array_fill(0, count($postIds), '?'));
 
-            // 1. Reactions summary batch
+            // 1. Reactions summary and user's reaction combined into a single query
             $reactStmt = $this->db->prepare("
-                SELECT ref_id, reaction_type, COUNT(*) as count 
+                SELECT ref_id, reaction_type, COUNT(*) as count,
+                       MAX(CASE WHEN user_id = ? THEN 1 ELSE 0 END) as is_user
                 FROM enterprise_reactions 
                 WHERE ref_type = 'post' AND ref_id IN ($placeholders) 
                 GROUP BY ref_id, reaction_type
             ");
-            $reactStmt->execute($postIds);
+            $reactStmt->execute(array_merge([$currentUserId], $postIds));
             $reacts = $reactStmt->fetchAll(PDO::FETCH_ASSOC);
             
             $reactionsMap = [];
+            $userReactionsMap = [];
             foreach ($reacts as $r) {
                 $pid = (int)$r['ref_id'];
                 $reactionsMap[$pid][$r['reaction_type']] = (int)$r['count'];
+                if (!empty($r['is_user'])) {
+                    $userReactionsMap[$pid] = $r['reaction_type'];
+                }
             }
 
-            // 2. User reactions batch
-            $userReactStmt = $this->db->prepare("
-                SELECT ref_id, reaction_type 
-                FROM enterprise_reactions 
-                WHERE ref_type = 'post' AND user_id = ? AND ref_id IN ($placeholders)
-            ");
-            $userReactStmt->execute(array_merge([$currentUserId], $postIds));
-            $userReacts = $userReactStmt->fetchAll(PDO::FETCH_ASSOC);
-            
-            $userReactionsMap = [];
-            foreach ($userReacts as $ur) {
-                $userReactionsMap[(int)$ur['ref_id']] = $ur['reaction_type'];
-            }
-
-            // 3. Comments count batch
+            // 2. Comments count batch
             $cmtCountStmt = $this->db->prepare("
                 SELECT post_id, COUNT(*) as count 
                 FROM enterprise_comments 
@@ -138,16 +129,18 @@ class PostController {
                 $commentsCountMap[(int)$cc['post_id']] = (int)$cc['count'];
             }
 
-            // 4. Top 3 comments batch (using ROW_NUMBER() CTE)
+            // 3. Top 3 comments batch (using ROW_NUMBER() CTE with selective columns)
             $cmtStmt = $this->db->prepare("
                 WITH RankedComments AS (
-                    SELECT c.*, u.full_name as author_name, u.avatar_url as author_avatar,
+                    SELECT c.id, c.post_id, c.user_id, c.parent_id, c.content, c.created_at,
+                           u.full_name as author_name, u.avatar_url as author_avatar,
                            ROW_NUMBER() OVER (PARTITION BY c.post_id ORDER BY c.created_at ASC) as rn
                     FROM enterprise_comments c
                     JOIN users u ON c.user_id = u.id
                     WHERE c.post_id IN ($placeholders) AND c.parent_id IS NULL AND c.deleted_at IS NULL
                 )
-                SELECT * FROM RankedComments WHERE rn <= 3
+                SELECT id, post_id, user_id, parent_id, content, created_at, author_name, author_avatar
+                FROM RankedComments WHERE rn <= 3
             ");
             $cmtStmt->execute($postIds);
             $topComments = $cmtStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -727,9 +720,11 @@ class PostController {
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 3); // 3 seconds timeout
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 2);
-        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.0.0 Safari/537.36');
+        curl_setopt($ch, CURLOPT_TIMEOUT, 2); // 2 seconds max
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 1); // 1 second connect
+        curl_setopt($ch, CURLOPT_RANGE, '0-65536'); // Only download first 64KB (head tags)
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
         
         $html = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);

@@ -20,6 +20,22 @@ import { MentionInput } from '../components/ui/MentionInput';
 import { StickerPickerModal } from '../components/ui/StickerPickerModal';
 import { useUIStore } from '../store/uiStore';
 
+// High-performance DOMPurify HTML sanitizer cache (avoids repeated synchronous parsing)
+const sanitizeCache = new Map<string, string>();
+const safeSanitize = (rawHtml: string, config?: any): string => {
+  if (!rawHtml) return '';
+  const cacheKey = config ? `${rawHtml}_${JSON.stringify(config)}` : rawHtml;
+  const cached = sanitizeCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+  const clean = String(DOMPurify.sanitize(rawHtml, config));
+  if (sanitizeCache.size > 800) {
+    const firstKey = sanitizeCache.keys().next().value;
+    if (firstKey) sanitizeCache.delete(firstKey);
+  }
+  sanitizeCache.set(cacheKey, clean);
+  return clean;
+};
+
 // Reaction Types Constants
 const REACTION_TYPES = [
   { type: 'like', label: 'Thích', emoji: '👍', color: '#3b82f6' },
@@ -67,6 +83,134 @@ interface Comment {
   replies?: Comment[];
 }
 
+interface PostCommentBoxProps {
+  postId: number;
+  replyToId: number | null;
+  user: any;
+  appendedEmoji?: { emoji: string; id: number } | null;
+  onSend: (postId: number, parentId: number | null, text: string) => Promise<boolean>;
+  onOpenSticker: (postId: number, parentId: number | null, el: HTMLElement) => void;
+  onCancelReply: (postId: number) => void;
+  t: (key: string) => string;
+}
+
+const PostCommentBox: React.FC<PostCommentBoxProps> = ({
+  postId,
+  replyToId,
+  user,
+  appendedEmoji,
+  onSend,
+  onOpenSticker,
+  onCancelReply,
+  t
+}) => {
+  const [text, setText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (appendedEmoji?.emoji) {
+      setText(prev => prev + appendedEmoji.emoji);
+    }
+  }, [appendedEmoji]);
+
+  const handleSend = async () => {
+    if (submitting) return;
+    const hasText = text.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, '').trim().length > 0;
+    if (!hasText) return;
+    setSubmitting(true);
+    try {
+      const ok = await onSend(postId, replyToId, text);
+      if (ok) {
+        setText('');
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', width: '100%' }}>
+      <Avatar 
+        src={user?.avatar_url || user?.avatar} 
+        name={user?.name || 'User'} 
+        size={32} 
+        style={{ marginTop: '4px' }}
+      />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, minWidth: 0 }}>
+        <MentionInput
+          placeholder={
+            replyToId 
+              ? `${t('Phản hồi bình luận')}...` 
+              : `${t('Viết bình luận')}...`
+          }
+          value={text}
+          onChange={val => setText(val.target.value)}
+          style={{
+            width: '100%',
+            minHeight: '48px',
+            fontSize: '0.8rem'
+          }}
+        />
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <button 
+            type="button"
+            disabled={submitting}
+            onClick={handleSend}
+            style={{
+              padding: '4px 12px',
+              borderRadius: '20px',
+              fontSize: '0.72rem',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}
+            className="btn primary sm"
+          >
+            <Send size={11} />
+            <span>{submitting ? '...' : t('Gửi')}</span>
+          </button>
+          <button 
+            type="button"
+            onClick={(e) => onOpenSticker(postId, replyToId, e.currentTarget)}
+            style={{
+              padding: '4px 10px',
+              borderRadius: '20px',
+              fontSize: '0.72rem',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              background: 'rgba(245, 158, 11, 0.12)',
+              color: '#d97706',
+              border: '1px solid rgba(245, 158, 11, 0.3)',
+              cursor: 'pointer',
+              fontWeight: 600,
+              transition: 'all 0.15s ease'
+            }}
+            title={t('Gửi nhãn dán Sticker')}
+          >
+            <Smile size={13} />
+            <span>{t('Nhãn dán')}</span>
+          </button>
+          {replyToId && (
+            <button 
+              type="button"
+              onClick={() => onCancelReply(postId)}
+              style={{
+                padding: '4px 10px',
+                borderRadius: '20px',
+                fontSize: '0.72rem'
+              }}
+              className="btn outline sm"
+            >
+              {t('Hủy')}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const EnterpriseFeed: React.FC = () => {
   const { user } = useAuth();
   const { t } = useLanguage();
@@ -107,6 +251,15 @@ export const EnterpriseFeed: React.FC = () => {
       .slice(0, 5);
   }, [posts]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+    }, 200);
+    return () => clearTimeout(handler);
+  }, [searchTerm]);
+
   const [selectedVisibility, setSelectedVisibility] = useState<string>('all');
 
   // Creation State
@@ -129,6 +282,7 @@ export const EnterpriseFeed: React.FC = () => {
   const [activeCommentsPostId, setActiveCommentsPostId] = useState<number | null>(null);
   const [commentsMap, setCommentsMap] = useState<Record<number, Comment[]>>({});
   const [newCommentText, setNewCommentText] = useState<Record<number, string>>({});
+  const [appendedEmoji, setAppendedEmoji] = useState<{ postId: number; emoji: string; id: number } | null>(null);
   const [replyToCommentId, setReplyToCommentId] = useState<Record<number, number | null>>({});
   const [commentToDelete, setCommentToDelete] = useState<{ postId: number; commentId: number } | null>(null);
 
@@ -672,10 +826,10 @@ export const EnterpriseFeed: React.FC = () => {
   };
 
   // Handle add comment / reply
-  const handleAddComment = async (postId: number, parentId: number | null = null) => {
-    const rawText = newCommentText[postId] || '';
+  const handleAddComment = async (postId: number, parentId: number | null = null, commentText?: string): Promise<boolean> => {
+    const rawText = commentText !== undefined ? commentText : (newCommentText[postId] || '');
     const hasText = rawText.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, '').trim().length > 0;
-    if (!hasText) return;
+    if (!hasText) return false;
 
     try {
       const res = await api.post(`/posts/${postId}/comments`, {
@@ -695,9 +849,12 @@ export const EnterpriseFeed: React.FC = () => {
           }
           return p;
         }));
+        return true;
       }
+      return false;
     } catch (e) {
       toast.error(t('Lỗi khi thêm bình luận'));
+      return false;
     }
   };
 
@@ -829,7 +986,7 @@ export const EnterpriseFeed: React.FC = () => {
       return (
         <div 
           className="rich-text-content"
-          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(content) }} 
+          dangerouslySetInnerHTML={{ __html: safeSanitize(content) }} 
           style={{ fontSize: '0.9rem', color: 'var(--color-text)', wordBreak: 'break-word' }}
           onClick={(e) => {
             const target = e.target as HTMLElement;
@@ -874,6 +1031,8 @@ export const EnterpriseFeed: React.FC = () => {
           <img 
             src={trimmed} 
             alt="sticker" 
+            loading="lazy"
+            decoding="async"
             className="feed-comment-sticker" 
             style={{ 
               maxWidth: '120px', 
@@ -897,6 +1056,8 @@ export const EnterpriseFeed: React.FC = () => {
           <img 
             src={mdStickerMatch[1]} 
             alt="sticker" 
+            loading="lazy"
+            decoding="async"
             className="feed-comment-sticker" 
             style={{ 
               maxWidth: '120px', 
@@ -923,7 +1084,7 @@ export const EnterpriseFeed: React.FC = () => {
         <div 
           className="rich-text-content feed-rich-comment" 
           dangerouslySetInnerHTML={{ 
-            __html: DOMPurify.sanitize(cleanContent, { 
+            __html: safeSanitize(cleanContent, { 
               ADD_TAGS: ['img', 'span', 'a'], 
               ADD_ATTR: ['src', 'alt', 'style', 'class', 'href', 'target', 'rel'] 
             }) 
@@ -970,9 +1131,9 @@ export const EnterpriseFeed: React.FC = () => {
       return (
         <div className="feed-attachment-single" style={{ marginTop: '0.75rem', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--color-border-light)', lineHeight: 0 }}>
           {isImage(url) ? (
-            <img src={url} alt="Attachment" style={{ display: 'block', width: '100%', maxHeight: '450px', objectFit: 'cover' }} />
+            <img src={url} alt="Attachment" loading="lazy" decoding="async" style={{ display: 'block', width: '100%', maxHeight: '450px', objectFit: 'cover' }} />
           ) : (
-            <video src={url} controls style={{ display: 'block', width: '100%', maxHeight: '450px' }} />
+            <video src={url} controls preload="none" style={{ display: 'block', width: '100%', maxHeight: '450px' }} />
           )}
         </div>
       );
@@ -984,9 +1145,9 @@ export const EnterpriseFeed: React.FC = () => {
           {urls.map((url, i) => (
             <div key={i} className="feed-attachment-cell-2" style={{ height: '220px', background: 'var(--color-bg)', overflow: 'hidden' }}>
               {isImage(url) ? (
-                <img src={url} alt="Attachment" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
+                <img src={url} alt="Attachment" loading="lazy" decoding="async" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
-                <video src={url} controls style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
+                <video src={url} controls preload="none" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
               )}
             </div>
           ))}
@@ -999,18 +1160,18 @@ export const EnterpriseFeed: React.FC = () => {
       <div className="feed-attachment-grid-3" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '8px', marginTop: '0.75rem', borderRadius: '12px', overflow: 'hidden', lineHeight: 0 }}>
         <div className="feed-attachment-cell-3-main" style={{ height: '320px', background: 'var(--color-bg)', overflow: 'hidden' }}>
           {isImage(urls[0]) ? (
-            <img src={urls[0]} alt="Attachment" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
+            <img src={urls[0]} alt="Attachment" loading="lazy" decoding="async" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : (
-            <video src={urls[0]} controls style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
+            <video src={urls[0]} controls preload="none" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
           )}
         </div>
         <div className="feed-attachment-cell-3-sub" style={{ display: 'grid', gridTemplateRows: '1fr 1fr', gap: '8px', height: '320px' }}>
           {urls.slice(1, 3).map((url, i) => (
             <div key={i} style={{ height: '100%', position: 'relative', background: 'var(--color-bg)', overflow: 'hidden' }}>
               {isImage(url) ? (
-                <img src={url} alt="Attachment" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
+                <img src={url} alt="Attachment" loading="lazy" decoding="async" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
-                <video src={url} controls style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
+                <video src={url} controls preload="none" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
               )}
               {i === 1 && urls.length > 3 && (
                 <div style={{
@@ -1037,20 +1198,24 @@ export const EnterpriseFeed: React.FC = () => {
     );
   };
 
-  // Filtered list
-  const filteredPosts = posts.filter(p => {
-    const matchesSearch = p.content.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          p.author_name.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    let matchesVisibility = true;
-    if (selectedVisibility === 'global') {
-      matchesVisibility = p.visibility === 'global';
-    } else if (selectedVisibility && selectedVisibility.startsWith('team_')) {
-      const teamId = parseInt(selectedVisibility.replace('team_', ''));
-      matchesVisibility = p.visibility === 'team' && p.team_id === teamId;
-    }
-    return matchesSearch && matchesVisibility;
-  });
+  // Filtered list (memoized with debounced search)
+  const filteredPosts = useMemo(() => {
+    const term = debouncedSearch.trim().toLowerCase();
+    return posts.filter(p => {
+      const matchesSearch = !term || 
+                            p.content.toLowerCase().includes(term) || 
+                            p.author_name.toLowerCase().includes(term);
+      
+      let matchesVisibility = true;
+      if (selectedVisibility === 'global') {
+        matchesVisibility = p.visibility === 'global';
+      } else if (selectedVisibility && selectedVisibility.startsWith('team_')) {
+        const teamId = parseInt(selectedVisibility.replace('team_', ''));
+        matchesVisibility = p.visibility === 'team' && p.team_id === teamId;
+      }
+      return matchesSearch && matchesVisibility;
+    });
+  }, [posts, debouncedSearch, selectedVisibility]);
 
   return (
     <div 
@@ -1063,6 +1228,10 @@ export const EnterpriseFeed: React.FC = () => {
       }}
     >
       <style>{`
+        .feed-post-card {
+          content-visibility: auto;
+          contain-intrinsic-size: 0 420px;
+        }
         .feed-layout {
           display: grid;
           grid-template-columns: 1fr 340px;
@@ -1550,6 +1719,8 @@ export const EnterpriseFeed: React.FC = () => {
                         <img 
                           src={post.link_metadata.image} 
                           alt="Preview" 
+                          loading="lazy"
+                          decoding="async"
                           style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} 
                         />
                       </div>
@@ -1741,90 +1912,24 @@ export const EnterpriseFeed: React.FC = () => {
                     flexDirection: 'column',
                     gap: '12px'
                   }}>
-                    {/* Add Comment Input */}
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', width: '100%' }}>
-                      <Avatar 
-                        src={user?.avatar_url || user?.avatar} 
-                        name={user?.name || 'User'} 
-                        size={32} 
-                        style={{ marginTop: '4px' }}
-                      />
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, minWidth: 0 }}>
-                        <MentionInput
-                          placeholder={
-                            replyToCommentId[post.id] 
-                              ? `${t('Phản hồi bình luận')}...` 
-                              : `${t('Viết bình luận')}...`
-                          }
-                          value={newCommentText[post.id] || ''}
-                          onChange={val => {
-                            setNewCommentText(prev => ({ ...prev, [post.id]: val.target.value }));
-                          }}
-                          style={{
-                            width: '100%',
-                            minHeight: '48px',
-                            fontSize: '0.8rem'
-                          }}
-                        />
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                          <button 
-                            onClick={() => handleAddComment(post.id, replyToCommentId[post.id])}
-                            style={{
-                              padding: '4px 12px',
-                              borderRadius: '20px',
-                              fontSize: '0.72rem',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px'
-                            }}
-                            className="btn primary sm"
-                          >
-                            <Send size={11} />
-                            <span>{t('Gửi')}</span>
-                          </button>
-                          <button 
-                            type="button"
-                            onClick={(e) => {
-                              setStickerTargetPostId(post.id);
-                              setStickerTargetParentId(replyToCommentId[post.id] || null);
-                              setFeedStickerAnchorEl(e.currentTarget);
-                              setShowFeedStickerModal(true);
-                            }}
-                            style={{
-                              padding: '4px 10px',
-                              borderRadius: '20px',
-                              fontSize: '0.72rem',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              background: 'rgba(245, 158, 11, 0.12)',
-                              color: '#d97706',
-                              border: '1px solid rgba(245, 158, 11, 0.3)',
-                              cursor: 'pointer',
-                              fontWeight: 600,
-                              transition: 'all 0.15s ease'
-                            }}
-                            title={t('Gửi nhãn dán Sticker')}
-                          >
-                            <Smile size={13} />
-                            <span>{t('Nhãn dán')}</span>
-                          </button>
-                          {replyToCommentId[post.id] && (
-                            <button 
-                              onClick={() => setReplyToCommentId(prev => ({ ...prev, [post.id]: null }))}
-                              style={{
-                                padding: '4px 10px',
-                                borderRadius: '20px',
-                                fontSize: '0.72rem'
-                              }}
-                              className="btn outline sm"
-                            >
-                              {t('Hủy')}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
+                    {/* Add Comment Input (Isolated component to eliminate root feed re-renders) */}
+                    <PostCommentBox
+                      postId={post.id}
+                      replyToId={replyToCommentId[post.id] || null}
+                      user={user}
+                      appendedEmoji={appendedEmoji?.postId === post.id ? appendedEmoji : null}
+                      onSend={handleAddComment}
+                      onOpenSticker={(postId, parentId, anchorEl) => {
+                        setStickerTargetPostId(postId);
+                        setStickerTargetParentId(parentId);
+                        setFeedStickerAnchorEl(anchorEl);
+                        setShowFeedStickerModal(true);
+                      }}
+                      onCancelReply={(postId) => {
+                        setReplyToCommentId(prev => ({ ...prev, [postId]: null }));
+                      }}
+                      t={t}
+                    />
 
                     {/* Comments List */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '350px', overflowY: 'auto', paddingRight: '4px' }}>
@@ -2505,6 +2610,11 @@ export const EnterpriseFeed: React.FC = () => {
         }}
         onSelectEmoji={(emoji) => {
           if (stickerTargetPostId) {
+            setAppendedEmoji({
+              postId: stickerTargetPostId,
+              emoji,
+              id: Date.now()
+            });
             setNewCommentText(prev => ({
               ...prev,
               [stickerTargetPostId]: (prev[stickerTargetPostId] || '') + emoji
