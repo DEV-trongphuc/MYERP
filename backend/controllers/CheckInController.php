@@ -956,6 +956,107 @@ class CheckInController {
         respond(200, null, 'Đã xóa bản ghi check-in thành công');
     }
 
+    public function adminUpsert(array $auth): void {
+        requireRole($auth, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr', 'assistant']);
+        $b = getBody();
+        $targetUserId = (int)($b['user_id'] ?? 0);
+        $date = trim($b['check_in_date'] ?? '');
+        $action = trim($b['action'] ?? 'upsert');
+
+        if (!$targetUserId || !$date) {
+            respond(422, null, 'Thiếu user_id hoặc ngày chấm công', false);
+            return;
+        }
+
+        // Kiểm tra xem nhân sự có đơn nghỉ phép cả ngày đã duyệt không
+        $stmtLeave = $this->db->prepare("
+            SELECT id, leave_type, total_days, status, start_date, end_date 
+            FROM hrm_leave_requests 
+            WHERE user_id = ? 
+              AND status = 'approved'
+              AND leave_type NOT IN ('remote_work', 'late_early', 'overtime')
+              AND total_days >= 1
+              AND (DATE(start_date) <= ? AND DATE(end_date) >= ?)
+            LIMIT 1
+        ");
+        $stmtLeave->execute([$targetUserId, $date, $date]);
+        $fullLeave = $stmtLeave->fetch();
+
+        if ($fullLeave && $action !== 'delete') {
+            respond(400, null, 'Nhân sự đã có đơn nghỉ phép cả ngày được duyệt. Không thể sửa hoặc bổ sung công để tránh trùng lặp dữ liệu.', false);
+            return;
+        }
+
+        if ($action === 'delete') {
+            $stmtDel = $this->db->prepare("DELETE FROM check_ins WHERE user_id = ? AND check_in_date = ?");
+            $stmtDel->execute([$targetUserId, $date]);
+            logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'ADMIN_DELETE_CHECK_IN', 'check_in', $targetUserId, json_encode([
+                'user_id' => $targetUserId,
+                'date' => $date
+            ]));
+            respond(200, null, 'Đã xóa bản ghi chấm công');
+            return;
+        }
+
+        $inTime = trim($b['check_in_time'] ?? '');
+        $outTime = trim($b['check_out_time'] ?? '');
+        $status = trim($b['status'] ?? 'approved');
+        if (!in_array($status, ['approved', 'pending_approval', 'rejected'], true)) {
+            $status = 'approved';
+        }
+        $adminNote = trim($b['admin_note'] ?? 'Quản trị viên hiệu chỉnh bảng công');
+
+        $inTimeStr = !empty($inTime) ? (strpos($inTime, ' ') !== false ? $inTime : "$date $inTime") : null;
+        if ($inTimeStr && strlen($inTimeStr) === 16) {
+            $inTimeStr .= ':00';
+        }
+        $outTimeStr = !empty($outTime) ? (strpos($outTime, ' ') !== false ? $outTime : "$date $outTime") : null;
+        if ($outTimeStr && strlen($outTimeStr) === 16) {
+            $outTimeStr .= ':00';
+        }
+
+        $stmt = $this->db->prepare("
+            INSERT INTO check_ins (user_id, check_in_date, check_in_time, check_out_time, status, late_minutes, early_minutes, admin_note, approved_by, approved_at)
+            VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, NOW())
+            ON DUPLICATE KEY UPDATE
+                check_in_time = VALUES(check_in_time),
+                check_out_time = VALUES(check_out_time),
+                status = VALUES(status),
+                late_minutes = 0,
+                early_minutes = 0,
+                admin_note = VALUES(admin_note),
+                approved_by = VALUES(approved_by),
+                approved_at = NOW()
+        ");
+        $stmt->execute([
+            $targetUserId,
+            $date,
+            $inTimeStr,
+            $outTimeStr,
+            $status,
+            $adminNote,
+            $auth['user_id']
+        ]);
+
+        logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'ADMIN_UPSERT_CHECK_IN', 'check_in', $targetUserId, json_encode([
+            'user_id' => $targetUserId,
+            'date' => $date,
+            'in' => $inTimeStr,
+            'out' => $outTimeStr,
+            'status' => $status,
+            'admin_note' => $adminNote
+        ]));
+
+        respond(200, [
+            'user_id' => $targetUserId,
+            'check_in_date' => $date,
+            'check_in_time' => $inTimeStr,
+            'check_out_time' => $outTimeStr,
+            'status' => $status,
+            'admin_note' => $adminNote
+        ], 'Cập nhật chấm công thành công');
+    }
+
     public function suggestBulkDates(array $auth): void {
         try {
             $userId = (int)$auth['user_id'];

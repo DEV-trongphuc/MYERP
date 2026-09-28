@@ -12,7 +12,7 @@ import { TableRowSkeleton } from '../components/ui/Skeleton';
 import { CustomSelect } from '../components/ui/CustomSelect';
 const CustomerProfileDrawer = lazy(() => import('./CustomerProfileDrawer').then(module => ({ default: module.CustomerProfileDrawer })));
 import api from '../api/axios';
-import { Clock, Calendar, Check, X, Trash2, Eye, ShieldAlert, AlertCircle, CheckCircle, Info, Download, Lightbulb, Upload, ChevronLeft, ChevronRight, Camera, Image, FileText, Zap, RefreshCw, Moon, MapPin, CheckSquare, Users, Plus, Home, ArrowLeft, UserPlus, Search, Loader2, FileSpreadsheet } from 'lucide-react';
+import { Clock, Calendar, Check, X, Trash2, Eye, ShieldAlert, AlertCircle, CheckCircle, Info, Download, Lightbulb, Upload, ChevronLeft, ChevronRight, Camera, Image, FileText, Zap, RefreshCw, Moon, MapPin, CheckSquare, Users, Plus, Home, ArrowLeft, UserPlus, Search, Loader2, FileSpreadsheet, Lock, Edit } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PeriodFilter, getDateRange } from '../components/ui/PeriodFilter';
 import { useUIStore } from '../store/uiStore';
@@ -1124,6 +1124,195 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   const [suppReason, setSuppReason] = useState('');
   const [suppSubmitting, setSuppSubmitting] = useState(false);
 
+  // Admin Direct Attendance Editing States
+  const [adminEditModalRow, setAdminEditModalRow] = useState<any | null>(null);
+  const [adminEditInTime, setAdminEditInTime] = useState<string>('08:00');
+  const [adminEditOutTime, setAdminEditOutTime] = useState<string>('17:00');
+  const [adminEditStatus, setAdminEditStatus] = useState<string>('approved');
+  const [adminEditNote, setAdminEditNote] = useState<string>('');
+  const [adminEditSaving, setAdminEditSaving] = useState<boolean>(false);
+
+  // All day personnel aggregation (Full active user list merged with checkins and leave requests)
+  const allDayPersonnel = useMemo(() => {
+    if (!selectedDateForDetail) return [];
+    const activeUsers = usersList.filter(u => 
+      (u.is_active === 1 || u.is_active === undefined || u.is_active === null || String(u.is_active) === '1') && 
+      u.status !== 'inactive' && 
+      u.email !== 'info@ideas.edu.vn'
+    );
+    
+    const dayCheckIns = calendarCheckIns.filter(c => c.check_in_date === selectedDateForDetail);
+    const dayLeaves = calendarLeaves.filter(l => {
+      const s = l.start_date_only || (l.start_date ? String(l.start_date).slice(0, 10) : '');
+      const e = l.end_date_only || (l.end_date ? String(l.end_date).slice(0, 10) : '');
+      return s <= selectedDateForDetail && e >= selectedDateForDetail;
+    });
+
+    return activeUsers.map(u => {
+      const checkIn = dayCheckIns.find(c => Number(c.user_id) === Number(u.id));
+      const userLeaves = dayLeaves.filter(l => Number(l.user_id) === Number(u.id));
+
+      const fullLeave = userLeaves.find(l => 
+        l.leave_type !== 'remote_work' && 
+        l.leave_type !== 'late_early' && 
+        Number(l.total_days) >= 1 && 
+        (l.status === 'approved' || Number(l.approved) === 1)
+      );
+
+      const halfLeave = userLeaves.find(l => 
+        l.leave_type !== 'remote_work' && 
+        l.leave_type !== 'late_early' && 
+        Number(l.total_days) === 0.5 && 
+        (l.status === 'approved' || Number(l.approved) === 1)
+      );
+
+      const lateEarly = userLeaves.find(l => 
+        l.leave_type === 'late_early' && 
+        (l.status === 'approved' || Number(l.approved) === 1)
+      );
+
+      const wfh = userLeaves.find(l => 
+        l.leave_type === 'remote_work' && 
+        (l.status === 'approved' || Number(l.approved) === 1)
+      );
+
+      return {
+        user: u,
+        checkIn,
+        fullLeave,
+        halfLeave,
+        lateEarly,
+        wfh,
+        isLockedByLeave: !!fullLeave
+      };
+    });
+  }, [selectedDateForDetail, usersList, calendarCheckIns, calendarLeaves]);
+
+  const sortedDayPersonnel = useMemo(() => {
+    return [...allDayPersonnel].sort((a, b) => {
+      if (a.checkIn && !b.checkIn) return -1;
+      if (!a.checkIn && b.checkIn) return 1;
+      if (a.checkIn && b.checkIn) {
+        return (a.checkIn.check_in_time || '').localeCompare(b.checkIn.check_in_time || '');
+      }
+      return (a.user.full_name || a.user.name || '').localeCompare(b.user.full_name || b.user.name || '');
+    });
+  }, [allDayPersonnel]);
+
+  const handleOpenAdminEdit = (row: any) => {
+    setAdminEditModalRow(row);
+    let inT = '08:00';
+    let outT = '17:00';
+    let st = 'approved';
+    let nt = 'Admin hiệu chỉnh bảng công';
+
+    if (row.checkIn) {
+      if (row.checkIn.check_in_time) {
+        const t = row.checkIn.check_in_time;
+        inT = t.length > 8 ? t.substring(11, 16) : t.substring(0, 5);
+      }
+      if (row.checkIn.check_out_time) {
+        const t = row.checkIn.check_out_time;
+        outT = t.length > 8 ? t.substring(11, 16) : t.substring(0, 5);
+      }
+      st = row.checkIn.status || 'approved';
+      nt = row.checkIn.admin_note || row.checkIn.reason || 'Admin hiệu chỉnh bảng công';
+    } else {
+      if (row.halfLeave && row.halfLeave.start_time && row.halfLeave.start_time < '12:00') {
+        inT = '13:00';
+        outT = '17:00';
+      } else if (row.halfLeave) {
+        inT = '08:00';
+        outT = '12:00';
+      } else if (row.lateEarly) {
+        if (row.lateEarly.start_time && row.lateEarly.start_time < '12:00') {
+          inT = row.lateEarly.end_time || row.lateEarly.start_time || '08:30';
+          outT = '17:00';
+        } else {
+          inT = '08:00';
+          outT = row.lateEarly.start_time || '16:00';
+        }
+      }
+    }
+
+    setAdminEditInTime(inT);
+    setAdminEditOutTime(outT);
+    setAdminEditStatus(st);
+    setAdminEditNote(nt);
+  };
+
+  const handleSaveAdminCheckIn = async () => {
+    if (!adminEditModalRow || !selectedDateForDetail) return;
+    const row = adminEditModalRow;
+
+    if (row.isLockedByLeave) {
+      toast.error(t('Không thể sửa công: Nhân sự đã có đơn nghỉ phép cả ngày được duyệt.'));
+      return;
+    }
+
+    if (row.halfLeave) {
+      const isMorningLeave = row.halfLeave.start_time && row.halfLeave.start_time < '12:00';
+      if (isMorningLeave) {
+        if (adminEditInTime < '12:00') {
+          toast.error(t('Nhân sự có đơn nghỉ phép nửa buổi sáng (đến 12:00). Giờ vào ca phải từ 12:00 trở đi!'));
+          return;
+        }
+      } else {
+        if (adminEditOutTime > '12:30') {
+          toast.error(t('Nhân sự có đơn nghỉ phép nửa buổi chiều (từ 12:00). Giờ ra ca tối đa là 12:00!'));
+          return;
+        }
+      }
+    }
+
+    if (row.lateEarly) {
+      const isEarly = row.lateEarly.start_time && row.lateEarly.start_time >= '12:00';
+      if (isEarly) {
+        const approvedEarlyTime = row.lateEarly.start_time;
+        if (approvedEarlyTime && adminEditOutTime < approvedEarlyTime) {
+          toast.error(`${t('Đơn xin về sớm từ ')}${approvedEarlyTime}. ${t('Giờ check-out không được sớm hơn ')}${approvedEarlyTime}!`);
+          return;
+        }
+      } else {
+        const approvedLateTime = row.lateEarly.end_time || row.lateEarly.start_time;
+        if (approvedLateTime && adminEditInTime > approvedLateTime) {
+          toast.error(`${t('Đơn xin đi muộn đến ')}${approvedLateTime}. ${t('Giờ check-in không được muộn hơn ')}${approvedLateTime}!`);
+          return;
+        }
+      }
+    }
+
+    if (adminEditInTime && adminEditOutTime && adminEditInTime >= adminEditOutTime) {
+      toast.error(t('Giờ check-out phải sau giờ check-in!'));
+      return;
+    }
+
+    setAdminEditSaving(true);
+    try {
+      const res = await api.post('/check-ins/admin-upsert', {
+        user_id: row.user.id,
+        check_in_date: selectedDateForDetail,
+        check_in_time: adminEditInTime ? `${adminEditInTime}:00` : null,
+        check_out_time: adminEditOutTime ? `${adminEditOutTime}:00` : null,
+        status: adminEditStatus,
+        admin_note: adminEditNote.trim() || 'Admin hiệu chỉnh bảng công',
+        action: 'upsert'
+      });
+
+      if (res.data?.success || res.status === 200) {
+        toast.success(t('Đã cập nhật công thành công!'));
+        setAdminEditModalRow(null);
+        fetchCalendarCheckIns();
+      } else {
+        toast.error(res.data?.message || t('Lỗi khi cập nhật công'));
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || err.message || t('Lỗi cập nhật công'));
+    } finally {
+      setAdminEditSaving(false);
+    }
+  };
+
   // Scheduler / Diary creation states
   const [diaryNoteText, setDiaryNoteText] = useState('');
   const [newActivityType, setNewActivityType] = useState<'task' | 'meeting' | 'call' | 'note'>('task');
@@ -1385,12 +1574,20 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   };
 
   const downloadDayExcel = (date: string) => {
-    const dayCheckIns = calendarCheckIns.filter(c => c.check_in_date === date);
-    const headers = 'STT,Nhân viên,Email,Giờ quy định,Giờ check-in,Giờ check-out,Trạng thái,Lý do trễ\n';
-    const rows = dayCheckIns.map((c, i) => {
-      const statusText = c.status === 'approved' ? 'Hợp lệ/Đúng giờ' : (c.status === 'pending_approval' ? 'Chờ duyệt đi trễ' : 'Từ chối');
-      const checkOut = c.check_out_time ? (c.check_out_time.length > 8 ? c.check_out_time.substring(11, 19) : c.check_out_time) : '';
-      return `${i + 1},${c.user_name},${c.user_email},${c.work_start_time || '08:00'},${c.check_in_time || ''},${checkOut},${statusText},"${c.reason || ''}"`;
+    const headers = 'STT,Nhân viên,Email,Giờ quy định,Giờ check-in,Giờ check-out,Trạng thái,Ghi chú\n';
+    const rows = sortedDayPersonnel.map((r, i) => {
+      const u = r.user;
+      const c = r.checkIn;
+      let statusText = 'Chưa chấm công';
+      if (r.isLockedByLeave) {
+        statusText = 'Nghỉ phép cả ngày';
+      } else if (c) {
+        statusText = c.status === 'approved' ? 'Hợp lệ/Đúng giờ' : (c.status === 'pending_approval' ? 'Chờ duyệt' : 'Từ chối');
+      }
+      const inTime = c?.check_in_time ? (c.check_in_time.length > 8 ? c.check_in_time.substring(11, 19) : c.check_in_time) : '';
+      const outTime = c?.check_out_time ? (c.check_out_time.length > 8 ? c.check_out_time.substring(11, 19) : c.check_out_time) : '';
+      const note = (c?.admin_note || c?.reason || '').replace(/"/g, '""');
+      return `${i + 1},"${u.full_name || u.name}","${u.email}",08:00,"${inTime}","${outTime}","${statusText}","${note}"`;
     }).join('\n');
     
     const csvContent = '\uFEFF' + headers + rows;
@@ -1398,11 +1595,11 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `cham_cong_ideas_${date}.csv`);
+    link.setAttribute('download', `bang_cong_ideas_${date}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    toast.success(t('Đã xuất file chấm công ngày ') + date);
+    toast.success(t('Đã xuất file bảng công ngày ') + date);
   };
 
   const handleExportCompanySummaryExcel = async () => {
@@ -7517,34 +7714,137 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.6875rem' }}>
                             <thead>
                               <tr style={{ background: theme === 'dark' ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)', color: 'var(--color-text-muted)' }}>
-                                <th style={{ padding: '6px 8px', fontWeight: 600, borderBottom: '1px solid var(--color-border)', fontSize: '0.625rem' }}>{t('STT')}</th>
+                                <th style={{ padding: '6px 8px', fontWeight: 600, borderBottom: '1px solid var(--color-border)', fontSize: '0.625rem', width: '36px' }}>{t('STT')}</th>
                                 <th style={{ padding: '6px 8px', fontWeight: 600, borderBottom: '1px solid var(--color-border)', fontSize: '0.625rem' }}>{t('Nhân viên')}</th>
                                 <th style={{ padding: '6px 8px', fontWeight: 600, borderBottom: '1px solid var(--color-border)', fontSize: '0.625rem' }}>{t('Giờ Check-in')}</th>
                                 <th style={{ padding: '6px 8px', fontWeight: 600, borderBottom: '1px solid var(--color-border)', fontSize: '0.625rem' }}>{t('Giờ Check-out')}</th>
                                 <th style={{ padding: '6px 8px', fontWeight: 600, borderBottom: '1px solid var(--color-border)', fontSize: '0.625rem' }}>{t('Trạng thái')}</th>
+                                <th style={{ padding: '6px 8px', fontWeight: 600, borderBottom: '1px solid var(--color-border)', fontSize: '0.625rem', textAlign: 'right' }}>{t('Thao tác')}</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {calendarCheckIns.filter(c => c.check_in_date === selectedDateForDetail).length === 0 ? (
+                              {sortedDayPersonnel.length === 0 ? (
                                 <tr>
-                                  <td colSpan={5} style={{ textAlign: 'center', padding: '12px', fontStyle: 'italic', fontSize: '0.65rem' }}>
-                                    {t('Trống')}
+                                  <td colSpan={6} style={{ textAlign: 'center', padding: '16px', fontStyle: 'italic', fontSize: '0.7rem' }}>
+                                    {t('Chưa có danh sách nhân sự')}
                                   </td>
                                 </tr>
                               ) : (
-                                calendarCheckIns.filter(c => c.check_in_date === selectedDateForDetail).map((c, i) => {
-                                  const outTime = c.check_out_time ? (c.check_out_time.length > 8 ? c.check_out_time.substring(11, 19) : c.check_out_time) : '—';
+                                sortedDayPersonnel.map((row, i) => {
+                                  const c = row.checkIn;
+                                  const inTime = c?.check_in_time ? (c.check_in_time.length > 8 ? c.check_in_time.substring(11, 19) : c.check_in_time) : '—';
+                                  const outTime = c?.check_out_time ? (c.check_out_time.length > 8 ? c.check_out_time.substring(11, 19) : c.check_out_time) : '—';
+
                                   return (
-                                    <tr key={c.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                                      <td style={{ padding: '6px 8px', fontSize: '0.625rem' }}>{i + 1}</td>
-                                      <td style={{ padding: '6px 8px', fontSize: '0.625rem', color: 'var(--color-text)', fontWeight: 500 }}>{c.user_name}</td>
-                                      <td style={{ padding: '6px 8px', fontSize: '0.625rem', fontFamily: 'monospace' }}>{c.check_in_time || '—'}</td>
-                                      <td style={{ padding: '6px 8px', fontSize: '0.625rem', fontFamily: 'monospace', color: outTime !== '—' ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{outTime}</td>
+                                    <tr key={row.user.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                                      <td style={{ padding: '6px 8px', fontSize: '0.625rem', color: 'var(--color-text-muted)' }}>{i + 1}</td>
+                                      <td style={{ padding: '6px 8px', fontSize: '0.6875rem' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                          <Avatar 
+                                            src={resolveAttachmentUrl(row.user.avatar_url || row.user.avatar)} 
+                                            name={row.user.full_name || row.user.name} 
+                                            size={22} 
+                                          />
+                                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                            <span style={{ color: 'var(--color-text)', fontWeight: 600 }}>{row.user.full_name || row.user.name}</span>
+                                            {/* Badges */}
+                                            {row.isLockedByLeave && (
+                                              <span style={{ fontSize: '0.58rem', color: '#ef4444', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '2px', marginTop: '1px' }}>
+                                                <Lock size={9} /> {t('Nghỉ phép cả ngày (Khóa)')}
+                                              </span>
+                                            )}
+                                            {row.halfLeave && (
+                                              <span style={{ fontSize: '0.58rem', color: '#ea580c', fontWeight: 700, marginTop: '1px' }}>
+                                                🏖️ {Number(row.halfLeave.start_time?.slice(0, 2)) < 12 ? t('Nghỉ nửa sáng') : t('Nghỉ nửa chiều')}
+                                              </span>
+                                            )}
+                                            {row.lateEarly && (
+                                              <span style={{ fontSize: '0.58rem', color: '#d97706', fontWeight: 700, marginTop: '1px' }}>
+                                                ⏰ {(row.lateEarly.start_time && row.lateEarly.start_time >= '12:00') ? t('Về sớm') : t('Đi muộn')} ({row.lateEarly.start_time || ''}-{row.lateEarly.end_time || ''})
+                                              </span>
+                                            )}
+                                            {row.wfh && (
+                                              <span style={{ fontSize: '0.58rem', color: '#059669', fontWeight: 700, marginTop: '1px' }}>
+                                                🏠 WFH
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </td>
+                                      <td style={{ padding: '6px 8px', fontSize: '0.625rem', fontFamily: 'monospace', color: inTime !== '—' ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+                                        {inTime}
+                                      </td>
+                                      <td style={{ padding: '6px 8px', fontSize: '0.625rem', fontFamily: 'monospace', color: outTime !== '—' ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+                                        {outTime}
+                                      </td>
                                       <td style={{ padding: '6px 8px', fontSize: '0.625rem' }}>
-                                        <span style={{
-                                          color: c.status === 'approved' ? 'var(--color-success)' : (c.status === 'pending_approval' ? 'var(--color-warning)' : 'var(--color-danger)'),
-                                          fontWeight: 600
-                                        }}>{c.status === 'approved' ? t('Hợp lệ') : (c.status === 'pending_approval' ? t('Chờ duyệt') : t('Từ chối'))}</span>
+                                        {row.isLockedByLeave ? (
+                                          <span style={{ color: '#ef4444', fontWeight: 600 }}>{t('Khóa (Nghỉ phép)')}</span>
+                                        ) : c ? (
+                                          <span style={{
+                                            color: c.status === 'approved' ? 'var(--color-success)' : (c.status === 'pending_approval' ? 'var(--color-warning)' : 'var(--color-danger)'),
+                                            fontWeight: 600
+                                          }}>
+                                            {c.status === 'approved' ? t('Hợp lệ') : (c.status === 'pending_approval' ? t('Chờ duyệt') : t('Từ chối'))}
+                                          </span>
+                                        ) : (
+                                          <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>{t('Chưa chấm công')}</span>
+                                        )}
+                                      </td>
+                                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>
+                                        {row.isLockedByLeave ? (
+                                          <button
+                                            type="button"
+                                            disabled
+                                            style={{
+                                              opacity: 0.5,
+                                              cursor: 'not-allowed',
+                                              background: 'rgba(239, 68, 68, 0.08)',
+                                              color: '#ef4444',
+                                              border: '1px solid rgba(239, 68, 68, 0.25)',
+                                              padding: '2px 7px',
+                                              borderRadius: '5px',
+                                              fontSize: '0.625rem',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '3px'
+                                            }}
+                                            title={t('Nhân sự đã có đơn nghỉ phép cả ngày được duyệt. Không thể sửa.')}
+                                          >
+                                            <Lock size={10} />
+                                            <span>{t('Khóa')}</span>
+                                          </button>
+                                        ) : (
+                                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleOpenAdminEdit(row)}
+                                              className="btn sm primary"
+                                              style={{
+                                                padding: '2px 8px',
+                                                fontSize: '0.625rem',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '3px'
+                                              }}
+                                              title={c ? t('Chỉnh sửa giờ chấm công') : t('Thêm lượt chấm công')}
+                                            >
+                                              <Edit size={10} />
+                                              <span>{c ? t('Sửa') : t('+ Chấm công')}</span>
+                                            </button>
+                                            {c && (
+                                              <button
+                                                type="button"
+                                                onClick={() => openDeleteConfirm(c.id)}
+                                                className="btn sm danger"
+                                                style={{ padding: '2px 5px', fontSize: '0.625rem' }}
+                                                title={t('Xóa lượt chấm công này')}
+                                              >
+                                                <Trash2 size={10} />
+                                              </button>
+                                            )}
+                                          </div>
+                                        )}
                                       </td>
                                     </tr>
                                   );
@@ -7921,6 +8221,212 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </CustomModal>
+      )}
+
+      {/* Admin Direct Attendance Edit Modal */}
+      {adminEditModalRow && (
+        <CustomModal
+          isOpen={!!adminEditModalRow}
+          onClose={() => !adminEditSaving && setAdminEditModalRow(null)}
+          title={adminEditModalRow.checkIn ? t('Chỉnh Sửa Chấm Công Nhân Sự') : t('Thêm Lượt Chấm Công Nhân Sự')}
+          width="500px"
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '4px 0' }}>
+            {/* User Info Header */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              padding: '10px 14px',
+              borderRadius: '10px',
+              background: 'var(--color-bg-light)',
+              border: '1px solid var(--color-border)'
+            }}>
+              <Avatar 
+                src={resolveAttachmentUrl(adminEditModalRow.user.avatar_url || adminEditModalRow.user.avatar)} 
+                name={adminEditModalRow.user.full_name || adminEditModalRow.user.name} 
+                size={38} 
+              />
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                <span style={{ fontWeight: 700, fontSize: '0.925rem', color: 'var(--color-text)' }}>
+                  {adminEditModalRow.user.full_name || adminEditModalRow.user.name}
+                </span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                  {adminEditModalRow.user.email} • {t('Ngày: ')}<strong style={{ color: 'var(--color-primary)' }}>{selectedDateForDetail}</strong>
+                </span>
+              </div>
+            </div>
+
+            {/* Leave / Late-Early Restriction Alert Banners */}
+            {adminEditModalRow.halfLeave && (
+              <div style={{
+                padding: '8px 12px',
+                borderRadius: '8px',
+                background: 'rgba(234, 88, 12, 0.08)',
+                border: '1px solid rgba(234, 88, 12, 0.25)',
+                color: '#ea580c',
+                fontSize: '0.75rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                <span>
+                  {Number(adminEditModalRow.halfLeave.start_time?.slice(0, 2)) < 12
+                    ? t('Ràng buộc: Nhân sự có đơn nghỉ phép nửa sáng (đến 12:00). Giờ vào ca chiều phải từ 12:00 trở đi.')
+                    : t('Ràng buộc: Nhân sự có đơn nghỉ phép nửa chiều (từ 12:00). Giờ ra ca sáng tối đa là 12:00.')}
+                </span>
+              </div>
+            )}
+
+            {adminEditModalRow.lateEarly && (
+              <div style={{
+                padding: '8px 12px',
+                borderRadius: '8px',
+                background: 'rgba(245, 158, 11, 0.08)',
+                border: '1px solid rgba(245, 158, 11, 0.25)',
+                color: '#d97706',
+                fontSize: '0.75rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                <span>
+                  {adminEditModalRow.lateEarly.start_time && adminEditModalRow.lateEarly.start_time >= '12:00'
+                    ? `${t('Ràng buộc đơn về sớm lúc ')}${adminEditModalRow.lateEarly.start_time}. ${t('Giờ check-out không được sớm hơn ')}${adminEditModalRow.lateEarly.start_time}.`
+                    : `${t('Ràng buộc đơn đi muộn đến ')}${adminEditModalRow.lateEarly.end_time || adminEditModalRow.lateEarly.start_time}. ${t('Giờ check-in không được muộn hơn ')}${adminEditModalRow.lateEarly.end_time || adminEditModalRow.lateEarly.start_time}.`}
+                </span>
+              </div>
+            )}
+
+            {/* Inputs: Check-in & Check-out time */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>
+                  {t('Giờ Check-in (Vào ca)')}
+                </label>
+                <input
+                  type="time"
+                  className="input"
+                  value={adminEditInTime}
+                  onChange={(e) => setAdminEditInTime(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--color-surface)',
+                    color: 'var(--color-text)',
+                    fontSize: '0.875rem',
+                    fontWeight: 600
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>
+                  {t('Giờ Check-out (Ra ca)')}
+                </label>
+                <input
+                  type="time"
+                  className="input"
+                  value={adminEditOutTime}
+                  onChange={(e) => setAdminEditOutTime(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--color-surface)',
+                    color: 'var(--color-text)',
+                    fontSize: '0.875rem',
+                    fontWeight: 600
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Status input */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>
+                {t('Trạng thái công')}
+              </label>
+              <select
+                className="input"
+                value={adminEditStatus}
+                onChange={(e) => setAdminEditStatus(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-surface)',
+                  color: 'var(--color-text)',
+                  fontSize: '0.8125rem'
+                }}
+              >
+                <option value="approved">{t('Hợp lệ (Đã duyệt)')}</option>
+                <option value="pending_approval">{t('Chờ duyệt (Đi trễ / Bổ sung)')}</option>
+                <option value="rejected">{t('Bị từ chối')}</option>
+              </select>
+            </div>
+
+            {/* Admin Note input */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>
+                {t('Ghi chú của Quản trị viên (Lý do điều chỉnh)')}
+              </label>
+              <textarea
+                className="input"
+                rows={2}
+                value={adminEditNote}
+                onChange={(e) => setAdminEditNote(e.target.value)}
+                placeholder={t('Ví dụ: Quên check-in do đi thị trường sớm, Quản trị viên hiệu chỉnh...')}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-surface)',
+                  color: 'var(--color-text)',
+                  fontSize: '0.8125rem',
+                  resize: 'none'
+                }}
+              />
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '6px' }}>
+              <button
+                type="button"
+                className="btn secondary"
+                disabled={adminEditSaving}
+                onClick={() => setAdminEditModalRow(null)}
+                style={{ padding: '8px 14px', fontSize: '0.8125rem' }}
+              >
+                {t('Hủy')}
+              </button>
+              <button
+                type="button"
+                className="btn primary"
+                disabled={adminEditSaving}
+                onClick={handleSaveAdminCheckIn}
+                style={{
+                  padding: '8px 16px',
+                  fontSize: '0.8125rem',
+                  fontWeight: 700,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                {adminEditSaving && <Loader2 size={14} className="animate-spin" />}
+                <span>{adminEditSaving ? t('Đang lưu DB...') : t('Lưu vào Database')}</span>
+              </button>
             </div>
           </div>
         </CustomModal>

@@ -1657,7 +1657,9 @@ switch ($resource) {
     case 'check-ins':
         $auth = requireAuth();
         $ctrl = new CheckInController($db);
-        if ($resourceId === 'bulk-request' || $resourceId === 'create-bulk-request') {
+        if ($resourceId === 'admin-upsert' && $method === 'POST') {
+            $ctrl->adminUpsert($auth);
+        } elseif ($resourceId === 'bulk-request' || $resourceId === 'create-bulk-request') {
             if ($method === 'POST') {
                 $ctrl->createBulkRequest($auth);
             } elseif ($method === 'GET') {
