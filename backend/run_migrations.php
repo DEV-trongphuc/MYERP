@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 299;
+$targetVersion = 300;
 $currentVersion = 186;
 
 // Query current DB version
@@ -4031,10 +4031,99 @@ try {
         }
     }
 
-    // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '299') ON DUPLICATE KEY UPDATE setting_value = '299'");
+    // --- PHIÊN BẢN 300: Cập nhật chấm công cho nganph@ideas.edu.vn và ngantk@ideas.edu.vn ---
+    if ($currentVersion < 300 && $apply) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 300: Đồng bộ dữ liệu chấm công cho nganph@ideas.edu.vn và ngantk@ideas.edu.vn...", "info");
+        try {
+            // 1. Kích hoạt tài khoản và cập nhật chấm công cho Phan Hiếu Ngân (nganph@ideas.edu.vn)
+            $resNganPH = $conn->query("SELECT id FROM users WHERE email = 'nganph@ideas.edu.vn' LIMIT 1");
+            $uNganPH = $resNganPH ? $resNganPH->fetch_assoc() : null;
+            if ($uNganPH) {
+                $uIdNganPH = (int)$uNganPH['id'];
+                $conn->query("UPDATE users SET is_active = 1, status = 'active' WHERE id = $uIdNganPH");
+                
+                // Ngày 28/09/2026: Chấm công vào 8h32p sáng
+                $conn->query("
+                    INSERT INTO check_ins (user_id, check_in_date, check_in_time, status, late_minutes, early_minutes, admin_note)
+                    VALUES ($uIdNganPH, '2026-09-28', '2026-09-28 08:32:00', 'approved', 0, 0, 'Cập nhật chấm công qua migration v300')
+                    ON DUPLICATE KEY UPDATE 
+                        check_in_time = '2026-09-28 08:32:00',
+                        status = 'approved',
+                        late_minutes = 0,
+                        admin_note = 'Cập nhật chấm công qua migration v300'
+                ");
+                $logMsg("Đã cập nhật chấm công ngày 28/09 (08:32:00) cho Phan Hiếu Ngân ($uIdNganPH).", "success");
+            } else {
+                $logMsg("Không tìm thấy tài khoản nganph@ideas.edu.vn để cập nhật công.", "warning");
+            }
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 299", "success");
+            // 2. Cập nhật chấm công cho Trần Kim Ngân (ngantk@ideas.edu.vn)
+            $resNganTK = $conn->query("SELECT id FROM users WHERE email = 'ngantk@ideas.edu.vn' OR id = 100070 LIMIT 1");
+            $uNganTK = $resNganTK ? $resNganTK->fetch_assoc() : null;
+            if ($uNganTK) {
+                $uIdNganTK = (int)$uNganTK['id'];
+                $conn->query("UPDATE users SET is_active = 1, status = 'active' WHERE id = $uIdNganTK");
+
+                $attendanceList = [
+                    [
+                        'date' => '2026-09-07',
+                        'in'   => '2026-09-07 08:05:00',
+                        'out'  => '2026-09-07 17:02:00',
+                    ],
+                    [
+                        'date' => '2026-09-08',
+                        'in'   => '2026-09-08 08:08:00',
+                        'out'  => '2026-09-08 17:02:00',
+                    ],
+                    [
+                        'date' => '2026-09-09',
+                        'in'   => '2026-09-09 08:08:00',
+                        'out'  => '2026-09-09 17:00:00',
+                    ],
+                    [
+                        'date' => '2026-09-10',
+                        'in'   => '2026-09-10 08:02:00',
+                        'out'  => '2026-09-10 17:05:00',
+                    ],
+                    [
+                        'date' => '2026-09-11',
+                        'in'   => '2026-09-11 08:05:00',
+                        'out'  => '2026-09-11 17:03:00',
+                    ]
+                ];
+
+                foreach ($attendanceList as $att) {
+                    $d = $att['date'];
+                    $inT = $att['in'];
+                    $outT = $att['out'];
+                    $conn->query("
+                        INSERT INTO check_ins (user_id, check_in_date, check_in_time, check_out_time, status, check_out_status, late_minutes, early_minutes, admin_note)
+                        VALUES ($uIdNganTK, '$d', '$inT', '$outT', 'approved', 'on_time', 0, 0, 'Cập nhật chấm công qua migration v300')
+                        ON DUPLICATE KEY UPDATE
+                            check_in_time = '$inT',
+                            check_out_time = '$outT',
+                            status = 'approved',
+                            check_out_status = 'on_time',
+                            late_minutes = 0,
+                            early_minutes = 0,
+                            admin_note = 'Cập nhật chấm công qua migration v300'
+                    ");
+                }
+                $logMsg("Đã cập nhật chấm công các ngày 07, 08, 09, 10, 11/09 cho Trần Kim Ngân ($uIdNganTK).", "success");
+            } else {
+                $logMsg("Không tìm thấy tài khoản ngantk@ideas.edu.vn để cập nhật công.", "warning");
+            }
+
+            $logMsg("Nâng cấp lên phiên bản 300 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi nâng cấp v300: " . $e->getMessage(), "error");
+        }
+    }
+
+    // Update DB version in system_settings
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '300') ON DUPLICATE KEY UPDATE setting_value = '300'");
+
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 300", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");

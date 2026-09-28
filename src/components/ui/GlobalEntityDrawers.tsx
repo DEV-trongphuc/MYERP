@@ -121,7 +121,6 @@ export const GlobalEntityDrawers: React.FC = () => {
     window.addEventListener('open-task-drawer', handleOpenTask);
     window.addEventListener('open-expense-drawer', handleOpenExpense);
     window.addEventListener('open-global-expense', handleOpenExpense);
-    window.addEventListener('open-approval-drawer', handleOpenApproval);
     window.addEventListener('open-global-approval', handleOpenApproval);
     window.addEventListener('open-deposit-drawer', handleOpenDeposit);
 
@@ -161,7 +160,6 @@ export const GlobalEntityDrawers: React.FC = () => {
       window.removeEventListener('open-task-drawer', handleOpenTask);
       window.removeEventListener('open-expense-drawer', handleOpenExpense);
       window.removeEventListener('open-global-expense', handleOpenExpense);
-      window.removeEventListener('open-approval-drawer', handleOpenApproval);
       window.removeEventListener('open-global-approval', handleOpenApproval);
       window.removeEventListener('open-deposit-drawer', handleOpenDeposit);
     };

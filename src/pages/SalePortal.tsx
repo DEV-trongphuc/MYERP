@@ -204,6 +204,29 @@ const formatVietnameseFullName = (nameStr: string) => {
   return `${lastName} ${parts.join(' ')}`;
 };
 
+const parseDescriptionAndChecklist = (descText: string) => {
+  const lines = descText ? descText.split('\n') : [];
+  const descLines: string[] = [];
+  const checklistItems: Array<{ text: string; checked: boolean }> = [];
+  
+  lines.forEach(line => {
+    const match = line.match(/^\s*-\s*\[([ xX])\]\s*(.*)$/);
+    if (match) {
+      checklistItems.push({
+        checked: match[1].toLowerCase() === 'x',
+        text: decodeHtmlEntities(match[2].trim())
+      });
+    } else {
+      descLines.push(line);
+    }
+  });
+  
+  return {
+    pureDescription: decodeHtmlEntities(descLines.join('\n').trim()),
+    checklist: checklistItems
+  };
+};
+
 interface WorkspaceCardInnerProps {
   task: any;
   isMobile: boolean;
@@ -211,7 +234,8 @@ interface WorkspaceCardInnerProps {
   theme: string;
   isPinned: boolean;
   togglePinTask: (id: number) => void;
-  users: any[];
+  users?: any[];
+  userMap?: Map<string, any>;
   t: (key: string) => string;
   getDueDateLabel: (dateStr: string | null | undefined, isDone: boolean, t: any) => string;
   parseDescriptionAndChecklist: (descText: string) => any;
@@ -228,6 +252,68 @@ interface WorkspaceCardInnerProps {
   onOpenCreateModal?: () => void;
   onToggleComplete?: (taskId: number, e: React.MouseEvent) => void;
   isCompleting?: boolean;
+  onSelectTask?: (task: any) => void;
+}
+
+let _cachedWsUsersRef: any[] | null = null;
+let _cachedWsUserMap: Map<string, any> = new Map();
+
+function getCachedWsUserMap(users: any[]): Map<string, any> {
+  if (users === _cachedWsUsersRef && _cachedWsUserMap.size > 0) {
+    return _cachedWsUserMap;
+  }
+  const map = new Map<string, any>();
+  if (Array.isArray(users)) {
+    for (const u of users) {
+      if (u?.id) map.set(String(u.id), u);
+    }
+  }
+  _cachedWsUsersRef = users;
+  _cachedWsUserMap = map;
+  return map;
+}
+
+function areWorkspaceCardPropsEqual(prev: WorkspaceCardInnerProps, next: WorkspaceCardInnerProps): boolean {
+  if (prev.isPinned !== next.isPinned) return false;
+  if (prev.isCompleting !== next.isCompleting) return false;
+  if (prev.isDragging !== next.isDragging) return false;
+  if (prev.isOverlay !== next.isOverlay) return false;
+  if (prev.wsBg !== next.wsBg) return false;
+  if (prev.theme !== next.theme) return false;
+  if (prev.isMobile !== next.isMobile) return false;
+  if (prev.taskGroups !== next.taskGroups) return false;
+  if (prev.users !== next.users) return false;
+  if (prev.userMap !== next.userMap) return false;
+
+  const pt = prev.task;
+  const nt = next.task;
+  if (pt === nt) return true;
+  if (!pt || !nt) return false;
+
+  return (
+    pt.id === nt.id &&
+    pt.subject === nt.subject &&
+    pt.status === nt.status &&
+    pt.progress === nt.progress &&
+    pt.priority === nt.priority &&
+    pt.due_date === nt.due_date &&
+    pt.body === nt.body &&
+    pt.tags === nt.tags &&
+    pt.first_image_url === nt.first_image_url &&
+    pt.user_id === nt.user_id &&
+    pt.user_name === nt.user_name &&
+    pt.participant_ids === nt.participant_ids &&
+    pt.task_group_id === nt.task_group_id &&
+    pt.task_group_name === nt.task_group_name &&
+    pt.task_group_color === nt.task_group_color &&
+    pt.require_approval === nt.require_approval &&
+    pt.approval_status === nt.approval_status &&
+    pt.approver_id === nt.approver_id &&
+    pt.contact_id === nt.contact_id &&
+    pt.contact_name === nt.contact_name &&
+    pt.contact_avatar === nt.contact_avatar &&
+    pt.updated_at === nt.updated_at
+  );
 }
 
 const WorkspaceCardInner: React.FC<WorkspaceCardInnerProps> = React.memo(({
@@ -238,6 +324,7 @@ const WorkspaceCardInner: React.FC<WorkspaceCardInnerProps> = React.memo(({
   isPinned,
   togglePinTask,
   users,
+  userMap: propUserMap,
   t,
   getDueDateLabel,
   parseDescriptionAndChecklist,
@@ -253,8 +340,10 @@ const WorkspaceCardInner: React.FC<WorkspaceCardInnerProps> = React.memo(({
   onOpenCreateGroupModal,
   onOpenCreateModal,
   onToggleComplete,
-  isCompleting
+  isCompleting,
+  onSelectTask
 }) => {
+  const userMap = propUserMap || getCachedWsUserMap(users || []);
   const isCompleted = isTaskEffectivelyDone(task);
   const isOverdue = !isCompleted && task.due_date && new Date(task.due_date) < new Date(new Date().setHours(0,0,0,0));
   const isToday = !isCompleted && task.due_date && new Date(task.due_date).toDateString() === new Date().toDateString();
@@ -338,11 +427,16 @@ const WorkspaceCardInner: React.FC<WorkspaceCardInnerProps> = React.memo(({
       className={`${isMobile ? 'active-press' : (isOverlay ? '' : 'hover-lift active-press')} ${isCompleting ? 'workspace-card-completing' : ''}`}
       onClick={() => {
         if (isDragging) return;
+        if (onSelectTask) {
+          onSelectTask(task);
+          return;
+        }
         const parsed = parseDescriptionAndChecklist(description);
         const checklistItems = (parsedBody.checklist && parsedBody.checklist.length > 0)
           ? parsedBody.checklist.map(c => ({ text: String(c.text || ''), checked: Boolean(c.checked) }))
           : parsed.checklist;
         const parsedTask = {
+          ...task,
           id: task.id,
           title: task.subject,
           done: task.status === 'done',
@@ -369,7 +463,12 @@ const WorkspaceCardInner: React.FC<WorkspaceCardInnerProps> = React.memo(({
           created_by_name: task.created_by_name,
           created_by_avatar: task.created_by_avatar,
           due_sla_notified: parsedBody.due_sla_notified,
-          subtask_sla_notified: parsedBody.subtask_sla_notified
+          subtask_sla_notified: parsedBody.subtask_sla_notified,
+          is_hidden: task.is_hidden,
+          is_muted: task.is_muted,
+          task_group_id: task.task_group_id,
+          task_group_name: task.task_group_name,
+          task_group_color: task.task_group_color
         };
         setChecklist(checklistItems);
         setSelectedTaskForDetails(parsedTask);
@@ -605,10 +704,10 @@ const WorkspaceCardInner: React.FC<WorkspaceCardInnerProps> = React.memo(({
         </div>
 
         {(() => {
-          const assigneeUser = users.find((u: any) => String(u.id) === String(task.user_id));
-          const approverUser = task.approver_id ? users.find((u: any) => String(u.id) === String(task.approver_id)) : null;
+          const assigneeUser = task.user_id ? userMap.get(String(task.user_id)) : null;
+          const approverUser = task.approver_id ? userMap.get(String(task.approver_id)) : null;
           const participantIds = task.participant_ids ? task.participant_ids.split(',').filter(Boolean) : [];
-          const participantUsers = participantIds.map((id: string) => users.find((u: any) => String(u.id) === String(id))).filter(Boolean);
+          const participantUsers = participantIds.map((id: string) => userMap.get(String(id))).filter(Boolean);
 
           return (
             <div 
@@ -687,7 +786,7 @@ const WorkspaceCardInner: React.FC<WorkspaceCardInnerProps> = React.memo(({
       </div>
     </div>
   );
-});
+}, areWorkspaceCardPropsEqual);
 WorkspaceCardInner.displayName = 'WorkspaceCardInner';
 
 const SortableWorkspaceCard: React.FC<WorkspaceCardInnerProps> = React.memo((props) => {
@@ -717,6 +816,434 @@ const SortableWorkspaceCard: React.FC<WorkspaceCardInnerProps> = React.memo((pro
   );
 });
 SortableWorkspaceCard.displayName = 'SortableWorkspaceCard';
+
+interface KanbanWorkspaceCardProps {
+  task: any;
+  colId: 'todo' | 'in_progress' | 'done';
+  isPinned: boolean;
+  wsBg: string;
+  theme: string;
+  userMap: Map<string, any>;
+  taskGroups?: TaskGroup[];
+  onDragStart: (taskId: number) => void;
+  onDragEnd: () => void;
+  onSelectTask: (task: any) => void;
+  togglePinTask: (taskId: number) => void;
+  handleOpenContactProfile: (id: number, tab?: string, initData?: any) => void;
+  setSelectedTaskParticipants: (users: any[]) => void;
+  setParticipantsModalOpen: (open: boolean) => void;
+  handleAssignTaskGroup: (taskId: number, groupId: number | null, customMsg?: string | false) => Promise<void>;
+  onOpenCreateGroupModal: () => void;
+  getDueDateLabel: (dateStr: string | null | undefined, isDone: boolean, t: any) => string;
+  t: (key: string) => string;
+}
+
+function areKanbanCardPropsEqual(prev: KanbanWorkspaceCardProps, next: KanbanWorkspaceCardProps): boolean {
+  if (prev.isPinned !== next.isPinned) return false;
+  if (prev.wsBg !== next.wsBg) return false;
+  if (prev.theme !== next.theme) return false;
+  if (prev.colId !== next.colId) return false;
+  if (prev.taskGroups !== next.taskGroups) return false;
+  if (prev.userMap !== next.userMap) return false;
+
+  const pt = prev.task;
+  const nt = next.task;
+  if (pt === nt) return true;
+  if (!pt || !nt) return false;
+
+  return (
+    pt.id === nt.id &&
+    pt.subject === nt.subject &&
+    pt.status === nt.status &&
+    pt.progress === nt.progress &&
+    pt.priority === nt.priority &&
+    pt.due_date === nt.due_date &&
+    pt.body === nt.body &&
+    pt.tags === nt.tags &&
+    pt.first_image_url === nt.first_image_url &&
+    pt.user_id === nt.user_id &&
+    pt.user_name === nt.user_name &&
+    pt.participant_ids === nt.participant_ids &&
+    pt.task_group_id === nt.task_group_id &&
+    pt.task_group_name === nt.task_group_name &&
+    pt.task_group_color === nt.task_group_color &&
+    pt.require_approval === nt.require_approval &&
+    pt.approval_status === nt.approval_status &&
+    pt.approver_id === nt.approver_id &&
+    pt.contact_id === nt.contact_id &&
+    pt.contact_name === nt.contact_name &&
+    pt.contact_avatar === nt.contact_avatar &&
+    pt.updated_at === nt.updated_at
+  );
+}
+
+const KanbanWorkspaceCard: React.FC<KanbanWorkspaceCardProps> = React.memo(({
+  task,
+  colId,
+  isPinned,
+  wsBg,
+  theme,
+  userMap,
+  taskGroups,
+  onDragStart,
+  onDragEnd,
+  onSelectTask,
+  togglePinTask,
+  handleOpenContactProfile,
+  setSelectedTaskParticipants,
+  setParticipantsModalOpen,
+  handleAssignTaskGroup,
+  onOpenCreateGroupModal,
+  getDueDateLabel,
+  t
+}) => {
+  const isCompleted = isTaskEffectivelyDone(task);
+  const isOverdue = !isCompleted && task.due_date && new Date(task.due_date) < new Date(new Date().setHours(0,0,0,0));
+  const isToday = !isCompleted && task.due_date && new Date(task.due_date).toDateString() === new Date().toDateString();
+
+  let dateBadgeColor = 'var(--color-text-muted)';
+  let dateBadgeBg = 'var(--color-bg)';
+  if (isOverdue) {
+    dateBadgeColor = 'var(--color-danger)';
+    dateBadgeBg = 'rgba(239, 68, 68, 0.08)';
+  } else if (isToday) {
+    dateBadgeColor = 'var(--color-warning)';
+    dateBadgeBg = 'rgba(245, 158, 11, 0.08)';
+  }
+
+  const parsedBody = parseTaskBody(task.body);
+  const link = (parsedBody.links?.[0]?.url) || (task.body && !task.body.trim().startsWith('{')
+    ? (task.body.match(/Tài liệu\/Link đính kèm:\s*(.*)$/m)?.[1]?.trim() || '')
+    : '');
+  const cleanDesc = extractCleanCardDescription(task.body);
+  const progressVal = task.progress || 0;
+
+  const hasKanbanContact = Boolean((task.related_type === 'contact' && task.related_id) || task.contact_name || task.contact_id);
+  const kContactId = task.contact_id || (task.related_type === 'contact' ? task.related_id : null);
+  const kContactName = formatVietnameseFullName(task.contact_name || (task.related_type === 'contact' ? t('Khách hàng') : ''));
+
+  const assigneeUser = task.user_id ? userMap.get(String(task.user_id)) : null;
+  const approverUser = task.approver_id ? userMap.get(String(task.approver_id)) : null;
+  const participantIds = task.participant_ids ? task.participant_ids.split(',').filter(Boolean) : [];
+  const participantUsers = participantIds
+    .map((id: string) => userMap.get(String(id)))
+    .filter(Boolean)
+    .filter((u: any) => String(u.id) !== String(task.user_id));
+
+  return (
+    <div
+      draggable
+      onDragStart={() => onDragStart(task.id)}
+      onDragEnd={onDragEnd}
+      onClick={() => onSelectTask(task)}
+      style={{
+        background: isPinned 
+          ? (wsBg ? (theme === 'dark' ? 'rgba(239, 68, 68, 0.22)' : 'rgba(254, 242, 242, 0.96)') : 'rgba(239, 68, 68, 0.03)')
+          : (wsBg ? (theme === 'dark' ? 'rgba(30, 41, 59, 0.92)' : 'rgba(255, 255, 255, 0.95)') : 'var(--color-surface)'),
+        border: isPinned 
+          ? '2px solid var(--color-danger)' 
+          : (isOverdue && task.status !== 'done' ? '1.5px solid var(--color-danger)' : (wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.12)' : '1px solid rgba(255, 255, 255, 0.85)') : '1px solid var(--color-border-light)')),
+        backdropFilter: wsBg ? 'blur(6px)' : 'none',
+        WebkitBackdropFilter: wsBg ? 'blur(6px)' : 'none',
+        borderRadius: '12px',
+        padding: '0.875rem',
+        cursor: 'grab',
+        opacity: task.status === 'done' ? 0.7 : 1,
+        boxShadow: isPinned 
+          ? 'var(--shadow-md), 0 0 12px rgba(239, 68, 68, 0.1)' 
+          : (wsBg ? '0 4px 12px rgba(0,0,0,0.06)' : 'var(--shadow-sm)'),
+        transition: 'all 0.2s',
+        position: 'relative',
+        minWidth: 0,
+        overflow: 'hidden',
+        flexShrink: 0
+      }}
+      onMouseEnter={e => {
+        e.currentTarget.style.borderColor = isPinned 
+          ? 'var(--color-danger)' 
+          : (isOverdue && task.status !== 'done' ? 'var(--color-danger)' : 'var(--color-primary)');
+        e.currentTarget.style.boxShadow = 'var(--shadow-md)';
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.borderColor = isPinned 
+          ? 'var(--color-danger)' 
+          : (isOverdue && task.status !== 'done' ? 'var(--color-danger)' : 'var(--color-border-light)');
+        e.currentTarget.style.boxShadow = isPinned 
+          ? 'var(--shadow-md), 0 0 12px rgba(239, 68, 68, 0.1)' 
+          : 'var(--shadow-sm)';
+      }}
+    >
+      {/* Drag handle & header info */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px', marginBottom: '4px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+          <span className={`badge ${task.priority === 'high' ? 'danger' : 'warning'}`} style={{ fontSize: '0.625rem', padding: '1px 5px' }}>
+            {task.priority === 'high' ? 'Cao' : 'Trung bình'}
+          </span>
+          <TaskGroupBadge
+            task={task}
+            groups={taskGroups}
+            onAssignGroup={handleAssignTaskGroup}
+            onOpenCreateModal={onOpenCreateGroupModal}
+          />
+        </div>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            togglePinTask(task.id);
+          }}
+          style={{
+            border: 'none',
+            background: isPinned ? 'rgba(239, 68, 68, 0.15)' : 'transparent',
+            color: isPinned ? 'var(--color-danger)' : 'var(--color-text-light)',
+            cursor: 'pointer',
+            padding: '4px',
+            borderRadius: '6px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'all 0.2s'
+          }}
+          title={isPinned ? t('Bỏ ghim công việc') : t('Ghim công việc')}
+        >
+          <Pin size={12} style={{ transform: isPinned ? 'rotate(0deg)' : 'rotate(45deg)', transition: 'transform 0.2s' }} />
+        </button>
+      </div>
+
+      {/* Task Image Preview */}
+      {task.first_image_url && (
+        <div style={{
+          width: '100%',
+          height: '100px',
+          borderRadius: '6px',
+          overflow: 'hidden',
+          border: '1px solid var(--color-border-light)',
+          background: 'var(--color-bg-alt)',
+          marginBottom: '6px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          <img 
+            src={task.first_image_url.startsWith('http') || task.first_image_url.startsWith('blob:') || task.first_image_url.startsWith('data:')
+              ? task.first_image_url 
+              : `${import.meta.env.VITE_API_URL || '/backend'}/${task.first_image_url}`} 
+            alt="Task Preview" 
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            onError={(e) => {
+              (e.currentTarget as HTMLElement).parentElement!.style.display = 'none';
+            }}
+          />
+        </div>
+      )}
+
+      {/* Task Title */}
+      <p style={{ 
+        fontSize: '0.8125rem', 
+        fontWeight: 600, 
+        color: 'var(--color-text)', 
+        margin: '0 0 6px 0', 
+        textDecoration: task.status === 'done' ? 'line-through' : 'none',
+        lineHeight: '1.25'
+      }}>
+        {task.subject}
+      </p>
+
+      {/* Task Description */}
+      {cleanDesc && (
+        <p style={{ 
+          fontSize: '0.75rem', 
+          color: 'var(--color-text-muted)', 
+          margin: '0 0 6px 0',
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
+          lineHeight: '1.3'
+        }}>
+          {cleanDesc}
+        </p>
+      )}
+
+      {/* Attachment Link */}
+      {link && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '3px', marginBottom: '6px' }} onClick={e => e.stopPropagation()}>
+          <Paperclip size={11} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+          <a 
+            href={link} 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            style={{ fontSize: '0.75rem', color: 'var(--color-primary)', fontWeight: 500, textDecoration: 'underline', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+          >
+            {link.includes('uploads/') ? link.split('/').pop().replace(/^\d+_/, '') : link}
+          </a>
+        </div>
+      )}
+
+      {/* Related Entity Badge */}
+      {hasKanbanContact && kContactName && (
+        <div style={{ marginBottom: '6px' }} onClick={e => e.stopPropagation()}>
+          <span
+            style={{
+              fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '12px',
+              color: 'var(--color-text, #334155)', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', border: '1px solid var(--color-border-light, rgba(0,0,0,0.05))', display: 'inline-flex', alignItems: 'center', gap: '4px',
+              cursor: kContactId ? 'pointer' : 'default'
+            }}
+            onClick={() => {
+              if (kContactId) {
+                handleOpenContactProfile(Number(kContactId), 'info', {
+                  id: Number(kContactId),
+                  full_name: kContactName,
+                  avatar_url: task.contact_avatar,
+                  _isLoading: true
+                });
+              }
+            }}
+            title={kContactName}
+          >
+            <Avatar src={task.contact_avatar} name={kContactName} size={13} />
+            {kContactName}
+          </span>
+        </div>
+      )}
+
+      {/* Tags */}
+      {task.tags && (
+        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '6px' }}>
+          {task.tags.split(',').filter(Boolean).map((tag: string) => {
+            const trimmedTag = tag.trim();
+            if (trimmedTag === 'internal_task') return null;
+            return (
+              <span 
+                key={tag} 
+                style={{ 
+                  fontSize: '0.65rem', 
+                  padding: '2px 8px', 
+                  borderRadius: '20px', 
+                  background: 'var(--color-bg)', 
+                  color: 'var(--color-text-light)', 
+                  fontWeight: 700 
+                }}
+              >
+                #{trimmedTag}
+              </span>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Progress Bar indicator */}
+      <div style={{ marginTop: '0.375rem', paddingTop: '4px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+          <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Tiến độ:</span>
+          <span style={{ fontSize: '0.7rem', fontWeight: 800, color: progressVal === 100 ? 'var(--color-success)' : 'var(--color-primary)' }}>{progressVal}%</span>
+        </div>
+        <div style={{ width: '100%', height: '12px', background: 'var(--color-border-light)', borderRadius: '99px', overflow: 'hidden' }}>
+          <div style={{ width: `${progressVal}%`, height: '100%', background: progressVal === 100 ? 'var(--color-success)' : 'linear-gradient(90deg, #BD1D2D, #F97316)', borderRadius: '99px', transition: 'width 0.4s var(--transition-fluid)' }} />
+        </div>
+      </div>
+
+      {/* Footer info (Due Date & Progress & Avatars) */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '0.5rem', paddingTop: '0.375rem', borderTop: '1px solid var(--color-border-light)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ 
+            fontSize: '0.7rem', 
+            color: isOverdue && task.status !== 'done' ? 'var(--color-danger)' : 'var(--color-text-muted)', 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '3px',
+            fontWeight: isOverdue && task.status !== 'done' ? 600 : 'normal'
+          }}>
+            <Clock size={10} />
+            {getDueDateLabel(task.due_date, task.status === 'done', t)}
+          </span>
+          
+          {colId === 'in_progress' && (
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '1px 5px', borderRadius: '4px', background: 'rgba(245,158,11,0.1)', color: 'var(--color-warning)' }}>
+              {progressVal}%
+            </span>
+          )}
+        </div>
+
+        {/* Assignee & Participants Avatars */}
+        {(() => {
+          if (!assigneeUser && !approverUser && participantUsers.length === 0) return null;
+
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }} onClick={(e) => {
+              if (participantUsers.length > 0) {
+                e.stopPropagation();
+                setSelectedTaskParticipants(participantUsers);
+                setParticipantsModalOpen(true);
+              }
+            }}>
+              {/* Assignee Avatar */}
+              {assigneeUser && (
+                <div title={`Chịu trách nhiệm: ${assigneeUser.full_name}`} style={{ position: 'relative', display: 'flex' }}>
+                  <Avatar src={assigneeUser.avatar_url || assigneeUser.avatar} name={assigneeUser.full_name} size={22} />
+                  <span style={{ position: 'absolute', bottom: -2, right: -2, background: 'var(--color-primary)', borderRadius: '50%', width: 8, height: 8, border: '1.5px solid white', display: 'flex', alignItems: 'center', justifyContent: 'center' }} />
+                </div>
+              )}
+
+              {/* Approver Avatar */}
+              {approverUser && (
+                <div title={`Người duyệt: ${approverUser.full_name}`} style={{ position: 'relative', display: 'flex' }}>
+                  <Avatar src={approverUser.avatar_url || approverUser.avatar} name={approverUser.full_name} size={22} />
+                  <span style={{ position: 'absolute', bottom: -2, right: -2, background: 'var(--color-warning)', borderRadius: '50%', width: 8, height: 8, border: '1.5px solid white', display: 'flex', alignItems: 'center', justifyContent: 'center' }} />
+                </div>
+              )}
+
+              {/* Overlapping Participant Avatars */}
+              {participantUsers.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', marginLeft: '2px', position: 'relative' }}>
+                  {participantUsers.slice(0, 3).map((pUser: any, pIdx: number) => (
+                    <div
+                      key={pUser.id}
+                      title={`Người liên quan: ${pUser.full_name}`}
+                      style={{
+                        marginLeft: pIdx > 0 ? '-6px' : '0px',
+                        border: '1.5px solid white',
+                        borderRadius: '50%',
+                        overflow: 'hidden',
+                        zIndex: 10 - pIdx,
+                        display: 'flex'
+                      }}
+                    >
+                      <Avatar src={pUser.avatar_url || pUser.avatar} name={pUser.full_name} size={20} />
+                    </div>
+                  ))}
+                  {participantUsers.length > 3 && (
+                    <div
+                      style={{
+                        marginLeft: '-6px',
+                        width: '20px',
+                        height: '20px',
+                        borderRadius: '50%',
+                        background: 'var(--color-border)',
+                        color: 'var(--color-text-muted)',
+                        fontSize: '0.6rem',
+                        fontWeight: 800,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        border: '1.5px solid white',
+                        zIndex: 5,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      +{participantUsers.length - 3}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+      </div>
+    </div>
+  );
+}, areKanbanCardPropsEqual);
+
+KanbanWorkspaceCard.displayName = 'KanbanWorkspaceCard';
 
 const DebouncedSearchInput: React.FC<{
   initialValue: string;
@@ -1344,30 +1871,32 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     }
   }, [wsTasks, pinnedTaskIds, currentUser?.id]);
 
-  const togglePinTask = (taskId: number) => {
+  const togglePinTask = useCallback((taskId: number) => {
     const numericId = Number(taskId);
-    let updated = [...pinnedTaskIds];
-    if (updated.includes(numericId)) {
-      updated = updated.filter(id => id !== numericId);
-      toast.success(t('Đã bỏ ghim công việc'));
-    } else {
-      const targetTask = wsTasks.find((t: any) => Number(t.id) === numericId);
-      if (targetTask && (isTaskEffectivelyDone(targetTask) || targetTask.status === 'done' || Number(targetTask.progress || 0) >= 100)) {
-        toast.error(t('Không thể ghim công việc đã hoàn thành.'));
-        return;
+    setPinnedTaskIds(prev => {
+      let updated = [...prev];
+      if (updated.includes(numericId)) {
+        updated = updated.filter(id => id !== numericId);
+        toast.success(t('Đã bỏ ghim công việc'));
+      } else {
+        const targetTask = wsTasks.find((t: any) => Number(t.id) === numericId);
+        if (targetTask && (isTaskEffectivelyDone(targetTask) || targetTask.status === 'done' || Number(targetTask.progress || 0) >= 100)) {
+          toast.error(t('Không thể ghim công việc đã hoàn thành.'));
+          return prev;
+        }
+        if (updated.length >= 8) {
+          toast.error(t('Bạn chỉ được ghim tối đa 8 công việc lên đầu ưu tiên.'));
+          return prev;
+        }
+        updated.push(numericId);
+        toast.success(t('Đã ghim công việc thành công!'));
       }
-      if (updated.length >= 8) {
-        toast.error(t('Bạn chỉ được ghim tối đa 8 công việc lên đầu ưu tiên.'));
-        return;
+      if (currentUser?.id) {
+        try { localStorage.setItem(`pinned_tasks_${currentUser.id}`, JSON.stringify(updated)); } catch (e) {}
       }
-      updated.push(numericId);
-      toast.success(t('Đã ghim công việc thành công!'));
-    }
-    setPinnedTaskIds(updated);
-    if (currentUser?.id) {
-      localStorage.setItem(`pinned_tasks_${currentUser.id}`, JSON.stringify(updated));
-    }
-  };
+      return updated;
+    });
+  }, [wsTasks, currentUser?.id, t]);
 
   // Task Groups State
   const [taskGroups, setTaskGroups] = useState<TaskGroup[]>([]);
@@ -1714,7 +2243,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     };
   };
 
-  const handleSelectTask = (task: any) => {
+  const handleSelectTask = useCallback((task: any) => {
     if (!task) {
       setSelectedTaskForDetails(null);
       setChecklist([]);
@@ -1730,6 +2259,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       ? parsedBody.checklist.map(c => ({ text: String(c.text || ''), checked: Boolean(c.checked) }))
       : parsed.checklist;
     const parsedTask = {
+      ...task,
       id: task.id,
       title: task.subject,
       done: task.status === 'done',
@@ -1756,11 +2286,16 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       created_by_name: task.created_by_name,
       created_by_avatar: task.created_by_avatar,
       due_sla_notified: parsedBody.due_sla_notified,
-      subtask_sla_notified: parsedBody.subtask_sla_notified
+      subtask_sla_notified: parsedBody.subtask_sla_notified,
+      is_hidden: task.is_hidden,
+      is_muted: task.is_muted,
+      task_group_id: task.task_group_id,
+      task_group_name: task.task_group_name,
+      task_group_color: task.task_group_color
     };
     setChecklist(checklistItems);
     setSelectedTaskForDetails(parsedTask);
-  };
+  }, []);
 
   // Deep-linking URL listener for task_id / open_task_id & global event 'open-task-drawer'
   useEffect(() => {
@@ -2037,9 +2572,10 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     });
 
     // Sắp xếp: 1. Ghim (Pinned) -> 2. Khẩn cấp (Urgent / High) -> 3. Tạo gần nhất lên trên (created_at DESC)
+    const pinnedSet = new Set(pinnedTaskIds.map(Number));
     return [...filtered].sort((a, b) => {
-      const aPinned = pinnedTaskIds.includes(Number(a.id));
-      const bPinned = pinnedTaskIds.includes(Number(b.id));
+      const aPinned = pinnedSet.has(Number(a.id));
+      const bPinned = pinnedSet.has(Number(b.id));
       if (aPinned && !bPinned) return -1;
       if (!aPinned && bPinned) return 1;
 
@@ -2050,13 +2586,13 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       if (!aUrgent && bUrgent) return 1;
 
       // Ưu tiên 3: Nếu không phải pin hay task khẩn cấp, render các task tạo gần nhất lên trên
-      const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
-      const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
-      if (timeB !== timeA) return timeB - timeA;
+      const timeA = a.created_at || '';
+      const timeB = b.created_at || '';
+      if (timeB !== timeA) return timeB > timeA ? 1 : -1;
 
       return Number(b.id || 0) - Number(a.id || 0);
     });
-  }, [wsTasks, debouncedWsSearch, wsTaskFilter, wsSubTab, wsTeamSubFilter, currentUser, wsUserId, wsPriority, wsStatus, showDoneTasks, wsDatePreset, pinnedTaskIds, adminViewFull, isTopAdmin, wsTaskOrder, activeTaskGroupId]);
+  }, [wsTasks, debouncedWsSearch, wsTaskFilter, wsSubTab, wsTeamSubFilter, currentUser, wsUserId, wsPriority, wsStatus, showDoneTasks, wsDatePreset, pinnedTaskIds, adminViewFull, isTopAdmin, activeTaskGroupId]);
 
   const workspaceStats = useMemo(() => {
     const todayStr = new Date().toISOString().slice(0, 10);
@@ -2166,11 +2702,40 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
 
   const [loadingWsTasks, setLoadingWsTasks] = useState(false);
-  const [wsContacts, setWsContacts] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [allowedProjects, setAllowedProjects] = useState<any[]>([]);
   const [allowedCampaigns, setAllowedCampaigns] = useState<any[]>([]);
   const [allowedTeams, setAllowedTeams] = useState<any[]>([]);
+
+  const userMap = useMemo(() => {
+    const map = new Map<string, any>();
+    if (Array.isArray(users)) {
+      for (const u of users) {
+        if (u?.id) map.set(String(u.id), u);
+      }
+    }
+    return map;
+  }, [users]);
+
+  const handleOpenCreateGroupModal = useCallback(() => {
+    setShowCardCreateGroupModal(true);
+  }, []);
+
+  const kanbanColumns = useMemo(() => {
+    const todo: any[] = [];
+    const inProgress: any[] = [];
+    const done: any[] = [];
+    for (const t of filteredWsTasks) {
+      if (isTaskEffectivelyDone(t)) {
+        done.push(t);
+      } else if (getTaskEffectiveProgress(t) > 0) {
+        inProgress.push(t);
+      } else {
+        todo.push(t);
+      }
+    }
+    return { todo, inProgress, done };
+  }, [filteredWsTasks]);
 
   const formatActivityBody = (body: string) => {
     if (!body) return null;
@@ -3271,7 +3836,6 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       if (callsRes?.data?.data) {
         setCompletedCallsCount(callsRes.data.data.total || 0);
       }
-      fetchTaskGroups();
     } catch (e) {
       console.error(e);
     } finally {
@@ -3411,25 +3975,38 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
   const handleUpdateTaskGroup = async (id: number, data: { name: string; color: string; icon: string }) => {
     try {
-      // Optimistic local update
+      // Optimistic local update for task groups list
       setTaskGroups(prev => {
         const list = Array.isArray(prev) ? prev : [];
         return list.map(g => g.id === id ? { ...g, ...data } : g);
       });
+      // Also optimistically update task group metadata on tasks in memory
+      setWsTasks(prev => prev.map(t => Number(t.task_group_id) === Number(id) ? {
+        ...t,
+        ...(data.name ? { task_group_name: data.name } : {}),
+        ...(data.color ? { task_group_color: data.color } : {})
+      } : t));
       const res = await api.put(`/task-groups/${id}`, data);
       if (res.data?.success) {
         toast.success(t('Đã cập nhật nhóm công việc!'));
         fetchTaskGroups();
-        fetchWorkspaceTasks();
       }
     } catch (err: any) {
       toast.error(err.response?.data?.message || t('Lỗi khi cập nhật nhóm'));
       fetchTaskGroups();
+      fetchWorkspaceTasks();
     }
   };
 
   const handleDeleteTaskGroup = async (id: number) => {
     try {
+      // Optimistically unassign group from local tasks
+      setWsTasks(prev => prev.map(t => Number(t.task_group_id) === Number(id) ? {
+        ...t,
+        task_group_id: null,
+        task_group_name: null,
+        task_group_color: null
+      } : t));
       const res = await api.delete(`/task-groups/${id}`);
       if (res.data?.success) {
         toast.success(t('Đã xóa nhóm công việc!'));
@@ -3437,10 +4014,10 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
           setActiveTaskGroupId('all');
         }
         await fetchTaskGroups();
-        await fetchWorkspaceTasks();
       }
     } catch (err: any) {
       toast.error(err.response?.data?.message || t('Lỗi khi xóa nhóm'));
+      fetchWorkspaceTasks();
     }
   };
 
@@ -3494,7 +4071,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     }
   };
 
-  const handleAssignTaskGroup = async (taskId: number, groupId: number | null, customMsg?: string | false) => {
+  const handleAssignTaskGroup = useCallback(async (taskId: number, groupId: number | null, customMsg?: string | false) => {
     try {
       const res = await api.post(`/activities/${taskId}/move-group`, { task_group_id: groupId });
       if (res.data?.success) {
@@ -3519,13 +4096,14 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     } catch (err: any) {
       toast.error(err.response?.data?.message || t('Lỗi khi chuyển nhóm'));
     }
-  };
+  }, [taskGroups, t]);
 
   useEffect(() => {
     const handleTaskLocalUpdate = (e: any) => {
       const updated = e.detail;
       if (!updated?.id) return;
       setWsTasks(prev => prev.map(t => Number(t.id) === Number(updated.id) ? { ...t, ...updated } : t));
+      setSelectedTaskForDetails((prev: any) => prev && Number(prev.id) === Number(updated.id) ? { ...prev, ...updated } : prev);
     };
     window.addEventListener('task-local-updated', handleTaskLocalUpdate);
     return () => window.removeEventListener('task-local-updated', handleTaskLocalUpdate);
@@ -3626,7 +4204,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     }
   };
 
-  const handleTaskDrop = async (taskId: number, targetCol: 'todo' | 'in_progress' | 'done') => {
+  const handleTaskDrop = useCallback(async (taskId: number, targetCol: 'todo' | 'in_progress' | 'done') => {
     let nextDone = false;
     let nextProgress = 0;
     let nextStatus = 'planned';
@@ -3646,7 +4224,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     }
 
     // Optimistic local state update
-    setWsTasks(prev => prev.map(x => x.id === taskId ? { ...x, status: nextStatus, progress: nextProgress } : x));
+    setWsTasks(prev => {
+      const next = prev.map(x => x.id === taskId ? { ...x, status: nextStatus, progress: nextProgress } : x);
+      try { sessionStorage.setItem('cached_ws_tasks', JSON.stringify(next)); } catch {}
+      return next;
+    });
     
     try {
       await api.put(`/activities/${taskId}`, { 
@@ -3665,12 +4247,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         });
         triggerFullConfetti();
       }
-      fetchWorkspaceTasks();
     } catch (err: any) {
       fetchWorkspaceTasks();
       toast.error(err.response?.data?.message || 'Lỗi khi cập nhật tiến độ công việc');
     }
-  };
+  }, [currentUser?.id]);
 
   useEffect(() => {
     if (activeTab === 'workspace') {
@@ -3678,17 +4259,6 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       fetchTaskGroups();
     }
   }, [activeTab, wsPriority, wsStatus, showDoneTasks, wsDatePreset, wsStartDate, wsEndDate, wsTeamId, wsUserId, wsActivityType, wsRelatedType, wsSubTab]);
-
-  useEffect(() => {
-    if (activeTab === 'workspace') {
-      api.get('/contacts?limit=100').then(res => {
-        if (res.data && res.data.data) {
-          const items = res.data.data.items || res.data.data || [];
-          setWsContacts(items);
-        }
-      }).catch(() => {});
-    }
-  }, [activeTab, user?.role]);
 
   useEffect(() => {
     if (token) {
@@ -4134,7 +4704,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     }
   };
 
-  const handleToggleTaskStatus = async (taskId: number, e?: React.MouseEvent) => {
+  const handleToggleTaskStatus = useCallback(async (taskId: number, e?: React.MouseEvent) => {
     try {
       const task = wsTasks.find(t => t.id === taskId);
       if (!task) return;
@@ -4143,19 +4713,27 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
       // Nếu công việc đã xong, click để mở lại (un-complete)
       if (isCurrentlyDone) {
+        setWsTasks(prev => {
+          const next = prev.map(x => x.id === taskId ? { ...x, status: 'planned', progress: 0 } : x);
+          try { sessionStorage.setItem('cached_ws_tasks', JSON.stringify(next)); } catch {}
+          return next;
+        });
+        if (selectedTaskForDetails?.id === taskId) {
+          setSelectedTaskForDetails((prev: any) => ({ ...prev, status: 'planned', progress: 0 }));
+        }
         await api.put(`/activities/${taskId}`, { status: 'planned', progress: 0 });
         toast.success(t('Đã mở lại công việc'));
         fetchPortalTasks();
-        fetchWorkspaceTasks();
         return;
       }
 
       // Mở modal xác nhận hoàn thành công việc (hiển thị ai tạo, ai thực hiện, liên quan, nội dung)
       setTaskToConfirmComplete(task);
     } catch (e) {
+      fetchWorkspaceTasks();
       toast.error(t('Lỗi khi cập nhật trạng thái công việc'));
     }
-  };
+  }, [wsTasks, selectedTaskForDetails, t]);
 
   const handleConfirmCompleteTask = async (task: any) => {
     if (!task?.id) return;
@@ -4190,13 +4768,30 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     // Kích hoạt pháo hoa dopamine ăn mừng!
     triggerFullConfetti();
 
+    // Optimistic local update so card moves to Done immediately with confetti
+    setWsTasks(prev => {
+      const next = prev.map(x => x.id === taskId ? { ...x, status: 'done', progress: 100 } : x);
+      try { sessionStorage.setItem('cached_ws_tasks', JSON.stringify(next)); } catch {}
+      return next;
+    });
+    if (selectedTaskForDetails?.id === taskId) {
+      setSelectedTaskForDetails((prev: any) => ({ ...prev, status: 'done', progress: 100 }));
+    }
+    setPinnedTaskIds(prev => {
+      const next = prev.filter(id => id !== Number(taskId));
+      if (currentUser?.id) {
+        try { localStorage.setItem(`pinned_tasks_${currentUser.id}`, JSON.stringify(next)); } catch (e) {}
+      }
+      return next;
+    });
+
     try {
       await api.put(`/activities/${taskId}`, { status: 'done', progress: 100 });
       toast.success(t('Đã hoàn thành công việc! 🎉'));
       setTaskToConfirmComplete(null);
       fetchPortalTasks();
-      fetchWorkspaceTasks();
     } catch (err: any) {
+      fetchWorkspaceTasks();
       toast.error(err.response?.data?.message || t('Lỗi khi cập nhật trạng thái công việc'));
     } finally {
       setIsConfirmingComplete(false);
@@ -4975,7 +5570,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     };
   }, []);
 
-  const handleOpenContactProfile = async (contactId: number, tab: string = 'info', initialData?: any) => {
+  const handleOpenContactProfile = useCallback(async (contactId: number, tab: string = 'info', initialData?: any) => {
     if (!contactId) return;
     setProfileDrawerTab(tab);
     // Ngay lập tức mở Drawer với Skeleton / initial data thay vì chờ API xong
@@ -4993,7 +5588,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       setProfileContact(null);
       toast.error(t('Lỗi khi tải thông tin khách hàng'));
     }
-  };
+  }, [t]);
 
   useEffect(() => {
     const handleOpenContactDrawerEv = (e: any) => {
@@ -8431,17 +9026,19 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                         isPinned={isPinned}
                         togglePinTask={togglePinTask}
                         users={users}
+                        userMap={userMap}
                         t={t}
                         getDueDateLabel={getDueDateLabel}
                         parseDescriptionAndChecklist={parseDescriptionAndChecklist}
                         setChecklist={setChecklist}
                         setSelectedTaskForDetails={setSelectedTaskForDetails}
+                        onSelectTask={handleSelectTask}
                         handleOpenContactProfile={handleOpenContactProfile}
                         setSelectedTaskParticipants={setSelectedTaskParticipants}
                         setParticipantsModalOpen={setParticipantsModalOpen}
                         taskGroups={taskGroups}
                         onAssignGroup={handleAssignTaskGroup}
-                        onOpenCreateGroupModal={() => setShowCardCreateGroupModal(true)}
+                        onOpenCreateGroupModal={handleOpenCreateGroupModal}
                         onToggleComplete={handleToggleTaskStatus}
                         isCompleting={completingTaskId === task.id}
                       />
@@ -8472,9 +9069,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
           /* Kanban View */
           <>
             {(() => {
-              const todoTasks = filteredWsTasks.filter(t => !isTaskEffectivelyDone(t) && getTaskEffectiveProgress(t) === 0);
-              const inProgressTasks = filteredWsTasks.filter(t => !isTaskEffectivelyDone(t) && getTaskEffectiveProgress(t) > 0);
-              const doneTasks = filteredWsTasks.filter(t => isTaskEffectivelyDone(t));
+              const { todo: todoTasks, inProgress: inProgressTasks, done: doneTasks } = kanbanColumns;
 
               const renderKanbanColumn = (
                 colId: 'todo' | 'in_progress' | 'done',
@@ -8533,392 +9128,29 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                     {/* Tasks List */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem', flex: 1, overflowY: 'auto', maxHeight: '600px' }}>
                       {columnTasks.slice(0, 20).map(task => {
-                        const isCompleted = isTaskEffectivelyDone(task);
-                        const isOverdue = !isCompleted && task.due_date && new Date(task.due_date) < new Date(new Date().setHours(0,0,0,0));
-                        const isToday = !isCompleted && task.due_date && new Date(task.due_date).toDateString() === new Date().toDateString();
-                        
-                        let dateBadgeColor = 'var(--color-text-muted)';
-                        let dateBadgeBg = 'var(--color-bg)';
-                        if (isOverdue) {
-                          dateBadgeColor = 'var(--color-danger)';
-                          dateBadgeBg = 'rgba(239, 68, 68, 0.08)';
-                        } else if (isToday) {
-                          dateBadgeColor = 'var(--color-warning)';
-                          dateBadgeBg = 'rgba(245, 158, 11, 0.08)';
-                        }
-
-                        const parsedBody = parseTaskBody(task.body);
-                        const link = (parsedBody.links?.[0]?.url) || (task.body && !task.body.trim().startsWith('{')
-                          ? (task.body.match(/Tài liệu\/Link đính kèm:\s*(.*)$/m)?.[1]?.trim() || '')
-                          : '');
-                        const description = parsedBody.description;
-                        const cleanDesc = extractCleanCardDescription(task.body);
-                        const progressVal = task.progress || 0;
                         const isPinned = pinnedTaskIds.includes(Number(task.id));
-
                         return (
-                          <div
+                          <KanbanWorkspaceCard
                             key={task.id}
-                            draggable
-                            onDragStart={() => setDraggedTaskId(task.id)}
+                            task={task}
+                            colId={colId}
+                            isPinned={isPinned}
+                            wsBg={wsBg}
+                            theme={theme}
+                            userMap={userMap}
+                            taskGroups={taskGroups}
+                            onDragStart={setDraggedTaskId}
                             onDragEnd={() => setDraggedTaskId(null)}
-                            onClick={() => {
-                              const parsed = parseDescriptionAndChecklist(description);
-                              const checklistItems = (parsedBody.checklist && parsedBody.checklist.length > 0)
-                                ? parsedBody.checklist.map(c => ({ text: String(c.text || ''), checked: Boolean(c.checked) }))
-                                : parsed.checklist;
-                              const parsedTask = {
-                                id: task.id,
-                                title: task.subject,
-                                done: task.status === 'done',
-                                priority: task.priority,
-                                due_date: task.due_date || '',
-                                created_at: task.created_at,
-                                link,
-                                description: parsedBody.pureDescription || parsed.pureDescription,
-                                user_id: task.user_id,
-                                user_name: task.user_name || 'Hệ thống',
-                                tags: task.tags || '',
-                                participant_ids: task.participant_ids || '',
-                                progress: task.progress || 0,
-                                require_approval: task.require_approval || 0,
-                                approver_id: task.approver_id,
-                                approval_status: task.approval_status,
-                                contact_id: task.contact_id,
-                                contact_name: task.contact_name,
-                                contact_avatar: task.contact_avatar,
-                                related_type: task.related_type,
-                                related_id: task.related_id,
-                                body: task.body,
-                                created_by: task.created_by,
-                                created_by_name: task.created_by_name,
-                                created_by_avatar: task.created_by_avatar,
-                                due_sla_notified: parsedBody.due_sla_notified,
-                                subtask_sla_notified: parsedBody.subtask_sla_notified
-                              };
-                              setChecklist(checklistItems);
-                              setSelectedTaskForDetails(parsedTask);
-                            }}
-                            style={{
-                              background: isPinned 
-                                ? (wsBg ? (theme === 'dark' ? 'rgba(239, 68, 68, 0.22)' : 'rgba(254, 242, 242, 0.96)') : 'rgba(239, 68, 68, 0.03)')
-                                : (wsBg ? (theme === 'dark' ? 'rgba(30, 41, 59, 0.92)' : 'rgba(255, 255, 255, 0.95)') : 'var(--color-surface)'),
-                              border: isPinned 
-                                ? '2px solid var(--color-danger)' 
-                                : (isOverdue && task.status !== 'done' ? '1.5px solid var(--color-danger)' : (wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.12)' : '1px solid rgba(255, 255, 255, 0.85)') : '1px solid var(--color-border-light)')),
-                              backdropFilter: wsBg ? 'blur(6px)' : 'none',
-                              WebkitBackdropFilter: wsBg ? 'blur(6px)' : 'none',
-                              borderRadius: '12px',
-                              padding: '0.875rem',
-                              cursor: 'grab',
-                              opacity: task.status === 'done' ? 0.7 : 1,
-                              boxShadow: isPinned 
-                                ? 'var(--shadow-md), 0 0 12px rgba(239, 68, 68, 0.1)' 
-                                : (wsBg ? '0 4px 12px rgba(0,0,0,0.06)' : 'var(--shadow-sm)'),
-                              transition: 'all 0.2s',
-                              position: 'relative',
-                              minWidth: 0,
-                              overflow: 'hidden',
-                              flexShrink: 0
-                            }}
-                            onMouseEnter={e => {
-                              e.currentTarget.style.borderColor = isPinned 
-                                ? 'var(--color-danger)' 
-                                : (isOverdue && task.status !== 'done' ? 'var(--color-danger)' : 'var(--color-primary)');
-                              e.currentTarget.style.boxShadow = 'var(--shadow-md)';
-                            }}
-                            onMouseLeave={e => {
-                              e.currentTarget.style.borderColor = isPinned 
-                                ? 'var(--color-danger)' 
-                                : (isOverdue && task.status !== 'done' ? 'var(--color-danger)' : 'var(--color-border-light)');
-                              e.currentTarget.style.boxShadow = isPinned 
-                                ? 'var(--shadow-md), 0 0 12px rgba(239, 68, 68, 0.1)' 
-                                : 'var(--shadow-sm)';
-                            }}
-                          >
-                            {/* Drag handle & header info */}
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px', marginBottom: '4px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                <span className={`badge ${task.priority === 'high' ? 'danger' : 'warning'}`} style={{ fontSize: '0.625rem', padding: '1px 5px' }}>
-                                  {task.priority === 'high' ? 'Cao' : 'Trung bình'}
-                                </span>
-                                <TaskGroupBadge
-                                  task={task}
-                                  groups={taskGroups}
-                                  onAssignGroup={handleAssignTaskGroup}
-                                  onOpenCreateModal={() => setShowCardCreateGroupModal(true)}
-                                />
-                              </div>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  togglePinTask(task.id);
-                                }}
-                                style={{
-                                  border: 'none',
-                                  background: isPinned ? 'rgba(239, 68, 68, 0.15)' : 'transparent',
-                                  color: isPinned ? 'var(--color-danger)' : 'var(--color-text-light)',
-                                  cursor: 'pointer',
-                                  padding: '4px',
-                                  borderRadius: '6px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  transition: 'all 0.2s'
-                                }}
-                                title={isPinned ? t('Bỏ ghim công việc') : t('Ghim công việc')}
-                              >
-                                <Pin size={12} style={{ transform: isPinned ? 'rotate(0deg)' : 'rotate(45deg)', transition: 'transform 0.2s' }} />
-                              </button>
-                            </div>
-
-                            {/* Task Image Preview */}
-                            {task.first_image_url && (
-                              <div style={{
-                                width: '100%',
-                                height: '100px',
-                                borderRadius: '6px',
-                                overflow: 'hidden',
-                                border: '1px solid var(--color-border-light)',
-                                background: 'var(--color-bg-alt)',
-                                marginBottom: '6px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center'
-                              }}>
-                                <img 
-                                  src={task.first_image_url.startsWith('http') || task.first_image_url.startsWith('blob:') || task.first_image_url.startsWith('data:')
-                                    ? task.first_image_url 
-                                    : `${import.meta.env.VITE_API_URL || '/backend'}/${task.first_image_url}`} 
-                                  alt="Task Preview" 
-                                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                  onError={(e) => {
-                                    (e.currentTarget as HTMLElement).parentElement!.style.display = 'none';
-                                  }}
-                                />
-                              </div>
-                            )}
-
-                            {/* Task Title */}
-                            <p style={{ 
-                              fontSize: '0.8125rem', 
-                              fontWeight: 600, 
-                              color: 'var(--color-text)', 
-                              margin: '0 0 6px 0', 
-                              textDecoration: task.status === 'done' ? 'line-through' : 'none',
-                              lineHeight: '1.25'
-                            }}>
-                              {task.subject}
-                            </p>
-
-                            {/* Task Description */}
-                            {cleanDesc && (
-                              <p style={{ 
-                                fontSize: '0.75rem', 
-                                color: 'var(--color-text-muted)', 
-                                margin: '0 0 6px 0',
-                                display: '-webkit-box',
-                                WebkitLineClamp: 2,
-                                WebkitBoxOrient: 'vertical',
-                                overflow: 'hidden',
-                                lineHeight: '1.3'
-                              }}>
-                                {cleanDesc}
-                              </p>
-                            )}
-
-                            {/* Attachment Link */}
-                            {link && (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '3px', marginBottom: '6px' }} onClick={e => e.stopPropagation()}>
-                                <Paperclip size={11} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
-                                <a 
-                                  href={link} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer" 
-                                  style={{ fontSize: '0.75rem', color: 'var(--color-primary)', fontWeight: 500, textDecoration: 'underline', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                                >
-                                  {link.includes('uploads/') ? link.split('/').pop().replace(/^\d+_/, '') : link}
-                                </a>
-                              </div>
-                            )}
-
-                            {/* Related Entity Badge */}
-                            {/* Related Entity Badge */}
-                            {(() => {
-                              const hasKanbanContact = Boolean((task.related_type === 'contact' && task.related_id) || task.contact_name || task.contact_id);
-                              const kContactId = task.contact_id || (task.related_type === 'contact' ? task.related_id : null);
-                              const kContactName = formatVietnameseFullName(task.contact_name || (task.related_type === 'contact' ? t('Khách hàng') : ''));
-                              if (!hasKanbanContact || !kContactName) return null;
-
-                              return (
-                                <div style={{ marginBottom: '6px' }} onClick={e => e.stopPropagation()}>
-                                  <span
-                                    style={{
-                                      fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '12px',
-                                      color: 'var(--color-text, #334155)', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', border: '1px solid var(--color-border-light, rgba(0,0,0,0.05))', display: 'inline-flex', alignItems: 'center', gap: '4px',
-                                      cursor: kContactId ? 'pointer' : 'default'
-                                    }}
-                                    onClick={() => {
-                                      if (kContactId) {
-                                        handleOpenContactProfile(Number(kContactId), 'info', {
-                                          id: Number(kContactId),
-                                          full_name: kContactName,
-                                          avatar_url: task.contact_avatar,
-                                          _isLoading: true
-                                        });
-                                      }
-                                    }}
-                                    title={kContactName}
-                                  >
-                                    <Avatar src={task.contact_avatar} name={kContactName} size={13} />
-                                    {kContactName}
-                                  </span>
-                                </div>
-                              );
-                            })()}
-
-                            {/* Tags */}
-                            {task.tags && (
-                              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '6px' }}>
-                                {task.tags.split(',').filter(Boolean).map((tag: string) => {
-                                  const trimmedTag = tag.trim();
-                                  if (trimmedTag === 'internal_task') return null;
-                                  return (
-                                    <span 
-                                      key={tag} 
-                                      style={{ 
-                                        fontSize: '0.65rem', 
-                                        padding: '2px 8px', 
-                                        borderRadius: '20px', 
-                                        background: 'var(--color-bg)', 
-                                        color: 'var(--color-text-light)', 
-                                        fontWeight: 700 
-                                      }}
-                                    >
-                                      #{trimmedTag}
-                                    </span>
-                                  );
-                                })}
-                              </div>
-                            )}
-
-                            {/* Progress Bar indicator */}
-                            <div style={{ marginTop: '0.375rem', paddingTop: '4px' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                                <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Tiến độ:</span>
-                                <span style={{ fontSize: '0.7rem', fontWeight: 800, color: progressVal === 100 ? 'var(--color-success)' : 'var(--color-primary)' }}>{progressVal}%</span>
-                              </div>
-                              <div style={{ width: '100%', height: '12px', background: 'var(--color-border-light)', borderRadius: '99px', overflow: 'hidden' }}>
-                                <div style={{ width: `${progressVal}%`, height: '100%', background: progressVal === 100 ? 'var(--color-success)' : 'linear-gradient(90deg, #BD1D2D, #F97316)', borderRadius: '99px', transition: 'width 0.4s var(--transition-fluid)' }} />
-                              </div>
-                            </div>
-
-                            {/* Footer info (Due Date & Progress & Avatars) */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '0.5rem', paddingTop: '0.375rem', borderTop: '1px solid var(--color-border-light)' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                <span style={{ 
-                                  fontSize: '0.7rem', 
-                                  color: isOverdue && task.status !== 'done' ? 'var(--color-danger)' : 'var(--color-text-muted)', 
-                                  display: 'flex', 
-                                  alignItems: 'center', 
-                                  gap: '3px',
-                                  fontWeight: isOverdue && task.status !== 'done' ? 600 : 'normal'
-                                }}>
-                                  <Clock size={10} />
-                                  {getDueDateLabel(task.due_date, task.status === 'done', t)}
-                                </span>
-                                
-                                {colId === 'in_progress' && (
-                                  <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '1px 5px', borderRadius: '4px', background: 'rgba(245,158,11,0.1)', color: 'var(--color-warning)' }}>
-                                    {progressVal}%
-                                  </span>
-                                )}
-                              </div>
-
-                              {/* Assignee & Participants Avatars */}
-                              {(() => {
-                                const assigneeUser = users.find((u: any) => String(u.id) === String(task.user_id));
-                                const approverUser = task.approver_id ? users.find((u: any) => String(u.id) === String(task.approver_id)) : null;
-                                const participantIds = task.participant_ids ? task.participant_ids.split(',').filter(Boolean) : [];
-                                const participantUsers = participantIds
-                                  .map((id: string) => users.find((u: any) => String(u.id) === String(id)))
-                                  .filter(Boolean)
-                                  .filter((u: any) => String(u.id) !== String(task.user_id));
-
-                                if (!assigneeUser && !approverUser && participantUsers.length === 0) return null;
-
-                                return (
-                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }} onClick={(e) => {
-                                    if (participantUsers.length > 0) {
-                                      e.stopPropagation();
-                                      setSelectedTaskParticipants(participantUsers);
-                                      setParticipantsModalOpen(true);
-                                    }
-                                  }}>
-                                    {/* Assignee Avatar */}
-                                    {assigneeUser && (
-                                      <div title={`Chịu trách nhiệm: ${assigneeUser.full_name}`} style={{ position: 'relative', display: 'flex' }}>
-                                        <Avatar src={assigneeUser.avatar_url || assigneeUser.avatar} name={assigneeUser.full_name} size={22} />
-                                        <span style={{ position: 'absolute', bottom: -2, right: -2, background: 'var(--color-primary)', borderRadius: '50%', width: 8, height: 8, border: '1.5px solid white', display: 'flex', alignItems: 'center', justifyContent: 'center' }} />
-                                      </div>
-                                    )}
-
-                                    {/* Approver Avatar */}
-                                    {approverUser && (
-                                      <div title={`Người duyệt: ${approverUser.full_name}`} style={{ position: 'relative', display: 'flex' }}>
-                                        <Avatar src={approverUser.avatar_url || approverUser.avatar} name={approverUser.full_name} size={22} />
-                                        <span style={{ position: 'absolute', bottom: -2, right: -2, background: 'var(--color-warning)', borderRadius: '50%', width: 8, height: 8, border: '1.5px solid white', display: 'flex', alignItems: 'center', justifyContent: 'center' }} />
-                                      </div>
-                                    )}
-
-                                    {/* Overlapping Participant Avatars */}
-                                    {participantUsers.length > 0 && (
-                                      <div style={{ display: 'flex', alignItems: 'center', marginLeft: '2px', position: 'relative' }}>
-                                        {participantUsers.slice(0, 3).map((pUser: any, pIdx: number) => (
-                                          <div
-                                            key={pUser.id}
-                                            title={`Người liên quan: ${pUser.full_name}`}
-                                            style={{
-                                              marginLeft: pIdx > 0 ? '-6px' : '0px',
-                                              border: '1.5px solid white',
-                                              borderRadius: '50%',
-                                              overflow: 'hidden',
-                                              zIndex: 10 - pIdx,
-                                              display: 'flex'
-                                            }}
-                                          >
-                                            <Avatar src={pUser.avatar_url || pUser.avatar} name={pUser.full_name} size={20} />
-                                          </div>
-                                        ))}
-                                        {participantUsers.length > 3 && (
-                                          <div
-                                            style={{
-                                              marginLeft: '-6px',
-                                              width: '20px',
-                                              height: '20px',
-                                              borderRadius: '50%',
-                                              background: 'var(--color-border)',
-                                              color: 'var(--color-text-muted)',
-                                              fontSize: '0.6rem',
-                                              fontWeight: 800,
-                                              display: 'flex',
-                                              alignItems: 'center',
-                                              justifyContent: 'center',
-                                              border: '1.5px solid white',
-                                              zIndex: 5,
-                                              cursor: 'pointer'
-                                            }}
-                                          >
-                                            +{participantUsers.length - 3}
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })()}
-                            </div>
-                          </div>
+                            onSelectTask={handleSelectTask}
+                            togglePinTask={togglePinTask}
+                            handleOpenContactProfile={handleOpenContactProfile}
+                            setSelectedTaskParticipants={setSelectedTaskParticipants}
+                            setParticipantsModalOpen={setParticipantsModalOpen}
+                            handleAssignTaskGroup={handleAssignTaskGroup}
+                            onOpenCreateGroupModal={handleOpenCreateGroupModal}
+                            getDueDateLabel={getDueDateLabel}
+                            t={t}
+                          />
                         );
                       })}
                       {columnTasks.length > 20 && (
@@ -9154,9 +9386,9 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       
                       {(() => {
                         const assigneeId = task.user_id;
-                        const assignee = users.find(u => String(u.id) === String(assigneeId));
+                        const assignee = assigneeId ? userMap.get(String(assigneeId)) : null;
                         const participantIds = task.participant_ids ? task.participant_ids.split(',').map((id: string) => id.trim()).filter(Boolean) : [];
-                        const collaborators = users.filter(u => participantIds.includes(String(u.id)));
+                        const collaborators = participantIds.map((id: string) => userMap.get(String(id))).filter(Boolean);
                         const progressVal = task.progress || 0;
                         const progressColor = progressVal < 33 
                           ? 'var(--color-danger)' 
@@ -9256,9 +9488,20 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       onClose={() => setSelectedTaskForDetails(null)}
                       task={selectedTaskForDetails}
                       taskGroups={taskGroups}
-                      onUpdate={() => {
-                        fetchPortalTasks();
-                        fetchWorkspaceTasks();
+                      onUpdate={(updatedTask?: any) => {
+                        if (updatedTask && updatedTask.id) {
+                          setWsTasks(prev => {
+                            const next = prev.map(t => Number(t.id) === Number(updatedTask.id) ? { ...t, ...updatedTask } : t);
+                            try { sessionStorage.setItem('cached_ws_tasks', JSON.stringify(next)); } catch {}
+                            return next;
+                          });
+                          if (selectedTaskForDetails && Number(selectedTaskForDetails.id) === Number(updatedTask.id)) {
+                            setSelectedTaskForDetails((prev: any) => ({ ...prev, ...updatedTask }));
+                          }
+                        } else {
+                          fetchPortalTasks();
+                          fetchWorkspaceTasks();
+                        }
                         window.dispatchEvent(new CustomEvent('task-updated'));
                       }}
                       users={users}
@@ -9297,6 +9540,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               isPinned={pinnedTaskIds.includes(Number(activeDragTask.id))}
               togglePinTask={togglePinTask}
               users={users}
+              userMap={userMap}
               t={t}
               getDueDateLabel={getDueDateLabel}
               parseDescriptionAndChecklist={parseDescriptionAndChecklist}
@@ -19012,8 +19256,6 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
             isOpen={!!profileContact}
             onClose={() => {
               setProfileContact(null);
-              loadPortalData();
-              fetchWorkspaceTasks();
             }}
             contact={profileContact}
             initialTab={profileDrawerTab}
@@ -19030,12 +19272,16 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                   return next;
                 });
                 loadPortalData();
-                fetchWorkspaceTasks();
+                if (activeTab === 'workspace') {
+                  fetchWorkspaceTasks();
+                }
                 return;
               }
               setProfileContact(updated);
               loadPortalData();
-              fetchWorkspaceTasks();
+              if (activeTab === 'workspace') {
+                fetchWorkspaceTasks();
+              }
             }}
           />
         </Suspense>
@@ -20085,7 +20331,6 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                     
                     fetchCalendarStats();
                     fetchPortalTasks();
-                    fetchWorkspaceTasks();
                     
                     setMeetingToComplete(null);
                   } catch (e: any) {
@@ -20676,9 +20921,20 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
             }}
             task={selectedTaskForDetails}
             taskGroups={taskGroups}
-            onUpdate={() => {
-              fetchPortalTasks();
-              fetchWorkspaceTasks();
+            onUpdate={(updatedTask?: any) => {
+              if (updatedTask && updatedTask.id) {
+                setWsTasks(prev => {
+                  const next = prev.map(t => Number(t.id) === Number(updatedTask.id) ? { ...t, ...updatedTask } : t);
+                  try { sessionStorage.setItem('cached_ws_tasks', JSON.stringify(next)); } catch {}
+                  return next;
+                });
+                if (selectedTaskForDetails && Number(selectedTaskForDetails.id) === Number(updatedTask.id)) {
+                  setSelectedTaskForDetails((prev: any) => ({ ...prev, ...updatedTask }));
+                }
+              } else {
+                fetchPortalTasks();
+                fetchWorkspaceTasks();
+              }
               window.dispatchEvent(new CustomEvent('task-updated'));
             }}
             users={users}

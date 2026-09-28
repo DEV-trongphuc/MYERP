@@ -73,102 +73,111 @@ class ActivityController {
         return date('Y-m-d H:i:s', $ts);
     }
 
-    private function getFirstImageUrl(array $activity, ?array $comments = null): ?string {
-        // Helper to check if an image URL is a valid task media (not an avatar/dicebear/icon)
-        $isValidTaskImage = function(?string $url): bool {
-            if (!$url) return false;
-            if (stripos($url, 'api.dicebear.com') !== false) return false;
-            return (bool)preg_match('/\.(jpg|jpeg|png|gif|webp|svg)/i', $url);
-        };
+    private function isValidTaskImage(?string $url): bool {
+        if (!$url) return false;
+        if (stripos($url, 'api.dicebear.com') !== false) return false;
+        return (bool)preg_match('/\.(jpg|jpeg|png|gif|webp|svg)/i', $url);
+    }
 
-        // 1. Check description/body HTML for <img> tag or markdown image
+    private function getFirstImageUrlFromBody(array $activity): ?string {
         $body = $activity['body'] ?? '';
-        if ($body) {
-            // Check if it's erp_task JSON
-            if (strpos($body, '{"erp_task"') === 0 || strpos($body, '{"erp_task":') === 0) {
-                try {
-                    $parsed = json_decode($body, true);
-                    if ($parsed && isset($parsed['erp_task'])) {
-                        // Check erp_task.links
-                        if (isset($parsed['erp_task']['links']) && is_array($parsed['erp_task']['links'])) {
-                            foreach ($parsed['erp_task']['links'] as $link) {
-                                $url = $link['url'] ?? '';
-                                $isImg = $link['is_image'] ?? false;
-                                if (($isImg || $isValidTaskImage($url)) && $isValidTaskImage($url)) {
-                                    return $url;
-                                }
+        if (!$body) return null;
+
+        // 1. Check if it's erp_task JSON
+        if (strpos($body, '{"erp_task"') === 0 || strpos($body, '{"erp_task":') === 0) {
+            try {
+                $parsed = json_decode($body, true);
+                if ($parsed && isset($parsed['erp_task'])) {
+                    // Check erp_task.links
+                    if (isset($parsed['erp_task']['links']) && is_array($parsed['erp_task']['links'])) {
+                        foreach ($parsed['erp_task']['links'] as $link) {
+                            $url = $link['url'] ?? '';
+                            $isImg = $link['is_image'] ?? false;
+                            if (($isImg || $this->isValidTaskImage($url)) && $this->isValidTaskImage($url)) {
+                                return $url;
                             }
                         }
-                        // Check description inside erp_task (excluding mention avatars)
-                        $desc = $parsed['erp_task']['description'] ?? '';
-                        if ($desc) {
-                            $cleanDesc = preg_replace('/<span[^>]*class=["\']mention["\'][^>]*>.*?<\/span>/is', '', $desc);
-                            if (preg_match('/<img[^>]+src=["\']([^"\']+)["\']/i', $cleanDesc, $matches)) {
-                                if ($isValidTaskImage($matches[1])) return $matches[1];
-                            }
-                            if (preg_match('/!\[.*?\]\((.*?)\)/i', $cleanDesc, $matches)) {
-                                if ($isValidTaskImage($matches[1])) return $matches[1];
+                    }
+                    // Check description inside erp_task (excluding mention avatars)
+                    $desc = $parsed['erp_task']['description'] ?? '';
+                    if ($desc) {
+                        $cleanDesc = preg_replace('/<span[^>]*class=["\']mention["\'][^>]*>.*?<\/span>/is', '', $desc);
+                        if (preg_match('/<img[^>]+src=["\']([^"\']+)["\']/i', $cleanDesc, $matches)) {
+                            if ($this->isValidTaskImage($matches[1])) return $matches[1];
+                        }
+                        if (preg_match('/!\[.*?\]\((.*?)\)/i', $cleanDesc, $matches)) {
+                            if ($this->isValidTaskImage($matches[1])) return $matches[1];
+                        }
+                    }
+                }
+            } catch (Exception $e) {}
+        } else {
+            $cleanBody = preg_replace('/<span[^>]*class=["\']mention["\'][^>]*>.*?<\/span>/is', '', $body);
+            if (preg_match('/<img[^>]+src=["\']([^"\']+)["\']/i', $cleanBody, $matches)) {
+                if ($this->isValidTaskImage($matches[1])) return $matches[1];
+            }
+            if (preg_match('/!\[.*?\]\((.*?)\)/i', $cleanBody, $matches)) {
+                if ($this->isValidTaskImage($matches[1])) return $matches[1];
+            }
+        }
+        return null;
+    }
+
+    private function getFirstImageUrlFromComments(array $comments): ?string {
+        foreach ($comments as $comment) {
+            // Check attachments column (JSON array of URLs)
+            $atts = $comment['attachments'] ?? '';
+            if ($atts) {
+                try {
+                    $parsedAtts = is_string($atts) ? json_decode($atts, true) : $atts;
+                    if (is_array($parsedAtts)) {
+                        foreach ($parsedAtts as $att) {
+                            $url = is_string($att) ? $att : ($att['url'] ?? '');
+                            if ($url && $this->isValidTaskImage($url)) {
+                                return $url;
                             }
                         }
                     }
                 } catch (Exception $e) {}
-            } else {
-                $cleanBody = preg_replace('/<span[^>]*class=["\']mention["\'][^>]*>.*?<\/span>/is', '', $body);
-                if (preg_match('/<img[^>]+src=["\']([^"\']+)["\']/i', $cleanBody, $matches)) {
-                    if ($isValidTaskImage($matches[1])) return $matches[1];
+            }
+            // Check inline images in comment content HTML (excluding mention tags)
+            $content = $comment['content'] ?? '';
+            if ($content) {
+                $cleanContent = preg_replace('/<span[^>]*class=["\']mention["\'][^>]*>.*?<\/span>/is', '', $content);
+                if (preg_match('/<img[^>]+src=["\']([^"\']+)["\']/i', $cleanContent, $matches)) {
+                    if ($this->isValidTaskImage($matches[1])) return $matches[1];
                 }
-                if (preg_match('/!\[.*?\]\((.*?)\)/i', $cleanBody, $matches)) {
-                    if ($isValidTaskImage($matches[1])) return $matches[1];
+                if (preg_match('/!\[.*?\]\((.*?)\)/i', $cleanContent, $matches)) {
+                    if ($this->isValidTaskImage($matches[1])) return $matches[1];
                 }
             }
         }
+        return null;
+    }
 
-        // 2. Check comments
+    private function getFirstImageUrl(array $activity, ?array $comments = null): ?string {
+        $bodyImg = $this->getFirstImageUrlFromBody($activity);
+        if ($bodyImg) return $bodyImg;
+
+        if (!empty($activity['expense_image_url']) && $this->isValidTaskImage($activity['expense_image_url'])) {
+            return $activity['expense_image_url'];
+        }
+
+        if ($comments !== null) {
+            return $this->getFirstImageUrlFromComments($comments);
+        }
+
         $actId = (int)($activity['id'] ?? 0);
         if ($actId > 0) {
-            if ($comments === null) {
-                $cStmt = $this->db->prepare("
-                    SELECT content, attachments 
-                    FROM activity_comments 
-                    WHERE activity_id = ? 
-                    ORDER BY id ASC
-                ");
-                $cStmt->execute([$actId]);
-                $comments = $cStmt->fetchAll(PDO::FETCH_ASSOC);
-            }
-            foreach ($comments as $comment) {
-                // Check attachments column (JSON array of URLs)
-                $atts = $comment['attachments'] ?? '';
-                if ($atts) {
-                    try {
-                        $parsedAtts = is_string($atts) ? json_decode($atts, true) : $atts;
-                        if (is_array($parsedAtts)) {
-                            foreach ($parsedAtts as $att) {
-                                $url = is_string($att) ? $att : ($att['url'] ?? '');
-                                if ($url && $isValidTaskImage($url)) {
-                                    return $url;
-                                }
-                            }
-                        }
-                    } catch (Exception $e) {}
-                }
-                // Check inline images in comment content HTML (excluding mention tags)
-                $content = $comment['content'] ?? '';
-                if ($content) {
-                    $cleanContent = preg_replace('/<span[^>]*class=["\']mention["\'][^>]*>.*?<\/span>/is', '', $content);
-                    if (preg_match('/<img[^>]+src=["\']([^"\']+)["\']/i', $cleanContent, $matches)) {
-                        if ($isValidTaskImage($matches[1])) return $matches[1];
-                    }
-                    if (preg_match('/!\[.*?\]\((.*?)\)/i', $cleanContent, $matches)) {
-                        if ($isValidTaskImage($matches[1])) return $matches[1];
-                    }
-                }
-            }
-        }
-
-        // 3. Fallback to expense image url if it exists
-        if (!empty($activity['expense_image_url']) && $isValidTaskImage($activity['expense_image_url'])) {
-            return $activity['expense_image_url'];
+            $cStmt = $this->db->prepare("
+                SELECT content, attachments 
+                FROM activity_comments 
+                WHERE activity_id = ? 
+                ORDER BY id ASC
+            ");
+            $cStmt->execute([$actId]);
+            $fetched = $cStmt->fetchAll(PDO::FETCH_ASSOC);
+            return $this->getFirstImageUrlFromComments($fetched);
         }
 
         return null;
@@ -629,11 +638,21 @@ class ActivityController {
         $stmt->execute($params);
         $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // Pre-fetch activity comments in chunks to permanently eliminate N+1 queries regardless of item count
-        $activityIds = array_column($items, 'id');
+        // 1. First pass: extract image from body or expense directly in 0ms PHP memory
+        $idsNeedingCommentScan = [];
+        foreach ($items as &$item) {
+            $item['first_image_url'] = !empty($item['expense_image_url']) ? $item['expense_image_url'] : $this->getFirstImageUrlFromBody($item);
+            // Only collect IDs for items that lack an image AND actually have comments
+            if (empty($item['first_image_url']) && !empty($item['comment_count']) && (int)$item['comment_count'] > 0) {
+                $idsNeedingCommentScan[] = (int)$item['id'];
+            }
+        }
+        unset($item);
+
+        // 2. Only query activity comments for the fraction of items that truly need it
         $preFetchedComments = [];
-        if (!empty($activityIds)) {
-            $chunks = array_chunk($activityIds, 200);
+        if (!empty($idsNeedingCommentScan)) {
+            $chunks = array_chunk($idsNeedingCommentScan, 100);
             foreach ($chunks as $chunk) {
                 $placeholders = implode(',', array_fill(0, count($chunk), '?'));
                 $cStmt = $this->db->prepare("
@@ -650,8 +669,11 @@ class ActivityController {
             }
         }
 
+        // 3. Second pass: attach comment image if needed and normalize strings
         foreach ($items as &$item) {
-            $item['first_image_url'] = $this->getFirstImageUrl($item, $preFetchedComments[$item['id']] ?? []);
+            if (empty($item['first_image_url']) && !empty($preFetchedComments[$item['id']])) {
+                $item['first_image_url'] = $this->getFirstImageUrlFromComments($preFetchedComments[$item['id']]);
+            }
             if (!empty($item['subject'])) {
                 $item['subject'] = html_entity_decode($item['subject'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
                 $item['subject'] = str_replace(["\xc2\xa0", "&nbsp;"], ' ', $item['subject']);
@@ -661,6 +683,7 @@ class ActivityController {
                 $item['body'] = str_replace('&nbsp;', ' ', $item['body']);
             }
         }
+        unset($item);
         respond(200,['items'=>$items,'total'=>$total,'page'=>$page,'limit'=>$limit]);
     }
 

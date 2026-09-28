@@ -1,5 +1,5 @@
 export type ConversationType = 'direct' | 'group';
-export type MessageType = 'text' | 'image' | 'file' | 'sticker' | 'erp_card' | 'system_event';
+export type MessageType = 'text' | 'image' | 'video' | 'file' | 'sticker' | 'erp_card' | 'system_event';
 export type ParticipantRole = 'owner' | 'admin' | 'member';
 export type UserOnlineStatus = 'online' | 'away' | 'offline';
 
@@ -58,6 +58,7 @@ export interface ChatMessage {
   reply_content?: string;
   reply_type?: MessageType;
   reply_sender_name?: string;
+  reply_metadata?: any;
   reactions?: ChatReaction[];
   is_mine?: boolean;
   is_sending?: boolean;

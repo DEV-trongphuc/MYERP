@@ -19,18 +19,59 @@ export const setChatSoundEnabled = (enabled: boolean): void => {
  * Web Audio API synthesized notification chime for WorkChat
  * Plays a clean, pleasant 2-tone melodic chime without downloading external files
  */
+let sharedAudioCtx: AudioContext | null = null;
 let lastSoundPlayedTime = 0;
+
+/**
+ * Returns or initializes a singleton AudioContext instance.
+ */
+const getOrCreateAudioContext = (): AudioContext | null => {
+  try {
+    if (!sharedAudioCtx) {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return null;
+      sharedAudioCtx = new AudioContextClass();
+    }
+    return sharedAudioCtx;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Automatically pre-unlock AudioContext on first user interaction (click, keypress, touch)
+ * so sound chimes are never silenced by browser autoplay restrictions.
+ */
+if (typeof window !== 'undefined') {
+  const unlockAudio = () => {
+    const ctx = getOrCreateAudioContext();
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+    window.removeEventListener('click', unlockAudio);
+    window.removeEventListener('keydown', unlockAudio);
+    window.removeEventListener('touchstart', unlockAudio);
+  };
+  window.addEventListener('click', unlockAudio, { passive: true, once: true });
+  window.addEventListener('keydown', unlockAudio, { passive: true, once: true });
+  window.addEventListener('touchstart', unlockAudio, { passive: true, once: true });
+}
 
 export const playChatNotificationSound = () => {
   if (!isChatSoundEnabled()) return;
-  const now = Date.now();
+  const nowTime = Date.now();
   // Throttle chimes: avoid overlapping audio contexts when multiple messages arrive in burst
-  if (now - lastSoundPlayedTime < 1200) return;
-  lastSoundPlayedTime = now;
+  if (nowTime - lastSoundPlayedTime < 1200) return;
+  lastSoundPlayedTime = nowTime;
+
   try {
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContextClass) return;
-    const ctx = new AudioContextClass();
+    const ctx = getOrCreateAudioContext();
+    if (!ctx) return;
+
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+
     const now = ctx.currentTime;
 
     // Harmonic bell chime: C6 (1046.5Hz) -> E6 (1318.5Hz) -> G6 (1567.9Hz)

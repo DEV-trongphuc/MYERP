@@ -21,14 +21,19 @@ export const ChatFloatingLauncher: React.FC = () => {
     isRealtimeConnected
   } = useChatStore();
 
-  // 1. Establish Real-time SSE Stream for instant (< 50ms) push notifications
+  // 1. Establish On-Demand Real-time SSE Stream ONLY when Chat Modal is open (< 50ms latency)
+  // When chat modal is closed, immediately disconnect SSE to free up PHP-FPM workers for the server
   useEffect(() => {
     if (!token || !user) return;
-    initRealtimeSSE(token);
+    if (isOpen) {
+      initRealtimeSSE(token);
+    } else {
+      disconnectRealtimeSSE();
+    }
     return () => {
       disconnectRealtimeSSE();
     };
-  }, [token, user]);
+  }, [token, user, isOpen, initRealtimeSSE, disconnectRealtimeSSE]);
 
   // 2. Intelligent adaptive polling (acts as presence heartbeat & instant fallback)
   useEffect(() => {

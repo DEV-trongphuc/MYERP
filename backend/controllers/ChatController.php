@@ -182,14 +182,17 @@ class ChatController {
                 SELECT c.id, c.type, c.title, c.avatar_url, c.created_by, c.last_message_at,
                        c.pinned_message_id, c.settings,
                        cp.role as my_role, cp.is_pinned, cp.is_muted, cp.last_read_message_id,
-                       (
-                           SELECT COUNT(*) 
-                           FROM chat_messages cm 
-                           WHERE cm.conversation_id = c.id 
-                             AND cm.id > cp.last_read_message_id 
-                             AND cm.sender_id != ? 
-                             AND cm.deleted_at IS NULL
-                       ) as unread_count,
+                       CASE 
+                           WHEN c.last_message_id <= cp.last_read_message_id THEN 0
+                           ELSE (
+                               SELECT COUNT(*) 
+                               FROM chat_messages cm 
+                               WHERE cm.conversation_id = c.id 
+                                 AND cm.id > cp.last_read_message_id 
+                                 AND cm.sender_id != ? 
+                                 AND cm.deleted_at IS NULL
+                           )
+                       END as unread_count,
                        m.id as last_msg_id, m.sender_id as last_msg_sender_id,
                        m.message_type as last_msg_type,
                        CASE 
@@ -587,7 +590,7 @@ class ChatController {
                 SELECT m.id, m.conversation_id, m.sender_id, m.message_type, m.content,
                        m.metadata, m.reply_to_id, m.is_pinned, m.is_edited, m.deleted_at, m.created_at,
                        u.full_name as sender_name, u.avatar_url as sender_avatar, u.job_title as sender_title,
-                       r.content as reply_content, r.message_type as reply_type,
+                       r.content as reply_content, r.message_type as reply_type, r.metadata as reply_metadata,
                        ru.full_name as reply_sender_name
                 FROM chat_messages m
                 LEFT JOIN users u ON m.sender_id = u.id
@@ -652,6 +655,7 @@ class ChatController {
                 $msg['is_edited'] = (bool)$msg['is_edited'];
                 $msg['is_mine'] = ($msg['sender_id'] === $uid);
                 $msg['metadata'] = !empty($msg['metadata']) ? json_decode($msg['metadata'], true) : null;
+                $msg['reply_metadata'] = !empty($msg['reply_metadata']) ? json_decode($msg['reply_metadata'], true) : null;
                 $msg['reactions'] = isset($reactionsMap[$msg['id']]) ? array_values($reactionsMap[$msg['id']]) : [];
 
                 if ($msg['deleted_at']) {
@@ -818,21 +822,27 @@ class ChatController {
 
             $this->db->commit();
 
-            // Fetch newly created message with user info
+            // Fetch newly created message with user info and replied message
             $stmtFetch = $this->db->prepare("
                 SELECT m.id, m.conversation_id, m.sender_id, m.message_type, m.content,
                        m.metadata, m.reply_to_id, m.is_pinned, m.is_edited, m.deleted_at, m.created_at,
-                       u.full_name as sender_name, u.avatar_url as sender_avatar, u.job_title as sender_title
+                       u.full_name as sender_name, u.avatar_url as sender_avatar, u.job_title as sender_title,
+                       r.content as reply_content, r.message_type as reply_type, r.metadata as reply_metadata,
+                       ru.full_name as reply_sender_name
                 FROM chat_messages m
                 LEFT JOIN users u ON m.sender_id = u.id
+                LEFT JOIN chat_messages r ON m.reply_to_id = r.id
+                LEFT JOIN users ru ON r.sender_id = ru.id
                 WHERE m.id = ?
             ");
             $stmtFetch->execute([$msgId]);
             $newMsg = $stmtFetch->fetch(PDO::FETCH_ASSOC);
             $newMsg['id'] = (int)$newMsg['id'];
             $newMsg['sender_id'] = (int)$newMsg['sender_id'];
+            $newMsg['reply_to_id'] = !empty($newMsg['reply_to_id']) ? (int)$newMsg['reply_to_id'] : null;
             $newMsg['is_mine'] = true;
             $newMsg['metadata'] = $metadata;
+            $newMsg['reply_metadata'] = !empty($newMsg['reply_metadata']) ? json_decode($newMsg['reply_metadata'], true) : null;
             $newMsg['reactions'] = [];
 
             // Optional: send notifications for @mentions or @all
@@ -2257,9 +2267,13 @@ class ChatController {
                 $stmt = $this->db->prepare("
                     SELECT m.id, m.conversation_id, m.sender_id, m.message_type, m.content,
                            m.metadata, m.reply_to_id, m.is_pinned, m.is_edited, m.deleted_at, m.created_at,
-                           u.full_name as sender_name, u.avatar_url as sender_avatar, u.job_title as sender_title
+                           u.full_name as sender_name, u.avatar_url as sender_avatar, u.job_title as sender_title,
+                           r.content as reply_content, r.message_type as reply_type, r.metadata as reply_metadata,
+                           ru.full_name as reply_sender_name
                     FROM chat_messages m
                     LEFT JOIN users u ON m.sender_id = u.id
+                    LEFT JOIN chat_messages r ON m.reply_to_id = r.id
+                    LEFT JOIN users ru ON r.sender_id = ru.id
                     WHERE m.conversation_id = ? AND m.id > ? AND m.tenant_id = ?
                     ORDER BY m.id ASC
                     LIMIT 30
@@ -2271,6 +2285,8 @@ class ChatController {
                     $nm['sender_id'] = (int)$nm['sender_id'];
                     $nm['is_mine'] = ($nm['sender_id'] === $uid);
                     $nm['metadata'] = !empty($nm['metadata']) ? json_decode($nm['metadata'], true) : null;
+                    $nm['reply_to_id'] = !empty($nm['reply_to_id']) ? (int)$nm['reply_to_id'] : null;
+                    $nm['reply_metadata'] = !empty($nm['reply_metadata']) ? json_decode($nm['reply_metadata'], true) : null;
                     $nm['reactions'] = [];
                     if (!empty($nm['deleted_at'])) {
                         $nm['content'] = 'Tin nhắn đã được thu hồi';
@@ -2341,14 +2357,18 @@ class ChatController {
         }
 
         // 4. Total unread messages across all user's conversations
+        // Fast prune: join chat_conversations and test c.last_message_id > cp.last_read_message_id
+        // to immediately bypass conversations with no new messages without scanning chat_messages
         $totalUnread = 0;
         try {
             $stmtUnread = $this->db->prepare("
                 SELECT COUNT(*) 
                 FROM chat_messages cm
                 JOIN chat_participants cp ON cm.conversation_id = cp.conversation_id
+                JOIN chat_conversations c ON cp.conversation_id = c.id
                 WHERE cp.user_id = ? 
                   AND (cp.tenant_id = ? OR cp.tenant_id IS NULL OR cp.tenant_id = 0)
+                  AND c.last_message_id > cp.last_read_message_id
                   AND cm.id > cp.last_read_message_id
                   AND cm.sender_id != ?
                   AND cm.deleted_at IS NULL
@@ -2371,6 +2391,7 @@ class ChatController {
                 LEFT JOIN users u ON cm.sender_id = u.id
                 WHERE cp.user_id = ?
                   AND (cp.tenant_id = ? OR cp.tenant_id IS NULL OR cp.tenant_id = 0)
+                  AND c.last_message_id > cp.last_read_message_id
                   AND cm.sender_id != ?
                   AND cm.id > cp.last_read_message_id
                   AND cm.deleted_at IS NULL
@@ -2541,11 +2562,15 @@ class ChatController {
                         SELECT cm.id, cm.conversation_id, cm.sender_id, cm.message_type, cm.content,
                                cm.metadata, cm.reply_to_id, cm.is_pinned, cm.is_edited, cm.created_at,
                                u.full_name as sender_name, u.avatar_url as sender_avatar,
-                               c.title as conversation_title, c.type as conversation_type
+                               c.title as conversation_title, c.type as conversation_type,
+                               r.content as reply_content, r.message_type as reply_type, r.metadata as reply_metadata,
+                               ru.full_name as reply_sender_name
                         FROM chat_messages cm
                         JOIN chat_participants cp ON cm.conversation_id = cp.conversation_id
                         JOIN chat_conversations c ON cm.conversation_id = c.id
                         LEFT JOIN users u ON cm.sender_id = u.id
+                        LEFT JOIN chat_messages r ON cm.reply_to_id = r.id
+                        LEFT JOIN users ru ON r.sender_id = ru.id
                         WHERE cp.user_id = ? 
                           AND (cp.tenant_id = ? OR cp.tenant_id IS NULL OR cp.tenant_id = 0)
                           AND cm.sender_id != ?
@@ -2565,6 +2590,7 @@ class ChatController {
                             $m['is_mine'] = false;
                             $m['reactions'] = [];
                             $m['metadata'] = !empty($m['metadata']) ? json_decode($m['metadata'], true) : null;
+                            $m['reply_metadata'] = !empty($m['reply_metadata']) ? json_decode($m['reply_metadata'], true) : null;
                             if ($m['id'] > $lastSeenMessageId) {
                                 $lastSeenMessageId = $m['id'];
                             }

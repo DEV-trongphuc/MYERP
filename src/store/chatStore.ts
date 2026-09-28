@@ -472,6 +472,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     if (!activeConversationId) return null;
 
     const actualReplyId = reply_to_id !== undefined ? reply_to_id : (replyingTo ? replyingTo.id : null);
+    const activeMsgs = get().messagesByConvId[activeConversationId] || [];
+    const targetReply = (replyingTo && replyingTo.id === actualReplyId)
+      ? replyingTo
+      : (actualReplyId ? activeMsgs.find(m => m.id === actualReplyId) : null);
 
     // Optimistic message with strictly unique monotonic sub-millisecond tempId
     const tempId = -(Date.now() * 1000 + (++tempIdCounter % 1000));
@@ -485,6 +489,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       content,
       metadata,
       reply_to_id: actualReplyId,
+      reply_content: targetReply?.content || undefined,
+      reply_type: targetReply?.message_type || undefined,
+      reply_metadata: targetReply?.metadata || undefined,
+      reply_sender_name: targetReply?.sender_name || (targetReply ? (targetReply.is_mine ? 'Bạn' : 'Đồng nghiệp') : undefined),
       created_at: new Date().toISOString(),
       is_mine: true,
       is_sending: true,
@@ -536,7 +544,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             messagesByConvId: {
               ...state.messagesByConvId,
               [activeConversationId]: (state.messagesByConvId[activeConversationId] || []).map((m) =>
-                m.id === tempId ? { ...serverMsg, is_mine: true } : m
+                m.id === tempId ? {
+                  ...serverMsg,
+                  is_mine: true,
+                  reply_to_id: serverMsg.reply_to_id ?? optimisticMsg.reply_to_id,
+                  reply_content: serverMsg.reply_content ?? optimisticMsg.reply_content,
+                  reply_type: serverMsg.reply_type ?? optimisticMsg.reply_type,
+                  reply_metadata: serverMsg.reply_metadata ?? optimisticMsg.reply_metadata,
+                  reply_sender_name: serverMsg.reply_sender_name ?? optimisticMsg.reply_sender_name,
+                } : m
               )
             },
             conversations: state.conversations.map((c) =>

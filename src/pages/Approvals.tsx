@@ -704,6 +704,7 @@ export default function Approvals() {
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all');
   const [directorySearch, setDirectorySearch] = useState('');
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
+  const editingItemIdRef = useRef<number | null>(null);
   const [editingItemType, setEditingItemType] = useState<string | null>(null);
   const [editingExpenseItem, setEditingExpenseItem] = useState<any>(null);
   const [isExpenseDrawerOpen, setIsExpenseDrawerOpen] = useState(false);
@@ -2141,6 +2142,7 @@ export default function Approvals() {
       window.dispatchEvent(new CustomEvent('refresh-approvals'));
       setShowCreateModal(false);
       setSelectedWorkflowDef(null);
+      editingItemIdRef.current = null;
       setEditingItemId(null);
       setEditingItemType(null);
       setRelatedUserIds([]);
@@ -2403,6 +2405,7 @@ export default function Approvals() {
 
   // Set default steps whenever the form type changes
   useEffect(() => {
+    if (editingItemId || editingItemIdRef.current) return;
     if (selectedWorkflowDef?.id === 'print_stamp_send') {
       setShowStepManager(false);
       setShowStepAccountant(false);
@@ -2460,7 +2463,7 @@ export default function Approvals() {
       if (defaultAccountant) setCustomApprover2(defaultAccountant);
       if (defaultDirector) setCustomApprover3(defaultDirector);
     }
-  }, [formType, selectedWorkflowDef, users, teams]);
+  }, [formType, selectedWorkflowDef, users, teams, editingItemId]);
 
   // Dynamic 5,000,000 VND rule: Dưới 5tr: 2 cấp (Leader -> Kế toán). Từ 5tr trở lên: 3 cấp (Leader -> Director Phạm Quang Vinh -> Kế toán)
   const currentExpenseTotal = useMemo(() => {
@@ -2468,6 +2471,7 @@ export default function Approvals() {
   }, [expenseItems]);
 
   useEffect(() => {
+    if (editingItemId || editingItemIdRef.current) return;
     if (formType === 'expense' && selectedWorkflowDef?.id !== 'stationery') {
       if (currentExpenseTotal >= 5000000) {
         setShowStepDirector(true);
@@ -2478,10 +2482,11 @@ export default function Approvals() {
         setShowStepDirector(false);
       }
     }
-  }, [currentExpenseTotal, formType, selectedWorkflowDef, defaultDirector]);
+  }, [currentExpenseTotal, formType, selectedWorkflowDef, defaultDirector, editingItemId]);
 
   // Tự động điều chỉnh Người duyệt Cấp 2 khi người dùng chuyển đổi loại OT (Lấy bù -> Nhân sự, Lấy lương -> Kế toán)
   useEffect(() => {
+    if (editingItemId || editingItemIdRef.current) return;
     if (formType === 'overtime') {
       if (otType === 'compensatory') {
         const hrLead = getDefaultHrLeader();
@@ -2490,10 +2495,11 @@ export default function Approvals() {
         if (defaultAccountant) setCustomApprover2(defaultAccountant);
       }
     }
-  }, [otType, formType, users]);
+  }, [otType, formType, users, editingItemId]);
 
   // Mặc định tự động chọn Leader / Trưởng phòng HR vào danh sách Người liên quan (theo dõi) cho đề xuất công / HR
   useEffect(() => {
+    if (editingItemId || editingItemIdRef.current) return;
     const isHrWf = selectedWorkflowDef?.category === 'hr' || ['leave', 'late_early', 'overtime', 'remote_work', 'attendance_bulk'].includes(formType);
     const isProposerManagerOrLeader = ['manager', 'director', 'admin', 'superadmin', 'super_admin', 'leader', 'truongphong', 'head_of_department'].includes(String(proposerUser?.role || user?.role).toLowerCase()) || Boolean(proposerUser?.is_team_leader || (user as any)?.is_team_leader);
 
@@ -2516,7 +2522,7 @@ export default function Approvals() {
         setRelatedUserIds(prev => prev.filter(id => id !== hrId));
       }
     }
-  }, [formType, selectedWorkflowDef, proposerUser, customApprover1?.id, users, teams]);
+  }, [formType, selectedWorkflowDef, proposerUser, customApprover1?.id, users, teams, editingItemId]);
 
   // --- DRAFT & EXIT CONFIRMATION HELPERS ---
   const getFormSnapshot = () => {
@@ -2780,6 +2786,7 @@ export default function Approvals() {
       } else {
         setShowCreateModal(false);
         setSelectedWorkflowDef(null);
+        editingItemIdRef.current = null;
         setEditingItemId(null);
         setEditingItemType(null);
         setCurrentDraftId(null);
@@ -2794,11 +2801,13 @@ export default function Approvals() {
     if (exitTargetAction === 'back') {
       setSelectedWorkflowDef(null);
       setCurrentDraftId(null);
+      editingItemIdRef.current = null;
       setEditingItemId(null);
       setEditingItemType(null);
     } else {
       setShowCreateModal(false);
       setSelectedWorkflowDef(null);
+      editingItemIdRef.current = null;
       setEditingItemId(null);
       setEditingItemType(null);
       setCurrentDraftId(null);
@@ -2815,11 +2824,13 @@ export default function Approvals() {
       if (target === 'back') {
         setSelectedWorkflowDef(null);
         setCurrentDraftId(null);
+        editingItemIdRef.current = null;
         setEditingItemId(null);
         setEditingItemType(null);
       } else {
         setShowCreateModal(false);
         setSelectedWorkflowDef(null);
+        editingItemIdRef.current = null;
         setEditingItemId(null);
         setEditingItemType(null);
         setCurrentDraftId(null);
@@ -3722,8 +3733,42 @@ export default function Approvals() {
     setSelectedTimelineItem(null);
     setSelectedItem(null);
     lastSavedSnapshotRef.current = null;
+    editingItemIdRef.current = item.id;
     setEditingItemId(item.id);
     setEditingItemType(item.type);
+
+    const creatorId = Number(item.created_by || item.user_id);
+    const creator = users.find(u => Number(u.id) === creatorId);
+    if (creator) {
+      setProposerUser(creator);
+    }
+
+    const restoreApproversAndRelated = (data: any) => {
+      if (data.approver_id) setCustomApprover1(users.find(u => Number(u.id) === Number(data.approver_id)) || null);
+      else setCustomApprover1(null);
+      if (data.approver_id_2) setCustomApprover2(users.find(u => Number(u.id) === Number(data.approver_id_2)) || null);
+      else setCustomApprover2(null);
+      if (data.approver_id_3) setCustomApprover3(users.find(u => Number(u.id) === Number(data.approver_id_3)) || null);
+      else setCustomApprover3(null);
+
+      setShowStepManager(!!data.approver_id);
+      setShowStepAccountant(!!data.approver_id_2);
+      setShowStepDirector(!!data.approver_id_3);
+
+      if (data.related_user_ids) {
+        try {
+          const rIds = typeof data.related_user_ids === 'string'
+            ? JSON.parse(data.related_user_ids)
+            : data.related_user_ids;
+          if (Array.isArray(rIds)) setRelatedUserIds(rIds.map(Number));
+          else setRelatedUserIds([]);
+        } catch {
+          setRelatedUserIds([]);
+        }
+      } else {
+        setRelatedUserIds([]);
+      }
+    };
 
     const matchingDef = getWorkflowDefFromItem(item);
 
@@ -3795,8 +3840,7 @@ export default function Approvals() {
             setLeaveTo(found.end_date || found.to_date || '');
             setLeaveReason(found.reason || '');
           }
-          if (found.approver_id) setCustomApprover1(users.find(u => Number(u.id) === Number(found.approver_id)) || null);
-          if (found.approver_id_2) setCustomApprover2(users.find(u => Number(u.id) === Number(found.approver_id_2)) || null);
+          restoreApproversAndRelated(found);
           setShowCreateModal(true);
           return;
         }
@@ -3819,8 +3863,7 @@ export default function Approvals() {
           if (Array.isArray(bulkData.details) && bulkData.details.length > 0) {
             setSuggestedDays(bulkData.details);
           }
-          if (bulkData.approver_id) setCustomApprover1(users.find(u => Number(u.id) === Number(bulkData.approver_id)) || null);
-          if (bulkData.approver_id_2) setCustomApprover2(users.find(u => Number(u.id) === Number(bulkData.approver_id_2)) || null);
+          restoreApproversAndRelated(bulkData);
         }
       } catch (e) {
         console.error('Error fetching bulk attendance for edit:', e);
@@ -3861,8 +3904,7 @@ export default function Approvals() {
                                .replace(/\[Đề nghị tạm ứng[^\]]*\]:[^\n]*(\n•[^\n]*)*\s*/gi, '')
                                .trim();
           setLeaveReason(cleanReason);
-          if (found.approver_id) setCustomApprover1(users.find(u => Number(u.id) === Number(found.approver_id)) || null);
-          if (found.approver_id_2) setCustomApprover2(users.find(u => Number(u.id) === Number(found.approver_id_2)) || null);
+          restoreApproversAndRelated(found);
         }
       } catch (e) {
         console.error('Error fetching advance for edit:', e);
@@ -4002,9 +4044,7 @@ export default function Approvals() {
           const amt = Number(expData.amount) || 0;
           setExpenseItems([{ id: Date.now(), name: 'Chi phí tiếp khách', quantity: 1, price: amt, vat: 0 }]);
 
-          if (expData.approver_id) setCustomApprover1(users.find(u => Number(u.id) === Number(expData.approver_id)) || null);
-          if (expData.approver_id_2) setCustomApprover2(users.find(u => Number(u.id) === Number(expData.approver_id_2)) || null);
-          if (expData.approver_id_3) setCustomApprover3(users.find(u => Number(u.id) === Number(expData.approver_id_3)) || null);
+          restoreApproversAndRelated(expData);
           if (expData.image_url) setAttachments([{ name: expData.image_url.split('/').pop() || 'Tài liệu', url: expData.image_url }]);
 
           setShowCreateModal(true);
@@ -4032,9 +4072,7 @@ export default function Approvals() {
           const amt = Number(expData.amount) || 0;
           setExpenseItems([{ id: Date.now(), name: 'Thanh toán theo đợt', quantity: 1, price: amt, vat: 0 }]);
 
-          if (expData.approver_id) setCustomApprover1(users.find(u => Number(u.id) === Number(expData.approver_id)) || null);
-          if (expData.approver_id_2) setCustomApprover2(users.find(u => Number(u.id) === Number(expData.approver_id_2)) || null);
-          if (expData.approver_id_3) setCustomApprover3(users.find(u => Number(u.id) === Number(expData.approver_id_3)) || null);
+          restoreApproversAndRelated(expData);
           if (expData.image_url) setAttachments([{ name: expData.image_url.split('/').pop() || 'Tài liệu', url: expData.image_url }]);
 
           setShowCreateModal(true);
@@ -4061,9 +4099,7 @@ export default function Approvals() {
           const amt = Number(expData.amount) || 0;
           setExpenseItems([{ id: Date.now(), name: 'Thanh toán định kỳ', quantity: 1, price: amt, vat: 0 }]);
 
-          if (expData.approver_id) setCustomApprover1(users.find(u => Number(u.id) === Number(expData.approver_id)) || null);
-          if (expData.approver_id_2) setCustomApprover2(users.find(u => Number(u.id) === Number(expData.approver_id_2)) || null);
-          if (expData.approver_id_3) setCustomApprover3(users.find(u => Number(u.id) === Number(expData.approver_id_3)) || null);
+          restoreApproversAndRelated(expData);
           if (expData.image_url) setAttachments([{ name: expData.image_url.split('/').pop() || 'Tài liệu', url: expData.image_url }]);
 
           setShowCreateModal(true);
@@ -4165,9 +4201,7 @@ export default function Approvals() {
           if (content) setPaymentDetails(content);
           if (reason) setLeaveReason(reason);
 
-          if (expData.approver_id) setCustomApprover1(users.find(u => Number(u.id) === Number(expData.approver_id)) || null);
-          if (expData.approver_id_2) setCustomApprover2(users.find(u => Number(u.id) === Number(expData.approver_id_2)) || null);
-          if (expData.approver_id_3) setCustomApprover3(users.find(u => Number(u.id) === Number(expData.approver_id_3)) || null);
+          restoreApproversAndRelated(expData);
           if (expData.image_url) setAttachments([{ name: expData.image_url.split('/').pop() || 'Tài liệu', url: expData.image_url }]);
 
           setShowCreateModal(true);
@@ -4332,23 +4366,8 @@ export default function Approvals() {
           ]);
         }
 
-        // 8. Approvers
-        if (expData.approver_id) setCustomApprover1(users.find(u => Number(u.id) === Number(expData.approver_id)) || null);
-        if (expData.approver_id_2) setCustomApprover2(users.find(u => Number(u.id) === Number(expData.approver_id_2)) || null);
-        if (expData.approver_id_3) setCustomApprover3(users.find(u => Number(u.id) === Number(expData.approver_id_3)) || null);
-        setShowStepManager(true);
-        setShowStepAccountant(true);
-        setShowStepDirector(!!expData.approver_id_3 || (Number(expData.amount) >= 5000000));
-
-        // 9. Related users
-        if (expData.related_user_ids) {
-          try {
-            const rIds = typeof expData.related_user_ids === 'string' 
-              ? JSON.parse(expData.related_user_ids) 
-              : expData.related_user_ids;
-            if (Array.isArray(rIds)) setRelatedUserIds(rIds.map(Number));
-          } catch {}
-        }
+        // 8. Approvers & Related users
+        restoreApproversAndRelated(expData);
 
         // 10. Attachments
         const parsedAtts: any[] = [];

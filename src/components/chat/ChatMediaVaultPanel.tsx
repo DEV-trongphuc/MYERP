@@ -600,6 +600,7 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
                     {grp.items.map((it) => {
                       const isSelected = selectedItemIds.includes(it.id);
+                      const isVid = it.category === 'video' || /\.(mp4|mov|webm|mkv|avi|m4v)(\?.*)?$/i.test(it.file_url || '');
                       return (
                         <div
                           key={it.id}
@@ -616,7 +617,7 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({
                             borderRadius: '8px',
                             overflow: 'hidden',
                             cursor: 'pointer',
-                            background: '#f1f5f9',
+                            background: isVid ? '#0f172a' : '#f1f5f9',
                             position: 'relative',
                             border: isSelected ? '2.5px solid #2563eb' : '1px solid #e2e8f0',
                             boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
@@ -624,13 +625,44 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({
                           }}
                           className="hover-scale"
                         >
-                          <img
-                            src={it.file_url}
-                            alt={it.file_name}
-                            loading="lazy"
-                            decoding="async"
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
+                          {isVid ? (
+                            <div style={{ width: '100%', height: '100%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <video
+                                src={it.file_url}
+                                preload="metadata"
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              />
+                              <div style={{
+                                position: 'absolute',
+                                inset: 0,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                background: 'rgba(0, 0, 0, 0.28)'
+                              }}>
+                                <div style={{
+                                  width: 28,
+                                  height: 28,
+                                  borderRadius: '50%',
+                                  background: 'rgba(0, 0, 0, 0.65)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  backdropFilter: 'blur(2px)'
+                                }}>
+                                  <Film size={14} color="#ffffff" />
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <img
+                              src={it.file_url}
+                              alt={it.file_name}
+                              loading="lazy"
+                              decoding="async"
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                          )}
                           {isSelectMode && (
                             <div
                               style={{
@@ -856,12 +888,22 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({
               padding: '20px'
             }}
           >
-            <img
-              src={selectedPreviewImage}
-              alt="Preview"
-              style={{ maxWidth: '92vw', maxHeight: '88vh', borderRadius: '10px', objectFit: 'contain', boxShadow: '0 20px 50px rgba(0,0,0,0.7)' }}
-              onClick={(e) => e.stopPropagation()}
-            />
+            {/\.(mp4|mov|webm|mkv|avi|m4v)(\?.*)?$/i.test(selectedPreviewImage) ? (
+              <video
+                src={selectedPreviewImage}
+                controls
+                autoPlay
+                style={{ maxWidth: '92vw', maxHeight: '88vh', borderRadius: '10px', boxShadow: '0 20px 50px rgba(0,0,0,0.7)' }}
+                onClick={(e) => e.stopPropagation()}
+              />
+            ) : (
+              <img
+                src={selectedPreviewImage}
+                alt="Preview"
+                style={{ maxWidth: '92vw', maxHeight: '88vh', borderRadius: '10px', objectFit: 'contain', boxShadow: '0 20px 50px rgba(0,0,0,0.7)' }}
+                onClick={(e) => e.stopPropagation()}
+              />
+            )}
             <button
               onClick={() => setSelectedPreviewImage(null)}
               style={{
@@ -1469,25 +1511,59 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({
               ) : (
                 <>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', marginBottom: '8px' }}>
-                    {mediaItems.slice(0, 8).map((it) => (
-                      <div
-                        key={it.id}
-                        onClick={() => setSelectedPreviewImage(it.file_url)}
-                        style={{
-                          aspectRatio: '1',
-                          borderRadius: '8px',
-                          overflow: 'hidden',
-                          background: '#f1f5f9',
-                          cursor: 'pointer',
-                          border: '1px solid #e2e8f0',
-                          transition: 'transform 0.15s ease'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.04)'}
-                        onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                      >
-                        <img src={it.file_url} alt={it.file_name} loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      </div>
-                    ))}
+                    {mediaItems.slice(0, 8).map((it) => {
+                      const isVid = it.category === 'video' || /\.(mp4|mov|webm|mkv|avi|m4v)(\?.*)?$/i.test(it.file_url || '');
+                      return (
+                        <div
+                          key={it.id}
+                          onClick={() => setSelectedPreviewImage(it.file_url)}
+                          style={{
+                            aspectRatio: '1',
+                            borderRadius: '8px',
+                            overflow: 'hidden',
+                            background: isVid ? '#0f172a' : '#f1f5f9',
+                            cursor: 'pointer',
+                            border: '1px solid #e2e8f0',
+                            position: 'relative',
+                            transition: 'transform 0.15s ease'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.04)'}
+                          onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                        >
+                          {isVid ? (
+                            <div style={{ width: '100%', height: '100%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <video
+                                src={it.file_url}
+                                preload="metadata"
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              />
+                              <div style={{
+                                position: 'absolute',
+                                inset: 0,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                background: 'rgba(0, 0, 0, 0.28)'
+                              }}>
+                                <div style={{
+                                  width: 22,
+                                  height: 22,
+                                  borderRadius: '50%',
+                                  background: 'rgba(0, 0, 0, 0.65)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center'
+                                }}>
+                                  <Film size={11} color="#ffffff" />
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <img src={it.file_url} alt={it.file_name} loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
 
                   <button
@@ -2184,7 +2260,22 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({
             padding: '20px'
           }}
         >
-          <img src={selectedPreviewImage} alt="Preview" style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain', borderRadius: '8px' }} />
+          {/\.(mp4|mov|webm|mkv|avi|m4v)(\?.*)?$/i.test(selectedPreviewImage) ? (
+            <video
+              src={selectedPreviewImage}
+              controls
+              autoPlay
+              style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: '8px' }}
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <img
+              src={selectedPreviewImage}
+              alt="Preview"
+              style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain', borderRadius: '8px' }}
+              onClick={(e) => e.stopPropagation()}
+            />
+          )}
         </div>
       )}
     </div>

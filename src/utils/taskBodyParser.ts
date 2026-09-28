@@ -163,11 +163,16 @@ export function convertTextToHtmlParagraphs(text: string): string {
     .join('');
 }
 
+const TASK_BODY_CACHE_LIMIT = 2000;
+const taskBodyCache = new Map<string, ParsedTaskBody>();
+const cleanCardDescCache = new Map<string, string>();
+
 /**
  * Bóc tách activities.body một cách toàn diện và an toàn:
  * - Không bị lỗi khi JSON bắt đầu bằng `"due_sla_notified":true`
  * - Giữ nguyên checklist, recurrence, link, cờ SLA
  * - Tự động làm sạch và phục hồi định dạng văn bản cho description
+ * - Có bộ nhớ đệm (LRU cache) để tối ưu hiệu năng 0ms khi duyệt danh sách công việc lớn
  */
 export function parseTaskBody(rawBody: string | null | undefined): ParsedTaskBody {
   const result: ParsedTaskBody = {
@@ -187,6 +192,9 @@ export function parseTaskBody(rawBody: string | null | undefined): ParsedTaskBod
   };
 
   if (!rawBody) return result;
+
+  const cached = taskBodyCache.get(rawBody);
+  if (cached) return cached;
 
   let currentStr = String(rawBody).trim();
   let parsedJson: any = null;
@@ -273,6 +281,12 @@ export function parseTaskBody(rawBody: string | null | undefined): ParsedTaskBod
   result.description = formatted;
   result.pureDescription = formatted;
 
+  if (taskBodyCache.size >= TASK_BODY_CACHE_LIMIT) {
+    const keysToDelete = Array.from(taskBodyCache.keys()).slice(0, 500);
+    for (const k of keysToDelete) taskBodyCache.delete(k);
+  }
+  taskBodyCache.set(rawBody, result);
+
   return result;
 }
 
@@ -281,6 +295,10 @@ export function parseTaskBody(rawBody: string | null | undefined): ParsedTaskBod
  */
 export function extractCleanCardDescription(rawBody: string | null | undefined): string {
   if (!rawBody) return '';
+
+  const cached = cleanCardDescCache.get(rawBody);
+  if (cached !== undefined) return cached;
+
   const parsed = parseTaskBody(rawBody);
   let desc = parsed.pureDescription || parsed.description || '';
 
@@ -295,6 +313,12 @@ export function extractCleanCardDescription(rawBody: string | null | undefined):
   desc = desc.replace(/\{"due_sla_notified":\s*(?:true|false)[^}]*\}/gi, '');
   desc = desc.replace(/\{"subtask_sla_notified":\s*(?:true|false)[^}]*\}/gi, '');
   desc = desc.replace(/^[\s,{}]+|[\s,{}]+$/g, '').trim();
+
+  if (cleanCardDescCache.size >= TASK_BODY_CACHE_LIMIT) {
+    const keysToDelete = Array.from(cleanCardDescCache.keys()).slice(0, 500);
+    for (const k of keysToDelete) cleanCardDescCache.delete(k);
+  }
+  cleanCardDescCache.set(rawBody, desc);
 
   return desc;
 }

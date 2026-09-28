@@ -37,7 +37,7 @@ interface WorkspaceTaskDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   task: any;
-  onUpdate: () => void;
+  onUpdate: (updatedTask?: any) => void;
   users?: any[];
   onOpenContact?: (contactId: number, initialData?: any) => void;
   embedMode?: boolean;
@@ -146,6 +146,49 @@ export const linkifyHtml = (html: string): string => {
     return html;
   }
 };
+
+const TaskSubjectInput: React.FC<{
+  initialValue: string;
+  onSave: (val: string) => void;
+  onSyncFormData: (val: string) => void;
+  placeholder: string;
+}> = React.memo(({ initialValue, onSave, onSyncFormData, placeholder }) => {
+  const [val, setVal] = useState(initialValue || '');
+  const syncTimeoutRef = useRef<any>(null);
+
+  useEffect(() => {
+    setVal(initialValue || '');
+  }, [initialValue]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const next = e.target.value;
+    setVal(next);
+    if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+    syncTimeoutRef.current = setTimeout(() => {
+      onSyncFormData(next);
+    }, 200);
+  };
+
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+    onSyncFormData(e.target.value);
+    if (e.target.value !== initialValue) {
+      onSave(e.target.value);
+    }
+  };
+
+  return (
+    <input
+      type="text"
+      className="form-input"
+      value={val}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      placeholder={placeholder}
+      style={{ fontSize: '0.85rem', fontWeight: 700, padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--color-border)' }}
+    />
+  );
+});
 
 export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({ 
   isOpen, 
@@ -388,24 +431,36 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       const taskId = task.id;
       setLoadingMute(true);
       
-      // Parallelize background status queries in a single batch
-      Promise.allSettled([
-        api.get(`/activities/${taskId}/mute-status`),
-        api.get(`/activities/${taskId}/hide-status`),
-        api.get(`/activities/${taskId}/subtasks-comment-counts`)
-      ]).then(([muteRes, hideRes, subtaskRes]) => {
-        if (muteRes.status === 'fulfilled' && muteRes.value.data?.success) {
-          setIsMuted(!!muteRes.value.data.is_muted);
-        }
-        if (hideRes.status === 'fulfilled' && hideRes.value.data?.success) {
-          setIsHidden(!!hideRes.value.data.is_hidden);
-        }
-        if (subtaskRes.status === 'fulfilled' && subtaskRes.value.data?.success) {
-          setSubtaskCommentCounts(subtaskRes.value.data.data || {});
-        }
-      }).catch(err => {
-        console.error("Lỗi lấy trạng thái hoạt động:", err);
-      }).finally(() => {
+      const promises: Promise<any>[] = [];
+      if (task.is_muted !== undefined) {
+        setIsMuted(Boolean(task.is_muted));
+      } else {
+        promises.push(
+          api.get(`/activities/${taskId}/mute-status`).then(res => {
+            if (res.data?.success) setIsMuted(!!res.data.is_muted);
+          }).catch(() => {})
+        );
+      }
+
+      if (task.is_hidden !== undefined) {
+        setIsHidden(Boolean(task.is_hidden));
+      } else {
+        promises.push(
+          api.get(`/activities/${taskId}/hide-status`).then(res => {
+            if (res.data?.success) setIsHidden(!!res.data.is_hidden);
+          }).catch(() => {})
+        );
+      }
+
+      promises.push(
+        api.get(`/activities/${taskId}/subtasks-comment-counts`).then(res => {
+          if (res.data) {
+            setSubtaskCommentCounts(res.data.data || res.data || {});
+          }
+        }).catch(() => {})
+      );
+
+      Promise.allSettled(promises).finally(() => {
         setLoadingMute(false);
       });
     }
@@ -466,7 +521,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         if (res.data && res.data.success) {
           setIsHidden(res.data.is_hidden);
           toast.success(res.data.message);
-          onUpdate();
+          if (onUpdate) onUpdate({ ...task, ...formData, is_hidden: res.data.is_hidden });
         }
       })
       .catch(err => {
@@ -957,7 +1012,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   taskRef.current = task;
 
   // Load contacts with cache (stable callback)
-  const fetchContactsList = useCallback(async (preferredContactId?: number | string | null) => {
+  const fetchContactsList = useCallback(async (preferredContactId?: number | string | null, forceFull: boolean = false) => {
     const now = Date.now();
     const currentFd = formDataRef.current;
     const currentT = taskRef.current;
@@ -966,6 +1021,34 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       (currentFd.related_type === 'contact' ? currentFd.related_id : null) || 
       currentT?.contact_id || 
       (currentT?.related_type === 'contact' ? currentT?.related_id : null);
+
+    // Fast-path: When opening a drawer with an activeContactId, fetch ONLY that contact in ~30ms (<1KB)
+    if (activeContactId && !forceFull) {
+      if (cachedContacts?.data?.length) {
+        const found = cachedContacts.data.find((c: any) => Number(c.id) === Number(activeContactId));
+        if (found) {
+          setContacts(cachedContacts.data);
+          setLoadingContacts(false);
+          return;
+        }
+      }
+      setLoadingContacts(true);
+      try {
+        const singleRes = await api.get(`/contacts/${activeContactId}`);
+        const cObj = singleRes.data?.data || singleRes.data;
+        if (cObj && cObj.id) {
+          setContacts(prev => {
+            if (prev.some((c: any) => Number(c.id) === Number(cObj.id))) return prev;
+            return [cObj, ...prev];
+          });
+        }
+      } catch (err) {
+        console.error("Lỗi tải contact chi tiết:", err);
+      } finally {
+        setLoadingContacts(false);
+      }
+      return;
+    }
 
     const applyContacts = async (initialList: any[]) => {
       let list = [...initialList];
@@ -1050,8 +1133,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       const res = await api.delete(`/activities/comments/${commentId}`);
       if (res.data && (res.data.success || res.status === 200)) {
         await loadComments(Number(task.id));
-        await loadTimeline(Number(task.id));
-        if (onUpdate) onUpdate();
+        if (activeTab === 'timeline') await loadTimeline(Number(task.id));
+        if (onUpdate) onUpdate({ ...task, ...formData, comment_count: Math.max(0, Number(formData.comment_count || task.comment_count || 1) - 1) });
         toast.success(t('Đã xóa bình luận!'));
       } else {
         toast.error(res.data?.message || t('Không thể xóa bình luận'));
@@ -1081,6 +1164,13 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       setLoadingTimeline(false);
     }
   };
+
+  // Lazy-load timeline only when user switches to 'timeline' tab
+  useEffect(() => {
+    if (isOpen && activeTab === 'timeline' && task?.id && task.id !== 'new') {
+      loadTimeline(Number(task.id));
+    }
+  }, [isOpen, activeTab, task?.id]);
 
   const loadSubtaskComments = async (taskId: number, subtaskId: string) => {
     setLoadingSubtaskComments(true);
@@ -1295,15 +1385,19 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         setIsCustomerLinked(true);
       }
 
-      if (hasInitialCustomer) {
+      if (hasInitialCustomer && !isSameTask) {
         fetchContactsList(normalizedTask.contact_id || (normalizedTask.related_type === 'contact' ? normalizedTask.related_id : null));
       }
 
       setChecklistPage(1);
       setCampaignTarget(parsedMeta.campaign_target || '');
       if (normalizedTask.id !== 'new') {
-        loadComments(normalizedTask.id);
-        loadTimeline(normalizedTask.id);
+        if (!isSameTask) {
+          loadComments(normalizedTask.id);
+          if (activeTab === 'timeline') {
+            loadTimeline(normalizedTask.id);
+          }
+        }
       } else {
         setComments([]);
         setTimeline([]);
@@ -1553,7 +1647,9 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         }));
 
         unpinIfDone(updatedFormData.status, updatedFormData.progress);
-        onUpdate();
+        const nextDetail = { id: task.id, ...updatedFormData, body: bodyPayload, progress: currentProgress };
+        window.dispatchEvent(new CustomEvent('task-local-updated', { detail: nextDetail }));
+        if (onUpdate) onUpdate(nextDetail);
       }
     } catch (e: any) {
       toast.error(t('Lỗi lưu thay đổi: ') + e.message);
@@ -1720,8 +1816,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
           }
 
           unpinIfDone(formData.status, formData.progress);
+          const nextDetail = { id: task.id, ...formData, body: bodyPayload };
+          window.dispatchEvent(new CustomEvent('task-local-updated', { detail: nextDetail }));
           // Background non-blocking sync
-          setTimeout(() => onUpdate(), 50);
+          setTimeout(() => { if (onUpdate) onUpdate(nextDetail); }, 50);
         } else {
           setIsSaving(false);
           toast.error(res?.data?.message || t('Không thể lưu công việc'));
@@ -1825,7 +1923,9 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
           return nextData;
         });
-        onUpdate();
+        const nextDetail = { id: task.id, ...formData, [field]: value };
+        window.dispatchEvent(new CustomEvent('task-local-updated', { detail: nextDetail }));
+        if (onUpdate) onUpdate(nextDetail);
         loadTimeline(task.id);
       }
     } catch (e: any) {
@@ -2222,8 +2322,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
           setFormData((prev: any) => ({ ...prev, participant_ids: res.data.data.participant_ids }));
         }
         await loadComments(Number(task.id));
-        await loadTimeline(Number(task.id));
-        if (onUpdate) onUpdate();
+        if (activeTab === 'timeline') await loadTimeline(Number(task.id));
+        if (onUpdate) onUpdate({ ...task, ...formData, comment_count: Number(formData.comment_count || task.comment_count || 0) + 1 });
         toast.success(t('Đã thêm bình luận!'));
       }
     } catch (e: any) {
@@ -2316,7 +2416,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         }
         loadSubtaskComments(Number(task.id), selectedSubtask.id);
         loadSubtaskCommentCounts();
-        if (onUpdate) onUpdate();
+        if (onUpdate) onUpdate({ ...task, ...formData });
         toast.success(t('Đã thêm bình luận việc con!'));
       }
     } catch (e: any) {
@@ -3180,14 +3280,11 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
               <label style={cardLabelStyle}>
                 {t('Tên công việc')}
               </label>
-              <input
-                type="text"
-                className="form-input"
-                value={formData.subject || ''}
-                onChange={(e) => setFormData((prev: any) => ({ ...prev, subject: e.target.value }))}
-                onBlur={(e) => handleUpdateField('subject', e.target.value)}
+              <TaskSubjectInput
+                initialValue={formData.subject || ''}
+                onSave={(val) => handleUpdateField('subject', val)}
+                onSyncFormData={(val) => setFormData((prev: any) => ({ ...prev, subject: val }))}
                 placeholder={t('Nhập tên công việc...')}
-                style={{ fontSize: '0.85rem', fontWeight: 700, padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--color-border)' }}
               />
             </div>
 
@@ -5642,14 +5739,14 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                             await api.put(`/activities/${task.id}`, { status: 'done', progress: 100 });
                             setFormData((prev: any) => ({ ...prev, status: 'done', progress: 100 }));
                             triggerLocalConfetti();
-                            onUpdate();
+                            if (onUpdate) onUpdate({ ...task, ...formData, status: 'done', progress: 100 });
                             showUndoToast({
                               message: t('Đã cập nhật trạng thái lịch hẹn thành công'),
                               subMessage: t('Bấm để hoàn tác nếu bạn thao tác nhầm'),
                               onUndo: async () => {
                                 await api.put(`/activities/${task.id}`, { status: prevStatus, progress: prevProgress });
                                 setFormData((prev: any) => ({ ...prev, status: prevStatus, progress: prevProgress }));
-                                onUpdate();
+                                if (onUpdate) onUpdate({ ...task, ...formData, status: prevStatus, progress: prevProgress });
                               }
                             });
                           } else {
@@ -5700,7 +5797,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                               const payload = { due_date: formatted, status: 'open', progress: 0 };
                               await api.put(`/activities/${task.id}`, payload);
                               setFormData((prev: any) => ({ ...prev, due_date: formatted, status: 'open', progress: 0 }));
-                              onUpdate();
+                              if (onUpdate) onUpdate({ ...task, ...formData, ...payload });
                               toast.success(t('Đã dời lịch hẹn thành công'));
                             } catch (err) {
                               toast.error(t('Lỗi khi dời lịch hẹn'));
@@ -5837,7 +5934,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                             ...(isContactRelated ? { related_id: null, related_type: null } : {}),
                             body: JSON.stringify(payloadObj)
                           });
-                          onUpdate();
+                          if (onUpdate) onUpdate({ ...task, ...formData, contact_id: null, ...(isContactRelated ? { related_id: null, related_type: null } : {}) });
                         } catch (e: any) {
                           toast.error(t('Lỗi gỡ liên kết khách hàng: ') + (e.message || ''));
                         }
@@ -5999,7 +6096,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                   related_type: contactIdVal ? 'contact' : null
                                 } : {})
                               });
-                              onUpdate();
+                              if (onUpdate) onUpdate({ ...task, ...nextFormData });
                             } catch (e: any) {
                               toast.error(t('Lỗi cập nhật khách hàng liên kết: ') + e.message);
                             }
@@ -6161,7 +6258,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                             setFormData((prev: any) => ({ ...prev, approval_status: 'approved', status: 'done' }));
                             triggerLocalConfetti();
                             toast.success(t('Đã phê duyệt hoàn thành công việc! 🎉'));
-                            onUpdate();
+                            if (onUpdate) onUpdate({ ...task, ...formData, approval_status: 'approved', status: 'done' });
                           }
                         } catch (e: any) {
                           toast.error(t('Lỗi phê duyệt: ') + e.message);
@@ -6183,7 +6280,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                           if (res.data && res.data.success) {
                             setFormData((prev: any) => ({ ...prev, approval_status: 'rejected', progress: 90 }));
                             toast.success(t('Đã từ chối phê duyệt hoàn thành.'));
-                            onUpdate();
+                            if (onUpdate) onUpdate({ ...task, ...formData, approval_status: 'rejected', progress: 90 });
                           }
                         } catch (e: any) {
                           toast.error(t('Lỗi từ chối: ') + e.message);
@@ -6226,7 +6323,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     if (task.id !== 'new') {
                       try {
                         await api.put(`/activities/${task.id}`, nextData);
-                        onUpdate();
+                        if (onUpdate) onUpdate({ ...task, ...formData, ...nextData });
                       } catch (e: any) {
                         toast.error(t('Lỗi cập nhật yêu cầu phê duyệt: ') + e.message);
                       }
@@ -6275,7 +6372,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                       if (task.id !== 'new') {
                         try {
                           await api.put(`/activities/${task.id}`, nextData);
-                          onUpdate();
+                          if (onUpdate) onUpdate({ ...task, ...formData, ...nextData });
                         } catch (e: any) {
                           toast.error(t('Lỗi cập nhật người phê duyệt: ') + e.message);
                         }
@@ -6730,7 +6827,6 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                   const newType = String(val);
                   setFormData((prev: any) => ({ ...prev, type: newType }));
                   await handleUpdateField('type', newType);
-                  onUpdate();
                   toast.success(t('Đã thay đổi phân loại công việc'));
                 }}
               />
@@ -6749,7 +6845,6 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     onClick={async () => {
                       setFormData((prev: any) => ({ ...prev, task_group_id: null, task_group_name: null }));
                       await handleUpdateField('task_group_id', null);
-                      onUpdate();
                       toast.success(t('Đã chuyển thành chưa phân nhóm'));
                     }}
                     style={{ border: 'none', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '0.72rem', padding: '0 4px' }}
@@ -6789,7 +6884,6 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     task_group_color: chosenGroup ? chosenGroup.color : null
                   }));
                   await handleUpdateField('task_group_id', newGId);
-                  onUpdate();
                   toast.success(t('Đã chuyển nhóm công việc'));
                 }}
               />
@@ -7964,7 +8058,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                           triggerLocalConfetti();
 
                           setFormData((prev: any) => ({ ...prev, status: 'done', progress: 100 }));
-                          onUpdate();
+                          if (onUpdate) onUpdate({ ...task, ...formData, status: 'done', progress: 100 });
                           setMeetingToComplete(null);
                           showUndoToast({
                             message: t('Đã tải ảnh minh chứng và hoàn thành gặp gỡ'),
@@ -7972,7 +8066,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                             onUndo: async () => {
                               await api.put(`/activities/${task.id}`, { status: prevStatus, progress: prevProgress });
                               setFormData((prev: any) => ({ ...prev, status: prevStatus, progress: prevProgress }));
-                              onUpdate();
+                              if (onUpdate) onUpdate({ ...task, ...formData, status: prevStatus, progress: prevProgress });
                             }
                           });
                         } catch (e: any) {
@@ -8066,7 +8160,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                           });
                           toast.success(t('Đã hủy lịch hẹn thành công'));
                           setFormData((prev: any) => ({ ...prev, status: 'cancelled', progress: 0 }));
-                          onUpdate();
+                          if (onUpdate) onUpdate({ ...task, ...formData, status: 'cancelled', progress: 0 });
                           setCancellingMeeting(null);
                         } catch (e: any) {
                           toast.error('Lỗi khi hủy gặp gỡ');

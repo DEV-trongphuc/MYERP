@@ -840,7 +840,7 @@ export const Header = ({
 
         navigate(targetLink, { state: { timestamp: Date.now(), openDrawer: true, openId: numOpenId || undefined, openType } });
 
-        if (openId && !isNaN(numOpenId) && numOpenId > 0) {
+        if (openId && !isNaN(numOpenId) && numOpenId > 0 && window.location.pathname.startsWith('/approvals')) {
           window.dispatchEvent(new CustomEvent('open-approval-drawer', {
             detail: { id: numOpenId, type: openType, status: openStatus || undefined }
           }));
@@ -901,9 +901,11 @@ export const Header = ({
       const openId = notif.entity_id || notif.expense_id || notif.approval_id;
       const openType = notifType === 'leave' ? 'leave' : 'expense';
       if (openId && !isNaN(Number(openId))) {
-        window.dispatchEvent(new CustomEvent('open-approval-drawer', {
-          detail: { id: Number(openId), type: openType }
-        }));
+        if (window.location.pathname.startsWith('/approvals')) {
+          window.dispatchEvent(new CustomEvent('open-approval-drawer', {
+            detail: { id: Number(openId), type: openType }
+          }));
+        }
         navigate(`/approvals?open_type=${openType}&open_id=${openId}`);
         return;
       }
