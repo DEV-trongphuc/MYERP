@@ -1407,6 +1407,27 @@ export const WorkChatModal: React.FC = () => {
     return map;
   }, [activeConversation, currentMessages, user?.id]);
 
+  // Find latest message sent by current user to only display status indicator once at the bottom
+  const lastSentMsgId = useMemo(() => {
+    const myId = Number(user?.id || (user as any)?.user_id || 0);
+    for (let i = currentMessages.length - 1; i >= 0; i--) {
+      const m = currentMessages[i];
+      const isMine = Boolean(m.is_mine) || (myId > 0 && Number(m.sender_id) === myId);
+      if (isMine && !m.deleted_at && m.message_type !== 'system_event') {
+        return m.id;
+      }
+    }
+    return null;
+  }, [currentMessages, user?.id]);
+
+  // Helper to set replying state and auto-focus composer input
+  const handleTriggerReply = (targetMsg: ChatMessage) => {
+    setReplyingTo(targetMsg);
+    setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 60);
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -2735,6 +2756,16 @@ export const WorkChatModal: React.FC = () => {
                       const canRecall = !isRecalled && (isMine || isGroupAdmin);
 
                       // Smart Burst Grouping: Same sender within 5 minutes (< 300s)
+                      const prevMsg = visibleMessages[index - 1];
+                      const isSameSenderAsPrev = Boolean(
+                        prevMsg &&
+                        prevMsg.message_type !== 'system_event' &&
+                        Number(prevMsg.sender_id) === Number(msg.sender_id)
+                      );
+                      const timeDiffPrevMs = prevMsg ? Math.abs(new Date(msg.created_at).getTime() - new Date(prevMsg.created_at).getTime()) : Infinity;
+                      const isWithin5MinWithPrev = timeDiffPrevMs < 5 * 60 * 1000;
+                      const isFirstInBurst = !isSameSenderAsPrev || !isWithin5MinWithPrev;
+
                       const nextMsg = visibleMessages[index + 1];
                       const isSameSenderAsNext = Boolean(
                         nextMsg &&
@@ -2749,7 +2780,25 @@ export const WorkChatModal: React.FC = () => {
                         isWithin5MinWithNext &&
                         new Date(msg.created_at).getMinutes() === new Date(nextMsg.created_at).getMinutes()
                       );
-                      const showTimestamp = isLastInBurst || !isSameMinuteAsNext || hoveredMsgId === msg.id;
+
+                      // Fixed timestamp without layout jump on hover
+                      const showTimestamp = isLastInBurst || !isSameMinuteAsNext;
+
+                      // Messenger-style dynamic border-radius matching consecutive messages
+                      const bubbleBorderRadius = (() => {
+                        const isSingle = isFirstInBurst && isLastInBurst;
+                        if (isMine) {
+                          if (isSingle) return '18px 18px 18px 18px';
+                          if (isFirstInBurst) return '18px 18px 4px 18px';
+                          if (isLastInBurst) return '18px 4px 18px 18px';
+                          return '18px 4px 4px 18px'; // middle in burst
+                        } else {
+                          if (isSingle) return '18px 18px 18px 18px';
+                          if (isFirstInBurst) return '18px 18px 18px 4px';
+                          if (isLastInBurst) return '4px 18px 18px 18px';
+                          return '4px 18px 18px 4px'; // middle in burst
+                        }
+                      })();
 
                       if (msg.message_type === 'system_event') {
                         const isTaskEvent = msg.metadata?.event_type === 'task_created';
@@ -2937,7 +2986,7 @@ export const WorkChatModal: React.FC = () => {
                                     </button>
                                   ))}
                                   <button
-                                    onClick={() => setReplyingTo(msg)}
+                                    onClick={() => handleTriggerReply(msg)}
                                     style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '2px 4px' }}
                                     title="Trả lời"
                                   >
@@ -3000,19 +3049,19 @@ export const WorkChatModal: React.FC = () => {
                                   onClick={() => handleJumpToMessage(msg.reply_to_id)}
                                   style={{
                                     cursor: 'pointer',
-                                    background: isMine ? 'rgba(255, 255, 255, 0.25)' : '#e2e8f0',
-                                    padding: '4px 10px',
-                                    borderRadius: '8px 8px 0 0',
-                                    fontSize: '0.72rem',
-                                    borderLeft: '3px solid #dc2626',
-                                    color: isMine ? '#ffffff' : '#475569',
+                                    background: isMine ? 'rgba(0, 0, 0, 0.22)' : '#f1f5f9',
+                                    padding: '5px 10px',
+                                    borderRadius: '10px 10px 0 0',
+                                    fontSize: '0.74rem',
+                                    borderLeft: isMine ? '3px solid #ffffff' : '3px solid #2563eb',
+                                    color: isMine ? '#ffffff' : '#334155',
                                     marginBottom: '-2px',
                                     transition: 'opacity 0.15s ease'
                                   }}
                                   title="Bấm để cuộn đến tin nhắn gốc"
                                 >
-                                  <span style={{ fontWeight: 700 }}>{msg.reply_sender_name || 'Trả lời'}: </span>
-                                  <span>{msg.reply_content}</span>
+                                  <span style={{ fontWeight: 700, color: isMine ? '#ffffff' : '#1e293b' }}>{msg.reply_sender_name || 'Trả lời'}: </span>
+                                  <span style={{ opacity: isMine ? 0.95 : 0.85 }}>{msg.reply_content}</span>
                                 </div>
                               )}
 
@@ -3026,7 +3075,7 @@ export const WorkChatModal: React.FC = () => {
                                   }}
                                   style={{
                                     padding: '7px 12px',
-                                    borderRadius: isMine ? '14px 14px 2px 14px' : '14px 14px 14px 2px',
+                                    borderRadius: bubbleBorderRadius,
                                     background: 'rgba(241, 245, 249, 0.88)',
                                     border: '1.5px dashed #cbd5e1',
                                     color: '#94a3b8',
@@ -3099,6 +3148,7 @@ export const WorkChatModal: React.FC = () => {
                                 </div>
                               ) : (
                                 <div 
+                                  title={new Date(msg.created_at).toLocaleString('vi-VN')}
                                   onContextMenu={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
@@ -3110,7 +3160,7 @@ export const WorkChatModal: React.FC = () => {
                                     : msg.message_type === 'file'
                                       ? '4px'
                                       : '10px 14px',
-                                  borderRadius: isMine ? '16px 16px 2px 16px' : '16px 16px 16px 2px',
+                                  borderRadius: (msg.message_type === 'sticker' || msg.message_type === 'erp_card' || (msg.message_type === 'image' && (!msg.content || msg.content === msg.metadata?.file_name))) ? '10px' : bubbleBorderRadius,
                                   background: (msg.message_type === 'sticker' || msg.message_type === 'erp_card') 
                                     ? 'transparent'
                                     : (msg.message_type === 'image' && (!msg.content || msg.content === msg.metadata?.file_name))
@@ -3821,7 +3871,7 @@ export const WorkChatModal: React.FC = () => {
                           </div>
 
                           {/* Time & Delivery Status Indicator */}
-                          {(showTimestamp || Boolean(msg.is_edited) || (isMine && !isRecalled && isLastInBurst)) && (
+                          {(showTimestamp || Boolean(msg.is_edited) || (isMine && !isRecalled && (msg.id === lastSentMsgId))) && (
                             <div style={{
                               fontSize: '0.66rem',
                               color: '#94a3b8',
@@ -3838,7 +3888,7 @@ export const WorkChatModal: React.FC = () => {
                                 <span style={{ fontStyle: 'italic', opacity: 0.85 }}>(đã sửa)</span>
                               )}
 
-                              {isMine && !isRecalled && isLastInBurst && (() => {
+                              {isMine && !isRecalled && (msg.id === lastSentMsgId) && (() => {
                                 const isSending = Boolean(msg.is_sending || msg.delivery_status === 'sending');
                                 const isError = msg.delivery_status === 'error';
 
@@ -3956,7 +4006,8 @@ export const WorkChatModal: React.FC = () => {
 
                           {/* SEEN AVATARS PILL (MESSENGER STYLE) - ONLY DISPLAY AT THE EXACT LATEST READ MESSAGE */}
                           {(() => {
-                            const seenUsers = participantReadMsgMap.get(msg.id) || [];
+                            const rawSeen = participantReadMsgMap.get(msg.id) || [];
+                            const seenUsers = rawSeen.filter((su: any) => Number(su.id) !== Number(msg.sender_id));
                             if (seenUsers.length === 0) return null;
 
                             const tooltipText = "Đã xem bởi: " + seenUsers.map((su: any) => {
@@ -3969,6 +4020,7 @@ export const WorkChatModal: React.FC = () => {
                             return (
                               <div
                                 title={tooltipText}
+                                onClick={() => setSelectedSeenDetailMessage(msg)}
                                 style={{
                                   display: 'flex',
                                   alignItems: 'center',
@@ -4849,9 +4901,10 @@ export const WorkChatModal: React.FC = () => {
       {selectedSeenDetailMessage && (() => {
         const msgId = selectedSeenDetailMessage.id;
         const currentUserId = Number(user?.id || (user as any)?.user_id || 0);
+        const senderId = Number(selectedSeenDetailMessage.sender_id || 0);
         const seenList = (activeConversation?.participants || []).filter((p: any) => {
           const uid = Number(p.user_id || p.id);
-          if (uid === currentUserId) return false;
+          if (uid === currentUserId || uid === senderId) return false;
           return Number(p.last_read_message_id || 0) >= msgId;
         }).map((p: any) => ({
           id: Number(p.user_id || p.id),
@@ -5428,7 +5481,7 @@ export const WorkChatModal: React.FC = () => {
 
           const seenUsers = pList.filter((p: any) => {
             const pUid = Number(p.user_id || p.id || 0);
-            if (pUid === myId) return false;
+            if (pUid === myId || pUid === Number(fMsg.sender_id)) return false;
             const pReadId = Number(p.last_read_message_id || 0);
             return pReadId >= fMsg.id;
           }).map((p: any) => ({
@@ -5756,7 +5809,7 @@ export const WorkChatModal: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => {
-                        setReplyingTo(fMsg);
+                        handleTriggerReply(fMsg);
                         setFloatingMenu(null);
                       }}
                       style={{

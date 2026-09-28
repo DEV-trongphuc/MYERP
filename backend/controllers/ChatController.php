@@ -782,13 +782,20 @@ class ChatController {
                 WHERE conversation_id = ? AND user_id = ?
             ")->execute([$msgId, $conversationId, $uid]);
 
-            // If image or file, auto register into vault
-            if (in_array($messageType, ['image', 'file'], true) && !empty($metadata['url'])) {
-                $category = ($messageType === 'image') ? 'image' : 'document';
-                $fName = $metadata['file_name'] ?? ($messageType === 'image' ? 'photo.jpg' : 'document.bin');
+            // If image, file, or video, auto register into vault
+            if (in_array($messageType, ['image', 'file', 'video'], true) && !empty($metadata['url'])) {
+                $fName = $metadata['file_name'] ?? ($messageType === 'image' ? 'photo.jpg' : ($messageType === 'video' ? 'video.mp4' : 'file.bin'));
                 $fUrl = $metadata['url'];
                 $fSize = (int)($metadata['file_size'] ?? 0);
                 $mime = $metadata['mime_type'] ?? '';
+                $ext = strtolower(pathinfo($fName, PATHINFO_EXTENSION));
+
+                $category = 'document';
+                if ($messageType === 'image' || in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'heic'], true) || (is_string($mime) && str_starts_with($mime, 'image/'))) {
+                    $category = 'image';
+                } elseif ($messageType === 'video' || in_array($ext, ['mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v'], true) || (is_string($mime) && str_starts_with($mime, 'video/'))) {
+                    $category = 'video';
+                }
 
                 $stmtVault = $this->db->prepare("
                     INSERT INTO chat_attachments_vault (tenant_id, conversation_id, message_id, uploader_id, category, file_name, file_url, file_size, mime_type)
@@ -2097,15 +2104,15 @@ class ChatController {
                 $this->db->prepare("
                     INSERT IGNORE INTO chat_attachments_vault (tenant_id, conversation_id, message_id, uploader_id, category, file_name, file_url, file_size, created_at)
                     SELECT cm.tenant_id, cm.conversation_id, cm.id, cm.sender_id,
-                           IF(cm.message_type = 'image', 'image', 'document'),
-                           COALESCE(JSON_UNQUOTE(JSON_EXTRACT(cm.metadata, '$.file_name')), IF(cm.message_type = 'image', 'photo.jpg', 'document.bin')),
+                           IF(cm.message_type = 'image', 'image', IF(cm.message_type = 'video' OR LOWER(RIGHT(JSON_UNQUOTE(JSON_EXTRACT(cm.metadata, '$.url')), 4)) IN ('.mp4','.mov','.ogg','.m4v') OR LOWER(RIGHT(JSON_UNQUOTE(JSON_EXTRACT(cm.metadata, '$.url')), 5)) = '.webm', 'video', 'document')),
+                           COALESCE(JSON_UNQUOTE(JSON_EXTRACT(cm.metadata, '$.file_name')), IF(cm.message_type = 'image', 'photo.jpg', IF(cm.message_type = 'video', 'video.mp4', 'document.bin'))),
                            JSON_UNQUOTE(JSON_EXTRACT(cm.metadata, '$.url')),
                            COALESCE(JSON_EXTRACT(cm.metadata, '$.file_size'), 0),
                            cm.created_at
                     FROM chat_messages cm
                     LEFT JOIN chat_attachments_vault v ON cm.id = v.message_id
                     WHERE cm.conversation_id = ? AND cm.tenant_id = ?
-                      AND cm.message_type IN ('image', 'file')
+                      AND cm.message_type IN ('image', 'file', 'video')
                       AND cm.deleted_at IS NULL
                       AND cm.metadata IS NOT NULL
                       AND JSON_EXTRACT(cm.metadata, '$.url') IS NOT NULL

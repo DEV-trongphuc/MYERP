@@ -215,6 +215,112 @@ const PostCommentBox: React.FC<PostCommentBoxProps> = ({
   );
 };
 
+// ── Feed Skeleton Loaders ──
+const FeedSkeletonItem: React.FC<{ width?: string | number; height?: string | number; borderRadius?: string | number; style?: React.CSSProperties }> = ({
+  width = '100%',
+  height = '16px',
+  borderRadius = '8px',
+  style = {}
+}) => (
+  <div
+    style={{
+      width,
+      height,
+      borderRadius,
+      background: 'linear-gradient(90deg, rgba(226, 232, 240, 0.6) 25%, rgba(241, 245, 249, 0.95) 37%, rgba(226, 232, 240, 0.6) 63%)',
+      backgroundSize: '400% 100%',
+      animation: 'feedSkeletonShimmer 1.5s ease-in-out infinite',
+      flexShrink: 0,
+      ...style
+    }}
+  />
+);
+
+const PostSkeletonCard: React.FC = () => (
+  <div
+    style={{
+      background: 'var(--color-surface)',
+      borderRadius: '16px',
+      border: '1px solid var(--color-border-light)',
+      padding: '1.25rem',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '14px',
+      boxShadow: 'var(--shadow-sm)'
+    }}
+  >
+    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+      <FeedSkeletonItem width={40} height={40} borderRadius="50%" />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
+        <FeedSkeletonItem width="140px" height="14px" />
+        <FeedSkeletonItem width="90px" height="11px" />
+      </div>
+    </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      <FeedSkeletonItem width="100%" height="13px" />
+      <FeedSkeletonItem width="88%" height="13px" />
+      <FeedSkeletonItem width="60%" height="13px" />
+    </div>
+    <FeedSkeletonItem width="100%" height="220px" borderRadius="12px" />
+    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--color-border-light)', paddingTop: '10px', marginTop: '4px' }}>
+      <FeedSkeletonItem width="80px" height="24px" borderRadius="20px" />
+      <FeedSkeletonItem width="80px" height="24px" borderRadius="20px" />
+      <FeedSkeletonItem width="80px" height="24px" borderRadius="20px" />
+    </div>
+  </div>
+);
+
+const HonorSkeletonCard: React.FC = () => (
+  <div
+    style={{
+      background: 'linear-gradient(135deg, rgba(220, 38, 38, 0.82) 0%, rgba(153, 27, 27, 0.92) 100%)',
+      borderRadius: '16px',
+      padding: '1.25rem',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      gap: '12px',
+      boxShadow: 'var(--shadow-md)',
+      position: 'relative',
+      overflow: 'hidden'
+    }}
+  >
+    <div
+      style={{
+        width: '130px',
+        height: '20px',
+        borderRadius: '10px',
+        background: 'rgba(255, 255, 255, 0.25)',
+        animation: 'feedSkeletonShimmer 1.5s ease-in-out infinite'
+      }}
+    />
+    <div
+      style={{
+        width: 60,
+        height: 60,
+        borderRadius: '50%',
+        background: 'rgba(255, 255, 255, 0.3)',
+        animation: 'feedSkeletonShimmer 1.5s ease-in-out infinite'
+      }}
+    />
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', width: '100%' }}>
+      <div style={{ width: '130px', height: '14px', borderRadius: '6px', background: 'rgba(255, 255, 255, 0.25)', animation: 'feedSkeletonShimmer 1.5s ease-in-out infinite' }} />
+      <div style={{ width: '90px', height: '11px', borderRadius: '6px', background: 'rgba(255, 255, 255, 0.2)', animation: 'feedSkeletonShimmer 1.5s ease-in-out infinite' }} />
+    </div>
+    <div style={{ width: '100px', height: '28px', borderRadius: '16px', background: 'rgba(255, 255, 255, 0.2)', animation: 'feedSkeletonShimmer 1.5s ease-in-out infinite' }} />
+  </div>
+);
+
+const CommentSkeletonItem: React.FC = () => (
+  <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+    <FeedSkeletonItem width={28} height={28} borderRadius="50%" />
+    <div style={{ flex: 1, background: 'var(--color-bg)', padding: '10px 12px', borderRadius: '12px', border: '1px solid var(--color-border-light)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      <FeedSkeletonItem width="100px" height="11px" />
+      <FeedSkeletonItem width="75%" height="12px" />
+    </div>
+  </div>
+);
+
 export const EnterpriseFeed: React.FC = () => {
   const { user } = useAuth();
   const { t } = useLanguage();
@@ -285,6 +391,7 @@ export const EnterpriseFeed: React.FC = () => {
   // Active Post Comments Drawers
   const [activeCommentsPostId, setActiveCommentsPostId] = useState<number | null>(null);
   const [commentsMap, setCommentsMap] = useState<Record<number, Comment[]>>({});
+  const [loadingCommentsMap, setLoadingCommentsMap] = useState<Record<number, boolean>>({});
   const [newCommentText, setNewCommentText] = useState<Record<number, string>>({});
   const [appendedEmoji, setAppendedEmoji] = useState<{ postId: number; emoji: string; id: number } | null>(null);
   const [replyToCommentId, setReplyToCommentId] = useState<Record<number, number | null>>({});
@@ -363,6 +470,7 @@ export const EnterpriseFeed: React.FC = () => {
     candidates: HonorsUser[];
   }
   const [honorsData, setHonorsData] = useState<HonorsData | null>(null);
+  const [loadingHonors, setLoadingHonors] = useState(false);
   const [showEditHonors, setShowEditHonors] = useState(false);
   const [selectedHonorId, setSelectedHonorId] = useState<number | null>(null);
   const [editHonorsUserId, setEditHonorsUserId] = useState<number | null>(null);
@@ -392,6 +500,7 @@ export const EnterpriseFeed: React.FC = () => {
   };
 
   const fetchHonors = async () => {
+    setLoadingHonors(true);
     try {
       const res = await api.get('/posts/honors');
       if (res.data && res.data.success) {
@@ -408,6 +517,8 @@ export const EnterpriseFeed: React.FC = () => {
       }
     } catch (e) {
       console.error('Error fetching honors', e);
+    } finally {
+      setLoadingHonors(false);
     }
   };
 
@@ -824,6 +935,7 @@ export const EnterpriseFeed: React.FC = () => {
 
   // Load comments for a post
   const loadComments = async (postId: number) => {
+    setLoadingCommentsMap(prev => ({ ...prev, [postId]: true }));
     try {
       const res = await api.get(`/posts/${postId}/comments`);
       if (res.data && res.data.success) {
@@ -834,6 +946,8 @@ export const EnterpriseFeed: React.FC = () => {
       }
     } catch (e) {
       toast.error(t('Không thể tải bình luận'));
+    } finally {
+      setLoadingCommentsMap(prev => ({ ...prev, [postId]: false }));
     }
   };
 
@@ -1372,6 +1486,10 @@ export const EnterpriseFeed: React.FC = () => {
       }}
     >
       <style>{`
+        @keyframes feedSkeletonShimmer {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
         .feed-post-card {
           content-visibility: auto;
           contain-intrinsic-size: 0 420px;
@@ -1733,7 +1851,13 @@ export const EnterpriseFeed: React.FC = () => {
 
       {/* Feed List */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-        {filteredPosts.length === 0 && !loading ? (
+        {loading && posts.length === 0 ? (
+          <>
+            <PostSkeletonCard />
+            <PostSkeletonCard />
+            <PostSkeletonCard />
+          </>
+        ) : filteredPosts.length === 0 && !loading ? (
           <div style={{
             background: 'var(--color-surface)',
             borderRadius: '16px',
@@ -2097,7 +2221,12 @@ export const EnterpriseFeed: React.FC = () => {
 
                     {/* Comments List */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '350px', overflowY: 'auto', paddingRight: '4px' }}>
-                      {(commentsMap[post.id] || []).length === 0 ? (
+                      {loadingCommentsMap[post.id] ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '6px 0' }}>
+                          <CommentSkeletonItem />
+                          <CommentSkeletonItem />
+                        </div>
+                      ) : (commentsMap[post.id] || []).length === 0 ? (
                         <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', textAlign: 'center', padding: '10px 0' }}>
                           {t('Chưa có bình luận nào. Hãy trở thành người đầu tiên!')}
                         </span>
@@ -2432,7 +2561,9 @@ export const EnterpriseFeed: React.FC = () => {
           )}
         </div>
 
-        {honorsData?.honors && honorsData.honors.length > 0 ? (
+        {loadingHonors || !honorsData ? (
+          <HonorSkeletonCard />
+        ) : honorsData?.honors && honorsData.honors.length > 0 ? (
           honorsData.honors.map((hObj) => (
             <div 
               key={hObj.id}

@@ -273,14 +273,44 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({
 
   const isGroup = activeConversation.type === 'group';
 
+  // Merge server vaultItems with active conversation messages to guarantee immediate visibility
+  const combinedVaultItems = React.useMemo(() => {
+    const list = [...vaultItems];
+    const existingUrls = new Set(vaultItems.map((v) => (v.file_url || '').toLowerCase()));
+    
+    // Scan active conversation messages to ensure newly sent or unsynced media always displays
+    convMessages.forEach((m) => {
+      const url = m.metadata?.url || (m.message_type === 'image' ? m.content : '');
+      if (url && typeof url === 'string' && !url.startsWith('/stickers/') && !existingUrls.has(url.toLowerCase())) {
+        const isVid = (m.message_type as string) === 'video' || /\.(mp4|mov|webm|mkv|avi|m4v)(\?.*)?$/i.test(url);
+        const isImg = m.message_type === 'image' || /\.(jpg|jpeg|png|gif|webp|svg|heic)(\?.*)?$/i.test(url);
+        if (isVid || isImg) {
+          existingUrls.add(url.toLowerCase());
+          list.push({
+            id: m.id,
+            message_id: m.id,
+            category: isVid ? 'video' : 'image',
+            file_name: m.metadata?.file_name || (isVid ? 'video.mp4' : 'photo.jpg'),
+            file_url: url,
+            file_size: m.metadata?.file_size || 0,
+            sender_id: m.sender_id,
+            sender_name: m.sender_name || 'Đồng nghiệp',
+            created_at: m.created_at
+          } as any);
+        }
+      }
+    });
+    return list;
+  }, [vaultItems, convMessages]);
+
   // Group vault items (ordered strictly newest to oldest)
-  const mediaItems = vaultItems
+  const mediaItems = combinedVaultItems
     .filter((i) => i.category === 'image' || i.category === 'video')
     .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime() || b.id - a.id);
-  const fileItems = vaultItems
+  const fileItems = combinedVaultItems
     .filter((i) => i.category === 'document')
     .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime() || b.id - a.id);
-  const linkItems = vaultItems
+  const linkItems = combinedVaultItems
     .filter((i) => i.category === 'link')
     .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime() || b.id - a.id);
 
