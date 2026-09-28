@@ -2624,7 +2624,7 @@ export const WorkChatModal: React.FC = () => {
                       padding: '16px',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: '12px',
+                      gap: '0px',
                       background: '#f8fafc'
                     }}
                   >
@@ -2762,7 +2762,14 @@ export const WorkChatModal: React.FC = () => {
                         prevMsg.message_type !== 'system_event' &&
                         Number(prevMsg.sender_id) === Number(msg.sender_id)
                       );
-                      const timeDiffPrevMs = prevMsg ? Math.abs(new Date(msg.created_at).getTime() - new Date(prevMsg.created_at).getTime()) : Infinity;
+                      const parseMsgTime = (val?: string) => {
+                        if (!val) return 0;
+                        const t = new Date(val).getTime();
+                        if (!isNaN(t)) return t;
+                        const fb = new Date(val.replace(/-/g, '/')).getTime();
+                        return isNaN(fb) ? 0 : fb;
+                      };
+                      const timeDiffPrevMs = prevMsg ? Math.abs(parseMsgTime(msg.created_at) - parseMsgTime(prevMsg.created_at)) : Infinity;
                       const isWithin5MinWithPrev = timeDiffPrevMs < 5 * 60 * 1000;
                       const isFirstInBurst = !isSameSenderAsPrev || !isWithin5MinWithPrev;
 
@@ -2772,7 +2779,7 @@ export const WorkChatModal: React.FC = () => {
                         nextMsg.message_type !== 'system_event' &&
                         Number(nextMsg.sender_id) === Number(msg.sender_id)
                       );
-                      const timeDiffNextMs = nextMsg ? Math.abs(new Date(nextMsg.created_at).getTime() - new Date(msg.created_at).getTime()) : Infinity;
+                      const timeDiffNextMs = nextMsg ? Math.abs(parseMsgTime(nextMsg.created_at) - parseMsgTime(msg.created_at)) : Infinity;
                       const isWithin5MinWithNext = timeDiffNextMs < 5 * 60 * 1000;
                       const isLastInBurst = !isSameSenderAsNext || !isWithin5MinWithNext;
                       const isSameMinuteAsNext = Boolean(
@@ -2894,6 +2901,7 @@ export const WorkChatModal: React.FC = () => {
                             position: 'relative',
                             zIndex: activeMenuMsgId === msg.id ? 45 : 1,
                             borderRadius: '12px',
+                            marginTop: index === 0 ? '0px' : (isFirstInBurst ? '10px' : '2px'),
                             transition: 'box-shadow 0.3s ease, background-color 0.3s ease',
                             ...(isMentionedMe ? {
                               borderLeft: '3px solid #f59e0b',
@@ -2940,7 +2948,7 @@ export const WorkChatModal: React.FC = () => {
                           )}
 
                           {/* Sender name for group chats */}
-                          {!isMine && activeConversation.type === 'group' && (
+                          {!isMine && activeConversation.type === 'group' && isFirstInBurst && (
                             <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, marginBottom: '2px', marginLeft: '38px' }}>
                               {msg.sender_name || 'Đồng nghiệp'}
                             </span>
@@ -2948,7 +2956,11 @@ export const WorkChatModal: React.FC = () => {
 
                           <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', maxWidth: '85%' }}>
                             {!isMine && (
-                              <Avatar src={msg.sender_avatar} name={msg.sender_name || 'U'} size={28} />
+                              isLastInBurst ? (
+                                <Avatar src={msg.sender_avatar} name={msg.sender_name || 'U'} size={28} />
+                              ) : (
+                                <div style={{ width: 28, height: 28, flexShrink: 0 }} />
+                              )
                             )}
 
                             <div style={{ position: 'relative', paddingTop: '4px' }}>
