@@ -1,15 +1,20 @@
 # QUY TẮC LÀM VIỆC DỰ ÁN MYERP (AGENTS RULES)
 
 ## 1. Xác nhận trước khi thực hiện (BẮT BUỘC)
-- **Luôn luôn xác nhận với người dùng trước khi bắt đầu thực hiện bất kỳ task mới nào**:
-  - Khi người dùng gửi yêu cầu công việc mới, AI phải tóm tắt lại các điểm chính cần làm, phạm vi ảnh hưởng (frontend, backend, database).
-  - Đặt câu hỏi xác nhận ngắn gọn, rõ ràng để người dùng duyệt trước khi tiến hành viết code hay sửa đổi hệ thống.
-  - Tuyệt đối không tự ý nhảy vào sửa code hoặc chạy migration khi chưa có sự xác nhận của người dùng.
+- Khi nhận yêu cầu mới: Tóm tắt điểm chính cần làm, phạm vi ảnh hưởng (Frontend, Backend, Database).
+- Đặt câu hỏi xác nhận ngắn gọn để người dùng duyệt trước khi viết code hay chỉnh sửa hệ thống.
+- Tuyệt đối không tự ý sửa code hoặc chạy migration khi chưa có sự xác nhận của người dùng.
 
-## 2. Quản lý ngữ cảnh và phân tách task
-- Không nhầm lẫn hoặc lôi các logic/vấn đề của các task cũ đã đóng vào task mới.
-- Mỗi task mới phải được tiếp cận độc lập, rõ ràng theo đúng yêu cầu hiện tại của người dùng.
+## 2. Quy tắc Deploy Production (NGHIÊM NGẶT)
+- **Tuyệt đối không tự ý deploy lên server production (`deploy-myerp.ps1`)**:
+  - Đặc biệt trong giờ hành chính, cơ chế Auto-Update reload trang sẽ làm gián đoạn công việc của nhân sự.
+  - Chỉ thực hiện deploy khi người dùng có yêu cầu/cho phép tường minh bằng lệnh rõ ràng.
+  - Mọi thay đổi và kiểm thử thông thường chỉ thực hiện ở môi trường local và commit/push git khi được yêu cầu.
 
-## 3. Tiêu chuẩn chất lượng
-- Rà soát kỹ lưỡng logic từ UI -> Backend API -> Database -> Đồng bộ công lương/báo cáo liên quan.
+## 3. Quản lý ngữ cảnh và phân tách task
+- Không nhầm lẫn hoặc lôi logic/vấn đề của các task cũ đã đóng vào task mới.
+- Mỗi task mới được tiếp cận độc lập, rõ ràng theo đúng yêu cầu hiện tại.
+
+## 4. Tiêu chuẩn chất lượng
+- Rà soát kỹ lưỡng luồng dữ liệu: UI -> Backend API -> Database -> Báo cáo/Công lương liên quan.
 - Đảm bảo tính toán đồng bộ, không để sai lệch số liệu thực tế.
