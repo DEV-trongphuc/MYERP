@@ -626,16 +626,18 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       return s <= selectedDateForDetail && e >= selectedDateForDetail;
     });
     dayLeaves.forEach(lv => {
+      const isWFH = lv.leave_type === 'remote_work';
+      const isLateEarly = lv.leave_type === 'late_early';
       const isHalfDay = Number(lv.total_days) === 0.5;
       let sessionLabel = t('Cả ngày');
-      if (isHalfDay) {
+      if (isLateEarly) {
+        const isEarly = lv.start_time && lv.start_time >= '12:00';
+        sessionLabel = isEarly ? t('Xin về sớm') : t('Xin đi muộn');
+      } else if (isHalfDay) {
         sessionLabel = (lv.start_time && lv.start_time < '12:00') ? t('Nửa buổi sáng') : t('Nửa buổi chiều');
       } else if (Number(lv.total_days) > 1) {
         sessionLabel = `${lv.total_days} ${t('ngày')} (${lv.start_date_only || String(lv.start_date).slice(0, 10)} → ${lv.end_date_only || String(lv.end_date).slice(0, 10)})`;
       }
-
-      const isWFH = lv.leave_type === 'remote_work';
-      const isLateEarly = lv.leave_type === 'late_early';
       
       let typeName = isHalfDay ? t('Nghỉ nửa buổi') : t('Nghỉ phép');
       let typeColor = isHalfDay ? '#ea580c' : '#f43f5e';
@@ -1230,6 +1232,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   const checkLeaveForDate = (dateStr: string) => {
     if (!dateStr || !calendarLeaves || calendarLeaves.length === 0) return null;
     return calendarLeaves.find((l: any) => {
+      if (l.leave_type === 'late_early') return false;
       const s = l.start_date_only || (l.start_date ? String(l.start_date).split('T')[0] : '');
       const e = l.end_date_only || (l.end_date ? String(l.end_date).split('T')[0] : '');
       const isMatch = dateStr >= s && dateStr <= e;
@@ -2841,9 +2844,10 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                           const holidays = dayShifts.filter(s => s.shift_type === 'holiday');
                           const overtimes = dayShifts.filter(s => s.shift_type === 'overtime');
                           const wfhList = dayLeaves.filter(lv => lv.leave_type === 'remote_work');
-                          const leaveList = dayLeaves.filter(lv => lv.leave_type !== 'remote_work');
+                          const lateEarlyList = dayLeaves.filter(lv => lv.leave_type === 'late_early');
+                          const leaveList = dayLeaves.filter(lv => lv.leave_type !== 'remote_work' && lv.leave_type !== 'late_early');
 
-                          const hasAnyBadges = nights.length > 0 || weekends.length > 0 || holidays.length > 0 || overtimes.length > 0 || wfhList.length > 0 || leaveList.length > 0;
+                          const hasAnyBadges = nights.length > 0 || weekends.length > 0 || holidays.length > 0 || overtimes.length > 0 || wfhList.length > 0 || lateEarlyList.length > 0 || leaveList.length > 0;
                           if (!hasAnyBadges) return null;
 
                           return (
@@ -2933,6 +2937,53 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                                   >
                                     <Home size={10} />
                                     <span>{wfhList.length} WFH</span>
+                                    {pend > 0 && (
+                                      <span style={{ fontSize: '0.55rem', padding: '0 2px', borderRadius: '3px', background: 'rgba(245, 158, 11, 0.2)', color: '#d97706', fontWeight: 800 }}>
+                                        ⏳{pend}
+                                      </span>
+                                    )}
+                                    {appr > 0 && pend === 0 && (
+                                      <span style={{ fontSize: '0.55rem', color: '#10b981', fontWeight: 800 }}>✓</span>
+                                    )}
+                                  </span>
+                                );
+                              })()}
+
+                              {/* Đi muộn / Về sớm */}
+                              {lateEarlyList.length > 0 && (() => {
+                                const appr = lateEarlyList.filter(l => Number(l.approved) === 1 || l.status === 'approved').length;
+                                const pend = lateEarlyList.length - appr;
+                                const tooltip = `⏰ ${t('Đi muộn / Về sớm')} (${lateEarlyList.length} ${t('người')}):\n` +
+                                  lateEarlyList.map(l => {
+                                    const name = l.user_name || l.full_name || t('Nhân viên');
+                                    const isA = Number(l.approved) === 1 || l.status === 'approved';
+                                    const timeStr = (l.start_time && l.end_time) ? ` (${l.start_time}-${l.end_time})` : '';
+                                    const typeStr = (l.start_time && l.start_time >= '12:00') ? t('Về sớm') : t('Đi muộn');
+                                    return `• ${name}: ${typeStr}${timeStr} (${isA ? t('Đã duyệt') : t('Chờ duyệt')})`;
+                                  }).join('\n');
+                                return (
+                                  <span
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenDayDetail(cell.dateStr, 'requests');
+                                    }}
+                                    style={{
+                                      fontSize: '0.62rem',
+                                      padding: '1.5px 5px',
+                                      borderRadius: '5px',
+                                      background: 'rgba(245, 158, 11, 0.12)',
+                                      color: '#d97706',
+                                      border: '1px solid rgba(245, 158, 11, 0.25)',
+                                      fontWeight: 700,
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '3px',
+                                      cursor: 'pointer'
+                                    }}
+                                    title={tooltip}
+                                  >
+                                    <Clock size={10} />
+                                    <span>{lateEarlyList.length} {t('Trễ/Sớm')}</span>
                                     {pend > 0 && (
                                       <span style={{ fontSize: '0.55rem', padding: '0 2px', borderRadius: '3px', background: 'rgba(245, 158, 11, 0.2)', color: '#d97706', fontWeight: 800 }}>
                                         ⏳{pend}
@@ -3071,21 +3122,42 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                             </div>
                           )}
 
-                          {/* Nghỉ phép / WFH của cá nhân */}
+                          {/* Nghỉ phép / WFH / Đi muộn / Về sớm của cá nhân */}
                           {dayLeaves.length > 0 && (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '2px' }}>
                               {dayLeaves.map(lv => {
                                 const isAppr = Number(lv.approved) === 1 || lv.status === 'approved';
                                 const isWFH = lv.leave_type === 'remote_work';
+                                const isLateEarly = lv.leave_type === 'late_early';
                                 const isHalfDay = Number(lv.total_days) === 0.5;
-                                const lvLabel = isWFH 
-                                  ? (isMobile ? t('WFH') : t('Làm từ xa (WFH)'))
-                                  : isHalfDay
-                                  ? (isMobile ? t('Nửa buổi') : (lv.start_time && lv.start_time < '12:00' ? t('Nghỉ sáng') : t('Nghỉ chiều')))
-                                  : (isMobile ? t('Nghỉ phép') : t('Nghỉ phép'));
-                                const lvColor = isWFH ? '#10b981' : (isHalfDay ? '#ea580c' : '#f43f5e');
-                                const lvBg = isWFH ? 'rgba(16, 185, 129, 0.08)' : (isHalfDay ? 'rgba(234, 88, 12, 0.08)' : 'rgba(244, 63, 94, 0.08)');
-                                const lvBorder = isWFH ? 'rgba(16, 185, 129, 0.25)' : (isHalfDay ? 'rgba(234, 88, 12, 0.25)' : 'rgba(244, 63, 94, 0.25)');
+
+                                let lvLabel = isMobile ? t('Nghỉ phép') : t('Nghỉ phép');
+                                let lvColor = '#f43f5e';
+                                let lvBg = 'rgba(244, 63, 94, 0.08)';
+                                let lvBorder = 'rgba(244, 63, 94, 0.25)';
+                                let isEarly = false;
+                                let isLate = false;
+
+                                if (isWFH) {
+                                  lvLabel = isMobile ? t('WFH') : t('Làm từ xa (WFH)');
+                                  lvColor = '#10b981';
+                                  lvBg = 'rgba(16, 185, 129, 0.08)';
+                                  lvBorder = 'rgba(16, 185, 129, 0.25)';
+                                } else if (isLateEarly) {
+                                  isEarly = !!(lv.start_time && lv.start_time >= '12:00');
+                                  isLate = !!(lv.start_time && lv.start_time < '12:00');
+                                  lvLabel = isEarly ? t('Về sớm') : (isLate ? t('Đi muộn') : t('Trễ/Sớm'));
+                                  lvColor = '#d97706';
+                                  lvBg = 'rgba(245, 158, 11, 0.1)';
+                                  lvBorder = 'rgba(245, 158, 11, 0.25)';
+                                } else if (isHalfDay) {
+                                  lvLabel = isMobile ? t('Nửa buổi') : (lv.start_time && lv.start_time < '12:00' ? t('Nghỉ sáng') : t('Nghỉ chiều'));
+                                  lvColor = '#ea580c';
+                                  lvBg = 'rgba(234, 88, 12, 0.08)';
+                                  lvBorder = 'rgba(234, 88, 12, 0.25)';
+                                }
+
+                                const timeStr = (lv.start_time && lv.end_time) ? ` (${lv.start_time} - ${lv.end_time})` : '';
 
                                 return (
                                   <div 
@@ -3107,10 +3179,10 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                                       fontWeight: 600,
                                       cursor: 'pointer'
                                     }} 
-                                    title={`${lvLabel} (${isAppr ? t('Đã duyệt') : t('Chờ duyệt')})`}
+                                    title={`${lvLabel}${timeStr} (${isAppr ? t('Đã duyệt') : t('Chờ duyệt')})`}
                                   >
                                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: isMobile ? '2px' : '4px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: isMobile ? '65px' : '95px' }}>
-                                      {isWFH ? <Home size={isMobile ? 8 : 10} /> : <Calendar size={isMobile ? 8 : 10} />}
+                                      {isWFH ? <Home size={isMobile ? 8 : 10} /> : isLateEarly ? <Clock size={isMobile ? 8 : 10} /> : <Calendar size={isMobile ? 8 : 10} />}
                                       {lvLabel}
                                     </span>
                                     <span style={{
@@ -7501,7 +7573,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                   }}>
                     {[
                       { id: 'all', label: t('Tất cả'), count: dayExceptions.length },
-                      { id: 'leave', label: t('Nghỉ phép & WFH'), count: dayExceptions.filter(e => e.category === 'leave').length },
+                      { id: 'leave', label: t('Nghỉ phép, Trễ/Sớm & WFH'), count: dayExceptions.filter(e => e.category === 'leave').length },
                       { id: 'supplementary', label: t('Bổ sung / Cập nhật công'), count: dayExceptions.filter(e => e.category === 'supplementary').length },
                       { id: 'overtime', label: t('Tăng ca (OT)'), count: dayExceptions.filter(e => e.category === 'overtime').length },
                     ].map(tab => {
