@@ -36,6 +36,80 @@ const resolveAttachmentUrl = (path: string | null | undefined): string => {
   return `${baseClean}/${cleanPath}`;
 };
 
+/**
+ * Tự động tính số ngày công chuẩn trong kỳ:
+ * - Trừ tất cả các ngày Chủ Nhật trong kỳ.
+ * - Trừ các ngày Lễ trong holiday_schedules rơi vào thứ 2 - thứ 7 (không trùng Chủ Nhật).
+ */
+export const calculateStandardWorkDays = (
+  startDateStr: string,
+  endDateStr: string,
+  holidays: any = []
+): { standardDays: number; totalDays: number; sundaysCount: number; holidaysCount: number; holidayNames: string[] } => {
+  if (!startDateStr || !endDateStr || startDateStr > endDateStr) {
+    return { standardDays: 26, totalDays: 30, sundaysCount: 4, holidaysCount: 0, holidayNames: [] };
+  }
+
+  const [sY, sM, sD] = startDateStr.split('-').map(Number);
+  const [eY, eM, eD] = endDateStr.split('-').map(Number);
+  const start = new Date(sY, sM - 1, sD, 12, 0, 0);
+  const end = new Date(eY, eM - 1, eD, 12, 0, 0);
+  const cur = new Date(start);
+  
+  let totalDays = 0;
+  let sundaysCount = 0;
+  let holidaysCount = 0;
+  const holidayNames: string[] = [];
+
+  let parsedHolidays: any[] = [];
+  if (typeof holidays === 'string') {
+    try { parsedHolidays = JSON.parse(holidays); } catch {}
+  } else if (Array.isArray(holidays)) {
+    parsedHolidays = holidays;
+  }
+
+  const holidayMap = new Map<string, string>();
+  parsedHolidays.forEach(h => {
+    const name = h.name || h.holiday_name || h.title || 'Ngày lễ';
+    if (h.date) {
+      holidayMap.set(h.date, name);
+    }
+    if (h.start_date && h.end_date) {
+      const [hsY, hsM, hsD] = String(h.start_date).slice(0, 10).split('-').map(Number);
+      const [heY, heM, heD] = String(h.end_date).slice(0, 10).split('-').map(Number);
+      if (hsY && hsM && hsD && heY && heM && heD) {
+        const hCur = new Date(hsY, hsM - 1, hsD, 12, 0, 0);
+        const hEnd = new Date(heY, heM - 1, heD, 12, 0, 0);
+        while (hCur <= hEnd) {
+          const dStr = `${hCur.getFullYear()}-${String(hCur.getMonth() + 1).padStart(2, '0')}-${String(hCur.getDate()).padStart(2, '0')}`;
+          holidayMap.set(dStr, name);
+          hCur.setDate(hCur.getDate() + 1);
+        }
+      }
+    }
+  });
+
+  while (cur <= end) {
+    totalDays++;
+    const dayOfWeek = cur.getDay(); // 0 is Sunday
+    const dStr = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+
+    if (dayOfWeek === 0) {
+      sundaysCount++;
+    } else if (holidayMap.has(dStr)) {
+      holidaysCount++;
+      const hName = holidayMap.get(dStr)!;
+      if (!holidayNames.includes(hName)) {
+        holidayNames.push(hName);
+      }
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+
+  const standardDays = Math.max(0, totalDays - sundaysCount - holidaysCount);
+  return { standardDays, totalDays, sundaysCount, holidaysCount, holidayNames };
+};
+
 export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean }) => {
   const { t } = useLanguage();
   const getDayOfWeek = (dateStr: string) => {
@@ -1112,6 +1186,27 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   const [exportStandardDays, setExportStandardDays] = useState<number>(26);
   const [isExportingExcel, setIsExportingExcel] = useState<boolean>(false);
 
+  // Auto-calculated standard working days based on Sundays and holiday schedules
+  const autoCalculatedStandardInfo = useMemo(() => {
+    let sDate = '';
+    let eDate = '';
+    if (exportMode === 'month') {
+      sDate = `${exportYear}-${String(exportMonth).padStart(2, '0')}-01`;
+      const lastDay = new Date(exportYear, exportMonth, 0).getDate();
+      eDate = `${exportYear}-${String(exportMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    } else {
+      sDate = exportFromDate;
+      eDate = exportToDate;
+    }
+    return calculateStandardWorkDays(sDate, eDate, sysSettings?.holiday_schedules);
+  }, [exportMode, exportMonth, exportYear, exportFromDate, exportToDate, sysSettings?.holiday_schedules]);
+
+  useEffect(() => {
+    if (autoCalculatedStandardInfo.standardDays > 0) {
+      setExportStandardDays(autoCalculatedStandardInfo.standardDays);
+    }
+  }, [autoCalculatedStandardInfo.standardDays]);
+
   // Shift registration approval states
   const [registrations, setRegistrations] = useState<any[]>([]);
   const [registrationsLoading, setRegistrationsLoading] = useState(false);
@@ -1136,16 +1231,6 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   const allDayPersonnel = useMemo(() => {
     if (!selectedDateForDetail) return [];
 
-    const inactiveUserIds = new Set([
-      999992, 999993, 999994, 999995, 999996, 999997, 999998, 999999,
-      1000000, 1000001, 1000002, 1000003, 1000004, 999906, 999907,
-      100071, 100069, 100078, 100077
-    ]);
-    const inactiveNames = new Set([
-      'mang viên hoàng nhật', 'lương văn trí', 'lê thanh nhân', 
-      'mai nhật huyền', 'nguyễn châu vỹ ái', 'nguyễn ngọc quỳnh', 'nguyễn quốc an'
-    ]);
-
     const dayCheckIns = calendarCheckIns.filter(c => c.check_in_date === selectedDateForDetail);
     const dayLeaves = calendarLeaves.filter(l => {
       const s = l.start_date_only || (l.start_date ? String(l.start_date).slice(0, 10) : '');
@@ -1155,16 +1240,11 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
 
     const activeUsers = usersList.filter(u => {
       const uId = Number(u.id);
-      const name = (u.full_name || u.name || '').toLowerCase().trim();
       const hasCheckIn = dayCheckIns.some(c => Number(c.user_id) === uId);
 
       // If user has a check-in on this date, show them even if inactive
       if (hasCheckIn) return true;
 
-      if (inactiveUserIds.has(uId)) return false;
-      if (inactiveNames.has(name)) return false;
-      if (u.email === 'info@ideas.edu.vn' || u.email === 'nhatmvh@ideas.edu.vn') return false;
-      if (u.status === 'inactive' || u.status === 'resigned' || u.status === 'terminated') return false;
       if (u.is_active === 0 || u.is_active === false || String(u.is_active) === '0') return false;
       return true;
     });
@@ -5892,9 +5972,27 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>
-                {t('Công chuẩn (ngày)')}
-              </label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>
+                  {t('Công chuẩn (ngày)')}
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setExportStandardDays(autoCalculatedStandardInfo.standardDays)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    fontSize: '0.7rem',
+                    color: '#059669',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    textDecoration: 'underline'
+                  }}
+                >
+                  {t('Đặt lại tự động')}
+                </button>
+              </div>
               <input
                 type="number"
                 min="1"
@@ -5912,6 +6010,12 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                   fontSize: '0.8125rem'
                 }}
               />
+              <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '2px', lineHeight: 1.35 }}>
+                <span style={{ color: '#059669', fontWeight: 600 }}>Tự động: </span>
+                {autoCalculatedStandardInfo.totalDays} ngày - {autoCalculatedStandardInfo.sundaysCount} CN
+                {autoCalculatedStandardInfo.holidaysCount > 0 ? ` - ${autoCalculatedStandardInfo.holidaysCount} Lễ (${autoCalculatedStandardInfo.holidayNames.join(', ')})` : ''}
+                {` = `}<strong>{autoCalculatedStandardInfo.standardDays} công</strong>
+              </div>
             </div>
           </div>
 

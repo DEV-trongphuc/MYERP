@@ -1004,12 +1004,21 @@ const ConsultantsInner = () => {
 
   const filteredUsers = React.useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
-    if (!query) return users;
-    return users.filter(u => 
-      (u.name && u.name.toLowerCase().includes(query)) ||
-      (u.email && u.email.toLowerCase().includes(query)) ||
-      (u.phone && u.phone.toLowerCase().includes(query))
-    );
+    let result = users;
+    if (query) {
+      result = users.filter(u => 
+        (u.name && u.name.toLowerCase().includes(query)) ||
+        (u.email && u.email.toLowerCase().includes(query)) ||
+        (u.phone && u.phone.toLowerCase().includes(query))
+      );
+    }
+    return [...result].sort((a, b) => {
+      const aInactive = String(a.is_active) === '0' || a.status === 'inactive';
+      const bInactive = String(b.is_active) === '0' || b.status === 'inactive';
+      if (aInactive && !bInactive) return 1;
+      if (!aInactive && bInactive) return -1;
+      return (a.name || '').localeCompare(b.name || '', 'vi');
+    });
   }, [users, searchQuery]);
 
   const paginatedUsers = React.useMemo(() => {

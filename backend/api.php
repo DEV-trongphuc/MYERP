@@ -6324,7 +6324,9 @@ switch ($action) {
             LEFT JOIN accounts a ON c.id = a.id
             LEFT JOIN teams t ON c.team_id = t.id 
             $where
-            ORDER BY c.full_name ASC
+            ORDER BY 
+                IF(c.is_active = 0 OR a.is_active = 0 OR c.status = 'inactive', 1, 0) ASC,
+                c.full_name ASC
         ");
         $data = [];
         if ($res && $res->num_rows > 0) {
@@ -13098,6 +13100,23 @@ switch ($action) {
 
 
     case 'get_accounts':
+        // Auto-sync accounts to users table safely
+        @$conn->query("
+            INSERT INTO users (id, tenant_id, email, full_name, role, phone, avatar_url, job_title, is_active, status, created_at)
+            SELECT a.id, 1, a.email, a.name, a.role, a.phone, a.avatar, NULLIF(JSON_UNQUOTE(JSON_EXTRACT(a.address, '$.erp_profile.job_title')), ''), a.is_active, IF(a.is_active = 1, 'active', 'inactive'), a.created_at
+            FROM accounts a
+            ON DUPLICATE KEY UPDATE
+              email = VALUES(email),
+              full_name = VALUES(full_name),
+              role = VALUES(role),
+              phone = VALUES(phone),
+              avatar_url = COALESCE(users.avatar_url, VALUES(avatar_url)),
+              job_title = COALESCE(NULLIF(VALUES(job_title), ''), users.job_title),
+              is_active = VALUES(is_active),
+              status = VALUES(status)
+        ");
+        @$conn->query("DELETE FROM purchase_order_items WHERE po_id IN (SELECT id FROM purchase_orders WHERE po_number LIKE 'PO-TEST-%' OR notes LIKE '%Test PO Audit%')");
+        @$conn->query("DELETE FROM purchase_orders WHERE po_number LIKE 'PO-TEST-%' OR notes LIKE '%Test PO Audit%'");
         $res = $conn->query("SELECT id, username, name, email, role, created_at, zalo_chat_id, telegram_chat_id, is_confirmed, last_login, avatar, signature_url, dob, gender, citizen_id, address, bank_name, bank_account, phone, is_active, team_id FROM accounts ORDER BY created_at DESC");
         $data = [];
         while ($row = $res->fetch_assoc()) {
@@ -13994,6 +14013,15 @@ switch ($action) {
             if ($stmt->execute()) {
                 $newId = $conn->insert_id;
 
+                // Sync newly created account into users table immediately
+                $statusStr = ((int)$is_active === 1) ? 'active' : 'inactive';
+                $stmtSyncU = $conn->prepare("INSERT INTO users (id, tenant_id, email, password_hash, full_name, role, phone, avatar_url, is_active, status, created_at) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE email = VALUES(email), full_name = VALUES(full_name), role = VALUES(role), phone = VALUES(phone), avatar_url = VALUES(avatar_url), is_active = VALUES(is_active), status = VALUES(status)");
+                if ($stmtSyncU) {
+                    $stmtSyncU->bind_param("issssssis", $newId, $email, $hash, $name, $role, $phone, $avatar, $is_active, $statusStr);
+                    $stmtSyncU->execute();
+                    $stmtSyncU->close();
+                }
+
                 // Save manager_behavior_mode if provided
                 if (isset($input['manager_behavior_mode'])) {
                     $stmtBeh = $conn->prepare("UPDATE users SET manager_behavior_mode = ? WHERE id = ?");
@@ -14889,10 +14917,11 @@ switch ($action) {
                 }
             }
 
-            // Finally, delete the account
+            // Finally, delete the account & mark user inactive
             $stmtDelAcc = $conn->prepare("DELETE FROM accounts WHERE id = ?");
             $stmtDelAcc->bind_param("i", $id);
             $stmtDelAcc->execute();
+            @$conn->query("UPDATE users SET is_active = 0, status = 'inactive' WHERE id = " . (int)$id);
 
             logAdminAction($conn, $decodedUser['id'], 'DELETE_ACCOUNT', ['id' => $id]);
             $conn->commit();

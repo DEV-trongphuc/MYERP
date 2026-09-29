@@ -904,6 +904,17 @@ export default function Approvals() {
         setTeams(res.data);
       }
     }).catch(() => {});
+
+    fetchAPI('get_accounts').then(res => {
+      if (res && res.success && Array.isArray(res.data)) {
+        const activeAccs = res.data.filter((u: any) => u.is_active !== false && u.is_active !== 0 && String(u.is_active) !== '0');
+        setUsers(activeAccs.map((u: any) => ({
+          ...u,
+          full_name: u.name || u.full_name,
+          avatar_url: u.avatar || u.avatar_url
+        })));
+      }
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -4627,7 +4638,12 @@ export default function Approvals() {
       }
 
       if (!finalUser && finalApproverName) {
-        finalUser = usersByNameMap.get(String(finalApproverName).toLowerCase().trim());
+        const cleanName = String(finalApproverName).toLowerCase().trim();
+        finalUser = usersByNameMap.get(cleanName) ||
+          Array.from(usersMap.values()).find(u => {
+            const ufn = String(u.full_name || u.name || '').toLowerCase().trim();
+            return ufn && (ufn === cleanName || cleanName.includes(ufn) || ufn.includes(cleanName));
+          });
       }
 
       if (!finalUser && (item as any).approved_by) {
@@ -4638,7 +4654,11 @@ export default function Approvals() {
         finalUser = users.find(u => Number(u.id) === Number((item as any).manager_id));
       }
 
-      const displayName = finalUser?.full_name || finalUser?.name || finalApproverName || t('Đã phê duyệt');
+      if (!finalUser && (item as any).approver_id) {
+        finalUser = users.find(u => Number(u.id) === Number((item as any).approver_id));
+      }
+
+      const displayName = finalUser?.full_name || finalUser?.name || finalApproverName || t('Ban Giám đốc');
       const avatarUrl = finalUser?.avatar_url || finalUser?.avatar;
 
       const isPaid = Boolean((item as any).is_refunded) || item.status === 'paid' || item.status === 'refunded';
@@ -13682,20 +13702,55 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
     const app2Id = detail?.approver_id_2 || (item as any)?.approver_id_2;
     const app3Id = detail?.director_id || detail?.approver_id_3 || (item as any)?.approver_id_3;
 
+    const app1Name = detail?.approver_name || (item as any)?.approver_name || detail?.approved_by_name || (item as any)?.approved_by_name;
+    const app2Name = detail?.approver_name_2 || (item as any)?.approver_name_2 || detail?.approved_by_name_2 || (item as any)?.approved_by_name_2;
+    const app3Name = detail?.approver_name_3 || (item as any)?.approver_name_3 || detail?.approved_by_name_3 || (item as any)?.approved_by_name_3;
+
     // Is it an HR workflow (leave, remote_work, late_early, overtime, attendance_bulk, checkin)?
     const isHrItem = item.type === 'leave' || item.type === 'checkin' || item.type === 'attendance_bulk' || rawDesc.includes('[Đăng ký làm việc từ xa]') || rawDesc.includes('[Đi muộn/Về sớm]') || rawDesc.includes('[Tăng ca]') || rawDesc.includes('[Nghỉ phép]');
 
-    const managerUser = app1Id
-      ? users.find(u => Number(u.id) === Number(app1Id))
-      : (users.find(u => ['manager', 'director', 'admin'].includes(String(u.role).toLowerCase())) || users.find(u => u.full_name?.includes('Nguyễn Thị Duy Phương')));
+    const findUserByIdOrName = (id: any, name: any, fallbackRoleTitle?: string) => {
+      if (id) {
+        const byId = users.find(u => Number(u.id) === Number(id));
+        if (byId) return byId;
+      }
+      if (name && typeof name === 'string' && name.trim()) {
+        const cleanName = name.trim().toLowerCase();
+        const byName = users.find(u => {
+          const fn = (u.full_name || u.name || '').toLowerCase().trim();
+          return fn === cleanName || fn.includes(cleanName) || cleanName.includes(fn);
+        });
+        if (byName) return byName;
+        return {
+          id: id ? (Number(id) || id) : `approver-${name}`,
+          full_name: name,
+          name: name,
+          role_title: fallbackRoleTitle || ''
+        };
+      }
+      if (id) {
+        return {
+          id: Number(id) || id,
+          full_name: name || `Người duyệt #${id}`,
+          name: name || `Người duyệt #${id}`,
+          role_title: fallbackRoleTitle || ''
+        };
+      }
+      return null;
+    };
 
-    const accountantUser = app2Id
-      ? users.find(u => Number(u.id) === Number(app2Id))
-      : users.find(u => String(u.role).toLowerCase() === 'accountant');
+    const managerUser = findUserByIdOrName(app1Id, app1Name, t('Người duyệt Cấp 1'))
+      || users.find(u => ['manager', 'director', 'admin'].includes(String(u.role).toLowerCase()))
+      || users.find(u => u.full_name?.includes('Nguyễn Thị Duy Phương'))
+      || (app1Name || app1Id ? { id: app1Id || 1, full_name: app1Name || 'Người duyệt Cấp 1', name: app1Name || 'Người duyệt Cấp 1' } : null);
 
-    const directorUser = app3Id
-      ? users.find(u => Number(u.id) === Number(app3Id))
-      : users.find(u => ['director', 'admin', 'superadmin'].includes(String(u.role).toLowerCase()));
+    const accountantUser = findUserByIdOrName(app2Id, app2Name, t('Người duyệt Cấp 2'))
+      || users.find(u => String(u.role).toLowerCase() === 'accountant')
+      || (app2Name || app2Id ? { id: app2Id || 2, full_name: app2Name || 'Người duyệt Cấp 2', name: app2Name || 'Người duyệt Cấp 2' } : null);
+
+    const directorUser = findUserByIdOrName(app3Id, app3Name, t('Người duyệt Cấp 3'))
+      || users.find(u => ['director', 'admin', 'superadmin'].includes(String(u.role).toLowerCase()))
+      || (app3Name || app3Id ? { id: app3Id || 3, full_name: app3Name || 'Người duyệt Cấp 3', name: app3Name || 'Người duyệt Cấp 3' } : null);
 
     // Multi-level conditions: Only show Level 2 if app2Id exists or it's multi-level finance
     const hasLevel2 = !isPrintStampSend && (Boolean(app2Id) || (!isHrItem && (item.type === 'advance' || (item.type === 'expense' && Boolean(detail?.approver_id_2)))));
@@ -13746,16 +13801,22 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       misaSteps.forEach((st: any, idx: number) => {
         const uName = st.user_name || st.actor || '';
         const uCode = st.user_code || '';
+        const cleanUName = (uName || '').toLowerCase().trim();
         const matchedUser = users.find(u => 
           (st.user_id && Number(u.id) === Number(st.user_id)) ||
           (uCode && String((u as any).code || '').toLowerCase() === uCode.toLowerCase()) ||
-          (uName && u.full_name && (u.full_name.toLowerCase().includes(uName.toLowerCase()) || uName.toLowerCase().includes(u.full_name.toLowerCase())))
+          (cleanUName && (u.full_name || u.name) && (
+            (u.full_name || u.name).toLowerCase().trim() === cleanUName ||
+            (u.full_name || u.name).toLowerCase().includes(cleanUName) ||
+            cleanUName.includes((u.full_name || u.name).toLowerCase().trim())
+          ))
         );
 
         const stepUser = matchedUser || {
           id: st.user_id || `misa-${idx}`,
           full_name: uName || 'Nhân sự thực hiện',
-          avatar: null
+          avatar: st.avatar || st.avatar_url || st.user_avatar || null,
+          avatar_url: st.avatar || st.avatar_url || st.user_avatar || null
         };
 
         const rawStatus = (st.status || '').toLowerCase();
@@ -14574,7 +14635,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
 
             const renderLeaveBalanceCard = () => (
               <div style={{
-                gridColumn: isMobile ? 'span 1' : 'span 2',
+                gridColumn: '1 / -1',
                 marginTop: '4px',
                 padding: isMobile ? '12px' : '12px 14px',
                 borderRadius: '12px',
@@ -14582,12 +14643,22 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 border: '1px solid var(--color-border-light)',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '10px'
+                gap: '10px',
+                width: '100%',
+                boxSizing: 'border-box'
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
-                  <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <BarChart2 size={15} style={{ color: 'var(--color-primary, #2563eb)' }} /> {t('Quỹ phép của người gửi')}: <span style={{ color: 'var(--color-primary, #2563eb)' }}>{senderName}</span>
-                  </span>
+                <div style={{
+                  display: 'flex',
+                  alignItems: isMobile ? 'flex-start' : 'center',
+                  justifyContent: 'space-between',
+                  flexDirection: isMobile ? 'column' : 'row',
+                  gap: isMobile ? '4px' : '6px'
+                }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <BarChart2 size={15} style={{ color: 'var(--color-primary, #2563eb)', flexShrink: 0 }} />
+                    <span>{t('Quỹ phép của người gửi')}:</span>
+                    <span style={{ color: 'var(--color-primary, #2563eb)' }}>{senderName}</span>
+                  </div>
                   <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
                     {t('Thông tin số ngày phép khả dụng để duyệt đơn')}
                   </span>
@@ -14596,7 +14667,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 <div style={{
                   display: 'grid',
                   gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)',
-                  gap: isMobile ? '8px' : '12px'
+                  gap: isMobile ? '8px' : '12px',
+                  width: '100%'
                 }}>
                   {/* Phép công / Phép năm */}
                   <div style={{
@@ -14606,7 +14678,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                     border: '1px solid var(--color-border-light)',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '10px'
+                    gap: '10px',
+                    minWidth: 0
                   }}>
                     <div style={{
                       width: '36px',
@@ -14648,7 +14721,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                     border: '1px solid var(--color-border-light)',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '10px'
+                    gap: '10px',
+                    minWidth: 0
                   }}>
                     <div style={{
                       width: '36px',
@@ -14735,7 +14809,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                       <span>{displayMinutes}</span>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: isMobile ? 'span 1' : 'span 2' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: '1 / -1' }}>
                     <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Khung giờ áp dụng')}</label>
                     <div style={{ display: 'flex', gap: isMobile ? '6px' : '10px', alignItems: 'center' }}>
                       <input
@@ -14778,7 +14852,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
             const leaveTypeDisplayText = leaveTypeMap[currentLeaveType] || (isWFH ? t('Làm việc từ xa (WFH)') : (isOT ? t('Đăng ký tăng ca (OT)') : (isBusinessTrip ? t('Đi công tác') : t('Nghỉ phép năm'))));
 
             return (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: isMobile ? '0.75rem' : '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: isMobile ? '0.75rem' : '1rem' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{typeLabel}</label>
                   <input
@@ -14805,7 +14879,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                   />
                 </div>
                 {isOT && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: 'span 2' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: '1 / -1' }}>
                     <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
                       {t('Hình thức nhận OT')}
                     </label>
@@ -14840,7 +14914,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                   const unpaidWorkDays = Number(Math.max(0, totalDaysVal - paidWorkDays).toFixed(2));
 
                   return (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: 'span 2' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: '1 / -1' }}>
                       <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
                         {t('Tỷ lệ hưởng lương làm việc từ xa (WFH)')}
                       </label>
@@ -14870,7 +14944,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                     </div>
                   );
                 })()}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: 'span 2' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: '1 / -1' }}>
                   <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{periodLabel}</label>
                   <div style={{ display: 'flex', gap: isMobile ? '6px' : '10px', alignItems: 'center' }}>
                     <input
@@ -15656,9 +15730,9 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
           const finalSum = hasAnyVat ? totalPostTax : totalPreTax;
 
           return (
-            <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '14px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', padding: isMobile ? '1.1rem' : '1.5rem', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)' }}>
-              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '14px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', padding: isMobile ? '1rem' : '1.5rem', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'space-between', flexDirection: isMobile ? 'column' : 'row', flexWrap: 'wrap', gap: isMobile ? '6px' : '8px' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                   <Receipt size={15} />
                   <span>{t('Bảng kê chi tiết chi phí')} ({expenseItems.length} {t('dòng chi phí')})</span>
                   {hasAnyVat && (
@@ -15667,13 +15741,13 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                     </span>
                   )}
                 </span>
-                <span style={{ fontSize: '0.82rem', color: '#10b981', fontWeight: 800 }}>
+                <span style={{ fontSize: isMobile ? '0.88rem' : '0.82rem', color: '#10b981', fontWeight: 800 }}>
                   {t('Tổng thanh toán')}: {formatApprovalCurrency(finalSum, curr)}
                 </span>
               </div>
 
-              <div style={{ overflowX: 'auto', borderRadius: '10px', border: '1px solid var(--color-border-light)' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: isMobile ? '0.725rem' : '0.8125rem' }}>
+              <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', borderRadius: '10px', border: '1px solid var(--color-border-light)' }}>
+                <table style={{ width: '100%', minWidth: isMobile ? (hasAnyVat ? '660px' : '460px') : '100%', borderCollapse: 'collapse', fontSize: isMobile ? '0.725rem' : '0.8125rem' }}>
                   <thead>
                     <tr style={{ background: 'var(--color-bg-secondary)', borderBottom: '1px solid var(--color-border-light)', textAlign: 'left' }}>
                       <th style={{ padding: '10px 12px', width: '38px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>#</th>
@@ -16814,8 +16888,10 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
+                          flexWrap: 'wrap',
+                          gap: '6px',
                           background: '#f8fafc',
-                          padding: '7px 10px',
+                          padding: '8px 10px',
                           borderRadius: '8px',
                           border: '1px solid var(--color-border-light, rgba(0, 0, 0, 0.08))',
                           boxShadow: '0 1px 2px rgba(0, 0, 0, 0.02)'
@@ -17460,7 +17536,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 background: 'rgba(0, 0, 0, 0.45)',
                 backdropFilter: 'blur(8px)',
                 WebkitBackdropFilter: 'blur(8px)',
-                zIndex: zIndex || 1000005
+                zIndex: zIndex || 2000000000
               }}
             />
 
@@ -17482,7 +17558,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 display: 'flex',
                 flexDirection: 'column',
                 boxSizing: 'border-box',
-                zIndex: (zIndex ? zIndex + 1 : 1000010),
+                zIndex: (zIndex ? zIndex + 1 : 2000000005),
                 overflow: 'hidden'
               }} 
               onClick={e => e.stopPropagation()}
@@ -17711,7 +17787,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         <div className="custom-scrollbar" style={{
           flex: 1,
           overflowY: 'auto',
-          padding: isMobile ? '1rem' : '1.5rem',
+          padding: isMobile ? '1rem 1rem calc(80px + env(safe-area-inset-bottom, 0px)) 1rem' : '1.5rem',
           display: 'grid',
           gridTemplateColumns: isMobile ? '1fr' : '1.3fr 1fr',
           gap: isMobile ? '1rem' : '1.5rem',

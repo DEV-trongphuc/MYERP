@@ -6,38 +6,27 @@ class UserController {
     }
 
     public function index(array $auth): void {
-        // Allow all authenticated users within the same tenant to retrieve the user list (e.g., for task assignment and mentions)
-        
-        
-        $where = [
-            "tenant_id = ?",
-            "is_active = 1",
-            "(status = 'active' OR status IS NULL OR status = '')",
-            "status != 'inactive'",
-            "email != 'info@ideas.edu.vn'",
-            "email != 'nhatmvh@ideas.edu.vn'",
-            "full_name NOT LIKE '%Mang Viên Hoàng Nhật%'",
-            "id NOT IN (999992, 999993, 999994, 999995, 999996, 999997, 999998, 999999, 1000000, 1000001, 1000002, 1000003, 1000004, 999906, 999907, 100071, 100069, 100078, 100077)"
-        ];
-        $params = [$auth['tenant_id']];
+        // Allow all authenticated users to retrieve the active user list based on unified accounts.is_active = 1
+        $where = ["a.is_active = 1"];
+        $params = [];
         
         $teamOnly = isset($_GET['team_only']) && (string)$_GET['team_only'] === '1';
         if ($teamOnly) {
             if ($auth['role'] === 'manager') {
-                $where[] = "(id = ? OR team_id IN (SELECT id FROM teams WHERE leader_id = ?) OR team_id = (SELECT team_id FROM users WHERE id = ?) OR role IN ('admin', 'super_admin', 'superadmin', 'director', 'accountant', 'hr'))";
+                $where[] = "(a.id = ? OR a.team_id IN (SELECT id FROM teams WHERE leader_id = ?) OR a.team_id = (SELECT team_id FROM accounts WHERE id = ?) OR a.role IN ('admin', 'super_admin', 'superadmin', 'director', 'accountant', 'hr'))";
                 $params[] = $auth['user_id'];
                 $params[] = $auth['user_id'];
                 $params[] = $auth['user_id'];
             } else if (in_array($auth['role'], ['sales', 'sale'], true)) {
-                $tStmt = $this->db->prepare("SELECT team_id FROM users WHERE id = ?");
+                $tStmt = $this->db->prepare("SELECT team_id FROM accounts WHERE id = ?");
                 $tStmt->execute([$auth['user_id']]);
                 $teamRow = $tStmt->fetch();
                 $teamId = $teamRow ? $teamRow['team_id'] : null;
                 if ($teamId) {
-                    $where[] = "(role IN ('admin', 'super_admin', 'superadmin', 'director', 'manager', 'accountant', 'hr') OR team_id = ?)";
+                    $where[] = "(a.role IN ('admin', 'super_admin', 'superadmin', 'director', 'manager', 'accountant', 'hr') OR a.team_id = ?)";
                     $params[] = $teamId;
                 } else {
-                    $where[] = "(role IN ('admin', 'super_admin', 'superadmin', 'director', 'manager', 'accountant', 'hr') OR id = ?)";
+                    $where[] = "(a.role IN ('admin', 'super_admin', 'superadmin', 'director', 'manager', 'accountant', 'hr') OR a.id = ?)";
                     $params[] = $auth['user_id'];
                 }
             }
@@ -46,18 +35,70 @@ class UserController {
         $whereClause = implode(" AND ", $where);
         
         try {
-            $stmt=$this->db->prepare("SELECT id,email,full_name,role,status,job_title,avatar_url,signature_url,phone,is_active,last_login_at,created_at,dob,gender,citizen_id,address,bank_name,bank_account,team_id,permissions_json,bio,extra_fields_json,manager_behavior_mode FROM users WHERE $whereClause ORDER BY full_name");
+            $stmt = $this->db->prepare("
+                SELECT 
+                    a.id,
+                    a.email,
+                    COALESCE(u.full_name, a.name) as full_name,
+                    a.name,
+                    a.username,
+                    a.role,
+                    'active' as status,
+                    COALESCE(NULLIF(u.job_title, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(a.address, '$.erp_profile.job_title')), ''), '') as job_title,
+                    COALESCE(u.avatar_url, a.avatar) as avatar_url,
+                    COALESCE(u.avatar_url, a.avatar) as avatar,
+                    COALESCE(u.signature_url, a.signature_url) as signature_url,
+                    COALESCE(u.phone, a.phone) as phone,
+                    1 as is_active,
+                    COALESCE(u.last_login_at, a.last_login) as last_login_at,
+                    COALESCE(u.created_at, a.created_at) as created_at,
+                    COALESCE(u.dob, a.dob) as dob,
+                    COALESCE(u.gender, a.gender) as gender,
+                    COALESCE(u.citizen_id, a.citizen_id) as citizen_id,
+                    COALESCE(u.address, a.address) as address,
+                    COALESCE(u.bank_name, a.bank_name) as bank_name,
+                    COALESCE(u.bank_account, a.bank_account) as bank_account,
+                    COALESCE(a.team_id, u.team_id) as team_id,
+                    u.permissions_json,
+                    u.bio,
+                    u.extra_fields_json,
+                    u.manager_behavior_mode
+                FROM accounts a
+                LEFT JOIN users u ON (a.id = u.id OR (a.email IS NOT NULL AND a.email != '' AND a.email = u.email))
+                WHERE $whereClause
+                GROUP BY a.id
+                ORDER BY full_name ASC
+            ");
             $stmt->execute($params);
-            respond(200,$stmt->fetchAll());
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            foreach ($rows as &$r) {
+                if (isset($r['role']) && $r['role'] === 'sales') {
+                    $r['role'] = 'sale';
+                }
+                $r['id'] = (int)$r['id'];
+                $r['is_active'] = 1;
+            }
+            respond(200, $rows);
         } catch (Throwable $e) {
             try {
-                $stmt=$this->db->prepare("SELECT id,email,full_name,role,status,avatar_url,phone,is_active,last_login_at,created_at,team_id FROM users WHERE $whereClause ORDER BY full_name");
+                $stmt = $this->db->prepare("
+                    SELECT a.id, a.email, a.name as full_name, a.name, a.role, 'active' as status, a.avatar as avatar_url, a.avatar, a.phone, 1 as is_active, a.created_at, a.team_id
+                    FROM accounts a
+                    WHERE $whereClause
+                    ORDER BY full_name ASC
+                ");
                 $stmt->execute($params);
-                respond(200,$stmt->fetchAll());
+                $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                foreach ($rows as &$r) {
+                    if (isset($r['role']) && $r['role'] === 'sales') {
+                        $r['role'] = 'sale';
+                    }
+                    $r['id'] = (int)$r['id'];
+                    $r['is_active'] = 1;
+                }
+                respond(200, $rows);
             } catch (Throwable $e2) {
-                $stmt=$this->db->prepare("SELECT id,email,full_name,role,status,phone,is_active,created_at,team_id FROM users WHERE $whereClause ORDER BY full_name");
-                $stmt->execute($params);
-                respond(200,$stmt->fetchAll());
+                respond(500, null, 'Lỗi nạp danh sách nhân sự: ' . $e2->getMessage(), false);
             }
         }
     }

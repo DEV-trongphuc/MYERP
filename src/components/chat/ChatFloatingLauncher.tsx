@@ -130,7 +130,7 @@ export const ChatFloatingLauncher: React.FC = () => {
           justifyContent: 'center',
           cursor: 'pointer',
           boxShadow: '0 8px 24px rgba(220, 38, 38, 0.45), 0 2px 6px rgba(0, 0, 0, 0.12)',
-          zIndex: 2147483645,
+          zIndex: 995,
           transition: 'all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)',
           outline: 'none'
         }}

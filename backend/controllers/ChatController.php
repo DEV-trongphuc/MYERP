@@ -1663,28 +1663,28 @@ class ChatController {
 
         try {
             $stmt = $this->db->prepare("
-                SELECT u.id, u.full_name, u.email, u.phone, u.avatar_url, u.role, u.job_title,
-                       u.team_id, t.name as team_name,
-                       pr.status as custom_status, pr.last_ping_at,
-                       COALESCE(pr.last_ping_at, u.last_login_at) as last_active_at,
-                       TIMESTAMPDIFF(SECOND, COALESCE(pr.last_ping_at, u.last_login_at), NOW()) as seconds_ago
-                FROM users u
-                LEFT JOIN accounts a ON (u.id = a.id OR u.email = a.email)
-                LEFT JOIN teams t ON u.team_id = t.id
-                LEFT JOIN chat_user_presence pr ON pr.user_id = u.id
-                WHERE u.id != ? 
-                  AND u.is_active = 1
-                  AND (u.status = 'active' OR u.status IS NULL OR u.status = '')
-                  AND u.status != 'inactive'
-                  AND (a.is_active = 1 OR a.is_active IS NULL)
-                  AND u.email != 'info@ideas.edu.vn'
-                  AND u.email != 'nhatmvh@ideas.edu.vn'
-                  AND u.full_name NOT LIKE '%Mang Viên Hoàng Nhật%'
-                  AND u.id NOT IN (999992, 999993, 999994, 999995, 999996, 999997, 999998, 999999, 1000000, 1000001, 1000002, 1000003, 1000004, 999906, 999907, 100071, 100069, 100078, 100077)
-                  AND u.role NOT IN ('superadmin', 'super_admin')
-                ORDER BY u.full_name ASC
+                SELECT a.id, 
+                       COALESCE(u.full_name, a.name) as full_name, 
+                       a.email, 
+                       a.phone, 
+                       COALESCE(u.avatar_url, a.avatar) as avatar_url, 
+                       a.role, 
+                       COALESCE(NULLIF(u.job_title, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(a.address, '$.erp_profile.job_title')), ''), '') as job_title,
+                       COALESCE(a.team_id, u.team_id) as team_id, 
+                       t.name as team_name,
+                       pr.status as custom_status, 
+                       pr.last_ping_at,
+                       COALESCE(pr.last_ping_at, a.last_login, u.last_login_at) as last_active_at,
+                       TIMESTAMPDIFF(SECOND, COALESCE(pr.last_ping_at, a.last_login, u.last_login_at), NOW()) as seconds_ago
+                FROM accounts a
+                LEFT JOIN users u ON (a.id = u.id OR (a.email IS NOT NULL AND a.email != '' AND a.email = u.email))
+                LEFT JOIN teams t ON (COALESCE(a.team_id, u.team_id) = t.id)
+                LEFT JOIN chat_user_presence pr ON (pr.user_id = a.id)
+                WHERE a.is_active = 1
+                GROUP BY a.id
+                ORDER BY full_name ASC
             ");
-            $stmt->execute([$uid]);
+            $stmt->execute();
             $users = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
             foreach ($users as &$u) {

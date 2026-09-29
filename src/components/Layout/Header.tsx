@@ -3364,7 +3364,7 @@ export const Header = ({
                   justifyContent: 'center',
                   cursor: 'pointer',
                   boxShadow: btnShadow,
-                  zIndex: 2147483640,
+                  zIndex: 990,
                   transition: 'all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)',
                   outline: 'none'
                 }}

@@ -873,23 +873,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     try {
       const res = await api.get('/chat/staff');
       const list: StaffDirectoryUser[] = res.data?.data || res.data || [];
-      const inactiveUserIds = new Set([
-        999992, 999993, 999994, 999995, 999996, 999997, 999998, 999999,
-        1000000, 1000001, 1000002, 1000003, 1000004, 999906, 999907,
-        100071, 100069, 100078, 100077
-      ]);
-      const inactiveNames = new Set([
-        'mang viên hoàng nhật', 'lương văn trí', 'lê thanh nhân', 
-        'mai nhật huyền', 'nguyễn châu vỹ ái', 'nguyễn ngọc quỳnh', 'nguyễn quốc an'
-      ]);
       const activeList = list.filter((s: any) => {
-        const sid = Number(s.id);
-        const name = (s.full_name || '').toLowerCase().trim();
-        if (inactiveUserIds.has(sid)) return false;
-        if (inactiveNames.has(name)) return false;
-        if (s.email === 'info@ideas.edu.vn' || s.email === 'nhatmvh@ideas.edu.vn') return false;
         if (s.is_active === false || s.is_active === 0 || String(s.is_active) === '0') return false;
-        if (s.status === 'inactive' || s.user_status === 'inactive') return false;
         return true;
       });
       set({ staffDirectory: activeList });

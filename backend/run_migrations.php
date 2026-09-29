@@ -4224,10 +4224,23 @@ try {
         }
     }
 
-    // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '302') ON DUPLICATE KEY UPDATE setting_value = '302'");
+    // --- MIGRATION 303: Dọn dẹp dữ liệu đơn mua hàng kiểm thử PO-TEST ---
+    if ($currentVersion < 303) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 303: Dọn dẹp dữ liệu đơn mua hàng kiểm thử PO-TEST...", "info");
+        try {
+            $conn->query("DELETE FROM purchase_order_items WHERE po_id IN (SELECT id FROM purchase_orders WHERE po_number LIKE 'PO-TEST-%' OR notes LIKE '%Test PO Audit%')");
+            $conn->query("DELETE FROM purchase_orders WHERE po_number LIKE 'PO-TEST-%' OR notes LIKE '%Test PO Audit%'");
+            $logMsg("Đã dọn dẹp các đơn mua hàng kiểm thử PO-TEST thành công.", "success");
+            $logMsg("Nâng cấp lên phiên bản 303 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi nâng cấp v303: " . $e->getMessage(), "error");
+        }
+    }
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 302", "success");
+    // Update DB version in system_settings
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '303') ON DUPLICATE KEY UPDATE setting_value = '303'");
+
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 303", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");
