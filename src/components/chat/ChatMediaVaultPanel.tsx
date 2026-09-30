@@ -4,7 +4,7 @@ import {
   ExternalLink, ChevronDown, ChevronUp, ChevronLeft, Check,
   FileArchive, FileSpreadsheet, Film, Globe, Search, Trash2,
   CheckSquare, Plus, Clock, AlertCircle, Shield, Crown, LogOut,
-  MoreVertical, UserMinus, Loader2, Info, Share2, Camera
+  MoreVertical, UserMinus, Loader2, Info, Share2, Camera, Palette
 } from 'lucide-react';
 import api from '../../api/axios';
 import { useChatStore } from '../../store/chatStore';
@@ -22,6 +22,7 @@ import { chatBroadcaster } from '../../utils/chatBroadcast';
 interface Props {
   onClose: () => void;
   onOpenAddMember: () => void;
+  onOpenWallpaper?: () => void;
   isMaximized?: boolean;
   onCloseChat?: () => void;
   initialCategory?: 'all' | 'image' | 'document' | 'link' | 'task';
@@ -30,6 +31,7 @@ interface Props {
 export const ChatMediaVaultPanel: React.FC<Props> = ({ 
   onClose, 
   onOpenAddMember, 
+  onOpenWallpaper,
   isMaximized, 
   onCloseChat,
   initialCategory = 'image'
@@ -1208,8 +1210,51 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({
           </span>
         </div>
 
+        {/* Chat Wallpaper Customization Button */}
+        {onOpenWallpaper && (
+          <div style={{ padding: '0 14px 4px' }}>
+            <button
+              type="button"
+              onClick={onOpenWallpaper}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '9px 12px',
+                background: '#f8fafc',
+                borderRadius: '10px',
+                border: '1px solid #e2e8f0',
+                color: '#334155',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = '#eff6ff';
+                e.currentTarget.style.borderColor = '#bfdbfe';
+                e.currentTarget.style.color = '#2563eb';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = '#f8fafc';
+                e.currentTarget.style.borderColor = '#e2e8f0';
+                e.currentTarget.style.color = '#334155';
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Palette size={16} color="#3b82f6" />
+                <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>
+                  Đổi ảnh nền trò chuyện
+                </span>
+              </div>
+              <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 600 }}>
+                Đồng bộ
+              </span>
+            </button>
+          </div>
+        )}
+
         {/* Mutual Groups / Participants Bar */}
-        <div style={{ padding: '12px 14px 6px' }}>
+        <div style={{ padding: '8px 14px 6px' }}>
           <div 
             onClick={() => isGroup && setShowMembersList(!showMembersList)}
             style={{

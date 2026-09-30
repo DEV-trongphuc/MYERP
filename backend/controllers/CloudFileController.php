@@ -636,6 +636,67 @@ class CloudFileController {
         exit;
     }
 
+    /**
+     * Call Partner AI Service (https://api-ai-staging.ideas.edu.vn/api/partner/invoke)
+     */
+    private function callPartnerAiInvoke(array $content, string $instructions, string $model = 'google/gemini-3.6-flash', float $temperature = 0.1, int $maxTokens = 3500): ?array {
+        $partnerUrl = 'https://api-ai-staging.ideas.edu.vn/api/partner/invoke';
+        $partnerKey = 'sk_f4f35f7b9db0c07311e94ce2c725f54a5d6c73ffdc4bd1d6f14a6a300b7000b2';
+
+        $payload = [
+            'content' => $content,
+            'agent_config' => [
+                'instructions' => $instructions,
+                'top_k' => 10,
+                'top_p' => 0.95,
+                'temperature' => $temperature,
+                'max_tokens' => $maxTokens,
+                'response_format' => [
+                    'type' => 'json_object'
+                ],
+                'model' => $model,
+                'enable_citation' => true
+            ]
+        ];
+
+        $ch = curl_init($partnerUrl);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: application/json',
+            'accept: */*',
+            'x-api-key: ' . $partnerKey
+        ]);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+        curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if (!$response || ($httpCode !== 200 && $httpCode !== 201)) {
+            return null;
+        }
+
+        $resJson = json_decode($response, true);
+        if (empty($resJson) || !empty($resJson['data']['error'])) {
+            return null;
+        }
+
+        $rawText = $resJson['data']['content'] ?? '';
+        if (empty($rawText)) {
+            return null;
+        }
+
+        $rawText = trim($rawText);
+        $rawText = preg_replace('/^```json\s*/i', '', $rawText);
+        $rawText = preg_replace('/\s*```$/', '', $rawText);
+        $parsed = json_decode($rawText, true);
+
+        return is_array($parsed) ? $parsed : null;
+    }
+
     public function extractIdDocument(array $auth): void {
         $tid = $auth['tenant_id'];
         $b = getBody();
@@ -644,6 +705,7 @@ class CloudFileController {
 
         $localPath = null;
         $originalFileName = '';
+        $fileRow = null;
 
         if ($fileId > 0) {
             $stmt = $this->db->prepare("SELECT id, name, file_path, mime_type FROM cloud_files WHERE id = ? AND tenant_id = ?");
@@ -707,24 +769,7 @@ class CloudFileController {
             $mimeType = 'image/webp';
         }
 
-        // Lấy Gemini API key
-        require_once __DIR__ . '/../db_connect.php';
-        $apiKey = function_exists('get_system_setting') ? get_system_setting($this->db, 'gemini_api_key') : null;
-        if (empty($apiKey)) {
-            $apiKey = getenv('GEMINI_API_KEY') ?: '';
-        }
-        if (empty($apiKey)) {
-            respond(500, null, 'Hệ thống chưa cấu hình Gemini API Key trong Cài đặt hệ thống. Vui lòng kiểm tra lại.', false);
-        }
-
-        // Đọc nội dung file
-        $fileBytes = file_get_contents($localPath);
-        if (empty($fileBytes)) {
-            respond(422, null, 'Không thể đọc nội dung tệp tin (tệp rỗng).', false);
-        }
-        $base64 = base64_encode($fileBytes);
-
-        // Prompt hướng dẫn Gemini
+        // Prompt hướng dẫn AI trích xuất
         $prompt = <<<EOT
 Bạn là chuyên gia phân tích và trích xuất tài liệu tùy thân (OCR & Document AI) của hệ thống ERP.
 Nhiệm vụ của bạn:
@@ -762,72 +807,100 @@ CHÚ Ý QUAN TRỌNG:
 - Không bọc trong markdown ```json ... ```, không thêm bất kỳ văn bản giải thích nào ngoài JSON.
 EOT;
 
-        $payload = [
-            'contents' => [[
-                'parts' => [
-                    [
-                        'inlineData' => [
-                            'mimeType' => $mimeType,
-                            'data' => $base64
+        // Xây dựng Public URL cho Partner AI
+        $host = $_SERVER['HTTP_HOST'] ?? 'myerp.ideas.edu.vn';
+        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'https';
+        $publicUrl = '';
+        if (!empty($fileUrl) && (strpos($fileUrl, 'http://') === 0 || strpos($fileUrl, 'https://') === 0)) {
+            $publicUrl = $fileUrl;
+        } else {
+            $rel = ltrim(!empty($fileUrl) ? $fileUrl : ($fileRow['file_path'] ?? ''), '/');
+            if (!empty($rel)) {
+                $publicUrl = "{$scheme}://{$host}/{$rel}";
+            }
+        }
+
+        // 1. Thử gọi qua Partner AI (Gemini 3.6 Flash)
+        $parsedData = null;
+        if (!empty($publicUrl)) {
+            $content = [
+                ['type' => 'text', 'text' => 'Vui lòng phân tích và trích xuất thông tin tài liệu tùy thân (CCCD / Passport) từ hình ảnh sau:'],
+                ['type' => 'image_url', 'image_url' => ['url' => $publicUrl]]
+            ];
+            $parsedData = $this->callPartnerAiInvoke($content, $prompt, 'google/gemini-3.6-flash', 0.1, 2000);
+        }
+
+        // 2. Fallback sang Google Gemini Direct API nếu Partner AI không khả dụng
+        if (!$parsedData) {
+            require_once __DIR__ . '/../db_connect.php';
+            $apiKey = function_exists('get_system_setting') ? get_system_setting($this->db, 'gemini_api_key') : null;
+            if (empty($apiKey)) {
+                $apiKey = getenv('GEMINI_API_KEY') ?: '';
+            }
+
+            if (!empty($apiKey)) {
+                $fileBytes = file_get_contents($localPath);
+                if (!empty($fileBytes)) {
+                    $base64 = base64_encode($fileBytes);
+                    $payload = [
+                        'contents' => [[
+                            'parts' => [
+                                [
+                                    'inlineData' => [
+                                        'mimeType' => $mimeType,
+                                        'data' => $base64
+                                    ]
+                                ],
+                                [
+                                    'text' => $prompt
+                                ]
+                            ]
+                        ]],
+                        'generationConfig' => [
+                            'temperature' => 0.1,
+                            'responseMimeType' => 'application/json'
                         ]
-                    ],
-                    [
-                        'text' => $prompt
-                    ]
-                ]
-            ]],
-            'generationConfig' => [
-                'temperature' => 0.1,
-                'responseMimeType' => 'application/json'
-            ]
-        ];
+                    ];
 
-        // Ưu tiên gemini-2.5-flash
-        $model = function_exists('get_system_setting') ? (get_system_setting($this->db, 'gemini_model') ?: 'gemini-2.5-flash') : 'gemini-2.5-flash';
-        if (strpos($model, 'embedding') !== false) {
-            $model = 'gemini-2.5-flash';
+                    $model = function_exists('get_system_setting') ? (get_system_setting($this->db, 'gemini_model') ?: 'gemini-2.5-flash') : 'gemini-2.5-flash';
+                    if (strpos($model, 'embedding') !== false) {
+                        $model = 'gemini-2.5-flash';
+                    }
+                    $url = "https://generativelanguage.googleapis.com/v1beta/models/" . $model . ":generateContent?key=" . $apiKey;
+
+                    $ch = curl_init($url);
+                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($ch, CURLOPT_POST, true);
+                    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+                    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+                    curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+                    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+                    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+                    $response = curl_exec($ch);
+                    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                    curl_close($ch);
+
+                    if ($response && $httpCode === 200) {
+                        $resJson = json_decode($response, true);
+                        $rawText = $resJson['candidates'][0]['content']['parts'][0]['text'] ?? '';
+                        $rawText = trim($rawText);
+                        $rawText = preg_replace('/^```json\s*/i', '', $rawText);
+                        $rawText = preg_replace('/\s*```$/', '', $rawText);
+                        $parsedData = json_decode($rawText, true);
+                    }
+                }
+            }
         }
-        $url = "https://generativelanguage.googleapis.com/v1beta/models/" . $model . ":generateContent?key=" . $apiKey;
-
-        $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
-        curl_setopt($ch, CURLOPT_TIMEOUT, 60);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlErr = curl_error($ch);
-        curl_close($ch);
-
-        if (!$response) {
-            respond(500, null, 'Lỗi kết nối đến dịch vụ AI trích xuất: ' . $curlErr, false);
-        }
-
-        $resJson = json_decode($response, true);
-        if ($httpCode !== 200) {
-            $errDetail = $resJson['error']['message'] ?? 'Mã lỗi HTTP ' . $httpCode;
-            respond(500, null, 'Lỗi từ Gemini AI: ' . $errDetail, false);
-        }
-
-        $rawText = $resJson['candidates'][0]['content']['parts'][0]['text'] ?? '';
-        $rawText = trim($rawText);
-        $rawText = preg_replace('/^```json\s*/i', '', $rawText);
-        $rawText = preg_replace('/\s*```$/', '', $rawText);
-        $parsedData = json_decode($rawText, true);
 
         if (!$parsedData) {
-            respond(500, null, 'Không thể giải mã dữ liệu trích xuất từ AI: ' . substr($rawText, 0, 150), false);
+            respond(500, null, 'Không thể giải mã dữ liệu trích xuất từ dịch vụ AI. Vui lòng thử lại.', false);
         }
 
         if (empty($parsedData['is_valid'])) {
             $reason = $parsedData['invalid_reason'] ?? 'Tài liệu không phải là CCCD hoặc Hộ chiếu (Passport) hợp lệ.';
             respond(422, [
                 'is_valid' => false,
-                'invalid_reason' => $reason,
-                'raw_text' => $rawText
+                'invalid_reason' => $reason
             ], $reason, false);
         }
 
@@ -874,7 +947,7 @@ EOT;
     }
 
     /**
-     * AI Contract Extraction using Gemini Multimodal (PDF, DOCX, DOC, Images)
+     * AI Contract Extraction using Partner AI (Gemini 3.6 Flash) & Gemini Multimodal
      */
     public function extractContractInfo(array $auth): void {
         $tid = $auth['tenant_id'];
@@ -921,17 +994,7 @@ EOT;
             respond(422, null, 'Định dạng tệp không hợp lệ. Vui lòng chọn tệp hợp đồng PDF, Word (.docx) hoặc ảnh scan.', false);
         }
 
-        // Lấy Gemini API key
-        require_once __DIR__ . '/../db_connect.php';
-        $apiKey = function_exists('get_system_setting') ? get_system_setting($this->db, 'gemini_api_key') : null;
-        if (empty($apiKey)) {
-            $apiKey = getenv('GEMINI_API_KEY') ?: '';
-        }
-        if (empty($apiKey)) {
-            respond(500, null, 'Hệ thống chưa cấu hình Gemini API Key trong Cài đặt hệ thống.', false);
-        }
-
-        // Prompt hướng dẫn Gemini trích xuất hợp đồng
+        // Prompt hướng dẫn AI trích xuất hợp đồng
         $prompt = <<<EOT
 Bạn là chuyên gia bóc tách dữ liệu hợp đồng đào tạo & kinh doanh (Contract AI Extraction) của hệ thống ERP.
 Nhiệm vụ của bạn:
@@ -966,9 +1029,7 @@ Quy tắc bắt buộc:
 6. Chỉ trả về duy nhất 1 chuỗi JSON hợp lệ. Không bọc markdown ```json, không thêm giải thích ngoài JSON.
 EOT;
 
-        $parts = [];
-
-        // Nếu là DOCX: thử đọc text từ XML
+        // Nếu là DOCX: đọc text từ XML
         $docxText = '';
         if ($ext === 'docx' && class_exists('ZipArchive')) {
             $zip = new ZipArchive();
@@ -981,75 +1042,105 @@ EOT;
             }
         }
 
+        // Xây dựng Public URL
+        $host = $_SERVER['HTTP_HOST'] ?? 'myerp.ideas.edu.vn';
+        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'https';
+        $publicUrl = '';
+        if (!empty($fileUrl) && (strpos($fileUrl, 'http://') === 0 || strpos($fileUrl, 'https://') === 0)) {
+            $publicUrl = $fileUrl;
+        } elseif (!empty($filePathInput)) {
+            $rel = ltrim($filePathInput, '/');
+            $publicUrl = "{$scheme}://{$host}/{$rel}";
+        }
+
+        // 1. Thử gọi Partner AI (Gemini 3.6 Flash)
+        $parsedData = null;
         if (!empty($docxText)) {
-            $parts[] = ['text' => "Nội dung văn bản hợp đồng:\n\n" . $docxText];
-            $parts[] = ['text' => $prompt];
-        } else {
-            // PDF hoặc ảnh
-            $mimeType = 'application/pdf';
-            if ($ext === 'png') $mimeType = 'image/png';
-            elseif ($ext === 'webp') $mimeType = 'image/webp';
-            elseif ($ext === 'jpg' || $ext === 'jpeg') $mimeType = 'image/jpeg';
-
-            $fileBytes = file_get_contents($localPath);
-            if (empty($fileBytes)) {
-                respond(422, null, 'Không thể đọc nội dung tệp tin hợp đồng (tệp rỗng).', false);
-            }
-            $base64 = base64_encode($fileBytes);
-            $parts[] = [
-                'inlineData' => [
-                    'mimeType' => $mimeType,
-                    'data' => $base64
-                ]
+            $content = [
+                ['type' => 'text', 'text' => "Nội dung văn bản hợp đồng:\n\n" . $docxText . "\n\nHãy phân tích và trả về đối tượng JSON theo cấu trúc yêu cầu."]
             ];
-            $parts[] = ['text' => $prompt];
+            $parsedData = $this->callPartnerAiInvoke($content, $prompt, 'google/gemini-3.6-flash', 0.1, 4000);
+        } elseif (!empty($publicUrl)) {
+            $content = [
+                ['type' => 'text', 'text' => 'Vui lòng phân tích và bóc tách dữ liệu hợp đồng từ tài liệu sau:'],
+                ['type' => 'image_url', 'image_url' => ['url' => $publicUrl]]
+            ];
+            $parsedData = $this->callPartnerAiInvoke($content, $prompt, 'google/gemini-3.6-flash', 0.1, 4000);
         }
 
-        $payload = [
-            'contents' => [['parts' => $parts]],
-            'generationConfig' => [
-                'temperature' => 0.1,
-                'responseMimeType' => 'application/json'
-            ]
-        ];
+        // 2. Fallback sang Google Gemini Direct API nếu Partner AI chưa trả kết quả
+        if (!$parsedData) {
+            require_once __DIR__ . '/../db_connect.php';
+            $apiKey = function_exists('get_system_setting') ? get_system_setting($this->db, 'gemini_api_key') : null;
+            if (empty($apiKey)) {
+                $apiKey = getenv('GEMINI_API_KEY') ?: '';
+            }
 
-        $model = function_exists('get_system_setting') ? (get_system_setting($this->db, 'gemini_model') ?: 'gemini-2.5-flash') : 'gemini-2.5-flash';
-        if (strpos($model, 'embedding') !== false) {
-            $model = 'gemini-2.5-flash';
+            if (!empty($apiKey)) {
+                $parts = [];
+                if (!empty($docxText)) {
+                    $parts[] = ['text' => "Nội dung văn bản hợp đồng:\n\n" . $docxText];
+                    $parts[] = ['text' => $prompt];
+                } else {
+                    $mimeType = 'application/pdf';
+                    if ($ext === 'png') $mimeType = 'image/png';
+                    elseif ($ext === 'webp') $mimeType = 'image/webp';
+                    elseif ($ext === 'jpg' || $ext === 'jpeg') $mimeType = 'image/jpeg';
+
+                    $fileBytes = file_get_contents($localPath);
+                    if (!empty($fileBytes)) {
+                        $base64 = base64_encode($fileBytes);
+                        $parts[] = [
+                            'inlineData' => [
+                                'mimeType' => $mimeType,
+                                'data' => $base64
+                            ]
+                        ];
+                        $parts[] = ['text' => $prompt];
+                    }
+                }
+
+                if (!empty($parts)) {
+                    $payload = [
+                        'contents' => [['parts' => $parts]],
+                        'generationConfig' => [
+                            'temperature' => 0.1,
+                            'responseMimeType' => 'application/json'
+                        ]
+                    ];
+
+                    $model = function_exists('get_system_setting') ? (get_system_setting($this->db, 'gemini_model') ?: 'gemini-2.5-flash') : 'gemini-2.5-flash';
+                    if (strpos($model, 'embedding') !== false) {
+                        $model = 'gemini-2.5-flash';
+                    }
+                    $url = "https://generativelanguage.googleapis.com/v1beta/models/" . $model . ":generateContent?key=" . $apiKey;
+
+                    $ch = curl_init($url);
+                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($ch, CURLOPT_POST, true);
+                    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+                    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+                    curl_setopt($ch, CURLOPT_TIMEOUT, 90);
+                    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+                    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+                    $response = curl_exec($ch);
+                    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                    curl_close($ch);
+
+                    if ($response && $httpCode === 200) {
+                        $resJson = json_decode($response, true);
+                        $rawText = $resJson['candidates'][0]['content']['parts'][0]['text'] ?? '';
+                        $rawText = trim($rawText);
+                        $rawText = preg_replace('/^```json\s*/i', '', $rawText);
+                        $rawText = preg_replace('/\s*```$/', '', $rawText);
+                        $parsedData = json_decode($rawText, true);
+                    }
+                }
+            }
         }
-        $url = "https://generativelanguage.googleapis.com/v1beta/models/" . $model . ":generateContent?key=" . $apiKey;
-
-        $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
-        curl_setopt($ch, CURLOPT_TIMEOUT, 90);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlErr = curl_error($ch);
-        curl_close($ch);
-
-        if (!$response) {
-            respond(500, null, 'Lỗi kết nối đến dịch vụ AI trích xuất hợp đồng: ' . $curlErr, false);
-        }
-
-        $resJson = json_decode($response, true);
-        if ($httpCode !== 200) {
-            $errDetail = $resJson['error']['message'] ?? 'Mã lỗi HTTP ' . $httpCode;
-            respond(500, null, 'Lỗi từ Gemini AI: ' . $errDetail, false);
-        }
-
-        $rawText = $resJson['candidates'][0]['content']['parts'][0]['text'] ?? '';
-        $rawText = trim($rawText);
-        $rawText = preg_replace('/^```json\s*/i', '', $rawText);
-        $rawText = preg_replace('/\s*```$/', '', $rawText);
-        $parsedData = json_decode($rawText, true);
 
         if (!$parsedData) {
-            respond(500, null, 'Không thể giải mã dữ liệu hợp đồng từ AI: ' . substr($rawText, 0, 150), false);
+            respond(500, null, 'Không thể bóc tách dữ liệu hợp đồng từ AI. Vui lòng thử lại.', false);
         }
 
         // Chuẩn hóa milestones
@@ -1083,7 +1174,7 @@ EOT;
             'totalAmount' => (int)($parsedData['total_amount'] ?? 0),
             'currency' => $parsedData['currency'] ?? 'VND',
             'milestones' => $milestones,
-            'rawTextPreview' => substr($rawText, 0, 500)
+            'rawTextPreview' => json_encode($parsedData, JSON_UNESCAPED_UNICODE)
         ];
 
         respond(200, $result, 'Trích xuất hợp đồng thành công');

@@ -151,6 +151,11 @@ class ChatController {
                 $this->db->exec("ALTER TABLE chat_messages ADD COLUMN deleted_at DATETIME NULL AFTER edited_at");
             } catch (\Throwable $e) {}
 
+            // Safe migration: ensure settings column exists on chat_conversations
+            try {
+                $this->db->exec("ALTER TABLE chat_conversations ADD COLUMN settings TEXT NULL AFTER pinned_message_id");
+            } catch (\Throwable $e) {}
+
             // Safe migration: Add composite covering indexes for high concurrency performance (1,000 - 10,000 CCU)
             try {
                 $this->db->exec("ALTER TABLE chat_messages ADD INDEX idx_tenant_conv_id (tenant_id, conversation_id, id DESC)");
@@ -208,7 +213,7 @@ class ChatController {
                 JOIN chat_conversations c ON cp.conversation_id = c.id
                 LEFT JOIN chat_messages m ON c.last_message_id = m.id
                 LEFT JOIN users u ON m.sender_id = u.id
-                WHERE cp.tenant_id = ? AND cp.user_id = ?
+                WHERE (cp.tenant_id = ? OR cp.tenant_id IS NULL OR cp.tenant_id = 0) AND cp.user_id = ?
                 ORDER BY cp.is_pinned DESC, COALESCE(c.last_message_at, c.created_at) DESC
             ");
             $stmt->execute([$uid, $tid, $uid]);
@@ -231,6 +236,7 @@ class ChatController {
                     $directConvIds[] = (int)$cv['id'];
                 }
             }
+            unset($cv);
 
             if (!empty($directConvIds)) {
                 $inClause = implode(',', array_fill(0, count($directConvIds), '?'));
@@ -268,6 +274,7 @@ class ChatController {
                         $cv['avatar_url'] = $other['avatar_url'];
                     }
                 }
+                unset($cv);
             }
 
             // Batch load participants for group chats (for GroupClusterAvatar)
@@ -277,6 +284,8 @@ class ChatController {
                     $groupConvIds[] = (int)$cv['id'];
                 }
             }
+            unset($cv);
+
             if (!empty($groupConvIds)) {
                 $gInClause = implode(',', array_fill(0, count($groupConvIds), '?'));
                 $gpStmt = $this->db->prepare("
@@ -309,6 +318,7 @@ class ChatController {
                         $cv['participants'] = $groupPartsMap[$cv['id']] ?? [];
                     }
                 }
+                unset($cv);
             }
 
             respond(200, $convs);
@@ -438,7 +448,7 @@ class ChatController {
                 SELECT c.*, cp.role as my_role, cp.is_muted, cp.is_pinned, cp.last_read_message_id
                 FROM chat_conversations c
                 JOIN chat_participants cp ON c.id = cp.conversation_id AND cp.user_id = ?
-                WHERE c.id = ? AND c.tenant_id = ?
+                WHERE c.id = ? AND (c.tenant_id = ? OR c.tenant_id IS NULL OR c.tenant_id = 0)
                 LIMIT 1
             ");
             $stmt->execute([$uid, $conversationId, $tid]);
@@ -518,6 +528,8 @@ class ChatController {
             respond(500, null, 'Lỗi khi tải chi tiết cuộc trò chuyện: ' . $e->getMessage(), false);
         }
     }
+
+
 
     /**
      * GET /chat/conversations/{id}/messages
@@ -1352,11 +1364,37 @@ class ChatController {
                 ")->execute([$auth['tenant_id'] ?? 1, $conversationId, $uid, $sysText]);
             }
             if (isset($body['settings'])) {
+                $stmtCurr = $this->db->prepare("SELECT settings FROM chat_conversations WHERE id = ?");
+                $stmtCurr->execute([$conversationId]);
+                $currSettings = $stmtCurr->fetchColumn();
+                $currArray = !empty($currSettings) ? (json_decode($currSettings, true) ?: []) : [];
+                $newSettings = is_array($body['settings']) ? array_merge($currArray, $body['settings']) : $body['settings'];
+                if (array_key_exists('wallpaper', $body['settings']) && ($body['settings']['wallpaper'] === null || $body['settings']['wallpaper'] === '')) {
+                    unset($newSettings['wallpaper']);
+                }
+                
                 $fields[] = "settings = ?";
-                $params[] = json_encode($body['settings'], JSON_UNESCAPED_UNICODE);
+                $params[] = json_encode($newSettings, JSON_UNESCAPED_UNICODE);
+
+                // If wallpaper is updated, broadcast a system event so all connected devices/users sync instantly
+                if (array_key_exists('wallpaper', $body['settings'])) {
+                    $actorName = $auth['full_name'] ?? 'Thành viên';
+                    $hasWp = !empty($newSettings['wallpaper']);
+                    $wpName = $newSettings['wallpaper']['name'] ?? 'mới';
+                    $sysText = $hasWp ? "{$actorName} đã đổi ảnh nền trò chuyện ({$wpName})" : "{$actorName} đã đặt lại ảnh nền mặc định";
+                    $this->db->prepare("
+                        INSERT INTO chat_messages (tenant_id, conversation_id, sender_id, message_type, content, created_at)
+                        VALUES (?, ?, ?, 'system_event', ?, NOW())
+                    ")->execute([$auth['tenant_id'] ?? 1, $conversationId, $uid, $sysText]);
+                    $sysMsgId = (int)$this->db->lastInsertId();
+                    $fields[] = "last_message_id = ?";
+                    $params[] = $sysMsgId;
+                    $fields[] = "last_message_at = NOW()";
+                }
             }
 
             if (!empty($fields)) {
+                $fields[] = "updated_at = NOW()";
                 $params[] = $conversationId;
                 $this->db->prepare("UPDATE chat_conversations SET " . implode(', ', $fields) . " WHERE id = ?")
                          ->execute($params);
@@ -1380,7 +1418,7 @@ class ChatController {
                          ->execute($pParams);
             }
 
-            respond(200, ['success' => true]);
+            $this->getConversationDetails($auth, $conversationId);
         } catch (\Throwable $e) {
             error_log("Update Conversation Error: " . $e->getMessage());
             respond(500, null, 'Lỗi khi cập nhật cuộc trò chuyện: ' . $e->getMessage(), false);
@@ -2458,29 +2496,35 @@ class ChatController {
             } catch (\Throwable $e) {}
         }
 
-        // 7. Pinned message status for active conversation
+        // 7. Pinned message status and conversation settings for active conversation
         $pinnedInfo = null;
+        $conversationSettings = null;
         if ($currentConvId > 0) {
             try {
-                $stmtPin = $this->db->prepare("
-                    SELECT c.pinned_message_id, m.id, m.content, m.message_type, m.sender_id, u.full_name as sender_name, m.created_at
+                $stmtConv = $this->db->prepare("
+                    SELECT c.pinned_message_id, c.settings, m.id, m.content, m.message_type, m.sender_id, u.full_name as sender_name, m.created_at
                     FROM chat_conversations c
                     LEFT JOIN chat_messages m ON c.pinned_message_id = m.id AND m.deleted_at IS NULL
                     LEFT JOIN users u ON m.sender_id = u.id
-                    WHERE c.id = ? AND c.tenant_id = ?
+                    WHERE c.id = ? AND (c.tenant_id = ? OR c.tenant_id IS NULL OR c.tenant_id = 0)
                 ");
-                $stmtPin->execute([$currentConvId, $tid]);
-                $pinRow = $stmtPin->fetch(PDO::FETCH_ASSOC);
-                if ($pinRow) {
+                $stmtConv->execute([$currentConvId, $tid]);
+                $convRow = $stmtConv->fetch(PDO::FETCH_ASSOC);
+                if ($convRow) {
+                    if (!empty($convRow['settings'])) {
+                        $conversationSettings = is_string($convRow['settings']) ? (json_decode($convRow['settings'], true) ?: []) : $convRow['settings'];
+                    } else {
+                        $conversationSettings = [];
+                    }
                     $pinnedInfo = [
-                        'pinned_message_id' => $pinRow['pinned_message_id'] ? (int)$pinRow['pinned_message_id'] : null,
-                        'pinned_message' => $pinRow['id'] ? [
-                            'id' => (int)$pinRow['id'],
-                            'content' => $pinRow['content'],
-                            'message_type' => $pinRow['message_type'],
-                            'sender_id' => (int)$pinRow['sender_id'],
-                            'sender_name' => $pinRow['sender_name'] ?: 'Đồng nghiệp',
-                            'created_at' => $pinRow['created_at']
+                        'pinned_message_id' => $convRow['pinned_message_id'] ? (int)$convRow['pinned_message_id'] : null,
+                        'pinned_message' => $convRow['id'] ? [
+                            'id' => (int)$convRow['id'],
+                            'content' => $convRow['content'],
+                            'message_type' => $convRow['message_type'],
+                            'sender_id' => (int)$convRow['sender_id'],
+                            'sender_name' => $convRow['sender_name'] ?: 'Đồng nghiệp',
+                            'created_at' => $convRow['created_at']
                         ] : null
                     ];
                 }
@@ -2491,6 +2535,7 @@ class ChatController {
             'new_messages' => $newMessages,
             'updated_messages' => $updatedMessages,
             'pinned_info' => $pinnedInfo,
+            'settings' => $conversationSettings,
             'recent_incoming' => $recentIncoming,
             'typing_users' => $typingUsers,
             'total_unread' => $totalUnread,
@@ -2568,6 +2613,7 @@ class ChatController {
                                cm.metadata, cm.reply_to_id, cm.is_pinned, cm.is_edited, cm.created_at,
                                u.full_name as sender_name, u.avatar_url as sender_avatar,
                                c.title as conversation_title, c.type as conversation_type,
+                               c.settings as conversation_settings,
                                r.content as reply_content, r.message_type as reply_type, r.metadata as reply_metadata,
                                ru.full_name as reply_sender_name
                         FROM chat_messages cm
@@ -2596,6 +2642,7 @@ class ChatController {
                             $m['reactions'] = [];
                             $m['metadata'] = !empty($m['metadata']) ? json_decode($m['metadata'], true) : null;
                             $m['reply_metadata'] = !empty($m['reply_metadata']) ? json_decode($m['reply_metadata'], true) : null;
+                            $m['conversation_settings'] = !empty($m['conversation_settings']) ? (json_decode($m['conversation_settings'], true) ?: []) : [];
                             if ($m['id'] > $lastSeenMessageId) {
                                 $lastSeenMessageId = $m['id'];
                             }

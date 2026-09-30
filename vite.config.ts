@@ -26,6 +26,18 @@ function versionManifestPlugin() {
       if (fs.existsSync(backendDir)) {
         fs.writeFileSync(path.resolve(backendDir, 'version.json'), payload, 'utf-8');
       }
+
+      // Stamp SW_VERSION in public/sw.js to trigger byte-change detection by browser
+      const swPath = path.resolve(publicDir, 'sw.js');
+      if (fs.existsSync(swPath)) {
+        try {
+          let swContent = fs.readFileSync(swPath, 'utf-8');
+          swContent = swContent.replace(/const SW_VERSION = ['"][^'"]*['"]/, `const SW_VERSION = 'myerp-sw-v${buildVersion}'`);
+          fs.writeFileSync(swPath, swContent, 'utf-8');
+        } catch (e) {
+          console.warn('[Vite] Failed to stamp SW_VERSION:', e);
+        }
+      }
     }
   };
 }

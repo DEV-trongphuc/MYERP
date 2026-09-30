@@ -14,7 +14,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="manifest" href="/manifest.json" />
-    <link rel="apple-touch-icon" href="/LOGO.jpg" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
     <link rel="preconnect" href="https://accounts.google.com" crossorigin />
 
     <link rel="dns-prefetch" href="https://accounts.google.com" />
@@ -30,8 +30,8 @@
         try {
           var token = localStorage.getItem('Ideas_token') || localStorage.getItem('access_token');
           var path = window.location.pathname;
-          var isLogin = path === '/login' || path.endsWith('/login');
-          if (!token || isLogin) {
+          var isPublic = path === '/login' || path.endsWith('/login') || path === '/download' || path.startsWith('/download') || path.startsWith('/public-schedule') || path.startsWith('/docs') || path.startsWith('/documentation');
+          if (!token || isPublic) {
             document.documentElement.classList.add('hide-initial-splash');
           }
         } catch(e) {}
@@ -840,6 +840,39 @@
           }
         }, 1200);
       })();
+    </script>
+    <script>
+      // Register PWA Service Worker for Browser Omnibox Install Button & Desktop Notifications
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(function(reg) {
+            console.log('[PWA] ServiceWorker registered with scope:', reg.scope);
+            // Actively check for updates whenever the user returns to the tab/app
+            window.addEventListener('focus', function() { reg.update(); });
+            document.addEventListener('visibilitychange', function() {
+              if (document.visibilityState === 'visible') reg.update();
+            });
+            // Periodically check for service worker updates
+            setInterval(function() {
+              reg.update();
+            }, 30 * 60 * 1000);
+          }).catch(function(err) {
+            console.warn('[PWA] ServiceWorker registration failed:', err);
+          });
+        });
+      }
+
+      // Capture beforeinstallprompt event to enable 1-click install button across the app
+      window.deferredPrompt = null;
+      window.addEventListener('beforeinstallprompt', function(e) {
+        e.preventDefault();
+        window.deferredPrompt = e;
+        window.dispatchEvent(new CustomEvent('pwa-install-available'));
+      });
+      window.addEventListener('appinstalled', function() {
+        window.deferredPrompt = null;
+        console.log('[PWA] MYERP app was successfully installed');
+      });
     </script>
 
     <div id="root"></div>

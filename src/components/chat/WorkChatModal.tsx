@@ -9,7 +9,7 @@ import {
   FileSpreadsheet, FileArchive, Film, Music, Globe, ExternalLink,
   FolderArchive, MoreHorizontal, Edit3, Trash2, Copy, RotateCcw, GitBranch, Lock,
   Clipboard, Receipt, CreditCard, Clock, Share2, Volume2, VolumeX, UploadCloud, ChevronUp, ChevronDown,
-  Check, CheckCheck, Bell, BellOff, Send, Phone, Mail, Calendar
+  Check, CheckCheck, Bell, BellOff, Send, Phone, Mail, Calendar, Palette
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useChatStore } from '../../store/chatStore';
@@ -23,10 +23,13 @@ import { CreateChatGroupModal } from './CreateChatGroupModal';
 import { ChatMediaVaultPanel } from './ChatMediaVaultPanel';
 import { ChatForwardModal } from './ChatForwardModal';
 import { CreateTaskFromChatModal } from './CreateTaskFromChatModal';
+import { ChatWallpaperModal } from './ChatWallpaperModal';
 import { StickerPickerModal } from '../ui/StickerPickerModal';
 import { ChatComposer, type ChatComposerRef } from './ChatComposer';
 import { isChatSoundEnabled, setChatSoundEnabled } from '../../utils/chatSound';
-import type { ChatMessage, ChatConversation, ErpEntitySearchResult, MessageType } from '../../types/chat';
+import { getWallpaperStyle } from '../../utils/chatWallpapers';
+import { chatBroadcaster } from '../../utils/chatBroadcast';
+import type { ChatMessage, ChatConversation, ErpEntitySearchResult, MessageType, ChatWallpaperConfig } from '../../types/chat';
 import api from '../../api/axios';
 import toast from 'react-hot-toast';
 
@@ -399,15 +402,16 @@ const formatStaffLastActive = (st: any): { text: string; isOnline: boolean; isAw
   return { text: 'Chưa truy cập', isOnline: false };
 };
 
-const formatStaffCleanTitle = (user: { job_title?: string; role?: string; team_name?: string }) => {
+const formatStaffCleanTitle = (user?: { job_title?: string; role?: string; team_name?: string } | null) => {
+  if (!user) return '';
   const isCodeRole = (val?: string) => {
     if (!val) return true;
     const v = val.toLowerCase().trim();
     return ['sales', 'sale_admin', 'academic', 'staff', 'admin', 'user', 'manager', 'superadmin', 'super_admin'].includes(v);
   };
 
-  const title = !isCodeRole(user.job_title) ? (user.job_title || '').trim() : '';
-  const team = (user.team_name || '').trim();
+  const title = !isCodeRole(user?.job_title) ? (user?.job_title || '').trim() : '';
+  const team = (user?.team_name || '').trim();
 
   if (title && team) {
     if (title.toLowerCase() === team.toLowerCase()) {
@@ -415,7 +419,7 @@ const formatStaffCleanTitle = (user: { job_title?: string; role?: string; team_n
     }
     return `${title} • ${team}`;
   }
-  return title || team || 'Nhân sự';
+  return title || team || '';
 };
 
 export const WorkChatModal: React.FC = () => {
@@ -452,10 +456,46 @@ export const WorkChatModal: React.FC = () => {
     loadMoreMessages,
     hasMoreByConvId,
     activeSidebarTab,
-    setActiveSidebarTab
+    setActiveSidebarTab,
+    updateGroupInfo
   } = useChatStore();
 
   const { openCustomerDrawer, openTaskDrawer, openExpenseDrawer, openApprovalDrawer } = useUIStore();
+
+  // Active conversation & wallpaper state with multi-source fallback
+  const [showWallpaperModal, setShowWallpaperModal] = useState(false);
+  const currentConv = activeConversation || (activeConversationId ? conversations.find((c) => c.id === activeConversationId) : null);
+  const displayConv = currentConv || activeConversation;
+  const parsedSettings = useMemo(() => {
+    const raw = displayConv?.settings;
+    if (!raw) return {};
+    if (typeof raw === 'string') {
+      try { return JSON.parse(raw); } catch { return {}; }
+    }
+    return raw;
+  }, [displayConv?.settings]);
+  const currentWallpaper = parsedSettings?.wallpaper;
+  const wallpaperStyle = useMemo(() => getWallpaperStyle(currentWallpaper), [currentWallpaper]);
+
+  const handleSaveWallpaper = async (wallpaperConfig: ChatWallpaperConfig | null) => {
+    const targetConv = activeConversation || conversations.find((c) => c.id === activeConversationId);
+    if (!targetConv) return;
+    let currentSettings = targetConv.settings || {};
+    if (typeof currentSettings === 'string') {
+      try { currentSettings = JSON.parse(currentSettings); } catch { currentSettings = {}; }
+    }
+    const newSettings = {
+      ...currentSettings,
+      wallpaper: wallpaperConfig || null
+    };
+    await updateGroupInfo(targetConv.id, { settings: newSettings });
+    chatBroadcaster.post({ 
+      type: 'WALLPAPER_UPDATED', 
+      conversationId: targetConv.id, 
+      wallpaper: wallpaperConfig || undefined 
+    });
+    chatBroadcaster.post({ type: 'CONVERSATIONS_UPDATED' });
+  };
 
   // Message edit & floating context menu state
   const [editingMsgId, setEditingMsgId] = useState<number | null>(null);
@@ -531,6 +571,7 @@ export const WorkChatModal: React.FC = () => {
   const [searchFilter, setSearchFilter] = useState('');
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
   const [showMobileHeaderMenu, setShowMobileHeaderMenu] = useState(false);
+  const [showDesktopHeaderMenu, setShowDesktopHeaderMenu] = useState(false);
 
   useEffect(() => {
     if (activeSidebarTab) {
@@ -543,6 +584,9 @@ export const WorkChatModal: React.FC = () => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Multi-column layout (3-column desktop view) is ONLY active when maximized AND on a wide desktop screen (>= 900px)
+  const isMultiColumn = isMaximized && !isMobile && (typeof window !== 'undefined' ? window.innerWidth >= 900 : true);
   const [showStickerPicker, setShowStickerPicker] = useState(false);
   const [showPackStickerModal, setShowPackStickerModal] = useState(false);
   const [packStickerInitialTab, setPackStickerInitialTab] = useState<string>('ideas');
@@ -975,6 +1019,7 @@ export const WorkChatModal: React.FC = () => {
     const q = searchFilter.toLowerCase();
     return conversations.filter((c) =>
       c.title?.toLowerCase().includes(q) ||
+      c.other_user?.full_name?.toLowerCase().includes(q) ||
       c.last_msg_content?.toLowerCase().includes(q)
     );
   }, [conversations, searchFilter]);
@@ -1000,36 +1045,43 @@ export const WorkChatModal: React.FC = () => {
       : (activeConversation.other_user ? [activeConversation.other_user] : []);
 
     const myId = Number(user?.id || (user as any)?.user_id || 0);
-    const lastMsg = currentMessages[currentMessages.length - 1];
 
+    // Deduplicate participants by unique user ID
+    const uniqueParticipants = new Map<number, any>();
     pList.forEach((p: any) => {
-      const pUid = Number(p.user_id || p.id || 0);
-      if (pUid === myId) return;
+      const uid = Number(p.user_id || p.id || 0);
+      if (uid > 0 && uid !== myId) {
+        uniqueParticipants.set(uid, p);
+      }
+    });
 
+    uniqueParticipants.forEach((p: any) => {
+      const pUid = Number(p.user_id || p.id || 0);
       const pReadId = Number(p.last_read_message_id || 0);
       if (pReadId <= 0) return;
 
+      // Find highest real message on server (id > 0) that user has read (id <= pReadId)
+      // Never attach to optimistic/pending messages (id <= 0)
       let targetMsgId: number | null = null;
-      if (pReadId >= lastMsg.id) {
-        targetMsgId = lastMsg.id;
-      } else {
-        for (let i = currentMessages.length - 1; i >= 0; i--) {
-          if (currentMessages[i].id <= pReadId) {
-            targetMsgId = currentMessages[i].id;
-            break;
-          }
+      for (let i = currentMessages.length - 1; i >= 0; i--) {
+        const m = currentMessages[i];
+        if (m && m.id > 0 && m.id <= pReadId) {
+          targetMsgId = m.id;
+          break;
         }
       }
 
       if (targetMsgId !== null) {
         const list = map.get(targetMsgId) || [];
-        list.push({
-          id: pUid,
-          name: p.full_name || p.name || 'Đồng nghiệp',
-          avatar: p.avatar_url || p.avatar,
-          read_at: p.last_read_at
-        });
-        map.set(targetMsgId, list);
+        if (!list.some(item => item.id === pUid)) {
+          list.push({
+            id: pUid,
+            name: p.full_name || p.name || 'Đồng nghiệp',
+            avatar: p.avatar_url || p.avatar,
+            read_at: p.last_read_at
+          });
+          map.set(targetMsgId, list);
+        }
       }
     });
     return map;
@@ -1126,7 +1178,7 @@ export const WorkChatModal: React.FC = () => {
             key="chat-col-1"
             initial={false}
             animate={
-              (isMaximized && !isMobile)
+              isMultiColumn
                 ? { x: '0%', opacity: 1 }
                 : activeConversationId
                 ? { x: '-30%', opacity: 0 }
@@ -1134,16 +1186,16 @@ export const WorkChatModal: React.FC = () => {
             }
             transition={{ duration: 0.24, ease: [0.25, 1, 0.5, 1] }}
             style={{
-              width: (isMaximized && !isMobile) ? '330px' : '100%',
-              minWidth: (isMaximized && !isMobile) ? '330px' : '100%',
-              borderRight: (isMaximized && !isMobile) ? '1px solid #e2e8f0' : 'none',
+              width: isMultiColumn ? '330px' : '100%',
+              minWidth: isMultiColumn ? '330px' : '100%',
+              borderRight: isMultiColumn ? '1px solid #e2e8f0' : 'none',
               background: '#f8fafc',
-              position: (isMaximized && !isMobile) ? 'relative' : 'absolute',
+              position: isMultiColumn ? 'relative' : 'absolute',
               top: 0,
               left: 0,
               bottom: 0,
-              zIndex: (isMaximized && !isMobile) ? 1 : (activeConversationId ? 1 : 2),
-              pointerEvents: (isMaximized && !isMobile) ? 'auto' : (activeConversationId ? 'none' : 'auto'),
+              zIndex: isMultiColumn ? 1 : (activeConversationId ? 1 : 2),
+              pointerEvents: isMultiColumn ? 'auto' : (activeConversationId ? 'none' : 'auto'),
               display: 'flex',
               flexDirection: 'column',
               height: '100%',
@@ -1230,8 +1282,8 @@ export const WorkChatModal: React.FC = () => {
                 </button>
 
 
-                {/* Close Button - hide when maximized so there's only one close button on far right */}
-                {!isMaximized && (
+                {/* Close Button - hide only when multi-column desktop is active (so there's only one close button on far right) */}
+                {!isMultiColumn && (
                   <button
                     type="button"
                     onClick={closeChat}
@@ -1370,8 +1422,33 @@ export const WorkChatModal: React.FC = () => {
                   filteredConversations.map((c) => {
                     const isSelected = c.id === activeConversationId;
                     const isDirect = c.type === 'direct';
-                    const itemTitle = (isDirect && c.other_user?.full_name) ? c.other_user.full_name : (c.title || 'Hội thoại');
-                    const itemAvatar = (isDirect && c.other_user) ? c.other_user.avatar_url : (c.avatar_url || c.other_user?.avatar_url);
+
+                    // Resolve other user from c.other_user, or from participants, or staffDirectory
+                    let resolvedOther = c.other_user;
+                    if (isDirect && (!resolvedOther || !resolvedOther.full_name)) {
+                      const otherParticipant = c.participants?.find((p: any) => ((p as any).user_id || (p as any).id) !== user?.id);
+                      const targetUid = otherParticipant ? ((otherParticipant as any).user_id || (otherParticipant as any).id) : null;
+                      if (targetUid) {
+                        const matchedStaff = staffDirectory.find((s) => s.id === targetUid);
+                        if (matchedStaff) {
+                          resolvedOther = {
+                            id: matchedStaff.id,
+                            full_name: matchedStaff.full_name,
+                            avatar_url: matchedStaff.avatar_url,
+                            job_title: matchedStaff.job_title,
+                            is_online: Boolean((matchedStaff as any).is_online),
+                            is_active: (matchedStaff as any).is_active !== false
+                          };
+                        }
+                      }
+                    }
+
+                    const itemTitle = (isDirect && resolvedOther?.full_name)
+                      ? resolvedOther.full_name
+                      : ((c.title && c.title !== 'Hội thoại') ? c.title : (resolvedOther?.full_name || 'Cuộc trò chuyện'));
+                    const itemAvatar = (isDirect && resolvedOther)
+                      ? resolvedOther.avatar_url
+                      : (c.avatar_url || resolvedOther?.avatar_url);
 
                     return (
                       <div
@@ -1595,7 +1672,7 @@ export const WorkChatModal: React.FC = () => {
             key="chat-col-2"
             initial={false}
             animate={
-              isMaximized
+              isMultiColumn
                 ? { x: '0%', opacity: 1 }
                 : activeConversationId
                 ? { x: '0%', opacity: 1 }
@@ -1603,16 +1680,16 @@ export const WorkChatModal: React.FC = () => {
             }
             transition={{ duration: 0.24, ease: [0.25, 1, 0.5, 1] }}
             style={{
-              flex: isMaximized ? 1 : 'none',
-              width: isMaximized ? 'auto' : '100%',
-              minWidth: isMaximized ? 'auto' : '100%',
-              position: isMaximized ? 'relative' : 'absolute',
+              flex: isMultiColumn ? 1 : 'none',
+              width: isMultiColumn ? 'auto' : '100%',
+              minWidth: isMultiColumn ? 'auto' : '100%',
+              position: isMultiColumn ? 'relative' : 'absolute',
               top: 0,
               right: 0,
               bottom: 0,
-              left: isMaximized ? 'auto' : 0,
-              zIndex: isMaximized ? 2 : (activeConversationId ? 3 : 1),
-              pointerEvents: isMaximized ? 'auto' : (activeConversationId ? 'auto' : 'none'),
+              left: isMultiColumn ? 'auto' : 0,
+              zIndex: isMultiColumn ? 2 : (activeConversationId ? 3 : 1),
+              pointerEvents: isMultiColumn ? 'auto' : (activeConversationId ? 'auto' : 'none'),
               display: 'flex',
               flexDirection: 'column',
               height: '100%',
@@ -1620,7 +1697,7 @@ export const WorkChatModal: React.FC = () => {
               background: '#ffffff'
             }}
           >
-            {activeConversation ? (
+            {displayConv ? (
               <>
                 {/* Header */}
                 <div style={{
@@ -1632,7 +1709,7 @@ export const WorkChatModal: React.FC = () => {
                   background: '#ffffff'
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '8px' : '10px', minWidth: 0, flex: 1 }}>
-                    {(!isMaximized || isMobile) && (
+                    {!isMultiColumn && (
                       <button
                         onClick={() => selectConversation(0)}
                         style={{
@@ -1656,25 +1733,25 @@ export const WorkChatModal: React.FC = () => {
                     )}
 
                     {(() => {
-                      const isDirect = activeConversation.type === 'direct';
+                      const isDirect = displayConv.type === 'direct';
                       const isOtherInactive = isDirect && (
-                        activeConversation.other_user?.is_active === false || 
-                        activeConversation.other_user?.user_status === 'inactive'
+                        displayConv.other_user?.is_active === false || 
+                        displayConv.other_user?.user_status === 'inactive'
                       );
-                      const headerTitle = (isDirect && activeConversation.other_user?.full_name)
-                        ? activeConversation.other_user.full_name
-                        : (activeConversation.title || 'Cuộc trò chuyện');
-                      const headerAvatar = (isDirect && activeConversation.other_user)
-                        ? activeConversation.other_user.avatar_url
-                        : (activeConversation.avatar_url || activeConversation.other_user?.avatar_url);
-                      const isOtherOnline = Boolean(activeConversation.other_user?.is_online) && !isOtherInactive;
+                      const headerTitle = (isDirect && displayConv.other_user?.full_name)
+                        ? displayConv.other_user.full_name
+                        : (displayConv.title || 'Cuộc trò chuyện');
+                      const headerAvatar = (isDirect && displayConv.other_user)
+                        ? displayConv.other_user.avatar_url
+                        : (displayConv.avatar_url || displayConv.other_user?.avatar_url);
+                      const isOtherOnline = Boolean(displayConv.other_user?.is_online) && !isOtherInactive;
 
                       return (
                         <>
                           <div style={{ position: 'relative', flexShrink: 0 }}>
-                            {activeConversation.type === 'group' ? (
+                            {displayConv.type === 'group' ? (
                               <GroupClusterAvatar
-                                participants={activeConversation.participants}
+                                participants={displayConv.participants}
                                 avatarUrl={headerAvatar}
                                 name={headerTitle}
                                 size={isMobile ? 34 : 38}
@@ -1725,14 +1802,14 @@ export const WorkChatModal: React.FC = () => {
                                 <span style={{ color: '#dc2626', fontWeight: 700 }}>
                                   {currentTypingUsers.map((u) => u.full_name).join(', ')} đang soạn tin...
                                 </span>
-                              ) : activeConversation.type === 'group' ? (
-                                <span>{activeConversation.participants?.length || activeConversation.participant_count || 0} thành viên</span>
+                              ) : displayConv.type === 'group' ? (
+                                <span>{displayConv.participants?.length || displayConv.participant_count || 0} thành viên</span>
                               ) : (
                                 <>
-                                  {formatStaffCleanTitle(activeConversation.other_user) && (
-                                    <span style={{ color: '#475569', fontWeight: 650, overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatStaffCleanTitle(activeConversation.other_user)}</span>
+                                  {formatStaffCleanTitle(displayConv.other_user) && (
+                                    <span style={{ color: '#475569', fontWeight: 650, overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatStaffCleanTitle(displayConv.other_user)}</span>
                                   )}
-                                  {formatStaffCleanTitle(activeConversation.other_user) && <span style={{ color: '#cbd5e1' }}>•</span>}
+                                  {formatStaffCleanTitle(displayConv.other_user) && <span style={{ color: '#cbd5e1' }}>•</span>}
                                   {isOtherInactive ? (
                                     <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Tài khoản đã ngưng hoạt động</span>
                                   ) : (
@@ -1764,25 +1841,6 @@ export const WorkChatModal: React.FC = () => {
                   {/* Header Actions */}
                   {isMobile ? (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}>
-                      {/* Media Vault Button */}
-                      <button
-                        onClick={() => setShowMediaVault(!showMediaVault)}
-                        style={{
-                          background: showMediaVault ? '#fef2f2' : '#f8fafc',
-                          border: showMediaVault ? '1px solid #fecaca' : '1px solid #e2e8f0',
-                          color: showMediaVault ? '#dc2626' : '#64748b',
-                          borderRadius: '8px',
-                          padding: '6px',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                        title="Kho lưu trữ tệp, ảnh & thông tin"
-                      >
-                        <FolderArchive size={16} />
-                      </button>
-
                       {/* Mobile More Options Menu Button '...' */}
                       <div style={{ position: 'relative' }}>
                         <button
@@ -1817,12 +1875,66 @@ export const WorkChatModal: React.FC = () => {
                               background: '#ffffff',
                               borderRadius: '10px',
                               boxShadow: '0 10px 25px -4px rgba(0, 0, 0, 0.22), 0 0 0 1px rgba(0, 0, 0, 0.08)',
-                              minWidth: '200px',
+                              minWidth: '210px',
                               padding: '6px',
                               display: 'flex',
                               flexDirection: 'column',
                               gap: '2px'
                             }}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setShowMobileHeaderMenu(false);
+                                  setShowWallpaperModal(true);
+                                }}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  padding: '8px 10px',
+                                  borderRadius: '6px',
+                                  border: 'none',
+                                  background: 'transparent',
+                                  color: '#334155',
+                                  fontSize: '0.8rem',
+                                  fontWeight: 650,
+                                  cursor: 'pointer',
+                                  textAlign: 'left'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = '#fef2f2'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                              >
+                                <Palette size={15} color="#ef4444" />
+                                <span>Đổi ảnh nền cuộc trò chuyện</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setShowMobileHeaderMenu(false);
+                                  setShowMediaVault(!showMediaVault);
+                                }}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  padding: '8px 10px',
+                                  borderRadius: '6px',
+                                  border: 'none',
+                                  background: 'transparent',
+                                  color: '#334155',
+                                  fontSize: '0.8rem',
+                                  fontWeight: 650,
+                                  cursor: 'pointer',
+                                  textAlign: 'left'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = '#f1f5f9'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                              >
+                                <FolderArchive size={15} color="#64748b" />
+                                <span>Kho lưu trữ tệp & ảnh</span>
+                              </button>
+
                               <button
                                 type="button"
                                 onClick={() => {
@@ -1873,7 +1985,7 @@ export const WorkChatModal: React.FC = () => {
                                 onMouseEnter={(e) => e.currentTarget.style.background = '#f1f5f9'}
                                 onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                               >
-                                {soundEnabled ? <Bell size={15} /> : <BellOff size={15} />}
+                                {soundEnabled ? <Bell size={15} color="#10b981" /> : <BellOff size={15} color="#94a3b8" />}
                                 <span>{soundEnabled ? 'Tắt âm thanh chuông' : 'Bật âm thanh chuông'}</span>
                               </button>
                             </div>
@@ -1925,62 +2037,163 @@ export const WorkChatModal: React.FC = () => {
                         <Search size={16} />
                       </button>
 
-                      {/* Sound notification toggle */}
-                      <button
-                        onClick={handleToggleSound}
-                        style={{
-                          background: '#f8fafc',
-                          border: '1px solid #e2e8f0',
-                          color: soundEnabled ? '#64748b' : '#94a3b8',
-                          borderRadius: '8px',
-                          padding: '6px',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          transition: 'all 0.15s ease'
-                        }}
-                        title={soundEnabled ? 'Âm thanh thông báo: Đang bật (nhấn để tắt)' : 'Âm thanh thông báo: Đang tắt (nhấn để bật)'}
-                      >
-                        {soundEnabled ? <Bell size={16} /> : <BellOff size={16} />}
-                      </button>
+                      {/* Desktop More Options Menu Button '...' */}
+                      <div style={{ position: 'relative' }}>
+                        <button
+                          onClick={() => setShowDesktopHeaderMenu(!showDesktopHeaderMenu)}
+                          style={{
+                            background: showDesktopHeaderMenu ? '#fee2e2' : '#f8fafc',
+                            border: showDesktopHeaderMenu ? '1px solid #fecaca' : '1px solid #e2e8f0',
+                            color: showDesktopHeaderMenu ? '#dc2626' : '#64748b',
+                            borderRadius: '8px',
+                            padding: '6px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            transition: 'all 0.15s ease'
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!showDesktopHeaderMenu) {
+                              e.currentTarget.style.color = '#ef4444';
+                              e.currentTarget.style.borderColor = '#fca5a5';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!showDesktopHeaderMenu) {
+                              e.currentTarget.style.color = '#64748b';
+                              e.currentTarget.style.borderColor = '#e2e8f0';
+                            }
+                          }}
+                          title="Tùy chọn khác (...)"
+                        >
+                          <MoreHorizontal size={16} />
+                        </button>
 
-                      <button
-                        onClick={() => setShowMediaVault(!showMediaVault)}
-                        style={{
-                          background: showMediaVault ? '#fef2f2' : '#f8fafc',
-                          border: showMediaVault ? '1px solid #fecaca' : '1px solid #e2e8f0',
-                          color: showMediaVault ? '#dc2626' : '#64748b',
-                          borderRadius: '8px',
-                          padding: '6px',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          transition: 'all 0.15s ease'
-                        }}
-                        title="Kho lưu trữ tệp, ảnh & liên kết"
-                      >
-                        <FolderArchive size={16} />
-                      </button>
+                        {showDesktopHeaderMenu && (
+                          <>
+                            <div
+                              style={{ position: 'fixed', inset: 0, zIndex: 998 }}
+                              onClick={() => setShowDesktopHeaderMenu(false)}
+                            />
+                            <div style={{
+                              position: 'absolute',
+                              top: '125%',
+                              right: 0,
+                              zIndex: 999,
+                              background: '#ffffff',
+                              borderRadius: '12px',
+                              boxShadow: '0 10px 30px -4px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.08)',
+                              minWidth: '220px',
+                              padding: '6px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '2px'
+                            }}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setShowDesktopHeaderMenu(false);
+                                  setShowWallpaperModal(true);
+                                }}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '9px',
+                                  padding: '8px 12px',
+                                  borderRadius: '8px',
+                                  border: 'none',
+                                  background: 'transparent',
+                                  color: '#1e293b',
+                                  fontSize: '0.8rem',
+                                  fontWeight: 650,
+                                  cursor: 'pointer',
+                                  textAlign: 'left'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = '#fef2f2'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                              >
+                                <Palette size={15} color="#ef4444" />
+                                <span>Đổi ảnh nền cuộc trò chuyện</span>
+                              </button>
 
-                      <button
-                        onClick={toggleMaximize}
-                        style={{
-                          background: '#f8fafc',
-                          border: '1px solid #e2e8f0',
-                          color: '#64748b',
-                          borderRadius: '8px',
-                          padding: '6px',
-                          cursor: 'pointer'
-                        }}
-                        title={isMaximized ? 'Thu nhỏ' : 'Phóng to toàn màn hình'}
-                      >
-                        {isMaximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-                      </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setShowDesktopHeaderMenu(false);
+                                  setShowMediaVault(!showMediaVault);
+                                }}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '9px',
+                                  padding: '8px 12px',
+                                  borderRadius: '8px',
+                                  border: 'none',
+                                  background: 'transparent',
+                                  color: '#1e293b',
+                                  fontSize: '0.8rem',
+                                  fontWeight: 650,
+                                  cursor: 'pointer',
+                                  textAlign: 'left'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = '#f1f5f9'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                              >
+                                <FolderArchive size={15} color="#64748b" />
+                                <span>Kho lưu trữ tệp & ảnh</span>
+                              </button>
 
-                      {/* Hide close button if maximized and media vault is open */}
-                      {!(isMaximized && showMediaVault) && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setShowDesktopHeaderMenu(false);
+                                  handleToggleSound();
+                                }}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '9px',
+                                  padding: '8px 12px',
+                                  borderRadius: '8px',
+                                  border: 'none',
+                                  background: 'transparent',
+                                  color: '#1e293b',
+                                  fontSize: '0.8rem',
+                                  fontWeight: 650,
+                                  cursor: 'pointer',
+                                  textAlign: 'left'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = '#f1f5f9'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                              >
+                                {soundEnabled ? <Bell size={15} color="#10b981" /> : <BellOff size={15} color="#94a3b8" />}
+                                <span>{soundEnabled ? 'Tắt âm thanh chuông' : 'Bật âm thanh chuông'}</span>
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      {!isMobile && (
+                        <button
+                          onClick={toggleMaximize}
+                          style={{
+                            background: '#f8fafc',
+                            border: '1px solid #e2e8f0',
+                            color: '#64748b',
+                            borderRadius: '8px',
+                            padding: '6px',
+                            cursor: 'pointer'
+                          }}
+                          title={isMaximized ? 'Thu nhỏ' : 'Phóng to toàn màn hình'}
+                        >
+                          {isMaximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                        </button>
+                      )}
+
+                      {/* Close button on right: always show if single-column or when media vault is closed on desktop */}
+                      {(!isMultiColumn || !(isMaximized && showMediaVault)) && (
                         <button
                           onClick={closeChat}
                           style={{
@@ -2158,7 +2371,7 @@ export const WorkChatModal: React.FC = () => {
                 </AnimatePresence>
 
                 {/* Pinned message banner if any */}
-                {activeConversation.pinned_message && (
+                {displayConv.pinned_message && (
                   <div style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -2173,11 +2386,11 @@ export const WorkChatModal: React.FC = () => {
                       <Pin size={13} color="#d97706" style={{ flexShrink: 0 }} />
                       <span style={{ fontWeight: 700 }}>Tin nhắn đã ghim:</span>
                       <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {activeConversation.pinned_message.content}
+                        {displayConv.pinned_message.content}
                       </span>
                     </div>
                     <button
-                      onClick={() => togglePinMessage(activeConversation.id, 0)}
+                      onClick={() => togglePinMessage(displayConv.id, 0)}
                       style={{ background: 'none', border: 'none', color: '#b45309', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 650 }}
                     >
                       Bỏ ghim
@@ -2192,13 +2405,33 @@ export const WorkChatModal: React.FC = () => {
                     position: 'relative',
                     overflow: 'hidden',
                     display: 'flex',
-                    flexDirection: 'column'
+                    flexDirection: 'column',
+                    background: wallpaperStyle.background,
+                    backgroundSize: wallpaperStyle.backgroundSize,
+                    backgroundPosition: wallpaperStyle.backgroundPosition,
+                    backgroundRepeat: wallpaperStyle.backgroundRepeat,
+                    transition: 'background 0.3s ease'
                   }}
                   onDragEnter={handleDragEnter}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
                 >
+                  {/* Fixed Adaptive Readability Tint Layer (Never moves during scroll) */}
+                  {wallpaperStyle.overlayOpacity < 1 && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        background: '#ffffff',
+                        opacity: 1 - wallpaperStyle.overlayOpacity,
+                        pointerEvents: 'none',
+                        zIndex: 1,
+                        transition: 'opacity 0.2s ease'
+                      }}
+                    />
+                  )}
+
                   {/* Drag & drop overlay */}
                   {isDraggingOver && (
                     <div
@@ -2242,7 +2475,7 @@ export const WorkChatModal: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Message List */}
+                  {/* Message List (Transparent scroll view above fixed background) */}
                   <div
                     ref={messagesContainerRef}
                     onScroll={handleMessagesScroll}
@@ -2253,7 +2486,9 @@ export const WorkChatModal: React.FC = () => {
                       display: 'flex',
                       flexDirection: 'column',
                       gap: '0px',
-                      background: '#f8fafc'
+                      background: 'transparent',
+                      position: 'relative',
+                      zIndex: 2
                     }}
                   >
                     {/* Indicator đang tải thêm tin nhắn cũ */}
@@ -2281,7 +2516,7 @@ export const WorkChatModal: React.FC = () => {
                     )}
 
                     {/* Nút xem thêm tin nhắn cũ thủ công nếu còn tin nhắn */}
-                    {!isLoadingOlder && (currentMessages.length > visibleCount || (activeConversation && Boolean(hasMoreByConvId[activeConversation.id]))) && (
+                    {!isLoadingOlder && (currentMessages.length > visibleCount || (displayConv && Boolean(hasMoreByConvId[displayConv.id]))) && (
                       <div style={{ textAlign: 'center', margin: '4px 0 8px' }}>
                         <button
                           type="button"
@@ -2385,10 +2620,11 @@ export const WorkChatModal: React.FC = () => {
 
                       // Smart Burst Grouping: Same sender within 5 minutes (< 300s)
                       const prevMsg = visibleMessages[index - 1];
+                      const isPrevMine = prevMsg ? (Boolean(prevMsg.is_mine) || (myId > 0 && Number(prevMsg.sender_id) === myId)) : false;
                       const isSameSenderAsPrev = Boolean(
                         prevMsg &&
                         prevMsg.message_type !== 'system_event' &&
-                        Number(prevMsg.sender_id) === Number(msg.sender_id)
+                        ((isMine && isPrevMine) || (!isMine && !isPrevMine && Number(prevMsg.sender_id) === Number(msg.sender_id)))
                       );
                       const parseMsgTime = (val?: string) => {
                         if (!val) return 0;
@@ -2402,22 +2638,18 @@ export const WorkChatModal: React.FC = () => {
                       const isFirstInBurst = !isSameSenderAsPrev || !isWithin5MinWithPrev;
 
                       const nextMsg = visibleMessages[index + 1];
+                      const isNextMine = nextMsg ? (Boolean(nextMsg.is_mine) || (myId > 0 && Number(nextMsg.sender_id) === myId)) : false;
                       const isSameSenderAsNext = Boolean(
                         nextMsg &&
                         nextMsg.message_type !== 'system_event' &&
-                        Number(nextMsg.sender_id) === Number(msg.sender_id)
+                        ((isMine && isNextMine) || (!isMine && !isNextMine && Number(nextMsg.sender_id) === Number(msg.sender_id)))
                       );
                       const timeDiffNextMs = nextMsg ? Math.abs(parseMsgTime(nextMsg.created_at) - parseMsgTime(msg.created_at)) : Infinity;
                       const isWithin5MinWithNext = timeDiffNextMs < 5 * 60 * 1000;
                       const isLastInBurst = !isSameSenderAsNext || !isWithin5MinWithNext;
-                      const isSameMinuteAsNext = Boolean(
-                        isSameSenderAsNext &&
-                        isWithin5MinWithNext &&
-                        new Date(msg.created_at).getMinutes() === new Date(nextMsg.created_at).getMinutes()
-                      );
 
-                      // Fixed timestamp without layout jump on hover
-                      const showTimestamp = isLastInBurst || !isSameMinuteAsNext;
+                      // Hiển thị thời gian ở tin nhắn cuối cùng trong chuỗi liên tiếp (trong 5 phút không bị ai cắt ngang)
+                      const showTimestamp = isLastInBurst;
 
                       // Messenger-style dynamic border-radius matching consecutive messages
                       const bubbleBorderRadius = (() => {
@@ -3478,16 +3710,29 @@ export const WorkChatModal: React.FC = () => {
                                               openExpenseDrawer(Number(meta.entity_id));
                                             } else if (eType === 'workflow') {
                                               const subType = String(meta.sub_type || '').toLowerCase();
-                                              if (['leave', 'ot', 'wfh', 'late_early'].includes(subType)) {
+                                              const category = String(meta.category || '').toUpperCase();
+                                              if (subType === 'advance') {
+                                                openApprovalDrawer({
+                                                  id: Number(meta.entity_id),
+                                                  type: 'advance',
+                                                  title: meta.title,
+                                                  status: meta.status,
+                                                  employee_name: meta.creator_name,
+                                                  approver_name: meta.approver_name,
+                                                  approver_name_2: meta.approver_name_2
+                                                });
+                                              } else if (subType === 'expense' || category === 'EXPENSE' || category === 'PAYMENT') {
+                                                openExpenseDrawer(Number(meta.entity_id));
+                                              } else {
                                                 openApprovalDrawer({
                                                   id: Number(meta.entity_id),
                                                   type: 'leave',
                                                   title: meta.title,
                                                   status: meta.status,
-                                                  employee_name: meta.creator_name
+                                                  employee_name: meta.creator_name,
+                                                  approver_name: meta.approver_name,
+                                                  approver_name_2: meta.approver_name_2
                                                 });
-                                              } else {
-                                                openExpenseDrawer(Number(meta.entity_id));
                                               }
                                             } else {
                                               toast.success(`Đang mở đối tượng ERP #${meta.entity_id}`);
@@ -3702,13 +3947,13 @@ export const WorkChatModal: React.FC = () => {
 
                                 if (isDirect) {
                                   const otherReadId = Number(otherUser?.last_read_message_id || 0);
-                                  isRead = otherReadId >= msg.id;
+                                  isRead = msg.id > 0 && otherReadId >= msg.id;
 
                                   const otherPingTime = otherUser?.last_ping_at ? new Date(otherUser.last_ping_at).getTime() : 0;
                                   const wasActiveAfterMsg = otherPingTime >= msgTime;
                                   isCurrentlyDelivered = Boolean(otherUser?.is_online) || wasActiveAfterMsg || isRead;
                                 } else {
-                                  const readers = participants.filter(p => Number(p.user_id || (p as any).id) !== myId && Number(p.last_read_message_id || 0) >= msg.id);
+                                  const readers = participants.filter(p => Number(p.user_id || (p as any).id) !== myId && msg.id > 0 && Number(p.last_read_message_id || 0) >= msg.id);
                                   isRead = readers.length > 0;
                                   readCount = readers.length;
 
@@ -3784,7 +4029,10 @@ export const WorkChatModal: React.FC = () => {
                           {/* SEEN AVATARS PILL (MESSENGER STYLE) - ONLY DISPLAY AT THE EXACT LATEST READ MESSAGE */}
                           {(() => {
                             const rawSeen = participantReadMsgMap.get(msg.id) || [];
-                            const seenUsers = rawSeen.filter((su: any) => Number(su.id) !== Number(msg.sender_id));
+                            const seenUsers = rawSeen.filter((su: any, suIdx: number, suArr: any[]) => 
+                              Number(su.id) !== Number(msg.sender_id) && 
+                              suArr.findIndex((x: any) => Number(x.id) === Number(su.id)) === suIdx
+                            );
                             if (seenUsers.length === 0) return null;
 
                             const tooltipText = "Đã xem bởi: " + seenUsers.map((su: any) => {
@@ -4062,10 +4310,10 @@ export const WorkChatModal: React.FC = () => {
 
                 {/* Input Bar or Inactive Lock Banner */}
                 {(() => {
-                  const isDirect = activeConversation.type === 'direct';
+                  const isDirect = displayConv.type === 'direct';
                   const isOtherInactive = isDirect && (
-                    activeConversation.other_user?.is_active === false || 
-                    activeConversation.other_user?.user_status === 'inactive'
+                    displayConv.other_user?.is_active === false || 
+                    displayConv.other_user?.user_status === 'inactive'
                   );
 
                   if (isOtherInactive) {
@@ -4092,7 +4340,7 @@ export const WorkChatModal: React.FC = () => {
                   return (
                     <ChatComposer
                       ref={composerRef}
-                      activeConversation={activeConversation}
+                      activeConversation={displayConv}
                       replyingTo={replyingTo}
                       onClearReplyingTo={() => setReplyingTo(null)}
                       onSendMessage={sendMessage}
@@ -4131,32 +4379,33 @@ export const WorkChatModal: React.FC = () => {
               COLUMN 3: GROUP INFO & MEDIA VAULT (COLLAPSIBLE / DOCKED ON MAXIMIZED)
              ══════════════════════════════════════════════════════════════════════ */}
           <AnimatePresence>
-            {showMediaVault && activeConversation && (
+            {showMediaVault && displayConv && (
               <motion.div
                 key="chat-col-3-vault"
-                initial={(isMaximized && !isMobile) ? { width: 0, opacity: 0 } : { x: '100%', opacity: 0 }}
-                animate={(isMaximized && !isMobile) ? { width: '340px', opacity: 1 } : { x: 0, opacity: 1 }}
-                exit={(isMaximized && !isMobile) ? { width: 0, opacity: 0 } : { x: '100%', opacity: 0 }}
+                initial={isMultiColumn ? { width: 0, opacity: 0 } : { x: '100%', opacity: 0 }}
+                animate={isMultiColumn ? { width: '340px', opacity: 1 } : { x: 0, opacity: 1 }}
+                exit={isMultiColumn ? { width: 0, opacity: 0 } : { x: '100%', opacity: 0 }}
                 transition={{ type: 'spring', damping: 28, stiffness: 320 }}
                 style={{
-                  width: (isMaximized && !isMobile) ? '340px' : '100%',
-                  minWidth: (isMaximized && !isMobile) ? '340px' : '100%',
+                  width: isMultiColumn ? '340px' : '100%',
+                  minWidth: isMultiColumn ? '340px' : '100%',
                   height: '100%',
-                  position: (isMaximized && !isMobile) ? 'relative' : 'absolute',
+                  position: isMultiColumn ? 'relative' : 'absolute',
                   top: 0,
                   right: 0,
                   bottom: 0,
-                  zIndex: (isMaximized && !isMobile) ? 10 : 35,
-                  boxShadow: (isMaximized && !isMobile) ? 'none' : '-8px 0 24px rgba(0, 0, 0, 0.15)',
+                  zIndex: isMultiColumn ? 10 : 35,
+                  boxShadow: isMultiColumn ? 'none' : '-8px 0 24px rgba(0, 0, 0, 0.15)',
                   background: '#ffffff',
-                  borderLeft: '1px solid #e2e8f0',
+                  borderLeft: isMultiColumn ? '1px solid #e2e8f0' : 'none',
                   overflow: 'hidden'
                 }}
               >
                 <ChatMediaVaultPanel
                   onClose={() => setShowMediaVault(false)}
                   onOpenAddMember={() => setShowAddMemberModal(true)}
-                  isMaximized={isMaximized}
+                  onOpenWallpaper={() => setShowWallpaperModal(true)}
+                  isMaximized={isMultiColumn}
                   onCloseChat={closeChat}
                   initialCategory="all"
                 />
@@ -5089,7 +5338,7 @@ export const WorkChatModal: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    hideMessageLocally(activeConversation.id, fMsg.id);
+                    if (displayConv) hideMessageLocally(displayConv.id, fMsg.id);
                     setFloatingMenu(null);
                   }}
                   style={{
@@ -5179,7 +5428,7 @@ export const WorkChatModal: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => {
-                        togglePinMessage(activeConversation.id, fMsg.id);
+                        if (displayConv) togglePinMessage(displayConv.id, fMsg.id);
                         setFloatingMenu(null);
                       }}
                       style={{
@@ -5200,7 +5449,7 @@ export const WorkChatModal: React.FC = () => {
                       onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                     >
                       <Pin size={14} color="#d97706" />
-                      <span>{activeConversation.pinned_message_id === fMsg.id ? 'Bỏ ghim' : 'Ghim tin nhắn'}</span>
+                      <span>{displayConv?.pinned_message_id === fMsg.id ? 'Bỏ ghim' : 'Ghim tin nhắn'}</span>
                     </button>
 
                     {/* Action: Copy text */}
@@ -5298,6 +5547,17 @@ export const WorkChatModal: React.FC = () => {
           );
         })(),
         document.body
+      )}
+      {/* Chat Wallpaper Customization Modal */}
+      {displayConv && (
+        <ChatWallpaperModal
+          isOpen={showWallpaperModal}
+          onClose={() => setShowWallpaperModal(false)}
+          currentWallpaper={currentWallpaper}
+          onSaveWallpaper={handleSaveWallpaper}
+          conversationTitle={displayConv?.title || displayConv?.other_user?.full_name || 'Cuộc trò chuyện'}
+          avatarUrl={displayConv?.avatar_url || displayConv?.other_user?.avatar_url}
+        />
       )}
     </>
   );

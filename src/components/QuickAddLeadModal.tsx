@@ -999,13 +999,30 @@ export const QuickAddLeadModal = () => {
       try {
         const json = await fetchAPI('preview_routing', {
           method: 'POST',
-          body: JSON.stringify({ data: manualData })
+          body: JSON.stringify({
+            data: manualData,
+            connection_type: 'manual',
+            connection_id: -3
+          })
         });
-        if (json.success) {
+        if (json && json.success) {
           setPreviewCons(json);
+        } else {
+          setPreviewCons({
+            success: false,
+            round_id: null,
+            consultant: null,
+            message: json?.message || 'Không khớp với luật chia nào. (Data sẽ lưu trạng thái Chưa phân bổ)'
+          });
         }
       } catch (e: any) {
-        // ignore preview network error
+        console.warn('[QuickAddLeadModal] Routing preview error:', e);
+        setPreviewCons({
+          success: false,
+          round_id: null,
+          consultant: null,
+          message: e?.message || 'Không thể kết nối máy chủ để xem trước vòng chia'
+        });
       }
       setIsPreviewing(false);
     }, 500);
@@ -1343,7 +1360,9 @@ export const QuickAddLeadModal = () => {
                 ) : !previewCons ? (
                   <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8125rem' }}>{t('Nhập SĐT hoặc Email để xem trước vòng chia.')}</div>
                 ) : previewCons.round_id === null ? (
-                  <div style={{ color: 'var(--color-danger)', fontSize: '0.8125rem', fontWeight: 600 }}>{t('Không khớp với luật chia nào. (Data sẽ lưu trạng thái Chưa phân bổ)')}</div>
+                  <div style={{ color: 'var(--color-danger)', fontSize: '0.8125rem', fontWeight: 600 }}>
+                    {previewCons.message ? t(previewCons.message) : t('Không khớp với luật chia nào. (Data sẽ lưu trạng thái Chưa phân bổ)')}
+                  </div>
                 ) : (
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

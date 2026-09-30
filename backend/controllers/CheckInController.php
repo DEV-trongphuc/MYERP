@@ -1659,9 +1659,13 @@ class CheckInController {
 
     public function getBulkRequestDetail(array $auth, int $id): void {
         $stmt = $this->db->prepare("
-            SELECT r.*, u.full_name as employee_name, u.full_name, u.role as user_role, r.manager_id as approver_id
+            SELECT r.*, u.full_name as employee_name, u.full_name, u.avatar_url as employee_avatar, u.avatar_url, u.role as user_role, r.manager_id as approver_id,
+                   m.full_name as approver_name, m.avatar_url as approver_avatar,
+                   ap.full_name as approved_by_name, ap.avatar_url as approved_by_avatar
             FROM attendance_bulk_requests r
             JOIN users u ON r.user_id = u.id
+            LEFT JOIN users m ON r.manager_id = m.id
+            LEFT JOIN users ap ON r.approved_by = ap.id
             WHERE r.id = ? AND u.tenant_id = ?
         ");
         $stmt->execute([$id, $auth['tenant_id']]);
@@ -2067,9 +2071,13 @@ class CheckInController {
 
     public function show(array $auth, int $id): void {
         $stmt = $this->db->prepare("
-            SELECT c.*, u.full_name as employee_name, u.email as employee_email
+            SELECT c.*, u.full_name as employee_name, u.full_name, u.avatar_url as employee_avatar, u.avatar_url, u.email as employee_email,
+                   m.full_name as approver_name, m.avatar_url as approver_avatar,
+                   ap.full_name as approved_by_name, ap.avatar_url as approved_by_avatar
             FROM check_ins c
             JOIN users u ON c.user_id = u.id
+            LEFT JOIN users m ON c.approver_id = m.id
+            LEFT JOIN users ap ON c.approved_by = ap.id
             WHERE c.id = ? AND u.tenant_id = ?
             LIMIT 1
         ");

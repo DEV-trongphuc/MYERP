@@ -3,12 +3,26 @@ import type { ErrorInfo, ReactNode } from 'react';
 import { RefreshCw } from 'lucide-react';
 
 if (typeof window !== 'undefined') {
-  const reloadOnChunkError = (msg: string) => {
-    if (msg && (msg.includes('Failed to fetch dynamically imported module') || msg.includes('ChunkLoadError'))) {
+  const reloadOnChunkError = async (msg: string) => {
+    if (msg && (msg.includes('Failed to fetch dynamically imported module') || msg.includes('ChunkLoadError') || msg.includes('error loading dynamically imported module'))) {
       const lastReload = sessionStorage.getItem('last_chunk_reload');
       const now = Date.now();
       if (!lastReload || now - Number(lastReload) > 15000) {
         sessionStorage.setItem('last_chunk_reload', String(now));
+        // Clear all CacheStorage to remove any stale/corrupted chunks
+        if ('caches' in window) {
+          try {
+            const keys = await caches.keys();
+            await Promise.all(keys.map(k => caches.delete(k)));
+          } catch {}
+        }
+        // Notify Service Worker
+        if ('serviceWorker' in navigator) {
+          try {
+            const reg = await navigator.serviceWorker.getRegistration();
+            if (reg) await reg.update();
+          } catch {}
+        }
         window.location.reload();
       }
     }

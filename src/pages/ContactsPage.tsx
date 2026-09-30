@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef, lazy, Suspense } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { Plus, Search, Phone, PhoneOff, Mail, Eye, EyeOff, Clock, Ban, CheckCircle2, Trash2, X, Download, Upload, ChevronDown, Users, Tag as TagIcon, UserCheck, RefreshCw, Filter, LayoutGrid, List, ArrowDownUp, Columns, Building2, Briefcase, Loader2, User, UserPlus, Calendar, AlertTriangle, AlertCircle, CheckSquare, Layers, MoreHorizontal, ChevronRight, ChevronLeft, GraduationCap } from 'lucide-react';
+import { Plus, Search, Phone, PhoneOff, Mail, Eye, EyeOff, Clock, Ban, CheckCircle2, Trash2, X, Download, Upload, ChevronDown, Users, Tag as TagIcon, UserCheck, RefreshCw, Filter, LayoutGrid, List, ArrowDownUp, Columns, Building2, Briefcase, Loader2, User, UserPlus, Calendar, AlertTriangle, AlertCircle, CheckSquare, Layers, MoreHorizontal, ChevronRight, ChevronLeft, GraduationCap, SlidersHorizontal, RotateCcw, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar, getColorFromName } from '../components/ui/Avatar';
 import { useUIStore } from '../store/uiStore';
@@ -599,6 +599,32 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   const [pipelineStages, setPipelineStages] = useState<any[]>(DEFAULT_PIPELINE_STAGES);
   const [teams, setTeams] = useState<any[]>([]);
 
+  // Quick Admission Date Filter state & Popovers
+  const [filterAdmissionPreset, setFilterAdmissionPreset] = useState<string>('');
+  const [filterAdmissionFrom, setFilterAdmissionFrom] = useState<string>('');
+  const [filterAdmissionTo, setFilterAdmissionTo] = useState<string>('');
+  const [showAdmissionPopover, setShowAdmissionPopover] = useState(false);
+  const [showTimelinePopover, setShowTimelinePopover] = useState(false);
+  const admissionPopoverRef = useRef<HTMLDivElement>(null);
+  const timelinePopoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleOutsidePopover = (e: MouseEvent) => {
+      if (admissionPopoverRef.current && !admissionPopoverRef.current.contains(e.target as Node)) {
+        setShowAdmissionPopover(false);
+      }
+      if (timelinePopoverRef.current && !timelinePopoverRef.current.contains(e.target as Node)) {
+        setShowTimelinePopover(false);
+      }
+    };
+    if (showAdmissionPopover || showTimelinePopover) {
+      document.addEventListener('mousedown', handleOutsidePopover);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleOutsidePopover);
+    };
+  }, [showAdmissionPopover, showTimelinePopover]);
+
   // Quick Pipeline Stage Tabs (1-Click Switching)
   const [quickPipelineStage, setQuickPipelineStage] = useState<string>('all');
   const [stageCounts, setStageCounts] = useState<Record<string, number>>({});
@@ -772,13 +798,17 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     projectId: '',
     campaignId: '',
     tag: '',
-    dateField: 'created_at' as 'created_at' | 'updated_at' | 'last_contact',
+    dateField: 'created_at' as 'created_at' | 'updated_at' | 'last_contact' | 'admission_date',
     dateType: 'range' as 'range' | 'before' | 'after',
     fromDate: '',
     toDate: '',
     beforeDate: '',
     afterDate: '',
     dateActive: false,
+    admissionFrom: '',
+    admissionTo: '',
+    admissionPreset: '',
+    admissionActive: false,
     dataType: '',
     multiProgram: searchParams.get('multi_program') === '1' || searchParams.get('multi_program') === 'true' || searchParams.get('multi_program') === '2'
   });
@@ -795,12 +825,14 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       activeFilters.tag,
       activeFilters.dataType,
       activeFilters.dateActive ? 'date' : '',
-      activeFilters.multiProgram ? 'multi_program' : ''
+      activeFilters.admissionActive ? 'admission' : '',
+      activeFilters.multiProgram ? 'multi_program' : '',
+      filterUncontacted ? 'uncontacted' : ''
     ].filter(val => {
       if (typeof val === 'string') return val.trim() !== '';
       return !!val;
     }).length;
-  }, [activeFilters]);
+  }, [activeFilters, filterUncontacted]);
 
   useEffect(() => {
     const statusParam = searchParams.get('status');
@@ -871,7 +903,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   // Date filter
   const [datePeriod, setDatePeriod] = useState<Period>('this_month');
   const [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' });
-  const [filterDateField, setFilterDateField] = useState<'created_at' | 'updated_at'>('created_at');
+  const [filterDateField, setFilterDateField] = useState<'created_at' | 'updated_at' | 'last_contact' | 'admission_date'>('created_at');
   const [dateFilterActive, setDateFilterActive] = useState(false);
   
   const [columns, setColumns] = useState<ColumnDef[]>(() => {
@@ -1078,6 +1110,11 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
         }
       }
 
+      if (activeFilters.admissionActive) {
+        if (activeFilters.admissionFrom) params.admission_from = activeFilters.admissionFrom;
+        if (activeFilters.admissionTo) params.admission_to = activeFilters.admissionTo;
+      }
+
       const teamId = getEffectiveTeamId();
       if (teamId) {
         params.team_id = teamId;
@@ -1105,10 +1142,15 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   };
 
   useEffect(() => {
-    if (initialMetadataLoaded) {
-      fetchData();
+    fetchData();
+  }, [page, pageSize, debouncedSearch, sortBy, activeFilters, segment, studentSubTab, showLost, quickLeadStatus, quickPipelineStage, filterUncontacted]);
+
+  // Recalculate lead scores instantly in RAM when scoringRules finishes loading
+  useEffect(() => {
+    if (scoringRules && contacts.length > 0) {
+      setContacts(prev => prev.map(c => ({ ...c, score: calcScore(c, scoringRules, decayDays) })));
     }
-  }, [page, pageSize, debouncedSearch, sortBy, activeFilters, segment, studentSubTab, initialMetadataLoaded, showLost, quickLeadStatus, quickPipelineStage, filterUncontacted]);
+  }, [scoringRules, decayDays]);
 
   // Reset page to 1 whenever any filter or search query changes
   useEffect(() => {
@@ -1214,8 +1256,247 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     }
   }, [user]);
 
+  const formatDateDMY = (dStr: string) => {
+    if (!dStr) return '';
+    const parts = dStr.split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return dStr;
+  };
+
+  const getAdmissionPresetRange = (preset: string) => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+
+    if (preset === 'this_month') {
+      const end = new Date(year, month + 1, 0);
+      return {
+        from: `${year}-${String(month + 1).padStart(2, '0')}-01`,
+        to: `${year}-${String(month + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`
+      };
+    }
+    if (preset === 'next_month') {
+      const nextM = month + 1;
+      const targetYear = nextM > 11 ? year + 1 : year;
+      const targetMonth = nextM > 11 ? 0 : nextM;
+      const end = new Date(targetYear, targetMonth + 1, 0);
+      return {
+        from: `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-01`,
+        to: `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`
+      };
+    }
+    if (preset === 'this_quarter') {
+      const qStartMonth = Math.floor(month / 3) * 3;
+      const qEndMonth = qStartMonth + 2;
+      const end = new Date(year, qEndMonth + 1, 0);
+      return {
+        from: `${year}-${String(qStartMonth + 1).padStart(2, '0')}-01`,
+        to: `${year}-${String(qEndMonth + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`
+      };
+    }
+    if (preset === 'this_year') {
+      return {
+        from: `${year}-01-01`,
+        to: `${year}-12-31`
+      };
+    }
+    return { from: '', to: '' };
+  };
+
+  const applyQuickAdmissionPreset = (preset: string) => {
+    if (!preset) {
+      setFilterAdmissionPreset('');
+      setFilterAdmissionFrom('');
+      setFilterAdmissionTo('');
+      setActiveFilters(prev => ({
+        ...prev,
+        admissionPreset: '',
+        admissionFrom: '',
+        admissionTo: '',
+        admissionActive: false
+      }));
+      setShowAdmissionPopover(false);
+      setShowTimelinePopover(false);
+      return;
+    }
+    const { from, to } = getAdmissionPresetRange(preset);
+    setFilterAdmissionPreset(preset);
+    setFilterAdmissionFrom(from);
+    setFilterAdmissionTo(to);
+    setActiveFilters(prev => ({
+      ...prev,
+      admissionPreset: preset,
+      admissionFrom: from,
+      admissionTo: to,
+      admissionActive: true
+    }));
+    setShowAdmissionPopover(false);
+    setShowTimelinePopover(false);
+  };
+
+  const applyCustomAdmissionRange = () => {
+    if (!filterAdmissionFrom && !filterAdmissionTo) {
+      applyQuickAdmissionPreset('');
+      return;
+    }
+    setFilterAdmissionPreset('custom');
+    setActiveFilters(prev => ({
+      ...prev,
+      admissionPreset: 'custom',
+      admissionFrom: filterAdmissionFrom,
+      admissionTo: filterAdmissionTo,
+      admissionActive: true
+    }));
+    setShowAdmissionPopover(false);
+    setShowTimelinePopover(false);
+  };
+
+  const getAdmissionDisplayLabel = () => {
+    if (!activeFilters.admissionActive) return '';
+    if (activeFilters.admissionPreset === 'this_month') return 'Tháng này';
+    if (activeFilters.admissionPreset === 'next_month') return 'Tháng sau';
+    if (activeFilters.admissionPreset === 'this_quarter') return 'Quý này';
+    if (activeFilters.admissionPreset === 'this_year') return 'Năm nay';
+    if (activeFilters.admissionFrom && activeFilters.admissionTo) {
+      if (activeFilters.admissionFrom === activeFilters.admissionTo) return formatDateDMY(activeFilters.admissionFrom);
+      return `${formatDateDMY(activeFilters.admissionFrom)} - ${formatDateDMY(activeFilters.admissionTo)}`;
+    }
+    if (activeFilters.admissionFrom) return `Từ ${formatDateDMY(activeFilters.admissionFrom)}`;
+    if (activeFilters.admissionTo) return `Đến ${formatDateDMY(activeFilters.admissionTo)}`;
+    return 'Đang lọc';
+  };
+
+  const applyQuickTimelinePreset = (preset: string) => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const todayStr = now.toISOString().split('T')[0];
+
+    let from = '';
+    let to = todayStr;
+
+    if (preset === 'today') {
+      from = todayStr;
+    } else if (preset === 'last_7_days') {
+      const d7 = new Date(now.getTime() - 7 * 86400000);
+      from = d7.toISOString().split('T')[0];
+    } else if (preset === 'this_month') {
+      const start = new Date(year, month, 1);
+      const end = new Date(year, month + 1, 0);
+      from = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+      to = `${year}-${String(month + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`;
+    } else if (preset === 'last_30_days') {
+      const d30 = new Date(now.getTime() - 30 * 86400000);
+      from = d30.toISOString().split('T')[0];
+    }
+
+    setFilterFromDate(from);
+    setFilterToDate(to);
+    setDateFilterType('range');
+    setActiveFilters(prev => ({
+      ...prev,
+      dateField: filterDateField as any,
+      dateType: 'range',
+      fromDate: from,
+      toDate: to,
+      beforeDate: '',
+      afterDate: '',
+      dateActive: true
+    }));
+    setShowTimelinePopover(false);
+  };
+
+  const applyCustomTimelineRange = () => {
+    if (!filterFromDate && !filterToDate) {
+      removeActiveFilterTag('date');
+      setShowTimelinePopover(false);
+      return;
+    }
+    setActiveFilters(prev => ({
+      ...prev,
+      dateField: filterDateField as any,
+      dateType: 'range',
+      fromDate: filterFromDate,
+      toDate: filterToDate,
+      beforeDate: '',
+      afterDate: '',
+      dateActive: true
+    }));
+    setShowTimelinePopover(false);
+  };
+
+  const getTimelineDisplayLabel = () => {
+    if (!activeFilters.dateActive) return '';
+    if (activeFilters.fromDate && activeFilters.toDate) {
+      if (activeFilters.fromDate === activeFilters.toDate) return formatDateDMY(activeFilters.fromDate);
+      return `${formatDateDMY(activeFilters.fromDate)} - ${formatDateDMY(activeFilters.toDate)}`;
+    }
+    if (activeFilters.fromDate) return `Từ ${formatDateDMY(activeFilters.fromDate)}`;
+    if (activeFilters.toDate) return `Đến ${formatDateDMY(activeFilters.toDate)}`;
+    if (activeFilters.beforeDate) return `Trước ${formatDateDMY(activeFilters.beforeDate)}`;
+    if (activeFilters.afterDate) return `Sau ${formatDateDMY(activeFilters.afterDate)}`;
+    return 'Đang lọc';
+  };
+
+  const getStageName = (statusId: string) => {
+    if (!statusId) return '';
+    if (statusId === 'not_contacted') return 'Chưa liên hệ';
+    const found = pipelineStages.find(s => String(s.id) === statusId || s.system_slug === statusId);
+    return found?.name || statusId;
+  };
+
+  const removeActiveFilterTag = (key: string) => {
+    if (key === 'admission') {
+      setFilterAdmissionPreset('');
+      setFilterAdmissionFrom('');
+      setFilterAdmissionTo('');
+      setActiveFilters(prev => ({ ...prev, admissionPreset: '', admissionFrom: '', admissionTo: '', admissionActive: false }));
+    } else if (key === 'date') {
+      setFilterFromDate('');
+      setFilterToDate('');
+      setFilterBeforeDate('');
+      setFilterAfterDate('');
+      setActiveFilters(prev => ({ ...prev, fromDate: '', toDate: '', beforeDate: '', afterDate: '', dateActive: false }));
+    } else if (key === 'status') {
+      setFilterStatus('');
+      setActiveFilters(prev => ({ ...prev, status: '' }));
+    } else if (key === 'leadStatus') {
+      setFilterLeadStatus('');
+      setActiveFilters(prev => ({ ...prev, leadStatus: '' }));
+    } else if (key === 'ownerId') {
+      setFilterOwnerId('');
+      setActiveFilters(prev => ({ ...prev, ownerId: '' }));
+    } else if (key === 'projectId') {
+      setFilterProjectId('');
+      setActiveFilters(prev => ({ ...prev, projectId: '' }));
+    } else if (key === 'campaignId') {
+      setFilterCampaignId('');
+      setActiveFilters(prev => ({ ...prev, campaignId: '' }));
+    } else if (key === 'source') {
+      setFilterSource('');
+      setActiveFilters(prev => ({ ...prev, source: '' }));
+    } else if (key === 'dataType') {
+      setFilterDataType('');
+      setActiveFilters(prev => ({ ...prev, dataType: '' }));
+    } else if (key === 'tag') {
+      setFilterTag('');
+      setActiveFilters(prev => ({ ...prev, tag: '' }));
+    } else if (key === 'multiProgram') {
+      setFilterMultiProgram(false);
+      setActiveFilters(prev => ({ ...prev, multiProgram: false }));
+    } else if (key === 'showLost') {
+      setFilterShowLost(false);
+      setActiveFilters(prev => ({ ...prev, showLost: false }));
+    } else if (key === 'uncontacted') {
+      setFilterUncontacted(false);
+    }
+  };
+
   const handleApplyFilters = () => {
     setPage(1);
+    const hasAdmission = Boolean(filterAdmissionFrom || filterAdmissionTo || filterAdmissionPreset);
     const dateActive = 
       (dateFilterType === 'range' && (filterFromDate || filterToDate)) ||
       (dateFilterType === 'before' && filterBeforeDate) ||
@@ -1239,6 +1520,10 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       beforeDate: filterBeforeDate,
       afterDate: filterAfterDate,
       dateActive: !!dateActive,
+      admissionFrom: filterAdmissionFrom,
+      admissionTo: filterAdmissionTo,
+      admissionPreset: filterAdmissionPreset,
+      admissionActive: !!hasAdmission,
       dataType: filterDataType,
       multiProgram: filterMultiProgram
     });
@@ -1248,6 +1533,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   const handleResetFilters = () => {
     setFilterUncontacted(false);
     setFilterMultiProgram(false);
+    setFilterDataType('');
     setFilterStatus('');
     setFilterStageOp('in');
     setFilterLeadStatus('');
@@ -1266,6 +1552,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     setFilterToDate('');
     setFilterBeforeDate('');
     setFilterAfterDate('');
+    setFilterAdmissionPreset('');
+    setFilterAdmissionFrom('');
+    setFilterAdmissionTo('');
     setPage(1);
     setActiveFilters({
       status: '',
@@ -1285,6 +1574,10 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       beforeDate: '',
       afterDate: '',
       dateActive: false,
+      admissionFrom: '',
+      admissionTo: '',
+      admissionPreset: '',
+      admissionActive: false,
       dataType: '',
       multiProgram: false
     });
@@ -2355,6 +2648,286 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                 </div>
               </div>
  
+              {/* Quick Filter: Mốc thời gian & Ngày nhập học */}
+              <div ref={timelinePopoverRef} style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (activeFilters.admissionActive) {
+                      setFilterDateField('admission_date');
+                    }
+                    setShowTimelinePopover(prev => !prev);
+                  }}
+                  style={{
+                    height: '38px',
+                    padding: '0 0.875rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    cursor: 'pointer',
+                    border: (activeFilters.dateActive || activeFilters.admissionActive) ? '1.5px solid var(--color-primary)' : '1px solid var(--color-border)',
+                    borderRadius: '8px',
+                    background: 'var(--color-surface, #ffffff)',
+                    color: (activeFilters.dateActive || activeFilters.admissionActive) ? 'var(--color-primary)' : 'var(--color-text)',
+                    fontWeight: (activeFilters.dateActive || activeFilters.admissionActive) ? 700 : 600,
+                    fontSize: '0.85rem',
+                    transition: 'all 0.2s',
+                    boxShadow: (activeFilters.dateActive || activeFilters.admissionActive) ? '0 2px 6px rgba(225, 29, 72, 0.15)' : 'var(--shadow-sm)',
+                    outline: 'none',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0
+                  }}
+                  title="Lọc theo mốc thời gian hoặc ngày nhập học"
+                >
+                  {activeFilters.admissionActive ? (
+                    <GraduationCap size={15} style={{ color: 'var(--color-primary)' }} />
+                  ) : (
+                    <Calendar size={15} style={{ color: activeFilters.dateActive ? 'var(--color-primary)' : 'var(--color-text-muted)' }} />
+                  )}
+                  <span>
+                    {activeFilters.admissionActive
+                      ? `Nhập học: ${getAdmissionDisplayLabel()}`
+                      : (activeFilters.dateActive
+                          ? `${activeFilters.dateField === 'created_at' ? 'Tạo' : (activeFilters.dateField === 'updated_at' ? 'Cập nhật' : (activeFilters.dateField === 'admission_date' ? 'Nhập học' : 'Tương tác'))}: ${getTimelineDisplayLabel()}`
+                          : 'Thời gian')}
+                  </span>
+                  <ChevronDown size={14} style={{ transform: showTimelinePopover ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                </button>
+
+                {/* Unified Timeline & Admission Popover Menu */}
+                <AnimatePresence>
+                  {showTimelinePopover && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                      transition={{ duration: 0.15 }}
+                      style={{
+                        position: 'absolute',
+                        top: 'calc(100% + 6px)',
+                        left: 0,
+                        zIndex: 1000,
+                        width: '340px',
+                        background: 'var(--color-surface, #ffffff)',
+                        border: '1px solid var(--color-border)',
+                        borderRadius: '14px',
+                        boxShadow: '0 12px 32px rgba(0,0,0,0.15)',
+                        padding: '1rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.875rem'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '0.5rem' }}>
+                        <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Calendar size={16} color="var(--color-primary)" /> Lọc mốc thời gian
+                        </span>
+                        {(activeFilters.dateActive || activeFilters.admissionActive) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              removeActiveFilterTag('date');
+                              removeActiveFilterTag('admission');
+                            }}
+                            style={{ fontSize: '0.72rem', color: 'var(--color-danger, #ef4444)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+                          >
+                            Xóa lọc
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Chọn loại ngày: Lọc theo */}
+                      <div>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: '5px', display: 'block' }}>Lọc theo:</label>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px' }}>
+                          {[
+                            { id: 'created_at', label: 'Ngày tạo' },
+                            { id: 'updated_at', label: 'Cập nhật' },
+                            { id: 'last_contact', label: 'Tương tác' },
+                            { id: 'admission_date', label: 'Nhập học' }
+                          ].map(f => {
+                            const isSelected = filterDateField === f.id;
+                            return (
+                              <button
+                                key={f.id}
+                                type="button"
+                                onClick={() => setFilterDateField(f.id as any)}
+                                style={{
+                                  padding: '6px 2px',
+                                  fontSize: '0.72rem',
+                                  fontWeight: isSelected ? 700 : 500,
+                                  borderRadius: '6px',
+                                  border: isSelected ? '1.5px solid var(--color-primary)' : '1px solid var(--color-border)',
+                                  background: 'var(--color-surface, #ffffff)',
+                                  color: isSelected ? 'var(--color-primary)' : 'var(--color-text)',
+                                  cursor: 'pointer',
+                                  textAlign: 'center',
+                                  whiteSpace: 'nowrap',
+                                  transition: 'all 0.15s'
+                                }}
+                              >
+                                {f.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Khoảng thời gian nhanh (Đổi linh hoạt theo filterDateField) */}
+                      <div>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: '5px', display: 'block' }}>Khoảng thời gian nhanh:</label>
+                        {filterDateField === 'admission_date' ? (
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '6px' }}>
+                            {[
+                              { id: 'this_month', label: 'Tháng này' },
+                              { id: 'next_month', label: 'Tháng sau' },
+                              { id: 'this_quarter', label: 'Quý này' },
+                              { id: 'this_year', label: 'Năm nay' }
+                            ].map(p => {
+                              const isSelected = filterAdmissionPreset === p.id && activeFilters.admissionActive;
+                              return (
+                                <button
+                                  key={p.id}
+                                  type="button"
+                                  onClick={() => applyQuickAdmissionPreset(p.id)}
+                                  style={{
+                                    padding: '6px 10px',
+                                    fontSize: '0.78rem',
+                                    fontWeight: isSelected ? 700 : 500,
+                                    borderRadius: '8px',
+                                    border: isSelected ? '1.5px solid var(--color-primary)' : '1px solid var(--color-border)',
+                                    background: 'var(--color-surface, #ffffff)',
+                                    color: isSelected ? 'var(--color-primary)' : 'var(--color-text)',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.15s'
+                                  }}
+                                >
+                                  {p.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '6px' }}>
+                            {[
+                              { id: 'today', label: 'Hôm nay' },
+                              { id: 'last_7_days', label: '7 ngày qua' },
+                              { id: 'this_month', label: 'Tháng này' },
+                              { id: 'last_30_days', label: '30 ngày qua' }
+                            ].map(p => (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => applyQuickTimelinePreset(p.id)}
+                                style={{
+                                  padding: '6px 10px',
+                                  fontSize: '0.78rem',
+                                  fontWeight: 500,
+                                  borderRadius: '8px',
+                                  border: '1px solid var(--color-border)',
+                                  background: 'var(--color-surface, #ffffff)',
+                                  color: 'var(--color-text)',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s'
+                                }}
+                              >
+                                {p.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Custom Date Range */}
+                      <div style={{ borderTop: '1px solid var(--color-border-light)', paddingTop: '0.75rem' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: '6px', display: 'block' }}>Hoặc nhập ngày cụ thể:</label>
+                        {filterDateField === 'admission_date' ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '0.75rem', width: '55px', color: 'var(--color-text-muted)', flexShrink: 0 }}>Từ ngày:</span>
+                              <input
+                                type="date"
+                                className="form-input"
+                                value={filterAdmissionFrom}
+                                onChange={e => {
+                                  setFilterAdmissionFrom(e.target.value);
+                                  setFilterAdmissionPreset('custom');
+                                }}
+                                style={{ height: '34px', fontSize: '0.8rem', borderRadius: '8px', flex: 1 }}
+                              />
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '0.75rem', width: '55px', color: 'var(--color-text-muted)', flexShrink: 0 }}>Đến ngày:</span>
+                              <input
+                                type="date"
+                                className="form-input"
+                                value={filterAdmissionTo}
+                                onChange={e => {
+                                  setFilterAdmissionTo(e.target.value);
+                                  setFilterAdmissionPreset('custom');
+                                }}
+                                style={{ height: '34px', fontSize: '0.8rem', borderRadius: '8px', flex: 1 }}
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '0.75rem', width: '55px', color: 'var(--color-text-muted)', flexShrink: 0 }}>Từ ngày:</span>
+                              <input
+                                type="date"
+                                className="form-input"
+                                value={filterFromDate}
+                                onChange={e => setFilterFromDate(e.target.value)}
+                                style={{ height: '34px', fontSize: '0.8rem', borderRadius: '8px', flex: 1 }}
+                              />
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '0.75rem', width: '55px', color: 'var(--color-text-muted)', flexShrink: 0 }}>Đến ngày:</span>
+                              <input
+                                type="date"
+                                className="form-input"
+                                value={filterToDate}
+                                onChange={e => setFilterToDate(e.target.value)}
+                                style={{ height: '34px', fontSize: '0.8rem', borderRadius: '8px', flex: 1 }}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', paddingTop: '4px' }}>
+                        <button
+                          type="button"
+                          className="btn sm outline"
+                          onClick={() => setShowTimelinePopover(false)}
+                          style={{ padding: '5px 10px', fontSize: '0.75rem', borderRadius: '6px' }}
+                        >
+                          Đóng
+                        </button>
+                        <button
+                          type="button"
+                          className="btn sm primary"
+                          onClick={() => {
+                            if (filterDateField === 'admission_date') {
+                              applyCustomAdmissionRange();
+                            } else {
+                              applyCustomTimelineRange();
+                            }
+                          }}
+                          style={{ padding: '5px 12px', fontSize: '0.75rem', borderRadius: '6px', fontWeight: 600 }}
+                        >
+                          Áp dụng
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* Nút mở Drawer Bộ lọc nâng cao */}
               <button 
                 onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
                 style={{
@@ -2365,25 +2938,26 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                   justifyContent: 'center',
                   gap: '6px',
                   cursor: 'pointer',
-                  border: '1px solid var(--color-border)',
+                  border: activeFiltersCount > 0 ? '1.5px solid var(--color-primary)' : '1px solid var(--color-border)',
                   borderRadius: '8px',
-                  background: showAdvancedFilters ? 'var(--color-border-light)' : 'var(--color-surface)',
-                  color: showAdvancedFilters ? 'var(--color-primary)' : 'var(--color-text)',
+                  background: 'var(--color-surface, #ffffff)',
+                  color: activeFiltersCount > 0 ? 'var(--color-primary)' : 'var(--color-text)',
                   fontWeight: 600,
                   fontSize: '0.85rem',
                   transition: 'all 0.2s',
-                  boxShadow: 'var(--shadow-sm)',
+                  boxShadow: activeFiltersCount > 0 ? '0 2px 8px rgba(37, 99, 235, 0.15)' : 'var(--shadow-sm)',
                   outline: 'none',
-                  position: 'relative'
+                  position: 'relative',
+                  flexShrink: 0
                 }}
-                title="Bộ lọc nâng cao"
+                title="Mở bảng bộ lọc chuyên sâu"
               >
-                <Filter size={14} />
+                <SlidersHorizontal size={14} />
                 <span>Bộ lọc</span>
                 {activeFiltersCount > 0 && (
                   <span
                     style={{
-                      background: 'var(--color-danger, #ef4444)',
+                      background: 'var(--color-primary, #2563eb)',
                       color: '#ffffff',
                       fontSize: '0.7rem',
                       fontWeight: 700,
@@ -2403,55 +2977,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                 )}
               </button>
 
-              {/* Quick Filter: Chưa tương tác */}
-              <button 
-                type="button"
-                onClick={() => {
-                  setFilterUncontacted(prev => !prev);
-                  setPage(1);
-                }}
-                style={{
-                  height: '38px',
-                  padding: '0 0.875rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  cursor: 'pointer',
-                  border: filterUncontacted ? '1.5px solid #ef4444' : '1px solid var(--color-border)',
-                  borderRadius: '8px',
-                  background: filterUncontacted ? 'rgba(239, 68, 68, 0.08)' : 'var(--color-surface)',
-                  color: filterUncontacted ? '#ef4444' : 'var(--color-text)',
-                  fontWeight: filterUncontacted ? 700 : 600,
-                  fontSize: '0.85rem',
-                  transition: 'all 0.2s',
-                  boxShadow: filterUncontacted ? '0 2px 8px rgba(239, 68, 68, 0.2)' : 'var(--shadow-sm)',
-                  outline: 'none',
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0
-                }}
-                title={filterUncontacted ? "Bỏ lọc Chưa tương tác" : "Lọc nhanh các khách hàng chưa có tương tác"}
-              >
-                <PhoneOff size={14} style={{ color: filterUncontacted ? '#ef4444' : 'var(--color-text-muted)' }} />
-                <span>Chưa tương tác</span>
-                {typeof stageCounts['uncontacted'] === 'number' && (
-                  <span
-                    style={{
-                      background: filterUncontacted ? '#ef4444' : 'var(--color-bg-light)',
-                      color: filterUncontacted ? '#ffffff' : 'var(--color-text-muted)',
-                      fontSize: '0.7rem',
-                      fontWeight: 700,
-                      borderRadius: '10px',
-                      padding: '1px 6px',
-                      marginLeft: '2px',
-                      lineHeight: 1.4
-                    }}
-                  >
-                    {stageCounts['uncontacted']}
-                  </span>
-                )}
-                {filterUncontacted && <X size={12} style={{ marginLeft: '2px', opacity: 0.8 }} />}
-              </button>
+
             </div>
  
             {/* Row 2: Sort Select & View Mode switchers */}
@@ -2613,124 +3139,555 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
         </div>
       )}
 
-      {/* Collapsible Advanced Filters Panel */}
-      <AnimatePresence>
-        {showAdvancedFilters && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            style={{ overflow: showAdvancedFilters ? 'visible' : 'hidden', marginBottom: '0.75rem' }}
+      {/* Active Filter Tags Bar */}
+      {activeFiltersCount > 0 && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '6px',
+          padding: '8px 12px',
+          marginBottom: '0.75rem',
+          background: 'var(--color-bg-alt, rgba(0,0,0,0.02))',
+          border: '1px solid var(--color-border-light)',
+          borderRadius: '12px',
+          fontSize: '0.8rem'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--color-text-muted)', fontWeight: 600, marginRight: '4px' }}>
+            <Filter size={13} />
+            <span>Đang lọc:</span>
+          </div>
+
+          {/* Admission date tag */}
+          {activeFilters.admissionActive && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(37, 99, 235, 0.1)', color: 'var(--color-primary, #2563eb)', fontWeight: 600, fontSize: '0.75rem', border: '1px solid rgba(37, 99, 235, 0.25)' }}>
+              <GraduationCap size={13} />
+              <span>Nhập học: {getAdmissionDisplayLabel()}</span>
+              <button type="button" onClick={() => removeActiveFilterTag('admission')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: 'var(--color-primary, #2563eb)' }}><X size={12} /></button>
+            </span>
+          )}
+
+          {/* Date (Timeline) tag */}
+          {activeFilters.dateActive && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.1)', color: '#059669', fontWeight: 600, fontSize: '0.75rem', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+              <Calendar size={13} />
+              <span>{activeFilters.dateField === 'created_at' ? 'Ngày tạo' : (activeFilters.dateField === 'updated_at' ? 'Ngày cập nhật' : 'Tương tác cuối')}: {getTimelineDisplayLabel()}</span>
+              <button type="button" onClick={() => removeActiveFilterTag('date')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#059669' }}><X size={12} /></button>
+            </span>
+          )}
+
+          {/* Stage tag */}
+          {activeFilters.status && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(139, 92, 246, 0.1)', color: '#7c3aed', fontWeight: 600, fontSize: '0.75rem', border: '1px solid rgba(139, 92, 246, 0.25)' }}>
+              <span>{activeFilters.stageOp === 'not_in' ? 'Trừ giai đoạn: ' : 'Giai đoạn: '} {getStageName(activeFilters.status)}</span>
+              <button type="button" onClick={() => removeActiveFilterTag('status')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#7c3aed' }}><X size={12} /></button>
+            </span>
+          )}
+
+          {/* Lead status tag */}
+          {activeFilters.leadStatus && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.1)', color: '#d97706', fontWeight: 600, fontSize: '0.75rem', border: '1px solid rgba(245, 158, 11, 0.25)' }}>
+              <span>Trạng thái: {activeFilters.leadStatus === 'active' ? 'Đang hoạt động' : (activeFilters.leadStatus === 'nurture' ? 'Nuôi dưỡng' : 'Lost')}</span>
+              <button type="button" onClick={() => removeActiveFilterTag('leadStatus')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#d97706' }}><X size={12} /></button>
+            </span>
+          )}
+
+          {/* Sales owner tag */}
+          {activeFilters.ownerId && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(14, 165, 233, 0.1)', color: '#0284c7', fontWeight: 600, fontSize: '0.75rem', border: '1px solid rgba(14, 165, 233, 0.25)' }}>
+              <User size={13} />
+              <span>Phụ trách: {users.find(u => String(u.id) === String(activeFilters.ownerId))?.full_name || activeFilters.ownerId}</span>
+              <button type="button" onClick={() => removeActiveFilterTag('ownerId')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#0284c7' }}><X size={12} /></button>
+            </span>
+          )}
+
+          {/* Project tag */}
+          {activeFilters.projectId && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(236, 72, 153, 0.1)', color: '#db2777', fontWeight: 600, fontSize: '0.75rem', border: '1px solid rgba(236, 72, 153, 0.25)' }}>
+              <Building2 size={13} />
+              <span>Dự án: {projects.find(p => String(p.id) === String(activeFilters.projectId))?.name || activeFilters.projectId}</span>
+              <button type="button" onClick={() => removeActiveFilterTag('projectId')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#db2777' }}><X size={12} /></button>
+            </span>
+          )}
+
+          {/* Campaign tag */}
+          {activeFilters.campaignId && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(236, 72, 153, 0.1)', color: '#db2777', fontWeight: 600, fontSize: '0.75rem', border: '1px solid rgba(236, 72, 153, 0.25)' }}>
+              <span>Chiến dịch: {campaigns.find(c => String(c.id) === String(activeFilters.campaignId))?.name || activeFilters.campaignId}</span>
+              <button type="button" onClick={() => removeActiveFilterTag('campaignId')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#db2777' }}><X size={12} /></button>
+            </span>
+          )}
+
+          {/* Source tag */}
+          {activeFilters.source && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(100, 116, 139, 0.1)', color: '#475569', fontWeight: 600, fontSize: '0.75rem', border: '1px solid rgba(100, 116, 139, 0.25)' }}>
+              <span>Nguồn: {SOURCE_OPTIONS.find(s => s.value === activeFilters.source)?.label || activeFilters.source}</span>
+              <button type="button" onClick={() => removeActiveFilterTag('source')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#475569' }}><X size={12} /></button>
+            </span>
+          )}
+
+          {/* Tag filter */}
+          {activeFilters.tag && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(100, 116, 139, 0.1)', color: '#475569', fontWeight: 600, fontSize: '0.75rem', border: '1px solid rgba(100, 116, 139, 0.25)' }}>
+              <TagIcon size={12} />
+              <span>Tag: &ldquo;{activeFilters.tag}&rdquo;</span>
+              <button type="button" onClick={() => removeActiveFilterTag('tag')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#475569' }}><X size={12} /></button>
+            </span>
+          )}
+
+          {/* Data type tag */}
+          {activeFilters.dataType && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(100, 116, 139, 0.1)', color: '#475569', fontWeight: 600, fontSize: '0.75rem', border: '1px solid rgba(100, 116, 139, 0.25)' }}>
+              <span>Loại data: {activeFilters.dataType === 'distributed' ? 'Được chia' : (activeFilters.dataType === 'personal' ? 'Cá nhân' : 'Lỗi/Ticket')}</span>
+              <button type="button" onClick={() => removeActiveFilterTag('dataType')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#475569' }}><X size={12} /></button>
+            </span>
+          )}
+
+          {/* Multi program tag */}
+          {activeFilters.multiProgram && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(99, 102, 241, 0.1)', color: '#4f46e5', fontWeight: 600, fontSize: '0.75rem', border: '1px solid rgba(99, 102, 241, 0.25)' }}>
+              <Layers size={13} />
+              <span>Đa chương trình (≥2)</span>
+              <button type="button" onClick={() => removeActiveFilterTag('multiProgram')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#4f46e5' }}><X size={12} /></button>
+            </span>
+          )}
+
+          {/* Show lost tag */}
+          {activeFilters.showLost && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', color: '#dc2626', fontWeight: 600, fontSize: '0.75rem', border: '1px solid rgba(239, 68, 68, 0.25)' }}>
+              <Eye size={13} />
+              <span>Bao gồm data Lost</span>
+              <button type="button" onClick={() => removeActiveFilterTag('showLost')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#dc2626' }}><X size={12} /></button>
+            </span>
+          )}
+
+
+
+          {/* Clear all button */}
+          <button
+            type="button"
+            onClick={handleResetFilters}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '3px 8px',
+              borderRadius: '8px',
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--color-danger, #ef4444)',
+              fontWeight: 600,
+              fontSize: '0.75rem',
+              cursor: 'pointer',
+              marginLeft: 'auto'
+            }}
           >
-            <div className="card" style={{ padding: '1.25rem', border: '1px solid var(--color-primary-light)', background: 'var(--color-surface)', borderRadius: '16px' }}>
-              {/* Nhóm 1: Thông tin khách hàng */}
-              <div style={{ marginBottom: '1.25rem' }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-primary)', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Thông tin khách hàng
+            <RotateCcw size={12} />
+            <span>Xóa tất cả</span>
+          </button>
+        </div>
+      )}
+
+      {/* Slide-Over Drawer for Advanced Filter */}
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {showAdvancedFilters && (
+            <div style={{ position: 'fixed', inset: 0, zIndex: 2147483640, display: 'flex', justifyContent: 'flex-end', overflow: 'hidden' }}>
+              {/* Backdrop */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowAdvancedFilters(false)}
+                style={{
+                  position: 'fixed',
+                  inset: 0,
+                  background: 'rgba(15, 23, 42, 0.55)',
+                  backdropFilter: 'blur(3px)',
+                  zIndex: 2147483639
+                }}
+              />
+
+              {/* Drawer Panel */}
+              <motion.div
+                initial={{ x: '100%' }}
+                animate={{ x: 0 }}
+                exit={{ x: '100%' }}
+                transition={{ type: 'spring', damping: 26, stiffness: 260 }}
+                style={{
+                  position: 'relative',
+                  width: '100%',
+                  maxWidth: '540px',
+                  height: '100%',
+                  background: 'var(--color-surface, #ffffff)',
+                  boxShadow: '-8px 0 36px rgba(0, 0, 0, 0.28)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  zIndex: 2147483640,
+                  overflow: 'hidden'
+                }}
+              >
+              {/* Drawer Header */}
+              <div style={{
+                padding: '1.25rem 1.5rem',
+                borderBottom: '1px solid var(--color-border)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: 'var(--color-surface)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '10px',
+                    background: 'rgba(37, 99, 235, 0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--color-primary, #2563eb)'
+                  }}>
+                    <SlidersHorizontal size={18} />
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--color-text)' }}>Bộ lọc chuyên sâu</h3>
+                    <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Tùy chỉnh tiêu chí lọc danh sách khách hàng</p>
+                  </div>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                  {/* Trạng thái Lead (Active / Nurture / Lost) */}
-                  <div className="form-group">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', margin: 0 }}>Trạng thái Lead</label>
-                      <div style={{ display: 'flex', gap: '2px', background: 'var(--color-bg-alt, rgba(0,0,0,0.05))', padding: '2px', borderRadius: '6px' }}>
-                        <button
-                          type="button"
-                          onClick={() => setFilterLeadStatusOp('in')}
-                          style={{
-                            padding: '2px 6px',
-                            fontSize: '0.68rem',
-                            fontWeight: 600,
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            background: filterLeadStatusOp === 'in' ? 'var(--color-primary)' : 'transparent',
-                            color: filterLeadStatusOp === 'in' ? '#fff' : 'var(--color-text-muted)',
-                            transition: 'all 0.15s'
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {activeFiltersCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleResetFilters}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '6px 10px',
+                        borderRadius: '8px',
+                        border: '1px solid var(--color-border)',
+                        background: 'transparent',
+                        color: 'var(--color-danger, #ef4444)',
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <RotateCcw size={12} /> Đặt lại
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowAdvancedFilters(false)}
+                    style={{
+                      width: '34px',
+                      height: '34px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--color-border)',
+                      background: 'var(--color-surface)',
+                      color: 'var(--color-text-muted)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Drawer Body */}
+              <div style={{
+                flex: 1,
+                overflowY: 'auto',
+                padding: '1.25rem 1.5rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '1.25rem'
+              }}>
+
+                {/* Card 1: 🎓 Học vụ & Nhập học */}
+                <div style={{
+                  padding: '1.1rem',
+                  borderRadius: '14px',
+                  background: 'var(--color-bg-alt, rgba(0,0,0,0.02))',
+                  border: '1px solid var(--color-border-light)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.875rem' }}>
+                    <GraduationCap size={16} color="var(--color-text, #0f172a)" /> Học vụ & Mốc thời gian
+                  </div>
+
+                  {/* Khoảng ngày nhập học */}
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '6px' }}>Khoảng ngày nhập học</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px', marginBottom: '8px' }}>
+                      {[
+                        { id: 'this_month', label: 'Tháng này' },
+                        { id: 'next_month', label: 'Tháng sau' },
+                        { id: 'this_quarter', label: 'Quý này' },
+                        { id: 'this_year', label: 'Năm nay' }
+                      ].map(p => {
+                        const isSelected = filterAdmissionPreset === p.id;
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => {
+                              if (isSelected) {
+                                setFilterAdmissionPreset('');
+                                setFilterAdmissionFrom('');
+                                setFilterAdmissionTo('');
+                              } else {
+                                const { from, to } = getAdmissionPresetRange(p.id);
+                                setFilterAdmissionPreset(p.id);
+                                setFilterAdmissionFrom(from);
+                                setFilterAdmissionTo(to);
+                              }
+                            }}
+                            style={{
+                              padding: '6px 4px',
+                              fontSize: '0.72rem',
+                              fontWeight: isSelected ? 700 : 500,
+                              borderRadius: '6px',
+                              border: isSelected ? '1.5px solid var(--color-primary)' : '1px solid var(--color-border)',
+                              background: 'var(--color-surface, #ffffff)',
+                              color: isSelected ? 'var(--color-primary)' : 'var(--color-text)',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {p.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      <div>
+                        <label style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '2px' }}>Từ ngày</label>
+                        <input
+                          type="date"
+                          className="form-input"
+                          value={filterAdmissionFrom}
+                          onChange={e => {
+                            setFilterAdmissionFrom(e.target.value);
+                            setFilterAdmissionPreset('custom');
                           }}
-                        >
-                          Lọc theo
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setFilterLeadStatusOp('not_in')}
-                          style={{
-                            padding: '2px 6px',
-                            fontSize: '0.68rem',
-                            fontWeight: 600,
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            background: filterLeadStatusOp === 'not_in' ? 'var(--color-danger, #ef4444)' : 'transparent',
-                            color: filterLeadStatusOp === 'not_in' ? '#fff' : 'var(--color-text-muted)',
-                            transition: 'all 0.15s'
+                          style={{ height: '36px', fontSize: '0.8125rem', borderRadius: '8px' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '2px' }}>Đến ngày</label>
+                        <input
+                          type="date"
+                          className="form-input"
+                          value={filterAdmissionTo}
+                          onChange={e => {
+                            setFilterAdmissionTo(e.target.value);
+                            setFilterAdmissionPreset('custom');
                           }}
-                        >
-                          Loại trừ
-                        </button>
+                          style={{ height: '36px', fontSize: '0.8125rem', borderRadius: '8px' }}
+                        />
                       </div>
                     </div>
-                    <CustomSelect
-                      value={filterLeadStatus}
-                      onChange={v => setFilterLeadStatus(v)}
-                      options={[
-                        { value: '', label: 'Tất cả trạng thái Lead' },
-                        { value: 'active', label: 'Đang hoạt động (Active)', icon: <CheckCircle2 size={13} style={{ color: '#10b981' }} /> },
-                        { value: 'nurture', label: 'Nuôi dưỡng (Nurture)', icon: <Clock size={13} style={{ color: '#d97706' }} /> },
-                        { value: 'lost', label: 'Không tiếp tục (Lost)', icon: <Ban size={13} style={{ color: '#ef4444' }} /> }
-                      ]}
-                    />
+                  </div>
+
+                  {/* Khoảng ngày tạo / cập nhật / tương tác (Đem lên bên dưới ngày nhập học) */}
+                  <div style={{ marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px solid var(--color-border-light)' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '0.875rem' }}>
+                      <div>
+                        <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Lọc theo ngày</label>
+                        <CustomSelect
+                          value={filterDateField}
+                          onChange={v => setFilterDateField(v as any)}
+                          options={[
+                            { value: 'created_at', label: 'Ngày tạo' },
+                            { value: 'updated_at', label: 'Ngày cập nhật' },
+                            { value: 'last_contact', label: 'Ngày tương tác cuối' }
+                          ]}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Kiểu lọc</label>
+                        <CustomSelect
+                          value={dateFilterType}
+                          onChange={v => setDateFilterType(v as any)}
+                          options={[
+                            { value: 'range', label: 'Trong khoảng' },
+                            { value: 'before', label: 'Trước ngày' },
+                            { value: 'after', label: 'Sau ngày' }
+                          ]}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Quick buttons */}
+                    {dateFilterType === 'range' && (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px', marginBottom: '8px' }}>
+                        {[
+                          { id: 'today', label: 'Hôm nay' },
+                          { id: 'last_7_days', label: '7 ngày' },
+                          { id: 'this_month', label: 'Tháng này' },
+                          { id: 'last_30_days', label: '30 ngày' }
+                        ].map(p => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => {
+                              const now = new Date();
+                              const year = now.getFullYear();
+                              const month = now.getMonth();
+                              const todayStr = now.toISOString().split('T')[0];
+                              let from = '';
+                              let to = todayStr;
+                              if (p.id === 'today') from = todayStr;
+                              else if (p.id === 'last_7_days') from = new Date(now.getTime() - 7 * 86400000).toISOString().split('T')[0];
+                              else if (p.id === 'this_month') {
+                                from = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+                                to = `${year}-${String(month + 1).padStart(2, '0')}-${String(new Date(year, month + 1, 0).getDate()).padStart(2, '0')}`;
+                              } else if (p.id === 'last_30_days') from = new Date(now.getTime() - 30 * 86400000).toISOString().split('T')[0];
+                              setFilterFromDate(from);
+                              setFilterToDate(to);
+                            }}
+                            style={{
+                              padding: '5px 4px',
+                              fontSize: '0.72rem',
+                              fontWeight: 500,
+                              borderRadius: '6px',
+                              border: '1px solid var(--color-border)',
+                              background: '#ffffff',
+                              color: 'var(--color-text)',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {p.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Inputs ngày */}
+                    {dateFilterType === 'range' && (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                        <div>
+                          <label style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '2px' }}>Từ ngày</label>
+                          <input type="date" className="form-input" value={filterFromDate} onChange={e => setFilterFromDate(e.target.value)} style={{ height: '36px', fontSize: '0.8125rem', borderRadius: '8px' }} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '2px' }}>Đến ngày</label>
+                          <input type="date" className="form-input" value={filterToDate} onChange={e => setFilterToDate(e.target.value)} style={{ height: '36px', fontSize: '0.8125rem', borderRadius: '8px' }} />
+                        </div>
+                      </div>
+                    )}
+                    {dateFilterType === 'before' && (
+                      <div>
+                        <label style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '2px' }}>Trước ngày</label>
+                        <input type="date" className="form-input" value={filterBeforeDate} onChange={e => setFilterBeforeDate(e.target.value)} style={{ height: '36px', fontSize: '0.8125rem', borderRadius: '8px' }} />
+                      </div>
+                    )}
+                    {dateFilterType === 'after' && (
+                      <div>
+                        <label style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '2px' }}>Sau ngày</label>
+                        <input type="date" className="form-input" value={filterAfterDate} onChange={e => setFilterAfterDate(e.target.value)} style={{ height: '36px', fontSize: '0.8125rem', borderRadius: '8px' }} />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Lọc đa chương trình */}
+                  <div>
+                    <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '6px' }}>Hồ sơ đa chương trình</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setFilterMultiProgram(false)}
+                        style={{
+                          padding: '7px 10px',
+                          fontSize: '0.78rem',
+                          fontWeight: !filterMultiProgram ? 700 : 500,
+                          borderRadius: '8px',
+                          border: !filterMultiProgram ? '1.5px solid var(--color-primary)' : '1px solid var(--color-border)',
+                          background: 'var(--color-surface, #ffffff)',
+                          color: !filterMultiProgram ? 'var(--color-primary)' : 'var(--color-text)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Tất cả hồ sơ
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFilterMultiProgram(true)}
+                        style={{
+                          padding: '7px 10px',
+                          fontSize: '0.78rem',
+                          fontWeight: filterMultiProgram ? 700 : 500,
+                          borderRadius: '8px',
+                          border: filterMultiProgram ? '1.5px solid var(--color-primary)' : '1px solid var(--color-border)',
+                          background: 'var(--color-surface, #ffffff)',
+                          color: filterMultiProgram ? 'var(--color-primary)' : 'var(--color-text)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Đa chương trình (≥ 2 CT)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card 2: 📊 Tiến trình & Trạng thái */}
+                <div style={{
+                  padding: '1.1rem',
+                  borderRadius: '14px',
+                  background: 'var(--color-bg-alt, rgba(0,0,0,0.02))',
+                  border: '1px solid var(--color-border-light)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.875rem' }}>
+                    <Layers size={16} color="var(--color-text, #0f172a)" /> Tiến trình & Trạng thái Lead
+                  </div>
+
+                  {/* Trạng thái Lead */}
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '6px' }}>Trạng thái Lead</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+                      {[
+                        { id: '', label: 'Tất cả' },
+                        { id: 'active', label: 'Hoạt động', color: '#10b981' },
+                        { id: 'nurture', label: 'Nuôi dưỡng', color: '#d97706' },
+                      ].map(st => {
+                        const isSelected = filterLeadStatus === st.id;
+                        return (
+                          <button
+                            key={st.id}
+                            type="button"
+                            onClick={() => setFilterLeadStatus(st.id)}
+                            style={{
+                              padding: '7px 8px',
+                              fontSize: '0.78rem',
+                              fontWeight: isSelected ? 700 : 500,
+                              borderRadius: '8px',
+                              border: isSelected ? `1.5px solid ${st.id === '' ? 'var(--color-primary)' : (st.color || 'var(--color-primary)')}` : '1px solid var(--color-border)',
+                              background: 'var(--color-surface, #ffffff)',
+                              color: isSelected ? (st.id === '' ? 'var(--color-primary)' : (st.color || 'var(--color-primary)')) : 'var(--color-text)',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {st.label}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   {/* Giai đoạn Pipeline */}
-                  <div className="form-group">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', margin: 0 }}>Giai đoạn Pipeline</label>
-                      <div style={{ display: 'flex', gap: '2px', background: 'var(--color-bg-alt, rgba(0,0,0,0.05))', padding: '2px', borderRadius: '6px' }}>
-                        <button
-                          type="button"
-                          onClick={() => setFilterStageOp('in')}
-                          style={{
-                            padding: '2px 6px',
-                            fontSize: '0.68rem',
-                            fontWeight: 600,
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            background: filterStageOp === 'in' ? 'var(--color-primary)' : 'transparent',
-                            color: filterStageOp === 'in' ? '#fff' : 'var(--color-text-muted)',
-                            transition: 'all 0.15s'
-                          }}
-                        >
-                          Lọc theo
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setFilterStageOp('not_in')}
-                          style={{
-                            padding: '2px 6px',
-                            fontSize: '0.68rem',
-                            fontWeight: 600,
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            background: filterStageOp === 'not_in' ? 'var(--color-danger, #ef4444)' : 'transparent',
-                            color: filterStageOp === 'not_in' ? '#fff' : 'var(--color-text-muted)',
-                            transition: 'all 0.15s'
-                          }}
-                        >
-                          Loại trừ
-                        </button>
-                      </div>
-                    </div>
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Giai đoạn Pipeline</label>
                     <CustomSelect
                       value={filterStatus}
                       onChange={v => setFilterStatus(v)}
                       options={[
                         { value: '', label: 'Tất cả giai đoạn' },
                         { value: 'not_contacted', label: 'Chưa liên hệ' },
-                        ...(pipelineStages.length > 0 
+                        ...(pipelineStages.length > 0
                           ? pipelineStages.map(s => ({ value: String(s.id), label: s.name }))
                           : [
                               { value: 'new_lead', label: '01 – New Lead' },
@@ -2750,89 +3707,37 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                             ]
                         )
                       ]}
-                    />
-                  </div>
-
-                  {/* Dự án */}
-                  <div className="form-group">
-                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '4px', display: 'block' }}>Dự án giao dịch</label>
-                    <CustomSelect
-                      value={filterProjectId}
-                      onChange={v => {
-                        setFilterProjectId(v);
-                        if (v && filterCampaignId) {
-                          const camp = campaigns.find(c => String(c.id) === String(filterCampaignId));
-                          if (camp && String(camp.project_id) !== String(v)) {
-                            setFilterCampaignId('');
-                          }
-                        }
-                      }}
-                      options={[
-                        { value: '', label: 'Tất cả dự án' },
-                        ...projects.map(p => ({ value: String(p.id), label: p.name }))
-                      ]}
                       searchable
                     />
                   </div>
 
-                  {/* Chiến dịch */}
-                  <div className="form-group">
-                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '4px', display: 'block' }}>Chiến dịch</label>
-                    {(() => {
-                      const filteredCamps = filterProjectId
-                        ? campaigns.filter(c => Number(c.project_id) === Number(filterProjectId))
-                        : campaigns;
-                      return (
-                        <CustomSelect
-                          value={filterCampaignId}
-                          onChange={v => {
-                            setFilterCampaignId(v);
-                            if (v) {
-                              const camp = campaigns.find(c => String(c.id) === String(v));
-                              if (camp && camp.project_id) {
-                                setFilterProjectId(String(camp.project_id));
-                              }
-                            }
-                          }}
-                          options={[
-                            { value: '', label: 'Tất cả chiến dịch' },
-                            ...filteredCamps.map(c => ({ value: String(c.id), label: c.name }))
-                          ]}
-                          searchable
-                        />
-                      );
-                    })()}
-                  </div>
-
-                  {/* Nhóm nguồn data */}
-                  <div className="form-group">
-                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '4px', display: 'block' }}>Phân loại nguồn data</label>
-                    <CustomSelect
-                      value={filterDataType}
-                      onChange={v => setFilterDataType(v)}
-                      options={[
-                        { value: '', label: 'Tất cả loại data' },
-                        { value: 'distributed', label: 'Data được chia' },
-                        { value: 'personal', label: 'Data cá nhân' },
-                        { value: 'error_ticket', label: 'Data lỗi & Ticket' }
-                      ]}
+                  {/* Toggle Lost */}
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', padding: '6px 0' }}>
+                    <input
+                      type="checkbox"
+                      checked={filterShowLost}
+                      onChange={e => setFilterShowLost(e.target.checked)}
+                      style={{ width: '16px', height: '16px', accentColor: 'var(--color-primary)', cursor: 'pointer' }}
                     />
-                  </div>
+                    <span>Bao gồm data Lost trong kết quả (Mặc định ẩn)</span>
+                  </label>
+                </div>
 
-                  {/* Nguồn */}
-                  <div className="form-group">
-                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '4px', display: 'block' }}>Nguồn khách hàng</label>
-                    <CustomSelect
-                      value={filterSource}
-                      onChange={v => setFilterSource(v)}
-                      options={SOURCE_OPTIONS}
-                    />
+                {/* Card 3: 👤 Phụ trách & Nguồn khách hàng */}
+                <div style={{
+                  padding: '1.1rem',
+                  borderRadius: '14px',
+                  background: 'var(--color-bg-alt, rgba(0,0,0,0.02))',
+                  border: '1px solid var(--color-border-light)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.875rem' }}>
+                    <Users size={16} color="var(--color-text, #0f172a)" /> Phụ trách & Nguồn dữ liệu
                   </div>
 
                   {/* Sale phụ trách */}
                   {!isSale && (
-                    <div className="form-group">
-                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '4px', display: 'block' }}>Sale phụ trách</label>
+                    <div style={{ marginBottom: '0.875rem' }}>
+                      <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Sale phụ trách</label>
                       <CustomSelect
                         value={filterOwnerId}
                         onChange={v => setFilterOwnerId(v)}
@@ -2848,8 +3753,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                               }
                             }
                             return list;
-                          })().map(u => ({ 
-                            value: String(u.id), 
+                          })().map(u => ({
+                            value: String(u.id),
                             label: u.full_name,
                             avatar: u.avatar_url || u.avatar,
                             sublabel: u.email
@@ -2861,129 +3766,145 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                     </div>
                   )}
 
-                  {/* Nhãn / Tags */}
-                  <div className="form-group">
-                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '4px', display: 'block' }}>Phân loại (Tag)</label>
+                  {/* Dự án & Chiến dịch */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '0.875rem' }}>
+                    <div>
+                      <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Dự án</label>
+                      <CustomSelect
+                        value={filterProjectId}
+                        onChange={v => {
+                          setFilterProjectId(v);
+                          if (v && filterCampaignId) {
+                            const camp = campaigns.find(c => String(c.id) === String(filterCampaignId));
+                            if (camp && String(camp.project_id) !== String(v)) {
+                              setFilterCampaignId('');
+                            }
+                          }
+                        }}
+                        options={[
+                          { value: '', label: 'Tất cả dự án' },
+                          ...projects.map(p => ({ value: String(p.id), label: p.name }))
+                        ]}
+                        searchable
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Chiến dịch</label>
+                      {(() => {
+                        const filteredCamps = filterProjectId
+                          ? campaigns.filter(c => Number(c.project_id) === Number(filterProjectId))
+                          : campaigns;
+                        return (
+                          <CustomSelect
+                            value={filterCampaignId}
+                            onChange={v => {
+                              setFilterCampaignId(v);
+                              if (v) {
+                                const camp = campaigns.find(c => String(c.id) === String(v));
+                                if (camp && camp.project_id) {
+                                  setFilterProjectId(String(camp.project_id));
+                                }
+                              }
+                            }}
+                            options={[
+                              { value: '', label: 'Tất cả chiến dịch' },
+                              ...filteredCamps.map(c => ({ value: String(c.id), label: c.name }))
+                            ]}
+                            searchable
+                          />
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Phân loại nguồn data & Nguồn */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '0.875rem' }}>
+                    <div>
+                      <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Phân loại nguồn data</label>
+                      <CustomSelect
+                        value={filterDataType}
+                        onChange={v => setFilterDataType(v)}
+                        options={[
+                          { value: '', label: 'Tất cả loại data' },
+                          { value: 'distributed', label: 'Data được chia' },
+                          { value: 'personal', label: 'Data cá nhân' },
+                          { value: 'error_ticket', label: 'Data lỗi & Ticket' }
+                        ]}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Nguồn khách hàng</label>
+                      <CustomSelect
+                        value={filterSource}
+                        onChange={v => setFilterSource(v)}
+                        options={SOURCE_OPTIONS}
+                        searchable
+                      />
+                    </div>
+                  </div>
+
+                  {/* Tag */}
+                  <div>
+                    <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Phân loại (Tag)</label>
                     <input
                       className="form-input"
                       placeholder="Nhập tên tag cần lọc..."
                       value={filterTag}
                       onChange={e => setFilterTag(e.target.value)}
-                      style={{ height: '38px', borderRadius: '10px' }}
-                    />
-                  </div>
-
-                  {/* Số lượng chương trình */}
-                  <div className="form-group">
-                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '4px', display: 'block' }}>Số lượng chương trình</label>
-                    <CustomSelect
-                      value={filterMultiProgram ? 'multi' : ''}
-                      onChange={v => setFilterMultiProgram(v === 'multi')}
-                      options={[
-                        { value: '', label: 'Tất cả hồ sơ' },
-                        { value: 'multi', label: 'Đa chương trình (≥ 2 CT)' }
-                      ]}
+                      style={{ height: '36px', borderRadius: '8px' }}
                     />
                   </div>
                 </div>
+
+
+
               </div>
 
-              {/* Nhóm 2: Lọc theo thời gian */}
-              <div style={{ borderTop: '1px solid var(--color-border-light)', paddingTop: '1.25rem', marginBottom: '1.5rem' }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-primary)', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Bộ lọc thời gian
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                  {/* Kiểu lọc thời gian */}
-                  <div className="form-group">
-                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '4px', display: 'block' }}>Lọc theo ngày nào</label>
-                    <CustomSelect
-                      value={filterDateField}
-                      onChange={v => setFilterDateField(v as any)}
-                      options={[
-                        { value: 'created_at', label: 'Ngày tạo' },
-                        { value: 'updated_at', label: 'Ngày cập nhật' },
-                        { value: 'last_contact', label: 'Ngày tương tác cuối' }
-                      ]}
-                    />
-                  </div>
+              {/* Drawer Footer */}
+              <div style={{
+                padding: '1rem 1.5rem',
+                borderTop: '1px solid var(--color-border)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: 'var(--color-surface)',
+                gap: '0.75rem'
+              }}>
+                <button
+                  type="button"
+                  className="btn outline"
+                  onClick={handleResetFilters}
+                  style={{ borderRadius: '10px', fontWeight: 600, fontSize: '0.85rem' }}
+                >
+                  Đặt lại
+                </button>
 
-                  {/* Kiểu lọc ngày */}
-                  <div className="form-group">
-                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '4px', display: 'block' }}>Kiểu lọc thời gian</label>
-                    <CustomSelect
-                      value={dateFilterType}
-                      onChange={v => setDateFilterType(v as any)}
-                      options={[
-                        { value: 'range', label: 'Trong khoảng' },
-                        { value: 'before', label: 'Trước ngày' },
-                        { value: 'after', label: 'Sau ngày' }
-                      ]}
-                    />
-                  </div>
-
-                  {/* inputs ngày tương ứng */}
-                  {dateFilterType === 'range' && (
-                    <>
-                      <div className="form-group">
-                        <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '4px', display: 'block' }}>Từ ngày</label>
-                        <input type="date" className="form-input" value={filterFromDate} onChange={e => setFilterFromDate(e.target.value)} style={{ height: '38px', borderRadius: '10px' }} />
-                      </div>
-                      <div className="form-group">
-                        <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '4px', display: 'block' }}>Đến ngày</label>
-                        <input type="date" className="form-input" value={filterToDate} onChange={e => setFilterToDate(e.target.value)} style={{ height: '38px', borderRadius: '10px' }} />
-                      </div>
-                    </>
-                  )}
-                  {dateFilterType === 'before' && (
-                    <div className="form-group">
-                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '4px', display: 'block' }}>Trước ngày</label>
-                      <input type="date" className="form-input" value={filterBeforeDate} onChange={e => setFilterBeforeDate(e.target.value)} style={{ height: '38px', borderRadius: '10px' }} />
-                    </div>
-                  )}
-                  {dateFilterType === 'after' && (
-                    <div className="form-group">
-                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '4px', display: 'block' }}>Sau ngày</label>
-                      <input type="date" className="form-input" value={filterAfterDate} onChange={e => setFilterAfterDate(e.target.value)} style={{ height: '38px', borderRadius: '10px' }} />
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Action Buttons & Quick Options */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid var(--color-border-light)' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)' }}>
-                  <input 
-                    type="checkbox" 
-                    checked={filterShowLost} 
-                    onChange={e => setFilterShowLost(e.target.checked)} 
-                    style={{ width: '16px', height: '16px', accentColor: 'var(--color-primary)', cursor: 'pointer' }}
-                  />
-                  <span>Bao gồm data Lost trong kết quả (Mặc định ẩn)</span>
-                </label>
-
-                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <button
-                    className="btn outline sm"
-                    onClick={handleResetFilters}
-                    style={{ display: 'flex', alignItems: 'center', gap: '6px', borderRadius: '10px', fontWeight: 600 }}
+                    type="button"
+                    className="btn outline"
+                    onClick={() => setShowAdvancedFilters(false)}
+                    style={{ borderRadius: '10px', fontWeight: 600, fontSize: '0.85rem' }}
                   >
-                    Đặt lại
+                    Hủy
                   </button>
                   <button
-                    className="btn primary sm"
+                    type="button"
+                    className="btn primary"
                     onClick={handleApplyFilters}
-                    style={{ display: 'flex', alignItems: 'center', gap: '6px', borderRadius: '10px', fontWeight: 600 }}
+                    style={{ borderRadius: '10px', fontWeight: 600, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}
                   >
-                    Lọc kết quả
+                    <CheckCircle2 size={16} /> Áp dụng bộ lọc
                   </button>
                 </div>
               </div>
 
-            </div>
-          </motion.div>
+            </motion.div>
+          </div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>,
+      document.body
+    )}
 
       <ColumnCustomizer 
         isOpen={showColumns} 

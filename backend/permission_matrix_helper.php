@@ -150,7 +150,7 @@ if (!function_exists('getActionModuleAndType')) {
             'get_sse_updates', 'get_dashboard_stats', 'get_logs'
         ], true)) {
             $module = 'leads';
-        } else if (strpos($action, 'lead') !== false || strpos($action, 'round') !== false || strpos($action, 'rule') !== false) {
+        } else if (strpos($action, 'lead') !== false || strpos($action, 'round') !== false || strpos($action, 'rule') !== false || strpos($action, 'routing') !== false) {
             $module = 'leads';
         } else if (strpos($action, 'ticket') !== false) {
             if (strpos($action, 'setting') !== false) {

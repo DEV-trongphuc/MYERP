@@ -22,6 +22,7 @@ import { canManageSystemSettings } from '../utils/roleUtils';
 import { useLanguage } from '../contexts/LanguageContext';
 import { EmptyCard } from '../components/ui/EmptyCard';
 import { useAuthStore } from '../store/authStore';
+import { DistributionNavTabs } from '../components/DistributionNavTabs';
 
 const OP_LABELS: Record<string, string> = {
   contains: 'Có chứa từ khóa',
@@ -689,6 +690,7 @@ const RuleSettingsInner = () => {
 
   return (
     <div style={{ animation: 'fadeIn 0.3s' }}>
+      <DistributionNavTabs currentTab="rules" />
       <div className="page-header" style={{ marginBottom: '2rem' }}>
         <div>
           <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

@@ -67,6 +67,15 @@ export interface ChatMessage {
   read_by?: MessageReadParticipant[];
 }
 
+export interface ChatWallpaperConfig {
+  preset_id?: string;
+  url?: string;
+  overlay_opacity?: number;
+  blur?: number;
+  name?: string;
+  custom?: boolean;
+}
+
 export interface ChatConversation {
   id: number;
   type: ConversationType;
@@ -78,6 +87,8 @@ export interface ChatConversation {
   settings?: {
     only_admin_can_send?: boolean;
     only_admin_can_change_info?: boolean;
+    wallpaper?: ChatWallpaperConfig;
+    [key: string]: any;
   };
   my_role?: ParticipantRole;
   is_pinned?: boolean;

@@ -983,6 +983,10 @@ function evaluateRules($conn, $data, $source, $type, $connId = null, $connection
             $isMatched = false;
 
             foreach ($ruleConnIds as $ruleConnIdStr) {
+                if ($ruleConnIdStr === 'all') {
+                    $isMatched = true;
+                    break;
+                }
                 $ruleConnId = (int) $ruleConnIdStr;
                 if ($ruleConnId === -1 && $connectionType === 'sheets') {
                     $isMatched = true;

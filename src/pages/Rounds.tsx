@@ -14,6 +14,7 @@ import { CustomSelect } from '../components/ui/CustomSelect';
 import { CustomModal } from '../components/ui/CustomModal';
 import { EmptyCard } from '../components/ui/EmptyCard';
 import { useAuthStore } from '../store/authStore';
+import { DistributionNavTabs } from '../components/DistributionNavTabs';
 import { Pagination } from '../components/ui/Pagination';
 import { canManageSystemSettings } from '../utils/roleUtils';
 
@@ -686,6 +687,7 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
           }
         }
       `}</style>
+      <DistributionNavTabs currentTab="rounds" />
       <div className="page-header">
         <div>
           <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

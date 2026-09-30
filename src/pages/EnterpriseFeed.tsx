@@ -5,7 +5,7 @@ import {
   ThumbsUp, Heart, Laugh, Angry, MessageCircle, Share2, 
   Send, Trash2, Globe, Lock, Users, Link as LinkIcon, Paperclip, X, Camera, 
   MessageSquare, MoreHorizontal, Filter, Search, Tag, Eye, Edit, Smile,
-  ArrowUp, Check, Link2
+  ArrowUp, Check, Link2, LayoutGrid, LayoutList, UserCheck, UserX, CheckSquare, Square, Settings
 } from 'lucide-react';
 import api from '../api/axios';
 import { useAuth } from '../contexts/AuthContext';
@@ -48,6 +48,15 @@ const REACTION_TYPES = [
   { type: 'flex', label: 'Đồng lòng', emoji: '💪', color: '#10b981' }
 ];
 
+export interface StaffAudienceUser {
+  id: number;
+  full_name: string;
+  avatar_url?: string | null;
+  role?: string;
+  department?: string;
+  team_id?: number | null;
+}
+
 interface Post {
   id: number;
   user_id: number;
@@ -71,6 +80,10 @@ interface Post {
   top_comments: Comment[];
   team_name?: string | null;
   team_id?: number | null;
+  target_user_ids?: number[];
+  excluded_user_ids?: number[];
+  target_users?: { id: number; full_name: string; avatar_url?: string | null; role?: string }[];
+  excluded_users?: { id: number; full_name: string; avatar_url?: string | null; role?: string }[];
 }
 
 interface Comment {
@@ -372,18 +385,38 @@ export const EnterpriseFeed: React.FC = () => {
 
   const [selectedVisibility, setSelectedVisibility] = useState<string>('all');
 
+  // View Mode: 'list' | 'grid'
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>(() => {
+    return (localStorage.getItem('enterprise_feed_view_mode') as 'list' | 'grid') || 'list';
+  });
+  const handleSetViewMode = (mode: 'list' | 'grid') => {
+    setViewMode(mode);
+    try { localStorage.setItem('enterprise_feed_view_mode', mode); } catch (e) {}
+  };
+
   // Creation State
   const [content, setContent] = useState('');
   const [visibility, setVisibility] = useState('global');
+  const [targetUserIds, setTargetUserIds] = useState<number[]>([]);
+  const [excludedUserIds, setExcludedUserIds] = useState<number[]>([]);
   const [attachments, setAttachments] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Audience Picker Modal state
+  const [audienceModalOpen, setAudienceModalOpen] = useState(false);
+  const [audienceModalMode, setAudienceModalMode] = useState<'target' | 'exclude'>('target');
+  const [audienceModalContext, setAudienceModalContext] = useState<'create' | 'edit'>('create');
+  const [audienceSearchTerm, setAudienceSearchTerm] = useState('');
+  const [audienceSelectedTeam, setAudienceSelectedTeam] = useState<number | 'all'>('all');
 
   // Edit Post State
   const [editingPost, setEditingPost] = useState<Post | null>(null);
   const [editContent, setEditContent] = useState('');
   const [editVisibility, setEditVisibility] = useState('global');
   const [editTeamId, setEditTeamId] = useState<number | null>(null);
+  const [editTargetUserIds, setEditTargetUserIds] = useState<number[]>([]);
+  const [editExcludedUserIds, setEditExcludedUserIds] = useState<number[]>([]);
   const [editAttachments, setEditAttachments] = useState<string[]>([]);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editUploading, setEditUploading] = useState(false);
@@ -442,6 +475,111 @@ export const EnterpriseFeed: React.FC = () => {
       setTeams(res.data.data || res.data || []);
     } catch (e) {
       console.error('Error fetching teams', e);
+    }
+  };
+
+  // Staff Directory for Audience targeting & exclusion
+  const [allStaff, setAllStaff] = useState<StaffAudienceUser[]>([]);
+
+  const fetchAllStaff = async () => {
+    try {
+      const res = await api.get('/users?all=1');
+      const d = res.data?.data;
+      const list = Array.isArray(d) ? d : (d?.items || []);
+      setAllStaff(list.map((u: any) => ({
+        id: u.id,
+        full_name: u.full_name || u.name || u.username || 'Nhân sự',
+        avatar_url: u.avatar_url || u.avatar || null,
+        role: u.role || 'Nhân viên',
+        department: u.department || '',
+        team_id: u.team_id || null
+      })));
+    } catch (e) {
+      console.error('Error fetching all staff', e);
+    }
+  };
+
+  // Active audience selected IDs helper
+  const currentAudienceSelectedIds = useMemo(() => {
+    if (audienceModalContext === 'create') {
+      return audienceModalMode === 'target' ? targetUserIds : excludedUserIds;
+    } else {
+      return audienceModalMode === 'target' ? editTargetUserIds : editExcludedUserIds;
+    }
+  }, [audienceModalContext, audienceModalMode, targetUserIds, excludedUserIds, editTargetUserIds, editExcludedUserIds]);
+
+  // Filtered staff in audience picker modal
+  const filteredAudienceStaff = useMemo(() => {
+    return allStaff.filter(s => {
+      if (s.id === Number(user?.id)) return false;
+      if (audienceSelectedTeam !== 'all') {
+        if (s.team_id !== audienceSelectedTeam) return false;
+      }
+      if (audienceSearchTerm.trim()) {
+        const query = audienceSearchTerm.toLowerCase();
+        const matchName = s.full_name.toLowerCase().includes(query);
+        const matchRole = (s.role || '').toLowerCase().includes(query);
+        const matchDept = (s.department || '').toLowerCase().includes(query);
+        if (!matchName && !matchRole && !matchDept) return false;
+      }
+      return true;
+    });
+  }, [allStaff, audienceSelectedTeam, audienceSearchTerm, user?.id]);
+
+  const handleToggleAudienceUser = (userId: number) => {
+    if (audienceModalContext === 'create') {
+      if (audienceModalMode === 'target') {
+        setTargetUserIds(prev => 
+          prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
+        );
+      } else {
+        setExcludedUserIds(prev => 
+          prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
+        );
+      }
+    } else {
+      if (audienceModalMode === 'target') {
+        setEditTargetUserIds(prev => 
+          prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
+        );
+      } else {
+        setEditExcludedUserIds(prev => 
+          prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
+        );
+      }
+    }
+  };
+
+  const handleSelectAllAudience = (staffList: StaffAudienceUser[]) => {
+    const ids = staffList.map(s => s.id);
+    if (audienceModalContext === 'create') {
+      if (audienceModalMode === 'target') {
+        setTargetUserIds(prev => Array.from(new Set([...prev, ...ids])));
+      } else {
+        setExcludedUserIds(prev => Array.from(new Set([...prev, ...ids])));
+      }
+    } else {
+      if (audienceModalMode === 'target') {
+        setEditTargetUserIds(prev => Array.from(new Set([...prev, ...ids])));
+      } else {
+        setEditExcludedUserIds(prev => Array.from(new Set([...prev, ...ids])));
+      }
+    }
+  };
+
+  const handleClearAllAudience = () => {
+    if (audienceModalContext === 'create') {
+      if (audienceModalMode === 'target') {
+        setTargetUserIds([]);
+      } else {
+        setExcludedUserIds([]);
+      }
+    } else {
+      if (audienceModalMode === 'target') {
+        setEditTargetUserIds([]);
+      } else {
+        setEditExcludedUserIds([]);
+      }
     }
   };
 
@@ -745,6 +883,7 @@ export const EnterpriseFeed: React.FC = () => {
 
   useEffect(() => {
     fetchTeams();
+    fetchAllStaff();
   }, []);
 
   // Infinite Scroll Observer Setup
@@ -776,6 +915,10 @@ export const EnterpriseFeed: React.FC = () => {
       toast.error(t('Vui lòng chọn phòng ban đăng bài'));
       return;
     }
+    if (visibility === 'specific' && targetUserIds.length === 0) {
+      toast.error(t('Vui lòng chọn ít nhất một người xem cho bài viết chỉ định'));
+      return;
+    }
     setIsSubmitting(true);
 
     try {
@@ -783,6 +926,8 @@ export const EnterpriseFeed: React.FC = () => {
         content: content.trim(),
         visibility,
         team_id: visibility === 'team' ? selectedTeamId : null,
+        target_user_ids: visibility === 'specific' ? targetUserIds : [],
+        excluded_user_ids: excludedUserIds,
         attachments
       });
 
@@ -791,6 +936,8 @@ export const EnterpriseFeed: React.FC = () => {
         setContent('');
         setAttachments([]);
         setSelectedTeamId(null);
+        setTargetUserIds([]);
+        setExcludedUserIds([]);
         fetchPosts(true); // reload list
       }
     } catch (err) {
@@ -806,6 +953,8 @@ export const EnterpriseFeed: React.FC = () => {
     setEditContent(post.content || '');
     setEditVisibility(post.visibility || 'global');
     setEditTeamId(post.team_id || null);
+    setEditTargetUserIds(post.target_user_ids || []);
+    setEditExcludedUserIds(post.excluded_user_ids || []);
     setEditAttachments(post.attachments || []);
   };
 
@@ -821,6 +970,10 @@ export const EnterpriseFeed: React.FC = () => {
       toast.error(t('Vui lòng chọn phòng ban'));
       return;
     }
+    if (editVisibility === 'specific' && editTargetUserIds.length === 0) {
+      toast.error(t('Vui lòng chọn ít nhất một người xem'));
+      return;
+    }
 
     setIsSavingEdit(true);
     try {
@@ -828,11 +981,16 @@ export const EnterpriseFeed: React.FC = () => {
         content: editContent,
         visibility: editVisibility,
         team_id: editVisibility === 'team' ? editTeamId : null,
+        target_user_ids: editVisibility === 'specific' ? editTargetUserIds : [],
+        excluded_user_ids: editExcludedUserIds,
         attachments: editAttachments
       });
       if (res.data?.success || res.status === 200) {
         toast.success(t('Đã cập nhật bài viết thành công'));
         const updatedTeam = teams.find(tm => tm.id === editTeamId);
+        const resolvedTargetUsers = allStaff.filter(s => editTargetUserIds.includes(s.id));
+        const resolvedExcludedUsers = allStaff.filter(s => editExcludedUserIds.includes(s.id));
+
         setPosts(prev => prev.map(p => {
           if (p.id === editingPost.id) {
             return {
@@ -841,6 +999,10 @@ export const EnterpriseFeed: React.FC = () => {
               visibility: editVisibility,
               team_id: editVisibility === 'team' ? editTeamId : null,
               team_name: editVisibility === 'team' ? (updatedTeam?.name || p.team_name) : null,
+              target_user_ids: editVisibility === 'specific' ? editTargetUserIds : [],
+              excluded_user_ids: editExcludedUserIds,
+              target_users: editVisibility === 'specific' ? resolvedTargetUsers : [],
+              excluded_users: resolvedExcludedUsers,
               attachments: editAttachments
             };
           }
@@ -1520,6 +1682,12 @@ export const EnterpriseFeed: React.FC = () => {
           width: auto !important;
           overflow: visible !important;
         }
+        .enterprise-feed-grid {
+          display: grid !important;
+          grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)) !important;
+          gap: 1.25rem !important;
+          align-items: start !important;
+        }
         @media (max-width: 992px) {
           .feed-layout {
             grid-template-columns: 1fr;
@@ -1529,6 +1697,9 @@ export const EnterpriseFeed: React.FC = () => {
           }
         }
         @media (max-width: 768px) {
+          .enterprise-feed-grid {
+            grid-template-columns: 1fr !important;
+          }
           .feed-container {
             padding: 0.75rem 0.5rem calc(var(--mobile-bottom-nav-height, 62px) + env(safe-area-inset-bottom, 0px) + 140px) 0.5rem !important;
           }
@@ -1640,13 +1811,14 @@ export const EnterpriseFeed: React.FC = () => {
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          gap: '12px',
+          gap: '10px',
           background: 'var(--color-surface)',
           padding: '8px 12px',
           borderRadius: '12px',
-          border: '1px solid var(--color-border-light)'
+          border: '1px solid var(--color-border-light)',
+          flexWrap: 'wrap'
         }}>
-          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', flex: 1 }}>
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', flex: 1, minWidth: '180px' }}>
             <input 
               type="text" 
               placeholder={t('Tìm bài viết, tác giả...')} 
@@ -1665,6 +1837,65 @@ export const EnterpriseFeed: React.FC = () => {
             />
             <Search size={14} style={{ position: 'absolute', right: '10px', color: 'var(--color-text-muted)', pointerEvents: 'none' }} />
           </div>
+
+          {/* View Mode Toggle: List vs Grid */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            background: 'var(--color-bg)',
+            padding: '3px',
+            borderRadius: '8px',
+            border: '1px solid var(--color-border-light)',
+            gap: '2px'
+          }}>
+            <button
+              type="button"
+              onClick={() => handleSetViewMode('list')}
+              title={t('Xem dạng danh sách (1 cột cuộn)')}
+              style={{
+                background: viewMode === 'list' ? 'var(--color-surface)' : 'transparent',
+                color: viewMode === 'list' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                border: 'none',
+                padding: '5px 8px',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '0.75rem',
+                fontWeight: viewMode === 'list' ? 700 : 500,
+                boxShadow: viewMode === 'list' ? 'var(--shadow-sm)' : 'none',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <LayoutList size={14} />
+              <span style={{ fontSize: '0.75rem' }}>{t('Danh sách')}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSetViewMode('grid')}
+              title={t('Xem dạng lưới thẻ (nhiều cột)')}
+              style={{
+                background: viewMode === 'grid' ? 'var(--color-surface)' : 'transparent',
+                color: viewMode === 'grid' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                border: 'none',
+                padding: '5px 8px',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '0.75rem',
+                fontWeight: viewMode === 'grid' ? 700 : 500,
+                boxShadow: viewMode === 'grid' ? 'var(--shadow-sm)' : 'none',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <LayoutGrid size={14} />
+              <span style={{ fontSize: '0.75rem' }}>{t('Lưới')}</span>
+            </button>
+          </div>
+
           <div className="icon-only-select">
             <CustomSelect
               value={selectedVisibility}
@@ -1761,9 +1992,11 @@ export const EnterpriseFeed: React.FC = () => {
           justifyContent: 'space-between',
           alignItems: 'center',
           borderTop: '1px solid var(--color-border-light)',
-          paddingTop: '10px'
+          paddingTop: '10px',
+          flexWrap: 'wrap',
+          gap: '8px'
         }}>
-          <div className="composer-left-tools" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div className="composer-left-tools" style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
             <label style={{
               display: 'flex',
               alignItems: 'center',
@@ -1795,12 +2028,18 @@ export const EnterpriseFeed: React.FC = () => {
                 if (val !== 'team') {
                   setSelectedTeamId(null);
                 }
+                if (val === 'specific' && targetUserIds.length === 0) {
+                  setAudienceModalMode('target');
+                  setAudienceModalContext('create');
+                  setAudienceModalOpen(true);
+                }
               }}
               options={[
                 { value: 'global', label: t('Công khai'), icon: <Globe size={12} /> },
-                { value: 'team', label: t('Phòng ban'), icon: <Users size={12} /> }
+                { value: 'team', label: t('Phòng ban'), icon: <Users size={12} /> },
+                { value: 'specific', label: t('Chỉ định người'), icon: <UserCheck size={12} /> }
               ]}
-              width="130px"
+              width="145px"
               size="sm"
             />
 
@@ -1819,6 +2058,89 @@ export const EnterpriseFeed: React.FC = () => {
                 size="sm"
               />
             )}
+
+            {/* Gear Settings Button (Icon-Only for Audience & Exclusion) */}
+            <button
+              type="button"
+              onClick={() => {
+                setAudienceModalMode(visibility === 'specific' ? 'target' : 'exclude');
+                setAudienceModalContext('create');
+                setAudienceModalOpen(true);
+              }}
+              title={
+                excludedUserIds.length > 0 
+                  ? `${t('Đang loại trừ')} ${excludedUserIds.length} ${t('người xem')}` 
+                  : (visibility === 'specific' ? `${t('Chỉ định')} ${targetUserIds.length} ${t('người xem')}` : t('Cài đặt đối tượng & loại trừ người xem'))
+              }
+              style={{
+                position: 'relative',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '32px',
+                height: '32px',
+                borderRadius: '50%',
+                background: (excludedUserIds.length > 0 || (visibility === 'specific' && targetUserIds.length > 0))
+                  ? (excludedUserIds.length > 0 ? 'rgba(239, 68, 68, 0.12)' : 'rgba(139, 92, 246, 0.12)')
+                  : 'var(--color-bg)',
+                border: '1px solid ' + (
+                  excludedUserIds.length > 0 
+                    ? '#ef4444' 
+                    : (visibility === 'specific' && targetUserIds.length > 0 ? '#8b5cf6' : 'var(--color-border-light)')
+                ),
+                color: excludedUserIds.length > 0 
+                  ? '#dc2626' 
+                  : (visibility === 'specific' && targetUserIds.length > 0 ? '#7c3aed' : 'var(--color-text-muted)'),
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                flexShrink: 0
+              }}
+              className="hover-lift"
+            >
+              <Settings size={15} />
+              {excludedUserIds.length > 0 && (
+                <span style={{
+                  position: 'absolute',
+                  top: '-3px',
+                  right: '-3px',
+                  background: '#ef4444',
+                  color: '#ffffff',
+                  fontSize: '0.62rem',
+                  fontWeight: 700,
+                  minWidth: '15px',
+                  height: '15px',
+                  borderRadius: '10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '0 3px',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                }}>
+                  {excludedUserIds.length}
+                </span>
+              )}
+              {visibility === 'specific' && targetUserIds.length > 0 && excludedUserIds.length === 0 && (
+                <span style={{
+                  position: 'absolute',
+                  top: '-3px',
+                  right: '-3px',
+                  background: '#8b5cf6',
+                  color: '#ffffff',
+                  fontSize: '0.62rem',
+                  fontWeight: 700,
+                  minWidth: '15px',
+                  height: '15px',
+                  borderRadius: '10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '0 3px',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                }}>
+                  {targetUserIds.length}
+                </span>
+              )}
+            </button>
           </div>
 
           <button 
@@ -1850,7 +2172,19 @@ export const EnterpriseFeed: React.FC = () => {
       </form>
 
       {/* Feed List */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      <div 
+        className={viewMode === 'grid' ? 'enterprise-feed-grid' : 'enterprise-feed-list'}
+        style={viewMode === 'grid' ? {
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))',
+          gap: '1.25rem',
+          alignItems: 'start'
+        } : {
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '1.25rem'
+        }}
+      >
         {loading && posts.length === 0 ? (
           <>
             <PostSkeletonCard />
@@ -1894,7 +2228,8 @@ export const EnterpriseFeed: React.FC = () => {
                   padding: '1.25rem',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '12px'
+                  gap: '12px',
+                  height: viewMode === 'grid' ? '100%' : 'auto'
                 }}
               >
                 {/* Post Header */}
@@ -1909,16 +2244,41 @@ export const EnterpriseFeed: React.FC = () => {
                       <h4 style={{ margin: 0, fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text)' }}>
                         {post.author_name}
                       </h4>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--color-text-muted)', flexWrap: 'wrap' }}>
                         <span>{new Date(post.created_at).toLocaleString('vi-VN')}</span>
                         <span>•</span>
-                        {post.visibility === 'global' ? (
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                            <Globe size={10} /> {t('Công khai')}
+                        {post.visibility === 'specific' ? (
+                          <span 
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: '#7c3aed', fontWeight: 600 }}
+                            title={post.target_users && post.target_users.length > 0 ? post.target_users.map(u => u.full_name).join(', ') : t('Chỉ định người xem')}
+                          >
+                            <UserCheck size={11} /> {t('Chỉ định')} ({post.target_user_ids?.length || 0})
+                          </span>
+                        ) : post.visibility === 'team' ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: 'var(--color-primary)' }} title={t('Bài viết giới hạn phòng ban')}>
+                            <Users size={11} /> {post.team_name || t('Phòng ban')}
                           </span>
                         ) : (
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '3px', color: 'var(--color-primary)' }} title={t('Bài viết giới hạn phòng ban')}>
-                            <Users size={10} /> {post.team_name || t('Phòng ban')}
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                            <Globe size={11} /> {t('Công khai')}
+                          </span>
+                        )}
+                        {post.excluded_user_ids && post.excluded_user_ids.length > 0 && (
+                          <span 
+                            style={{ 
+                              display: 'inline-flex', 
+                              alignItems: 'center', 
+                              gap: '2px', 
+                              color: '#dc2626', 
+                              fontSize: '0.7rem', 
+                              background: 'rgba(239, 68, 68, 0.08)', 
+                              padding: '1px 6px', 
+                              borderRadius: '8px',
+                              fontWeight: 500
+                            }}
+                            title={post.excluded_users && post.excluded_users.length > 0 ? `${t('Loại trừ')}: ${post.excluded_users.map(u => u.full_name).join(', ')}` : t('Đã loại trừ người xem')}
+                          >
+                            <UserX size={10} /> -{post.excluded_user_ids.length}
                           </span>
                         )}
                       </div>
@@ -3058,16 +3418,25 @@ export const EnterpriseFeed: React.FC = () => {
       >
         {editingPost && (
           <form onSubmit={handleSaveEditPost} style={{ padding: '8px 4px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {/* Visibility Selector */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {/* Visibility & Audience Selector */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <CustomSelect
                 value={editVisibility}
-                onChange={val => setEditVisibility(val)}
+                onChange={val => {
+                  setEditVisibility(val);
+                  if (val !== 'team') setEditTeamId(null);
+                  if (val === 'specific' && editTargetUserIds.length === 0) {
+                    setAudienceModalMode('target');
+                    setAudienceModalContext('edit');
+                    setAudienceModalOpen(true);
+                  }
+                }}
                 options={[
                   { value: 'global', label: t('Công khai'), icon: <Globe size={12} /> },
-                  { value: 'team', label: t('Phòng ban'), icon: <Users size={12} /> }
+                  { value: 'team', label: t('Phòng ban'), icon: <Users size={12} /> },
+                  { value: 'specific', label: t('Chỉ định người'), icon: <UserCheck size={12} /> }
                 ]}
-                width="160px"
+                width="150px"
                 size="sm"
               />
 
@@ -3082,10 +3451,93 @@ export const EnterpriseFeed: React.FC = () => {
                       label: tObj.name
                     }))
                   ]}
-                  width="180px"
+                  width="160px"
                   size="sm"
                 />
               )}
+
+              {/* Gear Settings Button (Icon-Only for Edit Audience & Exclusion) */}
+              <button
+                type="button"
+                onClick={() => {
+                  setAudienceModalMode(editVisibility === 'specific' ? 'target' : 'exclude');
+                  setAudienceModalContext('edit');
+                  setAudienceModalOpen(true);
+                }}
+                title={
+                  editExcludedUserIds.length > 0 
+                    ? `${t('Đang loại trừ')} ${editExcludedUserIds.length} ${t('người xem')}` 
+                    : (editVisibility === 'specific' ? `${t('Chỉ định')} ${editTargetUserIds.length} ${t('người xem')}` : t('Cài đặt đối tượng & loại trừ người xem'))
+                }
+                style={{
+                  position: 'relative',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  background: (editExcludedUserIds.length > 0 || (editVisibility === 'specific' && editTargetUserIds.length > 0))
+                    ? (editExcludedUserIds.length > 0 ? 'rgba(239, 68, 68, 0.12)' : 'rgba(139, 92, 246, 0.12)')
+                    : 'var(--color-bg)',
+                  border: '1px solid ' + (
+                    editExcludedUserIds.length > 0 
+                      ? '#ef4444' 
+                      : (editVisibility === 'specific' && editTargetUserIds.length > 0 ? '#8b5cf6' : 'var(--color-border-light)')
+                  ),
+                  color: editExcludedUserIds.length > 0 
+                    ? '#dc2626' 
+                    : (editVisibility === 'specific' && editTargetUserIds.length > 0 ? '#7c3aed' : 'var(--color-text-muted)'),
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  flexShrink: 0
+                }}
+                className="hover-lift"
+              >
+                <Settings size={15} />
+                {editExcludedUserIds.length > 0 && (
+                  <span style={{
+                    position: 'absolute',
+                    top: '-3px',
+                    right: '-3px',
+                    background: '#ef4444',
+                    color: '#ffffff',
+                    fontSize: '0.62rem',
+                    fontWeight: 700,
+                    minWidth: '15px',
+                    height: '15px',
+                    borderRadius: '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '0 3px',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                  }}>
+                    {editExcludedUserIds.length}
+                  </span>
+                )}
+                {editVisibility === 'specific' && editTargetUserIds.length > 0 && editExcludedUserIds.length === 0 && (
+                  <span style={{
+                    position: 'absolute',
+                    top: '-3px',
+                    right: '-3px',
+                    background: '#8b5cf6',
+                    color: '#ffffff',
+                    fontSize: '0.62rem',
+                    fontWeight: 700,
+                    minWidth: '15px',
+                    height: '15px',
+                    borderRadius: '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '0 3px',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                  }}>
+                    {editTargetUserIds.length}
+                  </span>
+                )}
+              </button>
             </div>
 
             {/* Content text area */}
@@ -3214,6 +3666,339 @@ export const EnterpriseFeed: React.FC = () => {
             </div>
           </form>
         )}
+      </CustomModal>
+
+      {/* Audience Picker Modal */}
+      <CustomModal
+        isOpen={audienceModalOpen}
+        onClose={() => setAudienceModalOpen(false)}
+        title={`⚙️ ${t('Cài đặt đối tượng bài viết')}`}
+        width="580px"
+        zIndex={2000050}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', padding: '4px 0' }}>
+          {/* Mode Switcher Tabs inside Audience Modal */}
+          <div style={{
+            display: 'flex',
+            background: 'var(--color-bg)',
+            padding: '4px',
+            borderRadius: '10px',
+            border: '1px solid var(--color-border-light)',
+            gap: '4px'
+          }}>
+            <button
+              type="button"
+              onClick={() => {
+                setAudienceModalMode('target');
+                if (audienceModalContext === 'create') setVisibility('specific');
+                else setEditVisibility('specific');
+              }}
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                borderRadius: '8px',
+                border: 'none',
+                background: audienceModalMode === 'target' ? 'var(--color-surface)' : 'transparent',
+                color: audienceModalMode === 'target' ? '#7c3aed' : 'var(--color-text-muted)',
+                fontWeight: audienceModalMode === 'target' ? 700 : 500,
+                fontSize: '0.82rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                boxShadow: audienceModalMode === 'target' ? 'var(--shadow-sm)' : 'none',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <UserCheck size={14} />
+              <span>{t('Chỉ định người xem')}</span>
+              {(audienceModalContext === 'create' ? targetUserIds.length : editTargetUserIds.length) > 0 && (
+                <span style={{
+                  background: '#7c3aed',
+                  color: '#fff',
+                  fontSize: '0.7rem',
+                  padding: '1px 6px',
+                  borderRadius: '10px'
+                }}>
+                  {audienceModalContext === 'create' ? targetUserIds.length : editTargetUserIds.length}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setAudienceModalMode('exclude')}
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                borderRadius: '8px',
+                border: 'none',
+                background: audienceModalMode === 'exclude' ? 'var(--color-surface)' : 'transparent',
+                color: audienceModalMode === 'exclude' ? '#dc2626' : 'var(--color-text-muted)',
+                fontWeight: audienceModalMode === 'exclude' ? 700 : 500,
+                fontSize: '0.82rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                boxShadow: audienceModalMode === 'exclude' ? 'var(--shadow-sm)' : 'none',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <UserX size={14} />
+              <span>{t('Loại trừ người xem')}</span>
+              {(audienceModalContext === 'create' ? excludedUserIds.length : editExcludedUserIds.length) > 0 && (
+                <span style={{
+                  background: '#dc2626',
+                  color: '#fff',
+                  fontSize: '0.7rem',
+                  padding: '1px 6px',
+                  borderRadius: '10px'
+                }}>
+                  {audienceModalContext === 'create' ? excludedUserIds.length : editExcludedUserIds.length}
+                </span>
+              )}
+            </button>
+          </div>
+
+          <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+            {audienceModalMode === 'target'
+              ? t('Chỉ những nhân sự được chọn dưới đây mới có quyền xem bài viết này trên bảng tin.')
+              : t('Bài viết sẽ được đăng công khai/theo phòng ban, nhưng sẽ bị ẩn hoàn toàn đối với những người được chọn dưới đây.')
+            }
+          </p>
+
+          {/* Search & Team Filter Bar */}
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
+              <input
+                type="text"
+                placeholder={t('Tìm nhân sự theo tên, chức vụ, bộ phận...')}
+                value={audienceSearchTerm}
+                onChange={e => setAudienceSearchTerm(e.target.value)}
+                style={{
+                  width: '100%',
+                  height: '36px',
+                  padding: '0 32px 0 12px',
+                  borderRadius: '10px',
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-bg)',
+                  fontSize: '0.85rem',
+                  color: 'var(--color-text)',
+                  outline: 'none'
+                }}
+              />
+              <Search size={14} style={{ position: 'absolute', right: '10px', color: 'var(--color-text-muted)', pointerEvents: 'none' }} />
+            </div>
+
+            <div style={{ width: '160px' }}>
+              <CustomSelect
+                value={audienceSelectedTeam === 'all' ? 'all' : String(audienceSelectedTeam)}
+                onChange={val => setAudienceSelectedTeam(val === 'all' ? 'all' : Number(val))}
+                options={[
+                  { value: 'all', label: t('Tất cả phòng ban') },
+                  ...teams.map(tm => ({ value: String(tm.id), label: tm.name }))
+                ]}
+                width="160px"
+                size="sm"
+              />
+            </div>
+          </div>
+
+          {/* Selection counter & Quick Select/Clear buttons */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem' }}>
+            <span style={{ fontWeight: 600, color: currentAudienceSelectedIds.length > 0 ? (audienceModalMode === 'target' ? '#7c3aed' : '#dc2626') : 'var(--color-text-muted)' }}>
+              {t('Đã chọn')}: {currentAudienceSelectedIds.length} {t('nhân sự')}
+            </span>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => handleSelectAllAudience(filteredAudienceStaff)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--color-primary)',
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  padding: '2px 6px'
+                }}
+              >
+                {t('Chọn tất cả kết quả')}
+              </button>
+              <button
+                type="button"
+                onClick={handleClearAllAudience}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--color-text-muted)',
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  padding: '2px 6px'
+                }}
+              >
+                {t('Bỏ chọn tất cả')}
+              </button>
+            </div>
+          </div>
+
+          {/* Selected chips bar */}
+          {currentAudienceSelectedIds.length > 0 && (
+            <div style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '6px',
+              maxHeight: '80px',
+              overflowY: 'auto',
+              padding: '6px 8px',
+              background: 'var(--color-bg)',
+              borderRadius: '8px',
+              border: '1px dashed var(--color-border-light)'
+            }}>
+              {allStaff.filter(s => currentAudienceSelectedIds.includes(s.id)).map(s => (
+                <span
+                  key={s.id}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '2px 8px',
+                    borderRadius: '16px',
+                    fontSize: '0.75rem',
+                    fontWeight: 500,
+                    background: audienceModalMode === 'target' ? 'rgba(139, 92, 246, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                    color: audienceModalMode === 'target' ? '#7c3aed' : '#dc2626',
+                    border: '1px solid ' + (audienceModalMode === 'target' ? 'rgba(139, 92, 246, 0.3)' : 'rgba(239, 68, 68, 0.3)')
+                  }}
+                >
+                  <Avatar src={s.avatar_url} name={s.full_name} size={16} />
+                  <span>{s.full_name}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleAudienceUser(s.id)}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      color: 'inherit',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: 0
+                    }}
+                  >
+                    <X size={12} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Staff List */}
+          <div style={{
+            maxHeight: '260px',
+            overflowY: 'auto',
+            border: '1px solid var(--color-border-light)',
+            borderRadius: '10px',
+            background: 'var(--color-surface)',
+            display: 'flex',
+            flexDirection: 'column'
+          }}>
+            {filteredAudienceStaff.length === 0 ? (
+              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+                {t('Không tìm thấy nhân sự phù hợp')}
+              </div>
+            ) : (
+              filteredAudienceStaff.map(s => {
+                const isSelected = currentAudienceSelectedIds.includes(s.id);
+                return (
+                  <div
+                    key={s.id}
+                    onClick={() => handleToggleAudienceUser(s.id)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 12px',
+                      cursor: 'pointer',
+                      borderBottom: '1px solid var(--color-border-light)',
+                      background: isSelected 
+                        ? (audienceModalMode === 'target' ? 'rgba(139, 92, 246, 0.05)' : 'rgba(239, 68, 68, 0.05)') 
+                        : 'transparent',
+                      transition: 'background 0.15s ease'
+                    }}
+                    className="hover-lift-subtle"
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{
+                        width: '18px',
+                        height: '18px',
+                        borderRadius: '4px',
+                        border: '2px solid ' + (isSelected ? (audienceModalMode === 'target' ? '#7c3aed' : '#dc2626') : 'var(--color-border)'),
+                        background: isSelected ? (audienceModalMode === 'target' ? '#7c3aed' : '#dc2626') : 'transparent',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#fff',
+                        transition: 'all 0.15s ease'
+                      }}>
+                        {isSelected && <Check size={12} strokeWidth={3} />}
+                      </div>
+                      <Avatar src={s.avatar_url} name={s.full_name} size={32} />
+                      <div>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text)' }}>
+                          {s.full_name}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                          {s.department || s.role || t('Nhân viên')}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Modal Footer */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
+            <button
+              type="button"
+              onClick={() => setAudienceModalOpen(false)}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '8px',
+                border: '1px solid var(--color-border)',
+                background: 'var(--color-surface)',
+                color: 'var(--color-text)',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              {t('Đóng')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setAudienceModalOpen(false)}
+              style={{
+                padding: '8px 20px',
+                borderRadius: '8px',
+                border: 'none',
+                background: audienceModalMode === 'target' ? '#7c3aed' : '#dc2626',
+                color: '#fff',
+                fontSize: '0.85rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                boxShadow: 'var(--shadow-sm)'
+              }}
+            >
+              {t('Xác nhận')} ({currentAudienceSelectedIds.length})
+            </button>
+          </div>
+        </div>
       </CustomModal>
 
       {/* Lightbox Modal for Fullscreen Image Viewing */}

@@ -50,7 +50,7 @@ interface ChatStore {
   setActiveSidebarTab: (tab: 'chats' | 'staff') => void;
 
   // Actions
-  openChat: (conversationId?: number, tab?: 'chats' | 'staff') => void;
+  openChat: (conversationId?: number, tab?: 'chats' | 'staff', options?: { maximized?: boolean }) => void;
   closeChat: () => void;
   toggleMaximize: () => void;
   setReplyingTo: (msg: ChatMessage | null) => void;
@@ -248,22 +248,27 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
   },
 
-  openChat: (conversationId, tab) => {
-    set({ 
+  openChat: (conversationId, tab, options) => {
+    const isMobileDevice = typeof window !== 'undefined' && window.innerWidth < 900;
+    const willMaximize = !isMobileDevice && options?.maximized !== undefined ? options.maximized : undefined;
+    set((state) => ({ 
       isOpen: true,
-      ...(tab ? { activeSidebarTab: tab } : {})
-    });
+      ...(tab ? { activeSidebarTab: tab } : {}),
+      ...(isMobileDevice
+        ? { isMaximized: false, showMediaVault: false }
+        : (willMaximize !== undefined ? { isMaximized: willMaximize, ...(willMaximize ? { showMediaVault: true } : {}) } : {})),
+      ...(!conversationId ? { activeConversationId: null, activeConversation: null } : {})
+    }));
     get().fetchConversations();
     get().fetchStaffDirectory();
+    
     if (conversationId) {
       get().selectConversation(conversationId);
-    } else if (tab !== 'staff' && !get().activeConversationId && get().conversations.length > 0) {
-      get().selectConversation(get().conversations[0].id);
     }
   },
 
   closeChat: () => {
-    set({ isOpen: false, replyingTo: null });
+    set({ isOpen: false, replyingTo: null, activeConversationId: null, activeConversation: null });
   },
 
   toggleMaximize: () => {
@@ -292,14 +297,65 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       const res = await api.get('/chat/conversations');
       const list: ChatConversation[] = res.data?.data || res.data || [];
       const totalUnread = list.reduce((acc, c) => acc + (c.unread_count || 0), 0);
-      set({ conversations: list, unreadTotal: totalUnread, loadingConversations: false });
-      persistConversationsToCache(list);
+      set((state) => {
+        const currentActiveId = state.activeConversationId;
+        const matchingActive = currentActiveId ? list.find((c) => c.id === currentActiveId) : null;
+        const mergedList = list.map((newItem) => {
+          const existing = state.conversations.find((c) => c.id === newItem.id);
+          const hasNewSettings = newItem.settings && typeof newItem.settings === 'object' && Object.keys(newItem.settings).length > 0;
+          const safeOtherUser = newItem.other_user || existing?.other_user || null;
+          const safeTitle = (newItem.title && newItem.title !== 'Hội thoại')
+            ? newItem.title
+            : (existing?.title && existing?.title !== 'Hội thoại' ? existing.title : (safeOtherUser?.full_name || newItem.title || 'Cuộc trò chuyện'));
+          const safeAvatar = newItem.avatar_url || existing?.avatar_url || safeOtherUser?.avatar_url;
+          return {
+            ...(existing || {}),
+            ...newItem,
+            other_user: safeOtherUser,
+            title: safeTitle,
+            avatar_url: safeAvatar,
+            settings: hasNewSettings ? newItem.settings : (existing?.settings || newItem.settings || {})
+          };
+        });
+        const activeSettings = matchingActive?.settings && typeof matchingActive.settings === 'object' && Object.keys(matchingActive.settings).length > 0
+          ? matchingActive.settings
+          : (state.activeConversation?.settings || matchingActive?.settings || {});
+
+        return {
+          conversations: mergedList,
+          unreadTotal: totalUnread,
+          loadingConversations: false,
+          ...(matchingActive ? {
+            activeConversation: {
+              ...(state.activeConversation || {}),
+              ...matchingActive,
+              settings: activeSettings
+            }
+          } : {})
+        };
+      });
+      persistConversationsToCache(get().conversations);
     } catch (err) {
       set({ loadingConversations: false });
     }
   },
 
   selectConversation: async (id: number) => {
+    if (!id || id <= 0) {
+      if (currentSelectAbortController) {
+        try {
+          currentSelectAbortController.abort();
+        } catch {}
+      }
+      set({
+        activeConversationId: null,
+        activeConversation: null,
+        loadingMessages: false,
+        replyingTo: null
+      });
+      return;
+    }
+
     selectConversationToken++;
     const thisToken = selectConversationToken;
 
@@ -317,11 +373,26 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const cachedMsgs = get().messagesByConvId[id];
     const hasCache = Array.isArray(cachedMsgs) && cachedMsgs.length > 0;
 
-    set({
-      activeConversationId: id,
-      activeConversation: existingConv || null,
-      loadingMessages: !hasCache,
-      replyingTo: null
+    set((state) => {
+      const prevActive = state.activeConversation?.id === id ? state.activeConversation : null;
+      const targetSettings = (existingConv?.settings && typeof existingConv.settings === 'object' && Object.keys(existingConv.settings).length > 0)
+        ? existingConv.settings
+        : ((prevActive?.settings && typeof prevActive.settings === 'object' && Object.keys(prevActive.settings).length > 0)
+          ? prevActive.settings
+          : (existingConv?.settings || prevActive?.settings || {}));
+
+      const mergedConv = existingConv ? {
+        ...existingConv,
+        ...(prevActive || {}),
+        settings: targetSettings
+      } : prevActive;
+
+      return {
+        activeConversationId: id,
+        activeConversation: mergedConv,
+        loadingMessages: !hasCache,
+        replyingTo: null
+      };
     });
 
     const now = Date.now();
@@ -334,6 +405,47 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       if (hasCache && isRecentlyFetched && latestCachedId > 0) {
         convLastFetchedAt[id] = now;
         get().markConversationAsRead(id);
+
+        // Background detail fetch to guarantee settings/wallpaper/participants are 100% in sync
+        api.get(`/chat/conversations/${id}`, { signal }).then((res) => {
+          const detail: ChatConversation = res.data?.data || res.data;
+          if (detail && thisToken === selectConversationToken && get().activeConversationId === id) {
+            set((state) => {
+              const hasDetailSettings = detail.settings && typeof detail.settings === 'object' && Object.keys(detail.settings).length > 0;
+              const resolvedSettings = hasDetailSettings
+                ? detail.settings
+                : (state.activeConversation?.settings || detail.settings || {});
+              const updatedActive = {
+                ...(state.activeConversation || {}),
+                ...detail,
+                other_user: detail.other_user || state.activeConversation?.other_user,
+                title: (detail.title && detail.title !== 'Hội thoại')
+                  ? detail.title
+                  : (state.activeConversation?.title && state.activeConversation.title !== 'Hội thoại' ? state.activeConversation.title : (detail.other_user?.full_name || state.activeConversation?.other_user?.full_name || detail.title)),
+                avatar_url: detail.avatar_url || state.activeConversation?.avatar_url,
+                settings: resolvedSettings
+              };
+              const updatedConvs = state.conversations.map((c) => {
+                if (c.id !== id) return c;
+                const safeOtherUser = detail.other_user || c.other_user;
+                const safeTitle = (detail.title && detail.title !== 'Hội thoại')
+                  ? detail.title
+                  : (c.title && c.title !== 'Hội thoại' ? c.title : (safeOtherUser?.full_name || detail.title || c.title));
+                const safeAvatar = detail.avatar_url || c.avatar_url || safeOtherUser?.avatar_url;
+                return {
+                  ...c,
+                  ...detail,
+                  other_user: safeOtherUser,
+                  title: safeTitle,
+                  avatar_url: safeAvatar,
+                  settings: resolvedSettings
+                };
+              });
+              persistConversationsToCache(updatedConvs);
+              return { activeConversation: updatedActive, conversations: updatedConvs };
+            });
+          }
+        }).catch(() => {});
 
         try {
           const deltaRes = await api.get(`/chat/conversations/${id}/messages`, {
@@ -375,14 +487,25 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       const rawDetail: ChatConversation = detailRes.data?.data || detailRes.data || {};
       const targetOtherUser = rawDetail.other_user || existingConv?.other_user;
       const isDirect = (rawDetail.type === 'direct') || (existingConv?.type === 'direct');
+      const hasRawDetailSettings = rawDetail.settings && typeof rawDetail.settings === 'object' && Object.keys(rawDetail.settings).length > 0;
+      const resolvedDetailSettings = hasRawDetailSettings
+        ? rawDetail.settings
+        : (existingConv?.settings || rawDetail.settings || {});
+
+      const safeTitle = (isDirect && targetOtherUser?.full_name)
+        ? targetOtherUser.full_name
+        : ((rawDetail.title && rawDetail.title !== 'Hội thoại')
+          ? rawDetail.title
+          : (existingConv?.title && existingConv.title !== 'Hội thoại' ? existingConv.title : (targetOtherUser?.full_name || rawDetail.title || 'Cuộc trò chuyện')));
+
       const convDetail: ChatConversation = {
+        ...(existingConv || {}),
         ...rawDetail,
+        settings: resolvedDetailSettings,
         type: isDirect ? 'direct' : (rawDetail.type || 'direct'),
         other_user: targetOtherUser,
-        title: (isDirect && targetOtherUser?.full_name)
-          ? targetOtherUser.full_name
-          : (rawDetail.title || existingConv?.title || 'Hội thoại'),
-        avatar_url: (isDirect && targetOtherUser)
+        title: safeTitle,
+        avatar_url: (isDirect && targetOtherUser?.avatar_url)
           ? targetOtherUser.avatar_url
           : (rawDetail.avatar_url || existingConv?.avatar_url),
       };
@@ -420,14 +543,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       set((state) => {
         const nextMsgs = { ...state.messagesByConvId, [id]: msgs };
         persistMessagesToCache(nextMsgs);
+        const nextConvs = state.conversations.map((c) =>
+          c.id === id ? { ...c, ...convDetail, settings: resolvedDetailSettings, unread_count: 0 } : c
+        );
+        persistConversationsToCache(nextConvs);
         return {
           activeConversation: convDetail,
           loadingMessages: false,
           messagesByConvId: nextMsgs,
           hasMoreByConvId: { ...state.hasMoreByConvId, [id]: hasMore },
-          // Update unread counter in list
-          conversations: state.conversations.map((c) => (c.id === id ? { ...c, unread_count: 0 } : c)),
-          unreadTotal: state.conversations.reduce((acc, c) => acc + (c.id === id ? 0 : (c.unread_count || 0)), 0)
+          conversations: nextConvs,
+          unreadTotal: nextConvs.reduce((acc, c) => acc + (c.id === id ? 0 : (c.unread_count || 0)), 0)
         };
       });
 
@@ -918,12 +1044,29 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   updateGroupInfo: async (convId: number, data) => {
     try {
       set((state) => {
-        const updatedConvs = state.conversations.map((c) =>
-          c.id === convId ? { ...c, ...data } : c
-        );
-        const updatedActive = state.activeConversation?.id === convId
-          ? { ...state.activeConversation, ...data }
-          : state.activeConversation;
+        const parseSettings = (raw: any) => {
+          if (!raw) return {};
+          if (typeof raw === 'string') {
+            try { return JSON.parse(raw); } catch { return {}; }
+          }
+          return raw;
+        };
+
+        const updatedConvs = state.conversations.map((c) => {
+          if (c.id !== convId) return c;
+          const currentSettings = parseSettings(c.settings);
+          const nextSettings = data.settings !== undefined ? { ...currentSettings, ...parseSettings(data.settings) } : currentSettings;
+          return { ...c, ...data, settings: nextSettings };
+        });
+
+        let updatedActive = state.activeConversation;
+        if (state.activeConversation?.id === convId) {
+          const currentActiveSettings = parseSettings(state.activeConversation.settings);
+          const nextActiveSettings = data.settings !== undefined ? { ...currentActiveSettings, ...parseSettings(data.settings) } : currentActiveSettings;
+          updatedActive = { ...state.activeConversation, ...data, settings: nextActiveSettings };
+        }
+
+        persistConversationsToCache(updatedConvs);
         return { conversations: updatedConvs, activeConversation: updatedActive };
       });
       await api.put(`/chat/conversations/${convId}`, data);
@@ -1088,6 +1231,28 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         });
       }
 
+      // 1d. Process conversation settings & wallpaper in real-time
+      if (activeConversationId && data.settings && typeof data.settings === 'object' && Object.keys(data.settings).length > 0) {
+        set((state) => {
+          if (!state.activeConversation || state.activeConversation.id !== activeConversationId) return state;
+          const currSettingsStr = JSON.stringify(state.activeConversation.settings || {});
+          const newSettingsStr = JSON.stringify(data.settings);
+          if (currSettingsStr === newSettingsStr) return state;
+          const merged = { ...(state.activeConversation.settings || {}), ...data.settings };
+          const updatedConvs = state.conversations.map((c) =>
+            c.id === activeConversationId ? { ...c, settings: merged } : c
+          );
+          persistConversationsToCache(updatedConvs);
+          return {
+            activeConversation: {
+              ...state.activeConversation,
+              settings: merged
+            },
+            conversations: updatedConvs
+          };
+        });
+      }
+
       // 2. Process incoming unread messages across all conversations (Toast & Chime)
       if (Array.isArray(data.recent_incoming) && data.recent_incoming.length > 0) {
         let anyToastFired = false;
@@ -1188,6 +1353,33 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           }
         }
       }
+
+      // 6. Update conversation settings (e.g. shared wallpaper) in activeConversation & conversations list
+      if (activeConversationId && data.settings && typeof data.settings === 'object' && Object.keys(data.settings).length > 0) {
+        set((state) => {
+          if (!state.activeConversation || state.activeConversation.id !== activeConversationId) {
+            return state;
+          }
+          const prevSettingsStr = JSON.stringify(state.activeConversation.settings || {});
+          const newSettingsStr = JSON.stringify(data.settings);
+          if (prevSettingsStr === newSettingsStr) {
+            return state;
+          }
+          const merged = { ...(state.activeConversation.settings || {}), ...data.settings };
+          const updatedActive = {
+            ...state.activeConversation,
+            settings: merged
+          };
+          const updatedConvs = state.conversations.map((c) =>
+            c.id === activeConversationId ? { ...c, settings: merged } : c
+          );
+          persistConversationsToCache(updatedConvs);
+          return {
+            activeConversation: updatedActive,
+            conversations: updatedConvs
+          };
+        });
+      }
     } catch (e) {}
   },
 
@@ -1227,7 +1419,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         es.addEventListener('new_messages', (event) => {
           try {
             const data = JSON.parse(event.data || '{}');
-            const incoming: ChatMessage[] = Array.isArray(data.messages) ? data.messages : [];
+            const incoming: any[] = Array.isArray(data.messages) ? data.messages : [];
             if (data.last_message_id) {
               sseLastMsgId = Number(data.last_message_id);
             }
@@ -1239,6 +1431,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
             set((state) => {
               const updatedMessages = { ...state.messagesByConvId };
+              let updatedActive = state.activeConversation;
+              let updatedConvs = [...state.conversations];
+              let convsModified = false;
+
               incoming.forEach((msg) => {
                 const convId = msg.conversation_id;
                 const existing = updatedMessages[convId] || [];
@@ -1248,9 +1444,35 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                     hasNewInActive = true;
                   }
                 }
+
+                // If message includes updated conversation settings (e.g. wallpaper changed), apply immediately
+                if (msg.conversation_settings && typeof msg.conversation_settings === 'object') {
+                  const targetConvIdx = updatedConvs.findIndex((c) => c.id === convId);
+                  if (targetConvIdx !== -1) {
+                    updatedConvs[targetConvIdx] = {
+                      ...updatedConvs[targetConvIdx],
+                      settings: msg.conversation_settings
+                    };
+                    convsModified = true;
+                  }
+                  if (updatedActive && updatedActive.id === convId) {
+                    updatedActive = {
+                      ...updatedActive,
+                      settings: msg.conversation_settings
+                    };
+                  }
+                }
               });
 
-              return { messagesByConvId: updatedMessages };
+              if (convsModified) {
+                persistConversationsToCache(updatedConvs);
+              }
+
+              return {
+                messagesByConvId: updatedMessages,
+                ...(convsModified ? { conversations: updatedConvs } : {}),
+                ...(updatedActive ? { activeConversation: updatedActive } : {})
+              };
             });
 
             incoming.forEach((msg: any) => {
@@ -1400,6 +1622,23 @@ chatBroadcaster.subscribe((event) => {
           )
         }
       };
+    });
+  } else if (event.type === 'CONVERSATIONS_UPDATED') {
+    store.fetchConversations();
+    if (store.activeConversationId) {
+      store.syncDelta();
+    }
+  } else if (event.type === 'WALLPAPER_UPDATED') {
+    useChatStore.setState((state) => {
+      const convId = event.conversationId;
+      const updatedConvs = state.conversations.map((c) =>
+        c.id === convId ? { ...c, settings: { ...c.settings, wallpaper: event.wallpaper } } : c
+      );
+      const updatedActive = state.activeConversation?.id === convId
+        ? { ...state.activeConversation, settings: { ...state.activeConversation.settings, wallpaper: event.wallpaper } }
+        : state.activeConversation;
+      persistConversationsToCache(updatedConvs);
+      return { conversations: updatedConvs, activeConversation: updatedActive };
     });
   }
 });

@@ -170,13 +170,34 @@ export const AutoUpdateChecker: React.FC = () => {
     return () => clearTimeout(timer);
   }, [hasNewVersion, isSnoozed, countdown, isDevOrLocalhost]);
 
-  const handleReload = () => {
+  const handleReload = async () => {
     if (newVersion) {
       try {
         localStorage.setItem(`myerp_reload_${newVersion}`, String(Date.now()));
       } catch {}
     }
-    window.location.reload();
+    // Purge any browser CacheStorage to prevent stale chunk errors
+    if ('caches' in window) {
+      try {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      } catch {}
+    }
+    // Update Service Worker registration
+    if ('serviceWorker' in navigator) {
+      try {
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (reg) await reg.update();
+      } catch {}
+    }
+    // Hard reload on mobile / Safari / PWA by appending cache-busting timestamp
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('_v', String(Date.now()));
+      window.location.href = url.toString();
+    } catch {
+      window.location.reload();
+    }
   };
 
   const handleSnooze = (durationMinutes = 60) => {

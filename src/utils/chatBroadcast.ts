@@ -9,7 +9,8 @@ export type ChatBroadcastEvent =
   | { type: 'CONVERSATIONS_UPDATED' }
   | { type: 'MESSAGE_EDITED'; messageId: number; content: string }
   | { type: 'MESSAGE_DELETED'; conversationId: number; messageId: number }
-  | { type: 'PIN_UPDATED'; conversationId: number; pinnedInfo: any };
+  | { type: 'PIN_UPDATED'; conversationId: number; pinnedInfo: any }
+  | { type: 'WALLPAPER_UPDATED'; conversationId: number; wallpaper: any };
 
 class ChatBroadcaster {
   private channel: BroadcastChannel | null = null;

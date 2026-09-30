@@ -31,6 +31,8 @@ class ContactController {
         $tag     = $_GET['tag'] ?? '';
         $from    = $_GET['from'] ?? '';
         $to      = $_GET['to'] ?? '';
+        $admissionFrom = $_GET['admission_from'] ?? '';
+        $admissionTo   = $_GET['admission_to'] ?? '';
         $dataType = $_GET['data_type'] ?? '';
         $dateField = $_GET['date_field'] ?? 'created_at';
         $sortBy  = $_GET['sort'] ?? 'created_at';
@@ -112,7 +114,7 @@ class ContactController {
         }
 
         // Validating sort fields
-        $allowedSort = ['created_at', 'updated_at', 'full_name', 'lead_score', 'last_contact'];
+        $allowedSort = ['created_at', 'updated_at', 'full_name', 'lead_score', 'last_contact', 'admission_date'];
         if (!in_array($sortBy, $allowedSort)) $sortBy = 'created_at';
         if (!in_array(strtoupper($order), ['ASC', 'DESC'])) $order = 'DESC';
 
@@ -122,6 +124,8 @@ class ContactController {
             $orderByClause = "c.last_contact $order, c.id $order";
         } elseif ($sortBy === 'updated_at') {
             $orderByClause = "c.updated_at $order, c.id $order";
+        } elseif ($sortBy === 'admission_date') {
+            $orderByClause = "c.admission_date $order, c.id $order";
         } else {
             $orderByClause = "c.$sortBy $order, c.id $order";
         }
@@ -208,18 +212,7 @@ class ContactController {
         if ($campaignId !== '') { $where[] = 'c.campaign_id = ?'; $params[] = (int)$campaignId; }
         if ($tag !== '') { $where[] = 'c.tags LIKE ?'; $params[] = '%"' . $tag . '"%'; }
 
-        // Lọc các liên hệ có từ 2 chương trình đổ lên (đa chương trình / hồ sơ nhân bản song song)
-        if ($multiProgram) {
-            $where[] = "(
-                (c.person_id > 0 AND c.person_id IN (SELECT person_id FROM contacts WHERE tenant_id = ? AND deleted_at IS NULL AND person_id > 0 GROUP BY person_id HAVING COUNT(*) > 1))
-                OR (c.duplicate_with_id > 0)
-                OR (c.id IN (SELECT duplicate_with_id FROM contacts WHERE tenant_id = ? AND deleted_at IS NULL AND duplicate_with_id > 0))
-                OR (c.phone != '' AND c.phone IS NOT NULL AND c.phone IN (SELECT phone FROM contacts WHERE tenant_id = ? AND deleted_at IS NULL AND phone != '' AND phone IS NOT NULL GROUP BY phone HAVING COUNT(*) > 1))
-            )";
-            $params[] = $tid;
-            $params[] = $tid;
-            $params[] = $tid;
-        }
+
         
         if ($dataType !== '') {
             $errorCond = "(
@@ -264,14 +257,33 @@ class ContactController {
         }
         
         if ($from !== '') {
-            $whereField = in_array($dateField, ['created_at', 'updated_at', 'last_contact']) ? $dateField : 'created_at';
-            $where[] = "c.{$whereField} >= ?";
-            $params[] = $from . ' 00:00:00';
+            $whereField = in_array($dateField, ['created_at', 'updated_at', 'last_contact', 'admission_date']) ? $dateField : 'created_at';
+            if ($whereField === 'admission_date') {
+                $where[] = "c.admission_date >= ?";
+                $params[] = $from;
+            } else {
+                $where[] = "c.{$whereField} >= ?";
+                $params[] = $from . ' 00:00:00';
+            }
         }
         if ($to !== '') {
-            $whereField = in_array($dateField, ['created_at', 'updated_at', 'last_contact']) ? $dateField : 'created_at';
-            $where[] = "c.{$whereField} <= ?";
-            $params[] = $to . ' 23:59:59';
+            $whereField = in_array($dateField, ['created_at', 'updated_at', 'last_contact', 'admission_date']) ? $dateField : 'created_at';
+            if ($whereField === 'admission_date') {
+                $where[] = "c.admission_date <= ?";
+                $params[] = $to;
+            } else {
+                $where[] = "c.{$whereField} <= ?";
+                $params[] = $to . ' 23:59:59';
+            }
+        }
+
+        if ($admissionFrom !== '') {
+            $where[] = "c.admission_date >= ?";
+            $params[] = $admissionFrom;
+        }
+        if ($admissionTo !== '') {
+            $where[] = "c.admission_date <= ?";
+            $params[] = $admissionTo;
         }
 
         if (!$isGlobalPipelineSearch) {
@@ -396,38 +408,21 @@ class ContactController {
                 $stageCounts['nurture'] = $nurtureTotal;
                 $stageCounts['lost'] = $lostTotal;
 
-                // Compute uncontacted count (for active pipeline leads only)
-                try {
-                    $unWhere = $baseWhere;
-                    $unWhere[] = "(c.lead_status NOT IN ('lost', 'nurture') OR c.lead_status IS NULL)";
-                    $unWhereStr = implode(' AND ', $unWhere);
+                // Compute uncontacted count on demand only
+                if (!empty($_GET['include_uncontacted_count']) || !empty($_GET['uncontacted'])) {
+                    try {
+                        $unWhere = $baseWhere;
+                        $unWhere[] = "(c.lead_status NOT IN ('lost', 'nurture') OR c.lead_status IS NULL)";
+                        $unWhere[] = "(c.last_contact IS NULL OR c.last_contact = '')";
+                        $unWhereStr = implode(' AND ', $unWhere);
 
-                    $unStmt = $this->db->prepare("
-                        SELECT COUNT(*) 
-                        FROM contacts c 
-                        WHERE $unWhereStr 
-                          AND (c.last_contact IS NULL OR c.last_contact = '')
-                          AND NOT EXISTS (
-                              SELECT 1 FROM activities a 
-                              WHERE ((a.related_type = 'contact' AND a.related_id = c.id) OR a.contact_id = c.id) 
-                                AND a.deleted_at IS NULL
-                          )
-                          AND NOT EXISTS (
-                              SELECT 1 FROM notes n 
-                              WHERE n.entity_type = 'contact' AND n.entity_id = c.id 
-                                AND n.body NOT LIKE '[Tự động]%' 
-                                AND n.body NOT LIKE '[Phân bổ]%' 
-                                AND n.body NOT LIKE '[Giao data]%'
-                                AND n.body NOT LIKE '[Auto]%'
-                                AND n.body NOT LIKE '[Import]%'
-                                AND n.body NOT LIKE '[Tái phân bổ]%'
-                                AND n.body NOT LIKE 'Tái phân bổ%'
-                                AND n.body NOT LIKE 'Giao lại%'
-                          )
-                    ");
-                    $unStmt->execute($baseParams);
-                    $stageCounts['uncontacted'] = (int)$unStmt->fetchColumn();
-                } catch (\Throwable $e) {
+                        $unStmt = $this->db->prepare("SELECT COUNT(*) FROM contacts c WHERE $unWhereStr");
+                        $unStmt->execute($baseParams);
+                        $stageCounts['uncontacted'] = (int)$unStmt->fetchColumn();
+                    } catch (\Throwable $e) {
+                        $stageCounts['uncontacted'] = 0;
+                    }
+                } else {
                     $stageCounts['uncontacted'] = 0;
                 }
 
@@ -475,14 +470,22 @@ class ContactController {
         if ($leadStatus !== '') {
             $statuses = array_filter(array_map('trim', explode(',', $leadStatus)));
             if (!empty($statuses)) {
-                $placeholders = implode(',', array_fill(0, count($statuses), '?'));
-                if ($leadStatusOp === 'not_in') {
-                    $where[] = "(c.lead_status NOT IN ($placeholders) OR c.lead_status IS NULL)";
+                if (count($statuses) === 1 && in_array('active', $statuses, true)) {
+                    if ($leadStatusOp === 'not_in') {
+                        $where[] = "(c.lead_status IN ('lost', 'nurture'))";
+                    } else {
+                        $where[] = "(c.lead_status = 'active' OR c.lead_status IS NULL OR c.lead_status = '')";
+                    }
                 } else {
-                    $where[] = "c.lead_status IN ($placeholders)";
-                }
-                foreach ($statuses as $st) {
-                    $params[] = $st;
+                    $placeholders = implode(',', array_fill(0, count($statuses), '?'));
+                    if ($leadStatusOp === 'not_in') {
+                        $where[] = "(c.lead_status NOT IN ($placeholders) OR c.lead_status IS NULL)";
+                    } else {
+                        $where[] = "c.lead_status IN ($placeholders)";
+                    }
+                    foreach ($statuses as $st) {
+                        $params[] = $st;
+                    }
                 }
             }
         } elseif (!$showLost && !$isGlobalPipelineSearch) {
@@ -533,12 +536,12 @@ class ContactController {
                 (c.last_contact IS NULL OR c.last_contact = '')
                 AND NOT EXISTS (
                     SELECT 1 FROM activities a 
-                    WHERE ((a.related_type = 'contact' AND a.related_id = c.id) OR a.contact_id = c.id) 
+                    WHERE a.tenant_id = c.tenant_id AND ((a.related_type = 'contact' AND a.related_id = c.id) OR a.contact_id = c.id) 
                       AND a.deleted_at IS NULL
                 )
                 AND NOT EXISTS (
                     SELECT 1 FROM notes n 
-                    WHERE n.entity_type = 'contact' AND n.entity_id = c.id 
+                    WHERE n.tenant_id = c.tenant_id AND n.entity_type = 'contact' AND n.entity_id = c.id 
                       AND n.body NOT LIKE '[Tự động]%' 
                       AND n.body NOT LIKE '[Phân bổ]%' 
                       AND n.body NOT LIKE '[Giao data]%'
@@ -659,6 +662,41 @@ class ContactController {
         $count->execute($params);
         $total = (int)$count->fetchColumn();
 
+        if ($total === 0) {
+            respond(200, [
+                'items' => [], 'total' => 0,
+                'page' => $page, 'limit' => $limit,
+                'total_pages' => 0,
+                'stage_counts' => $stageCounts
+            ]);
+            return;
+        }
+
+        // Phase 1: High-speed ID-only pagination via index (~15ms)
+        $idStmt = $this->db->prepare("
+            SELECT c.id
+            FROM contacts c
+            WHERE $whereStr
+            ORDER BY $orderByClause
+            LIMIT $limit OFFSET $offset
+        ");
+        $idStmt->execute($params);
+        $targetIds = $idStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+
+        if (empty($targetIds)) {
+            respond(200, [
+                'items' => [], 'total' => $total,
+                'page' => $page, 'limit' => $limit,
+                'total_pages' => ceil($total / $limit),
+                'stage_counts' => $stageCounts
+            ]);
+            return;
+        }
+
+        // Phase 2: Execute rich joins & correlated subqueries ONLY for the 50 target IDs
+        $idPlaceholders = implode(',', array_fill(0, count($targetIds), '?'));
+        $orderFieldClause = "FIELD(c.id, " . implode(',', array_map('intval', $targetIds)) . ")";
+
         $stmt = $this->db->prepare("
             SELECT c.*, 
                    CASE 
@@ -740,11 +778,10 @@ class ContactController {
                 SELECT MAX(id) FROM data_reports 
                 WHERE lead_id = l.id AND consultant_id = c.owner_id
             )
-            WHERE $whereStr
-            ORDER BY $orderByClause
-            LIMIT $limit OFFSET $offset
+            WHERE c.id IN ($idPlaceholders)
+            ORDER BY $orderFieldClause
         ");
-        $stmt->execute($params);
+        $stmt->execute($targetIds);
         $data = $stmt->fetchAll();
         $this->populateLinkedProfilesCount($data, (int)($tid ?: 1));
         // Parse JSON tags
@@ -803,7 +840,7 @@ class ContactController {
         }
 
         try {
-            $matchSql = "SELECT id, person_id, duplicate_with_id, phone, mobile, program FROM contacts WHERE tenant_id = ? AND deleted_at IS NULL AND (" . implode(' OR ', $whereMatches) . ")";
+            $matchSql = "SELECT id, person_id, duplicate_with_id, phone, mobile, program, stage_id FROM contacts WHERE tenant_id = ? AND deleted_at IS NULL AND (" . implode(' OR ', $whereMatches) . ")";
             $matchStmt = $this->db->prepare($matchSql);
             $matchStmt->execute($paramsMatches);
             $allLinkedRows = $matchStmt->fetchAll();
@@ -3419,7 +3456,7 @@ class ContactController {
         $contact = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$contact) respond(404, null, 'Không tìm thấy thông tin học viên', false);
 
-        $body = getJsonBody();
+        $body = getBody();
         $toEmail = trim($body['to_email'] ?? $contact['email'] ?? '');
         $ccEmail = trim($body['cc_email'] ?? '');
         $subject = trim($body['subject'] ?? 'Thông báo Tiếp nhận học viên & Hướng dẫn học tập');
@@ -3506,7 +3543,7 @@ class ContactController {
         $contact = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$contact) respond(404, null, 'Không tìm thấy thông tin học viên', false);
 
-        $body = getJsonBody();
+        $body = getBody();
         $targetStatus = trim($body['study_status'] ?? '');
         $allowedStatuses = ['studying', 'completed', 'reserved'];
         if (!in_array($targetStatus, $allowedStatuses, true)) {

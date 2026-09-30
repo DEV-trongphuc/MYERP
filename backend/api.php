@@ -874,7 +874,8 @@ if (!in_array($action, $publicActions)) {
         'get_logs',
         'get_all_pending_counts',
         'save_workspace_settings',
-        'get_workspace_settings'
+        'get_workspace_settings',
+        'preview_routing'
     ], true)) {
         $resolvedScope = 'all';
     }
@@ -18538,6 +18539,10 @@ switch ($action) {
                 $ruleConnIds = array_map('trim', explode(',', (string) $rule['connection_id']));
                 $isMatched = false;
                 foreach ($ruleConnIds as $ruleConnIdStr) {
+                    if ($ruleConnIdStr === 'all') {
+                        $isMatched = true;
+                        break;
+                    }
                     $ruleConnId = (int) $ruleConnIdStr;
                     if ($ruleConnId === -1 && $connectionType === 'sheets') {
                         $isMatched = true;

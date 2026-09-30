@@ -4237,10 +4237,22 @@ try {
         }
     }
 
-    // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '303') ON DUPLICATE KEY UPDATE setting_value = '303'");
+    // --- MIGRATION 304: Bổ sung quyền riêng tư và đối tượng bài đăng enterprise_posts ---
+    if ($currentVersion < 304) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 304: Thêm target_user_ids và excluded_user_ids cho enterprise_posts...", "info");
+        try {
+            $addColumnIfNotExists('enterprise_posts', 'target_user_ids', "TEXT NULL DEFAULT NULL COMMENT 'JSON array of user IDs allowed to view' AFTER team_id");
+            $addColumnIfNotExists('enterprise_posts', 'excluded_user_ids', "TEXT NULL DEFAULT NULL COMMENT 'JSON array of user IDs excluded from viewing' AFTER target_user_ids");
+            $logMsg("Nâng cấp lên phiên bản 304 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi nâng cấp v304: " . $e->getMessage(), "error");
+        }
+    }
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 303", "success");
+    // Update DB version in system_settings
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '304') ON DUPLICATE KEY UPDATE setting_value = '304'");
+
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 304", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");

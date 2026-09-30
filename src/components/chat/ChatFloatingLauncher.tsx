@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useLocation } from 'react-router-dom';
 import { Sparkles } from 'lucide-react';
 import { useChatStore } from '../../store/chatStore';
 import { useAuth } from '../../contexts/AuthContext';
@@ -7,6 +8,7 @@ import { WorkChatModal } from './WorkChatModal';
 import { BrandChatIcon } from './BrandChatIcon';
 
 export const ChatFloatingLauncher: React.FC = () => {
+  const location = useLocation();
   const { user, token } = useAuth();
   const { 
     isOpen, 
@@ -93,7 +95,18 @@ export const ChatFloatingLauncher: React.FC = () => {
     };
   }, [token, user, isOpen, isRealtimeConnected]);
 
-  if (!token || !user) return null;
+  const isPublicPage = 
+    location.pathname === '/download' || 
+    location.pathname.startsWith('/download') ||
+    location.pathname === '/login' ||
+    location.pathname.startsWith('/login') ||
+    location.pathname.startsWith('/public-schedule') ||
+    location.pathname.startsWith('/splash-preview') ||
+    location.pathname.startsWith('/docs') ||
+    location.pathname.startsWith('/documentation') ||
+    location.pathname.startsWith('/api-docs');
+
+  if (!token || !user || isPublicPage) return null;
 
   // When chat modal is open, hide launcher button so it doesn't overlap the input bar or send button
   if (isOpen) {
@@ -104,6 +117,31 @@ export const ChatFloatingLauncher: React.FC = () => {
 
   const floatingButton = (
     <>
+      <style>{`
+        @keyframes chatBeaconPing {
+          0% {
+            transform: scale(0.95);
+            opacity: 0.75;
+          }
+          65% {
+            transform: scale(1.48);
+            opacity: 0;
+          }
+          100% {
+            transform: scale(1.48);
+            opacity: 0;
+          }
+        }
+        @keyframes chatBreathingGlow {
+          0%, 100% {
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5), 0 8px 24px rgba(220, 38, 38, 0.45), 0 2px 6px rgba(0, 0, 0, 0.12);
+          }
+          50% {
+            box-shadow: 0 0 0 10px rgba(239, 68, 68, 0), 0 12px 28px rgba(220, 38, 38, 0.65), 0 4px 10px rgba(0, 0, 0, 0.18);
+          }
+        }
+      `}</style>
+
       <button
         type="button"
         onClick={() => {
@@ -132,7 +170,8 @@ export const ChatFloatingLauncher: React.FC = () => {
           boxShadow: '0 8px 24px rgba(220, 38, 38, 0.45), 0 2px 6px rgba(0, 0, 0, 0.12)',
           zIndex: 995,
           transition: 'all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)',
-          outline: 'none'
+          outline: 'none',
+          animation: unreadTotal > 0 ? 'chatBreathingGlow 2.4s ease-in-out infinite' : undefined
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.transform = 'scale(1.08)';
@@ -144,6 +183,34 @@ export const ChatFloatingLauncher: React.FC = () => {
         }}
         title="Tin nhắn nội bộ (WorkChat) - Click để trò chuyện"
       >
+        {/* Pulsing Beacon Ripple Aura when unread messages exist */}
+        {unreadTotal > 0 && (
+          <>
+            <span
+              style={{
+                position: 'absolute',
+                inset: '-2px',
+                borderRadius: '50%',
+                background: 'rgba(239, 68, 68, 0.45)',
+                zIndex: -1,
+                pointerEvents: 'none',
+                animation: 'chatBeaconPing 2.4s cubic-bezier(0, 0, 0.2, 1) infinite'
+              }}
+            />
+            <span
+              style={{
+                position: 'absolute',
+                inset: '-2px',
+                borderRadius: '50%',
+                background: 'rgba(239, 68, 68, 0.3)',
+                zIndex: -1,
+                pointerEvents: 'none',
+                animation: 'chatBeaconPing 2.4s cubic-bezier(0, 0, 0.2, 1) infinite 0.8s'
+              }}
+            />
+          </>
+        )}
+
         <BrandChatIcon size={27} variant="solid-white" />
 
         {/* Live Active Status Indicator Dot */}

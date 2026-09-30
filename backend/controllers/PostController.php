@@ -8,6 +8,22 @@ class PostController {
         $this->db = $db;
     }
 
+    private function ensureAudienceColumnsExist(): void {
+        static $checked = false;
+        if ($checked) return;
+        try {
+            $cols = $this->db->query("SHOW COLUMNS FROM `enterprise_posts` LIKE 'target_user_ids'")->fetchAll();
+            if (empty($cols)) {
+                $this->db->exec("ALTER TABLE `enterprise_posts` ADD COLUMN `target_user_ids` TEXT NULL DEFAULT NULL AFTER `team_id`");
+            }
+            $cols2 = $this->db->query("SHOW COLUMNS FROM `enterprise_posts` LIKE 'excluded_user_ids'")->fetchAll();
+            if (empty($cols2)) {
+                $this->db->exec("ALTER TABLE `enterprise_posts` ADD COLUMN `excluded_user_ids` TEXT NULL DEFAULT NULL AFTER `target_user_ids`");
+            }
+            $checked = true;
+        } catch (\Throwable $e) {}
+    }
+
     /**
      * GET /posts
      * Fetch timeline posts with cursor pagination and optional tag/author filtering.
@@ -25,6 +41,8 @@ class PostController {
 
         $isAdmin = in_array($auth['role'], ['superadmin', 'admin', 'super_admin'], true);
 
+        $this->ensureAudienceColumnsExist();
+
         // Fetch user's team_id
         $userTeamId = null;
         $stmtUserTeam = $this->db->prepare("SELECT team_id FROM users WHERE id = ? LIMIT 1");
@@ -41,17 +59,27 @@ class PostController {
         
         $params = [$tenantId];
 
-        // Restrict team posts visibility for non-admins
-        if (!$isAdmin) {
-            if ($userTeamId) {
-                $query .= " AND (p.visibility = 'global' OR p.user_id = ? OR (p.visibility = 'team' AND p.team_id = ?))";
-                $params[] = $currentUserId;
-                $params[] = (int)$userTeamId;
-            } else {
-                $query .= " AND (p.visibility = 'global' OR p.user_id = ?)";
-                $params[] = $currentUserId;
-            }
-        }
+        // Visibility & Audience filtering
+        $query .= " AND (
+            p.user_id = ?
+            OR (
+                (p.excluded_user_ids IS NULL OR p.excluded_user_ids = '' OR p.excluded_user_ids = '[]' OR NOT JSON_CONTAINS(p.excluded_user_ids, ?))
+                AND (
+                    p.visibility = 'global'
+                    OR (p.visibility = 'team' AND (p.team_id = ? OR ? = 1))
+                    OR (p.visibility IN ('specific', 'custom_include') AND (
+                        (p.target_user_ids IS NOT NULL AND JSON_CONTAINS(p.target_user_ids, ?))
+                        OR ? = 1
+                    ))
+                )
+            )
+        )";
+        $params[] = $currentUserId;
+        $params[] = json_encode($currentUserId);
+        $params[] = (int)($userTeamId ?: 0);
+        $params[] = $isAdmin ? 1 : 0;
+        $params[] = json_encode($currentUserId);
+        $params[] = $isAdmin ? 1 : 0;
 
         if ($userIdFilter) {
             $query .= " AND p.user_id = ?";
@@ -175,7 +203,42 @@ class PostController {
 
                 // Top comments
                 $post['top_comments'] = isset($topCommentsMap[$postId]) ? $topCommentsMap[$postId] : [];
+
+                // Audience decode
+                $post['target_user_ids'] = json_decode($post['target_user_ids'] ?? '[]', true) ?: [];
+                $post['excluded_user_ids'] = json_decode($post['excluded_user_ids'] ?? '[]', true) ?: [];
             }
+            unset($post);
+
+            // Batch enrich audience users
+            $allAudienceUids = [];
+            foreach ($posts as $pItem) {
+                foreach ($pItem['target_user_ids'] as $u) $allAudienceUids[(int)$u] = true;
+                foreach ($pItem['excluded_user_ids'] as $u) $allAudienceUids[(int)$u] = true;
+            }
+
+            $audienceUsersMap = [];
+            if (!empty($allAudienceUids)) {
+                $uidsList = array_keys($allAudienceUids);
+                $uPlaceholders = implode(',', array_fill(0, count($uidsList), '?'));
+                $uStmt = $this->db->prepare("SELECT id, full_name, avatar_url, role FROM users WHERE id IN ($uPlaceholders)");
+                $uStmt->execute($uidsList);
+                while ($ur = $uStmt->fetch(PDO::FETCH_ASSOC)) {
+                    $audienceUsersMap[(int)$ur['id']] = $ur;
+                }
+            }
+
+            foreach ($posts as &$post) {
+                $post['target_users'] = [];
+                foreach ($post['target_user_ids'] as $uid) {
+                    if (isset($audienceUsersMap[$uid])) $post['target_users'][] = $audienceUsersMap[$uid];
+                }
+                $post['excluded_users'] = [];
+                foreach ($post['excluded_user_ids'] as $uid) {
+                    if (isset($audienceUsersMap[$uid])) $post['excluded_users'][] = $audienceUsersMap[$uid];
+                }
+            }
+            unset($post);
         }
 
         respond(200, [
@@ -190,17 +253,21 @@ class PostController {
      * Create a post. Triggers server-side Open Graph parsing if url detected in content.
      */
     public function store(array $auth): void {
+        $this->ensureAudienceColumnsExist();
         $tenantId = (int)$auth['tenant_id'];
         $userId = (int)$auth['user_id'];
         $b = getBody();
 
         $content = isset($b['content']) ? trim($b['content']) : '';
-        if (empty($content)) {
+        $attachments = isset($b['attachments']) && is_array($b['attachments']) ? $b['attachments'] : [];
+        if (empty($content) && empty($attachments)) {
             respond(400, null, 'Nội dung bài viết không được để trống', false);
         }
 
-        $attachments = isset($b['attachments']) ? $b['attachments'] : [];
         $visibility = isset($b['visibility']) ? trim($b['visibility']) : 'global';
+        if (!in_array($visibility, ['global', 'team', 'specific', 'custom_include'], true)) {
+            $visibility = 'global';
+        }
 
         // Extract hashtags
         preg_match_all('/#(\w+)/u', $content, $matches);
@@ -217,9 +284,20 @@ class PostController {
             $teamId = null;
         }
 
+        $targetUserIds = isset($b['target_user_ids']) && is_array($b['target_user_ids']) 
+            ? array_values(array_unique(array_filter(array_map('intval', $b['target_user_ids'])))) 
+            : [];
+        $excludedUserIds = isset($b['excluded_user_ids']) && is_array($b['excluded_user_ids']) 
+            ? array_values(array_unique(array_filter(array_map('intval', $b['excluded_user_ids'])))) 
+            : [];
+
+        if (in_array($visibility, ['specific', 'custom_include'], true) && empty($targetUserIds)) {
+            respond(400, null, 'Vui lòng chọn ít nhất một người xem cho bài viết chỉ định', false);
+        }
+
         $stmt = $this->db->prepare("
-            INSERT INTO enterprise_posts (tenant_id, user_id, content, attachments_json, visibility, team_id, tags_json, link_metadata_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO enterprise_posts (tenant_id, user_id, content, attachments_json, visibility, team_id, target_user_ids, excluded_user_ids, tags_json, link_metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         
         $stmt->execute([
@@ -229,6 +307,8 @@ class PostController {
             json_encode($attachments),
             $visibility,
             $teamId,
+            !empty($targetUserIds) ? json_encode($targetUserIds) : null,
+            !empty($excludedUserIds) ? json_encode($excludedUserIds) : null,
             json_encode($tags),
             $linkMetadata ? json_encode($linkMetadata) : null
         ]);
@@ -316,9 +396,16 @@ class PostController {
 
         $b = getBody();
         $content = isset($b['content']) ? trim($b['content']) : $post['content'];
-        $visibility = in_array($b['visibility'] ?? '', ['global', 'team', 'public']) ? ($b['visibility'] === 'public' ? 'global' : $b['visibility']) : $post['visibility'];
+        $visibility = in_array($b['visibility'] ?? '', ['global', 'team', 'specific', 'custom_include', 'public']) ? ($b['visibility'] === 'public' ? 'global' : $b['visibility']) : $post['visibility'];
         $teamId = $visibility === 'team' ? (isset($b['team_id']) ? (int)$b['team_id'] : $post['team_id']) : null;
         
+        $targetUserIds = isset($b['target_user_ids']) && is_array($b['target_user_ids']) 
+            ? array_values(array_unique(array_filter(array_map('intval', $b['target_user_ids'])))) 
+            : (json_decode($post['target_user_ids'] ?? '[]', true) ?: []);
+        $excludedUserIds = isset($b['excluded_user_ids']) && is_array($b['excluded_user_ids']) 
+            ? array_values(array_unique(array_filter(array_map('intval', $b['excluded_user_ids'])))) 
+            : (json_decode($post['excluded_user_ids'] ?? '[]', true) ?: []);
+
         $newAttachments = isset($b['attachments']) && is_array($b['attachments']) ? array_values(array_filter($b['attachments'])) : (json_decode($post['attachments_json'] ?? '[]', true) ?: []);
         $oldAttachments = json_decode($post['attachments_json'] ?? '[]', true) ?: [];
 
@@ -334,13 +421,15 @@ class PostController {
 
         $upStmt = $this->db->prepare("
             UPDATE enterprise_posts 
-            SET content = ?, visibility = ?, team_id = ?, attachments_json = ?, tags_json = ?, updated_at = CURRENT_TIMESTAMP
+            SET content = ?, visibility = ?, team_id = ?, target_user_ids = ?, excluded_user_ids = ?, attachments_json = ?, tags_json = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ? AND tenant_id = ?
         ");
         $upStmt->execute([
             $content,
             $visibility,
             $teamId,
+            !empty($targetUserIds) ? json_encode($targetUserIds) : null,
+            !empty($excludedUserIds) ? json_encode($excludedUserIds) : null,
             json_encode($newAttachments, JSON_UNESCAPED_UNICODE),
             json_encode($tags, JSON_UNESCAPED_UNICODE),
             $id,
@@ -350,6 +439,8 @@ class PostController {
         $post['content'] = $content;
         $post['visibility'] = $visibility;
         $post['team_id'] = $teamId;
+        $post['target_user_ids'] = $targetUserIds;
+        $post['excluded_user_ids'] = $excludedUserIds;
         $post['attachments'] = $newAttachments;
         $post['tags'] = $tags;
         $post['link_metadata'] = json_decode($post['link_metadata_json'] ?? 'null', true);
@@ -362,6 +453,7 @@ class PostController {
      * Get a single post by ID with full hydration.
      */
     public function show(array $auth, int $id): void {
+        $this->ensureAudienceColumnsExist();
         $tenantId = (int)$auth['tenant_id'];
         $currentUserId = (int)$auth['user_id'];
 
@@ -379,11 +471,59 @@ class PostController {
             respond(404, null, 'Bài viết không tồn tại hoặc đã bị xóa', false);
         }
 
+        $targetUids = json_decode($post['target_user_ids'] ?? '[]', true) ?: [];
+        $excludedUids = json_decode($post['excluded_user_ids'] ?? '[]', true) ?: [];
+        $post['target_user_ids'] = $targetUids;
+        $post['excluded_user_ids'] = $excludedUids;
+
+        // Check permission
+        $isAuthor = (int)$post['user_id'] === $currentUserId;
+        $isAdmin = in_array($auth['role'], ['superadmin', 'admin', 'super_admin'], true);
+
+        if (!$isAuthor) {
+            if (in_array($currentUserId, $excludedUids, true)) {
+                respond(403, null, 'Bạn không có quyền xem bài viết này', false);
+            }
+            if ($post['visibility'] === 'team' && !$isAdmin) {
+                $stmtUt = $this->db->prepare("SELECT team_id FROM users WHERE id = ?");
+                $stmtUt->execute([$currentUserId]);
+                $curTeamId = $stmtUt->fetchColumn();
+                if ((int)$curTeamId !== (int)$post['team_id']) {
+                    respond(403, null, 'Bạn không có quyền xem bài viết này', false);
+                }
+            }
+            if (in_array($post['visibility'], ['specific', 'custom_include'], true) && !$isAdmin) {
+                if (!in_array($currentUserId, $targetUids, true)) {
+                    respond(403, null, 'Bạn không có quyền xem bài viết này', false);
+                }
+            }
+        }
+
         // Hydrate single post
         $post['attachments'] = json_decode($post['attachments_json'] ?? '[]', true) ?: [];
         $post['tags'] = json_decode($post['tags_json'] ?? '[]', true) ?: [];
         $post['link_metadata'] = json_decode($post['link_metadata_json'] ?? 'null', true);
         unset($post['attachments_json'], $post['tags_json'], $post['link_metadata_json']);
+
+        // Hydrate target and excluded user entities
+        $allUids = array_unique(array_merge($targetUids, $excludedUids));
+        $post['target_users'] = [];
+        $post['excluded_users'] = [];
+        if (!empty($allUids)) {
+            $uPlaceholders = implode(',', array_fill(0, count($allUids), '?'));
+            $uStmt = $this->db->prepare("SELECT id, full_name, avatar_url, role FROM users WHERE id IN ($uPlaceholders)");
+            $uStmt->execute($allUids);
+            $uMap = [];
+            while ($ur = $uStmt->fetch(PDO::FETCH_ASSOC)) {
+                $uMap[(int)$ur['id']] = $ur;
+            }
+            foreach ($targetUids as $u) {
+                if (isset($uMap[$u])) $post['target_users'][] = $uMap[$u];
+            }
+            foreach ($excludedUids as $u) {
+                if (isset($uMap[$u])) $post['excluded_users'][] = $uMap[$u];
+            }
+        }
 
         // Reactions
         $reactStmt = $this->db->prepare("
@@ -1168,6 +1308,24 @@ class PostController {
         $mentions = array_filter($mentions, function($uid) use ($currentUserId) {
             return (int)$uid !== $currentUserId;
         });
+
+        // Filter mentions by post audience & exclusion permissions
+        try {
+            $pStmt = $this->db->prepare("SELECT visibility, team_id, target_user_ids, excluded_user_ids FROM enterprise_posts WHERE id = ?");
+            $pStmt->execute([$postId]);
+            $pRow = $pStmt->fetch(PDO::FETCH_ASSOC);
+            if ($pRow) {
+                $targetUids = json_decode($pRow['target_user_ids'] ?? '[]', true) ?: [];
+                $excludedUids = json_decode($pRow['excluded_user_ids'] ?? '[]', true) ?: [];
+                $mentions = array_filter($mentions, function($uid) use ($pRow, $targetUids, $excludedUids) {
+                    if (in_array((int)$uid, $excludedUids, true)) return false;
+                    if (in_array($pRow['visibility'], ['specific', 'custom_include'], true)) {
+                        return in_array((int)$uid, $targetUids, true);
+                    }
+                    return true;
+                });
+            }
+        } catch (\Throwable $e) {}
 
         if (!empty($mentions)) {
             require_once __DIR__ . '/../NotificationService.php';

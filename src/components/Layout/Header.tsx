@@ -1865,9 +1865,11 @@ export const Header = ({
           </button>
         )}
 
-        {/* WorkChat Icon Button with NEW Badge */}
         <button
-          onClick={() => openChat()}
+          onClick={() => {
+            const isMobileDevice = typeof window !== 'undefined' && window.innerWidth < 900;
+            openChat(undefined, undefined, isMobileDevice ? undefined : { maximized: true });
+          }}
           style={{
             width: 36,
             height: 36,

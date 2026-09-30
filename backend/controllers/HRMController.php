@@ -321,6 +321,18 @@ class HRMController {
         respond(200, $row);
     }
 
+    private function resolveRelatedUsers($rawRelated): array {
+        if (empty($rawRelated)) return [];
+        $ids = is_array($rawRelated) ? $rawRelated : (json_decode((string)$rawRelated, true) ?: []);
+        if (!is_array($ids)) return [];
+        $ids = array_values(array_filter(array_unique(array_map('intval', $ids))));
+        if (empty($ids)) return [];
+        $inClause = implode(',', array_fill(0, count($ids), '?'));
+        $stmt = $this->db->prepare("SELECT id, full_name, full_name as name, avatar_url, avatar_url as avatar, job_title, role FROM users WHERE id IN ($inClause)");
+        $stmt->execute($ids);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
     // --- LEAVE REQUESTS ---
 
     public function indexLeaves(array $auth): void {
@@ -345,12 +357,20 @@ class HRMController {
         $stmt = $this->db->prepare("
             SELECT l.*, u.full_name as employee_name, u.email as employee_email,
                    u.avatar_url as employee_avatar, u.avatar_url, u.department, u.job_title,
+                   app1.full_name as approver_name, app1.avatar_url as approver_avatar,
+                   app2.full_name as approver_name_2, app2.avatar_url as approver_avatar_2,
+                   apby.full_name as approved_by_name, apby.avatar_url as approved_by_avatar,
+                   apby2.full_name as approved_by_name_2, apby2.avatar_url as approved_by_avatar_2,
                    COALESCE(p.annual_leave_total, 12.0) as annual_leave_total,
                    COALESCE(p.annual_leave_used, 0.0) as annual_leave_used,
                    COALESCE(p.compensatory_leave_total, 0.0) as compensatory_leave_total,
                    COALESCE(p.compensatory_leave_used, 0.0) as compensatory_leave_used
             FROM hrm_leave_requests l
             JOIN users u ON l.user_id = u.id
+            LEFT JOIN users app1 ON l.approver_id = app1.id
+            LEFT JOIN users app2 ON l.approver_id_2 = app2.id
+            LEFT JOIN users apby ON l.approved_by = apby.id
+            LEFT JOIN users apby2 ON l.approved_by_2 = apby2.id
             LEFT JOIN hrm_profiles p ON l.user_id = p.user_id
             WHERE $where
             ORDER BY l.created_at DESC
@@ -366,6 +386,7 @@ class HRMController {
             $r['remaining_compensatory_leave'] = max(0.0, $r['compensatory_leave_total'] - $r['compensatory_leave_used']);
             $r['reason'] = self::cleanLeaveReason($r['reason'] ?? '');
             $r['title'] = self::formatLeaveTitle($r);
+            $r['related_users'] = $this->resolveRelatedUsers($r['related_user_ids'] ?? null);
         }
         unset($r);
 
@@ -380,12 +401,21 @@ class HRMController {
     public function showLeave(array $auth, int $id): void {
         $stmt = $this->db->prepare("
             SELECT l.*, u.full_name as employee_name, u.email as employee_email,
+                   u.avatar_url as employee_avatar, u.avatar_url, u.department, u.job_title,
+                   app1.full_name as approver_name, app1.avatar_url as approver_avatar,
+                   app2.full_name as approver_name_2, app2.avatar_url as approver_avatar_2,
+                   apby.full_name as approved_by_name, apby.avatar_url as approved_by_avatar,
+                   apby2.full_name as approved_by_name_2, apby2.avatar_url as approved_by_avatar_2,
                    COALESCE(p.annual_leave_total, 12.0) as annual_leave_total,
                    COALESCE(p.annual_leave_used, 0.0) as annual_leave_used,
                    COALESCE(p.compensatory_leave_total, 0.0) as compensatory_leave_total,
                    COALESCE(p.compensatory_leave_used, 0.0) as compensatory_leave_used
             FROM hrm_leave_requests l
             JOIN users u ON l.user_id = u.id
+            LEFT JOIN users app1 ON l.approver_id = app1.id
+            LEFT JOIN users app2 ON l.approver_id_2 = app2.id
+            LEFT JOIN users apby ON l.approved_by = apby.id
+            LEFT JOIN users apby2 ON l.approved_by_2 = apby2.id
             LEFT JOIN hrm_profiles p ON l.user_id = p.user_id
             WHERE l.id = ? AND u.tenant_id = ?
             LIMIT 1
@@ -397,13 +427,6 @@ class HRMController {
             return;
         }
 
-        $userId = (int)$auth['user_id'];
-        $relArr = !empty($row['related_user_ids']) ? (is_array($row['related_user_ids']) ? $row['related_user_ids'] : json_decode($row['related_user_ids'], true)) : [];
-        if (!is_array($relArr)) $relArr = [];
-        $relArr = array_map('intval', $relArr);
-
-        // Allow read-only viewing for all users in the same tenant (e.g. WorkChat preview / Drawer)
-
         $row['annual_leave_total'] = (float)$row['annual_leave_total'];
         $row['annual_leave_used'] = (float)$row['annual_leave_used'];
         $row['compensatory_leave_total'] = (float)$row['compensatory_leave_total'];
@@ -412,6 +435,7 @@ class HRMController {
         $row['remaining_compensatory_leave'] = max(0.0, $row['compensatory_leave_total'] - $row['compensatory_leave_used']);
         $row['reason'] = self::cleanLeaveReason($row['reason'] ?? '');
         $row['title'] = self::formatLeaveTitle($row);
+        $row['related_users'] = $this->resolveRelatedUsers($row['related_user_ids'] ?? null);
 
         respond(200, $row);
     }
@@ -969,33 +993,56 @@ class HRMController {
 
     public function indexAdvances(array $auth): void {
         $userId = (int)$auth['user_id'];
-        if ($this->isAdmin($auth)) {
-            $stmt = $this->db->prepare("
-                SELECT a.*, u.full_name as employee_name, u.avatar_url as employee_avatar, u.avatar_url, u.department, u.job_title
-                FROM hrm_salary_advances a
-                JOIN users u ON a.user_id = u.id
-                WHERE u.tenant_id = ?
-                ORDER BY a.created_at DESC
-            ");
-            $stmt->execute([$auth['tenant_id']]);
-        } else {
-            $stmt = $this->db->prepare("
-                SELECT a.*, u.full_name as employee_name, u.avatar_url as employee_avatar, u.avatar_url, u.department, u.job_title
-                FROM hrm_salary_advances a
-                JOIN users u ON a.user_id = u.id
-                WHERE a.user_id = ? OR a.approver_id = ? OR a.approver_id_2 = ? OR a.related_user_ids LIKE ? OR a.related_user_ids LIKE ?
-                ORDER BY a.created_at DESC
-            ");
-            $stmt->execute([$userId, $userId, $userId, '%"' . $userId . '"%', '%' . $userId . '%']);
+        $where = "u.tenant_id = ?";
+        $params = [$auth['tenant_id']];
+
+        if (!$this->isAdmin($auth)) {
+            $where .= " AND (a.user_id = ? OR a.approver_id = ? OR a.approver_id_2 = ? OR a.related_user_ids LIKE ? OR a.related_user_ids LIKE ?)";
+            $params[] = $userId;
+            $params[] = $userId;
+            $params[] = $userId;
+            $params[] = '%"' . $userId . '"%';
+            $params[] = '%' . $userId . '%';
         }
-        respond(200, $stmt->fetchAll(PDO::FETCH_ASSOC));
+
+        $stmt = $this->db->prepare("
+            SELECT a.*, u.full_name as employee_name, u.avatar_url as employee_avatar, u.avatar_url, u.department, u.job_title,
+                   app1.full_name as approver_name, app1.avatar_url as approver_avatar,
+                   app2.full_name as approver_name_2, app2.avatar_url as approver_avatar_2,
+                   apby.full_name as approved_by_name, apby.avatar_url as approved_by_avatar,
+                   apby2.full_name as approved_by_name_2, apby2.avatar_url as approved_by_avatar_2
+            FROM hrm_salary_advances a
+            JOIN users u ON a.user_id = u.id
+            LEFT JOIN users app1 ON a.approver_id = app1.id
+            LEFT JOIN users app2 ON a.approver_id_2 = app2.id
+            LEFT JOIN users apby ON a.approved_by = apby.id
+            LEFT JOIN users apby2 ON a.approved_by_2 = apby2.id
+            WHERE $where
+            ORDER BY a.created_at DESC
+        ");
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as &$r) {
+            $r['related_users'] = $this->resolveRelatedUsers($r['related_user_ids'] ?? null);
+        }
+        unset($r);
+        respond(200, $rows);
     }
 
     public function showAdvance(array $auth, int $id): void {
         $stmt = $this->db->prepare("
-            SELECT a.*, u.full_name as employee_name, u.email as employee_email
+            SELECT a.*, u.full_name as employee_name, u.email as employee_email,
+                   u.avatar_url as employee_avatar, u.avatar_url, u.department, u.job_title,
+                   app1.full_name as approver_name, app1.avatar_url as approver_avatar,
+                   app2.full_name as approver_name_2, app2.avatar_url as approver_avatar_2,
+                   apby.full_name as approved_by_name, apby.avatar_url as approved_by_avatar,
+                   apby2.full_name as approved_by_name_2, apby2.avatar_url as approved_by_avatar_2
             FROM hrm_salary_advances a
             JOIN users u ON a.user_id = u.id
+            LEFT JOIN users app1 ON a.approver_id = app1.id
+            LEFT JOIN users app2 ON a.approver_id_2 = app2.id
+            LEFT JOIN users apby ON a.approved_by = apby.id
+            LEFT JOIN users apby2 ON a.approved_by_2 = apby2.id
             WHERE a.id = ? AND u.tenant_id = ?
             LIMIT 1
         ");
@@ -1006,13 +1053,7 @@ class HRMController {
             return;
         }
 
-        $userId = (int)$auth['user_id'];
-        $relArr = !empty($row['related_user_ids']) ? (is_array($row['related_user_ids']) ? $row['related_user_ids'] : json_decode($row['related_user_ids'], true)) : [];
-        if (!is_array($relArr)) $relArr = [];
-        $relArr = array_map('intval', $relArr);
-
-        // Allow read-only viewing for all users in the same tenant (e.g. WorkChat preview / Drawer)
-
+        $row['related_users'] = $this->resolveRelatedUsers($row['related_user_ids'] ?? null);
         respond(200, $row);
     }
 

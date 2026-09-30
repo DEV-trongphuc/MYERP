@@ -2073,6 +2073,14 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     return isOwnerOrCreator && isSelfEntered;
   }, [contact, currentUser, formData.owner_id, formData.created_by, formData.source, formData.dl_status]);
 
+  const canReportDataLead = useMemo(() => {
+    if (!contact && !formData) return false;
+    const src = (contact?.source || formData?.source || '').toLowerCase();
+    const isSelfEnteredOrDb = ['ca_nhan', 'cold_call', 'gioi_thieu'].includes(src) || (formData?.dl_status || contact?.dl_status) === 'databank_claim';
+    const hasDistribution = Boolean(contact?.round_name || contact?.round_id || contact?.log_id || contact?.distribution_log_id || contact?.distributed_at);
+    return hasDistribution || !isSelfEnteredOrDb;
+  }, [contact, formData]);
+
   const [showCallLogger, setShowCallLogger] = useState(false);
   const [showActivityModal, setShowActivityModal] = useState(false);
   const [meetingToComplete, setMeetingToComplete] = useState<any | null>(null);
@@ -8292,7 +8300,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           </div>
                         )}
 
-                        {/* Báo lỗi data button (cho dữ liệu phân bổ từ chiến dịch) */}
+                        {/* Báo lỗi data button (cho dữ liệu phân bổ từ chiến dịch) - Icon only */}
                         <button
                           type="button"
                           onClick={() => setShowReportDataModal(true)}
@@ -8300,12 +8308,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           style={{ 
                             display: 'flex', 
                             alignItems: 'center', 
-                            gap: '6px', 
-                            padding: '8px 14px', 
-                            borderRadius: '10px', 
+                            justifyContent: 'center',
+                            width: '40px',
                             height: '40px', 
-                            fontSize: '0.85rem',
-                            fontWeight: 650,
+                            padding: 0,
+                            borderRadius: '10px', 
                             color: '#dc2626',
                             borderColor: 'rgba(239, 68, 68, 0.35)',
                             background: 'rgba(239, 68, 68, 0.05)',
@@ -8313,9 +8320,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             boxShadow: 'var(--shadow-sm)',
                             transition: 'all 0.2s ease'
                           }}
-                          title="Báo cáo số điện thoại ảo, sai thông tin hoặc trùng lặp để bù vòng"
+                          title="Báo lỗi data - Báo cáo số điện thoại ảo, sai thông tin hoặc trùng lặp để bù vòng"
                         >
-                          <AlertTriangle size={15} /> Báo lỗi data
+                          <AlertTriangle size={18} />
                         </button>
 
                         <button
@@ -9105,6 +9112,33 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   <span>Xóa khách hàng</span>
                                 </button>
                               )}
+                              {canReportDataLead && (
+                                <button
+                                  type="button"
+                                  onClick={() => setShowReportDataModal(true)}
+                                  title="Báo lỗi data này để nhận bù vòng"
+                                  style={{
+                                    width: '100%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '6px',
+                                    marginTop: '8px',
+                                    padding: '8px 12px',
+                                    background: 'rgba(245, 158, 11, 0.06)',
+                                    border: '1px dashed rgba(245, 158, 11, 0.35)',
+                                    color: '#d97706',
+                                    fontSize: '0.78rem',
+                                    fontWeight: 650,
+                                    cursor: 'pointer',
+                                    borderRadius: '6px',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                >
+                                  <AlertTriangle size={14} />
+                                  <span>Báo lỗi data</span>
+                                </button>
+                              )}
                             </div>
                           </div>
                         ) : (
@@ -9303,6 +9337,43 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 >
                                   <Trash2 size={13} />
                                   <span>Xóa khách hàng</span>
+                                </button>
+                              )}
+                              {canReportDataLead && (
+                                <button
+                                  type="button"
+                                  onClick={() => setShowReportDataModal(true)}
+                                  title="Báo lỗi data này để nhận bù vòng"
+                                  style={{
+                                    width: '100%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '6px',
+                                    marginTop: '8px',
+                                    padding: '6px 8px',
+                                    background: 'rgba(245, 158, 11, 0.06)',
+                                    border: '1px dashed rgba(245, 158, 11, 0.35)',
+                                    color: '#d97706',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 650,
+                                    cursor: 'pointer',
+                                    borderRadius: '6px',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.color = '#b45309';
+                                    e.currentTarget.style.background = 'rgba(245, 158, 11, 0.14)';
+                                    e.currentTarget.style.borderColor = 'rgba(245, 158, 11, 0.6)';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.color = '#d97706';
+                                    e.currentTarget.style.background = 'rgba(245, 158, 11, 0.06)';
+                                    e.currentTarget.style.borderColor = 'rgba(245, 158, 11, 0.35)';
+                                  }}
+                                >
+                                  <AlertTriangle size={13} />
+                                  <span>Báo lỗi data</span>
                                 </button>
                               )}
                             </div>

@@ -208,6 +208,12 @@ function getBody(): array {
     return $body;
 }
 
+if (!function_exists('getJsonBody')) {
+    function getJsonBody(): array {
+        return getBody();
+    }
+}
+
 if (!function_exists('getBearerToken')) {
     function getBearerToken(): ?string {
         $h = $_SERVER['HTTP_AUTHORIZATION'] ?? '';

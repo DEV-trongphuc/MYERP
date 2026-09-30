@@ -66,6 +66,15 @@ try {
 } catch {
     Set-Content -Path "backend\version.json" -Value $versionPayload -Encoding UTF8 -Force -ErrorAction SilentlyContinue
 }
+# Stamp SW_VERSION in public/sw.js
+$swPath = "$PSScriptRoot\public\sw.js"
+if (Test-Path $swPath) {
+    try {
+        $swCode = Get-Content $swPath -Raw
+        $swCode = $swCode -replace "const SW_VERSION = ['`"][^'`"]*['`"]", "const SW_VERSION = 'myerp-sw-v$deployVersion'"
+        [System.IO.File]::WriteAllText($swPath, $swCode, [System.Text.Encoding]::UTF8)
+    } catch {}
+}
 
 # 2. Ultra-Fast Vite Build (Instant 1.5s vs 35s tsc)
 if (-not $BackendOnly) {
@@ -109,7 +118,7 @@ if (-not $BackendOnly -and (Test-Path "dist")) {
         Write-Host "  -> Packaging FULL dist (including stickers & media)..." -ForegroundColor DarkYellow
         tar -czf "$distArchive" -C dist .
     } else {
-        tar -czf "$distArchive" --exclude="stickers" --exclude="ideas_bot_kling.*" -C dist .
+        tar -czf "$distArchive" --exclude="stickers" --exclude="stickers/*" --exclude="ideas_bot_kling.*" -C dist .
     }
     $feSize = [Math]::Round(((Get-Item $distArchive).Length / 1MB), 2)
     Write-Host "  -> Frontend dist archive (optimized): ${feSize} MB" -ForegroundColor Gray
@@ -120,48 +129,47 @@ Write-Host "`n[3/3] Uploading & deploying to remote server..." -ForegroundColor 
 
 $archivesToUpload = @()
 if (-not $FrontendOnly -and (Test-Path "$backendArchive")) {
-    $archivesToUpload += "`"$backendArchive`""
+    $archivesToUpload += $backendArchive
 }
 if (-not $BackendOnly -and (Test-Path "$distArchive")) {
-    $archivesToUpload += "`"$distArchive`""
+    $archivesToUpload += $distArchive
 }
 
 if ($archivesToUpload.Count -gt 0) {
-    $uploadFilesStr = $archivesToUpload -join " "
-    Write-Host "  -> Uploading archives..." -ForegroundColor Gray
-    cmd /c "scp -i $sshKey -P $sshPort -o StrictHostKeyChecking=no -o ConnectTimeout=15 $uploadFilesStr ${sshUser}@${sshHost}:${RemoteDir}/"
+    Write-Host "  -> Uploading archives ($($archivesToUpload -join ', '))..." -ForegroundColor Gray
+    & scp -i $sshKey -P $sshPort -o StrictHostKeyChecking=no -o ConnectTimeout=30 @archivesToUpload "${sshUser}@${sshHost}:${RemoteDir}/"
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "    Retrying upload in 2s..." -ForegroundColor DarkYellow
-        Start-Sleep -Seconds 2
-        cmd /c "scp -i $sshKey -P $sshPort -o StrictHostKeyChecking=no -o ConnectTimeout=15 $uploadFilesStr ${sshUser}@${sshHost}:${RemoteDir}/"
+        Write-Host "    Retrying upload in 12s..." -ForegroundColor DarkYellow
+        Start-Sleep -Seconds 12
+        & scp -i $sshKey -P $sshPort -o StrictHostKeyChecking=no -o ConnectTimeout=30 @archivesToUpload "${sshUser}@${sshHost}:${RemoteDir}/"
     }
 }
 
 # Allow SSH connection pool to settle
-Start-Sleep -Seconds 2
+Start-Sleep -Seconds 12
 
 $remoteCommands = @()
 $remoteCommands += "mkdir -p ${RemoteDir}/backend ${RemoteDir}/backend/uploads"
 
-if ($archivesToUpload -contains "`"$backendArchive`"") {
+if ($archivesToUpload -contains $backendArchive) {
     $remoteCommands += "tar -xzf ${RemoteDir}/${backendArchive} -C ${RemoteDir}/backend/ 2>/dev/null"
     $remoteCommands += "rm -f ${RemoteDir}/${backendArchive}"
     $remoteCommands += "/usr/local/bin/ea-php81 ${RemoteDir}/backend/run_migrations.php --apply"
     $remoteCommands += "cp -f ${RemoteDir}/version.json ${RemoteDir}/backend/version.json 2>/dev/null || true"
 }
 
-if ($archivesToUpload -contains "`"$distArchive`"") {
+if ($archivesToUpload -contains $distArchive) {
     $remoteCommands += "tar -xzf ${RemoteDir}/${distArchive} -C ${RemoteDir}/ 2>/dev/null"
     $remoteCommands += "rm -f ${RemoteDir}/${distArchive}"
 }
 
 $remoteScript = $remoteCommands -join " && "
 
-cmd /c "ssh -i $sshKey -p $sshPort -o StrictHostKeyChecking=no -o ConnectTimeout=15 ${sshUser}@${sshHost} ""$remoteScript"""
+& ssh -tt -i $sshKey -p $sshPort -o StrictHostKeyChecking=no -o ConnectTimeout=30 "${sshUser}@${sshHost}" "$remoteScript"
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "    Retrying remote commands in 3s..." -ForegroundColor DarkYellow
-    Start-Sleep -Seconds 3
-    cmd /c "ssh -i $sshKey -p $sshPort -o StrictHostKeyChecking=no -o ConnectTimeout=15 ${sshUser}@${sshHost} ""$remoteScript"""
+    Write-Host "    Retrying remote commands in 12s..." -ForegroundColor DarkYellow
+    Start-Sleep -Seconds 12
+    & ssh -tt -i $sshKey -p $sshPort -o StrictHostKeyChecking=no -o ConnectTimeout=30 "${sshUser}@${sshHost}" "$remoteScript"
 }
 
 # 5. Clean up local temp archives

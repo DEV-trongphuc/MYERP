@@ -165,6 +165,17 @@ export const GlobalEntityDrawers: React.FC = () => {
     };
   }, [openCustomerDrawer, openTaskDrawer, openExpenseDrawer, openApprovalDrawer]);
 
+  const [usersList, setUsersList] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (approvalDrawer.isOpen) {
+      api.get('/users').then(res => {
+        const u = Array.isArray(res.data?.data) ? res.data.data : (Array.isArray(res.data) ? res.data : []);
+        if (u.length > 0) setUsersList(u);
+      }).catch(() => {});
+    }
+  }, [approvalDrawer.isOpen]);
+
   return (
     <>
       {customerDrawer.isOpen && fullContact && (
@@ -215,7 +226,7 @@ export const GlobalEntityDrawers: React.FC = () => {
           <ApprovalDetailDrawer
             item={approvalDrawer.item}
             onClose={closeApprovalDrawer}
-            users={[]}
+            users={usersList}
             t={(k: string) => k}
             onApprove={async (it) => {
               try {

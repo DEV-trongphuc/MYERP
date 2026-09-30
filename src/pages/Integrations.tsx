@@ -9,6 +9,7 @@ import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { ToggleSwitch } from '../components/ui/ToggleSwitch';
 import { useAuthStore } from '../store/authStore';
 import { canManageSystemSettings } from '../utils/roleUtils';
+import { DistributionNavTabs } from '../components/DistributionNavTabs';
 
 const SYSTEM_FIELDS = [
   // --- Thông tin Cá nhân & Liên hệ ---
@@ -864,6 +865,7 @@ const IntegrationsInner = () => {
 
   return (
     <>
+      <DistributionNavTabs currentTab="integrations" />
       <div className="responsive-flex-row responsive-height-auto" style={{ display: 'flex', gap: '1.5rem', height: 'calc(100vh - 66px - 3rem)', minHeight: 0, animation: 'fadeIn 0.3s' }}>
         {/* LEFT PANEL: Sheet connections list */}
         <div className={`responsive-filter-item ${mobileActiveView === 'detail' ? 'hide-on-mobile' : ''}`} style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>

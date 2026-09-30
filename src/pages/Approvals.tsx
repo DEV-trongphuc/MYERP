@@ -12968,6 +12968,27 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
   const [senderLeaveBalance, setSenderLeaveBalance] = useState<any>(null);
   const [loading, setLoading] = useState(!item);
   const [isClosing, setIsClosing] = useState(false);
+  const [internalUsers, setInternalUsers] = useState<any[]>(users && users.length > 0 ? users : []);
+
+  useEffect(() => {
+    if (users && users.length > 0) {
+      setInternalUsers(users);
+    } else {
+      let isSubscribed = true;
+      api.get('/users').then(res => {
+        const uList = Array.isArray(res.data?.data) ? res.data.data : (Array.isArray(res.data) ? res.data : []);
+        if (isSubscribed && uList.length > 0) {
+          setInternalUsers(uList);
+        }
+      }).catch(() => {});
+      return () => { isSubscribed = false; };
+    }
+  }, [users]);
+
+  const effectiveUsers = useMemo(() => {
+    return (users && users.length > 0) ? users : internalUsers;
+  }, [users, internalUsers]);
+
   const [lightboxState, setLightboxState] = useState<{ isOpen: boolean; items: AttachmentItem[]; initialIndex: number }>({
     isOpen: false,
     items: [],
@@ -13586,17 +13607,37 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
 
   const creatorUser = useMemo(() => {
     const creatorId = detail?.user_id || detail?.created_by || (item as any)?.user_id || (item as any)?.created_by;
+    const empName = detail?.employee_name || detail?.full_name || (item as any)?.employee_name || (item as any)?.full_name || (detail?.user as any)?.name;
+    const empAvatar = detail?.employee_avatar || detail?.avatar_url || (item as any)?.avatar_url || (item as any)?.employee_avatar || (detail?.user as any)?.avatar;
+
     if (creatorId) {
-      const foundById = users.find(u => Number(u.id) === Number(creatorId));
-      if (foundById) return foundById;
+      const foundById = effectiveUsers.find(u => Number(u.id) === Number(creatorId));
+      if (foundById) return { ...foundById, avatar_url: foundById.avatar_url || empAvatar };
     }
-    const empName = detail?.employee_name || detail?.full_name || item.employee_name;
-    if (empName) {
-      const foundByName = users.find(u => String(u.full_name) === String(empName) || String(u.name) === String(empName));
-      if (foundByName) return foundByName;
+    if (empName && typeof empName === 'string' && empName.trim()) {
+      const cleanEmpName = empName.trim().toLowerCase();
+      const foundByName = effectiveUsers.find(u => {
+        const fn = (u.full_name || u.name || '').toLowerCase().trim();
+        return fn === cleanEmpName || fn.includes(cleanEmpName) || cleanEmpName.includes(fn);
+      });
+      if (foundByName) return { ...foundByName, avatar_url: foundByName.avatar_url || empAvatar };
+      return {
+        id: creatorId || 0,
+        full_name: empName,
+        name: empName,
+        avatar_url: empAvatar
+      };
+    }
+    if (creatorId) {
+      return {
+        id: creatorId,
+        full_name: `User #${creatorId}`,
+        name: `User #${creatorId}`,
+        avatar_url: empAvatar
+      };
     }
     return user || null;
-  }, [users, detail, item, user]);
+  }, [effectiveUsers, detail, item, user]);
 
   const getEmployeeName = () => {
     if (detail?.employee_name) return detail.employee_name;
@@ -13706,25 +13747,30 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
     const app2Name = detail?.approver_name_2 || (item as any)?.approver_name_2 || detail?.approved_by_name_2 || (item as any)?.approved_by_name_2;
     const app3Name = detail?.approver_name_3 || (item as any)?.approver_name_3 || detail?.approved_by_name_3 || (item as any)?.approved_by_name_3;
 
+    const app1Avatar = detail?.approver_avatar || (item as any)?.approver_avatar || detail?.approved_by_avatar || (item as any)?.approved_by_avatar;
+    const app2Avatar = detail?.approver_avatar_2 || (item as any)?.approver_avatar_2 || detail?.approved_by_avatar_2 || (item as any)?.approved_by_avatar_2;
+    const app3Avatar = detail?.approver_avatar_3 || (item as any)?.approver_avatar_3 || detail?.approved_by_avatar_3 || (item as any)?.approved_by_avatar_3;
+
     // Is it an HR workflow (leave, remote_work, late_early, overtime, attendance_bulk, checkin)?
     const isHrItem = item.type === 'leave' || item.type === 'checkin' || item.type === 'attendance_bulk' || rawDesc.includes('[Đăng ký làm việc từ xa]') || rawDesc.includes('[Đi muộn/Về sớm]') || rawDesc.includes('[Tăng ca]') || rawDesc.includes('[Nghỉ phép]');
 
-    const findUserByIdOrName = (id: any, name: any, fallbackRoleTitle?: string) => {
+    const findUserByIdOrName = (id: any, name: any, fallbackRoleTitle?: string, fallbackAvatar?: string) => {
       if (id) {
-        const byId = users.find(u => Number(u.id) === Number(id));
-        if (byId) return byId;
+        const byId = effectiveUsers.find(u => Number(u.id) === Number(id));
+        if (byId) return { ...byId, avatar_url: byId.avatar_url || fallbackAvatar };
       }
       if (name && typeof name === 'string' && name.trim()) {
         const cleanName = name.trim().toLowerCase();
-        const byName = users.find(u => {
+        const byName = effectiveUsers.find(u => {
           const fn = (u.full_name || u.name || '').toLowerCase().trim();
           return fn === cleanName || fn.includes(cleanName) || cleanName.includes(fn);
         });
-        if (byName) return byName;
+        if (byName) return { ...byName, avatar_url: byName.avatar_url || fallbackAvatar };
         return {
           id: id ? (Number(id) || id) : `approver-${name}`,
           full_name: name,
           name: name,
+          avatar_url: fallbackAvatar,
           role_title: fallbackRoleTitle || ''
         };
       }
@@ -13733,24 +13779,25 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
           id: Number(id) || id,
           full_name: name || `Người duyệt #${id}`,
           name: name || `Người duyệt #${id}`,
+          avatar_url: fallbackAvatar,
           role_title: fallbackRoleTitle || ''
         };
       }
       return null;
     };
 
-    const managerUser = findUserByIdOrName(app1Id, app1Name, t('Người duyệt Cấp 1'))
-      || users.find(u => ['manager', 'director', 'admin'].includes(String(u.role).toLowerCase()))
-      || users.find(u => u.full_name?.includes('Nguyễn Thị Duy Phương'))
-      || (app1Name || app1Id ? { id: app1Id || 1, full_name: app1Name || 'Người duyệt Cấp 1', name: app1Name || 'Người duyệt Cấp 1' } : null);
+    const managerUser = findUserByIdOrName(app1Id, app1Name, t('Người duyệt Cấp 1'), app1Avatar)
+      || effectiveUsers.find(u => ['manager', 'director', 'admin'].includes(String(u.role).toLowerCase()))
+      || effectiveUsers.find(u => u.full_name?.includes('Nguyễn Thị Duy Phương'))
+      || (app1Name || app1Id ? { id: app1Id || 1, full_name: app1Name || (app1Id ? `Người duyệt #${app1Id}` : 'Người duyệt Cấp 1'), name: app1Name || (app1Id ? `Người duyệt #${app1Id}` : 'Người duyệt Cấp 1'), avatar_url: app1Avatar } : null);
 
-    const accountantUser = findUserByIdOrName(app2Id, app2Name, t('Người duyệt Cấp 2'))
-      || users.find(u => String(u.role).toLowerCase() === 'accountant')
-      || (app2Name || app2Id ? { id: app2Id || 2, full_name: app2Name || 'Người duyệt Cấp 2', name: app2Name || 'Người duyệt Cấp 2' } : null);
+    const accountantUser = findUserByIdOrName(app2Id, app2Name, t('Người duyệt Cấp 2'), app2Avatar)
+      || effectiveUsers.find(u => String(u.role).toLowerCase() === 'accountant')
+      || (app2Name || app2Id ? { id: app2Id || 2, full_name: app2Name || (app2Id ? `Người duyệt #${app2Id}` : 'Người duyệt Cấp 2'), name: app2Name || (app2Id ? `Người duyệt #${app2Id}` : 'Người duyệt Cấp 2'), avatar_url: app2Avatar } : null);
 
-    const directorUser = findUserByIdOrName(app3Id, app3Name, t('Người duyệt Cấp 3'))
-      || users.find(u => ['director', 'admin', 'superadmin'].includes(String(u.role).toLowerCase()))
-      || (app3Name || app3Id ? { id: app3Id || 3, full_name: app3Name || 'Người duyệt Cấp 3', name: app3Name || 'Người duyệt Cấp 3' } : null);
+    const directorUser = findUserByIdOrName(app3Id, app3Name, t('Người duyệt Cấp 3'), app3Avatar)
+      || effectiveUsers.find(u => ['director', 'admin', 'superadmin'].includes(String(u.role).toLowerCase()))
+      || (app3Name || app3Id ? { id: app3Id || 3, full_name: app3Name || (app3Id ? `Người duyệt #${app3Id}` : 'Người duyệt Cấp 3'), name: app3Name || (app3Id ? `Người duyệt #${app3Id}` : 'Người duyệt Cấp 3'), avatar_url: app3Avatar } : null);
 
     // Multi-level conditions: Only show Level 2 if app2Id exists or it's multi-level finance
     const hasLevel2 = !isPrintStampSend && (Boolean(app2Id) || (!isHrItem && (item.type === 'advance' || (item.type === 'expense' && Boolean(detail?.approver_id_2)))));
@@ -13802,7 +13849,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         const uName = st.user_name || st.actor || '';
         const uCode = st.user_code || '';
         const cleanUName = (uName || '').toLowerCase().trim();
-        const matchedUser = users.find(u => 
+        const matchedUser = effectiveUsers.find(u => 
           (st.user_id && Number(u.id) === Number(st.user_id)) ||
           (uCode && String((u as any).code || '').toLowerCase() === uCode.toLowerCase()) ||
           (cleanUName && (u.full_name || u.name) && (
@@ -13871,14 +13918,14 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         const mExec = rawDesc.match(/Người thực hiện:\s*([^\n]+)/i);
         const parsedExecName = mExec ? mExec[1].trim() : '';
         if (parsedExecName) {
-          printStampSendExecUser = users.find(u => 
+          printStampSendExecUser = effectiveUsers.find(u => 
             u.full_name?.toLowerCase() === parsedExecName.toLowerCase() || 
             u.name?.toLowerCase() === parsedExecName.toLowerCase() ||
             u.full_name?.toLowerCase().includes(parsedExecName.toLowerCase())
           );
         }
         if (!printStampSendExecUser) {
-          printStampSendExecUser = users.find(u => (u.full_name || u.name || '').toLowerCase().includes('duy phương') || u.username === 'phuongntd');
+          printStampSendExecUser = effectiveUsers.find(u => (u.full_name || u.name || '').toLowerCase().includes('duy phương') || u.username === 'phuongntd');
         }
       }
 
@@ -13886,7 +13933,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         stepNumber: steps.length + 1,
         title: isPrintStampSend ? t('Bước 2: Xác nhận hoàn thành') : t('Bước 2: Phê duyệt (Cấp 1)'),
         roleTitle: isPrintStampSend ? t('Người thực hiện') : t('Người duyệt Cấp 1'),
-        user: isPrintStampSend ? (printStampSendExecUser || users.find(u => Number(u.id) === Number(app1Id)) || managerUser) : managerUser,
+        user: isPrintStampSend ? (printStampSendExecUser || effectiveUsers.find(u => Number(u.id) === Number(app1Id)) || managerUser) : managerUser,
         status: s1Status,
         approvedAt: s1Status === 'approved' || s1Status === 'rejected' ? formatApprovalTime(s1ApprovedTime) : '',
         waitingSince: s1Status === 'pending' ? step1CreatedTime : null,
@@ -17845,13 +17892,23 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                   return Number(entryId) || 0;
                 }).filter(id => id > 0);
 
-                const relUsers = relIds.map(numId => {
-                  const found = users.find((u: any) => Number(u.id) === numId);
+                const relUsers = rawList.map((entry: any) => {
+                  const numId = typeof entry === 'object' ? Number(entry.id || entry.user_id || 0) : Number(entry || 0);
+                  const found = effectiveUsers.find((u: any) => Number(u.id) === numId);
                   if (found) return found;
+                  if (typeof entry === 'object' && (entry.full_name || entry.name)) {
+                    return {
+                      id: numId || entry.id,
+                      full_name: entry.full_name || entry.name,
+                      name: entry.full_name || entry.name,
+                      avatar_url: entry.avatar_url || entry.avatar,
+                      role_title: entry.job_title || entry.role
+                    };
+                  }
                   return { id: numId, full_name: `User #${numId}`, name: `User #${numId}` };
                 });
 
-                const availableUsersToAdd = users.filter((u: any) => 
+                const availableUsersToAdd = effectiveUsers.filter((u: any) => 
                   !relIds.includes(Number(u.id)) &&
                   (u.full_name || u.name || '').toLowerCase().includes(watcherSearch.toLowerCase())
                 );
