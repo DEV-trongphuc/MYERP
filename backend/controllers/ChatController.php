@@ -1820,7 +1820,9 @@ class ChatController {
 
                 // 2A. Financial Workflows (expenses)
                 $expSql = "
-                    SELECT e.id, e.title, e.category, e.amount, e.status, e.date, e.created_at,
+                    SELECT e.id, e.title, e.category, e.amount, e.status, e.date, e.created_at, e.created_by,
+                           e.approver_id, e.approver_id_2, e.approver_id_3,
+                           e.status_level_1, e.status_level_2, e.status_level_3,
                            u.full_name as creator_name, u.avatar_url as creator_avatar,
                            app1.full_name as app1_name, app1.avatar_url as app1_avatar,
                            app2.full_name as app2_name, app2.avatar_url as app2_avatar,
@@ -1868,10 +1870,17 @@ class ChatController {
                         'category' => $categoryStr,
                         'amount' => $amt,
                         'status' => $row['status'] ?: 'pending',
+                        'creator_id' => (int)($row['created_by'] ?? 0),
                         'creator_name' => $creatorName,
                         'creator_avatar' => $row['creator_avatar'] ?: '',
                         'created_at' => $createdTime,
                         'steps' => $steps,
+                        'approver_id' => (int)($row['approver_id'] ?? 0),
+                        'approver_id_2' => (int)($row['approver_id_2'] ?? 0),
+                        'approver_id_3' => (int)($row['approver_id_3'] ?? 0),
+                        'status_level_1' => $row['status_level_1'] ?? 'pending',
+                        'status_level_2' => $row['status_level_2'] ?? 'none',
+                        'status_level_3' => $row['status_level_3'] ?? 'none',
                         'approver_name' => $row['app1_name'] ?: 'Chờ phân bổ',
                         'approver_avatar' => $row['app1_avatar'] ?: '',
                         'approver_status' => $row['status'] ?: 'pending',
@@ -1883,7 +1892,8 @@ class ChatController {
 
                 // 2B. HR Workflows (hrm_leave_requests: OT, WFH, Nghỉ phép, Đi muộn)
                 $leaveSql = "
-                    SELECT l.id, l.leave_type, l.start_date, l.end_date, l.total_days, l.reason, l.status, l.created_at,
+                    SELECT l.id, l.leave_type, l.start_date, l.end_date, l.total_days, l.reason, l.status, l.created_at, l.user_id,
+                           l.approver_id, l.approver_id_2,
                            u.full_name as creator_name, u.avatar_url as creator_avatar,
                            app1.full_name as app1_name, app1.avatar_url as app1_avatar,
                            app2.full_name as app2_name, app2.avatar_url as app2_avatar
@@ -1947,10 +1957,13 @@ class ChatController {
                         'category' => strtoupper($type),
                         'amount' => 0,
                         'status' => $row['status'] ?: 'pending',
+                        'creator_id' => (int)($row['user_id'] ?? 0),
                         'creator_name' => $creatorName,
                         'creator_avatar' => $row['creator_avatar'] ?: '',
                         'created_at' => $createdTime,
                         'steps' => $steps,
+                        'approver_id' => (int)($row['approver_id'] ?? 0),
+                        'approver_id_2' => (int)($row['approver_id_2'] ?? 0),
                         'approver_name' => $row['app1_name'] ?: 'Chờ phân bổ',
                         'approver_avatar' => $row['app1_avatar'] ?: '',
                         'approver_status' => $row['status'] ?: 'pending',

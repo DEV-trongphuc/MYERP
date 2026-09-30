@@ -350,10 +350,20 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
 
     const role = String(user?.role || '').toLowerCase();
     const userId = Number(user?.id || 0);
+    const userName = (user?.name || (user as any)?.full_name || '').toLowerCase().trim();
     if (Number(item.created_by || (item as any)?.user_id) === userId) {
       return false; // Creator cannot approve their own expense
     }
-    const isSuperAdmin = ['superadmin', 'super_admin', 'admin', 'director'].includes(role);
+
+    const isUserMatch = (appId: any, appName: any) => {
+      const numId = Number(appId || 0);
+      if (numId > 0 && numId === userId) return true;
+      if (appName) {
+        const cleanName = String(appName).toLowerCase().trim();
+        if (cleanName && userName && (cleanName === userName || userName.includes(cleanName) || cleanName.includes(userName))) return true;
+      }
+      return false;
+    };
 
     const s1 = String(item.status_level_1 || 'pending').toLowerCase();
     const s2 = String(item.status_level_2 || 'pending').toLowerCase();
@@ -362,30 +372,39 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
     const app1 = Number(item.approver_id || 0);
     const app2 = Number(item.approver_id_2 || 0);
     const app3 = Number(item.approver_id_3 || 0);
+    const appName1 = item.approver_name;
+    const appName2 = item.approver_name_2;
+    const appName3 = item.approver_name_3;
 
     let currentLevel = 1;
-    if (s1 === 'approved' && app2 && s2 === 'pending') {
+    if (s1 === 'approved' && (app2 > 0 || appName2) && s2 === 'pending') {
       currentLevel = 2;
-    } else if (s1 === 'approved' && s2 === 'approved' && app3 && s3 === 'pending') {
+    } else if (s1 === 'approved' && s2 === 'approved' && (app3 > 0 || appName3) && s3 === 'pending') {
       currentLevel = 3;
     } else if (s1 !== 'pending') {
       return false;
     }
 
     if (currentLevel === 1) {
-      if (app1 > 0 && app1 === userId) return true;
-      if (app1 === 0 && (role === 'manager' || isSuperAdmin)) return true;
-      return isSuperAdmin;
+      if (app1 > 0 || appName1) {
+        return isUserMatch(app1, appName1);
+      }
+      // Only fallback if no specific approver was assigned at all
+      return ['superadmin', 'super_admin', 'admin', 'director', 'manager'].includes(role);
     }
 
     if (currentLevel === 2) {
-      if (app2 > 0 && app2 === userId) return true;
-      return isSuperAdmin;
+      if (app2 > 0 || appName2) {
+        return isUserMatch(app2, appName2);
+      }
+      return false;
     }
 
     if (currentLevel === 3) {
-      if (app3 > 0 && app3 === userId) return true;
-      return isSuperAdmin;
+      if (app3 > 0 || appName3) {
+        return isUserMatch(app3, appName3);
+      }
+      return false;
     }
 
     return false;

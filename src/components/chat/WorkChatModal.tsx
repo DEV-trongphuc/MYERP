@@ -5,7 +5,7 @@ import {
   Image as ImageIcon, Smile, Briefcase, Pin, MoreVertical, 
   CornerDownRight, CheckSquare, DollarSign, FileText, User, 
   Download, ArrowDown, Users, Sparkles, ChevronRight, Eye,
-  Loader2, ThumbsUp, Heart, Flame, AlertCircle, CheckCircle2,
+  Loader2, ThumbsUp, Heart, Flame, AlertCircle, CheckCircle2, XCircle,
   FileSpreadsheet, FileArchive, Film, Music, Globe, ExternalLink,
   FolderArchive, MoreHorizontal, Edit3, Trash2, Copy, RotateCcw, GitBranch, Lock,
   Clipboard, Receipt, CreditCard, Clock, Share2, Volume2, VolumeX, UploadCloud, ChevronUp, ChevronDown,
@@ -941,6 +941,88 @@ export const WorkChatModal: React.FC = () => {
     });
   };
 
+  // Tracking in-memory state for ERP Card actions (approving, approved, rejected)
+  const [erpCardActionState, setErpCardActionState] = useState<Record<string, { status: 'approving' | 'approved' | 'rejecting' | 'rejected' }>>({});
+
+  const handleApproveWorkflowCard = async (meta: any) => {
+    const entityId = String(meta.entity_id || meta.id);
+    if (!entityId || erpCardActionState[entityId]?.status === 'approving') return;
+
+    setErpCardActionState(prev => ({ ...prev, [entityId]: { status: 'approving' } }));
+    try {
+      const subType = String(meta.sub_type || '').toLowerCase();
+      if (subType === 'leave' || subType === 'ot' || subType === 'wfh' || subType === 'late_early') {
+        await api.put(`/hrm/leaves/${entityId}/status`, { status: 'approved' });
+      } else {
+        await api.patch(`/expenses/${entityId}`, { status: 'approved' });
+      }
+
+      setErpCardActionState(prev => ({ ...prev, [entityId]: { status: 'approved' } }));
+      toast.success(`Đã phê duyệt quy trình #${entityId} thành công`);
+      window.dispatchEvent(new CustomEvent('refresh-pending-counts'));
+
+      // Tự động gửi Sticker "ĐÃ DUYỆT" vào đoạn chat
+      const stkApproved = CHAT_STICKERS.find(s => s.id === 'stk_approved') || {
+        id: 'stk_approved',
+        name: 'Đã Duyệt',
+        category: 'work',
+        icon: '✅',
+        badgeText: 'ĐÃ DUYỆT',
+        color: '#059669',
+        bgGradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+      };
+
+      if (activeConversationId) {
+        await sendMessage({
+          content: stkApproved.badgeText || 'ĐÃ DUYỆT',
+          message_type: 'sticker',
+          metadata: {
+            sticker_id: stkApproved.id,
+            icon: stkApproved.icon,
+            badgeText: stkApproved.badgeText,
+            color: stkApproved.color,
+            bgGradient: stkApproved.bgGradient
+          }
+        });
+      }
+    } catch (err: any) {
+      setErpCardActionState(prev => ({ ...prev, [entityId]: { status: undefined as any } }));
+      toast.error(err?.response?.data?.message || 'Lỗi khi phê duyệt quy trình');
+    }
+  };
+
+  const handleRejectWorkflowCard = async (meta: any) => {
+    const entityId = String(meta.entity_id || meta.id);
+    if (!entityId || erpCardActionState[entityId]?.status === 'rejecting') return;
+
+    const reason = window.prompt('Nhập lý do từ chối quy trình:');
+    if (reason === null) return; // Người dùng ấn Hủy
+
+    setErpCardActionState(prev => ({ ...prev, [entityId]: { status: 'rejecting' } }));
+    try {
+      const subType = String(meta.sub_type || '').toLowerCase();
+      if (subType === 'leave' || subType === 'ot' || subType === 'wfh' || subType === 'late_early') {
+        await api.put(`/hrm/leaves/${entityId}/status`, { status: 'rejected', reject_reason: reason });
+      } else {
+        await api.patch(`/expenses/${entityId}`, { status: 'rejected', reject_reason: reason });
+      }
+
+      setErpCardActionState(prev => ({ ...prev, [entityId]: { status: 'rejected' } }));
+      toast.success(`Đã từ chối quy trình #${entityId}`);
+      window.dispatchEvent(new CustomEvent('refresh-pending-counts'));
+
+      if (activeConversationId) {
+        await sendMessage({
+          content: `Đã từ chối quy trình #${entityId}${reason ? `: ${reason}` : ''}`,
+          message_type: 'text'
+        });
+      }
+    } catch (err: any) {
+      setErpCardActionState(prev => ({ ...prev, [entityId]: { status: undefined as any } }));
+      toast.error(err?.response?.data?.message || 'Lỗi khi từ chối quy trình');
+    }
+  };
+
   const handleSendErpCard = async (entity: ErpEntitySearchResult) => {
     if (!activeConversationId) return;
     await sendMessage({
@@ -961,6 +1043,7 @@ export const WorkChatModal: React.FC = () => {
         due_date: entity.due_date,
         assignee_name: entity.assignee_name,
         assignee_avatar: entity.assignee_avatar,
+        creator_id: (entity as any).creator_id,
         creator_name: entity.creator_name,
         creator_avatar: entity.creator_avatar,
         owner_name: entity.owner_name,
@@ -978,9 +1061,16 @@ export const WorkChatModal: React.FC = () => {
         sub_type: entity.sub_type,
         created_at: entity.created_at,
         steps: entity.steps,
+        approver_id: (entity as any).approver_id,
         approver_name: entity.approver_name,
         approver_avatar: entity.approver_avatar,
         approver_status: entity.approver_status,
+        approver_id_2: (entity as any).approver_id_2,
+        approver_name_2: (entity as any).approver_name_2,
+        approver_id_3: (entity as any).approver_id_3,
+        status_level_1: (entity as any).status_level_1,
+        status_level_2: (entity as any).status_level_2,
+        status_level_3: (entity as any).status_level_3,
         date: entity.date
       }
     });
@@ -1120,7 +1210,7 @@ export const WorkChatModal: React.FC = () => {
           transition={{ type: 'spring', damping: 28, stiffness: 360, mass: 0.8 }}
           style={{
             position: 'fixed',
-            zIndex: 2147483600,
+            zIndex: 2147483000,
             ...(isMobile
               ? {
                   top: 0,
@@ -1136,7 +1226,7 @@ export const WorkChatModal: React.FC = () => {
                   margin: 0,
                   padding: 0,
                   boxShadow: 'none',
-                  zIndex: 2147483600
+                  zIndex: 2147483000
                 }
               : isMaximized
               ? {
@@ -1153,7 +1243,7 @@ export const WorkChatModal: React.FC = () => {
                   margin: 0,
                   padding: 0,
                   boxShadow: 'none',
-                  zIndex: 2147483600
+                  zIndex: 2147483000
                 }
               : {
                   bottom: '32px',
@@ -1164,7 +1254,7 @@ export const WorkChatModal: React.FC = () => {
                   maxHeight: 'calc(100vh - 64px)',
                   borderRadius: '20px',
                   boxShadow: '0 24px 60px -12px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(220, 38, 38, 0.08)',
-                  zIndex: 2147483647
+                  zIndex: 2147483000
                 }),
             background: '#ffffff',
             display: 'flex',
@@ -3476,7 +3566,9 @@ export const WorkChatModal: React.FC = () => {
                                       : prio === 'low' ? { label: 'Ưu tiên thấp', bg: '#f8fafc', text: '#64748b' }
                                       : prio ? { label: 'Bình thường', bg: '#eff6ff', text: '#2563eb' } : null;
 
-                                    const stat = meta.status ? String(meta.status).toLowerCase() : '';
+                                    const entityId = String(meta.entity_id || meta.id);
+                                    const currentAction = erpCardActionState[entityId]?.status;
+                                    const stat = currentAction || (meta.status ? String(meta.status).toLowerCase() : '');
                                     const statBadge = (stat === 'done' || stat === 'completed' || stat === 'approved' || stat === 'paid' || stat === 'won')
                                       ? { label: stat === 'approved' ? 'Đã duyệt' : stat === 'paid' ? 'Đã thanh toán' : 'Hoàn thành', bg: '#ecfdf5', text: '#047857' }
                                       : (stat === 'rejected' || stat === 'cancelled' || stat === 'lost')
@@ -3686,15 +3778,164 @@ export const WorkChatModal: React.FC = () => {
                                           )}
                                         </div>
 
-                                        {/* Action Button */}
+                                        {/* Direct Workflow Approver Actions (Từ chối & Duyệt) */}
+                                        {(() => {
+                                          if (eType !== 'workflow') return null;
+                                          const entityId = String(meta.entity_id || meta.id);
+                                          const currentAction = erpCardActionState[entityId]?.status;
+
+                                          if (currentAction === 'approved' || stat === 'approved') {
+                                            return (
+                                              <div style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '6px',
+                                                padding: '6px 10px',
+                                                borderRadius: '7px',
+                                                background: '#ecfdf5',
+                                                border: '1px solid #a7f3d0',
+                                                color: '#059669',
+                                                fontSize: '0.74rem',
+                                                fontWeight: 700,
+                                                marginBottom: '6px'
+                                              }}>
+                                                <CheckCircle2 size={13} />
+                                                <span>Đã phê duyệt</span>
+                                              </div>
+                                            );
+                                          }
+
+                                          if (currentAction === 'rejected' || stat === 'rejected') {
+                                            return (
+                                              <div style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '6px',
+                                                padding: '6px 10px',
+                                                borderRadius: '7px',
+                                                background: '#fef2f2',
+                                                border: '1px solid #fecaca',
+                                                color: '#dc2626',
+                                                fontSize: '0.74rem',
+                                                fontWeight: 700,
+                                                marginBottom: '6px'
+                                              }}>
+                                                <XCircle size={13} />
+                                                <span>Đã từ chối</span>
+                                              </div>
+                                            );
+                                          }
+
+                                          const overall = String(meta.status || 'pending').toLowerCase();
+                                          const isPending = overall === 'pending' || overall === 'pending_approval';
+                                          if (!isPending) return null;
+
+                                          const currentUserId = Number(user?.id || (user as any)?.user_id || 0);
+                                          const currentUserName = (user?.name || (user as any)?.full_name || '').toLowerCase().trim();
+
+                                          const creatorId = Number(meta.creator_id || 0);
+                                          const creatorName = (meta.creator_name || '').toLowerCase().trim();
+                                          if (creatorId > 0 && creatorId === currentUserId) return null;
+                                          if (creatorName && (creatorName === currentUserName || currentUserName.includes(creatorName))) return null;
+
+                                          const app1 = Number(meta.approver_id || 0);
+                                          const appName1 = meta.approver_name;
+                                          const app2 = Number(meta.approver_id_2 || 0);
+                                          const appName2 = meta.approver_name_2;
+                                          const s1 = String(meta.status_level_1 || 'pending').toLowerCase();
+
+                                          let targetId = app1;
+                                          let targetName = appName1;
+                                          if (s1 === 'approved' && (app2 > 0 || appName2)) {
+                                            targetId = app2;
+                                            targetName = appName2;
+                                          }
+
+                                          let isTargetApprover = false;
+                                          if (targetId > 0 && targetId === currentUserId) {
+                                            isTargetApprover = true;
+                                          } else if (targetName) {
+                                            const clean = String(targetName).toLowerCase().trim();
+                                            if (clean && currentUserName && (clean === currentUserName || currentUserName.includes(clean) || clean.includes(currentUserName))) {
+                                              isTargetApprover = true;
+                                            }
+                                          }
+
+                                          if (!isTargetApprover) return null;
+
+                                          return (
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginBottom: '6px' }}>
+                                              <button
+                                                type="button"
+                                                disabled={currentAction === 'approving' || currentAction === 'rejecting'}
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleRejectWorkflowCard(meta);
+                                                }}
+                                                style={{
+                                                  padding: '6.5px 8px',
+                                                  borderRadius: '7px',
+                                                  border: '1px solid #fca5a5',
+                                                  background: '#fff1f2',
+                                                  color: '#e11d48',
+                                                  fontSize: '0.73rem',
+                                                  fontWeight: 700,
+                                                  cursor: 'pointer',
+                                                  display: 'flex',
+                                                  alignItems: 'center',
+                                                  justifyContent: 'center',
+                                                  gap: '4px',
+                                                  boxShadow: '0 1px 2px rgba(225, 29, 72, 0.08)',
+                                                  transition: 'all 0.15s ease'
+                                                }}
+                                                onMouseEnter={(e) => { e.currentTarget.style.background = '#ffe4e6'; }}
+                                                onMouseLeave={(e) => { e.currentTarget.style.background = '#fff1f2'; }}
+                                              >
+                                                {currentAction === 'rejecting' ? <Loader2 size={13} className="spin" /> : <XCircle size={13} />}
+                                                <span>Từ chối</span>
+                                              </button>
+                                              <button
+                                                type="button"
+                                                disabled={currentAction === 'approving' || currentAction === 'rejecting'}
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleApproveWorkflowCard(meta);
+                                                }}
+                                                style={{
+                                                  padding: '6.5px 8px',
+                                                  borderRadius: '7px',
+                                                  border: 'none',
+                                                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                                  color: '#ffffff',
+                                                  fontSize: '0.73rem',
+                                                  fontWeight: 700,
+                                                  cursor: 'pointer',
+                                                  display: 'flex',
+                                                  alignItems: 'center',
+                                                  justifyContent: 'center',
+                                                  gap: '4px',
+                                                  boxShadow: '0 2px 6px rgba(5, 150, 105, 0.25)',
+                                                  transition: 'opacity 0.15s ease'
+                                                }}
+                                                onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.9'; }}
+                                                onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
+                                              >
+                                                {currentAction === 'approving' ? <Loader2 size={13} className="spin" /> : <CheckCircle2 size={13} />}
+                                                <span>Duyệt</span>
+                                              </button>
+                                            </div>
+                                          );
+                                        })()}
+
+                                        {/* Action / View Detail Button */}
                                         <button
                                           type="button"
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             if (isMobile) {
                                               closeChat();
-                                            } else if (isMaximized) {
-                                              toggleMaximize();
                                             }
                                             if (eType === 'contact') {
                                               openCustomerDrawer(meta.entity_id);
@@ -3761,7 +4002,7 @@ export const WorkChatModal: React.FC = () => {
                                           <ExternalLink size={12} />
                                           <span>
                                             {eType === 'task' ? 'Mở Task công việc'
-                                              : eType === 'workflow' ? 'Xem & Duyệt quy trình'
+                                              : eType === 'workflow' ? 'Xem chi tiết quy trình'
                                               : eType === 'so' ? 'Xem chi tiết Đơn cọc'
                                               : eType === 'po' ? 'Xem Phiếu chi / PO'
                                               : eType === 'contact' ? 'Mở Hồ sơ Khách hàng'
@@ -4460,7 +4701,7 @@ export const WorkChatModal: React.FC = () => {
             right: 0,
             bottom: 0,
             background: 'rgba(0, 0, 0, 0.85)',
-            zIndex: 2147483647,
+            zIndex: 2147483050,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -4485,7 +4726,7 @@ export const WorkChatModal: React.FC = () => {
         onSelectEmoji={(emoji) => {
           composerRef.current?.insertEmoji(emoji);
         }}
-        zIndex={2147483647}
+        zIndex={2147483050}
       />
 
       {/* MODAL: XEM DANH SÁCH NGƯỜI ĐÃ XEM (CÓ TÌM KIẾM & NÚT XEM TẤT CẢ) */}
@@ -4526,7 +4767,7 @@ export const WorkChatModal: React.FC = () => {
               left: 0,
               right: 0,
               bottom: 0,
-              zIndex: 2147483647,
+              zIndex: 2147483050,
               background: 'rgba(15, 23, 42, 0.45)',
               backdropFilter: 'blur(3px)',
               display: 'flex',
@@ -4745,7 +4986,7 @@ export const WorkChatModal: React.FC = () => {
               left: 0,
               right: 0,
               bottom: 0,
-              zIndex: 2147483647,
+              zIndex: 2147483050,
               background: 'rgba(15, 23, 42, 0.45)',
               backdropFilter: 'blur(3px)',
               display: 'flex',
@@ -4936,7 +5177,7 @@ export const WorkChatModal: React.FC = () => {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 2147483647,
+            zIndex: 2147483050,
             backdropFilter: 'blur(4px)',
             padding: '16px'
           }}
@@ -5043,7 +5284,7 @@ export const WorkChatModal: React.FC = () => {
               top: p.y - 16,
               fontSize: '2.2rem',
               pointerEvents: 'none',
-              zIndex: 2147483647,
+              zIndex: 2147483050,
               filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.3))'
             }}
           >
@@ -5100,10 +5341,10 @@ export const WorkChatModal: React.FC = () => {
           }
 
           return (
-            <div style={{ position: 'fixed', inset: 0, zIndex: 2147483647 }}>
+            <div style={{ position: 'fixed', inset: 0, zIndex: 2147483050 }}>
               {/* Invisible full-screen backdrop to dismiss on click outside or right click */}
               <div
-                style={{ position: 'fixed', inset: 0, background: 'transparent', zIndex: 2147483646 }}
+                style={{ position: 'fixed', inset: 0, background: 'transparent', zIndex: 2147483049 }}
                 onClick={(e) => {
                   e.stopPropagation();
                   setFloatingMenu(null);
@@ -5127,7 +5368,7 @@ export const WorkChatModal: React.FC = () => {
                   borderRadius: '12px',
                   padding: '5px',
                   boxShadow: '0 16px 36px -4px rgba(0, 0, 0, 0.25), 0 8px 16px -6px rgba(0, 0, 0, 0.12)',
-                  zIndex: 2147483647,
+                  zIndex: 2147483050,
                   minWidth: '220px',
                   maxWidth: '290px',
                   maxHeight: '390px',

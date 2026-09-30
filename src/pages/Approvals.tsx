@@ -13224,27 +13224,21 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
 
       if (currentLevel === 1) {
         if (app1 > 0 || appName1) {
-          if (isUserMatch(app1, appName1)) return true;
-          if (['superadmin', 'super_admin'].includes(role)) return true;
-          return false;
+          return isUserMatch(app1, appName1);
         }
         return role === 'manager' || isSuperAdmin;
       }
       if (currentLevel === 2) {
         if (app2 > 0 || appName2) {
-          if (isUserMatch(app2, appName2)) return true;
-          if (['superadmin', 'super_admin'].includes(role)) return true;
-          return false;
+          return isUserMatch(app2, appName2);
         }
-        return isSuperAdmin;
+        return false;
       }
       if (currentLevel === 3) {
         if (app3 > 0 || appName3) {
-          if (isUserMatch(app3, appName3)) return true;
-          if (['superadmin', 'super_admin'].includes(role)) return true;
-          return false;
+          return isUserMatch(app3, appName3);
         }
-        return isSuperAdmin;
+        return false;
       }
       return false;
     }
@@ -13259,7 +13253,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       const appName2 = detail?.approver_name_2 || (item as any)?.approver_name_2;
 
       let currentLevel = 1;
-      if (s1 === 'approved' && app2 && s2 === 'pending') {
+      if (s1 === 'approved' && (app2 > 0 || appName2) && s2 === 'pending') {
         currentLevel = 2;
       } else if (s1 !== 'pending') {
         return false;
@@ -13267,19 +13261,15 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
 
       if (currentLevel === 1) {
         if (app1 > 0 || appName1) {
-          if (isUserMatch(app1, appName1)) return true;
-          if (['superadmin', 'super_admin'].includes(role)) return true;
-          return false;
+          return isUserMatch(app1, appName1);
         }
         return role === 'manager' || isSuperAdmin;
       }
       if (currentLevel === 2) {
         if (app2 > 0 || appName2) {
-          if (isUserMatch(app2, appName2)) return true;
-          if (['superadmin', 'super_admin'].includes(role)) return true;
-          return false;
+          return isUserMatch(app2, appName2);
         }
-        return isSuperAdmin;
+        return false;
       }
       return false;
     }
