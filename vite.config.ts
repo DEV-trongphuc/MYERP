@@ -60,6 +60,7 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
     ],
     build: {
+      minify: 'esbuild',
       chunkSizeWarningLimit: 800,
       rollupOptions: {
         output: {
