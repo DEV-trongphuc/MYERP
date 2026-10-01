@@ -520,10 +520,8 @@ export const ExpensesPage: React.FC = () => {
 
     const role = String(user?.role || '').toLowerCase();
     const userId = Number(user?.id || 0);
-    if (Number(item.created_by || (item as any)?.user_id) === userId) {
-      return false; // Creator cannot approve their own expense
-    }
-    const isSuperAdmin = ['superadmin', 'super_admin', 'admin'].includes(role);
+    const userName = (user?.name || (user as any)?.full_name || '').toLowerCase().trim();
+    const isSuperAdmin = ['superadmin', 'super_admin', 'admin', 'director'].includes(role);
 
     const s1 = String(item.status_level_1 || 'pending').toLowerCase();
     const s2 = String(item.status_level_2 || 'pending').toLowerCase();
@@ -532,6 +530,16 @@ export const ExpensesPage: React.FC = () => {
     const app1 = Number(item.approver_id || 0);
     const app2 = Number(item.approver_id_2 || 0);
     const app3 = Number(item.approver_id_3 || 0);
+
+    const isUserMatch = (appId: any, appName?: any) => {
+      const numId = Number(appId || 0);
+      if (numId > 0 && numId === userId) return true;
+      if (appName && userName) {
+        const cleanName = String(appName).toLowerCase().trim();
+        if (cleanName === userName || userName.includes(cleanName) || cleanName.includes(userName)) return true;
+      }
+      return false;
+    };
 
     let currentLevel = 1;
     if (s1 === 'approved' && app2 && s2 === 'pending') {
@@ -542,19 +550,29 @@ export const ExpensesPage: React.FC = () => {
       return false;
     }
 
+    const isCreator = Number(item.created_by || (item as any)?.user_id) === userId;
+    const isAssignedCurrentLevel = 
+      (currentLevel === 1 && isUserMatch(app1, item.approver_name)) ||
+      (currentLevel === 2 && isUserMatch(app2, item.approver_name_2)) ||
+      (currentLevel === 3 && isUserMatch(app3, item.approver_name_3));
+
+    if (isCreator && !isSuperAdmin && !isAssignedCurrentLevel) {
+      return false; // Creator cannot approve their own expense unless executive or specifically assigned
+    }
+
     if (currentLevel === 1) {
-      if (app1 > 0 && app1 === userId) return true;
+      if (app1 > 0 || item.approver_name) return isUserMatch(app1, item.approver_name);
       if (app1 === 0 && (role === 'manager' || isSuperAdmin)) return true;
       return isSuperAdmin;
     }
 
     if (currentLevel === 2) {
-      if (app2 > 0 && app2 === userId) return true;
+      if (app2 > 0 || item.approver_name_2) return isUserMatch(app2, item.approver_name_2);
       return isSuperAdmin;
     }
 
     if (currentLevel === 3) {
-      if (app3 > 0 && app3 === userId) return true;
+      if (app3 > 0 || item.approver_name_3) return isUserMatch(app3, item.approver_name_3);
       return isSuperAdmin;
     }
 

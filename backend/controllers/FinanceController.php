@@ -1498,7 +1498,8 @@ class FinanceController
                             stripos($expenseRow['title'] ?? '', 'hoa hồng') !== false || 
                             stripos($expenseRow['notes'] ?? '', 'hoa hồng') !== false;
 
-            if ($isCreator && !$isCommission) {
+            $isExecutive = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true);
+            if ($isCreator && !$isCommission && !$isExecutive && !$isAssigned) {
                 $this->db->rollBack();
                 respond(403, null, 'Người tạo đề xuất không được tự phê duyệt chi phí của chính mình', false);
             }
@@ -1558,7 +1559,7 @@ class FinanceController
                 $expectedApproverId = (int)($expenseRow['approver_id_3'] ?? 0);
             }
 
-            if ($expectedApproverId > 0 && $expectedApproverId !== (int)$userId && !in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin'], true)) {
+            if ($expectedApproverId > 0 && $expectedApproverId !== (int)$userId && !in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true)) {
                 $this->db->rollBack();
                 respond(403, null, 'Bạn không có quyền phê duyệt cấp này hoặc chưa đến lượt phê duyệt của bạn', false);
             }

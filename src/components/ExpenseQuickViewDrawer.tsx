@@ -351,9 +351,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
     const role = String(user?.role || '').toLowerCase();
     const userId = Number(user?.id || 0);
     const userName = (user?.name || (user as any)?.full_name || '').toLowerCase().trim();
-    if (Number(item.created_by || (item as any)?.user_id) === userId) {
-      return false; // Creator cannot approve their own expense
-    }
+    const isSuperAdmin = ['superadmin', 'super_admin', 'admin', 'director'].includes(role);
 
     const isUserMatch = (appId: any, appName: any) => {
       const numId = Number(appId || 0);
@@ -385,26 +383,36 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
       return false;
     }
 
+    const isCreator = Number(item.created_by || (item as any)?.user_id) === userId;
+    const isAssignedCurrentLevel = 
+      (currentLevel === 1 && isUserMatch(app1, appName1)) ||
+      (currentLevel === 2 && isUserMatch(app2, appName2)) ||
+      (currentLevel === 3 && isUserMatch(app3, appName3));
+
+    if (isCreator && !isSuperAdmin && !isAssignedCurrentLevel) {
+      return false; // Creator cannot approve their own expense unless executive or specifically assigned
+    }
+
     if (currentLevel === 1) {
       if (app1 > 0 || appName1) {
         return isUserMatch(app1, appName1);
       }
       // Only fallback if no specific approver was assigned at all
-      return ['superadmin', 'super_admin', 'admin', 'director', 'manager'].includes(role);
+      return isSuperAdmin || role === 'manager';
     }
 
     if (currentLevel === 2) {
       if (app2 > 0 || appName2) {
         return isUserMatch(app2, appName2);
       }
-      return false;
+      return isSuperAdmin;
     }
 
     if (currentLevel === 3) {
       if (app3 > 0 || appName3) {
         return isUserMatch(app3, appName3);
       }
-      return false;
+      return isSuperAdmin;
     }
 
     return false;

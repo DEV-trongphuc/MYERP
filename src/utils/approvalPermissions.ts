@@ -123,22 +123,43 @@ export function isItemAtMyStepToApprove(item: any, user: any, usersByNameMap?: M
 
   const isAttendance = item.type === 'attendance_bulk' || item.type === 'checkin' || item.type === 'late_early';
   const isManagerOrLeader = ['manager', 'director', 'admin', 'superadmin', 'super_admin', 'leader', 'truongphong', 'head_of_department'].includes(currentRole) || Boolean((user as any)?.is_team_leader);
+  const isExecutiveUser = isExecutive(user) || ['director', 'admin', 'superadmin', 'super_admin'].includes(currentRole);
 
   // Người tạo KHÔNG tự phê duyệt yêu cầu của chính mình trong "Chờ duyệt"
   // NGOẠI LỆ 1: Trưởng phòng / Quản lý được quyền tự tạo, tự duyệt chấm công cho mình
   // NGOẠI LỆ 2: Quy trình Hoa hồng (commission_payout) cho phép người tạo tự duyệt bước của mình
+  // NGOẠI LỆ 3: Ban Giám đốc (director/admin) hoặc người được chỉ định đích danh duyệt cấp hiện tại
   const isCommission = (item.category === 'commission' || 
                         item.type === 'commission_payout' || 
                         (item.title && typeof item.title === 'string' && item.title.toLowerCase().includes('hoa hồng')) || 
                         (item.notes && typeof item.notes === 'string' && item.notes.toLowerCase().includes('hoa hồng')));
   if ((currentUid > 0 && itemUid === currentUid) || (currentUserName && itEmpName === currentUserName)) {
-    if (!isCommission && (!isAttendance || !isManagerOrLeader)) {
-      return false;
+    if (!isCommission && (!isAttendance || !isManagerOrLeader) && !isExecutiveUser) {
+      const lvl1 = (item.status_level_1 || 'pending').toLowerCase();
+      const lvl2 = (item.status_level_2 || 'none').toLowerCase();
+      const lvl3 = (item.status_level_3 || 'none').toLowerCase();
+
+      const app1 = item.approver_id || item.manager_id;
+      const appName1 = item.approver_name || item.manager_name;
+      const app2 = item.approver_id_2;
+      const appName2 = item.approver_name_2;
+      const app3 = item.approver_id_3;
+      const appName3 = item.approver_name_3;
+
+      const isCurrentStepAssigned = 
+        (lvl1 === 'pending' && (Number(app1) === currentUid || (appName1 && currentUserName && (String(appName1).toLowerCase().trim() === currentUserName || currentUserName.includes(String(appName1).toLowerCase().trim()))))) ||
+        (lvl1 === 'approved' && lvl2 === 'pending' && (Number(app2) === currentUid || (appName2 && currentUserName && (String(appName2).toLowerCase().trim() === currentUserName || currentUserName.includes(String(appName2).toLowerCase().trim()))))) ||
+        (lvl1 === 'approved' && lvl2 === 'approved' && lvl3 === 'pending' && (Number(app3) === currentUid || (appName3 && currentUserName && (String(appName3).toLowerCase().trim() === currentUserName || currentUserName.includes(String(appName3).toLowerCase().trim())))));
+
+      if (!isCurrentStepAssigned) {
+        return false;
+      }
     }
   }
 
   const rawStatus = (item.status || 'pending').toLowerCase();
-  if (['approved', 'rejected', 'failed', 'cancelled', 'confirmed', 'paid', 'completed'].includes(rawStatus)) {
+  const appStatus = (item.approval_status || '').toLowerCase();
+  if (['approved', 'rejected', 'failed', 'cancelled', 'confirmed', 'paid', 'completed', 'ordered', 'received'].includes(rawStatus) || appStatus === 'approved' || appStatus === 'rejected') {
     return false;
   }
 
@@ -146,9 +167,11 @@ export function isItemAtMyStepToApprove(item: any, user: any, usersByNameMap?: M
   const lvl2 = (item.status_level_2 || 'none').toLowerCase();
   const lvl3 = (item.status_level_3 || 'none').toLowerCase();
 
+  // Đơn chỉ có Cấp 2 / Cấp 3 khi có người duyệt được chỉ định cụ thể
+  const hasLvl2 = Boolean(item.approver_id_2 || (item.approver_name_2 && String(item.approver_name_2).trim() !== ''));
+  const hasLvl3 = Boolean(item.approver_id_3 || (item.approver_name_3 && String(item.approver_name_3).trim() !== ''));
+
   // If all reached levels are approved, it is no longer pending approval
-  const hasLvl2 = Boolean(item.approver_id_2 || item.approver_name_2 || (lvl2 !== 'none' && lvl2 !== '' && lvl2 !== 'not_reached'));
-  const hasLvl3 = Boolean(item.approver_id_3 || item.approver_name_3 || (lvl3 !== 'none' && lvl3 !== '' && lvl3 !== 'not_reached'));
   if (lvl1 === 'approved' && (!hasLvl2 || lvl2 === 'approved') && (!hasLvl3 || lvl3 === 'approved')) {
     return false;
   }
@@ -181,33 +204,35 @@ export function isItemAtMyStepToApprove(item: any, user: any, usersByNameMap?: M
   }
 
   // 2. Cấp 1 đã duyệt -> Chờ duyệt Cấp 2
-  if (lvl1 === 'approved' && lvl2 === 'pending') {
+  if (lvl1 === 'approved' && lvl2 === 'pending' && hasLvl2) {
     const app2 = item.approver_id_2;
     const appName2 = item.approver_name_2;
     if (app2 || appName2) {
       return isUserMatch(app2, appName2);
     }
-    // Fallback nếu không có người duyệt cấp 2 chỉ định: người đã duyệt cấp 1 không tự duyệt cấp 2
+    // Fallback nếu không có người duyệt cấp 2 chỉ định: Director chỉ xem trừ khi được chỉ định đích danh
+    if (currentRole === 'director') return false;
     const app1 = item.approver_id || item.manager_id;
     const appName1 = item.approver_name || item.manager_name;
     if (isUserMatch(app1, appName1)) return false;
-    return ['director', 'accountant', 'superadmin', 'super_admin', 'admin'].includes(currentRole);
+    return ['accountant', 'superadmin', 'super_admin', 'admin'].includes(currentRole);
   }
 
   // 3. Cấp 2 đã duyệt -> Chờ duyệt Cấp 3
-  if (lvl1 === 'approved' && lvl2 === 'approved' && lvl3 === 'pending') {
+  if (lvl1 === 'approved' && lvl2 === 'approved' && lvl3 === 'pending' && hasLvl3) {
     const app3 = item.approver_id_3;
     const appName3 = item.approver_name_3;
     if (app3 || appName3) {
       return isUserMatch(app3, appName3);
     }
     // Fallback nếu không có người duyệt cấp 3 chỉ định
+    if (currentRole === 'director') return false;
     const app1 = item.approver_id || item.manager_id;
     const appName1 = item.approver_name || item.manager_name;
     const app2 = item.approver_id_2;
     const appName2 = item.approver_name_2;
     if (isUserMatch(app1, appName1) || isUserMatch(app2, appName2)) return false;
-    return ['director', 'superadmin', 'super_admin'].includes(currentRole);
+    return ['superadmin', 'super_admin'].includes(currentRole);
   }
 
   // Fallback cho luồng 1 cấp
@@ -236,7 +261,8 @@ export function isMyRequestPendingApproval(item: any, user: any, assumeMine = fa
   }
 
   const rawStatus = (item.status || 'pending').toLowerCase();
-  if (['approved', 'rejected', 'failed', 'cancelled', 'confirmed', 'paid', 'completed', 'draft'].includes(rawStatus)) {
+  const appStatus = (item.approval_status || '').toLowerCase();
+  if (['approved', 'rejected', 'failed', 'cancelled', 'confirmed', 'paid', 'completed', 'ordered', 'received', 'draft'].includes(rawStatus) || appStatus === 'approved' || appStatus === 'rejected') {
     return false;
   }
   if (item.is_draft || item.isDraft) return false;
@@ -246,11 +272,14 @@ export function isMyRequestPendingApproval(item: any, user: any, assumeMine = fa
   const s3 = (item.status_level_3 || '').toLowerCase();
   if (s1 === 'rejected' || s2 === 'rejected' || s3 === 'rejected') return false;
 
+  const hasLvl2 = Boolean(item.approver_id_2 || (item.approver_name_2 && String(item.approver_name_2).trim() !== ''));
+  const hasLvl3 = Boolean(item.approver_id_3 || (item.approver_name_3 && String(item.approver_name_3).trim() !== ''));
+
   // Check multi-level completion:
   if (s1 === 'approved') {
-    if (!s2 || s2 === 'none' || s2 === 'null') return false; // Fully approved at level 1
+    if (!hasLvl2 || s2 === 'none' || s2 === 'null') return false; // Fully approved at level 1
     if (s2 === 'approved') {
-      if (!s3 || s3 === 'none' || s3 === 'null') return false; // Fully approved at level 2
+      if (!hasLvl3 || s3 === 'none' || s3 === 'null') return false; // Fully approved at level 2
       if (s3 === 'approved') return false; // Fully approved at level 3
     }
   }

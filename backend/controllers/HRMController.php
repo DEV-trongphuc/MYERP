@@ -3536,6 +3536,7 @@ class HRMController {
         $pos = $stmtPOs->fetchAll(PDO::FETCH_ASSOC);
         foreach ($pos as $p) {
             $relArr = !empty($p['related_user_ids']) ? array_filter(array_map('intval', explode(',', (string)$p['related_user_ids']))) : [];
+            $isPoApproved = ($p['approval_status'] === 'approved') || in_array($p['status'], ['ordered', 'received'], true) || ($p['status_level_1'] === 'approved' && empty($p['approver_id_2']));
             $all[] = [
                 'id' => (int)$p['id'],
                 'type' => 'po',
@@ -3551,13 +3552,13 @@ class HRMController {
                 'status_level_1' => $p['status_level_1'] ?? 'pending',
                 'status_level_2' => $p['status_level_2'] ?? 'none',
                 'status_level_3' => $p['status_level_3'] ?? 'none',
-                'approval_status' => $p['approval_status'] ?? 'pending',
+                'approval_status' => $isPoApproved ? 'approved' : ($p['approval_status'] ?? 'pending'),
                 'amount' => (float)($p['total'] ?? 0),
                 'currency' => 'VND',
                 'related_user_ids' => array_values($relArr),
                 'title' => 'Đơn mua hàng: ' . ($p['po_number'] ?: ('#' . $p['id'])) . ($p['supplier_name'] ? (' - ' . $p['supplier_name']) : ''),
                 'description' => $p['notes'] ?: ('Đơn mua hàng ' . $p['po_number']),
-                'status' => ($p['status'] === 'pending_approval' ? 'pending' : ($p['approval_status'] === 'approved' ? 'approved' : ($p['status'] === 'cancelled' ? 'rejected' : $p['status']))),
+                'status' => ($p['status'] === 'pending_approval' ? 'pending' : ($isPoApproved ? 'approved' : ($p['status'] === 'cancelled' ? 'rejected' : $p['status']))),
                 'created_at' => $p['created_at']
             ];
         }

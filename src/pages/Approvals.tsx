@@ -13232,13 +13232,13 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         if (app2 > 0 || appName2) {
           return isUserMatch(app2, appName2);
         }
-        return false;
+        return isSuperAdmin;
       }
       if (currentLevel === 3) {
         if (app3 > 0 || appName3) {
           return isUserMatch(app3, appName3);
         }
-        return false;
+        return isSuperAdmin;
       }
       return false;
     }
