@@ -137,11 +137,11 @@ if (-not $BackendOnly -and (Test-Path "$distArchive")) {
 
 if ($archivesToUpload.Count -gt 0) {
     Write-Host "  -> Uploading archives ($($archivesToUpload -join ', '))..." -ForegroundColor Gray
-    & scp -i $sshKey -P $sshPort -o StrictHostKeyChecking=no -o ConnectTimeout=30 @archivesToUpload "${sshUser}@${sshHost}:${RemoteDir}/"
+    & scp -4 -i $sshKey -P $sshPort -o StrictHostKeyChecking=no -o ConnectTimeout=30 @archivesToUpload "${sshUser}@${sshHost}:${RemoteDir}/"
     if ($LASTEXITCODE -ne 0) {
         Write-Host "    Retrying upload in 12s..." -ForegroundColor DarkYellow
         Start-Sleep -Seconds 12
-        & scp -i $sshKey -P $sshPort -o StrictHostKeyChecking=no -o ConnectTimeout=30 @archivesToUpload "${sshUser}@${sshHost}:${RemoteDir}/"
+        & scp -4 -i $sshKey -P $sshPort -o StrictHostKeyChecking=no -o ConnectTimeout=30 @archivesToUpload "${sshUser}@${sshHost}:${RemoteDir}/"
     }
 }
 
@@ -165,11 +165,11 @@ if ($archivesToUpload -contains $distArchive) {
 
 $remoteScript = $remoteCommands -join " && "
 
-& ssh -tt -i $sshKey -p $sshPort -o StrictHostKeyChecking=no -o ConnectTimeout=30 "${sshUser}@${sshHost}" "$remoteScript"
+& ssh -4 -tt -i $sshKey -p $sshPort -o StrictHostKeyChecking=no -o ConnectTimeout=30 "${sshUser}@${sshHost}" "$remoteScript"
 if ($LASTEXITCODE -ne 0) {
     Write-Host "    Retrying remote commands in 12s..." -ForegroundColor DarkYellow
     Start-Sleep -Seconds 12
-    & ssh -tt -i $sshKey -p $sshPort -o StrictHostKeyChecking=no -o ConnectTimeout=30 "${sshUser}@${sshHost}" "$remoteScript"
+    & ssh -4 -tt -i $sshKey -p $sshPort -o StrictHostKeyChecking=no -o ConnectTimeout=30 "${sshUser}@${sshHost}" "$remoteScript"
 }
 
 # 5. Clean up local temp archives
