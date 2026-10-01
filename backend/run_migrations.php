@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 302;
+$targetVersion = 305;
 $currentVersion = 186;
 
 // Query current DB version
@@ -4249,10 +4249,45 @@ try {
         }
     }
 
-    // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '304') ON DUPLICATE KEY UPDATE setting_value = '304'");
+    // --- MIGRATION 305: TẠO TÀI KHOẢN HỌC VỤ NGUYỄN HIỀN THƯƠNG (thuongnh@ideas.edu.vn) ---
+    if ($currentVersion < 305) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 305: Tạo/cập nhật tài khoản Học vụ Nguyễn Hiền Thương (thuongnh@ideas.edu.vn)...", "info");
+        try {
+            $email = 'thuongnh@ideas.edu.vn';
+            $username = 'thuongnh';
+            $fullName = 'Nguyễn Hiền Thương';
+            $role = 'academic';
+            $department = 'Học vụ - học thuật';
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 304", "success");
+            // Tìm ID team Học vụ - học thuật nếu có
+            $teamId = 5;
+            $chkTeam = $conn->query("SELECT id FROM teams WHERE name LIKE '%Học vụ%' OR name LIKE '%học thuật%' LIMIT 1");
+            if ($chkTeam && $rowTeam = $chkTeam->fetch_assoc()) {
+                $teamId = (int)$rowTeam['id'];
+            }
+
+            $pwdHash = password_hash('Ideas@123456', PASSWORD_BCRYPT, ['cost' => 12]);
+
+            $chk = $conn->query("SELECT id FROM users WHERE email = '{$email}' OR username = '{$username}' LIMIT 1");
+            if ($chk && $chk->num_rows > 0) {
+                $uid = (int)$chk->fetch_assoc()['id'];
+                $conn->query("UPDATE users SET full_name = '{$fullName}', password_hash = '{$pwdHash}', role = '{$role}', department = '{$department}', team_id = {$teamId}, is_active = 1, is_confirmed = 1, status = 'active' WHERE id = {$uid}");
+                $logMsg("Đã cập nhật thông tin tài khoản Nguyễn Hiền Thương (ID: {$uid}).", "success");
+            } else {
+                $conn->query("INSERT INTO users (tenant_id, full_name, email, username, password_hash, role, department, team_id, is_active, is_confirmed, status) VALUES (1, '{$fullName}', '{$email}', '{$username}', '{$pwdHash}', '{$role}', '{$department}', {$teamId}, 1, 1, 'active')");
+                $newId = (int)$conn->insert_id;
+                $logMsg("Đã tạo mới tài khoản Nguyễn Hiền Thương (ID: {$newId}).", "success");
+            }
+            $logMsg("Nâng cấp lên phiên bản 305 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi nâng cấp v305: " . $e->getMessage(), "error");
+        }
+    }
+
+    // Update DB version in system_settings
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '305') ON DUPLICATE KEY UPDATE setting_value = '305'");
+
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 305", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");
