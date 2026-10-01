@@ -2040,11 +2040,14 @@ class ChatController {
                 if ($hasSearch) {
                     $stmt = $this->db->prepare("
                         SELECT e.id, e.title, e.amount, e.status, e.vendor_name, e.category, e.created_at,
+                               e.created_by, e.approver_id, e.approver_id_2, e.status_level_1, e.status_level_2,
                                u.full_name as creator_name, u.avatar_url as creator_avatar,
-                               app.full_name as approver_name, app.avatar_url as approver_avatar
+                               app.full_name as approver_name, app.avatar_url as approver_avatar,
+                               app2.full_name as approver_name_2, app2.avatar_url as approver_avatar_2
                         FROM expenses e
                         LEFT JOIN users u ON e.created_by = u.id
                         LEFT JOIN users app ON e.approver_id = app.id
+                        LEFT JOIN users app2 ON e.approver_id_2 = app2.id
                         WHERE e.tenant_id = ? AND (e.title LIKE ? OR e.vendor_name LIKE ? OR e.id = ? OR u.full_name LIKE ?)
                         ORDER BY e.id DESC LIMIT 15
                     ");
@@ -2052,11 +2055,14 @@ class ChatController {
                 } else {
                     $stmt = $this->db->prepare("
                         SELECT e.id, e.title, e.amount, e.status, e.vendor_name, e.category, e.created_at,
+                               e.created_by, e.approver_id, e.approver_id_2, e.status_level_1, e.status_level_2,
                                u.full_name as creator_name, u.avatar_url as creator_avatar,
-                               app.full_name as approver_name, app.avatar_url as approver_avatar
+                               app.full_name as approver_name, app.avatar_url as approver_avatar,
+                               app2.full_name as approver_name_2, app2.avatar_url as approver_avatar_2
                         FROM expenses e
                         LEFT JOIN users u ON e.created_by = u.id
                         LEFT JOIN users app ON e.approver_id = app.id
+                        LEFT JOIN users app2 ON e.approver_id_2 = app2.id
                         WHERE e.tenant_id = ?
                         ORDER BY e.id DESC LIMIT 15
                     ");
@@ -2073,10 +2079,16 @@ class ChatController {
                         'status' => $row['status'] ?: 'pending',
                         'vendor_name' => '',
                         'category' => $row['category'] ?: 'Chi phí',
+                        'creator_id' => (int)($row['created_by'] ?? 0),
                         'creator_name' => $row['creator_name'] ?: 'Nhân sự',
                         'creator_avatar' => $row['creator_avatar'] ?: '',
+                        'approver_id' => (int)($row['approver_id'] ?? 0),
                         'approver_name' => $row['approver_name'] ?: 'Kế toán trưởng',
                         'approver_avatar' => $row['approver_avatar'] ?: '',
+                        'approver_id_2' => (int)($row['approver_id_2'] ?? 0),
+                        'approver_name_2' => $row['approver_name_2'] ?: '',
+                        'status_level_1' => $row['status_level_1'] ?? 'pending',
+                        'status_level_2' => $row['status_level_2'] ?? 'pending',
                         'created_at' => !empty($row['created_at']) ? date('H:i:s d/m/Y', strtotime($row['created_at'])) : '',
                         'badge' => 'CHI PHÍ PO',
                         'subtitle' => number_format($amt, 0, ',', '.') . ' VNĐ'

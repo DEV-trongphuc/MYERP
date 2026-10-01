@@ -88,6 +88,7 @@ if (-not $BackendOnly) {
                 exit $LASTEXITCODE
             }
         }
+        $env:GOMAXPROCS = "4"
         npx vite build
         if ($LASTEXITCODE -ne 0) {
             Write-Host "ERROR: Frontend build failed. Aborting deployment." -ForegroundColor Red

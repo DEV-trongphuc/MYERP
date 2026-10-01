@@ -187,6 +187,13 @@ export interface ErpEntitySearchResult {
   approver_name?: string;
   approver_avatar?: string;
   approver_status?: string;
+  approver_id?: number;
+  approver_id_2?: number;
+  approver_name_2?: string;
+  approver_avatar_2?: string;
+  creator_id?: number;
+  status_level_1?: string;
+  status_level_2?: string;
   assignee_avatar?: string;
   owner_avatar?: string;
   contact_phone?: string;

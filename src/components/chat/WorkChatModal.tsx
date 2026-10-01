@@ -32,6 +32,7 @@ import { chatBroadcaster } from '../../utils/chatBroadcast';
 import type { ChatMessage, ChatConversation, ErpEntitySearchResult, MessageType, ChatWallpaperConfig } from '../../types/chat';
 import api from '../../api/axios';
 import toast from 'react-hot-toast';
+import { isExecutive } from '../../utils/roleUtils';
 
 import { getFileFormatConfig, formatFileSize, extractFirstUrl } from '../../utils/chatFileUtils';
 import { compressImageFile } from '../../utils/imageCompressor';
@@ -951,14 +952,18 @@ export const WorkChatModal: React.FC = () => {
     setErpCardActionState(prev => ({ ...prev, [entityId]: { status: 'approving' } }));
     try {
       const subType = String(meta.sub_type || '').toLowerCase();
+      const entityType = String(meta.entity_type || '').toLowerCase();
       if (subType === 'leave' || subType === 'ot' || subType === 'wfh' || subType === 'late_early') {
         await api.put(`/hrm/leaves/${entityId}/status`, { status: 'approved' });
+      } else if (entityType === 'purchase_order' || subType === 'purchase_order') {
+        await api.post(`/purchase-orders/${entityId}/approve`);
       } else {
         await api.patch(`/expenses/${entityId}`, { status: 'approved' });
       }
 
       setErpCardActionState(prev => ({ ...prev, [entityId]: { status: 'approved' } }));
-      toast.success(`Đã phê duyệt quy trình #${entityId} thành công`);
+      const itemLabel = entityType === 'po' ? 'chi phí/PO' : 'quy trình';
+      toast.success(`Đã phê duyệt ${itemLabel} #${entityId} thành công`);
       window.dispatchEvent(new CustomEvent('refresh-pending-counts'));
 
       // Tự động gửi Sticker "ĐÃ DUYỆT" vào đoạn chat
@@ -1001,14 +1006,18 @@ export const WorkChatModal: React.FC = () => {
     setErpCardActionState(prev => ({ ...prev, [entityId]: { status: 'rejecting' } }));
     try {
       const subType = String(meta.sub_type || '').toLowerCase();
+      const entityType = String(meta.entity_type || '').toLowerCase();
       if (subType === 'leave' || subType === 'ot' || subType === 'wfh' || subType === 'late_early') {
         await api.put(`/hrm/leaves/${entityId}/status`, { status: 'rejected', reject_reason: reason });
+      } else if (entityType === 'purchase_order' || subType === 'purchase_order') {
+        await api.post(`/purchase-orders/${entityId}/reject`, { reason });
       } else {
         await api.patch(`/expenses/${entityId}`, { status: 'rejected', reject_reason: reason });
       }
 
       setErpCardActionState(prev => ({ ...prev, [entityId]: { status: 'rejected' } }));
-      toast.success(`Đã từ chối quy trình #${entityId}`);
+      const itemLabel = entityType === 'po' ? 'chi phí/PO' : 'quy trình';
+      toast.success(`Đã từ chối ${itemLabel} #${entityId}`);
       window.dispatchEvent(new CustomEvent('refresh-pending-counts'));
 
       if (activeConversationId) {
@@ -3780,7 +3789,7 @@ export const WorkChatModal: React.FC = () => {
 
                                         {/* Direct Workflow Approver Actions (Từ chối & Duyệt) */}
                                         {(() => {
-                                          if (eType !== 'workflow') return null;
+                                          if (eType !== 'workflow' && eType !== 'po') return null;
                                           const entityId = String(meta.entity_id || meta.id);
                                           const currentAction = erpCardActionState[entityId]?.status;
 
@@ -3834,11 +3843,7 @@ export const WorkChatModal: React.FC = () => {
 
                                           const currentUserId = Number(user?.id || (user as any)?.user_id || 0);
                                           const currentUserName = (user?.name || (user as any)?.full_name || '').toLowerCase().trim();
-
-                                          const creatorId = Number(meta.creator_id || 0);
-                                          const creatorName = (meta.creator_name || '').toLowerCase().trim();
-                                          if (creatorId > 0 && creatorId === currentUserId) return null;
-                                          if (creatorName && (creatorName === currentUserName || currentUserName.includes(creatorName))) return null;
+                                          const isExec = isExecutive(user);
 
                                           const app1 = Number(meta.approver_id || 0);
                                           const appName1 = meta.approver_name;
@@ -3863,7 +3868,18 @@ export const WorkChatModal: React.FC = () => {
                                             }
                                           }
 
-                                          if (!isTargetApprover) return null;
+                                          // Check creator
+                                          const creatorId = Number(meta.creator_id || 0);
+                                          const creatorName = (meta.creator_name || meta.owner_name || '').toLowerCase().trim();
+                                          const isCreator = (creatorId > 0 && creatorId === currentUserId) ||
+                                            Boolean(creatorName && currentUserName && (creatorName === currentUserName || currentUserName.includes(creatorName) || creatorName.includes(currentUserName)));
+
+                                          // User can approve if they are designated approver or have executive authority
+                                          const canApprove = isTargetApprover || isExec;
+                                          if (!canApprove) return null;
+
+                                          // Normal creators who are neither designated approvers nor executives cannot approve their own requests
+                                          if (isCreator && !isTargetApprover && !isExec) return null;
 
                                           return (
                                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginBottom: '6px' }}>
@@ -3948,7 +3964,7 @@ export const WorkChatModal: React.FC = () => {
                                                 window.dispatchEvent(new CustomEvent('open-deposit-drawer', { detail: { id: Number(meta.entity_id), depositId: Number(meta.entity_id) } }));
                                               }
                                             } else if (eType === 'po') {
-                                              openExpenseDrawer(Number(meta.entity_id));
+                                              openExpenseDrawer(Number(meta.entity_id || meta.id));
                                             } else if (eType === 'workflow') {
                                               const subType = String(meta.sub_type || '').toLowerCase();
                                               const category = String(meta.category || '').toUpperCase();
