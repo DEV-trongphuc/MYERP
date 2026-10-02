@@ -520,7 +520,26 @@ class HRMController {
             $otRate = !empty($b['ot_rate']) ? (float)$b['ot_rate'] : 1.5;
             if ($otRate <= 0) $otRate = 1.5;
         } elseif ($leaveType === 'remote_work') {
-            $salaryRate = isset($b['salary_rate']) ? (float)$b['salary_rate'] : 50.0;
+            // Quy định WFH: 2 ngày đầu tiên trong tháng hưởng 100% lương, từ ngày thứ 3 trở đi hưởng 50% lương
+            $targetMonth = substr($fromDate, 0, 7); // 'YYYY-MM'
+            $stmtWfhMonth = $this->db->prepare("
+                SELECT COALESCE(SUM(total_days), 0) as used_days
+                FROM hrm_leave_requests
+                WHERE user_id = ? 
+                  AND leave_type = 'remote_work' 
+                  AND status IN ('approved', 'pending')
+                  AND DATE_FORMAT(start_date, '%Y-%m') = ?
+            ");
+            $stmtWfhMonth->execute([(int)$auth['user_id'], $targetMonth]);
+            $usedWfhDays = (float)$stmtWfhMonth->fetchColumn();
+
+            // Nếu người dùng không chỉ định tỷ lệ riêng, tự động áp dụng: <= 2 ngày thì 100%, > 2 ngày thì 50%
+            if (isset($b['salary_rate'])) {
+                $salaryRate = (float)$b['salary_rate'];
+            } else {
+                $salaryRate = ($usedWfhDays < 2.0) ? 100.0 : 50.0;
+            }
+
             if ($salaryRate < 0.0 || $salaryRate > 100.0) {
                 respond(400, null, 'Tỷ lệ hưởng lương làm việc từ xa phải từ 0% đến 100% (không được vượt quá 100%).', false);
                 return;
@@ -2159,9 +2178,20 @@ class HRMController {
             $createdCount = 0;
             $notifiedUsers = [];
 
+            // Lọc danh sách nhân viên đang hoạt động (loại trừ tài khoản inactive / nghỉ việc)
+            $stmtActUsers = $this->db->prepare("
+                SELECT id FROM users 
+                WHERE tenant_id = ? AND is_active = 1 
+                  AND LOWER(COALESCE(status, 'active')) NOT IN ('inactive', 'locked', 'resigned', 'terminated')
+            ");
+            $stmtActUsers->execute([$tenantId]);
+            $activeUserMap = array_flip($stmtActUsers->fetchAll(PDO::FETCH_COLUMN) ?: []);
+
             foreach ($records as $r) {
                 $uid = (int)($r['user_id'] ?? 0);
                 if ($uid <= 0) continue;
+                // Bỏ qua nhân sự inactive
+                if (!isset($activeUserMap[$uid])) continue;
 
                 $empName = trim($r['emp_name'] ?? '');
                 $empDept = trim($r['emp_dept'] ?? '');
@@ -2423,9 +2453,12 @@ class HRMController {
         if (!$batch) respond(404, null, 'Không tìm thấy đợt đối soát này', false);
 
         $stmtPending = $this->db->prepare("
-            SELECT user_id, emp_name 
-            FROM attendance_confirmations 
-            WHERE batch_id = ? AND tenant_id = ? AND status = 'pending'
+            SELECT ac.user_id, ac.emp_name 
+            FROM attendance_confirmations ac
+            JOIN users u ON ac.user_id = u.id
+            WHERE ac.batch_id = ? AND ac.tenant_id = ? AND ac.status = 'pending'
+              AND u.is_active = 1 
+              AND LOWER(COALESCE(u.status, 'active')) NOT IN ('inactive', 'locked', 'resigned', 'terminated')
         ");
         $stmtPending->execute([$batchId, $tenantId]);
         $pendingUsers = $stmtPending->fetchAll(PDO::FETCH_ASSOC) ?: [];

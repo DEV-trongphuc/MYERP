@@ -223,16 +223,27 @@ export const computeEmployeeAttendanceSummary = (
   standardDays: number,
   departmentFilter: string = 'all'
 ) => {
-  // 1. Filter employees by department if specified
-  let filteredEmployees = employees;
-  if (departmentFilter !== 'all') {
-    filteredEmployees = employees.filter((u: any) => {
+  // 1. Filter out inactive employees & filter by department if specified
+  let filteredEmployees = employees.filter((u: any) => {
+    // Exclude inactive employees (is_active = 0, status = 'inactive' / 'locked' / 'resigned' / 'terminated')
+    const isActive = u.is_active !== 0 && 
+                     u.is_active !== false && 
+                     u.is_active !== '0' && 
+                     String(u.status || '').toLowerCase() !== 'inactive' && 
+                     String(u.status || '').toLowerCase() !== 'locked' &&
+                     String(u.status || '').toLowerCase() !== 'resigned' &&
+                     String(u.status || '').toLowerCase() !== 'terminated' &&
+                     String(u.status || '').toLowerCase() !== 'disabled';
+    if (!isActive) return false;
+
+    if (departmentFilter !== 'all') {
       const uDept = String(u.department || '').toLowerCase().trim();
       const uTeam = String(u.team_name || '').toLowerCase().trim();
       const target = departmentFilter.toLowerCase().trim();
       return uDept === target || uTeam === target || String(u.team_id) === String(departmentFilter);
-    });
-  }
+    }
+    return true;
+  });
 
   // Sort employees by department then full_name
   filteredEmployees = [...filteredEmployees].sort((a, b) => {
@@ -283,29 +294,54 @@ export const computeEmployeeAttendanceSummary = (
     const waivedDates: string[] = [];
     const halfLeaveDates = new Set<string>();
 
-    uLeaves.forEach((lv: any) => {
+    // Sắp xếp đơn nghỉ theo thứ tự thời gian tăng dần để tích lũy hạn mức WFH theo tháng chuẩn xác
+    const sortedLeaves = [...uLeaves].sort((a: any, b: any) => {
+      const dateA = a.start_date_only || String(a.start_date || a.from_date || '').slice(0, 10);
+      const dateB = b.start_date_only || String(b.start_date || b.from_date || '').slice(0, 10);
+      return dateA.localeCompare(dateB);
+    });
+
+    // Theo dõi số ngày WFH đã hưởng trong từng tháng: 2 ngày đầu 100%, từ ngày thứ 3 tính 50%
+    const monthlyWfhAccumulated: Record<string, number> = {};
+
+    sortedLeaves.forEach((lv: any) => {
       const isApproved = lv.status === 'approved' || lv.approved === 1;
       if (!isApproved) return;
 
       const days = Number(lv.total_days) || 1;
       const type = lv.leave_type;
-      const sDate = lv.start_date_only || String(lv.start_date).slice(0, 10);
-      const eDate = lv.end_date_only || String(lv.end_date).slice(0, 10);
+      const sDate = lv.start_date_only || String(lv.start_date || lv.from_date || '').slice(0, 10);
+      const eDate = lv.end_date_only || String(lv.end_date || lv.to_date || '').slice(0, 10);
+
+      let rateStr = (lv.salary_rate !== undefined && lv.salary_rate !== null) ? `${lv.salary_rate}%` : '50%';
 
       if (type === 'annual') {
         annualDays += days;
       } else if (type === 'compensatory') {
         compDays += days;
       } else if (type === 'remote_work') {
-        const rawRate = (lv.salary_rate !== undefined && lv.salary_rate !== null) ? Number(lv.salary_rate) : null;
-        let effRate = 50;
-        if (rawRate !== null && !isNaN(rawRate)) {
-          effRate = rawRate;
+        // Chính sách WFH: 2 ngày đầu tiên trong tháng hưởng 100% lương, từ ngày thứ 3 trở đi hưởng 50% lương
+        const monthKey = sDate.slice(0, 7); // 'YYYY-MM'
+        const usedBefore = monthlyWfhAccumulated[monthKey] || 0;
+        
+        // Hạn mức 100%: 2.0 ngày/tháng
+        const quota100Remaining = Math.max(0, 2.0 - usedBefore);
+        const daysAt100 = Math.min(days, quota100Remaining);
+        const daysAt50 = Math.max(0, days - daysAt100);
+
+        monthlyWfhAccumulated[monthKey] = usedBefore + days;
+
+        // Tính công hưởng lương WFH: 100% = 1.0 công, 50% = 0.5 công
+        const paidThisWfh = Number((daysAt100 * 1.0 + daysAt50 * 0.5).toFixed(2));
+        wfhDays += paidThisWfh;
+
+        if (daysAt100 > 0 && daysAt50 > 0) {
+          rateStr = `${daysAt100}d 100% + ${daysAt50}d 50%`;
+        } else if (daysAt100 > 0) {
+          rateStr = '100% (trong 2 ngày đầu)';
         } else {
-          const rateMatch = String(lv.reason || '').match(/Tỷ lệ hưởng lương:\s*(\d+(\.\d+)?)%/i);
-          if (rateMatch) effRate = Number(rateMatch[1]);
+          rateStr = '50% (từ ngày thứ 3)';
         }
-        wfhDays += Number((days * (effRate / 100)).toFixed(2));
       } else if (type === 'unpaid') {
         unpaidDays += days;
       } else if (['special_paid', 'maternity', 'paternity', 'marriage', 'funeral', 'business_trip', 'sick'].includes(type)) {
@@ -318,7 +354,6 @@ export const computeEmployeeAttendanceSummary = (
         halfLeaveDates.add(sDate);
       }
 
-      const rateStr = (lv.salary_rate !== undefined && lv.salary_rate !== null) ? `${lv.salary_rate}%` : '50%';
       detailLeaveRows.push([
         uid,
         empName,
@@ -613,7 +648,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   const [otEndField, setOtEndField] = useState('21:00');
   const [otTypeField, setOtTypeField] = useState<'compensatory' | 'salary'>('compensatory');
   const [otRateField, setOtRateField] = useState<number>(1.5);
-  const [wfhSalaryRateField, setWfhSalaryRateField] = useState<number>(50);
+  const [wfhSalaryRateField, setWfhSalaryRateField] = useState<number>(100);
   
   const [approverIdField, setApproverIdField] = useState('');
   const [approverId2Field, setApproverId2Field] = useState('');
@@ -1010,6 +1045,37 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   const [calendarShifts, setCalendarShifts] = useState<any[]>([]);
   const [calendarLeaves, setCalendarLeaves] = useState<any[]>([]);
   const [calendarLoading, setCalendarLoading] = useState(false);
+
+  // Thống kê hạn mức WFH trong tháng của nhân viên (2 ngày đầu 100%, từ ngày thứ 3 tính 50%)
+  const currentMonthWfhStats = useMemo(() => {
+    if (!user?.id || !leaveFromField) return { usedDays: 0, quotaRemaining: 2.0, isOverQuota: false };
+    const targetMonth = leaveFromField.slice(0, 7); // 'YYYY-MM'
+    const sourceLeaves = leavesList.length > 0 ? leavesList : calendarLeaves;
+    const myLeaves = sourceLeaves.filter((l: any) => {
+      const uid = Number(l.user_id || l.userId);
+      const isApproved = l.status === 'approved' || l.approved === 1;
+      const isWfh = l.leave_type === 'remote_work';
+      const sDate = String(l.start_date_only || l.start_date || l.from_date || '').slice(0, 10);
+      return uid === Number(user.id) && isApproved && isWfh && sDate.startsWith(targetMonth);
+    });
+
+    const usedDays = myLeaves.reduce((sum: number, l: any) => sum + (Number(l.total_days) || 1), 0);
+    const quotaRemaining = Math.max(0, 2.0 - usedDays);
+    const isOverQuota = usedDays >= 2.0;
+
+    return { usedDays, quotaRemaining, isOverQuota };
+  }, [user?.id, leaveFromField, leavesList, calendarLeaves]);
+
+  // Tự động gán tỷ lệ hưởng lương WFH theo hạn mức tháng
+  useEffect(() => {
+    if (createLeaveType === 'remote_work') {
+      if (currentMonthWfhStats.isOverQuota) {
+        setWfhSalaryRateField(50);
+      } else {
+        setWfhSalaryRateField(100);
+      }
+    }
+  }, [createLeaveType, currentMonthWfhStats.isOverQuota, leaveFromField]);
 
 
   // Theme support
@@ -5675,14 +5741,46 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                 )}
               </div>
 
-              {/* Tỷ lệ hưởng lương (%) */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {/* Chính sách & Tỷ lệ hưởng lương WFH (%) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {/* WFH policy & quota status banner */}
+                <div style={{
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  fontSize: '0.8rem',
+                  background: currentMonthWfhStats.isOverQuota ? 'rgba(239, 68, 68, 0.08)' : 'rgba(16, 185, 129, 0.08)',
+                  border: `1px solid ${currentMonthWfhStats.isOverQuota ? 'rgba(239, 68, 68, 0.25)' : 'rgba(16, 185, 129, 0.25)'}`,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+                    <span style={{ fontWeight: 700, color: currentMonthWfhStats.isOverQuota ? '#dc2626' : '#059669' }}>
+                      🏠 {t('Chính sách WFH:')} {t('2 ngày đầu/tháng hưởng 100% lương, từ ngày thứ 3 tính 50%')}
+                    </span>
+                    <span style={{ fontSize: '0.74rem', padding: '2px 8px', borderRadius: '4px', background: 'var(--color-surface)', fontWeight: 600 }}>
+                      {t('Tháng')} {leaveFromField.slice(0, 7)}: <strong>{currentMonthWfhStats.usedDays.toFixed(1)} / 2.0 {t('ngày')}</strong>
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)' }}>
+                    {currentMonthWfhStats.quotaRemaining > 0 ? (
+                      <span style={{ color: '#059669', fontWeight: 600 }}>
+                        ✓ {t('Bạn còn')} {currentMonthWfhStats.quotaRemaining.toFixed(1)} {t('ngày tiêu chuẩn 100% lương trong tháng. Hệ thống tự động chọn 100%.')}
+                      </span>
+                    ) : (
+                      <span style={{ color: '#dc2626', fontWeight: 600 }}>
+                        ⚠️ {t('Đã hết 2 ngày tiêu chuẩn 100% lương trong tháng. Đơn này tự động áp dụng 50% lương theo quy định.')}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
                     {t('Tỷ lệ hưởng lương (%)')} <span style={{ color: 'var(--color-danger)' }}>*</span>
                   </label>
                   <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
-                    {t('Mặc định 50%, tối đa 100%')}
+                    {currentMonthWfhStats.isOverQuota ? t('Mặc định 50% (hết hạn mức 2 ngày)') : t('Mặc định 100% (trong hạn mức 2 ngày)')}
                   </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -5700,7 +5798,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                       }}
                       onBlur={() => {
                         if (wfhSalaryRateField === '' as any || isNaN(Number(wfhSalaryRateField))) {
-                          setWfhSalaryRateField(50);
+                          setWfhSalaryRateField(currentMonthWfhStats.isOverQuota ? 50 : 100);
                         } else if (Number(wfhSalaryRateField) > 100) {
                           setWfhSalaryRateField(100);
                         } else if (Number(wfhSalaryRateField) < 0) {
@@ -5731,9 +5829,10 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                   {/* Quick selection presets */}
                   <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
                     {[
-                      { label: '50% (Mặc định)', val: 50 },
+                      { label: t('100% (2 ngày đầu)'), val: 100 },
+                      { label: t('50% (Từ ngày thứ 3)'), val: 50 },
                       { label: '70%', val: 70 },
-                      { label: '100% (Đủ lương)', val: 100 }
+                      { label: t('0% (Không lương)'), val: 0 }
                     ].map(p => (
                       <button
                         key={p.val}
