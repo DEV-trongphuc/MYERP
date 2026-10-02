@@ -521,7 +521,7 @@ class HRMController {
             if ($otRate <= 0) $otRate = 1.5;
         } elseif ($leaveType === 'remote_work') {
             // Quy định WFH: 2 ngày đầu tiên trong tháng hưởng 100% lương, từ ngày thứ 3 trở đi hưởng 50% lương
-            $targetMonth = substr($fromDate, 0, 7); // 'YYYY-MM'
+            $targetMonth = substr($startDate, 0, 7); // 'YYYY-MM'
             $stmtWfhMonth = $this->db->prepare("
                 SELECT COALESCE(SUM(total_days), 0) as used_days
                 FROM hrm_leave_requests
