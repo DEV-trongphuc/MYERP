@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 305;
+$targetVersion = 306;
 $currentVersion = 186;
 
 // Query current DB version
@@ -4284,10 +4284,82 @@ try {
         }
     }
 
-    // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '305') ON DUPLICATE KEY UPDATE setting_value = '305'");
+    // --- MIGRATION 306: TẠO BẢNG ĐỐI SOÁT & XÁC NHẬN CÔNG CÓ HẠN CHÓT ---
+    if ($currentVersion < 306) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 306: Tạo bảng đợt đối soát & xác nhận công (attendance_confirmation_batches, attendance_confirmations)...", "info");
+        try {
+            $conn->query("
+                CREATE TABLE IF NOT EXISTS `attendance_confirmation_batches` (
+                    `id` INT AUTO_INCREMENT PRIMARY KEY,
+                    `tenant_id` INT NOT NULL DEFAULT 1,
+                    `title` VARCHAR(255) NOT NULL,
+                    `period_type` ENUM('month', 'range') NOT NULL DEFAULT 'month',
+                    `month` INT NULL,
+                    `year` INT NULL,
+                    `from_date` DATE NOT NULL,
+                    `to_date` DATE NOT NULL,
+                    `standard_days` DECIMAL(4,1) NOT NULL DEFAULT 22.0,
+                    `deadline_at` DATETIME NOT NULL,
+                    `department` VARCHAR(100) NOT NULL DEFAULT 'all',
+                    `note` TEXT NULL,
+                    `created_by` INT NOT NULL,
+                    `status` ENUM('active', 'completed', 'cancelled') NOT NULL DEFAULT 'active',
+                    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    INDEX `idx_tenant_status` (`tenant_id`, `status`),
+                    INDEX `idx_period` (`year`, `month`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            ");
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 305", "success");
+            $conn->query("
+                CREATE TABLE IF NOT EXISTS `attendance_confirmations` (
+                    `id` INT AUTO_INCREMENT PRIMARY KEY,
+                    `tenant_id` INT NOT NULL DEFAULT 1,
+                    `batch_id` INT NOT NULL,
+                    `user_id` INT NOT NULL,
+                    `emp_name` VARCHAR(150) NULL,
+                    `emp_dept` VARCHAR(100) NULL,
+                    `emp_title` VARCHAR(100) NULL,
+                    `standard_days` DECIMAL(4,1) NOT NULL DEFAULT 0.0,
+                    `actual_days` DECIMAL(4,1) NOT NULL DEFAULT 0.0,
+                    `annual_leave_days` DECIMAL(4,1) NOT NULL DEFAULT 0.0,
+                    `comp_leave_days` DECIMAL(4,1) NOT NULL DEFAULT 0.0,
+                    `special_leave_days` DECIMAL(4,1) NOT NULL DEFAULT 0.0,
+                    `wfh_days` DECIMAL(4,1) NOT NULL DEFAULT 0.0,
+                    `unpaid_leave_days` DECIMAL(4,1) NOT NULL DEFAULT 0.0,
+                    `total_paid_days` DECIMAL(4,1) NOT NULL DEFAULT 0.0,
+                    `late_count` INT NOT NULL DEFAULT 0,
+                    `late_minutes` INT NOT NULL DEFAULT 0,
+                    `early_minutes` INT NOT NULL DEFAULT 0,
+                    `ot_hours` DECIMAL(4,1) NOT NULL DEFAULT 0.0,
+                    `night_shifts` INT NOT NULL DEFAULT 0,
+                    `weekend_shifts` INT NOT NULL DEFAULT 0,
+                    `supp_count` INT NOT NULL DEFAULT 0,
+                    `status` ENUM('pending', 'confirmed', 'auto_confirmed', 'disputed') NOT NULL DEFAULT 'pending',
+                    `dispute_reason` TEXT NULL,
+                    `confirmed_at` DATETIME NULL,
+                    `confirmed_by_type` ENUM('employee', 'auto', 'admin') NULL,
+                    `ip_address` VARCHAR(50) NULL,
+                    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY `uq_batch_user` (`batch_id`, `user_id`),
+                    INDEX `idx_user_status` (`user_id`, `status`),
+                    INDEX `idx_batch_status` (`batch_id`, `status`),
+                    CONSTRAINT `fk_att_conf_batch` FOREIGN KEY (`batch_id`) REFERENCES `attendance_confirmation_batches`(`id`) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            ");
+
+            $logMsg("Đã tạo thành công các bảng đối soát công (attendance_confirmation_batches, attendance_confirmations).", "success");
+            $logMsg("Nâng cấp lên phiên bản 306 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi nâng cấp v306: " . $e->getMessage(), "error");
+        }
+    }
+
+    // Update DB version in system_settings
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '306') ON DUPLICATE KEY UPDATE setting_value = '306'");
+
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 306", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");

@@ -2037,6 +2037,420 @@ class HRMController {
         respond(200, ['success' => true]);
     }
 
+    /**
+     * Tự động xác nhận các bản ghi đối soát công đã quá hạn chót (Auto-Confirm Past Deadline)
+     */
+    public static function autoConfirmExpiredAttendance(PDO $db, int $tenantId = 0): int {
+        try {
+            $where = "WHERE ac.status = 'pending' AND b.deadline_at <= NOW()";
+            $params = [];
+            if ($tenantId > 0) {
+                $where .= " AND b.tenant_id = ?";
+                $params[] = $tenantId;
+            }
+            $stmt = $db->prepare("
+                UPDATE attendance_confirmations ac
+                JOIN attendance_confirmation_batches b ON ac.batch_id = b.id
+                SET ac.status = 'auto_confirmed',
+                    ac.confirmed_at = b.deadline_at,
+                    ac.confirmed_by_type = 'auto'
+                {$where}
+            ");
+            $stmt->execute($params);
+            $affected = $stmt->rowCount();
+
+            // Cập nhật trạng thái batch thành 'completed' nếu tất cả bản ghi đã được xử lý
+            $db->query("
+                UPDATE attendance_confirmation_batches b
+                SET b.status = 'completed'
+                WHERE b.status = 'active'
+                  AND b.deadline_at <= NOW()
+                  AND NOT EXISTS (
+                      SELECT 1 FROM attendance_confirmations ac
+                      WHERE ac.batch_id = b.id AND ac.status IN ('pending', 'disputed')
+                  )
+            ");
+            return $affected;
+        } catch (\Throwable $e) {
+            error_log("Error in autoConfirmExpiredAttendance: " . $e->getMessage());
+            return 0;
+        }
+    }
+
+    /**
+     * HR: Khởi tạo đợt đối soát công & snapshot dữ liệu gửi cho nhân viên
+     */
+    public function createAttendanceConfirmationBatch(array $auth): void {
+        if (!$this->isAdmin($auth)) respond(403, null, 'Quyền HR/Admin là bắt buộc', false);
+
+        $b = getBody();
+        $title = trim($b['title'] ?? '');
+        $periodType = in_array($b['period_type'] ?? '', ['month', 'range'], true) ? $b['period_type'] : 'month';
+        $month = isset($b['month']) ? (int)$b['month'] : null;
+        $year = isset($b['year']) ? (int)$b['year'] : null;
+        $fromDate = $b['from_date'] ?? '';
+        $toDate = $b['to_date'] ?? '';
+        $standardDays = (float)($b['standard_days'] ?? 22.0);
+        $deadlineAt = trim($b['deadline_at'] ?? '');
+        $department = trim($b['department'] ?? 'all');
+        $note = trim($b['note'] ?? '');
+        $records = is_array($b['records'] ?? null) ? $b['records'] : [];
+
+        if (empty($title)) respond(400, null, 'Vui lòng nhập tiêu đề đợt đối soát bảng công', false);
+        if (empty($fromDate) || empty($toDate)) respond(400, null, 'Vui lòng cung cấp ngày bắt đầu và kết thúc kỳ công', false);
+        if (empty($deadlineAt)) respond(400, null, 'Vui lòng chọn hạn chót xác nhận công', false);
+
+        // Chuẩn hóa deadline_at
+        $deadlineTs = strtotime($deadlineAt);
+        if (!$deadlineTs || $deadlineTs <= time()) {
+            respond(400, null, 'Hạn chót xác nhận phải lớn hơn thời điểm hiện tại', false);
+        }
+        $deadlineSql = date('Y-m-d H:i:s', $deadlineTs);
+
+        $tenantId = (int)($auth['tenant_id'] ?? 1);
+        $creatorId = (int)($auth['id'] ?? 0);
+
+        try {
+            $this->db->beginTransaction();
+
+            // 1. Tạo batch
+            $stmtBatch = $this->db->prepare("
+                INSERT INTO attendance_confirmation_batches 
+                (tenant_id, title, period_type, month, year, from_date, to_date, standard_days, deadline_at, department, note, created_by, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
+            ");
+            $stmtBatch->execute([
+                $tenantId, $title, $periodType, $month, $year, $fromDate, $toDate, $standardDays, $deadlineSql, $department, $note, $creatorId
+            ]);
+            $batchId = (int)$this->db->lastInsertId();
+
+            // 2. Chèn danh sách nhân sự snapshot
+            $stmtInsertRecord = $this->db->prepare("
+                INSERT INTO attendance_confirmations 
+                (tenant_id, batch_id, user_id, emp_name, emp_dept, emp_title, standard_days, actual_days, 
+                 annual_leave_days, comp_leave_days, special_leave_days, wfh_days, unpaid_leave_days, total_paid_days, 
+                 late_count, late_minutes, early_minutes, ot_hours, night_shifts, weekend_shifts, supp_count, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+                ON DUPLICATE KEY UPDATE 
+                    emp_name = VALUES(emp_name),
+                    emp_dept = VALUES(emp_dept),
+                    emp_title = VALUES(emp_title),
+                    standard_days = VALUES(standard_days),
+                    actual_days = VALUES(actual_days),
+                    annual_leave_days = VALUES(annual_leave_days),
+                    comp_leave_days = VALUES(comp_leave_days),
+                    special_leave_days = VALUES(special_leave_days),
+                    wfh_days = VALUES(wfh_days),
+                    unpaid_leave_days = VALUES(unpaid_leave_days),
+                    total_paid_days = VALUES(total_paid_days),
+                    late_count = VALUES(late_count),
+                    late_minutes = VALUES(late_minutes),
+                    early_minutes = VALUES(early_minutes),
+                    ot_hours = VALUES(ot_hours),
+                    night_shifts = VALUES(night_shifts),
+                    weekend_shifts = VALUES(weekend_shifts),
+                    supp_count = VALUES(supp_count),
+                    status = 'pending',
+                    dispute_reason = NULL,
+                    confirmed_at = NULL,
+                    confirmed_by_type = NULL
+            ");
+
+            $createdCount = 0;
+            $notifiedUsers = [];
+
+            foreach ($records as $r) {
+                $uid = (int)($r['user_id'] ?? 0);
+                if ($uid <= 0) continue;
+
+                $empName = trim($r['emp_name'] ?? '');
+                $empDept = trim($r['emp_dept'] ?? '');
+                $empTitle = trim($r['emp_title'] ?? '');
+                $std = (float)($r['standard_days'] ?? $standardDays);
+                $act = (float)($r['actual_days'] ?? 0);
+                $ann = (float)($r['annual_leave_days'] ?? 0);
+                $comp = (float)($r['comp_leave_days'] ?? 0);
+                $spec = (float)($r['special_leave_days'] ?? 0);
+                $wfh = (float)($r['wfh_days'] ?? 0);
+                $unpaid = (float)($r['unpaid_leave_days'] ?? 0);
+                $paid = (float)($r['total_paid_days'] ?? ($act + $ann + $comp + $spec + $wfh));
+                $lateCount = (int)($r['late_count'] ?? 0);
+                $lateMins = (int)($r['late_minutes'] ?? 0);
+                $earlyMins = (int)($r['early_minutes'] ?? 0);
+                $ot = (float)($r['ot_hours'] ?? 0);
+                $night = (int)($r['night_shifts'] ?? 0);
+                $weekend = (int)($r['weekend_shifts'] ?? 0);
+                $supp = (int)($r['supp_count'] ?? 0);
+
+                $stmtInsertRecord->execute([
+                    $tenantId, $batchId, $uid, $empName, $empDept, $empTitle, $std, $act,
+                    $ann, $comp, $spec, $wfh, $unpaid, $paid,
+                    $lateCount, $lateMins, $earlyMins, $ot, $night, $weekend, $supp
+                ]);
+
+                $createdCount++;
+                $notifiedUsers[$uid] = $empName;
+            }
+
+            $this->db->commit();
+
+            // 3. Gửi thông báo tới nhân viên
+            try {
+                require_once __DIR__ . '/../NotificationService.php';
+                foreach ($notifiedUsers as $uid => $uName) {
+                    NotificationService::send($this->db, $tenantId, 'ATTENDANCE_CONFIRMATION_REQUESTED', [
+                        'user_id' => $uid,
+                        'user_name' => $uName,
+                        'title' => $title,
+                        'deadline' => $deadlineSql,
+                        'note' => $note,
+                        'batch_id' => $batchId
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                error_log("Error dispatching attendance confirmation notifications: " . $e->getMessage());
+            }
+
+            respond(200, [
+                'success' => true,
+                'batch_id' => $batchId,
+                'total_employees' => $createdCount,
+                'deadline_at' => $deadlineSql
+            ], 'Đã tạo đợt đối soát công và gửi thông báo thành công');
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            respond(500, null, 'Lỗi khi khởi tạo đợt đối soát: ' . $e->getMessage(), false);
+        }
+    }
+
+    /**
+     * HR: Danh sách các đợt đối soát bảng công và tiến độ tổng hợp
+     */
+    public function listAttendanceConfirmationBatches(array $auth): void {
+        if (!$this->isAdmin($auth)) respond(403, null, 'Quyền HR/Admin là bắt buộc', false);
+
+        $tenantId = (int)($auth['tenant_id'] ?? 1);
+        self::autoConfirmExpiredAttendance($this->db, $tenantId);
+
+        $stmt = $this->db->prepare("
+            SELECT b.*,
+                   u.full_name as creator_name,
+                   COUNT(ac.id) as total_count,
+                   SUM(CASE WHEN ac.status = 'confirmed' THEN 1 ELSE 0 END) as confirmed_count,
+                   SUM(CASE WHEN ac.status = 'auto_confirmed' THEN 1 ELSE 0 END) as auto_confirmed_count,
+                   SUM(CASE WHEN ac.status = 'disputed' THEN 1 ELSE 0 END) as disputed_count,
+                   SUM(CASE WHEN ac.status = 'pending' THEN 1 ELSE 0 END) as pending_count
+            FROM attendance_confirmation_batches b
+            LEFT JOIN users u ON b.created_by = u.id
+            LEFT JOIN attendance_confirmations ac ON b.id = ac.batch_id
+            WHERE b.tenant_id = ?
+            GROUP BY b.id
+            ORDER BY b.id DESC
+            LIMIT 50
+        ");
+        $stmt->execute([$tenantId]);
+        $batches = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        respond(200, ['batches' => $batches]);
+    }
+
+    /**
+     * HR: Xem chi tiết một đợt đối soát (kèm danh sách chi tiết nhân viên)
+     */
+    public function getAttendanceBatchDetail(array $auth): void {
+        if (!$this->isAdmin($auth)) respond(403, null, 'Quyền HR/Admin là bắt buộc', false);
+
+        $tenantId = (int)($auth['tenant_id'] ?? 1);
+        $batchId = (int)($_GET['id'] ?? $_GET['batch_id'] ?? 0);
+        if ($batchId <= 0) respond(400, null, 'Thiếu ID đợt đối soát', false);
+
+        self::autoConfirmExpiredAttendance($this->db, $tenantId);
+
+        // Fetch batch
+        $stmtBatch = $this->db->prepare("
+            SELECT b.*, u.full_name as creator_name
+            FROM attendance_confirmation_batches b
+            LEFT JOIN users u ON b.created_by = u.id
+            WHERE b.id = ? AND b.tenant_id = ?
+        ");
+        $stmtBatch->execute([$batchId, $tenantId]);
+        $batch = $stmtBatch->fetch(PDO::FETCH_ASSOC);
+        if (!$batch) respond(404, null, 'Không tìm thấy đợt đối soát này', false);
+
+        // Fetch confirmations
+        $stmtList = $this->db->prepare("
+            SELECT ac.*, u.email as emp_email, u.avatar_url
+            FROM attendance_confirmations ac
+            LEFT JOIN users u ON ac.user_id = u.id
+            WHERE ac.batch_id = ? AND ac.tenant_id = ?
+            ORDER BY ac.emp_dept ASC, ac.emp_name ASC
+        ");
+        $stmtList->execute([$batchId, $tenantId]);
+        $records = $stmtList->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        respond(200, [
+            'batch' => $batch,
+            'records' => $records
+        ]);
+    }
+
+    /**
+     * Nhân viên: Lấy thông tin đợt đối soát công đang mở của mình
+     */
+    public function getMyPendingAttendanceConfirmation(array $auth): void {
+        $tenantId = (int)($auth['tenant_id'] ?? 1);
+        $userId = (int)($auth['id'] ?? 0);
+        if ($userId <= 0) respond(401, null, 'Vui lòng đăng nhập', false);
+
+        self::autoConfirmExpiredAttendance($this->db, $tenantId);
+
+        $stmt = $this->db->prepare("
+            SELECT ac.*, 
+                   b.title as batch_title, 
+                   b.period_type, 
+                   b.month, 
+                   b.year, 
+                   b.from_date, 
+                   b.to_date, 
+                   b.deadline_at, 
+                   b.note as batch_note,
+                   b.status as batch_status,
+                   CASE WHEN b.deadline_at <= NOW() THEN 1 ELSE 0 END as is_expired
+            FROM attendance_confirmations ac
+            JOIN attendance_confirmation_batches b ON ac.batch_id = b.id
+            WHERE ac.user_id = ? AND ac.tenant_id = ?
+            ORDER BY b.id DESC
+            LIMIT 1
+        ");
+        $stmt->execute([$userId, $tenantId]);
+        $record = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        respond(200, ['confirmation' => $record ?: null]);
+    }
+
+    /**
+     * Nhân viên: Xác nhận đúng công hoặc Gửi khiếu nại sai lệch
+     */
+    public function confirmMyAttendance(array $auth): void {
+        $tenantId = (int)($auth['tenant_id'] ?? 1);
+        $userId = (int)($auth['id'] ?? 0);
+        if ($userId <= 0) respond(401, null, 'Vui lòng đăng nhập', false);
+
+        $b = getBody();
+        $id = (int)($b['id'] ?? 0);
+        $batchId = (int)($b['batch_id'] ?? 0);
+        $action = $b['action'] ?? 'confirm'; // 'confirm' | 'dispute'
+        $disputeReason = trim($b['dispute_reason'] ?? $b['note'] ?? '');
+
+        self::autoConfirmExpiredAttendance($this->db, $tenantId);
+
+        // Find confirmation record
+        $stmtFind = $this->db->prepare("
+            SELECT ac.*, b.title as batch_title, b.deadline_at, b.status as batch_status
+            FROM attendance_confirmations ac
+            JOIN attendance_confirmation_batches b ON ac.batch_id = b.id
+            WHERE " . ($id > 0 ? "ac.id = ?" : "ac.batch_id = ? AND ac.user_id = ?") . " 
+              AND ac.user_id = ? AND ac.tenant_id = ?
+        ");
+        $params = $id > 0 ? [$id, $userId, $tenantId] : [$batchId, $userId, $userId, $tenantId];
+        $stmtFind->execute($params);
+        $row = $stmtFind->fetch(PDO::FETCH_ASSOC);
+
+        if (!$row) respond(404, null, 'Không tìm thấy thông tin đối soát công của bạn', false);
+
+        if ($action === 'dispute') {
+            if (empty($disputeReason)) {
+                respond(400, null, 'Vui lòng ghi rõ nội dung sai lệch công để HR đối soát', false);
+            }
+
+            $stmtUpdate = $this->db->prepare("
+                UPDATE attendance_confirmations
+                SET status = 'disputed',
+                    dispute_reason = ?,
+                    confirmed_at = NULL,
+                    confirmed_by_type = 'employee'
+                WHERE id = ?
+            ");
+            $stmtUpdate->execute([$disputeReason, $row['id']]);
+
+            // Dispatch notification to HR
+            try {
+                require_once __DIR__ . '/../NotificationService.php';
+                NotificationService::send($this->db, $tenantId, 'ATTENDANCE_CONFIRMATION_DISPUTED', [
+                    'employee_name' => $row['emp_name'] ?: ($auth['name'] ?? 'Nhân viên'),
+                    'department' => $row['emp_dept'] ?: '',
+                    'title' => $row['batch_title'],
+                    'reason' => $disputeReason,
+                    'batch_id' => $row['batch_id']
+                ]);
+            } catch (\Throwable $e) {}
+
+            respond(200, ['success' => true], 'Đã gửi phản hồi sai lệch công về Phòng Nhân sự để xử lý');
+        } else {
+            // Action: confirm
+            $stmtUpdate = $this->db->prepare("
+                UPDATE attendance_confirmations
+                SET status = 'confirmed',
+                    dispute_reason = NULL,
+                    confirmed_at = NOW(),
+                    confirmed_by_type = 'employee'
+                WHERE id = ?
+            ");
+            $stmtUpdate->execute([$row['id']]);
+
+            respond(200, ['success' => true], 'Đã xác nhận bảng công thành công');
+        }
+    }
+
+    /**
+     * HR: Nhắc nhở những nhân viên chưa xác nhận công
+     */
+    public function remindAttendanceConfirmation(array $auth): void {
+        if (!$this->isAdmin($auth)) respond(403, null, 'Quyền HR/Admin là bắt buộc', false);
+
+        $tenantId = (int)($auth['tenant_id'] ?? 1);
+        $b = getBody();
+        $batchId = (int)($b['batch_id'] ?? 0);
+        if ($batchId <= 0) respond(400, null, 'Thiếu ID đợt đối soát', false);
+
+        self::autoConfirmExpiredAttendance($this->db, $tenantId);
+
+        $stmtBatch = $this->db->prepare("SELECT * FROM attendance_confirmation_batches WHERE id = ? AND tenant_id = ?");
+        $stmtBatch->execute([$batchId, $tenantId]);
+        $batch = $stmtBatch->fetch(PDO::FETCH_ASSOC);
+        if (!$batch) respond(404, null, 'Không tìm thấy đợt đối soát này', false);
+
+        $stmtPending = $this->db->prepare("
+            SELECT user_id, emp_name 
+            FROM attendance_confirmations 
+            WHERE batch_id = ? AND tenant_id = ? AND status = 'pending'
+        ");
+        $stmtPending->execute([$batchId, $tenantId]);
+        $pendingUsers = $stmtPending->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        if (empty($pendingUsers)) {
+            respond(200, ['reminded_count' => 0], 'Tất cả nhân viên đã hoàn tất xác nhận, không còn ai chờ');
+        }
+
+        try {
+            require_once __DIR__ . '/../NotificationService.php';
+                foreach ($pendingUsers as $pu) {
+                    NotificationService::send($this->db, $tenantId, 'ATTENDANCE_CONFIRMATION_REQUESTED', [
+                        'user_id' => (int)$pu['user_id'],
+                        'user_name' => $pu['emp_name'],
+                        'title' => $batch['title'],
+                        'deadline' => $batch['deadline_at'],
+                        'note' => 'Nhắc nhở: Sắp hết hạn chót đối soát bảng công. Vui lòng kiểm tra và xác nhận sớm!',
+                        'batch_id' => $batchId
+                    ]);
+                }
+        } catch (\Throwable $e) {}
+
+        respond(200, ['reminded_count' => count($pendingUsers)], "Đã gửi thông báo nhắc nhở tới " . count($pendingUsers) . " nhân viên");
+    }
+
 
     public function countPendingApprovals(array $auth): int {
         return count($this->fetchPendingApprovals($auth));

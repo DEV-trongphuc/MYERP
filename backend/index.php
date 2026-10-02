@@ -1224,6 +1224,23 @@ switch ($resource) {
                 respond(404, null, 'Route không tồn tại', false);
             }
         }
+        elseif ($resourceId === 'attendance-confirmations') {
+            if (!$subResource) {
+                if ($method === 'GET') $ctrl->listAttendanceConfirmationBatches($auth);
+                elseif ($method === 'POST') $ctrl->createAttendanceConfirmationBatch($auth);
+                else respond(404, null, 'Route không tồn tại', false);
+            } elseif ($subResource === 'my-pending' && $method === 'GET') {
+                $ctrl->getMyPendingAttendanceConfirmation($auth);
+            } elseif ($subResource === 'confirm' && $method === 'POST') {
+                $ctrl->confirmMyAttendance($auth);
+            } elseif ($subResource === 'detail' && $method === 'GET') {
+                $ctrl->getAttendanceBatchDetail($auth);
+            } elseif ($subResource === 'remind' && $method === 'POST') {
+                $ctrl->remindAttendanceConfirmation($auth);
+            } else {
+                respond(404, null, 'Route không tồn tại', false);
+            }
+        }
         elseif ($resourceId === 'approvals' && $subResource === 'overview' && $method === 'GET') $ctrl->getApprovalsOverview($auth);
         elseif ($resourceId === 'approvals' && $subResource === 'pending' && $method === 'GET') $ctrl->getPendingApprovals($auth);
         elseif ($resourceId === 'approvals' && $subResource === 'my-requests' && $method === 'GET') $ctrl->getMyRequests($auth);

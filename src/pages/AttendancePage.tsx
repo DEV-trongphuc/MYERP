@@ -12,7 +12,7 @@ import { TableRowSkeleton } from '../components/ui/Skeleton';
 import { CustomSelect } from '../components/ui/CustomSelect';
 const CustomerProfileDrawer = lazy(() => import('./CustomerProfileDrawer').then(module => ({ default: module.CustomerProfileDrawer })));
 import api from '../api/axios';
-import { Clock, Calendar, Check, X, Trash2, Eye, ShieldAlert, AlertCircle, CheckCircle, Info, Download, Lightbulb, Upload, ChevronLeft, ChevronRight, Camera, Image, FileText, Zap, RefreshCw, Moon, MapPin, CheckSquare, Users, Plus, Home, ArrowLeft, UserPlus, Search, Loader2, FileSpreadsheet, Lock, Edit } from 'lucide-react';
+import { Clock, Calendar, Check, X, Trash2, Eye, ShieldAlert, AlertCircle, CheckCircle, Info, Download, Lightbulb, Upload, ChevronLeft, ChevronRight, Camera, Image, FileText, Zap, RefreshCw, Moon, MapPin, CheckSquare, Users, Plus, Home, ArrowLeft, UserPlus, Search, Loader2, FileSpreadsheet, Lock, Edit, Send, Bell, AlertTriangle, ChevronDown, CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PeriodFilter, getDateRange } from '../components/ui/PeriodFilter';
 import { useUIStore } from '../store/uiStore';
@@ -38,16 +38,36 @@ const resolveAttachmentUrl = (path: string | null | undefined): string => {
 
 /**
  * Tự động tính số ngày công chuẩn trong kỳ:
- * - Trừ tất cả các ngày Chủ Nhật trong kỳ.
- * - Trừ các ngày Lễ trong holiday_schedules rơi vào thứ 2 - thứ 7 (không trùng Chủ Nhật).
+ * - Dựa trên cấu hình ngày làm việc của công ty (global_work_schedule).
+ * - Trừ các ngày nghỉ trong tuần (mặc định Thứ Bảy và Chủ Nhật nếu tắt active trong cấu hình công ty).
+ * - Trừ các ngày Lễ trong holiday_schedules rơi vào ngày làm việc (không tính trùng vào ngày nghỉ tuần).
  */
 export const calculateStandardWorkDays = (
   startDateStr: string,
   endDateStr: string,
-  holidays: any = []
-): { standardDays: number; totalDays: number; sundaysCount: number; holidaysCount: number; holidayNames: string[] } => {
+  holidays: any = [],
+  workSchedule: any = null
+): {
+  standardDays: number;
+  totalDays: number;
+  weekendDaysCount: number;
+  sundaysCount: number;
+  saturdaysCount: number;
+  holidaysCount: number;
+  holidayNames: string[];
+  weekendDetails: string;
+} => {
   if (!startDateStr || !endDateStr || startDateStr > endDateStr) {
-    return { standardDays: 26, totalDays: 30, sundaysCount: 4, holidaysCount: 0, holidayNames: [] };
+    return {
+      standardDays: 26,
+      totalDays: 30,
+      weekendDaysCount: 4,
+      sundaysCount: 4,
+      saturdaysCount: 0,
+      holidaysCount: 0,
+      holidayNames: [],
+      weekendDetails: '4 CN'
+    };
   }
 
   const [sY, sM, sD] = startDateStr.split('-').map(Number);
@@ -58,8 +78,17 @@ export const calculateStandardWorkDays = (
   
   let totalDays = 0;
   let sundaysCount = 0;
+  let saturdaysCount = 0;
+  let otherWeekendCount = 0;
   let holidaysCount = 0;
   const holidayNames: string[] = [];
+
+  let parsedSchedule: any = null;
+  if (typeof workSchedule === 'string') {
+    try { parsedSchedule = JSON.parse(workSchedule); } catch {}
+  } else if (workSchedule && typeof workSchedule === 'object') {
+    parsedSchedule = workSchedule;
+  }
 
   let parsedHolidays: any[] = [];
   if (typeof holidays === 'string') {
@@ -72,7 +101,7 @@ export const calculateStandardWorkDays = (
   parsedHolidays.forEach(h => {
     const name = h.name || h.holiday_name || h.title || 'Ngày lễ';
     if (h.date) {
-      holidayMap.set(h.date, name);
+      holidayMap.set(String(h.date).slice(0, 10), name);
     }
     if (h.start_date && h.end_date) {
       const [hsY, hsM, hsD] = String(h.start_date).slice(0, 10).split('-').map(Number);
@@ -91,11 +120,37 @@ export const calculateStandardWorkDays = (
 
   while (cur <= end) {
     totalDays++;
-    const dayOfWeek = cur.getDay(); // 0 is Sunday
+    const jsDay = cur.getDay(); // 0 is Sunday, 1 is Monday ... 6 is Saturday
     const dStr = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
 
-    if (dayOfWeek === 0) {
-      sundaysCount++;
+    // Map jsDay to scheduleKey: 1..7 (1=Thứ 2, 6=Thứ 7, 7=Chủ Nhật)
+    const scheduleKey = jsDay === 0 ? '7' : String(jsDay);
+
+    let isWorkingDay = true;
+    if (parsedSchedule) {
+      const dayConf = parsedSchedule[scheduleKey] || parsedSchedule[Number(scheduleKey)];
+      if (!dayConf) {
+        isWorkingDay = (jsDay !== 0);
+      } else if (dayConf.active === false || dayConf.active === 'false' || dayConf.active === 0 || dayConf.active === '0') {
+        isWorkingDay = false;
+      } else if (dayConf.active === true || dayConf.active === 'true' || dayConf.active === 1 || dayConf.active === '1') {
+        isWorkingDay = true;
+      }
+    } else {
+      // Mặc định: Chủ Nhật là ngày nghỉ
+      if (jsDay === 0) {
+        isWorkingDay = false;
+      }
+    }
+
+    if (!isWorkingDay) {
+      if (jsDay === 0) {
+        sundaysCount++;
+      } else if (jsDay === 6) {
+        saturdaysCount++;
+      } else {
+        otherWeekendCount++;
+      }
     } else if (holidayMap.has(dStr)) {
       holidaysCount++;
       const hName = holidayMap.get(dStr)!;
@@ -106,8 +161,343 @@ export const calculateStandardWorkDays = (
     cur.setDate(cur.getDate() + 1);
   }
 
-  const standardDays = Math.max(0, totalDays - sundaysCount - holidaysCount);
-  return { standardDays, totalDays, sundaysCount, holidaysCount, holidayNames };
+  const weekendDaysCount = sundaysCount + saturdaysCount + otherWeekendCount;
+  const standardDays = Math.max(0, totalDays - weekendDaysCount - holidaysCount);
+
+  const weekendParts: string[] = [];
+  if (saturdaysCount > 0) weekendParts.push(`${saturdaysCount} T7`);
+  if (sundaysCount > 0) weekendParts.push(`${sundaysCount} CN`);
+  if (otherWeekendCount > 0) weekendParts.push(`${otherWeekendCount} ngày khác`);
+  const weekendDetails = weekendParts.length > 0 ? weekendParts.join(', ') : '0 ngày';
+
+  return {
+    standardDays,
+    totalDays,
+    weekendDaysCount,
+    sundaysCount,
+    saturdaysCount,
+    holidaysCount,
+    holidayNames,
+    weekendDetails
+  };
+};
+
+/**
+ * Tự động xác định kỳ xuất công mặc định:
+ * - Nếu ngày hiện tại <= 5 (từ ngày 1 đến ngày 5): tự động chọn tháng trước.
+ * - Nếu ngày hiện tại > 5 (từ ngày 6 trở đi): tự động chọn tháng hiện tại.
+ */
+export const getDefaultExportPeriod = () => {
+  const now = new Date();
+  const dayOfMonth = now.getDate();
+  let m = now.getMonth() + 1; // 1-12
+  let y = now.getFullYear();
+
+  if (dayOfMonth <= 5) {
+    m -= 1;
+    if (m === 0) {
+      m = 12;
+      y -= 1;
+    }
+  }
+
+  const lastDay = new Date(y, m, 0).getDate();
+  const fromDate = `${y}-${String(m).padStart(2, '0')}-01`;
+  const toDate = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+  return { month: m, year: y, fromDate, toDate };
+};
+
+/**
+ * Hàm dùng chung tính toán tổng hợp dữ liệu chấm công của toàn bộ nhân viên:
+ * - Chuẩn hóa thống nhất 100% giữa chức năng Xuất Excel và Đợt đối soát công nhân viên.
+ * - Tính toán chính xác: Công thực tế, Phép năm, Nghỉ bù, WFH (theo % hưởng lương), Nghỉ chế độ/khác, Nghỉ không lương.
+ * - Tổng công tính lương = Công thực tế + Phép năm + Nghỉ bù + Chế độ + WFH.
+ * - Thống kê đi trễ, về sớm, bù công, OT, trực đêm, trực cuối tuần.
+ */
+export const computeEmployeeAttendanceSummary = (
+  employees: any[],
+  allCheckIns: any[],
+  allLeaves: any[],
+  allShifts: any[],
+  standardDays: number,
+  departmentFilter: string = 'all'
+) => {
+  // 1. Filter employees by department if specified
+  let filteredEmployees = employees;
+  if (departmentFilter !== 'all') {
+    filteredEmployees = employees.filter((u: any) => {
+      const uDept = String(u.department || '').toLowerCase().trim();
+      const uTeam = String(u.team_name || '').toLowerCase().trim();
+      const target = departmentFilter.toLowerCase().trim();
+      return uDept === target || uTeam === target || String(u.team_id) === String(departmentFilter);
+    });
+  }
+
+  // Sort employees by department then full_name
+  filteredEmployees = [...filteredEmployees].sort((a, b) => {
+    const deptCompare = String(a.department || '').localeCompare(String(b.department || ''), 'vi');
+    if (deptCompare !== 0) return deptCompare;
+    return String(a.full_name || a.name || '').localeCompare(String(b.full_name || b.name || ''), 'vi');
+  });
+
+  const records: any[] = [];
+  const summaryRows: any[] = [];
+  const detailCheckInRows: any[] = [];
+  const detailLeaveRows: any[] = [];
+
+  let sumStdDays = 0;
+  let sumActDays = 0;
+  let sumAnnualLeave = 0;
+  let sumCompLeave = 0;
+  let sumSpecialLeave = 0;
+  let sumWfhDays = 0;
+  let sumUnpaidLeave = 0;
+  let sumLateCount = 0;
+  let sumLateMins = 0;
+  let sumEarlyMins = 0;
+  let sumSuppCount = 0;
+  let sumOtHours = 0;
+  let sumNightShifts = 0;
+  let sumWeekendShifts = 0;
+  let sumTotalPaidDays = 0;
+
+  filteredEmployees.forEach((emp: any, index: number) => {
+    const uid = Number(emp.id);
+    const empName = emp.full_name || emp.name || emp.username || `NV #${uid}`;
+    const empDept = emp.department || emp.team_name || 'Chung';
+    const empTitle = emp.job_title || emp.role || 'Nhân viên';
+    const empEmail = emp.email || '';
+
+    const uCheckIns = allCheckIns.filter((c: any) => Number(c.user_id) === uid);
+    const uLeaves = allLeaves.filter((l: any) => Number(l.user_id) === uid);
+    const uShifts = allShifts.filter((s: any) => Number(s.user_id) === uid);
+
+    // A. Leaves calculation
+    let annualDays = 0;
+    let compDays = 0;
+    let specialDays = 0;
+    let wfhDays = 0;
+    let unpaidDays = 0;
+
+    const waivedDates: string[] = [];
+    const halfLeaveDates = new Set<string>();
+
+    uLeaves.forEach((lv: any) => {
+      const isApproved = lv.status === 'approved' || lv.approved === 1;
+      if (!isApproved) return;
+
+      const days = Number(lv.total_days) || 1;
+      const type = lv.leave_type;
+      const sDate = lv.start_date_only || String(lv.start_date).slice(0, 10);
+      const eDate = lv.end_date_only || String(lv.end_date).slice(0, 10);
+
+      if (type === 'annual') {
+        annualDays += days;
+      } else if (type === 'compensatory') {
+        compDays += days;
+      } else if (type === 'remote_work') {
+        const rawRate = (lv.salary_rate !== undefined && lv.salary_rate !== null) ? Number(lv.salary_rate) : null;
+        let effRate = 50;
+        if (rawRate !== null && !isNaN(rawRate)) {
+          effRate = rawRate;
+        } else {
+          const rateMatch = String(lv.reason || '').match(/Tỷ lệ hưởng lương:\s*(\d+(\.\d+)?)%/i);
+          if (rateMatch) effRate = Number(rateMatch[1]);
+        }
+        wfhDays += Number((days * (effRate / 100)).toFixed(2));
+      } else if (type === 'unpaid') {
+        unpaidDays += days;
+      } else if (['special_paid', 'maternity', 'paternity', 'marriage', 'funeral', 'business_trip', 'sick'].includes(type)) {
+        specialDays += days;
+      } else if (type === 'late_early') {
+        waivedDates.push(sDate);
+      }
+
+      if (Number(lv.total_days) === 0.5) {
+        halfLeaveDates.add(sDate);
+      }
+
+      const rateStr = (lv.salary_rate !== undefined && lv.salary_rate !== null) ? `${lv.salary_rate}%` : '50%';
+      detailLeaveRows.push([
+        uid,
+        empName,
+        empDept,
+        type === 'annual' ? 'Phép năm' : (type === 'compensatory' ? 'Nghỉ bù' : (type === 'remote_work' ? `WFH (${rateStr})` : (type === 'unpaid' ? 'Không lương' : (type === 'late_early' ? 'Đi muộn/về sớm' : 'Chế độ/Khác')))),
+        sDate,
+        eDate,
+        days,
+        lv.status,
+        lv.reason || ''
+      ]);
+    });
+
+    // B. Check-ins & Work days
+    let actualDays = 0;
+    let lateCount = 0;
+    let lateMins = 0;
+    let earlyMins = 0;
+    let suppCount = 0;
+    const checkedDates = new Set<string>();
+
+    uCheckIns.forEach((ci: any) => {
+      const cDate = ci.check_in_date;
+      const isAppr = ci.status === 'approved';
+
+      if (isAppr && !checkedDates.has(cDate)) {
+        checkedDates.add(cDate);
+        if (halfLeaveDates.has(cDate)) {
+          actualDays += 0.5;
+        } else {
+          actualDays += 1.0;
+        }
+      }
+
+      const lMin = Number(ci.late_minutes) || 0;
+      const eMin = Number(ci.early_minutes) || 0;
+
+      if (lMin > 0 && !waivedDates.includes(cDate)) {
+        lateCount += 1;
+        lateMins += lMin;
+      }
+      if (eMin > 0) {
+        earlyMins += eMin;
+      }
+      if (!ci.selfie_url) {
+        suppCount += 1;
+      }
+
+      const checkOutStr = ci.check_out_time ? (ci.check_out_time.length > 8 ? ci.check_out_time.substring(11, 19) : ci.check_out_time) : '—';
+      detailCheckInRows.push([
+        cDate,
+        uid,
+        empName,
+        empDept,
+        ci.work_start_time || '08:00',
+        ci.check_in_time || '—',
+        checkOutStr,
+        ci.status === 'approved' ? 'Hợp lệ' : (ci.status === 'pending_approval' ? 'Chờ duyệt' : 'Từ chối'),
+        lMin,
+        eMin,
+        !ci.selfie_url ? 'Bổ sung công' : 'Chấm công GPS/Ảnh',
+        ci.reason || ''
+      ]);
+    });
+
+    // C. Shifts & OT
+    let otHours = 0;
+    let nightShifts = 0;
+    let weekendShifts = 0;
+
+    uShifts.forEach((s: any) => {
+      const isAppr = s.approved === 1 || s.status === 'approved';
+      if (!isAppr) return;
+
+      if (s.shift_type === 'overtime') {
+        otHours += Number(s.total_days) || 1;
+      } else if (s.shift_type === 'night') {
+        nightShifts += 1;
+      } else if (s.shift_type === 'weekend' || s.shift_type === 'holiday') {
+        weekendShifts += 1;
+      }
+    });
+
+    // D. Totals
+    const stdDays = standardDays;
+    const totalPaidDays = Number((actualDays + annualDays + compDays + specialDays + wfhDays).toFixed(1));
+    const diffDays = Number((totalPaidDays - stdDays).toFixed(1));
+
+    sumStdDays += stdDays;
+    sumActDays += actualDays;
+    sumAnnualLeave += annualDays;
+    sumCompLeave += compDays;
+    sumSpecialLeave += specialDays;
+    sumWfhDays += wfhDays;
+    sumUnpaidLeave += unpaidDays;
+    sumLateCount += lateCount;
+    sumLateMins += lateMins;
+    sumEarlyMins += earlyMins;
+    sumSuppCount += suppCount;
+    sumOtHours += otHours;
+    sumNightShifts += nightShifts;
+    sumWeekendShifts += weekendShifts;
+    sumTotalPaidDays += totalPaidDays;
+
+    records.push({
+      user_id: uid,
+      emp_name: empName,
+      emp_dept: empDept,
+      emp_title: empTitle,
+      emp_email: empEmail,
+      standard_days: stdDays,
+      actual_days: actualDays,
+      annual_leave_days: annualDays,
+      comp_leave_days: compDays,
+      special_leave_days: specialDays,
+      wfh_days: wfhDays,
+      unpaid_leave_days: unpaidDays,
+      total_paid_days: totalPaidDays,
+      diff_days: diffDays,
+      late_count: lateCount,
+      late_minutes: lateMins,
+      early_minutes: earlyMins,
+      supp_count: suppCount,
+      ot_hours: otHours,
+      night_shifts: nightShifts,
+      weekend_shifts: weekendShifts
+    });
+
+    summaryRows.push([
+      index + 1,
+      uid,
+      empName,
+      empDept,
+      empTitle,
+      empEmail,
+      stdDays,
+      actualDays,
+      annualDays,
+      compDays,
+      specialDays,
+      wfhDays,
+      unpaidDays,
+      lateCount,
+      lateMins,
+      earlyMins,
+      suppCount,
+      otHours,
+      nightShifts,
+      weekendShifts,
+      totalPaidDays,
+      diffDays >= 0 ? `+${diffDays}` : `${diffDays}`,
+      diffDays >= 0 ? 'Đủ công' : `Thiếu ${Math.abs(diffDays)} công`
+    ]);
+  });
+
+  return {
+    filteredEmployees,
+    records,
+    summaryRows,
+    detailCheckInRows,
+    detailLeaveRows,
+    totals: {
+      sumStdDays,
+      sumActDays,
+      sumAnnualLeave,
+      sumCompLeave,
+      sumSpecialLeave,
+      sumWfhDays,
+      sumUnpaidLeave,
+      sumLateCount,
+      sumLateMins,
+      sumEarlyMins,
+      sumSuppCount,
+      sumOtHours,
+      sumNightShifts,
+      sumWeekendShifts,
+      sumTotalPaidDays
+    }
+  };
 };
 
 export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean }) => {
@@ -1171,22 +1561,25 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     ['admin', 'superadmin', 'super_admin', 'director', 'hr', 'hr_manager', 'hrm', 'nhan_su'].includes(userRoleStr);
   const [showExportSummaryModal, setShowExportSummaryModal] = useState(false);
   const [exportMode, setExportMode] = useState<'month' | 'range'>('month');
-  const [exportMonth, setExportMonth] = useState<number>(() => currentMonth);
-  const [exportYear, setExportYear] = useState<number>(() => currentYear);
-  const [exportFromDate, setExportFromDate] = useState<string>(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-  });
-  const [exportToDate, setExportToDate] = useState<string>(() => {
-    const now = new Date();
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-  });
+  const initialExportPeriod = useMemo(() => getDefaultExportPeriod(), []);
+  const [exportMonth, setExportMonth] = useState<number>(() => initialExportPeriod.month);
+  const [exportYear, setExportYear] = useState<number>(() => initialExportPeriod.year);
+  const [exportFromDate, setExportFromDate] = useState<string>(() => initialExportPeriod.fromDate);
+  const [exportToDate, setExportToDate] = useState<string>(() => initialExportPeriod.toDate);
   const [exportDepartment, setExportDepartment] = useState<string>('all');
   const [exportStandardDays, setExportStandardDays] = useState<number>(26);
   const [isExportingExcel, setIsExportingExcel] = useState<boolean>(false);
 
-  // Auto-calculated standard working days based on Sundays and holiday schedules
+  const handleOpenExportSummaryModal = () => {
+    const period = getDefaultExportPeriod();
+    setExportMonth(period.month);
+    setExportYear(period.year);
+    setExportFromDate(period.fromDate);
+    setExportToDate(period.toDate);
+    setShowExportSummaryModal(true);
+  };
+
+  // Auto-calculated standard working days based on company work schedule and holiday schedules
   const autoCalculatedStandardInfo = useMemo(() => {
     let sDate = '';
     let eDate = '';
@@ -1198,14 +1591,353 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       sDate = exportFromDate;
       eDate = exportToDate;
     }
-    return calculateStandardWorkDays(sDate, eDate, sysSettings?.holiday_schedules);
-  }, [exportMode, exportMonth, exportYear, exportFromDate, exportToDate, sysSettings?.holiday_schedules]);
+    return calculateStandardWorkDays(sDate, eDate, sysSettings?.holiday_schedules, sysSettings?.global_work_schedule);
+  }, [exportMode, exportMonth, exportYear, exportFromDate, exportToDate, sysSettings?.holiday_schedules, sysSettings?.global_work_schedule]);
 
   useEffect(() => {
     if (autoCalculatedStandardInfo.standardDays > 0) {
       setExportStandardDays(autoCalculatedStandardInfo.standardDays);
     }
   }, [autoCalculatedStandardInfo.standardDays]);
+
+  // --- Attendance Confirmation Batches States (HR/Admin) ---
+  const [showConfirmationBatchModal, setShowConfirmationBatchModal] = useState<boolean>(false);
+  const [confModalTab, setConfModalTab] = useState<'create' | 'list'>('create');
+  const [confBatchTitle, setConfBatchTitle] = useState<string>('');
+  const [confPeriodMode, setConfPeriodMode] = useState<'month' | 'range'>('month');
+  const [confMonth, setConfMonth] = useState<number>(() => initialExportPeriod.month);
+  const [confYear, setConfYear] = useState<number>(() => initialExportPeriod.year);
+  const [confFromDate, setConfFromDate] = useState<string>(() => initialExportPeriod.fromDate);
+  const [confToDate, setConfToDate] = useState<string>(() => initialExportPeriod.toDate);
+  const [confStandardDays, setConfStandardDays] = useState<number>(22);
+  const [confDepartment, setConfDepartment] = useState<string>('all');
+  
+  // Default deadline: 48h from now rounded to hour
+  const getDefaultDeadline = () => {
+    const d = new Date();
+    d.setHours(d.getHours() + 48, 0, 0, 0);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+  const [confDeadlineAt, setConfDeadlineAt] = useState<string>(() => getDefaultDeadline());
+  const [confNote, setConfNote] = useState<string>('');
+  const [isCreatingBatch, setIsCreatingBatch] = useState<boolean>(false);
+
+  // Auto-calculated standard days for batch creation
+  const confAutoCalculatedStandardInfo = useMemo(() => {
+    let sDate = '';
+    let eDate = '';
+    if (confPeriodMode === 'month') {
+      sDate = `${confYear}-${String(confMonth).padStart(2, '0')}-01`;
+      const lastDay = new Date(confYear, confMonth, 0).getDate();
+      eDate = `${confYear}-${String(confMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    } else {
+      sDate = confFromDate;
+      eDate = confToDate;
+    }
+    return calculateStandardWorkDays(sDate, eDate, sysSettings?.holiday_schedules, sysSettings?.global_work_schedule);
+  }, [confPeriodMode, confMonth, confYear, confFromDate, confToDate, sysSettings?.holiday_schedules, sysSettings?.global_work_schedule]);
+
+  useEffect(() => {
+    if (confAutoCalculatedStandardInfo.standardDays > 0) {
+      setConfStandardDays(confAutoCalculatedStandardInfo.standardDays);
+    }
+  }, [confAutoCalculatedStandardInfo.standardDays]);
+
+  // Keep title updated when period changes
+  useEffect(() => {
+    if (confPeriodMode === 'month') {
+      setConfBatchTitle(`Bảng đối soát công tháng ${confMonth}/${confYear}`);
+    } else {
+      setConfBatchTitle(`Bảng đối soát công từ ${confFromDate} đến ${confToDate}`);
+    }
+  }, [confPeriodMode, confMonth, confYear, confFromDate, confToDate]);
+
+  // Quick preset deadline helper
+  const setQuickDeadlinePreset = (hoursAhead: number) => {
+    const d = new Date();
+    d.setHours(d.getHours() + hoursAhead, 0, 0, 0);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    setConfDeadlineAt(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`);
+  };
+
+  const setDeadlineDay5Preset = () => {
+    const d = new Date();
+    if (d.getDate() >= 5) {
+      d.setMonth(d.getMonth() + 1);
+    }
+    d.setDate(5);
+    d.setHours(17, 0, 0, 0);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    setConfDeadlineAt(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`);
+  };
+
+  // Batches monitoring & history
+  const [batchesList, setBatchesList] = useState<any[]>([]);
+  const [loadingBatches, setLoadingBatches] = useState<boolean>(false);
+  const [selectedBatchId, setSelectedBatchId] = useState<number | null>(null);
+  const [selectedBatchDetail, setSelectedBatchDetail] = useState<any | null>(null);
+  const [loadingBatchDetail, setLoadingBatchDetail] = useState<boolean>(false);
+  const [remindingBatchId, setRemindingBatchId] = useState<number | null>(null);
+  const [batchEmployeeFilter, setBatchEmployeeFilter] = useState<'all' | 'pending' | 'confirmed' | 'auto_confirmed' | 'disputed'>('all');
+
+  // --- Employee Pending Confirmation States ---
+  const [myConfirmation, setMyConfirmation] = useState<any | null>(null);
+  const [loadingMyConfirmation, setLoadingMyConfirmation] = useState<boolean>(false);
+  const [showDisputeModal, setShowDisputeModal] = useState<boolean>(false);
+  const [disputeReason, setDisputeReason] = useState<string>('');
+  const [submittingDispute, setSubmittingDispute] = useState<boolean>(false);
+  const [confirmingAttendance, setConfirmingAttendance] = useState<boolean>(false);
+  const [isConfirmationBannerCollapsed, setIsConfirmationBannerCollapsed] = useState<boolean>(false);
+
+  const fetchMyPendingConfirmation = async () => {
+    try {
+      setLoadingMyConfirmation(true);
+      const res = await api.get('/hrm/attendance-confirmations/my-pending');
+      if (res.data?.success && res.data?.data?.confirmation) {
+        setMyConfirmation(res.data.data.confirmation);
+      } else {
+        setMyConfirmation(null);
+      }
+    } catch (e) {
+      console.warn('Could not fetch my pending confirmation', e);
+    } finally {
+      setLoadingMyConfirmation(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMyPendingConfirmation();
+  }, [user?.id]);
+
+  const handleConfirmAttendance = async () => {
+    if (!myConfirmation) return;
+    try {
+      setConfirmingAttendance(true);
+      const res = await api.post('/hrm/attendance-confirmations/confirm', {
+        id: myConfirmation.id,
+        batch_id: myConfirmation.batch_id,
+        action: 'confirm'
+      });
+      if (res.data?.success) {
+        toast.success(t('Bạn đã xác nhận bảng công thành công!'));
+        await fetchMyPendingConfirmation();
+      } else {
+        toast.error(res.data?.message || t('Lỗi khi xác nhận bảng công'));
+      }
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || e.message || t('Lỗi khi xác nhận bảng công'));
+    } finally {
+      setConfirmingAttendance(false);
+    }
+  };
+
+  const handleSendDispute = async () => {
+    if (!myConfirmation) return;
+    if (!disputeReason.trim()) {
+      toast.error(t('Vui lòng nhập chi tiết nội dung khiếu nại hoặc ngày sai lệch'));
+      return;
+    }
+    try {
+      setSubmittingDispute(true);
+      const res = await api.post('/hrm/attendance-confirmations/confirm', {
+        id: myConfirmation.id,
+        batch_id: myConfirmation.batch_id,
+        action: 'dispute',
+        dispute_reason: disputeReason.trim()
+      });
+      if (res.data?.success) {
+        toast.success(t('Đã gửi phản hồi khiếu nại đến Phòng Nhân sự!'));
+        setShowDisputeModal(false);
+        setDisputeReason('');
+        await fetchMyPendingConfirmation();
+      } else {
+        toast.error(res.data?.message || t('Lỗi khi gửi khiếu nại'));
+      }
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || e.message || t('Lỗi khi gửi khiếu nại'));
+    } finally {
+      setSubmittingDispute(false);
+    }
+  };
+
+  const fetchBatchesList = async () => {
+    try {
+      setLoadingBatches(true);
+      const res = await api.get('/hrm/attendance-confirmations');
+      if (res.data?.success) {
+        setBatchesList(res.data.data?.batches || []);
+      }
+    } catch (e) {
+      console.warn('Error fetching batches:', e);
+    } finally {
+      setLoadingBatches(false);
+    }
+  };
+
+  const fetchBatchDetail = async (batchId: number) => {
+    try {
+      setSelectedBatchId(batchId);
+      setLoadingBatchDetail(true);
+      const res = await api.get(`/hrm/attendance-confirmations/detail?id=${batchId}`);
+      if (res.data?.success) {
+        setSelectedBatchDetail(res.data.data);
+      }
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || t('Không thể tải chi tiết đợt đối soát'));
+    } finally {
+      setLoadingBatchDetail(false);
+    }
+  };
+
+  const handleRemindPending = async (batchId: number) => {
+    try {
+      setRemindingBatchId(batchId);
+      const res = await api.post('/hrm/attendance-confirmations/remind', { batch_id: batchId });
+      if (res.data?.success) {
+        toast.success(res.data.message || t('Đã gửi thông báo nhắc nhở đến các nhân sự chưa xác nhận!'));
+        await fetchBatchesList();
+      } else {
+        toast.error(res.data?.message || t('Lỗi gửi nhắc nhở'));
+      }
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || e.message || t('Lỗi gửi nhắc nhở'));
+    } finally {
+      setRemindingBatchId(null);
+    }
+  };
+
+  const handleOpenConfirmationModal = () => {
+    const period = getDefaultExportPeriod();
+    setConfMonth(period.month);
+    setConfYear(period.year);
+    setConfFromDate(period.fromDate);
+    setConfToDate(period.toDate);
+    setConfBatchTitle(`Bảng đối soát công tháng ${period.month}/${period.year}`);
+    setConfDeadlineAt(getDefaultDeadline());
+    setShowConfirmationBatchModal(true);
+    fetchBatchesList();
+  };
+
+  const handleCreateConfirmationBatch = async () => {
+    let startDate = '';
+    let endDate = '';
+    if (confPeriodMode === 'month') {
+      startDate = `${confYear}-${String(confMonth).padStart(2, '0')}-01`;
+      const lastDay = new Date(confYear, confMonth, 0).getDate();
+      endDate = `${confYear}-${String(confMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    } else {
+      if (!confFromDate || !confToDate) {
+        toast.error(t('Vui lòng chọn đầy đủ ngày bắt đầu và kết thúc'));
+        return;
+      }
+      if (confFromDate > confToDate) {
+        toast.error(t('Ngày bắt đầu không được lớn hơn ngày kết thúc'));
+        return;
+      }
+      startDate = confFromDate;
+      endDate = confToDate;
+    }
+
+    if (!confBatchTitle.trim()) {
+      toast.error(t('Vui lòng nhập tiêu đề đợt đối soát'));
+      return;
+    }
+
+    if (!confDeadlineAt) {
+      toast.error(t('Vui lòng chọn hạn chót xác nhận'));
+      return;
+    }
+
+    const dTs = new Date(confDeadlineAt).getTime();
+    if (isNaN(dTs) || dTs <= Date.now()) {
+      toast.error(t('Hạn chót xác nhận phải lớn hơn thời điểm hiện tại'));
+      return;
+    }
+
+    setIsCreatingBatch(true);
+    const toastId = toast.loading(t('Đang tổng hợp dữ liệu chấm công và tạo đợt đối soát...'));
+
+    try {
+      const query = `check-ins&from=${startDate}&to=${endDate}&include_shifts=1&user_id=all`;
+      const res = await fetchAPI(query);
+      if (!res || !res.success) {
+        toast.error(res?.message || t('Không thể tải dữ liệu chấm công'), { id: toastId });
+        setIsCreatingBatch(false);
+        return;
+      }
+
+      const allCheckIns: any[] = res.data?.check_ins || (Array.isArray(res.data) ? res.data : []);
+      const allShifts: any[] = res.data?.shifts || [];
+      const allLeaves: any[] = res.data?.leaves || [];
+
+      let employees = consultants.length > 0 ? consultants : usersList;
+      if (!employees || employees.length === 0) {
+        const uRes = await fetchAPI('get_consultants&all=1');
+        if (uRes && uRes.success && Array.isArray(uRes.data) && uRes.data.length > 0) {
+          employees = uRes.data;
+          setConsultants(uRes.data);
+        } else {
+          const uRes2 = await fetchAPI('users?all=1');
+          if (uRes2 && uRes2.data && Array.isArray(uRes2.data)) {
+            employees = uRes2.data;
+            setUsersList(uRes2.data);
+          }
+        }
+      }
+
+      if (!employees || employees.length === 0) {
+        toast.error(t('Không tìm thấy danh sách nhân sự'), { id: toastId });
+        setIsCreatingBatch(false);
+        return;
+      }
+
+      const summaryResult = computeEmployeeAttendanceSummary(
+        employees,
+        allCheckIns,
+        allLeaves,
+        allShifts,
+        confStandardDays,
+        confDepartment
+      );
+
+      if (summaryResult.records.length === 0) {
+        toast.error(t('Không có nhân sự nào trong phạm vi phòng ban đã chọn'), { id: toastId });
+        setIsCreatingBatch(false);
+        return;
+      }
+
+      const payload = {
+        title: confBatchTitle.trim(),
+        period_type: confPeriodMode,
+        month: confPeriodMode === 'month' ? confMonth : null,
+        year: confPeriodMode === 'month' ? confYear : null,
+        from_date: startDate,
+        to_date: endDate,
+        standard_days: confStandardDays,
+        deadline_at: confDeadlineAt,
+        department: confDepartment,
+        note: confNote.trim(),
+        records: summaryResult.records
+      };
+
+      const createRes = await api.post('/hrm/attendance-confirmations', payload);
+      if (createRes.data?.success) {
+        toast.success(
+          t(`Đã phát hành đợt đối soát tới ${summaryResult.records.length} nhân viên thành công!`),
+          { id: toastId, duration: 5000 }
+        );
+        setConfModalTab('list');
+        await fetchBatchesList();
+      } else {
+        toast.error(createRes.data?.message || t('Lỗi khi khởi tạo đợt đối soát'), { id: toastId });
+      }
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || e.message || t('Lỗi khi khởi tạo đợt đối soát'), { id: toastId });
+    } finally {
+      setIsCreatingBatch(false);
+    }
+  };
 
   // Shift registration approval states
   const [registrations, setRegistrations] = useState<any[]>([]);
@@ -1766,232 +2498,38 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         return;
       }
 
-      // 3. Filter employees by department if specified
-      let filteredEmployees = employees;
-      if (exportDepartment !== 'all') {
-        filteredEmployees = employees.filter((u: any) => {
-          const uDept = String(u.department || '').toLowerCase().trim();
-          const uTeam = String(u.team_name || '').toLowerCase().trim();
-          const target = exportDepartment.toLowerCase().trim();
-          return uDept === target || uTeam === target || String(u.team_id) === String(exportDepartment);
-        });
-      }
+      // 3. Compute summaries using shared logic
+      const {
+        summaryRows,
+        detailCheckInRows,
+        detailLeaveRows,
+        totals
+      } = computeEmployeeAttendanceSummary(
+        employees,
+        allCheckIns,
+        allLeaves,
+        allShifts,
+        exportStandardDays,
+        exportDepartment
+      );
 
-      // Sort employees by department then full_name
-      filteredEmployees = [...filteredEmployees].sort((a, b) => {
-        const deptCompare = String(a.department || '').localeCompare(String(b.department || ''), 'vi');
-        if (deptCompare !== 0) return deptCompare;
-        return String(a.full_name || a.name || '').localeCompare(String(b.full_name || b.name || ''), 'vi');
-      });
-
-      // 4. Compute summaries
-      const summaryRows: any[] = [];
-      const detailCheckInRows: any[] = [];
-      const detailLeaveRows: any[] = [];
-
-      let sumStdDays = 0;
-      let sumActDays = 0;
-      let sumAnnualLeave = 0;
-      let sumCompLeave = 0;
-      let sumSpecialLeave = 0;
-      let sumWfhDays = 0;
-      let sumUnpaidLeave = 0;
-      let sumLateCount = 0;
-      let sumLateMins = 0;
-      let sumEarlyMins = 0;
-      let sumSuppCount = 0;
-      let sumOtHours = 0;
-      let sumNightShifts = 0;
-      let sumWeekendShifts = 0;
-      let sumTotalPaidDays = 0;
-
-      filteredEmployees.forEach((emp: any, index: number) => {
-        const uid = Number(emp.id);
-        const empName = emp.full_name || emp.name || emp.username || `NV #${uid}`;
-        const empDept = emp.department || emp.team_name || 'Chung';
-        const empTitle = emp.job_title || emp.role || 'Nhân viên';
-        const empEmail = emp.email || '';
-
-        const uCheckIns = allCheckIns.filter((c: any) => Number(c.user_id) === uid);
-        const uLeaves = allLeaves.filter((l: any) => Number(l.user_id) === uid);
-        const uShifts = allShifts.filter((s: any) => Number(s.user_id) === uid);
-
-        // A. Leaves calculation
-        let annualDays = 0;
-        let compDays = 0;
-        let specialDays = 0;
-        let wfhDays = 0;
-        let unpaidDays = 0;
-
-        const waivedDates: string[] = [];
-        const halfLeaveDates = new Set<string>();
-
-        uLeaves.forEach((lv: any) => {
-          const isApproved = lv.status === 'approved' || lv.approved === 1;
-          if (!isApproved) return;
-
-          const days = Number(lv.total_days) || 1;
-          const type = lv.leave_type;
-          const sDate = lv.start_date_only || String(lv.start_date).slice(0, 10);
-          const eDate = lv.end_date_only || String(lv.end_date).slice(0, 10);
-
-          if (type === 'annual') {
-            annualDays += days;
-          } else if (type === 'compensatory') {
-            compDays += days;
-          } else if (type === 'remote_work') {
-            const rawRate = (lv.salary_rate !== undefined && lv.salary_rate !== null) ? Number(lv.salary_rate) : null;
-            let effRate = 50;
-            if (rawRate !== null && !isNaN(rawRate)) {
-              effRate = rawRate;
-            } else {
-              const rateMatch = String(lv.reason || '').match(/Tỷ lệ hưởng lương:\s*(\d+(\.\d+)?)%/i);
-              if (rateMatch) effRate = Number(rateMatch[1]);
-            }
-            wfhDays += Number((days * (effRate / 100)).toFixed(2));
-          } else if (type === 'unpaid') {
-            unpaidDays += days;
-          } else if (['special_paid', 'maternity', 'paternity', 'marriage', 'funeral', 'business_trip', 'sick'].includes(type)) {
-            specialDays += days;
-          } else if (type === 'late_early') {
-            waivedDates.push(sDate);
-          }
-
-          if (Number(lv.total_days) === 0.5) {
-            halfLeaveDates.add(sDate);
-          }
-
-          const rateStr = (lv.salary_rate !== undefined && lv.salary_rate !== null) ? `${lv.salary_rate}%` : '50%';
-          detailLeaveRows.push([
-            uid,
-            empName,
-            empDept,
-            type === 'annual' ? 'Phép năm' : (type === 'compensatory' ? 'Nghỉ bù' : (type === 'remote_work' ? `WFH (${rateStr})` : (type === 'unpaid' ? 'Không lương' : (type === 'late_early' ? 'Đi muộn/về sớm' : 'Chế độ/Khác')))),
-            sDate,
-            eDate,
-            days,
-            lv.status,
-            lv.reason || ''
-          ]);
-        });
-
-        // B. Check-ins & Work days
-        let actualDays = 0;
-        let lateCount = 0;
-        let lateMins = 0;
-        let earlyMins = 0;
-        let suppCount = 0;
-        const checkedDates = new Set<string>();
-
-        uCheckIns.forEach((ci: any) => {
-          const cDate = ci.check_in_date;
-          const isAppr = ci.status === 'approved';
-
-          if (isAppr && !checkedDates.has(cDate)) {
-            checkedDates.add(cDate);
-            if (halfLeaveDates.has(cDate)) {
-              actualDays += 0.5;
-            } else {
-              actualDays += 1.0;
-            }
-          }
-
-          const lMin = Number(ci.late_minutes) || 0;
-          const eMin = Number(ci.early_minutes) || 0;
-
-          if (lMin > 0 && !waivedDates.includes(cDate)) {
-            lateCount += 1;
-            lateMins += lMin;
-          }
-          if (eMin > 0) {
-            earlyMins += eMin;
-          }
-          if (!ci.selfie_url) {
-            suppCount += 1;
-          }
-
-          const checkOutStr = ci.check_out_time ? (ci.check_out_time.length > 8 ? ci.check_out_time.substring(11, 19) : ci.check_out_time) : '—';
-          detailCheckInRows.push([
-            cDate,
-            uid,
-            empName,
-            empDept,
-            ci.work_start_time || '08:00',
-            ci.check_in_time || '—',
-            checkOutStr,
-            ci.status === 'approved' ? 'Hợp lệ' : (ci.status === 'pending_approval' ? 'Chờ duyệt' : 'Từ chối'),
-            lMin,
-            eMin,
-            !ci.selfie_url ? 'Bổ sung công' : 'Chấm công GPS/Ảnh',
-            ci.reason || ''
-          ]);
-        });
-
-        // C. Shifts & OT
-        let otHours = 0;
-        let nightShifts = 0;
-        let weekendShifts = 0;
-
-        uShifts.forEach((s: any) => {
-          const isAppr = s.approved === 1 || s.status === 'approved';
-          if (!isAppr) return;
-
-          if (s.shift_type === 'overtime') {
-            otHours += Number(s.total_days) || 1;
-          } else if (s.shift_type === 'night') {
-            nightShifts += 1;
-          } else if (s.shift_type === 'weekend' || s.shift_type === 'holiday') {
-            weekendShifts += 1;
-          }
-        });
-
-        // D. Totals
-        const stdDays = exportStandardDays;
-        const totalPaidDays = Number((actualDays + annualDays + compDays + specialDays + wfhDays).toFixed(1));
-        const diffDays = Number((totalPaidDays - stdDays).toFixed(1));
-
-        sumStdDays += stdDays;
-        sumActDays += actualDays;
-        sumAnnualLeave += annualDays;
-        sumCompLeave += compDays;
-        sumSpecialLeave += specialDays;
-        sumWfhDays += wfhDays;
-        sumUnpaidLeave += unpaidDays;
-        sumLateCount += lateCount;
-        sumLateMins += lateMins;
-        sumEarlyMins += earlyMins;
-        sumSuppCount += suppCount;
-        sumOtHours += otHours;
-        sumNightShifts += nightShifts;
-        sumWeekendShifts += weekendShifts;
-        sumTotalPaidDays += totalPaidDays;
-
-        summaryRows.push([
-          index + 1,
-          uid,
-          empName,
-          empDept,
-          empTitle,
-          empEmail,
-          stdDays,
-          actualDays,
-          annualDays,
-          compDays,
-          specialDays,
-          wfhDays,
-          unpaidDays,
-          lateCount,
-          lateMins,
-          earlyMins,
-          suppCount,
-          otHours,
-          nightShifts,
-          weekendShifts,
-          totalPaidDays,
-          diffDays >= 0 ? `+${diffDays}` : `${diffDays}`,
-          diffDays >= 0 ? 'Đủ công' : `Thiếu ${Math.abs(diffDays)} công`
-        ]);
-      });
+      const {
+        sumStdDays,
+        sumActDays,
+        sumAnnualLeave,
+        sumCompLeave,
+        sumSpecialLeave,
+        sumWfhDays,
+        sumUnpaidLeave,
+        sumLateCount,
+        sumLateMins,
+        sumEarlyMins,
+        sumSuppCount,
+        sumOtHours,
+        sumNightShifts,
+        sumWeekendShifts,
+        sumTotalPaidDays
+      } = totals;
 
       // 5. Create Workbook & Sheets (Dynamic import for speed)
       const XLSX = await import('xlsx');
@@ -5867,7 +6405,13 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                 <select
                   className="input"
                   value={exportMonth}
-                  onChange={(e) => setExportMonth(Number(e.target.value))}
+                  onChange={(e) => {
+                    const newM = Number(e.target.value);
+                    setExportMonth(newM);
+                    const lastDay = new Date(exportYear, newM, 0).getDate();
+                    setExportFromDate(`${exportYear}-${String(newM).padStart(2, '0')}-01`);
+                    setExportToDate(`${exportYear}-${String(newM).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`);
+                  }}
                   style={{
                     width: '100%',
                     padding: '8px 12px',
@@ -5891,7 +6435,13 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                 <select
                   className="input"
                   value={exportYear}
-                  onChange={(e) => setExportYear(Number(e.target.value))}
+                  onChange={(e) => {
+                    const newY = Number(e.target.value);
+                    setExportYear(newY);
+                    const lastDay = new Date(newY, exportMonth, 0).getDate();
+                    setExportFromDate(`${newY}-${String(exportMonth).padStart(2, '0')}-01`);
+                    setExportToDate(`${newY}-${String(exportMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`);
+                  }}
                   style={{
                     width: '100%',
                     padding: '8px 12px',
@@ -5902,7 +6452,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                     fontSize: '0.8125rem'
                   }}
                 >
-                  {[2024, 2025, 2026, 2027, 2028].map(y => (
+                  {[2024, 2025, 2026, 2027, 2028, 2029, 2030].map(y => (
                     <option key={y} value={y}>{y}</option>
                   ))}
                 </select>
@@ -6012,8 +6562,13 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
               />
               <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '2px', lineHeight: 1.35 }}>
                 <span style={{ color: '#059669', fontWeight: 600 }}>Tự động: </span>
-                {autoCalculatedStandardInfo.totalDays} ngày - {autoCalculatedStandardInfo.sundaysCount} CN
-                {autoCalculatedStandardInfo.holidaysCount > 0 ? ` - ${autoCalculatedStandardInfo.holidaysCount} Lễ (${autoCalculatedStandardInfo.holidayNames.join(', ')})` : ''}
+                {autoCalculatedStandardInfo.totalDays} ngày
+                {autoCalculatedStandardInfo.weekendDaysCount > 0
+                  ? ` - ${autoCalculatedStandardInfo.weekendDaysCount} ngày nghỉ (${autoCalculatedStandardInfo.weekendDetails})`
+                  : ''}
+                {autoCalculatedStandardInfo.holidaysCount > 0
+                  ? ` - ${autoCalculatedStandardInfo.holidaysCount} Lễ (${autoCalculatedStandardInfo.holidayNames.join(', ')})`
+                  : ''}
                 {` = `}<strong>{autoCalculatedStandardInfo.standardDays} công</strong>
               </div>
             </div>
@@ -6095,6 +6650,1355 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     );
   };
 
+  const renderEmployeeConfirmationBanner = () => {
+    if (!myConfirmation || loadingMyConfirmation) return null;
+
+    const status = myConfirmation.status;
+    const deadlineStr = myConfirmation.deadline_at ? formatDateTimeVN(myConfirmation.deadline_at) : '';
+
+    // A. Confirmed Status
+    if (status === 'confirmed') {
+      return (
+        <div style={{
+          backgroundColor: 'rgba(5, 150, 105, 0.07)',
+          border: '1px solid rgba(5, 150, 105, 0.35)',
+          borderRadius: isMobile ? '8px' : '12px',
+          padding: isMobile ? '8px 12px' : '10px 18px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: isMobile ? '8px' : '1rem',
+          boxShadow: '0 2px 8px rgba(5, 150, 105, 0.08)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{
+              width: '28px',
+              height: '28px',
+              borderRadius: '50%',
+              backgroundColor: '#059669',
+              color: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}>
+              <Check size={16} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, color: '#065f46', fontSize: isMobile ? '0.75rem' : '0.85rem' }}>
+                {t('Bạn đã xác nhận bảng công')} {myConfirmation.batch_title || ''}
+              </div>
+              <div style={{ fontSize: isMobile ? '0.68rem' : '0.75rem', color: '#047857', marginTop: '1px' }}>
+                {t('Xác nhận lúc:')} <strong>{formatDateTimeVN(myConfirmation.confirmed_at)}</strong> • {t('Tổng công tính lương:')} <strong>{myConfirmation.total_paid_days}</strong> công (Thực tế: {myConfirmation.actual_days}, Phép: {(Number(myConfirmation.annual_leave_days) + Number(myConfirmation.comp_leave_days) + Number(myConfirmation.special_leave_days)).toFixed(1)})
+              </div>
+            </div>
+          </div>
+          <span style={{
+            fontSize: '0.7rem',
+            fontWeight: 700,
+            padding: '3px 8px',
+            borderRadius: '12px',
+            backgroundColor: 'rgba(5, 150, 105, 0.15)',
+            color: '#065f46'
+          }}>
+            {t('ĐÃ XÁC NHẬN')}
+          </span>
+        </div>
+      );
+    }
+
+    // B. Auto Confirmed Status
+    if (status === 'auto_confirmed') {
+      return (
+        <div style={{
+          backgroundColor: 'rgba(37, 99, 235, 0.06)',
+          border: '1px solid rgba(37, 99, 235, 0.3)',
+          borderRadius: isMobile ? '8px' : '12px',
+          padding: isMobile ? '8px 12px' : '10px 18px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: isMobile ? '8px' : '1rem',
+          boxShadow: '0 2px 8px rgba(37, 99, 235, 0.08)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{
+              width: '28px',
+              height: '28px',
+              borderRadius: '50%',
+              backgroundColor: '#2563eb',
+              color: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}>
+              <Info size={16} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, color: '#1e40af', fontSize: isMobile ? '0.75rem' : '0.85rem' }}>
+                {t('Hệ thống đã tự động xác nhận bảng công')} {myConfirmation.batch_title || ''}
+              </div>
+              <div style={{ fontSize: isMobile ? '0.68rem' : '0.75rem', color: '#1d4ed8', marginTop: '1px' }}>
+                {t('Tự động chốt lúc:')} <strong>{formatDateTimeVN(myConfirmation.confirmed_at)}</strong> (do quá hạn chót) • {t('Tổng công:')} <strong>{myConfirmation.total_paid_days}</strong> công
+              </div>
+            </div>
+          </div>
+          <span style={{
+            fontSize: '0.7rem',
+            fontWeight: 700,
+            padding: '3px 8px',
+            borderRadius: '12px',
+            backgroundColor: 'rgba(37, 99, 235, 0.15)',
+            color: '#1e40af'
+          }}>
+            {t('TỰ ĐỘNG CHỐT')}
+          </span>
+        </div>
+      );
+    }
+
+    // C. Disputed Status
+    if (status === 'disputed') {
+      return (
+        <div style={{
+          backgroundColor: 'rgba(239, 68, 68, 0.06)',
+          border: '1px solid rgba(239, 68, 68, 0.35)',
+          borderRadius: isMobile ? '8px' : '12px',
+          padding: isMobile ? '8px 12px' : '10px 18px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: isMobile ? '8px' : '1rem',
+          boxShadow: '0 2px 8px rgba(239, 68, 68, 0.08)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{
+              width: '28px',
+              height: '28px',
+              borderRadius: '50%',
+              backgroundColor: '#ef4444',
+              color: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}>
+              <AlertTriangle size={16} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, color: '#991b1b', fontSize: isMobile ? '0.75rem' : '0.85rem' }}>
+                {t('Bạn đã báo sai lệch bảng công')} {myConfirmation.batch_title || ''}
+              </div>
+              <div style={{ fontSize: isMobile ? '0.68rem' : '0.75rem', color: '#b91c1c', marginTop: '1px' }}>
+                {t('Nội dung phản hồi:')} "<em>{myConfirmation.dispute_reason}</em>" — {t('Phòng Nhân sự đang rà soát xử lý.')}
+              </div>
+            </div>
+          </div>
+          <span style={{
+            fontSize: '0.7rem',
+            fontWeight: 700,
+            padding: '3px 8px',
+            borderRadius: '12px',
+            backgroundColor: 'rgba(239, 68, 68, 0.15)',
+            color: '#991b1b',
+            whiteSpace: 'nowrap'
+          }}>
+            {t('KHIẾU NẠI')}
+          </span>
+        </div>
+      );
+    }
+
+    // D. Pending Status - The Active Interactive Banner
+    return (
+      <div style={{
+        backgroundColor: 'var(--color-surface)',
+        border: '2px solid #2563eb',
+        borderRadius: isMobile ? '10px' : '14px',
+        boxShadow: '0 4px 20px rgba(37, 99, 235, 0.12)',
+        overflow: 'hidden',
+        marginBottom: isMobile ? '10px' : '1.25rem'
+      }}>
+        {/* Banner Top Header */}
+        <div style={{
+          background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
+          color: '#ffffff',
+          padding: isMobile ? '8px 12px' : '10px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '8px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <CheckSquare size={18} />
+            <span style={{ fontWeight: 800, fontSize: isMobile ? '0.8rem' : '0.925rem', letterSpacing: '0.02em' }}>
+              {t('ĐỐI SOÁT BẢNG CÔNG:')} {myConfirmation.batch_title}
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px',
+              backgroundColor: 'rgba(255, 255, 255, 0.2)',
+              backdropFilter: 'blur(4px)',
+              padding: '3px 10px',
+              borderRadius: '20px',
+              fontSize: isMobile ? '0.68rem' : '0.75rem',
+              fontWeight: 600
+            }}>
+              <Clock size={13} />
+              <span>{t('Hạn chót:')} <strong>{deadlineStr}</strong></span>
+              <span style={{ opacity: 0.85, fontSize: '0.65rem' }}>({t('Tự động chốt sau hạn')})</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsConfirmationBannerCollapsed(!isConfirmationBannerCollapsed)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#ffffff',
+                cursor: 'pointer',
+                padding: '2px',
+                display: 'flex',
+                alignItems: 'center'
+              }}
+              title={isConfirmationBannerCollapsed ? t('Mở rộng') : t('Thu gọn')}
+            >
+              <ChevronDown
+                size={16}
+                style={{
+                  transform: isConfirmationBannerCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.2s'
+                }}
+              />
+            </button>
+          </div>
+        </div>
+
+        {/* Banner Body */}
+        {!isConfirmationBannerCollapsed && (
+          <div style={{ padding: isMobile ? '10px 12px' : '14px 18px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {/* Description & HR note */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <p style={{ margin: 0, fontSize: isMobile ? '0.72rem' : '0.8rem', color: 'var(--color-text)', lineHeight: 1.45 }}>
+                {t('Phòng Nhân sự đã phát hành số liệu chấm công kỳ này để bạn kiểm tra. Vui lòng rà soát kỹ các chỉ số công, phép, WFH và giờ đi trễ trước khi xác nhận.')}
+              </p>
+              {myConfirmation.batch_note && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  backgroundColor: 'rgba(37, 99, 235, 0.05)',
+                  border: '1px dashed rgba(37, 99, 235, 0.25)',
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  fontSize: '0.75rem',
+                  color: '#1d4ed8'
+                }}>
+                  <Info size={14} style={{ flexShrink: 0 }} />
+                  <span><strong>{t('Lời nhắn từ HR:')}</strong> {myConfirmation.batch_note}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Metrics Grid */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(6, 1fr)',
+              gap: isMobile ? '6px' : '10px'
+            }}>
+              {/* Metric 1 */}
+              <div style={{
+                background: 'var(--color-bg-light)',
+                border: '1px solid var(--color-border-light)',
+                borderRadius: '8px',
+                padding: '8px 10px',
+                display: 'flex',
+                flexDirection: 'column'
+              }}>
+                <span style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                  {t('Công chuẩn kỳ')}
+                </span>
+                <span style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--color-text)', marginTop: '2px' }}>
+                  {myConfirmation.standard_days} <span style={{ fontSize: '0.7rem', fontWeight: 500 }}>công</span>
+                </span>
+              </div>
+
+              {/* Metric 2 */}
+              <div style={{
+                background: 'var(--color-bg-light)',
+                border: '1px solid var(--color-border-light)',
+                borderRadius: '8px',
+                padding: '8px 10px',
+                display: 'flex',
+                flexDirection: 'column'
+              }}>
+                <span style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                  {t('Công thực tế')}
+                </span>
+                <span style={{ fontSize: '1rem', fontWeight: 800, color: '#2563eb', marginTop: '2px' }}>
+                  {myConfirmation.actual_days} <span style={{ fontSize: '0.7rem', fontWeight: 500 }}>công</span>
+                </span>
+              </div>
+
+              {/* Metric 3: Phép năm & Nghỉ bù */}
+              <div style={{
+                background: 'var(--color-bg-light)',
+                border: '1px solid var(--color-border-light)',
+                borderRadius: '8px',
+                padding: '8px 10px',
+                display: 'flex',
+                flexDirection: 'column'
+              }}>
+                <span style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                  {t('Phép & Nghỉ bù')}
+                </span>
+                <span style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--color-text)', marginTop: '2px' }}>
+                  {(Number(myConfirmation.annual_leave_days) + Number(myConfirmation.comp_leave_days)).toFixed(1)} <span style={{ fontSize: '0.7rem', fontWeight: 500 }}>ngày</span>
+                </span>
+                <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>
+                  Phép: {myConfirmation.annual_leave_days} | Bù: {myConfirmation.comp_leave_days}
+                </span>
+              </div>
+
+              {/* Metric 4: WFH & Chế độ */}
+              <div style={{
+                background: 'var(--color-bg-light)',
+                border: '1px solid var(--color-border-light)',
+                borderRadius: '8px',
+                padding: '8px 10px',
+                display: 'flex',
+                flexDirection: 'column'
+              }}>
+                <span style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                  {t('WFH & Chế độ')}
+                </span>
+                <span style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--color-text)', marginTop: '2px' }}>
+                  {(Number(myConfirmation.wfh_days) + Number(myConfirmation.special_leave_days)).toFixed(1)} <span style={{ fontSize: '0.7rem', fontWeight: 500 }}>ngày</span>
+                </span>
+                <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>
+                  WFH: {myConfirmation.wfh_days} | Chế độ: {myConfirmation.special_leave_days}
+                </span>
+              </div>
+
+              {/* Metric 5: Đi trễ & Về sớm */}
+              <div style={{
+                background: 'var(--color-bg-light)',
+                border: '1px solid var(--color-border-light)',
+                borderRadius: '8px',
+                padding: '8px 10px',
+                display: 'flex',
+                flexDirection: 'column'
+              }}>
+                <span style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                  {t('Đi trễ / Về sớm')}
+                </span>
+                <span style={{ fontSize: '0.95rem', fontWeight: 800, color: Number(myConfirmation.late_minutes) > 0 ? '#ef4444' : 'var(--color-text)', marginTop: '2px' }}>
+                  {myConfirmation.late_count} <span style={{ fontSize: '0.7rem', fontWeight: 500 }}>lần</span> ({myConfirmation.late_minutes}p)
+                </span>
+                <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>
+                  Về sớm: {myConfirmation.early_minutes}p | OT: {myConfirmation.ot_hours}h
+                </span>
+              </div>
+
+              {/* Metric 6: TỔNG CÔNG TÍNH LƯƠNG (HIGHLIGHT) */}
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(5, 150, 105, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%)',
+                border: '1.5px solid #059669',
+                borderRadius: '8px',
+                padding: '8px 10px',
+                display: 'flex',
+                flexDirection: 'column'
+              }}>
+                <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#065f46', textTransform: 'uppercase' }}>
+                  {t('TỔNG CÔNG TÍNH LƯƠNG')}
+                </span>
+                <span style={{ fontSize: '1.25rem', fontWeight: 900, color: '#059669', marginTop: '2px' }}>
+                  {myConfirmation.total_paid_days} <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>công</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Actions Bar */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '10px',
+              paddingTop: '6px',
+              borderTop: '1px solid var(--color-border-light)'
+            }}>
+              <span style={{ fontSize: isMobile ? '0.68rem' : '0.75rem', color: '#b91c1c', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Clock size={13} />
+                <span>{t('Quá hạn chót lúc')} <strong>{deadlineStr}</strong>, {t('hệ thống sẽ tự động xác nhận số liệu trên.')}</span>
+              </span>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowDisputeModal(true)}
+                  disabled={confirmingAttendance}
+                  className="btn outline"
+                  style={{
+                    borderRadius: '7px',
+                    padding: isMobile ? '6px 10px' : '7px 14px',
+                    fontSize: isMobile ? '0.72rem' : '0.8125rem',
+                    fontWeight: 700,
+                    color: '#ef4444',
+                    borderColor: 'rgba(239, 68, 68, 0.4)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <AlertTriangle size={14} />
+                  <span>{t('Báo sai lệch / Khiếu nại')}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleConfirmAttendance}
+                  disabled={confirmingAttendance}
+                  className="btn hover-lift"
+                  style={{
+                    borderRadius: '7px',
+                    padding: isMobile ? '6px 14px' : '7px 20px',
+                    fontSize: isMobile ? '0.72rem' : '0.8125rem',
+                    fontWeight: 700,
+                    backgroundColor: '#059669',
+                    color: '#ffffff',
+                    border: 'none',
+                    cursor: confirmingAttendance ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 2px 6px rgba(5, 150, 105, 0.3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px'
+                  }}
+                >
+                  {confirmingAttendance ? (
+                    <>
+                      <RefreshCw size={14} className="spin" />
+                      <span>{t('Đang xác nhận...')}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check size={16} />
+                      <span>{t('Xác nhận đúng công')}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderDisputeModal = () => {
+    if (!showDisputeModal || !myConfirmation) return null;
+
+    return (
+      <CustomModal
+        isOpen={showDisputeModal}
+        onClose={() => setShowDisputeModal(false)}
+        title={t('Phản Hồi Sai Lệch Dữ Liệu Bảng Công')}
+        width="540px"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '4px 0' }}>
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(220, 38, 38, 0.03) 100%)',
+            border: '1px solid rgba(239, 68, 68, 0.2)',
+            borderRadius: '10px',
+            padding: '12px 14px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px'
+          }}>
+            <div style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '8px',
+              background: '#ef4444',
+              color: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}>
+              <AlertTriangle size={20} />
+            </div>
+            <div>
+              <h4 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                {myConfirmation.batch_title}
+              </h4>
+              <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                {t('Tổng công hiện ghi nhận: ')}<strong>{myConfirmation.total_paid_days} công</strong> (Thực tế: {myConfirmation.actual_days}, Phép: {(Number(myConfirmation.annual_leave_days) + Number(myConfirmation.comp_leave_days) + Number(myConfirmation.special_leave_days)).toFixed(1)})
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)' }}>
+              {t('Chi tiết sai lệch cần điều chỉnh')} <span style={{ color: '#ef4444' }}>*</span>
+            </label>
+            <textarea
+              rows={4}
+              value={disputeReason}
+              onChange={(e) => setDisputeReason(e.target.value)}
+              placeholder={t('Ghi rõ ngày bị sai, lý do (ví dụ: ngày 12/10 quên check-out đã có xác nhận của trưởng nhóm, ngày 18/10 đi công tác...)')}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                border: '1px solid var(--color-border)',
+                background: 'var(--color-surface)',
+                color: 'var(--color-text)',
+                fontSize: '0.8125rem',
+                outline: 'none',
+                resize: 'vertical'
+              }}
+            />
+            <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+              {t('Sau khi bạn gửi khiếu nại, thông báo sẽ được chuyển trực tiếp tới Bộ phận Nhân sự & Ban Quản lý qua Bell, Zalo, Telegram và Email để kiểm tra giải quyết.')}
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
+            <button
+              type="button"
+              onClick={() => setShowDisputeModal(false)}
+              disabled={submittingDispute}
+              className="btn outline"
+              style={{ borderRadius: '8px', padding: '8px 16px', fontSize: '0.8125rem' }}
+            >
+              {t('Đóng')}
+            </button>
+            <button
+              type="button"
+              onClick={handleSendDispute}
+              disabled={submittingDispute}
+              className="btn hover-lift"
+              style={{
+                borderRadius: '8px',
+                padding: '8px 20px',
+                fontSize: '0.8125rem',
+                fontWeight: 700,
+                backgroundColor: '#ef4444',
+                color: '#ffffff',
+                border: 'none',
+                cursor: submittingDispute ? 'not-allowed' : 'pointer'
+              }}
+            >
+              {submittingDispute ? t('Đang gửi...') : t('Gửi Khiếu Nại Tới HR')}
+            </button>
+          </div>
+        </div>
+      </CustomModal>
+    );
+  };
+
+  const renderConfirmationBatchesModal = () => {
+    if (!showConfirmationBatchModal) return null;
+
+    return (
+      <CustomModal
+        isOpen={showConfirmationBatchModal}
+        onClose={() => {
+          setShowConfirmationBatchModal(false);
+          setSelectedBatchDetail(null);
+        }}
+        title={t('Đối Soát Bảng Công Nhân Viên & Tự Động Xác Nhận')}
+        width="880px"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '4px 0' }}>
+          {/* Tabs bar */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            background: 'var(--color-bg-light)',
+            padding: '3px',
+            borderRadius: '10px',
+            border: '1px solid var(--color-border)',
+            gap: '4px'
+          }}>
+            <button
+              type="button"
+              onClick={() => {
+                setConfModalTab('create');
+                setSelectedBatchDetail(null);
+              }}
+              style={{
+                padding: '8px 12px',
+                borderRadius: '7px',
+                border: 'none',
+                background: confModalTab === 'create' ? 'var(--color-surface)' : 'transparent',
+                color: confModalTab === 'create' ? '#2563eb' : 'var(--color-text-muted)',
+                fontWeight: confModalTab === 'create' ? 700 : 500,
+                fontSize: '0.8125rem',
+                cursor: 'pointer',
+                boxShadow: confModalTab === 'create' ? '0 1px 3px rgba(0, 0, 0, 0.08)' : 'none',
+                transition: 'all 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px'
+              }}
+            >
+              <Send size={15} />
+              <span>{t('Khởi Tạo Đợt Đối Soát Mới')}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setConfModalTab('list');
+                fetchBatchesList();
+              }}
+              style={{
+                padding: '8px 12px',
+                borderRadius: '7px',
+                border: 'none',
+                background: confModalTab === 'list' ? 'var(--color-surface)' : 'transparent',
+                color: confModalTab === 'list' ? '#2563eb' : 'var(--color-text-muted)',
+                fontWeight: confModalTab === 'list' ? 700 : 500,
+                fontSize: '0.8125rem',
+                cursor: 'pointer',
+                boxShadow: confModalTab === 'list' ? '0 1px 3px rgba(0, 0, 0, 0.08)' : 'none',
+                transition: 'all 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px'
+              }}
+            >
+              <CheckSquare size={15} />
+              <span>{t('Lịch Sử Đợt & Tiến Độ')} ({batchesList.length})</span>
+            </button>
+          </div>
+
+          {/* TAB 1: CREATE NEW BATCH */}
+          {confModalTab === 'create' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              {/* Info banner */}
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.08) 0%, rgba(59, 130, 246, 0.04) 100%)',
+                border: '1px solid rgba(37, 99, 235, 0.2)',
+                borderRadius: '10px',
+                padding: '12px 14px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px'
+              }}>
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '8px',
+                  background: '#2563eb',
+                  color: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  <Send size={20} />
+                </div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                    {t('Gửi Số Liệu Đối Soát Bảng Công Cho Nhân Viên')}
+                  </h4>
+                  <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: 'var(--color-text-muted)', lineHeight: 1.4 }}>
+                    {t('Hệ thống tổng hợp snapshot công toàn bộ nhân viên, gửi thông báo qua Bell, Zalo, Telegram & Email kèm hạn chót. Nếu nhân viên không phản hồi trước hạn, hệ thống sẽ TỰ ĐỘNG XÁC NHẬN số liệu để tính lương.')}
+                  </p>
+                </div>
+              </div>
+
+              {/* Title & Department */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '12px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                    {t('Tiêu đề đợt đối soát')} <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    className="input"
+                    value={confBatchTitle}
+                    onChange={(e) => setConfBatchTitle(e.target.value)}
+                    placeholder={t('Ví dụ: Bảng đối soát công tháng 10/2026')}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--color-border)',
+                      fontSize: '0.8125rem'
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                    {t('Phòng ban áp dụng')}
+                  </label>
+                  <select
+                    className="input"
+                    value={confDepartment}
+                    onChange={(e) => setConfDepartment(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--color-border)',
+                      fontSize: '0.8125rem'
+                    }}
+                  >
+                    <option value="all">{t('Toàn bộ công ty (Tất cả nhân sự)')}</option>
+                    {departmentList.map(dept => (
+                      <option key={dept} value={dept}>{dept}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Period selection */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                  {t('Kỳ công đối soát')}
+                </label>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  background: 'var(--color-bg-light)',
+                  padding: '3px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--color-border)',
+                  gap: '4px',
+                  marginBottom: '6px'
+                }}>
+                  <button
+                    type="button"
+                    onClick={() => setConfPeriodMode('month')}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      background: confPeriodMode === 'month' ? 'var(--color-surface)' : 'transparent',
+                      color: confPeriodMode === 'month' ? '#2563eb' : 'var(--color-text-muted)',
+                      fontWeight: confPeriodMode === 'month' ? 700 : 500,
+                      fontSize: '0.75rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {t('Theo Tháng')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfPeriodMode('range')}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      background: confPeriodMode === 'range' ? 'var(--color-surface)' : 'transparent',
+                      color: confPeriodMode === 'range' ? '#2563eb' : 'var(--color-text-muted)',
+                      fontWeight: confPeriodMode === 'range' ? 700 : 500,
+                      fontSize: '0.75rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {t('Theo Khoảng Ngày')}
+                  </button>
+                </div>
+
+                {confPeriodMode === 'month' ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{t('Tháng')}</label>
+                      <select
+                        className="input"
+                        value={confMonth}
+                        onChange={(e) => setConfMonth(Number(e.target.value))}
+                        style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', fontSize: '0.8125rem' }}
+                      >
+                        {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                          <option key={m} value={m}>{t(`Tháng ${m}`)}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{t('Năm')}</label>
+                      <select
+                        className="input"
+                        value={confYear}
+                        onChange={(e) => setConfYear(Number(e.target.value))}
+                        style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', fontSize: '0.8125rem' }}
+                      >
+                        {[2024, 2025, 2026, 2027, 2028, 2029, 2030].map(y => (
+                          <option key={y} value={y}>{y}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{t('Từ ngày')}</label>
+                      <VietnameseDateInput
+                        value={confFromDate}
+                        onChange={val => setConfFromDate(val)}
+                        inputStyle={{ width: '100%', padding: '8px 12px', borderRadius: '8px', fontSize: '0.8125rem' }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{t('Đến ngày')}</label>
+                      <VietnameseDateInput
+                        value={confToDate}
+                        onChange={val => setConfToDate(val)}
+                        inputStyle={{ width: '100%', padding: '8px 12px', borderRadius: '8px', fontSize: '0.8125rem' }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Standard days & calculation breakdown */}
+              <div style={{
+                background: 'var(--color-bg-light)',
+                borderRadius: '8px',
+                padding: '10px 14px',
+                border: '1px solid var(--color-border-light)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px'
+              }}>
+                <div>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                    {t('Công chuẩn áp dụng: ')}<strong>{confStandardDays} ngày</strong>
+                  </span>
+                  <p style={{ margin: '2px 0 0', fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                    Tổng {confAutoCalculatedStandardInfo.totalDays} ngày - {confAutoCalculatedStandardInfo.weekendDaysCount} ngày nghỉ tuần ({confAutoCalculatedStandardInfo.weekendDetails}) - {confAutoCalculatedStandardInfo.holidaysCount} ngày lễ
+                  </p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{t('Chỉnh sửa:')}</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="1"
+                    max="31"
+                    value={confStandardDays}
+                    onChange={(e) => setConfStandardDays(Number(e.target.value))}
+                    style={{
+                      width: '64px',
+                      padding: '5px 8px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--color-border)',
+                      textAlign: 'center',
+                      fontWeight: 700,
+                      fontSize: '0.8125rem'
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Deadline & Quick presets */}
+              <div style={{
+                border: '1.5px solid #2563eb',
+                borderRadius: '10px',
+                padding: '12px 14px',
+                background: 'rgba(37, 99, 235, 0.03)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+                  <label style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#1d4ed8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Clock size={16} />
+                    <span>{t('Hạn chót xác nhận (Sau hạn sẽ TỰ ĐỘNG XÁC NHẬN)')}</span> <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+
+                  {/* Preset quick buttons */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>{t('Chọn nhanh:')}</span>
+                    <button
+                      type="button"
+                      onClick={() => setQuickDeadlinePreset(24)}
+                      className="btn outline"
+                      style={{ padding: '2px 7px', fontSize: '0.68rem', borderRadius: '4px', height: '22px' }}
+                    >
+                      +24h
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setQuickDeadlinePreset(48)}
+                      className="btn outline"
+                      style={{ padding: '2px 7px', fontSize: '0.68rem', borderRadius: '4px', height: '22px' }}
+                    >
+                      +48h
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setQuickDeadlinePreset(72)}
+                      className="btn outline"
+                      style={{ padding: '2px 7px', fontSize: '0.68rem', borderRadius: '4px', height: '22px' }}
+                    >
+                      +72h
+                    </button>
+                    <button
+                      type="button"
+                      onClick={setDeadlineDay5Preset}
+                      className="btn outline"
+                      style={{ padding: '2px 7px', fontSize: '0.68rem', borderRadius: '4px', height: '22px', color: '#059669', borderColor: '#059669' }}
+                    >
+                      17:00 Ngày 5
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <input
+                    type="datetime-local"
+                    value={confDeadlineAt}
+                    onChange={(e) => setConfDeadlineAt(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--color-border)',
+                      fontSize: '0.85rem',
+                      fontWeight: 600,
+                      background: 'var(--color-surface)',
+                      color: 'var(--color-text)'
+                    }}
+                  />
+                </div>
+                <span style={{ fontSize: '0.72rem', color: '#b91c1c' }}>
+                  {t('⚠️ Quá thời hạn chót trên, hệ thống sẽ tự động duyệt toàn bộ nhân viên chưa xác nhận để chốt bảng lương.')}
+                </span>
+              </div>
+
+              {/* Note / Message */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>
+                  {t('Ghi chú / Lời dặn gửi kèm thông báo tới nhân viên')}
+                </label>
+                <textarea
+                  rows={2}
+                  value={confNote}
+                  onChange={(e) => setConfNote(e.target.value)}
+                  placeholder={t('Ví dụ: Đề nghị toàn thể nhân sự kiểm tra kỹ số ngày công, phép và các khoản đi trễ trước hạn chót...')}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--color-border)',
+                    fontSize: '0.8125rem',
+                    background: 'var(--color-surface)',
+                    color: 'var(--color-text)'
+                  }}
+                />
+              </div>
+
+              {/* Submit Button */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '4px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmationBatchModal(false)}
+                  disabled={isCreatingBatch}
+                  className="btn outline"
+                  style={{ borderRadius: '8px', padding: '8px 16px', fontSize: '0.8125rem' }}
+                >
+                  {t('Hủy')}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCreateConfirmationBatch}
+                  disabled={isCreatingBatch}
+                  className="btn hover-lift"
+                  style={{
+                    borderRadius: '8px',
+                    padding: '8px 22px',
+                    fontSize: '0.8125rem',
+                    fontWeight: 700,
+                    backgroundColor: '#2563eb',
+                    color: '#ffffff',
+                    border: 'none',
+                    cursor: isCreatingBatch ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 2px 8px rgba(37, 99, 235, 0.3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  {isCreatingBatch ? (
+                    <>
+                      <RefreshCw size={14} className="spin" />
+                      <span>{t('Đang tổng hợp & gửi thông báo...')}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send size={15} />
+                      <span>{t('Phát Hành Đợt Đối Soát & Gửi Thông Báo')}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: MONITOR & HISTORY */}
+          {confModalTab === 'list' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {selectedBatchDetail ? (
+                /* Subview: Batch detail & employee responses */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  {/* Header with back button */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    paddingBottom: '8px',
+                    borderBottom: '1px solid var(--color-border-light)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedBatchDetail(null)}
+                        className="btn outline"
+                        style={{ padding: '4px 10px', fontSize: '0.75rem', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                      >
+                        <ArrowLeft size={13} />
+                        <span>{t('Quay lại danh sách')}</span>
+                      </button>
+                      <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-text)' }}>
+                        {selectedBatchDetail.batch?.title}
+                      </h4>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                        {t('Hạn chót:')} <strong>{formatDateTimeVN(selectedBatchDetail.batch?.deadline_at)}</strong>
+                      </span>
+                      {selectedBatchDetail.batch?.status === 'active' && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemindPending(selectedBatchDetail.batch?.id)}
+                          disabled={remindingBatchId === selectedBatchDetail.batch?.id}
+                          className="btn hover-lift"
+                          style={{
+                            padding: '4px 12px',
+                            fontSize: '0.75rem',
+                            borderRadius: '6px',
+                            fontWeight: 700,
+                            backgroundColor: '#f59e0b',
+                            color: '#ffffff',
+                            border: 'none',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <Bell size={13} />
+                          <span>{t('Nhắc nhở người chưa xác nhận')}</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Filter chips */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    {[
+                      { id: 'all', label: t('Tất cả'), count: selectedBatchDetail.records?.length || 0 },
+                      { id: 'confirmed', label: t('Đã xác nhận'), count: (selectedBatchDetail.records || []).filter((r: any) => r.status === 'confirmed').length },
+                      { id: 'auto_confirmed', label: t('Tự động chốt'), count: (selectedBatchDetail.records || []).filter((r: any) => r.status === 'auto_confirmed').length },
+                      { id: 'disputed', label: t('Khiếu nại sai lệch'), count: (selectedBatchDetail.records || []).filter((r: any) => r.status === 'disputed').length, isRed: true },
+                      { id: 'pending', label: t('Đang chờ'), count: (selectedBatchDetail.records || []).filter((r: any) => r.status === 'pending').length }
+                    ].map(f => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => setBatchEmployeeFilter(f.id as any)}
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: '16px',
+                          border: 'none',
+                          fontSize: '0.75rem',
+                          fontWeight: batchEmployeeFilter === f.id ? 700 : 500,
+                          backgroundColor: batchEmployeeFilter === f.id 
+                            ? (f.isRed ? '#ef4444' : '#2563eb')
+                            : 'var(--color-bg-light)',
+                          color: batchEmployeeFilter === f.id 
+                            ? '#ffffff' 
+                            : (f.isRed && f.count > 0 ? '#ef4444' : 'var(--color-text)'),
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <span>{f.label}</span>
+                        <span style={{
+                          padding: '1px 5px',
+                          borderRadius: '10px',
+                          fontSize: '0.65rem',
+                          backgroundColor: batchEmployeeFilter === f.id ? 'rgba(255, 255, 255, 0.25)' : 'rgba(0, 0, 0, 0.08)'
+                        }}>
+                          {f.count}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Employees Table */}
+                  <div style={{ maxHeight: '420px', overflowY: 'auto', border: '1px solid var(--color-border-light)', borderRadius: '8px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+                      <thead>
+                        <tr style={{ background: 'var(--color-bg-light)', borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
+                          <th style={{ padding: '8px 10px', fontWeight: 700 }}>{t('Nhân viên')}</th>
+                          <th style={{ padding: '8px 8px', fontWeight: 700 }}>{t('Phòng ban')}</th>
+                          <th style={{ padding: '8px 8px', fontWeight: 700, textAlign: 'center' }}>{t('Công chuẩn')}</th>
+                          <th style={{ padding: '8px 8px', fontWeight: 700, textAlign: 'center' }}>{t('Thực tế')}</th>
+                          <th style={{ padding: '8px 8px', fontWeight: 700, textAlign: 'center' }}>{t('Phép & Bù')}</th>
+                          <th style={{ padding: '8px 8px', fontWeight: 700, textAlign: 'center' }}>{t('WFH')}</th>
+                          <th style={{ padding: '8px 8px', fontWeight: 700, textAlign: 'center' }}>{t('Trễ (phút)')}</th>
+                          <th style={{ padding: '8px 8px', fontWeight: 700, textAlign: 'center', color: '#059669' }}>{t('Tổng công')}</th>
+                          <th style={{ padding: '8px 10px', fontWeight: 700, textAlign: 'center' }}>{t('Trạng thái')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(selectedBatchDetail.records || [])
+                          .filter((r: any) => batchEmployeeFilter === 'all' || r.status === batchEmployeeFilter)
+                          .map((r: any) => (
+                            <React.Fragment key={r.id}>
+                              <tr style={{
+                                borderBottom: r.status === 'disputed' && r.dispute_reason ? 'none' : '1px solid var(--color-border-light)',
+                                backgroundColor: r.status === 'disputed' ? 'rgba(239, 68, 68, 0.04)' : 'transparent'
+                              }}>
+                                <td style={{ padding: '8px 10px', fontWeight: 600 }}>
+                                  <div>{r.emp_name}</div>
+                                  <div style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>{r.emp_email || r.emp_title}</div>
+                                </td>
+                                <td style={{ padding: '8px 8px', color: 'var(--color-text-muted)' }}>{r.emp_dept}</td>
+                                <td style={{ padding: '8px 8px', textAlign: 'center' }}>{r.standard_days}</td>
+                                <td style={{ padding: '8px 8px', textAlign: 'center', fontWeight: 700, color: '#2563eb' }}>{r.actual_days}</td>
+                                <td style={{ padding: '8px 8px', textAlign: 'center' }}>
+                                  {(Number(r.annual_leave_days) + Number(r.comp_leave_days) + Number(r.special_leave_days)).toFixed(1)}
+                                </td>
+                                <td style={{ padding: '8px 8px', textAlign: 'center' }}>{r.wfh_days}</td>
+                                <td style={{ padding: '8px 8px', textAlign: 'center', color: Number(r.late_minutes) > 0 ? '#ef4444' : 'inherit' }}>
+                                  {r.late_minutes > 0 ? `${r.late_count} (${r.late_minutes}p)` : '0'}
+                                </td>
+                                <td style={{ padding: '8px 8px', textAlign: 'center', fontWeight: 800, color: '#059669', fontSize: '0.85rem' }}>
+                                  {r.total_paid_days}
+                                </td>
+                                <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                  {r.status === 'confirmed' && (
+                                    <span style={{ padding: '2px 8px', borderRadius: '10px', backgroundColor: 'rgba(5, 150, 105, 0.15)', color: '#065f46', fontSize: '0.68rem', fontWeight: 700 }}>
+                                      {t('Đã xác nhận')}
+                                    </span>
+                                  )}
+                                  {r.status === 'auto_confirmed' && (
+                                    <span style={{ padding: '2px 8px', borderRadius: '10px', backgroundColor: 'rgba(37, 99, 235, 0.15)', color: '#1e40af', fontSize: '0.68rem', fontWeight: 700 }}>
+                                      {t('Tự động chốt')}
+                                    </span>
+                                  )}
+                                  {r.status === 'pending' && (
+                                    <span style={{ padding: '2px 8px', borderRadius: '10px', backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#b45309', fontSize: '0.68rem', fontWeight: 700 }}>
+                                      {t('Chờ xác nhận')}
+                                    </span>
+                                  )}
+                                  {r.status === 'disputed' && (
+                                    <span style={{ padding: '2px 8px', borderRadius: '10px', backgroundColor: 'rgba(239, 68, 68, 0.18)', color: '#991b1b', fontSize: '0.68rem', fontWeight: 700 }}>
+                                      {t('Khiếu nại')}
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                              {r.status === 'disputed' && r.dispute_reason && (
+                                <tr style={{ borderBottom: '1px solid var(--color-border-light)', backgroundColor: 'rgba(239, 68, 68, 0.04)' }}>
+                                  <td colSpan={9} style={{ padding: '4px 10px 8px' }}>
+                                    <div style={{
+                                      backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                                      borderLeft: '3px solid #ef4444',
+                                      padding: '6px 10px',
+                                      borderRadius: '0 6px 6px 0',
+                                      fontSize: '0.72rem',
+                                      color: '#991b1b'
+                                    }}>
+                                      <strong>{t('Lý do khiếu nại của nhân viên:')}</strong> "{r.dispute_reason}"
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                /* Batches list overview */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {loadingBatches ? (
+                    <div style={{ padding: '30px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+                      <RefreshCw size={24} className="spin" style={{ margin: '0 auto 8px' }} />
+                      <div>{t('Đang tải danh sách các đợt đối soát...')}</div>
+                    </div>
+                  ) : batchesList.length === 0 ? (
+                    <div style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+                      <FileSpreadsheet size={32} style={{ margin: '0 auto 8px', opacity: 0.5 }} />
+                      <div style={{ fontWeight: 600 }}>{t('Chưa có đợt đối soát bảng công nào')}</div>
+                      <p style={{ fontSize: '0.75rem', marginTop: '4px' }}>
+                        {t('Hãy chuyển sang tab "Khởi Tạo Đợt Đối Soát Mới" để phát hành đợt đối soát đầu tiên.')}
+                      </p>
+                    </div>
+                  ) : (
+                    batchesList.map((b: any) => {
+                      const isExpired = b.deadline_at && new Date(b.deadline_at).getTime() <= Date.now();
+                      const hasDisputes = Number(b.disputed_count) > 0;
+                      return (
+                        <div
+                          key={b.id}
+                          style={{
+                            border: hasDisputes ? '1.5px solid #ef4444' : '1px solid var(--color-border)',
+                            borderRadius: '10px',
+                            padding: '12px 14px',
+                            backgroundColor: 'var(--color-surface)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '10px',
+                            boxShadow: hasDisputes ? '0 2px 10px rgba(239, 68, 68, 0.1)' : '0 1px 3px rgba(0, 0, 0, 0.03)'
+                          }}
+                        >
+                          {/* Batch Header */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--color-text)' }}>
+                                  {b.title}
+                                </span>
+                                <span style={{
+                                  fontSize: '0.68rem',
+                                  padding: '2px 7px',
+                                  borderRadius: '10px',
+                                  fontWeight: 700,
+                                  backgroundColor: isExpired ? 'rgba(100, 116, 139, 0.15)' : 'rgba(5, 150, 105, 0.15)',
+                                  color: isExpired ? '#475569' : '#065f46'
+                                }}>
+                                  {isExpired ? t('Đã Chốt') : t('Đang Mở')}
+                                </span>
+                              </div>
+                              <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                                {b.period_type === 'month' ? `Tháng ${b.month}/${b.year}` : `${b.from_date} đến ${b.to_date}`} • Công chuẩn: <strong>{b.standard_days}</strong> ngày • Tạo bởi: {b.creator_name || 'Admin'}
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ fontSize: '0.72rem', color: isExpired ? '#64748b' : '#b91c1c', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <Clock size={13} />
+                                <span>{t('Hạn chót:')} <strong>{formatDateTimeVN(b.deadline_at)}</strong></span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => fetchBatchDetail(b.id)}
+                                className="btn outline hover-lift"
+                                style={{
+                                  padding: '4px 12px',
+                                  fontSize: '0.75rem',
+                                  borderRadius: '6px',
+                                  fontWeight: 700,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}
+                              >
+                                <Eye size={13} />
+                                <span>{t('Xem chi tiết')}</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Stats Counters Grid */}
+                          <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(5, 1fr)',
+                            gap: '8px',
+                            background: 'var(--color-bg-light)',
+                            padding: '8px 10px',
+                            borderRadius: '8px'
+                          }}>
+                            <div>
+                              <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>{t('Tổng nhân sự')}</div>
+                              <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-text)' }}>{b.total_count}</div>
+                            </div>
+
+                            <div>
+                              <div style={{ fontSize: '0.65rem', color: '#059669' }}>{t('Đã xác nhận')}</div>
+                              <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#059669' }}>{b.confirmed_count}</div>
+                            </div>
+
+                            <div>
+                              <div style={{ fontSize: '0.65rem', color: '#2563eb' }}>{t('Tự động chốt')}</div>
+                              <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#2563eb' }}>{b.auto_confirmed_count}</div>
+                            </div>
+
+                            <div>
+                              <div style={{ fontSize: '0.65rem', color: hasDisputes ? '#ef4444' : 'var(--color-text-muted)', fontWeight: hasDisputes ? 700 : 500 }}>
+                                {t('Khiếu nại sai lệch')}
+                              </div>
+                              <div style={{ fontSize: '0.95rem', fontWeight: 800, color: hasDisputes ? '#ef4444' : 'var(--color-text)' }}>
+                                {b.disputed_count}
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <div>
+                                <div style={{ fontSize: '0.65rem', color: '#f59e0b' }}>{t('Đang chờ')}</div>
+                                <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#f59e0b' }}>{b.pending_count}</div>
+                              </div>
+                              {!isExpired && Number(b.pending_count) > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemindPending(b.id)}
+                                  disabled={remindingBatchId === b.id}
+                                  title={t('Gửi thông báo nhắc nhở đến các nhân viên đang chờ')}
+                                  style={{
+                                    border: 'none',
+                                    backgroundColor: '#f59e0b',
+                                    color: '#ffffff',
+                                    borderRadius: '50%',
+                                    width: '24px',
+                                    height: '24px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  <Bell size={12} />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </CustomModal>
+    );
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', paddingBottom: isMobile ? '120px' : '3rem' }}>
       {/* Header */}
@@ -6142,33 +8046,63 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
           {/* Right Action Buttons */}
           <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '4px' : '8px', flexShrink: 0 }}>
             {canExportSummary && (
-              <button
-                type="button"
-                onClick={() => setShowExportSummaryModal(true)}
-                className="btn hover-lift"
-                style={{
-                  borderRadius: '6px',
-                  height: isMobile ? '26px' : '34px',
-                  padding: isMobile ? '0 7px' : '0 13px',
-                  fontWeight: 700,
-                  fontSize: isMobile ? '0.68rem' : '0.8125rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: isMobile ? '2px' : '5px',
-                  backgroundColor: '#059669',
-                  color: '#ffffff',
-                  border: 'none',
-                  cursor: 'pointer',
-                  boxShadow: '0 1px 4px rgba(5, 150, 105, 0.25)',
-                  transition: 'all 0.2s',
-                  flexShrink: 0,
-                  whiteSpace: 'nowrap'
-                }}
-                title={t('Tải bảng tổng hợp công toàn công ty (Excel)')}
-              >
-                <Download size={isMobile ? 12 : 14} />
-                <span style={{ display: isMobile ? 'none' : 'inline' }}>{t('Xuất bảng công')}</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={handleOpenConfirmationModal}
+                  className="btn hover-lift"
+                  style={{
+                    borderRadius: '6px',
+                    height: isMobile ? '26px' : '34px',
+                    padding: isMobile ? '0 7px' : '0 13px',
+                    fontWeight: 700,
+                    fontSize: isMobile ? '0.68rem' : '0.8125rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: isMobile ? '2px' : '5px',
+                    backgroundColor: '#2563eb',
+                    color: '#ffffff',
+                    border: 'none',
+                    cursor: 'pointer',
+                    boxShadow: '0 1px 4px rgba(37, 99, 235, 0.25)',
+                    transition: 'all 0.2s',
+                    flexShrink: 0,
+                    whiteSpace: 'nowrap'
+                  }}
+                  title={t('Quản lý các đợt đối soát bảng công và tự động xác nhận')}
+                >
+                  <CheckSquare size={isMobile ? 12 : 14} />
+                  <span style={{ display: isMobile ? 'none' : 'inline' }}>{t('Đối soát công')}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleOpenExportSummaryModal}
+                  className="btn hover-lift"
+                  style={{
+                    borderRadius: '6px',
+                    height: isMobile ? '26px' : '34px',
+                    padding: isMobile ? '0 7px' : '0 13px',
+                    fontWeight: 700,
+                    fontSize: isMobile ? '0.68rem' : '0.8125rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: isMobile ? '2px' : '5px',
+                    backgroundColor: '#059669',
+                    color: '#ffffff',
+                    border: 'none',
+                    cursor: 'pointer',
+                    boxShadow: '0 1px 4px rgba(5, 150, 105, 0.25)',
+                    transition: 'all 0.2s',
+                    flexShrink: 0,
+                    whiteSpace: 'nowrap'
+                  }}
+                  title={t('Tải bảng tổng hợp công toàn công ty (Excel)')}
+                >
+                  <Download size={isMobile ? 12 : 14} />
+                  <span style={{ display: isMobile ? 'none' : 'inline' }}>{t('Xuất bảng công')}</span>
+                </button>
+              </>
             )}
 
             {/* Red Standalone Button for Leave/Attendance Requests */}
@@ -6202,6 +8136,9 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       )}
 
 
+
+      {/* Employee Attendance Confirmation Banner */}
+      {renderEmployeeConfirmationBanner()}
 
       {/* Stats row - Ultra-compact Micro-Cards */}
       {/* Stats row - Ultra-compact Micro-Cards (Employee-Centric) */}
@@ -9986,6 +11923,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       {renderCreateLeaveModal()}
       {renderMenuModal()}
       {renderExportSummaryModal()}
+      {renderConfirmationBatchesModal()}
+      {renderDisputeModal()}
     </div>
   );
 };

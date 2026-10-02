@@ -2111,6 +2111,94 @@ class NotificationService {
                                     "Vui lòng kiểm tra lịch sử ký trên hệ thống CRM."
                 ];
 
+            case 'ATTENDANCE_CONFIRMATION_REQUESTED':
+                $recipients = self::getRecipientById($db, (int)($payload['user_id'] ?? 0));
+                $empGreetingName = !empty($payload['user_name']) ? $payload['user_name'] : (!empty($recipients[0]['full_name']) ? $recipients[0]['full_name'] : $userName);
+                $titleText = $payload['title'] ?? 'Bảng công';
+                $deadline = $payload['deadline'] ?? '';
+                $deadlineFmt = !empty($deadline) ? date('H:i d/m/Y', strtotime($deadline)) : 'sớm nhất';
+                $noteText = !empty($payload['note']) ? "\n• Ghi chú HR: " . $payload['note'] : "";
+                
+                $stmtFe = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'frontend_url' LIMIT 1");
+                $frontendUrl = $stmtFe ? ($stmtFe->fetchColumn() ?: 'https://myerp.ideas.edu.vn') : 'https://myerp.ideas.edu.vn';
+
+                return [
+                    'recipients' => $recipients,
+                    'title' => "Đối soát bảng công: {$titleText}",
+                    'body' => "Phòng Nhân sự đã gửi đối soát {$titleText}. Hạn chót xác nhận: {$deadlineFmt}. Vui lòng kiểm tra và xác nhận trước hạn để tránh tự động xác nhận.",
+                    'type' => "attendance",
+                    'link' => "/attendance",
+                    'zalo_msg' => "📋 [ ĐỐI SOÁT BẢNG CÔNG: {$titleText} ]\n\n"
+                        . "Xin chào {$empGreetingName},\n"
+                        . "Phòng Nhân sự đã phát hành số liệu đối soát {$titleText}.\n"
+                        . "⏰ Hạn chót xác nhận: {$deadlineFmt}\n"
+                        . "⚠️ Lưu ý: Sau thời gian trên, hệ thống sẽ TỰ ĐỘNG XÁC NHẬN số liệu công hiện tại để tính lương.\n"
+                        . $noteText . "\n\n"
+                        . "👉 Vui lòng đăng nhập MYERP để kiểm tra và xác nhận:\n"
+                        . rtrim($frontendUrl, '/') . "/attendance",
+                    'tg_msg' => "📋 <b>[ ĐỐI SOÁT BẢNG CÔNG: {$titleText} ]</b>\n\n"
+                        . "Xin chào <b>{$empGreetingName}</b>,\n"
+                        . "Phòng Nhân sự đã phát hành số liệu đối soát <b>{$titleText}</b>.\n"
+                        . "⏰ Hạn chót xác nhận: <code>{$deadlineFmt}</code>\n"
+                        . "⚠️ <i>Sau thời hạn trên, hệ thống sẽ TỰ ĐỘNG XÁC NHẬN số liệu công để chốt lương.</i>\n"
+                        . (!empty($noteText) ? "<i>{$noteText}</i>\n" : "") . "\n"
+                        . "👉 <a href=\"" . rtrim($frontendUrl, '/') . "/attendance\"><b>Bấm vào đây để kiểm tra & xác nhận công ngay</b></a>",
+                    'email_subject' => "[IDEAS] Yêu cầu đối soát bảng công: {$titleText} (Hạn chót: {$deadlineFmt})",
+                    'email_title' => "ĐỐI SOÁT BẢNG CÔNG: {$titleText}",
+                    'email_content' => "Chào <strong>{$empGreetingName}</strong>,<br/><br/>"
+                        . "Phòng Nhân sự đã gửi bảng tổng hợp dữ liệu chấm công kỳ <strong>{$titleText}</strong> để bạn đối soát.<br/>"
+                        . "⏰ <strong>Hạn chót xác nhận:</strong> <span style=\"color: #BD1D2D; font-weight: bold;\">{$deadlineFmt}</span>.<br/>"
+                        . "⚠️ <em>Lưu ý: Nếu quá hạn chót trên mà chưa có phản hồi, hệ thống sẽ <strong>tự động xác nhận</strong> số liệu công hiện tại để tiến hành tính lương.</em><br/>"
+                        . (!empty($payload['note']) ? "<br/><strong>Lời nhắn từ HR:</strong> <em>\"" . htmlspecialchars($payload['note']) . "\"</em><br/>" : "")
+                        . "<br/><a href=\"" . rtrim($frontendUrl, '/') . "/attendance\" target=\"_blank\" style=\"display: inline-block; background-color: #059669; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: bold; font-size: 14px;\">KIỂM TRA &amp; XÁC NHẬN CÔNG</a>"
+                ];
+
+            case 'ATTENDANCE_CONFIRMATION_DISPUTED':
+                $stmtHr = $db->prepare("
+                    SELECT u.id, u.email, u.role, u.full_name,
+                           COALESCE(NULLIF(NULLIF(TRIM(u.zalo_chat_id), 'chưa liên kết'), 'Chưa liên kết'), NULLIF(NULLIF(TRIM(c.zalo_chat_id), 'chưa liên kết'), 'Chưa liên kết')) AS zalo_chat_id,
+                           COALESCE(NULLIF(NULLIF(TRIM(u.telegram_chat_id), 'chưa liên kết'), 'Chưa liên kết'), NULLIF(NULLIF(TRIM(c.telegram_chat_id), 'chưa liên kết'), 'Chưa liên kết')) AS telegram_chat_id
+                    FROM users u
+                    LEFT JOIN consultants c ON (u.email = c.email OR u.id = c.id)
+                    WHERE u.tenant_id = ? AND u.is_active = 1 AND u.role IN ('hr', 'admin', 'superadmin', 'director')
+                ");
+                $stmtHr->execute([$tenantId]);
+                $recipients = $stmtHr->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                $titleText = $payload['title'] ?? 'Bảng công';
+                $empName = $payload['employee_name'] ?? 'Nhân viên';
+                $empDept = $payload['department'] ?? '';
+                $reason = $payload['reason'] ?? 'Không có lý do chi tiết';
+                
+                $stmtFe = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'frontend_url' LIMIT 1");
+                $frontendUrl = $stmtFe ? ($stmtFe->fetchColumn() ?: 'https://myerp.ideas.edu.vn') : 'https://myerp.ideas.edu.vn';
+
+                return [
+                    'recipients' => $recipients,
+                    'title' => "[Khiếu nại công] {$empName} phản hồi kỳ {$titleText}",
+                    'body' => "Nhân viên {$empName} ({$empDept}) đã báo sai lệch công kỳ {$titleText}: \"{$reason}\"",
+                    'type' => "attendance",
+                    'link' => "/attendance",
+                    'zalo_msg' => "⚠️ [ KHIẾU NẠI SAI LỆCH CÔNG ]\n\n"
+                        . "• Nhân viên: {$empName} ({$empDept})\n"
+                        . "• Kỳ công: {$titleText}\n"
+                        . "• Lý do khiếu nại: {$reason}\n\n"
+                        . "👉 Vui lòng truy cập Quản lý Chấm công để rà soát:\n"
+                        . rtrim($frontendUrl, '/') . "/attendance",
+                    'tg_msg' => "⚠️ <b>[ KHIẾU NẠI SAI LỆCH CÔNG ]</b>\n\n"
+                        . "• Nhân viên: <b>{$empName}</b> ({$empDept})\n"
+                        . "• Kỳ công: <b>{$titleText}</b>\n"
+                        . "• Lý do phản hồi: <i>{$reason}</i>\n\n"
+                        . "👉 <a href=\"" . rtrim($frontendUrl, '/') . "/attendance\"><b>Xem &amp; xử lý khiếu nại trên MYERP</b></a>",
+                    'email_subject' => "[MYERP] [Khiếu nại công] {$empName} phản hồi số liệu kỳ {$titleText}",
+                    'email_title' => "PHẢN HỒI SAI LỆCH CÔNG: {$titleText}",
+                    'email_content' => "Chào Bộ phận Nhân sự &amp; Ban Quản lý,<br/><br/>"
+                        . "Nhân viên <strong>{$empName}</strong> (Phòng ban: <strong>{$empDept}</strong>) đã gửi báo cáo sai lệch công kỳ <strong>{$titleText}</strong>.<br/>"
+                        . "<strong>Nội dung phản hồi / giải trình:</strong><br/>"
+                        . "<blockquote style=\"background: #fef2f2; border-left: 4px solid #ef4444; padding: 10px 14px; margin: 10px 0; font-style: italic;\">" . htmlspecialchars($reason) . "</blockquote>"
+                        . "Vui lòng kiểm tra đối soát lại nhật ký chấm công và điều chỉnh kịp thời trước khi chốt bảng lương.<br/><br/>"
+                        . "<a href=\"" . rtrim($frontendUrl, '/') . "/attendance\" target=\"_blank\" style=\"display: inline-block; background-color: #ef4444; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: bold; font-size: 14px;\">XỬ LÝ KHIẾU NẠI CÔNG</a>"
+                ];
+
             case 'PO_WAITING_APPROVAL':
                 $recipients = self::getRecipientById($db, (int)($payload['target_user_id'] ?? 0));
                 $poNumber = $payload['po_number'] ?? (!empty($payload['po_id']) ? "PO-" . $payload['po_id'] : '');

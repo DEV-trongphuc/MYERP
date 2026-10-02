@@ -2774,3 +2774,71 @@ ALTER TABLE `lms_student_campaign_allocations` ADD INDEX `idx_lms_stud_camp_allo
 ALTER TABLE `lms_student_campaign_allocations` ADD INDEX `idx_lms_stud_camp_alloc_campaign` (`campaign_id`);
 ALTER TABLE `quyen_truy_cap` ADD INDEX `idx_quyen_truy_cap_invited_by` (`invited_by`);
 
+--
+-- Table structure for table `attendance_confirmation_batches`
+--
+
+CREATE TABLE IF NOT EXISTS `attendance_confirmation_batches` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `tenant_id` int(11) NOT NULL DEFAULT 1,
+  `title` varchar(255) NOT NULL,
+  `period_type` enum('month','range') NOT NULL DEFAULT 'month',
+  `month` int(11) DEFAULT NULL,
+  `year` int(11) DEFAULT NULL,
+  `from_date` date NOT NULL,
+  `to_date` date NOT NULL,
+  `standard_days` decimal(4,1) NOT NULL DEFAULT 22.0,
+  `deadline_at` datetime NOT NULL,
+  `department` varchar(100) NOT NULL DEFAULT 'all',
+  `note` text DEFAULT NULL,
+  `created_by` int(11) NOT NULL,
+  `status` enum('active','completed','cancelled') NOT NULL DEFAULT 'active',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_tenant_status` (`tenant_id`,`status`),
+  KEY `idx_period` (`year`,`month`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Table structure for table `attendance_confirmations`
+--
+
+CREATE TABLE IF NOT EXISTS `attendance_confirmations` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `tenant_id` int(11) NOT NULL DEFAULT 1,
+  `batch_id` int(11) NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `emp_name` varchar(150) DEFAULT NULL,
+  `emp_dept` varchar(100) DEFAULT NULL,
+  `emp_title` varchar(100) DEFAULT NULL,
+  `standard_days` decimal(4,1) NOT NULL DEFAULT 0.0,
+  `actual_days` decimal(4,1) NOT NULL DEFAULT 0.0,
+  `annual_leave_days` decimal(4,1) NOT NULL DEFAULT 0.0,
+  `comp_leave_days` decimal(4,1) NOT NULL DEFAULT 0.0,
+  `special_leave_days` decimal(4,1) NOT NULL DEFAULT 0.0,
+  `wfh_days` decimal(4,1) NOT NULL DEFAULT 0.0,
+  `unpaid_leave_days` decimal(4,1) NOT NULL DEFAULT 0.0,
+  `total_paid_days` decimal(4,1) NOT NULL DEFAULT 0.0,
+  `late_count` int(11) NOT NULL DEFAULT 0,
+  `late_minutes` int(11) NOT NULL DEFAULT 0,
+  `early_minutes` int(11) NOT NULL DEFAULT 0,
+  `ot_hours` decimal(4,1) NOT NULL DEFAULT 0.0,
+  `night_shifts` int(11) NOT NULL DEFAULT 0,
+  `weekend_shifts` int(11) NOT NULL DEFAULT 0,
+  `supp_count` int(11) NOT NULL DEFAULT 0,
+  `status` enum('pending','confirmed','auto_confirmed','disputed') NOT NULL DEFAULT 'pending',
+  `dispute_reason` text DEFAULT NULL,
+  `confirmed_at` datetime DEFAULT NULL,
+  `confirmed_by_type` enum('employee','auto','admin') DEFAULT NULL,
+  `ip_address` varchar(50) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_batch_user` (`batch_id`,`user_id`),
+  KEY `idx_user_status` (`user_id`,`status`),
+  KEY `idx_batch_status` (`batch_id`,`status`),
+  CONSTRAINT `fk_att_conf_batch` FOREIGN KEY (`batch_id`) REFERENCES `attendance_confirmation_batches` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+

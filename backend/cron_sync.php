@@ -4178,6 +4178,46 @@ function sendHolidayReturnReminders($conn) {
     }
 }
 
+/**
+ * Tự động xác nhận các bản ghi đối soát công quá hạn chót
+ */
+function autoConfirmExpiredAttendanceBatches($conn) {
+    try {
+        $now = date('Y-m-d H:i:s');
+        $stmt = $conn->prepare("
+            UPDATE attendance_confirmations ac
+            JOIN attendance_confirmation_batches b ON ac.batch_id = b.id
+            SET ac.status = 'auto_confirmed',
+                ac.confirmed_at = b.deadline_at,
+                ac.confirmed_by_type = 'auto'
+            WHERE ac.status = 'pending' AND b.deadline_at <= ?
+        ");
+        if ($stmt) {
+            $stmt->bind_param("s", $now);
+            $stmt->execute();
+            $aff = $stmt->affected_rows;
+            $stmt->close();
+            if ($aff > 0) {
+                logSync("Auto-confirmed $aff expired attendance confirmation records past deadline ($now).");
+            }
+        }
+
+        // Cập nhật các batch hoàn tất
+        $conn->query("
+            UPDATE attendance_confirmation_batches b
+            SET b.status = 'completed'
+            WHERE b.status = 'active'
+              AND b.deadline_at <= '{$now}'
+              AND NOT EXISTS (
+                  SELECT 1 FROM attendance_confirmations ac
+                  WHERE ac.batch_id = b.id AND ac.status IN ('pending', 'disputed')
+              )
+        ");
+    } catch (Throwable $e) {
+        logSync("Error running autoConfirmExpiredAttendanceBatches: " . $e->getMessage());
+    }
+}
+
 logSync("Cronjob finished.");
 
 if (!defined('DIAG_TOKEN')) {
@@ -4238,6 +4278,15 @@ if (!defined('DIAG_TOKEN')) {
         }
     } catch (Exception $e) {
         logSync("Error running sendHolidayReturnReminders: " . $e->getMessage());
+    }
+
+    // --- Tự động xác nhận các đợt đối soát công quá hạn chót (Auto-Confirm) ---
+    try {
+        if (function_exists('autoConfirmExpiredAttendanceBatches')) {
+            autoConfirmExpiredAttendanceBatches($conn);
+        }
+    } catch (Exception $e) {
+        logSync("Error running autoConfirmExpiredAttendanceBatches: " . $e->getMessage());
     }
 
     // --- Chạy kiểm tra cảnh báo SLA duyệt đi trễ ---
