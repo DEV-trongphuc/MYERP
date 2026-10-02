@@ -6295,6 +6295,9 @@ switch ($action) {
         $currentUserId = (int)($decodedUser['id'] ?? 0);
         $where = "";
 
+        if (isset($_GET['active_only']) && ($_GET['active_only'] == '1' || $_GET['active_only'] === 'true')) {
+            $where = "WHERE (c.is_active = 1 OR c.is_active IS NULL) AND (a.is_active = 1 OR a.is_active IS NULL) AND LOWER(COALESCE(c.status, a.status, 'active')) NOT IN ('inactive', 'locked', 'resigned', 'terminated', 'disabled', 'nghi_viec', 'tam_nghi', 'suspended', 'khoa')";
+        }
 
         $res = $conn->query("
             SELECT 
@@ -6313,8 +6316,9 @@ switch ($action) {
                 c.leave_end, 
                 c.vacation_mode, 
                 c.overtime_mode,
-                c.status,
-                IF(c.is_active = 0 OR a.is_active = 0, 0, COALESCE(c.is_active, a.is_active, 1)) AS is_active,
+                COALESCE(NULLIF(c.status, ''), a.status, 'active') AS status,
+                IF(c.is_active = 0 OR a.is_active = 0 OR c.status = 'inactive' OR a.status = 'inactive', 0, COALESCE(a.is_active, c.is_active, 1)) AS is_active,
+                COALESCE(NULLIF(c.department, ''), t.name, '') AS department,
                 c.last_login_at AS last_login,
                 IF(c.use_custom_work_hours = 1, c.work_start_time, (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_start_time' LIMIT 1)) AS work_start_time,
                 IF(c.use_custom_work_hours = 1, c.work_end_time, (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_end_time' LIMIT 1)) AS work_end_time,
@@ -6322,11 +6326,11 @@ switch ($action) {
                 t.name as team_name, 
                 t.branch as team_branch 
             FROM users c 
-            LEFT JOIN accounts a ON c.id = a.id
+            LEFT JOIN accounts a ON (c.id = a.id OR (c.email IS NOT NULL AND c.email != '' AND c.email = a.email))
             LEFT JOIN teams t ON c.team_id = t.id 
             $where
             ORDER BY 
-                IF(c.is_active = 0 OR a.is_active = 0 OR c.status = 'inactive', 1, 0) ASC,
+                IF(c.is_active = 0 OR a.is_active = 0 OR c.status = 'inactive' OR a.status = 'inactive', 1, 0) ASC,
                 c.full_name ASC
         ");
         $data = [];

@@ -221,17 +221,46 @@ export const computeEmployeeAttendanceSummary = (
   allLeaves: any[],
   allShifts: any[],
   standardDays: number,
-  departmentFilter: string = 'all'
+  departmentFilter: string = 'all',
+  excludeInactive: boolean = true
 ) => {
   // 1. Filter out inactive employees & filter by department if specified
   let filteredEmployees = employees.filter((u: any) => {
-    // Exclude inactive employees (is_active / active = 0, status = inactive / locked / resigned / terminated / nghi_viec / tam_nghi)
-    const rawActive = u.is_active !== undefined ? u.is_active : u.active;
-    const isInactiveFlag = rawActive === 0 || rawActive === false || rawActive === '0';
-    const statusLower = String(u.status || '').toLowerCase().trim();
-    const isInactiveStatus = ['inactive', 'locked', 'resigned', 'terminated', 'disabled', 'nghi_viec', 'tam_nghi', 'suspended', 'khoa'].includes(statusLower);
+    if (excludeInactive) {
+      // Exclude inactive employees (is_active / active = 0, status = inactive / locked / resigned / terminated / nghi_viec / tam_nghi)
+      const rawActive = u.is_active !== undefined ? u.is_active : u.active;
+      const isInactiveFlag = rawActive === 0 || rawActive === false || rawActive === '0' || rawActive === 'false';
+      if (isInactiveFlag) return false;
 
-    if (isInactiveFlag || isInactiveStatus) return false;
+      const statusLower = String(u.status || '').toLowerCase().trim();
+      const isInactiveStatus = [
+        'inactive', 'locked', 'resigned', 'terminated', 'disabled',
+        'nghi_viec', 'tam_nghi', 'suspended', 'khoa', 'da_nghi',
+        'quit', 'off', 'blocked', 'deactivated', 'nghi'
+      ].includes(statusLower);
+      if (isInactiveStatus) return false;
+
+      // Vietnamese phrase variations
+      if (
+        statusLower.includes('nghỉ việc') ||
+        statusLower.includes('nghi viec') ||
+        statusLower.includes('đã nghỉ') ||
+        statusLower.includes('da nghi') ||
+        statusLower.includes('tạm nghỉ') ||
+        statusLower.includes('tam nghi') ||
+        statusLower.includes('thôi việc') ||
+        statusLower.includes('thoi viec') ||
+        statusLower.includes('vô hiệu') ||
+        statusLower.includes('vo hieu') ||
+        statusLower.includes('ngừng hoạt động') ||
+        statusLower.includes('ngung hoat dong') ||
+        statusLower.includes('không hoạt động') ||
+        statusLower.includes('khoá') ||
+        statusLower.includes('khóa')
+      ) {
+        return false;
+      }
+    }
 
     if (departmentFilter !== 'all') {
       const uDept = String(u.department || '').toLowerCase().trim();
@@ -1635,6 +1664,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   const [exportToDate, setExportToDate] = useState<string>(() => initialExportPeriod.toDate);
   const [exportDepartment, setExportDepartment] = useState<string>('all');
   const [exportStandardDays, setExportStandardDays] = useState<number>(26);
+  const [exportExcludeInactive, setExportExcludeInactive] = useState<boolean>(true);
   const [isExportingExcel, setIsExportingExcel] = useState<boolean>(false);
 
   const handleOpenExportSummaryModal = () => {
@@ -1643,6 +1673,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     setExportYear(period.year);
     setExportFromDate(period.fromDate);
     setExportToDate(period.toDate);
+    setExportExcludeInactive(true);
     setShowExportSummaryModal(true);
   };
 
@@ -2567,7 +2598,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       // 2. Fetch full user list if needed
       let employees = consultants.length > 0 ? consultants : usersList;
       if (!employees || employees.length === 0) {
-        const uRes = await fetchAPI('get_consultants&all=1');
+        const uRes = await fetchAPI(exportExcludeInactive ? 'get_consultants&all=1&active_only=1' : 'get_consultants&all=1');
         if (uRes && uRes.success && Array.isArray(uRes.data) && uRes.data.length > 0) {
           employees = uRes.data;
           setConsultants(uRes.data);
@@ -2578,6 +2609,40 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
             setUsersList(uRes2.data);
           }
         }
+      }
+
+      // Ensure usersList is loaded to cross-validate active accounts
+      let currentUsers = usersList;
+      if (!currentUsers || currentUsers.length === 0) {
+        try {
+          const uRes2 = await fetchAPI('users?all=1');
+          if (uRes2 && uRes2.data && Array.isArray(uRes2.data)) {
+            currentUsers = uRes2.data;
+            setUsersList(uRes2.data);
+          }
+        } catch (e) {}
+      }
+
+      // If exportExcludeInactive is true, strictly filter employees against accounts map
+      if (exportExcludeInactive && currentUsers && currentUsers.length > 0) {
+        const activeAccountMap = new Map<number, any>();
+        currentUsers.forEach((u: any) => {
+          if (u.id) activeAccountMap.set(Number(u.id), u);
+        });
+
+        employees = employees.filter((emp: any) => {
+          const empId = Number(emp.id);
+          const matched = activeAccountMap.get(empId);
+          if (matched) {
+            const raw = matched.is_active !== undefined ? matched.is_active : matched.active;
+            if (raw === 0 || raw === false || raw === '0') return false;
+          }
+          const rawActive = emp.is_active !== undefined ? emp.is_active : emp.active;
+          if (rawActive === 0 || rawActive === false || rawActive === '0' || rawActive === null) return false;
+          const statusLower = String(emp.status || '').toLowerCase().trim();
+          if (['inactive', 'locked', 'resigned', 'terminated', 'disabled', 'nghi_viec', 'tam_nghi'].includes(statusLower)) return false;
+          return true;
+        });
       }
 
       if (!employees || employees.length === 0) {
@@ -2598,7 +2663,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         allLeaves,
         allShifts,
         exportStandardDays,
-        exportDepartment
+        exportDepartment,
+        exportExcludeInactive
       );
 
       const {
@@ -6698,6 +6764,31 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                 {` = `}<strong>{autoCalculatedStandardInfo.standardDays} công</strong>
               </div>
             </div>
+          </div>
+
+          {/* Exclude inactive toggle */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '10px 14px',
+            borderRadius: '8px',
+            background: exportExcludeInactive ? 'rgba(5, 150, 105, 0.06)' : 'var(--color-bg-light)',
+            border: `1px solid ${exportExcludeInactive ? 'rgba(5, 150, 105, 0.25)' : 'var(--color-border)'}`,
+            fontSize: '0.8125rem'
+          }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none', fontWeight: 600, color: 'var(--color-text)' }}>
+              <input
+                type="checkbox"
+                checked={exportExcludeInactive}
+                onChange={(e) => setExportExcludeInactive(e.target.checked)}
+                style={{ accentColor: '#059669', width: '16px', height: '16px', cursor: 'pointer' }}
+              />
+              <span>{t('Chỉ xuất nhân sự đang hoạt động (loại trừ tài khoản Inactive / Đã nghỉ việc)')}</span>
+            </label>
+            <span style={{ fontSize: '0.72rem', color: exportExcludeInactive ? '#059669' : 'var(--color-text-muted)', fontWeight: 700 }}>
+              {exportExcludeInactive ? t('✓ Đang bật') : t('Tắt lọc')}
+            </span>
           </div>
 
           {/* Info note */}
