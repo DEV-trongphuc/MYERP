@@ -225,16 +225,13 @@ export const computeEmployeeAttendanceSummary = (
 ) => {
   // 1. Filter out inactive employees & filter by department if specified
   let filteredEmployees = employees.filter((u: any) => {
-    // Exclude inactive employees (is_active = 0, status = 'inactive' / 'locked' / 'resigned' / 'terminated')
-    const isActive = u.is_active !== 0 && 
-                     u.is_active !== false && 
-                     u.is_active !== '0' && 
-                     String(u.status || '').toLowerCase() !== 'inactive' && 
-                     String(u.status || '').toLowerCase() !== 'locked' &&
-                     String(u.status || '').toLowerCase() !== 'resigned' &&
-                     String(u.status || '').toLowerCase() !== 'terminated' &&
-                     String(u.status || '').toLowerCase() !== 'disabled';
-    if (!isActive) return false;
+    // Exclude inactive employees (is_active / active = 0, status = inactive / locked / resigned / terminated / nghi_viec / tam_nghi)
+    const rawActive = u.is_active !== undefined ? u.is_active : u.active;
+    const isInactiveFlag = rawActive === 0 || rawActive === false || rawActive === '0';
+    const statusLower = String(u.status || '').toLowerCase().trim();
+    const isInactiveStatus = ['inactive', 'locked', 'resigned', 'terminated', 'disabled', 'nghi_viec', 'tam_nghi', 'suspended', 'khoa'].includes(statusLower);
+
+    if (isInactiveFlag || isInactiveStatus) return false;
 
     if (departmentFilter !== 'all') {
       const uDept = String(u.department || '').toLowerCase().trim();
@@ -1003,6 +1000,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
           setShowCreateLeaveModal(false);
           fetchCalendarCheckIns();
           fetchCheckInsList();
+          fetchMyPendingConfirmation();
         } else {
           toast.error(res?.data?.message || t('Có lỗi xảy ra khi gửi yêu cầu cập nhật công!'));
         }
@@ -1015,6 +1013,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         toast.success(t('Gửi đề xuất thành công!'));
         setShowCreateLeaveModal(false);
         setRelatedUserIds([]);
+        fetchMyPendingConfirmation();
       } else {
         toast.error(res?.data?.message || t('Có lỗi xảy ra khi gửi đề xuất!'));
       }
@@ -1767,6 +1766,27 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       }
     } catch (e) {
       console.warn('Could not fetch my pending confirmation', e);
+    } finally {
+      setLoadingMyConfirmation(false);
+    }
+  };
+
+  const handleRefreshMyConfirmation = async (showToast = true) => {
+    try {
+      setLoadingMyConfirmation(true);
+      const res = await api.get('/hrm/attendance-confirmations/my-pending');
+      if (res.data?.success && res.data?.data?.confirmation) {
+        setMyConfirmation(res.data.data.confirmation);
+        if (showToast) {
+          toast.success(t('Đã tự động tính toán lại số liệu công mới nhất!'));
+        }
+      } else {
+        setMyConfirmation(null);
+      }
+    } catch (e) {
+      if (showToast) {
+        toast.error(t('Không thể làm mới số liệu đối soát'));
+      }
     } finally {
       setLoadingMyConfirmation(false);
     }
@@ -6377,6 +6397,10 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     const depts = new Set<string>();
     const sourceList = consultants.length > 0 ? consultants : usersList;
     sourceList.forEach((u: any) => {
+      const rawActive = u.is_active !== undefined ? u.is_active : u.active;
+      if (rawActive === 0 || rawActive === false || rawActive === '0') return;
+      const statusLower = String(u.status || '').toLowerCase().trim();
+      if (['inactive', 'locked', 'resigned', 'terminated', 'disabled', 'nghi_viec', 'tam_nghi'].includes(statusLower)) return;
       if (u.department && String(u.department).trim()) depts.add(String(u.department).trim());
       if (u.team_name && String(u.team_name).trim()) depts.add(String(u.team_name).trim());
     });
@@ -6953,6 +6977,31 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
               <span>{t('Hạn chót:')} <strong>{deadlineStr}</strong></span>
               <span style={{ opacity: 0.85, fontSize: '0.65rem' }}>({t('Tự động chốt sau hạn')})</span>
             </div>
+
+            {/* Nút Làm mới / Tự động tính lại số liệu công mới nhất */}
+            <button
+              type="button"
+              onClick={() => handleRefreshMyConfirmation(true)}
+              disabled={loadingMyConfirmation}
+              style={{
+                background: 'rgba(255, 255, 255, 0.18)',
+                border: '1px solid rgba(255, 255, 255, 0.35)',
+                color: '#ffffff',
+                borderRadius: '6px',
+                padding: '3px 9px',
+                fontSize: '0.68rem',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                cursor: loadingMyConfirmation ? 'not-allowed' : 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+              title={t('Tự động tính lại số liệu công mới nhất khi có đơn bổ sung công hoặc nghỉ phép vừa được duyệt')}
+            >
+              <RefreshCw size={12} className={loadingMyConfirmation ? 'animate-spin' : ''} />
+              <span style={{ display: isMobile ? 'none' : 'inline' }}>{t('Làm mới số liệu')}</span>
+            </button>
 
             <button
               type="button"

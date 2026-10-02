@@ -2320,10 +2320,205 @@ class HRMController {
         $stmtList->execute([$batchId, $tenantId]);
         $records = $stmtList->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
+        // Tự động tính toán lại số liệu mới nhất cho các nhân sự chưa chốt (pending / disputed)
+        foreach ($records as &$rec) {
+            if (in_array($rec['status'], ['pending', 'disputed'], true)) {
+                $rec['from_date'] = $batch['from_date'];
+                $rec['to_date'] = $batch['to_date'];
+                self::recalculateConfirmationRecord($this->db, $tenantId, $rec);
+            }
+        }
+        unset($rec);
+
         respond(200, [
             'batch' => $batch,
             'records' => $records
         ]);
+    }
+
+    /**
+     * Tự động tính toán lại số liệu công cho một bản ghi đối soát công dựa trên check-in và đơn từ mới nhất
+     */
+    public static function recalculateConfirmationRecord(PDO $db, int $tenantId, array &$record): void {
+        $confId = (int)($record['id'] ?? 0);
+        $userId = (int)($record['user_id'] ?? 0);
+        $fromDate = $record['from_date'] ?? null;
+        $toDate = $record['to_date'] ?? null;
+
+        if ($confId <= 0 || $userId <= 0 || empty($fromDate) || empty($toDate)) return;
+
+        // Chỉ tự động tính lại nếu bản ghi chưa bị chốt (vẫn pending hoặc disputed)
+        if (!in_array($record['status'], ['pending', 'disputed'], true)) return;
+
+        // 1. Quét các đơn nghỉ phép / WFH / đi muộn về sớm đã được duyệt
+        $stmtLeaves = $db->prepare("
+            SELECT id, leave_type, salary_rate, start_date, end_date, total_days, status, reason
+            FROM hrm_leave_requests
+            WHERE user_id = ? 
+              AND status = 'approved'
+              AND DATE(start_date) <= ? AND DATE(end_date) >= ?
+            ORDER BY start_date ASC
+        ");
+        $stmtLeaves->execute([$userId, $toDate, $fromDate]);
+        $leaves = $stmtLeaves->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        $annualDays = 0.0;
+        $compDays = 0.0;
+        $specialDays = 0.0;
+        $wfhDays = 0.0;
+        $unpaidDays = 0.0;
+        $waivedDates = [];
+        $halfLeaveDates = [];
+        $monthlyWfhUsed = [];
+
+        foreach ($leaves as $lv) {
+            $days = (float)($lv['total_days'] ?: 1);
+            $type = $lv['leave_type'];
+            $sDate = substr($lv['start_date'], 0, 10);
+
+            if ($type === 'annual') {
+                $annualDays += $days;
+            } elseif ($type === 'compensatory') {
+                $compDays += $days;
+            } elseif ($type === 'remote_work') {
+                // Chính sách 2 ngày đầu 100%, từ ngày thứ 3 tính 50%
+                $monthKey = substr($sDate, 0, 7);
+                $usedBefore = $monthlyWfhUsed[$monthKey] ?? 0.0;
+
+                $quota100Remaining = max(0.0, 2.0 - $usedBefore);
+                $daysAt100 = min($days, $quota100Remaining);
+                $daysAt50 = max(0.0, $days - $daysAt100);
+
+                $monthlyWfhUsed[$monthKey] = $usedBefore + $days;
+
+                $paidThisWfh = round($daysAt100 * 1.0 + $daysAt50 * 0.5, 2);
+                $wfhDays += $paidThisWfh;
+            } elseif ($type === 'unpaid') {
+                $unpaidDays += $days;
+            } elseif (in_array($type, ['special_paid', 'maternity', 'paternity', 'marriage', 'funeral', 'business_trip', 'sick'], true)) {
+                $specialDays += $days;
+            } elseif ($type === 'late_early') {
+                $waivedDates[] = $sDate;
+            }
+
+            if ((float)$lv['total_days'] === 0.5) {
+                $halfLeaveDates[$sDate] = true;
+            }
+        }
+
+        // 2. Quét các lượt check-in đã được duyệt (bao gồm cả bổ sung công đã được duyệt)
+        $stmtCheckins = $db->prepare("
+            SELECT check_in_date, check_in_time, check_out_time, late_minutes, early_minutes, selfie_url, reason, status
+            FROM check_ins
+            WHERE user_id = ? 
+              AND check_in_date >= ? AND check_in_date <= ?
+              AND status = 'approved'
+            ORDER BY check_in_date ASC, id ASC
+        ");
+        $stmtCheckins->execute([$userId, $fromDate, $toDate]);
+        $checkins = $stmtCheckins->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        $actualDays = 0.0;
+        $lateCount = 0;
+        $lateMins = 0;
+        $earlyMins = 0;
+        $suppCount = 0;
+        $checkedDates = [];
+
+        foreach ($checkins as $ci) {
+            $cDate = $ci['check_in_date'];
+            if (!isset($checkedDates[$cDate])) {
+                $checkedDates[$cDate] = true;
+                if (isset($halfLeaveDates[$cDate])) {
+                    $actualDays += 0.5;
+                } else {
+                    $actualDays += 1.0;
+                }
+            }
+
+            $lMin = (int)($ci['late_minutes'] ?? 0);
+            $eMin = (int)($ci['early_minutes'] ?? 0);
+
+            if ($lMin > 0 && !in_array($cDate, $waivedDates, true)) {
+                $lateCount++;
+                $lateMins += $lMin;
+            }
+            if ($eMin > 0) {
+                $earlyMins += $eMin;
+            }
+            if (empty($ci['selfie_url'])) {
+                $suppCount++;
+            }
+        }
+
+        // 3. Quét ca trực & OT đã được duyệt
+        $stmtShifts = $db->prepare("
+            SELECT shift_type, ot_hours, approved
+            FROM shift_registrations
+            WHERE user_id = ? 
+              AND shift_date >= ? AND shift_date <= ?
+              AND (approved = 1 OR status = 'approved')
+        ");
+        $stmtShifts->execute([$userId, $fromDate, $toDate]);
+        $shifts = $stmtShifts->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        $otHours = 0.0;
+        $nightShifts = 0;
+        $weekendShifts = 0;
+
+        foreach ($shifts as $s) {
+            if ($s['shift_type'] === 'overtime') {
+                $otHours += (float)($s['ot_hours'] ?? 0);
+            } elseif ($s['shift_type'] === 'night') {
+                $nightShifts++;
+            } elseif ($s['shift_type'] === 'weekend') {
+                $weekendShifts++;
+            }
+        }
+
+        // 4. Tổng công tính lương
+        $totalPaidDays = round($actualDays + $annualDays + $compDays + $specialDays + $wfhDays, 2);
+
+        // 5. Cập nhật vào DB
+        $stmtUpd = $db->prepare("
+            UPDATE attendance_confirmations
+            SET actual_days = ?,
+                annual_leave_days = ?,
+                comp_leave_days = ?,
+                special_leave_days = ?,
+                wfh_days = ?,
+                unpaid_leave_days = ?,
+                total_paid_days = ?,
+                late_count = ?,
+                late_minutes = ?,
+                early_minutes = ?,
+                supp_count = ?,
+                ot_hours = ?,
+                night_shifts = ?,
+                weekend_shifts = ?
+            WHERE id = ? AND status IN ('pending', 'disputed')
+        ");
+        $stmtUpd->execute([
+            $actualDays, $annualDays, $compDays, $specialDays, $wfhDays, $unpaidDays, $totalPaidDays,
+            $lateCount, $lateMins, $earlyMins, $suppCount, $otHours, $nightShifts, $weekendShifts,
+            $confId
+        ]);
+
+        // Cập nhật lại mảng record trả về
+        $record['actual_days'] = $actualDays;
+        $record['annual_leave_days'] = $annualDays;
+        $record['comp_leave_days'] = $compDays;
+        $record['special_leave_days'] = $specialDays;
+        $record['wfh_days'] = $wfhDays;
+        $record['unpaid_leave_days'] = $unpaidDays;
+        $record['total_paid_days'] = $totalPaidDays;
+        $record['late_count'] = $lateCount;
+        $record['late_minutes'] = $lateMins;
+        $record['early_minutes'] = $earlyMins;
+        $record['supp_count'] = $suppCount;
+        $record['ot_hours'] = $otHours;
+        $record['night_shifts'] = $nightShifts;
+        $record['weekend_shifts'] = $weekendShifts;
     }
 
     /**
@@ -2357,6 +2552,11 @@ class HRMController {
         $stmt->execute([$userId, $tenantId]);
         $record = $stmt->fetch(PDO::FETCH_ASSOC);
 
+        // Tự động tính lại số liệu công mới nhất từ các đơn / bổ sung công vừa được duyệt
+        if ($record && in_array($record['status'], ['pending', 'disputed'], true)) {
+            self::recalculateConfirmationRecord($this->db, $tenantId, $record);
+        }
+
         respond(200, ['confirmation' => $record ?: null]);
     }
 
@@ -2378,7 +2578,7 @@ class HRMController {
 
         // Find confirmation record
         $stmtFind = $this->db->prepare("
-            SELECT ac.*, b.title as batch_title, b.deadline_at, b.status as batch_status
+            SELECT ac.*, b.title as batch_title, b.from_date, b.to_date, b.deadline_at, b.status as batch_status
             FROM attendance_confirmations ac
             JOIN attendance_confirmation_batches b ON ac.batch_id = b.id
             WHERE " . ($id > 0 ? "ac.id = ?" : "ac.batch_id = ? AND ac.user_id = ?") . " 
@@ -2419,7 +2619,11 @@ class HRMController {
 
             respond(200, ['success' => true], 'Đã gửi phản hồi sai lệch công về Phòng Nhân sự để xử lý');
         } else {
-            // Action: confirm
+            // Action: confirm -> Tự động tính toán lại trước khi chốt để số liệu chính xác 100%
+            if (in_array($row['status'], ['pending', 'disputed'], true)) {
+                self::recalculateConfirmationRecord($this->db, $tenantId, $row);
+            }
+
             $stmtUpdate = $this->db->prepare("
                 UPDATE attendance_confirmations
                 SET status = 'confirmed',
@@ -2430,7 +2634,7 @@ class HRMController {
             ");
             $stmtUpdate->execute([$row['id']]);
 
-            respond(200, ['success' => true], 'Đã xác nhận bảng công thành công');
+            respond(200, ['success' => true, 'updated_record' => $row], 'Đã xác nhận bảng công thành công');
         }
     }
 
