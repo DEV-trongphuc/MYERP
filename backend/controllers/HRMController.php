@@ -1005,6 +1005,28 @@ class HRMController {
             }
         } catch (\Throwable $e) {}
 
+        // Tự động tính lại số liệu đối soát công nếu đơn nghỉ phép / WFH / OT vừa được phê duyệt hoàn tất
+        if ($nextStatus === 'approved') {
+            try {
+                $tenantId = (int)($auth['tenant_id'] ?? 1);
+                $uId = (int)$leaveRow['user_id'];
+                $sDate = substr($leaveRow['start_date'], 0, 10);
+                $eDate = substr($leaveRow['end_date'], 0, 10);
+                $stmtFindConf = $this->db->prepare("
+                    SELECT ac.*, b.from_date, b.to_date
+                    FROM attendance_confirmations ac
+                    JOIN attendance_confirmation_batches b ON ac.batch_id = b.id
+                    WHERE ac.user_id = ? AND ac.tenant_id = ? AND ac.status IN ('pending', 'disputed')
+                      AND b.from_date <= ? AND b.to_date >= ?
+                ");
+                $stmtFindConf->execute([$uId, $tenantId, $eDate, $sDate]);
+                $confs = $stmtFindConf->fetchAll(PDO::FETCH_ASSOC);
+                foreach ($confs as $confRec) {
+                    self::recalculateConfirmationRecord($this->db, $tenantId, $confRec);
+                }
+            } catch (\Throwable $eRecalc) {}
+        }
+
         respond(200, ['success' => true]);
     }
 

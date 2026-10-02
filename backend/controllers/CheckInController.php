@@ -621,7 +621,7 @@ class CheckInController {
         }
 
         // ==================== FLOW B: CHECK-IN (VÀO CA) ====================
-        if ($existingRow) {
+        if ($existingRow && !$isSupplementary) {
             respond(409, null, 'Bạn đã thực hiện check-in hoặc gửi yêu cầu cho ngày này rồi', false);
             return;
         }
@@ -720,6 +720,79 @@ class CheckInController {
 
         $inTimeStr = $today . ' ' . $currentTime;
 
+        $approverId = !empty($b['approver_id']) ? (int)$b['approver_id'] : null;
+
+        // BỔ SUNG / CẬP NHẬT CÔNG CHO NGÀY ĐÃ CÓ BẢN GHI DỞ DANG (Ví dụ: đã chấm sáng, quên chấm chiều)
+        if ($existingRow && $isSupplementary) {
+            $inTimeStr = (!empty($b['check_in_time']))
+                ? (strpos($b['check_in_time'], ' ') !== false ? trim($b['check_in_time']) : ($today . ' ' . $currentTime))
+                : $existingRow['check_in_time'];
+
+            $outTimeStr = (!empty($b['check_out_time']))
+                ? (strpos($b['check_out_time'], ' ') !== false ? trim($b['check_out_time']) : ($today . ' ' . trim($b['check_out_time'])))
+                : $existingRow['check_out_time'];
+
+            $updId = (int)$existingRow['id'];
+            try {
+                $stmtUpdExisting = $this->db->prepare("
+                    UPDATE check_ins
+                    SET check_in_time = ?,
+                        check_out_time = ?,
+                        status = ?,
+                        reason = ?,
+                        manager_id = COALESCE(?, manager_id),
+                        late_minutes = 0,
+                        early_minutes = 0
+                    WHERE id = ?
+                ");
+                $stmtUpdExisting->execute([$inTimeStr, $outTimeStr, $status, $reason ?: null, $approverId, $updId]);
+            } catch (\Throwable $eUpd) {
+                $stmtUpdExisting = $this->db->prepare("
+                    UPDATE check_ins
+                    SET check_in_time = ?,
+                        check_out_time = ?,
+                        status = ?,
+                        reason = ?
+                    WHERE id = ?
+                ");
+                $stmtUpdExisting->execute([$inTimeStr, $outTimeStr, $status, $reason ?: null, $updId]);
+            }
+
+            logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'SUPPLEMENTARY_CHECK_IN_UPDATE', 'check_in', $updId, json_encode([
+                'date' => $today,
+                'in_time' => $inTimeStr,
+                'out_time' => $outTimeStr,
+                'status' => $status,
+                'reason' => $reason
+            ]));
+
+            // Gửi thông báo cho Quản lý / Leader
+            require_once __DIR__ . '/../NotificationService.php';
+            $stmtUserDetails = $this->db->prepare("SELECT full_name, team_id FROM users WHERE id = ?");
+            $stmtUserDetails->execute([$auth['user_id']]);
+            $uDetails = $stmtUserDetails->fetch(PDO::FETCH_ASSOC);
+
+            NotificationService::send($this->db, $auth['tenant_id'], 'ATTENDANCE_UPDATE', [
+                'user_name' => $uDetails ? $uDetails['full_name'] : 'Nhân viên',
+                'team_id' => $uDetails ? $uDetails['team_id'] : null,
+                'date' => $today,
+                'time' => $currentTime,
+                'reason' => $reason,
+                'approver_id' => $approverId
+            ]);
+
+            respond(200, [
+                'id' => $updId,
+                'status' => $status,
+                'check_in_time' => $inTimeStr,
+                'check_out_time' => $outTimeStr,
+                'late_minutes' => 0,
+                'is_supplementary' => true,
+                'message' => 'Đã cập nhật yêu cầu bổ sung chấm công thành công. Đang chờ phê duyệt.'
+            ]);
+            return;
+        }
+
         $addr = trim($b['location_address'] ?? '');
         if (empty($addr) && !empty($lat) && !empty($lng)) {
             $addr = $lat . ', ' . $lng;
@@ -752,6 +825,12 @@ class CheckInController {
         }
         
         $newId = (int)$this->db->lastInsertId();
+
+        if ($approverId > 0) {
+            try {
+                $this->db->prepare("UPDATE check_ins SET manager_id = ? WHERE id = ?")->execute([$approverId, $newId]);
+            } catch (\Throwable $eMgr) {}
+        }
 
         if ($isSupplementary && !empty($b['check_out_time'])) {
             $outTimeRaw = trim($b['check_out_time']);
@@ -915,6 +994,25 @@ class CheckInController {
             'ref_id' => $id,
             'is_supplementary' => $isSupplementary
         ]);
+
+        // Tự động tính lại số liệu đối soát công của nhân sự nếu có đợt đối soát đang mở
+        if ($status === 'approved') {
+            try {
+                require_once __DIR__ . '/HRMController.php';
+                $stmtFindConf = $this->db->prepare("
+                    SELECT ac.*, b.from_date, b.to_date
+                    FROM attendance_confirmations ac
+                    JOIN attendance_confirmation_batches b ON ac.batch_id = b.id
+                    WHERE ac.user_id = ? AND ac.tenant_id = ? AND ac.status IN ('pending', 'disputed')
+                      AND ? <= b.to_date AND ? >= b.from_date
+                ");
+                $stmtFindConf->execute([$row['user_id'], $auth['tenant_id'], $row['check_in_date'], $row['check_in_date']]);
+                $confs = $stmtFindConf->fetchAll(PDO::FETCH_ASSOC);
+                foreach ($confs as $confRec) {
+                    HRMController::recalculateConfirmationRecord($this->db, (int)$auth['tenant_id'], $confRec);
+                }
+            } catch (\Throwable $eRecalc) {}
+        }
 
         respond(200, null, 'Cập nhật trạng thái check-in thành công');
     }

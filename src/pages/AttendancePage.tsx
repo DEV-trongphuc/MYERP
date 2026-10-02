@@ -1014,6 +1014,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         setShowCreateLeaveModal(false);
         setRelatedUserIds([]);
         fetchMyPendingConfirmation();
+        if (typeof fetchCalendarCheckIns === 'function') fetchCalendarCheckIns();
+        if (typeof fetchLeaves === 'function') fetchLeaves();
       } else {
         toast.error(res?.data?.message || t('Có lỗi xảy ra khi gửi đề xuất!'));
       }
@@ -3084,6 +3086,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         setSuppReason('');
         fetchCalendarCheckIns();
         fetchCheckInsList();
+        fetchMyPendingConfirmation();
       } else {
         toast.error(res.message || t('Gửi yêu cầu thất bại'));
       }
