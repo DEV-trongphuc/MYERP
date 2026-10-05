@@ -1118,13 +1118,22 @@ export default function Approvals() {
   const [recurringEndDate, setRecurringEndDate] = useState('');
 
   // Commission payout states (Multi-recipient)
+  const [purchaseOrdersList, setPurchaseOrdersList] = useState<any[]>([]);
   const [commissionItems, setCommissionItems] = useState<any[]>([
     {
       id: Date.now(),
+      recipient_type: 'employee',
       user_id: '',
       user_name: '',
       avatar: '',
       role: '',
+      company_id: '',
+      supplier_id: '',
+      contact_id: '',
+      other_id: '',
+      other_type: '',
+      po_number: '',
+      po_id: '',
       bank_name: '',
       bank_account: '',
       bank_owner: '',
@@ -1133,10 +1142,21 @@ export default function Approvals() {
     }
   ]);
 
-  // Tự động đồng bộ các nhân viên được chọn nhận hoa hồng vào danh sách Người liên quan (relatedUserIds)
+  // Load purchase orders for commission payout when needed
+  useEffect(() => {
+    if (selectedWorkflowDef?.id === 'commission_payout' && purchaseOrdersList.length === 0) {
+      api.get('/purchase-orders').then(res => {
+        const d = res.data?.data || res.data || [];
+        setPurchaseOrdersList(Array.isArray(d) ? d : []);
+      }).catch(() => setPurchaseOrdersList([]));
+    }
+  }, [selectedWorkflowDef?.id, purchaseOrdersList.length]);
+
+  // Tự động đồng bộ các nhân viên nội bộ được chọn nhận hoa hồng vào danh sách Người liên quan (relatedUserIds)
   useEffect(() => {
     if (selectedWorkflowDef?.id === 'commission_payout') {
       const recipientIds = commissionItems
+        .filter(it => !it.recipient_type || it.recipient_type === 'employee')
         .map(it => Number(it.user_id))
         .filter(id => !isNaN(id) && id > 0 && id !== Number(user?.id));
       if (recipientIds.length > 0) {
@@ -2043,9 +2063,9 @@ export default function Approvals() {
         let effectiveRelatedUserIds = [...relatedUserIds];
 
         if (isCommissionWf) {
-          const validCommission = commissionItems.filter(c => c.user_id && (Number(c.amount) > 0 || c.amount));
+          const validCommission = commissionItems.filter(c => (c.user_id || c.user_name) && (Number(c.amount) > 0 || c.amount));
           if (validCommission.length === 0) {
-            toast.error(t('Vui lòng thêm ít nhất một nhân viên nhận hoa hồng với số tiền hợp lệ.'));
+            toast.error(t('Vui lòng thêm ít nhất một người nhận hoa hồng với số tiền hợp lệ.'));
             setSubmitting(false);
             return;
           }
@@ -2053,16 +2073,26 @@ export default function Approvals() {
           calcVatAmt = 0;
           payloadItems = validCommission.map((c, idx) => ({
             stt: idx + 1,
-            user_id: Number(c.user_id),
+            recipient_type: c.recipient_type || (c.user_id ? 'employee' : 'other'),
+            user_id: c.user_id ? Number(c.user_id) : null,
             user_name: c.user_name || '',
             avatar: c.avatar || '',
             role: c.role || '',
+            company_id: c.company_id || null,
+            supplier_id: c.supplier_id || null,
+            contact_id: c.contact_id || null,
+            other_id: c.other_id || null,
+            other_type: c.other_type || null,
+            po_number: c.po_number || null,
+            po_id: c.po_id || null,
             bank_name: c.bank_name || '',
             bank_account: c.bank_account || '',
+            bank_account_no: c.bank_account || '',
             bank_owner: c.bank_owner || '',
+            bank_account_name: c.bank_owner || '',
             amount: Number(c.amount) || 0,
             note: c.note || '',
-            name: `Hoa hồng: ${c.user_name || ''}${c.note ? ` - ${c.note}` : ''}`,
+            name: `Hoa hồng: ${c.user_name || ''}${c.po_number ? ` [PO: ${c.po_number}]` : ''}${c.note ? ` - ${c.note}` : ''}`,
             quantity: 1,
             unit_price: Number(c.amount) || 0,
             price: Number(c.amount) || 0,
@@ -2075,14 +2105,20 @@ export default function Approvals() {
             paid_by: null
           }));
 
-          // Tự động gắn tất cả người nhận thành Người liên quan (related_user_ids)
-          const beneIds = validCommission.map(c => Number(c.user_id)).filter(id => id > 0 && id !== Number(user?.id));
+          // Tự động gắn tất cả nhân viên nội bộ nhận hoa hồng thành Người liên quan (related_user_ids)
+          const beneIds = validCommission
+            .filter(c => !c.recipient_type || c.recipient_type === 'employee')
+            .map(c => Number(c.user_id))
+            .filter(id => !isNaN(id) && id > 0 && id !== Number(user?.id));
           effectiveRelatedUserIds = Array.from(new Set([...effectiveRelatedUserIds, ...beneIds]));
 
-          const commListStr = validCommission.map((c, idx) => 
-            `• [${idx + 1}] ${c.user_name} (STK: ${c.bank_name || ''} ${c.bank_account || ''}) - Số tiền: ${formatApprovalCurrency(c.amount, currencyType)}${c.note ? ` (Ghi chú: ${c.note})` : ''}`
-          ).join('\n');
-          finalDesc = `[Đề xuất chi trả hoa hồng - ${validCommission.length} nhân sự]:\n${commListStr}\n\n[Tổng tiền chi trả]: ${formatApprovalCurrency(calcTotalAmt, currencyType)}\n\n` + finalDesc;
+          const commListStr = validCommission.map((c, idx) => {
+            const isEmp = !c.recipient_type || c.recipient_type === 'employee';
+            const typeTag = isEmp ? '[Nhân viên]' : '[Đối tác/Khác]';
+            const poStr = c.po_number ? ` (Mã PO: ${c.po_number})` : '';
+            return `• [${idx + 1}] ${typeTag} ${c.user_name}${poStr} (STK: ${c.bank_name || ''} ${c.bank_account || ''}) - Số tiền: ${formatApprovalCurrency(c.amount, currencyType)}${c.note ? ` (Ghi chú: ${c.note})` : ''}`;
+          }).join('\n');
+          finalDesc = `[Đề xuất chi trả hoa hồng - ${validCommission.length} đối tượng thụ hưởng]:\n${commListStr}\n\n[Tổng tiền chi trả]: ${formatApprovalCurrency(calcTotalAmt, currencyType)}\n\n` + finalDesc;
         } else {
           calcTotalAmt = expenseItems.reduce((acc, it) => {
             const lineBase = (Number(it.quantity) || 1) * (Number(it.price) || 0);
@@ -2557,6 +2593,7 @@ export default function Approvals() {
         unit: it.unit || '',
         notes: it.notes || ''
       })),
+      commissionItems: (commissionItems || []).map(it => ({ ...it })),
       attachmentsCount: (attachments || []).length,
       attachmentsUrls: (attachments || []).map(a => a.url || a.name),
       relatedUserIds: [...(relatedUserIds || [])].sort(),
@@ -2953,6 +2990,9 @@ export default function Approvals() {
     if (fd.showStepDirector !== undefined) setShowStepDirector(fd.showStepDirector);
     if (fd.editingItemId !== undefined) setEditingItemId(fd.editingItemId);
     if (fd.editingItemType !== undefined) setEditingItemType(fd.editingItemType);
+    if (Array.isArray(fd.commissionItems) && fd.commissionItems.length > 0) {
+      setCommissionItems(fd.commissionItems);
+    }
 
     // Record snapshot of loaded draft so closing immediately without edits will not prompt
     lastSavedSnapshotRef.current = JSON.stringify({
@@ -3281,6 +3321,117 @@ export default function Approvals() {
       };
     });
   }, [contacts]);
+
+  // Unified Other Beneficiary Options for Commission Payout (Đối tác, Nhà cung cấp, Người giới thiệu, Khách hàng, Giảng viên)
+  const commissionRecipientOtherOptions = useMemo(() => {
+    const list: any[] = [];
+    const seenValues = new Set<string>();
+
+    // 1. Đối tác (Companies)
+    const safeCompanies = Array.isArray(companies) ? companies : ((companies as any)?.items || []);
+    safeCompanies.forEach((co: any) => {
+      const val = `co_${co.id}`;
+      if (!seenValues.has(val) && co.name) {
+        seenValues.add(val);
+        const tier = String(co.tier || '').toUpperCase();
+        list.push({
+          value: val,
+          rawId: co.id,
+          category: 'company',
+          typeLabel: `Đối tác ${tier || 'B2B'}`,
+          label: co.name,
+          avatar: co.logo_url,
+          bank_name: co.bank_name || '',
+          bank_account: co.bank_account_number || co.bank_account || '',
+          bank_owner: co.bank_account_name || co.name || '',
+          phone: co.phone || '',
+          tax_code: co.tax_id || '',
+          sublabel: [
+            `Đối tác ${tier || 'B2B'}`,
+            co.tax_id ? `MST: ${co.tax_id}` : '',
+            co.bank_name ? `${co.bank_name}: ${co.bank_account_number || co.bank_account}` : 'Chưa có STK'
+          ].filter(Boolean).join(' • ')
+        });
+      }
+    });
+
+    // 2. Nhà cung cấp (Suppliers)
+    const safeSuppliers = Array.isArray(suppliers) ? suppliers : ((suppliers as any)?.items || (suppliers as any)?.suppliers || []);
+    safeSuppliers.forEach((s: any) => {
+      const val = `sup_${s.id}`;
+      if (!seenValues.has(val) && s.name) {
+        seenValues.add(val);
+        list.push({
+          value: val,
+          rawId: s.id,
+          category: 'supplier',
+          typeLabel: 'Nhà cung cấp',
+          label: s.name,
+          bank_name: s.bank_name || '',
+          bank_account: s.bank_account || '',
+          bank_owner: s.bank_account_name || s.name || '',
+          phone: s.phone || '',
+          tax_code: s.tax_code || '',
+          sublabel: [
+            'Nhà cung cấp',
+            s.tax_code ? `MST: ${s.tax_code}` : '',
+            s.bank_name ? `${s.bank_name}: ${s.bank_account}` : 'Chưa có STK'
+          ].filter(Boolean).join(' • ')
+        });
+      }
+    });
+
+    // 3. Người giới thiệu / Khách hàng (Contacts)
+    const safeContacts = Array.isArray(contacts) ? contacts : ((contacts as any)?.items || []);
+    safeContacts.forEach((c: any) => {
+      const val = `contact_${c.id}`;
+      const cName = c.full_name || c.name;
+      if (!seenValues.has(val) && cName) {
+        seenValues.add(val);
+        list.push({
+          value: val,
+          rawId: c.id,
+          category: 'contact',
+          typeLabel: 'Người giới thiệu',
+          label: cName,
+          avatar: c.avatar_url || c.avatar,
+          bank_name: c.bank_name || '',
+          bank_account: c.bank_account || c.bank_account_number || '',
+          bank_owner: c.bank_account_name || cName,
+          phone: c.phone || '',
+          email: c.email || '',
+          sublabel: [
+            'Người giới thiệu / Liên hệ',
+            c.phone || '',
+            c.bank_name ? `${c.bank_name}: ${c.bank_account || c.bank_account_number}` : 'Chưa có STK'
+          ].filter(Boolean).join(' • ')
+        });
+      }
+    });
+
+    // 4. Giảng viên / Chuyên gia
+    lecturerOptions.forEach((lec: any) => {
+      const val = `lec_${lec.value}`;
+      if (!seenValues.has(val) && lec.label) {
+        seenValues.add(val);
+        list.push({
+          value: val,
+          rawId: lec.raw?.id || lec.value,
+          category: 'lecturer',
+          typeLabel: 'Giảng viên / Chuyên gia',
+          label: lec.label,
+          avatar: lec.avatar,
+          bank_name: lec.bank_name || '',
+          bank_account: lec.bank_account || '',
+          bank_owner: lec.bank_account_name || lec.label,
+          phone: lec.phone || '',
+          sublabel: lec.sublabel || `Giảng viên • ${lec.phone || ''}`
+        });
+      }
+    });
+
+    return list;
+  }, [companies, suppliers, contacts, lecturerOptions]);
 
   // Auto-fill bank information for current user when opening payment request
   useEffect(() => {
@@ -4400,6 +4551,30 @@ export default function Approvals() {
               vat: vatPct
             }
           ]);
+        }
+
+        // 7.1 Commission Payout items restoration
+        if (def?.id === 'commission_payout' && Array.isArray(expData.items) && expData.items.length > 0) {
+          setCommissionItems(expData.items.map((it: any, i: number) => ({
+            id: it.id || Date.now() + i,
+            recipient_type: it.recipient_type || (it.user_id ? 'employee' : 'other'),
+            user_id: it.user_id ? String(it.user_id) : '',
+            user_name: it.user_name || '',
+            avatar: it.avatar || '',
+            role: it.role || '',
+            company_id: it.company_id ? String(it.company_id) : '',
+            supplier_id: it.supplier_id ? String(it.supplier_id) : '',
+            contact_id: it.contact_id ? String(it.contact_id) : '',
+            other_id: it.other_id || '',
+            other_type: it.other_type || '',
+            po_number: it.po_number || '',
+            po_id: it.po_id ? String(it.po_id) : '',
+            bank_name: it.bank_name || '',
+            bank_account: it.bank_account || it.bank_account_no || '',
+            bank_owner: it.bank_owner || it.bank_account_name || '',
+            amount: Number(it.amount || it.price || 0),
+            note: it.note || ''
+          })));
         }
 
         // 8. Approvers & Related users
@@ -11363,10 +11538,10 @@ export default function Approvals() {
                               <Award size={18} color="#f59e0b" />
                               <div>
                                 <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                  {t('BẢNG PHÂN BỔ HOA HỒNG NHÂN SỰ')}
+                                  {t('BẢNG PHÂN BỔ HOA HỒNG (NHÂN SỰ & ĐỐI TÁC)')}
                                 </span>
                                 <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-                                  {t('Không giới hạn số lượng nhân viên. STK được tự động trích xuất từ hồ sơ và tự động gắn vào Người liên quan.')}
+                                  {t('Không giới hạn số lượng. Hỗ trợ nhân viên nội bộ và đối tác, người giới thiệu. STK được tự động trích xuất và đối soát mã PO chi tiết.')}
                                 </div>
                               </div>
                             </div>
@@ -11376,11 +11551,19 @@ export default function Approvals() {
                                 setCommissionItems(prev => [
                                   ...prev,
                                   {
-                                    id: Date.now(),
+                                    id: Date.now() + Math.random(),
+                                    recipient_type: 'employee',
                                     user_id: '',
                                     user_name: '',
                                     avatar: '',
                                     role: '',
+                                    company_id: '',
+                                    supplier_id: '',
+                                    contact_id: '',
+                                    other_id: '',
+                                    other_type: '',
+                                    po_number: '',
+                                    po_id: '',
                                     bank_name: '',
                                     bank_account: '',
                                     bank_owner: '',
@@ -11404,20 +11587,22 @@ export default function Approvals() {
                                 boxShadow: '0 2px 8px rgba(245, 158, 11, 0.25)'
                               }}
                             >
-                              <Plus size={15} /> {t('Thêm nhân viên nhận hoa hồng')}
+                              <Plus size={15} /> {t('Thêm người nhận hoa hồng')}
                             </button>
                           </div>
 
-                          {/* DANH SÁCH NHÂN VIÊN NHẬN HOA HỒNG (CARD 2 HÀNG RỘNG RÃI, OVERFLOW VISIBLE) */}
+                          {/* DANH SÁCH NGƯỜI NHẬN HOA HỒNG (CARD 2 HÀNG RỘNG RÃI, OVERFLOW VISIBLE) */}
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', overflow: 'visible' }}>
                             {commissionItems.map((cItem, idx) => {
+                              const isOther = cItem.recipient_type === 'other';
+
                               return (
                                 <div
                                   key={cItem.id}
                                   style={{
-                                    border: '1px solid var(--color-border)',
+                                    border: isOther ? '1px solid rgba(217, 119, 6, 0.35)' : '1px solid var(--color-border)',
                                     borderRadius: '12px',
-                                    background: 'var(--color-bg-primary, #ffffff)',
+                                    background: isOther ? 'rgba(245, 158, 11, 0.02)' : 'var(--color-bg-primary, #ffffff)',
                                     padding: '14px 16px',
                                     display: 'flex',
                                     flexDirection: 'column',
@@ -11427,90 +11612,293 @@ export default function Approvals() {
                                     overflow: 'visible'
                                   }}
                                 >
-                                  {/* HÀNG 1: THÔNG TIN NHÂN VIÊN & SỐ TIỀN HOA HỒNG & NÚT XÓA */}
-                                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.4fr 1fr auto', gap: '14px', alignItems: 'flex-start', overflow: 'visible' }}>
-                                    {/* Cột 1: Nhân viên thụ hưởng */}
+                                  {/* HÀNG 1: THÔNG TIN THỤ HƯỞNG & PO & SỐ TIỀN HOA HỒNG & NÚT XÓA */}
+                                  <div style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: isMobile
+                                      ? '1fr'
+                                      : (isOther ? '1.3fr 1.15fr 1fr auto' : '1.5fr 1fr auto'),
+                                    gap: '14px',
+                                    alignItems: 'flex-start',
+                                    overflow: 'visible'
+                                  }}>
+                                    {/* Cột 1: Người thụ hưởng + 2 Tabs Switcher */}
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', overflow: 'visible' }}>
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <span style={{
+                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                          <span style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            width: '22px',
+                                            height: '22px',
+                                            borderRadius: '50%',
+                                            background: isOther ? 'rgba(217, 119, 6, 0.2)' : 'rgba(245, 158, 11, 0.15)',
+                                            color: isOther ? '#b45309' : '#d97706',
+                                            fontSize: '0.72rem',
+                                            fontWeight: 800
+                                          }}>
+                                            {idx + 1}
+                                          </span>
+                                          <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                                            {t('Người thụ hưởng')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                          </label>
+                                        </div>
+
+                                        {/* 2 Tabs: [👤 Nhân viên] | [🏢 Khác: Đối tác, Giới thiệu] */}
+                                        <div style={{
                                           display: 'inline-flex',
                                           alignItems: 'center',
-                                          justifyContent: 'center',
-                                          width: '22px',
-                                          height: '22px',
-                                          borderRadius: '50%',
-                                          background: 'rgba(245, 158, 11, 0.15)',
-                                          color: '#d97706',
-                                          fontSize: '0.72rem',
-                                          fontWeight: 800
+                                          background: 'var(--color-bg-secondary, #f1f5f9)',
+                                          padding: '2px',
+                                          borderRadius: '8px',
+                                          border: '1px solid var(--color-border-light)'
                                         }}>
-                                          {idx + 1}
-                                        </span>
-                                        <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                                          {t('Nhân viên thụ hưởng')} <span style={{ color: 'var(--color-danger)' }}>*</span>
-                                        </label>
-                                        <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginLeft: 'auto' }}>
-                                          {t('(Tự động điền STK từ hồ sơ)')}
-                                        </span>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setCommissionItems(prev => {
+                                                const copy = [...prev];
+                                                copy[idx] = {
+                                                  ...copy[idx],
+                                                  recipient_type: 'employee',
+                                                  other_id: '',
+                                                  other_type: ''
+                                                };
+                                                return copy;
+                                              });
+                                            }}
+                                            style={{
+                                              border: 'none',
+                                              cursor: 'pointer',
+                                              padding: '3px 8px',
+                                              borderRadius: '6px',
+                                              fontSize: '0.7rem',
+                                              fontWeight: (!cItem.recipient_type || cItem.recipient_type === 'employee') ? 750 : 500,
+                                              background: (!cItem.recipient_type || cItem.recipient_type === 'employee') ? 'var(--color-surface, #ffffff)' : 'transparent',
+                                              color: (!cItem.recipient_type || cItem.recipient_type === 'employee') ? 'var(--color-primary, #2563eb)' : 'var(--color-text-muted)',
+                                              boxShadow: (!cItem.recipient_type || cItem.recipient_type === 'employee') ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '4px',
+                                              transition: 'all 0.15s ease'
+                                            }}
+                                          >
+                                            <User size={12} />
+                                            <span>{t('Nhân viên')}</span>
+                                          </button>
+
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setCommissionItems(prev => {
+                                                const copy = [...prev];
+                                                copy[idx] = {
+                                                  ...copy[idx],
+                                                  recipient_type: 'other',
+                                                  user_id: ''
+                                                };
+                                                return copy;
+                                              });
+                                            }}
+                                            style={{
+                                              border: 'none',
+                                              cursor: 'pointer',
+                                              padding: '3px 8px',
+                                              borderRadius: '6px',
+                                              fontSize: '0.7rem',
+                                              fontWeight: cItem.recipient_type === 'other' ? 750 : 500,
+                                              background: cItem.recipient_type === 'other' ? 'var(--color-surface, #ffffff)' : 'transparent',
+                                              color: cItem.recipient_type === 'other' ? '#d97706' : 'var(--color-text-muted)',
+                                              boxShadow: cItem.recipient_type === 'other' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '4px',
+                                              transition: 'all 0.15s ease'
+                                            }}
+                                          >
+                                            <Building2 size={12} />
+                                            <span>{t('Khác (Đối tác / Giới thiệu)')}</span>
+                                          </button>
+                                        </div>
                                       </div>
-                                      <CustomSelect
-                                        options={users.map((u: any) => ({
-                                          value: String(u.id),
-                                          label: u.full_name || u.name || u.username || `Nhân viên #${u.id}`,
-                                          avatar: u.avatar_url || u.avatar,
-                                          sublabel: [
-                                            u.role || '',
-                                            u.bank_name ? `${u.bank_name}: ${u.bank_account}` : t('Chưa có STK')
-                                          ].filter(Boolean).join(' • ')
-                                        }))}
-                                        value={cItem.user_id ? String(cItem.user_id) : ''}
-                                        onChange={val => {
-                                          const empId = String(val);
-                                          const emp = users.find((u: any) => String(u.id) === empId);
-                                          setCommissionItems(prev => {
-                                            const copy = [...prev];
-                                            if (emp) {
-                                              const empName = emp.full_name || emp.name || emp.username || '';
-                                              copy[idx] = {
-                                                ...copy[idx],
-                                                user_id: empId,
-                                                user_name: empName,
-                                                avatar: emp.avatar_url || emp.avatar || '',
-                                                role: emp.role || '',
-                                                bank_name: emp.bank_name || copy[idx].bank_name || '',
-                                                bank_account: emp.bank_account || copy[idx].bank_account || '',
-                                                bank_owner: (empName || '').toUpperCase()
-                                              };
-                                            } else {
-                                              copy[idx] = {
-                                                ...copy[idx],
-                                                user_id: '',
-                                                user_name: '',
-                                                avatar: '',
-                                                role: ''
-                                              };
-                                            }
-                                            return copy;
-                                          });
-                                        }}
-                                        placeholder={t('-- Tìm & chọn nhân viên nhận hoa hồng --')}
-                                        searchable
-                                        showAvatars
-                                        width="100%"
-                                      />
-                                      {cItem.user_id && !cItem.bank_account && (
-                                        <div style={{ fontSize: '0.72rem', color: '#d97706', marginTop: '2px', fontWeight: 600 }}>
-                                          ⚠️ {t('Nhân viên này chưa cập nhật STK trong hồ sơ. Vui lòng nhập STK ở Hàng 2 bên dưới.')}
-                                        </div>
-                                      )}
-                                      {cItem.user_id && cItem.bank_account && (
-                                        <div style={{ fontSize: '0.72rem', color: '#059669', marginTop: '2px', fontWeight: 600 }}>
-                                          ✓ {t('Đã tự động liên kết STK ngân hàng từ hồ sơ nhân sự.')}
-                                        </div>
+
+                                      {/* TAB 1: NHÂN VIÊN */}
+                                      {(!cItem.recipient_type || cItem.recipient_type === 'employee') ? (
+                                        <>
+                                          <CustomSelect
+                                            options={users.map((u: any) => ({
+                                              value: String(u.id),
+                                              label: u.full_name || u.name || u.username || `Nhân viên #${u.id}`,
+                                              avatar: u.avatar_url || u.avatar,
+                                              sublabel: [
+                                                u.role || '',
+                                                u.bank_name ? `${u.bank_name}: ${u.bank_account}` : t('Chưa có STK')
+                                              ].filter(Boolean).join(' • ')
+                                            }))}
+                                            value={cItem.user_id ? String(cItem.user_id) : ''}
+                                            onChange={val => {
+                                              const empId = String(val);
+                                              const emp = users.find((u: any) => String(u.id) === empId);
+                                              setCommissionItems(prev => {
+                                                const copy = [...prev];
+                                                if (emp) {
+                                                  const empName = emp.full_name || emp.name || emp.username || '';
+                                                  copy[idx] = {
+                                                    ...copy[idx],
+                                                    recipient_type: 'employee',
+                                                    user_id: empId,
+                                                    user_name: empName,
+                                                    avatar: emp.avatar_url || emp.avatar || '',
+                                                    role: emp.role || '',
+                                                    bank_name: emp.bank_name || copy[idx].bank_name || '',
+                                                    bank_account: emp.bank_account || copy[idx].bank_account || '',
+                                                    bank_owner: (empName || '').toUpperCase()
+                                                  };
+                                                } else {
+                                                  copy[idx] = {
+                                                    ...copy[idx],
+                                                    user_id: '',
+                                                    user_name: '',
+                                                    avatar: '',
+                                                    role: ''
+                                                  };
+                                                }
+                                                return copy;
+                                              });
+                                            }}
+                                            placeholder={t('-- Tìm & chọn nhân viên nhận hoa hồng --')}
+                                            searchable
+                                            showAvatars
+                                            width="100%"
+                                          />
+                                          {cItem.user_id && !cItem.bank_account && (
+                                            <div style={{ fontSize: '0.72rem', color: '#d97706', marginTop: '2px', fontWeight: 600 }}>
+                                              ⚠️ {t('Nhân viên này chưa cập nhật STK trong hồ sơ. Vui lòng nhập STK ở Hàng 2 bên dưới.')}
+                                            </div>
+                                          )}
+                                          {cItem.user_id && cItem.bank_account && (
+                                            <div style={{ fontSize: '0.72rem', color: '#059669', marginTop: '2px', fontWeight: 600 }}>
+                                              ✓ {t('Đã tự động liên kết STK ngân hàng từ hồ sơ nhân sự.')}
+                                            </div>
+                                          )}
+                                        </>
+                                      ) : (
+                                        /* TAB 2: KHÁC (ĐỐI TÁC / GIỚI THIỆU / NHÀ CUNG CẤP / CTV) */
+                                        <>
+                                          <CustomSelect
+                                            options={commissionRecipientOtherOptions}
+                                            value={cItem.other_id || ''}
+                                            onChange={val => {
+                                              const selectedKey = String(val);
+                                              const found = commissionRecipientOtherOptions.find(o => o.value === selectedKey);
+                                              setCommissionItems(prev => {
+                                                const copy = [...prev];
+                                                if (found) {
+                                                  copy[idx] = {
+                                                    ...copy[idx],
+                                                    recipient_type: 'other',
+                                                    other_id: selectedKey,
+                                                    user_id: '',
+                                                    user_name: found.label,
+                                                    avatar: found.avatar || '',
+                                                    role: found.typeLabel || 'Đối tác',
+                                                    other_type: found.category || 'partner',
+                                                    company_id: found.category === 'company' ? found.rawId : '',
+                                                    supplier_id: found.category === 'supplier' ? found.rawId : '',
+                                                    contact_id: found.category === 'contact' ? found.rawId : '',
+                                                    bank_name: found.bank_name || copy[idx].bank_name || '',
+                                                    bank_account: found.bank_account || copy[idx].bank_account || '',
+                                                    bank_owner: found.bank_owner ? found.bank_owner.toUpperCase() : (copy[idx].bank_owner || found.label.toUpperCase())
+                                                  };
+                                                } else {
+                                                  copy[idx] = {
+                                                    ...copy[idx],
+                                                    other_id: '',
+                                                    user_name: ''
+                                                  };
+                                                }
+                                                return copy;
+                                              });
+                                            }}
+                                            placeholder={t('-- Tìm kiếm Đối tác, Giới thiệu, NCC, Giảng viên --')}
+                                            searchable
+                                            width="100%"
+                                          />
+                                          {cItem.other_id && !cItem.bank_account && (
+                                            <div style={{ fontSize: '0.72rem', color: '#d97706', marginTop: '2px', fontWeight: 600 }}>
+                                              ⚠️ {t('Đối tượng này chưa lưu STK trong danh bạ. Vui lòng nhập thông tin ngân hàng ở Hàng 2 bên dưới.')}
+                                            </div>
+                                          )}
+                                          {cItem.other_id && cItem.bank_account && (
+                                            <div style={{ fontSize: '0.72rem', color: '#059669', marginTop: '2px', fontWeight: 600 }}>
+                                              ✓ {t('Đã tự động trích xuất STK ngân hàng từ danh bạ hệ thống.')}
+                                            </div>
+                                          )}
+                                        </>
                                       )}
                                     </div>
 
-                                    {/* Cột 2: Số tiền hoa hồng */}
+                                    {/* Cột 2 (Nếu là Khác/Đối tác): MÃ PO THỤ HƯỞNG */}
+                                    {isOther && (
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                          <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#2563eb', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            <FileText size={14} />
+                                            {t('Mã PO thụ hưởng')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                          </label>
+                                          <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>
+                                            {t('(Chọn hoặc gõ PO)')}
+                                          </span>
+                                        </div>
+                                        <input
+                                          type="text"
+                                          list={`po-datalist-${cItem.id}`}
+                                          className="form-input"
+                                          value={cItem.po_number || ''}
+                                          onChange={e => {
+                                            const val = e.target.value;
+                                            const matchedPo = purchaseOrdersList.find(p => p.po_number === val || `PO #${p.id}` === val);
+                                            setCommissionItems(prev => {
+                                              const copy = [...prev];
+                                              copy[idx] = {
+                                                ...copy[idx],
+                                                po_number: val,
+                                                po_id: matchedPo ? matchedPo.id : (copy[idx].po_id || '')
+                                              };
+                                              return copy;
+                                            });
+                                          }}
+                                          placeholder={t('Nhập hoặc chọn mã PO...')}
+                                          style={{
+                                            height: '38px',
+                                            fontSize: '0.82rem',
+                                            fontWeight: 700,
+                                            color: '#1e40af',
+                                            borderColor: cItem.po_number ? '#3b82f6' : 'var(--color-border)',
+                                            background: cItem.po_number ? 'rgba(59, 130, 246, 0.05)' : 'var(--color-surface)'
+                                          }}
+                                        />
+                                        <datalist id={`po-datalist-${cItem.id}`}>
+                                          {purchaseOrdersList.map(po => (
+                                            <option key={po.id} value={po.po_number || `PO #${po.id}`}>
+                                              {`${po.po_number || `PO #${po.id}`} • ${formatApprovalCurrency(po.total || 0, currencyType)}${po.notes ? ` • ${po.notes}` : ''}`}
+                                            </option>
+                                          ))}
+                                        </datalist>
+                                        {cItem.po_number ? (
+                                          <div style={{ fontSize: '0.7rem', color: '#2563eb', fontWeight: 650, display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                            <Check size={11} /> {t('PO liên kết:')} <strong>{cItem.po_number}</strong>
+                                          </div>
+                                        ) : (
+                                          <div style={{ fontSize: '0.7rem', color: '#d97706', fontStyle: 'italic' }}>
+                                            ℹ️ {t('Vui lòng ghi nhận mã PO thụ hưởng của đối tác')}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+
+                                    {/* Cột Số tiền hoa hồng */}
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                       <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>
                                         {t('Số tiền hoa hồng (₫)')} <span style={{ color: 'var(--color-danger)' }}>*</span>
@@ -11537,7 +11925,7 @@ export default function Approvals() {
                                       )}
                                     </div>
 
-                                    {/* Cột 3: Nút xóa dòng */}
+                                    {/* Cột Nút xóa dòng */}
                                     <div style={{ display: 'flex', alignItems: 'center', paddingTop: '26px' }}>
                                       {commissionItems.length > 1 && (
                                         <button
@@ -11557,7 +11945,7 @@ export default function Approvals() {
                                             justifyContent: 'center',
                                             transition: 'all 0.15s'
                                           }}
-                                          title={t('Xóa nhân viên này khỏi danh sách')}
+                                          title={t('Xóa dòng này khỏi danh sách')}
                                         >
                                           <Trash2 size={16} />
                                         </button>
@@ -11570,7 +11958,7 @@ export default function Approvals() {
                                     display: 'grid',
                                     gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr 1.4fr',
                                     gap: '10px',
-                                    background: 'var(--color-bg-secondary, #f8fafc)',
+                                    background: isOther ? 'rgba(245, 158, 11, 0.04)' : 'var(--color-bg-secondary, #f8fafc)',
                                     padding: '10px 12px',
                                     borderRadius: '8px',
                                     border: '1px solid var(--color-border-light)'
@@ -11651,7 +12039,7 @@ export default function Approvals() {
                                             return copy;
                                           });
                                         }}
-                                        placeholder={t('Ví dụ: Hoa hồng chốt hợp đồng dự án ABC...')}
+                                        placeholder={isOther ? t('VD: Hoa hồng đối tác dự án X theo PO...') : t('Ví dụ: Hoa hồng chốt hợp đồng dự án ABC...')}
                                         style={{ height: '32px', fontSize: '0.8rem' }}
                                       />
                                     </div>
@@ -11662,9 +12050,14 @@ export default function Approvals() {
                           </div>
 
                           {/* Totals Summary */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--color-bg-secondary)', padding: '12px 18px', borderRadius: '12px', border: '1px solid var(--color-border-light)' }}>
-                            <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
-                              {t('Tổng số nhân viên nhận hoa hồng:')} <strong style={{ color: 'var(--color-text)' }}>{commissionItems.filter(c => c.user_id).length}</strong>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--color-bg-secondary)', padding: '12px 18px', borderRadius: '12px', border: '1px solid var(--color-border-light)', flexWrap: 'wrap', gap: '10px' }}>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span>{t('Tổng số người nhận hoa hồng:')} <strong style={{ color: 'var(--color-text)' }}>{commissionItems.filter(c => c.user_id || c.user_name).length}</strong></span>
+                              {commissionItems.some(c => c.recipient_type === 'other') && (
+                                <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: '6px', background: 'rgba(245, 158, 11, 0.12)', color: '#d97706', fontWeight: 700 }}>
+                                  {commissionItems.filter(c => !c.recipient_type || c.recipient_type === 'employee').filter(c => c.user_id).length} {t('nhân viên')} • {commissionItems.filter(c => c.recipient_type === 'other').filter(c => c.user_name).length} {t('đối tác/khác')}
+                                </span>
+                              )}
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('TỔNG TIỀN HOA HỒNG')}:</span>
@@ -15379,11 +15772,11 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                       <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                         <span>{t('BẢNG PHÂN BỔ & CHI TRẢ HOA HỒNG')}</span>
                         <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.12)', color: '#d97706', fontWeight: 700 }}>
-                          {totalCount} {t('nhân sự')}
+                          {totalCount} {t('đối tượng thụ hưởng')}
                         </span>
                       </div>
                       <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-                        {t('Giải ngân độc lập từng nhân sự • Tự động gửi thông báo riêng biệt')}
+                        {t('Giải ngân độc lập từng đối tượng • Tự động gửi thông báo riêng biệt')}
                       </div>
                     </div>
                   </div>
@@ -15408,7 +15801,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 <div style={{ padding: '8px 12px', borderRadius: '10px', background: 'rgba(59, 130, 246, 0.05)', border: '1px solid rgba(59, 130, 246, 0.15)', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
                   <ShieldCheck size={16} style={{ color: '#3b82f6', flexShrink: 0 }} />
                   <span>
-                    <strong style={{ color: '#2563eb' }}>{t('Cơ chế bảo mật thông báo riêng biệt')}:</strong> {t('Kế toán xác nhận hoặc upload UNC cho nhân sự nào thì chỉ gửi thông báo và email thanh toán đến đúng nhân viên đó.')}
+                    <strong style={{ color: '#2563eb' }}>{t('Cơ chế bảo mật thông báo riêng biệt')}:</strong> {t('Kế toán xác nhận hoặc upload UNC cho người nào thì chỉ gửi thông báo và email thanh toán đến đúng người đó (nếu là nhân sự nội bộ).')}
                   </span>
                 </div>
 
@@ -15418,10 +15811,10 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                     <thead>
                       <tr style={{ background: 'var(--color-bg-secondary)', borderBottom: '1px solid var(--color-border-light)', textAlign: 'left' }}>
                         <th style={{ padding: '10px 12px', width: '38px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>#</th>
-                        <th style={{ padding: '10px 12px', minWidth: '160px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>{t('Nhân sự thụ hưởng')}</th>
+                        <th style={{ padding: '10px 12px', minWidth: '160px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>{t('Đối tượng thụ hưởng')}</th>
                         <th style={{ padding: '10px 12px', minWidth: '200px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>{t('Thông tin tài khoản nhận')}</th>
                         <th style={{ padding: '10px 12px', width: '130px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>{t('Số tiền chi')}</th>
-                        <th style={{ padding: '10px 12px', minWidth: '150px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>{t('Nội dung')}</th>
+                        <th style={{ padding: '10px 12px', minWidth: '150px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>{t('Nội dung / Mã PO')}</th>
                         <th style={{ padding: '10px 12px', minWidth: '140px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>{t('Trạng thái & UNC')}</th>
                         {canManagePayment && (
                           <th style={{ padding: '10px 12px', minWidth: '150px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>{t('Thao tác kế toán')}</th>
@@ -15435,8 +15828,16 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                         const isRowPaid = Boolean(it.is_paid == 1 || it.is_paid === true);
                         const isUploading = uploadingUncIndex === idx;
                         const isPaying = payingItemIndex === idx;
+                        const isOther = it.recipient_type === 'other' || !it.user_id;
                         const rowAmt = Number(it.amount || it.price || 0);
-                        const qrUrl = (it.bank_name && it.bank_account_no && rowAmt > 0) ? getVietQrUrl({ bankBinOrCode: it.bank_name, accountNumber: it.bank_account_no, amount: rowAmt, memo: it.note || 'Hoa hong' }) : null;
+                        const qrUrl = (it.bank_name && (it.bank_account_no || it.bank_account) && rowAmt > 0)
+                          ? getVietQrUrl({
+                              bankBinOrCode: it.bank_name,
+                              accountNumber: it.bank_account_no || it.bank_account,
+                              amount: rowAmt,
+                              memo: it.po_number ? `PO ${it.po_number} ${it.note || 'Hoa hong'}`.substring(0, 50) : (it.note || 'Hoa hong')
+                            })
+                          : null;
 
                         return (
                           <tr key={idx} style={{
@@ -15449,15 +15850,32 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                               {idx + 1}
                             </td>
 
-                            {/* Staff Info */}
+                            {/* Beneficiary Info */}
                             <td style={{ padding: '12px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                 <div style={{ position: 'relative' }}>
-                                  <Avatar
-                                    src={u?.avatar_url || u?.avatar}
-                                    name={it.user_name || u?.full_name || 'N'}
-                                    size="sm"
-                                  />
+                                  {isOther ? (
+                                    <div style={{
+                                      width: '32px',
+                                      height: '32px',
+                                      borderRadius: '8px',
+                                      background: 'rgba(217, 119, 6, 0.12)',
+                                      color: '#d97706',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      fontWeight: 800,
+                                      fontSize: '0.8rem'
+                                    }}>
+                                      {it.other_type === 'company' || it.company_id ? <Building2 size={16} /> : (it.other_type === 'supplier' || it.supplier_id ? <Building2 size={16} /> : <User size={16} />)}
+                                    </div>
+                                  ) : (
+                                    <Avatar
+                                      src={u?.avatar_url || u?.avatar || it.avatar}
+                                      name={it.user_name || u?.full_name || 'N'}
+                                      size="sm"
+                                    />
+                                  )}
                                   {isRowPaid && (
                                     <div style={{ position: 'absolute', bottom: -2, right: -2, width: '12px', height: '12px', borderRadius: '50%', background: '#10b981', border: '2px solid var(--color-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                       <Check size={8} color="#fff" strokeWidth={3} />
@@ -15465,16 +15883,39 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                                   )}
                                 </div>
                                 <div>
-                                  <div style={{ fontWeight: 750, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <span>{it.user_name || u?.full_name || u?.name || t('Nhân sự')}</span>
+                                  <div style={{ fontWeight: 750, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                    <span>{it.user_name || u?.full_name || u?.name || t('Thụ hưởng')}</span>
                                     {isCurrentUser && (
                                       <span style={{ fontSize: '0.65rem', padding: '1px 6px', borderRadius: '4px', background: '#f59e0b', color: '#fff', fontWeight: 800 }}>
                                         {t('Bạn')}
                                       </span>
                                     )}
+                                    {isOther && (
+                                      <span style={{ fontSize: '0.65rem', padding: '1px 6px', borderRadius: '4px', background: 'rgba(217, 119, 6, 0.12)', color: '#b45309', fontWeight: 750 }}>
+                                        {it.role || t('Đối tác / Khác')}
+                                      </span>
+                                    )}
                                   </div>
-                                  <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
-                                    {u?.email || u?.phone || (it.user_id ? `#${it.user_id}` : '')}
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '2px' }}>
+                                    <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                                      {u?.email || u?.phone || (it.user_id ? `#${it.user_id}` : (it.tax_code ? `MST: ${it.tax_code}` : ''))}
+                                    </span>
+                                    {it.po_number && (
+                                      <span style={{
+                                        fontSize: '0.68rem',
+                                        padding: '1px 7px',
+                                        borderRadius: '5px',
+                                        background: 'rgba(37, 99, 235, 0.1)',
+                                        color: '#1d4ed8',
+                                        fontWeight: 800,
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '3px'
+                                      }}>
+                                        <FileText size={10} />
+                                        PO: {it.po_number}
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               </div>
@@ -15512,21 +15953,21 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                                   )}
                                 </div>
 
-                                {it.bank_account_no ? (
+                                {(it.bank_account_no || it.bank_account) ? (
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                     <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '0.85rem', color: '#2563eb', letterSpacing: '0.02em' }}>
-                                      {it.bank_account_no}
+                                      {it.bank_account_no || it.bank_account}
                                     </span>
                                     <button
                                       type="button"
-                                      onClick={() => handleCopyText(it.bank_account_no, `STK (${it.user_name || 'Nhân sự'})`)}
+                                      onClick={() => handleCopyText(it.bank_account_no || it.bank_account, `STK (${it.user_name || 'Thụ hưởng'})`)}
                                       title={t('Sao chép số tài khoản')}
                                       style={{
                                         background: 'transparent',
                                         border: 'none',
                                         padding: '2px 4px',
                                         cursor: 'pointer',
-                                        color: copiedField?.includes(it.bank_account_no) ? '#10b981' : 'var(--color-text-muted)',
+                                        color: copiedField?.includes(it.bank_account_no || it.bank_account) ? '#10b981' : 'var(--color-text-muted)',
                                         display: 'flex',
                                         alignItems: 'center',
                                         borderRadius: '4px'
@@ -15541,9 +15982,9 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                                   </span>
                                 )}
 
-                                {it.bank_account_name && (
+                                {(it.bank_account_name || it.bank_owner) && (
                                   <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
-                                    {it.bank_account_name}
+                                    {it.bank_account_name || it.bank_owner}
                                   </div>
                                 )}
                               </div>
@@ -15556,11 +15997,17 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                               </div>
                             </td>
 
-                            {/* Note */}
+                            {/* Note & PO */}
                             <td style={{ padding: '12px' }}>
                               <div style={{ color: 'var(--color-text)', fontWeight: 500, fontSize: '0.78rem', maxWidth: '220px', wordBreak: 'break-word' }}>
                                 {it.note || it.name || 'Chi trả hoa hồng'}
                               </div>
+                              {it.po_number && (
+                                <div style={{ fontSize: '0.7rem', color: '#2563eb', fontWeight: 700, marginTop: '3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <FileText size={11} />
+                                  <span>{t('PO liên kết:')} {it.po_number}</span>
+                                </div>
+                              )}
                             </td>
 
                             {/* Status & UNC */}

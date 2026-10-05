@@ -2051,7 +2051,7 @@ class FinanceController
 
             if ($foundIndex === -1) {
                 $this->db->rollBack();
-                respond(404, null, 'Không tìm thấy dòng nhân viên thụ hưởng trong phiếu', false);
+                respond(404, null, 'Không tìm thấy dòng người thụ hưởng trong phiếu', false);
             }
 
             // Update item
@@ -2083,7 +2083,7 @@ class FinanceController
             $stmtUpdate = $this->db->prepare("UPDATE expenses SET items = ?, is_refunded = ?, refund_image_url = ? WHERE id = ?");
             $stmtUpdate->execute([$newItemsJson, $newRefunded, $refundImg, $id]);
 
-            // Notification: Send EXCLUSIVELY to target beneficiary user
+            // Notification: Send EXCLUSIVELY to target beneficiary user if internal employee
             $beneficiaryUserId = isset($targetItem['user_id']) ? (int)$targetItem['user_id'] : 0;
             if ($beneficiaryUserId > 0) {
                 $paidAmt = (float)($targetItem['amount'] ?? 0);
@@ -2116,6 +2116,9 @@ class FinanceController
 
             logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'PAY_COMMISSION_ITEM', 'expense', $id, json_encode([
                 'beneficiary_user_id' => $beneficiaryUserId,
+                'beneficiary_name' => $targetItem['user_name'] ?? '',
+                'recipient_type' => $targetItem['recipient_type'] ?? ($beneficiaryUserId > 0 ? 'employee' : 'other'),
+                'po_number' => $targetItem['po_number'] ?? null,
                 'amount' => $targetItem['amount'] ?? 0,
                 'unc_file_url' => $uncFileUrl,
                 'all_paid' => $allPaid
