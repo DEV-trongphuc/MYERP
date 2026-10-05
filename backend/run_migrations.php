@@ -4356,10 +4356,45 @@ try {
         }
     }
 
-    // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '306') ON DUPLICATE KEY UPDATE setting_value = '306'");
+    // --- MIGRATION 307: TẠO TÀI KHOẢN HỌC VỤ CHO NGANHS@IDEAS.EDU.VN ---
+    if ($currentVersion < 307) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 307: Tạo tài khoản Học vụ nganhs@ideas.edu.vn...", "info");
+        try {
+            $email = 'nganhs@ideas.edu.vn';
+            $username = 'nganhs';
+            $fullName = 'Học vụ - nganhs';
+            $role = 'academic';
+            $department = 'Học vụ - học thuật';
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 306", "success");
+            // Tìm ID team Học vụ - học thuật nếu có
+            $teamId = 5;
+            $chkTeam = $conn->query("SELECT id FROM teams WHERE name LIKE '%Học vụ%' OR name LIKE '%học thuật%' LIMIT 1");
+            if ($chkTeam && $rowTeam = $chkTeam->fetch_assoc()) {
+                $teamId = (int)$rowTeam['id'];
+            }
+
+            $pwdHash = password_hash('Ideas@123456', PASSWORD_BCRYPT, ['cost' => 12]);
+
+            $chk = $conn->query("SELECT id FROM users WHERE email = '{$email}' OR username = '{$username}' LIMIT 1");
+            if ($chk && $chk->num_rows > 0) {
+                $uid = (int)$chk->fetch_assoc()['id'];
+                $conn->query("UPDATE users SET full_name = '{$fullName}', password_hash = '{$pwdHash}', role = '{$role}', department = '{$department}', team_id = {$teamId}, is_active = 1, is_confirmed = 1, status = 'active' WHERE id = {$uid}");
+                $logMsg("Đã cập nhật thông tin tài khoản Học vụ nganhs (ID: {$uid}).", "success");
+            } else {
+                $conn->query("INSERT INTO users (tenant_id, full_name, email, username, password_hash, role, department, team_id, is_active, is_confirmed, status) VALUES (1, '{$fullName}', '{$email}', '{$username}', '{$pwdHash}', '{$role}', '{$department}', {$teamId}, 1, 1, 'active')");
+                $newId = (int)$conn->insert_id;
+                $logMsg("Đã tạo mới tài khoản Học vụ nganhs (ID: {$newId}).", "success");
+            }
+            $logMsg("Nâng cấp lên phiên bản 307 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi nâng cấp v307: " . $e->getMessage(), "error");
+        }
+    }
+
+    // Update DB version in system_settings
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '307') ON DUPLICATE KEY UPDATE setting_value = '307'");
+
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 307", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");
