@@ -20,6 +20,7 @@ import { GroupClusterAvatar } from './GroupClusterAvatar';
 import { CHAT_STICKERS } from './ChatStickers';
 import { ChatErpCardModal } from './ChatErpCardModal';
 import { CreateChatGroupModal } from './CreateChatGroupModal';
+import { AddChatMemberModal } from './AddChatMemberModal';
 import { ChatMediaVaultPanel } from './ChatMediaVaultPanel';
 import { ChatForwardModal } from './ChatForwardModal';
 import { CreateTaskFromChatModal } from './CreateTaskFromChatModal';
@@ -477,6 +478,13 @@ export const WorkChatModal: React.FC = () => {
   }, [displayConv?.settings]);
   const currentWallpaper = parsedSettings?.wallpaper;
   const wallpaperStyle = useMemo(() => getWallpaperStyle(currentWallpaper), [currentWallpaper]);
+
+  // Tự động chọn cuộc trò chuyện đầu tiên khi mở màn chat to (chỉ khi maximized)
+  useEffect(() => {
+    if (isMaximized && !activeConversationId && conversations.length > 0) {
+      selectConversation(conversations[0].id);
+    }
+  }, [isMaximized, activeConversationId, conversations, selectConversation]);
 
   const handleSaveWallpaper = async (wallpaperConfig: ChatWallpaperConfig | null) => {
     const targetConv = activeConversation || conversations.find((c) => c.id === activeConversationId);
@@ -1980,6 +1988,35 @@ export const WorkChatModal: React.FC = () => {
                               flexDirection: 'column',
                               gap: '2px'
                             }}>
+                              {displayConv.type === 'group' && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setShowMobileHeaderMenu(false);
+                                    setShowAddMemberModal(true);
+                                  }}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    padding: '8px 10px',
+                                    borderRadius: '6px',
+                                    border: 'none',
+                                    background: 'transparent',
+                                    color: '#334155',
+                                    fontSize: '0.8rem',
+                                    fontWeight: 650,
+                                    cursor: 'pointer',
+                                    textAlign: 'left'
+                                  }}
+                                  onMouseEnter={(e) => e.currentTarget.style.background = '#fef2f2'}
+                                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                                >
+                                  <UserPlus size={15} color="#dc2626" />
+                                  <span>Thêm thành viên vào nhóm</span>
+                                </button>
+                              )}
+
                               <button
                                 type="button"
                                 onClick={() => {
@@ -2189,6 +2226,35 @@ export const WorkChatModal: React.FC = () => {
                               flexDirection: 'column',
                               gap: '2px'
                             }}>
+                              {displayConv.type === 'group' && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setShowDesktopHeaderMenu(false);
+                                    setShowAddMemberModal(true);
+                                  }}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '9px',
+                                    padding: '8px 12px',
+                                    borderRadius: '8px',
+                                    border: 'none',
+                                    background: 'transparent',
+                                    color: '#1e293b',
+                                    fontSize: '0.8rem',
+                                    fontWeight: 650,
+                                    cursor: 'pointer',
+                                    textAlign: 'left'
+                                  }}
+                                  onMouseEnter={(e) => e.currentTarget.style.background = '#fef2f2'}
+                                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                                >
+                                  <UserPlus size={15} color="#dc2626" />
+                                  <span>Thêm thành viên vào nhóm</span>
+                                </button>
+                              )}
+
                               <button
                                 type="button"
                                 onClick={() => {
@@ -4681,11 +4747,15 @@ export const WorkChatModal: React.FC = () => {
 
       {/* Create Group Modal */}
       <CreateChatGroupModal
-        isOpen={showCreateGroup || showAddMemberModal}
-        onClose={() => {
-          setShowCreateGroup(false);
-          setShowAddMemberModal(false);
-        }}
+        isOpen={showCreateGroup}
+        onClose={() => setShowCreateGroup(false)}
+      />
+
+      {/* Add Member Modal to Existing Group */}
+      <AddChatMemberModal
+        isOpen={showAddMemberModal}
+        onClose={() => setShowAddMemberModal(false)}
+        conversation={displayConv}
       />
 
       {/* Forward Message Modal */}

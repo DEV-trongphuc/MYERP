@@ -1894,7 +1894,7 @@ class ActivityController {
         // 4. If linked to contact: notify owner ONLY IF not already notified
         if ($activity['related_type'] === 'contact' && $activity['related_id']) {
             $stmtOwner = $this->db->prepare("
-                SELECT c.owner_id, u.email, u.full_name 
+                SELECT c.id as contact_id, c.full_name as contact_name, c.owner_id, u.email, u.full_name as owner_name 
                 FROM contacts c 
                 JOIN users u ON c.owner_id = u.id 
                 WHERE c.id = ? AND c.tenant_id = ?
@@ -1907,7 +1907,9 @@ class ActivityController {
                     $notifiedUserIds[] = $ownerUid;
                     NotificationService::send($this->db, $auth['tenant_id'], 'CUSTOMER_UPDATE', [
                         'user_id' => $ownerUid,
-                        'customer_name' => $ownerRow['full_name'] ?? 'Khách hàng',
+                        'customer_name' => $ownerRow['contact_name'] ?: 'Khách hàng',
+                        'contact_id' => (int)$ownerRow['contact_id'],
+                        'link' => $targetLink,
                         'content' => $commenterName . ' đã bình luận trong một hoạt động thuộc khách hàng của bạn.'
                     ]);
                 }

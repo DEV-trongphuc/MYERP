@@ -1489,12 +1489,14 @@ class NotificationService {
                 $recipients = self::getRecipientById($db, $payload['user_id'] ?? 0);
                 $custName = $payload['customer_name'] ?? 'Khách hàng';
                 $updateContent = $payload['content'] ?? 'Thông tin khách hàng vừa được cập nhật';
+                $contactId = (int)($payload['contact_id'] ?? 0);
+                $link = !empty($payload['link']) ? $payload['link'] : ($contactId > 0 ? "/contacts?open_contact_id={$contactId}" : "/contacts");
                 return [
                     'recipients' => $recipients,
                     'title' => "Cập nhật khách hàng $custName",
                     'body' => $updateContent,
                     'type' => "customer",
-                    'link' => "/contacts",
+                    'link' => $link,
                     'zalo_msg' => "👤 [ CẬP NHẬT KHÁCH HÀNG ]\n\n"
                         . "Khách hàng $custName có cập nhật mới:\n"
                         . "  • Nội dung: $updateContent\n\n"

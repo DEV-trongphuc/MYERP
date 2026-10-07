@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 307;
+$targetVersion = 308;
 $currentVersion = 186;
 
 // Query current DB version
@@ -4391,10 +4391,68 @@ try {
         }
     }
 
-    // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '307') ON DUPLICATE KEY UPDATE setting_value = '307'");
+    // --- MIGRATION 308: CHUẨN HÓA LINK VÀ TÊN KHÁCH HÀNG CHO THÔNG BÁO CUSTOMER_UPDATE ---
+    if ($currentVersion < 308) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 308: Chuẩn hóa thông báo Cập nhật khách hàng...", "info");
+        try {
+            $sqlOldNotifs = "
+                SELECT n.id, n.user_id, n.body, n.created_at
+                FROM notifications n
+                WHERE (n.link = '/contacts' OR n.link IS NULL OR n.link = '')
+                  AND n.body LIKE '%đã bình luận trong một hoạt động thuộc khách hàng của bạn%'
+                ORDER BY n.id DESC
+                LIMIT 200
+            ";
+            $resOld = $conn->query($sqlOldNotifs);
+            $fixedCount = 0;
+            if ($resOld && $resOld->num_rows > 0) {
+                while ($notifRow = $resOld->fetch_assoc()) {
+                    $nId = (int)$notifRow['id'];
+                    $ownerId = (int)$notifRow['user_id'];
+                    $nCreatedAt = $notifRow['created_at'];
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 307", "success");
+                    $stmtFind = $conn->prepare("
+                        SELECT ac.id as comment_id, ac.activity_id, a.related_id as contact_id, c.full_name as contact_name
+                        FROM activity_comments ac
+                        JOIN activities a ON ac.activity_id = a.id
+                        JOIN contacts c ON a.related_id = c.id
+                        WHERE a.related_type = 'contact'
+                          AND c.owner_id = ?
+                          AND ABS(TIMESTAMPDIFF(SECOND, ac.created_at, ?)) <= 600
+                        ORDER BY ABS(TIMESTAMPDIFF(SECOND, ac.created_at, ?)) ASC
+                        LIMIT 1
+                    ");
+                    $stmtFind->bind_param("iss", $ownerId, $nCreatedAt, $nCreatedAt);
+                    $stmtFind->execute();
+                    $matchResult = $stmtFind->get_result();
+                    if ($matchResult && $mRow = $matchResult->fetch_assoc()) {
+                        $cId = (int)$mRow['contact_id'];
+                        $actId = (int)$mRow['activity_id'];
+                        $cmtId = (int)$mRow['comment_id'];
+                        $cName = trim((string)$mRow['contact_name']) ?: 'Khách hàng';
+                        $newLink = "/contacts?open_contact_id={$cId}&highlight_activity_id={$actId}&highlight_comment_id={$cmtId}";
+                        $newTitle = "Cập nhật khách hàng {$cName}";
+
+                        $upStmt = $conn->prepare("UPDATE notifications SET link = ?, title = ? WHERE id = ?");
+                        $upStmt->bind_param("ssi", $newLink, $newTitle, $nId);
+                        $upStmt->execute();
+                        $upStmt->close();
+                        $fixedCount++;
+                    }
+                    $stmtFind->close();
+                }
+            }
+            $logMsg("Đã chuẩn hóa {$fixedCount} thông báo cập nhật khách hàng cũ.", "success");
+            $logMsg("Nâng cấp lên phiên bản 308 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi nâng cấp v308: " . $e->getMessage(), "error");
+        }
+    }
+
+    // Update DB version in system_settings
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '308') ON DUPLICATE KEY UPDATE setting_value = '308'");
+
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 308", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");

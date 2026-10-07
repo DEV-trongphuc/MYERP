@@ -812,7 +812,7 @@ export const Header = ({
       }
 
       if (urlObj.pathname.startsWith('/contacts')) {
-        const idFromParam = urlObj.searchParams.get('open_contact_id') || 
+        let idFromParam = urlObj.searchParams.get('open_contact_id') || 
                             urlObj.searchParams.get('id') || 
                             urlObj.searchParams.get('contact_id');
         let contactId: number | null = null;
@@ -823,10 +823,21 @@ export const Header = ({
           if (pathMatch) contactId = Number(pathMatch[1]);
         }
 
+        // Fallback: check if notification object carries contact_id or entity_id
+        if (!contactId && notif.contact_id && !isNaN(Number(notif.contact_id))) {
+          contactId = Number(notif.contact_id);
+        }
+        if (!contactId && notif.entity_id && !isNaN(Number(notif.entity_id)) && (notif.type === 'customer' || notif.type === 'contact')) {
+          contactId = Number(notif.entity_id);
+        }
+
         if (contactId) {
           window.dispatchEvent(new CustomEvent('open-contact-drawer', {
             detail: { id: contactId, contactId: contactId }
           }));
+          if (!idFromParam) {
+            targetLink = `/contacts?open_contact_id=${contactId}`;
+          }
         }
         navigate(targetLink, { state: { timestamp: Date.now(), openContactId: contactId || undefined } });
         return;
