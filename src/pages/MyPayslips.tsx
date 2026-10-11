@@ -429,8 +429,9 @@ export default function MyPayslips() {
     }
   };
 
-  const formatCurrency = (val: number) => {
-    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
+  const formatCurrency = (val: number | null | undefined) => {
+    const num = Number(val || 0);
+    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(isNaN(num) ? 0 : num);
   };
 
   const currentYear = new Date().getFullYear();

@@ -1119,7 +1119,9 @@ class HRMController {
         $approverId2 = !empty($b['approver_id_2']) ? (int)$b['approver_id_2'] : null;
         $relatedUserIds = !empty($b['related_user_ids']) ? (is_array($b['related_user_ids']) ? json_encode($b['related_user_ids']) : $b['related_user_ids']) : null;
 
-        $isSelfApproved = ($approverId > 0 && $approverId === (int)$auth['user_id'] && (empty($approverId2) || $approverId2 === (int)$auth['user_id']));
+        // Cấp Quản lý trở lên toàn quyền tự duyệt tạm ứng của chính mình; nhân viên cấp dưới bắt buộc chờ cấp trên duyệt
+        $isManagerOrAbove = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager'], true);
+        $isSelfApproved = $isManagerOrAbove && ($approverId > 0 && $approverId === (int)$auth['user_id'] && (empty($approverId2) || $approverId2 === (int)$auth['user_id']));
         $initialStatus = $isSelfApproved ? 'approved' : 'pending';
         $statusL1 = $isSelfApproved ? 'approved' : 'pending';
         $statusL2 = $isSelfApproved ? (!empty($approverId2) ? 'approved' : 'none') : ($approverId2 ? 'pending' : 'none');
@@ -1195,92 +1197,106 @@ class HRMController {
         $statusInput = $b['status'];
         $approverNote = $b['reason'] ?? 'Không có ghi chú thêm';
 
-        $stmtA = $this->db->prepare("SELECT a.*, u.full_name FROM hrm_salary_advances a JOIN users u ON a.user_id = u.id WHERE a.id = ?");
-        $stmtA->execute([$id]);
-        $advRow = $stmtA->fetch(PDO::FETCH_ASSOC);
+        $this->db->beginTransaction();
+        try {
+            $stmtA = $this->db->prepare("SELECT a.*, u.full_name FROM hrm_salary_advances a JOIN users u ON a.user_id = u.id WHERE a.id = ? AND a.tenant_id = ? FOR UPDATE");
+            $stmtA->execute([$id, $auth['tenant_id']]);
+            $advRow = $stmtA->fetch(PDO::FETCH_ASSOC);
 
-        if (!$advRow) {
-            respond(404, null, 'Yêu cầu tạm ứng không tồn tại', false);
-        }
-
-        $isApprover1 = ((int)$auth['user_id'] === (int)$advRow['approver_id']);
-        $isApprover2 = ((int)$auth['user_id'] === (int)$advRow['approver_id_2']);
-        $isSuperAdmin = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true);
-        $isPrivileged = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr', 'leader', 'team_lead', 'teamlead', 'marketing_lead'], true);
-
-        $isCreator = ((int)$auth['user_id'] === (int)$advRow['user_id']);
-        if ($isCreator && !$isApprover1 && !$isApprover2 && !$isPrivileged) {
-            respond(403, null, 'Người tạo đề xuất không được tự phê duyệt đề xuất của chính mình', false);
-        }
-
-        if (!$isApprover1 && !$isApprover2 && !$isPrivileged) {
-            respond(403, null, 'Bạn không có quyền phê duyệt yêu cầu này', false);
-        }
-
-        if ($isApprover2 && !$isApprover1 && !$isSuperAdmin) {
-            if ($advRow['status_level_1'] === 'pending') {
-                respond(403, null, 'Cần có phê duyệt Cấp 1 trước khi Cấp 2 phê duyệt', false);
+            if (!$advRow) {
+                $this->db->rollBack();
+                respond(404, null, 'Yêu cầu tạm ứng không tồn tại', false);
             }
-        }
 
-        $nextStatus = 'pending';
-        $updateFields = [];
-        $params = [];
+            $isApprover1 = ((int)$auth['user_id'] === (int)$advRow['approver_id']);
+            $isApprover2 = ((int)$auth['user_id'] === (int)$advRow['approver_id_2']);
+            $isSuperAdmin = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true);
+            $isPrivileged = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr', 'leader', 'team_lead', 'teamlead', 'marketing_lead'], true);
 
-        if ($statusInput === 'rejected') {
-            $nextStatus = 'rejected';
-            if ($isApprover1) {
-                $updateFields[] = "status_level_1 = 'rejected'";
+            $isManagerOrAbove = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager'], true);
+            $isCreator = ((int)$auth['user_id'] === (int)$advRow['user_id']);
+            if ($isCreator && !$isManagerOrAbove) {
+                $this->db->rollBack();
+                respond(403, null, 'Chỉ cấp Quản lý trở lên mới có thẩm quyền tự phê duyệt đề xuất tạm ứng của chính mình', false);
             }
-            if ($isApprover2) {
-                $updateFields[] = "status_level_2 = 'rejected'";
-                $updateFields[] = "approved_by_2 = ?";
-                $params[] = $auth['user_id'];
+
+            if (!$isApprover1 && !$isApprover2 && !$isPrivileged) {
+                $this->db->rollBack();
+                respond(403, null, 'Bạn không có quyền phê duyệt yêu cầu này', false);
             }
-            if (!$isApprover1 && !$isApprover2) {
-                $updateFields[] = "status_level_1 = 'rejected'";
-                $updateFields[] = "status_level_2 = 'rejected'";
+
+            if ($isApprover2 && !$isApprover1 && !$isSuperAdmin) {
+                if ($advRow['status_level_1'] === 'pending') {
+                    $this->db->rollBack();
+                    respond(403, null, 'Cần có phê duyệt Cấp 1 trước khi Cấp 2 phê duyệt', false);
+                }
             }
-            
-            if (!empty($approverNote) && $approverNote !== 'Không có ghi chú thêm') {
-                $reasonAppend = "\n[Từ chối: " . $approverNote . "]";
-                try {
-                    $stmtReason = $this->db->prepare("UPDATE hrm_salary_advances SET reason = CONCAT(COALESCE(reason, ''), ?) WHERE id = ?");
-                    $stmtReason->execute([$reasonAppend, $id]);
-                } catch (\Throwable $e) {}
-            }
-        } else {
-            if ($isApprover1) {
-                $updateFields[] = "status_level_1 = 'approved'";
+
+            $nextStatus = 'pending';
+            $updateFields = [];
+            $params = [];
+
+            if ($statusInput === 'rejected') {
+                $nextStatus = 'rejected';
+                if ($isApprover1) {
+                    $updateFields[] = "status_level_1 = 'rejected'";
+                }
+                if ($isApprover2) {
+                    $updateFields[] = "status_level_2 = 'rejected'";
+                    $updateFields[] = "approved_by_2 = ?";
+                    $params[] = $auth['user_id'];
+                }
+                if (!$isApprover1 && !$isApprover2) {
+                    $updateFields[] = "status_level_1 = 'rejected'";
+                    $updateFields[] = "status_level_2 = 'rejected'";
+                }
                 
-                if (!empty($advRow['approver_id_2'])) {
-                    $nextStatus = 'pending';
-                } else {
+                if (!empty($approverNote) && $approverNote !== 'Không có ghi chú thêm') {
+                    $reasonAppend = "\n[Từ chối: " . $approverNote . "]";
+                    try {
+                        $stmtReason = $this->db->prepare("UPDATE hrm_salary_advances SET reason = CONCAT(COALESCE(reason, ''), ?) WHERE id = ? AND tenant_id = ?");
+                        $stmtReason->execute([$reasonAppend, $id, $auth['tenant_id']]);
+                    } catch (\Throwable $e) {}
+                }
+            } else {
+                if ($isApprover1) {
+                    $updateFields[] = "status_level_1 = 'approved'";
+                    
+                    if (!empty($advRow['approver_id_2'])) {
+                        $nextStatus = 'pending';
+                    } else {
+                        $nextStatus = 'approved';
+                    }
+                }
+                if ($isApprover2) {
+                    $updateFields[] = "status_level_2 = 'approved'";
+                    $updateFields[] = "approved_by_2 = ?";
+                    $params[] = $auth['user_id'];
+                    $nextStatus = 'approved';
+                }
+                if (!$isApprover1 && !$isApprover2) {
+                    $updateFields[] = "status_level_1 = 'approved'";
+                    $updateFields[] = "status_level_2 = 'approved'";
+                    $updateFields[] = "approved_by_2 = ?";
+                    $params[] = $auth['user_id'];
                     $nextStatus = 'approved';
                 }
             }
-            if ($isApprover2) {
-                $updateFields[] = "status_level_2 = 'approved'";
-                $updateFields[] = "approved_by_2 = ?";
-                $params[] = $auth['user_id'];
-                $nextStatus = 'approved';
-            }
-            if (!$isApprover1 && !$isApprover2) {
-                $updateFields[] = "status_level_1 = 'approved'";
-                $updateFields[] = "status_level_2 = 'approved'";
-                $updateFields[] = "approved_by_2 = ?";
-                $params[] = $auth['user_id'];
-                $nextStatus = 'approved';
-            }
+
+            $updateFields[] = "status = ?";
+            $params[] = $nextStatus;
+            $params[] = $id;
+            $params[] = $auth['tenant_id'];
+
+            $updateSql = "UPDATE hrm_salary_advances SET " . implode(", ", $updateFields) . " WHERE id = ? AND tenant_id = ?";
+            $stmtUpdate = $this->db->prepare($updateSql);
+            $stmtUpdate->execute($params);
+
+            $this->db->commit();
+        } catch (\Exception $e) {
+            $this->db->rollBack();
+            respond(500, null, 'Lỗi khi phê duyệt tạm ứng: ' . $e->getMessage(), false);
         }
-
-        $updateFields[] = "status = ?";
-        $params[] = $nextStatus;
-        $params[] = $id;
-
-        $updateSql = "UPDATE hrm_salary_advances SET " . implode(", ", $updateFields) . " WHERE id = ?";
-        $stmtUpdate = $this->db->prepare($updateSql);
-        $stmtUpdate->execute($params);
 
         try {
             $statusText = $nextStatus === 'approved' ? 'Phê duyệt giải ngân hoàn toàn' : ($nextStatus === 'rejected' ? 'Từ chối' : 'Phê duyệt cấp 1 (Chờ Giám đốc duyệt)');
@@ -1407,9 +1423,9 @@ class HRMController {
                 SELECT m.expected_amount, d.contact_id, d.created_by
                 FROM deposit_milestones m
                 JOIN deposits d ON m.deposit_id = d.id
-                WHERE m.status = 'approved' AND DATE_FORMAT(m.approval_date, '%Y-%m') = ?
+                WHERE d.tenant_id = ? AND m.status = 'approved' AND DATE_FORMAT(m.approval_date, '%Y-%m') = ?
             ");
-            $milestonesStmt->execute([$monthYear]);
+            $milestonesStmt->execute([$auth['tenant_id'], $monthYear]);
             $milestonesList = $milestonesStmt->fetchAll(PDO::FETCH_ASSOC);
 
             $contactIds = array_values(array_unique(array_filter(array_column($milestonesList, 'contact_id'))));
@@ -1427,16 +1443,58 @@ class HRMController {
             $holidaysJson = $stmtHol ? (string)$stmtHol->fetchColumn() : '[]';
             $holidayList = json_decode($holidaysJson, true) ?: [];
         }
-        foreach ($employees as $emp) {
-            $userId = (int)$emp['id'];
+        $this->db->beginTransaction();
+        try {
+            // Batch pre-fetch: Existing payslips for the month (Anti N+1 bottleneck)
+            $oldPayslipsMap = [];
+            if (!$isSpecialPeriod) {
+                $oldStmt = $this->db->prepare("SELECT user_id, lateness_compensatory_deducted, lateness_annual_deducted FROM monthly_payslips WHERE month_year = ? AND tenant_id = ?");
+                $oldStmt->execute([$monthYear, $auth['tenant_id']]);
+                while ($row = $oldStmt->fetch(PDO::FETCH_ASSOC)) {
+                    $oldPayslipsMap[(int)$row['user_id']] = $row;
+                }
+            }
+
+            // Batch pre-fetch: Paid approved leaves per employee for this month (Anti N+1 bottleneck)
+            $paidLeavesMap = [];
+            if (!$isSpecialPeriod) {
+                $lvBatchStmt = $this->db->prepare("
+                    SELECT user_id, SUM(
+                        CASE 
+                            WHEN leave_type = 'remote_work' THEN total_days * (COALESCE(salary_rate, 50.0) / 100.0)
+                            ELSE (total_days - unpaid_days)
+                        END
+                    ) as paid_days
+                    FROM hrm_leave_requests
+                    WHERE tenant_id = ? AND status = 'approved' AND leave_type IN ('annual', 'sick', 'compensatory', 'remote_work', 'special_paid', 'maternity', 'paternity', 'marriage', 'funeral', 'business_trip')
+                      AND DATE_FORMAT(start_date, '%Y-%m') = ?
+                    GROUP BY user_id
+                ");
+                $lvBatchStmt->execute([$auth['tenant_id'], $monthYear]);
+                $paidLeavesMap = $lvBatchStmt->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
+            }
+
+            // Batch pre-fetch: Approved advances per employee (Anti N+1 bottleneck)
+            $advancesMap = [];
+            if (!$isSpecialPeriod) {
+                $advBatchStmt = $this->db->prepare("
+                    SELECT user_id, SUM(amount) as adv_amt
+                    FROM hrm_salary_advances
+                    WHERE tenant_id = ? AND status = 'approved' AND deducted_payslip_id IS NULL
+                    GROUP BY user_id
+                ");
+                $advBatchStmt->execute([$auth['tenant_id']]);
+                $advancesMap = $advBatchStmt->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
+            }
+
+            foreach ($employees as $emp) {
+                $userId = (int)$emp['id'];
 
             // Hoàn trả số ngày nghỉ bù & phép năm đã trừ do đi trễ ở bảng lương cũ của tháng này (nếu có)
             $oldComp = 0.0;
             $oldAnn = 0.0;
             if (!$isSpecialPeriod) {
-                $oldStmt = $this->db->prepare("SELECT /* refresh_cache_select */ lateness_compensatory_deducted, lateness_annual_deducted FROM monthly_payslips WHERE user_id = ? AND month_year = ? LIMIT 1");
-                $oldStmt->execute([$userId, $monthYear]);
-                $oldPayslip = $oldStmt->fetch(PDO::FETCH_ASSOC);
+                $oldPayslip = $oldPayslipsMap[$userId] ?? null;
                 if ($oldPayslip) {
                     $oldComp = (float)($oldPayslip['lateness_compensatory_deducted'] ?? 0.0);
                     $oldAnn = (float)($oldPayslip['lateness_annual_deducted'] ?? 0.0);
@@ -1519,20 +1577,7 @@ class HRMController {
             if ($isSpecialPeriod) {
                 $paidLeaveDays = 0;
             } else {
-                $lvStmt = $this->db->prepare("
-                    SELECT SUM(
-                        CASE 
-                            WHEN leave_type = 'remote_work' THEN total_days * (COALESCE(salary_rate, 50.0) / 100.0)
-                            ELSE (total_days - unpaid_days)
-                        END
-                    ) as paid_days
-                    FROM hrm_leave_requests
-                    WHERE user_id = ? AND status = 'approved' AND leave_type IN ('annual', 'sick', 'compensatory', 'remote_work', 'special_paid', 'maternity', 'paternity', 'marriage', 'funeral', 'business_trip')
-                      AND DATE_FORMAT(start_date, '%Y-%m') = ?
-                ");
-                $lvStmt->execute([$userId, $monthYear]);
-                $lv = $lvStmt->fetch(PDO::FETCH_ASSOC);
-                $paidLeaveDays = (float)($lv['paid_days'] ?? 0);
+                $paidLeaveDays = (float)($paidLeavesMap[$userId] ?? 0.0);
             }
 
             // Calculate Paid Public Holidays in month (e.g. 2/9, 30/4, Tết) on working days not checked-in
@@ -1728,14 +1773,7 @@ class HRMController {
             // 9. Approved salary advances to deduct
             $advanceDeduction = 0.0;
             if (!$isSpecialPeriod) {
-                $advStmt = $this->db->prepare("
-                    SELECT SUM(amount) as adv_amt
-                    FROM hrm_salary_advances
-                    WHERE user_id = ? AND status = 'approved' AND deducted_payslip_id IS NULL
-                ");
-                $advStmt->execute([$userId]);
-                $advVal = $advStmt->fetch(PDO::FETCH_ASSOC);
-                $advanceDeduction = (float)($advVal['adv_amt'] ?? 0);
+                $advanceDeduction = (float)($advancesMap[$userId] ?? 0.0);
             }
 
             // 6b. Overtime calculation (Sum up approved leave requests of type 'overtime' in this month)
@@ -1834,7 +1872,12 @@ class HRMController {
             ];
         }
 
-        respond(200, ['success' => true, 'data' => $results]);
+            $this->db->commit();
+            respond(200, ['success' => true, 'data' => $results]);
+        } catch (\Exception $e) {
+            $this->db->rollBack();
+            respond(500, null, 'Lỗi khi tính bảng lương: ' . $e->getMessage(), false);
+        }
     }
 
     // --- PAYSLIP CONTROLS ---
@@ -4314,8 +4357,8 @@ class HRMController {
     }
 
     public function deleteLeave(array $auth, int $id): void {
-        $stmt = $this->db->prepare("SELECT * FROM hrm_leave_requests WHERE id = ?");
-        $stmt->execute([$id]);
+        $stmt = $this->db->prepare("SELECT * FROM hrm_leave_requests WHERE id = ? AND tenant_id = ?");
+        $stmt->execute([$id, $auth['tenant_id']]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$row) {
             respond(404, null, 'Không tìm thấy yêu cầu nghỉ phép', false);
@@ -4329,13 +4372,13 @@ class HRMController {
             respond(403, null, 'Bạn không có quyền xóa yêu cầu này', false);
         }
         
-        $this->db->prepare("DELETE FROM hrm_leave_requests WHERE id = ?")->execute([$id]);
+        $this->db->prepare("DELETE FROM hrm_leave_requests WHERE id = ? AND tenant_id = ?")->execute([$id, $auth['tenant_id']]);
         respond(200, null, 'Đã xóa yêu cầu nghỉ phép');
     }
 
     public function deleteAdvance(array $auth, int $id): void {
-        $stmt = $this->db->prepare("SELECT * FROM hrm_salary_advances WHERE id = ?");
-        $stmt->execute([$id]);
+        $stmt = $this->db->prepare("SELECT * FROM hrm_salary_advances WHERE id = ? AND tenant_id = ?");
+        $stmt->execute([$id, $auth['tenant_id']]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$row) {
             respond(404, null, 'Không tìm thấy yêu cầu tạm ứng', false);
@@ -4349,7 +4392,7 @@ class HRMController {
             respond(403, null, 'Bạn không có quyền xóa yêu cầu này', false);
         }
         
-        $this->db->prepare("DELETE FROM hrm_salary_advances WHERE id = ?")->execute([$id]);
+        $this->db->prepare("DELETE FROM hrm_salary_advances WHERE id = ? AND tenant_id = ?")->execute([$id, $auth['tenant_id']]);
         respond(200, null, 'Đã xóa yêu cầu tạm ứng');
     }
 
@@ -4531,7 +4574,7 @@ class HRMController {
         }
         $jsonVal = json_encode($relatedUserIds);
 
-        if ($type === 'expense' || $type === 'expenses') {
+        if ($type === 'expense' || $type === 'expenses' || $type === 'commission_payout') {
             $stmt = $this->db->prepare("UPDATE expenses SET related_user_ids = ? WHERE id = ? AND tenant_id = ?");
             $stmt->execute([$jsonVal, $id, $auth['tenant_id']]);
         } elseif ($type === 'leave' || $type === 'hrm_leave') {

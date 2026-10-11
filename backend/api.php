@@ -75,11 +75,17 @@ if (strpos($action, '?') !== false) {
 }
 
 $segments = explode('/', $action);
+if (isset($segments[0]) && $segments[0] === 'v1' && isset($segments[1])) {
+    $action = substr($action, 3);
+    $segments = explode('/', $action);
+}
 $baseAction = explode('&', $segments[0])[0];
 if (in_array($baseAction, [
     'auth',
     'projects',
+    'tasks',
     'deposits',
+    'cooperation',
     'cooperation-slips',
     'capi',
     'check-ins',
@@ -98,16 +104,27 @@ if (in_array($baseAction, [
     'quotes',
     'invoices',
     'sales-orders',
+    'orders',
+    'finance',
     'expenses',
     'products',
     'posts',
+    'feed',
     'contacts',
     'companies',
     'deals',
     'activities',
     'notes',
     'campaigns',
+    'marketing',
     'marketing-campaigns',
+    'lead-distribution',
+    'consultant-shifts',
+    'connectors',
+    'omnichannel',
+    'ai',
+    'crons',
+    'presence',
     'upload',
     'teams',
     'dashboard',
@@ -171,7 +188,7 @@ if (!empty($httpOrigin)) {
 }
 header("Access-Control-Allow-Origin: " . $originToSet);
 
-$JWT_SECRET = $_ENV['JWT_SECRET'] ?? "IDEAS_SECRET_KEY_2026";
+$JWT_SECRET = defined('JWT_SECRET') ? JWT_SECRET : ($_ENV['JWT_SECRET'] ?? "MYERP_SECRET_KEY_2026_IDEAS");
 
 function getSafeErrorMsg($e)
 {
@@ -205,63 +222,6 @@ function create_jwt($payload, $secret)
 
 function verify_jwt($jwt, $secret)
 {
-    // Bypass for dev/demo tokens
-    if ($jwt === 'demo_token_12345') {
-        return [
-            'username' => 'info',
-            'email' => 'info@ideas.edu.vn',
-            'name' => 'Admin Demo',
-            'role' => 'admin',
-            'id' => 999905,
-            'user_id' => 999905,
-            'tenant_id' => 1
-        ];
-    }
-    if ($jwt === 'demo_token_marketing') {
-        return [
-            'username' => 'duongtnt',
-            'email' => 'duongtnt@ideas.edu.vn',
-            'name' => 'Trần Ngọc Thùy Dương',
-            'role' => 'marketing',
-            'id' => 100071,
-            'user_id' => 100071,
-            'tenant_id' => 1
-        ];
-    }
-    if ($jwt === 'demo_token_manager') {
-        return [
-            'username' => 'manager',
-            'email' => 'manager@Ideas.test',
-            'name' => 'Manager Demo',
-            'role' => 'manager',
-            'id' => 2,
-            'user_id' => 2
-        ];
-    }
-    if (strpos($jwt, 'demo_token_sale_') === 0) {
-        $cId = (int)str_replace('demo_token_sale_', '', $jwt);
-        $names = [
-            1 => 'Hải Đăng',
-            2 => 'Thanh Thảo',
-            3 => 'Việt Dũng',
-            4 => 'Minh Tuấn'
-        ];
-        $emails = [
-            1 => 'haidang@Ideas.test',
-            2 => 'thanhthao@Ideas.test',
-            3 => 'vietdung@Ideas.test',
-            4 => 'minhtuan@Ideas.test'
-        ];
-        return [
-            'username' => str_replace('@Ideas.test', '', $emails[$cId] ?? 'sale'),
-            'email' => $emails[$cId] ?? 'sale@Ideas.test',
-            'name' => $names[$cId] ?? 'Sale Demo',
-            'role' => 'sale',
-            'consultant_id' => $cId,
-            'id' => 100 + $cId // Dummy user ID for sales
-        ];
-    }
-
     $parts = explode('.', $jwt);
     if (count($parts) !== 3)
         return false;
@@ -664,7 +624,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 $action = $_GET['action'] ?? '';
 
-$publicActions = ['login', 'login_google', 'login_google_sale', 'submit_report', 'get_report_context', 'debug_companies_db', 'public_student_schedule', 'test_email', 'download-file'];
+$publicActions = ['login', 'login_google', 'login_google_sale', 'submit_report', 'get_report_context', 'public_student_schedule', 'download-file'];
 
 if (!in_array($action, $publicActions)) {
     $token = getBearerToken();
@@ -2028,11 +1988,21 @@ if (!function_exists('getTicketNotifyAdmins')) {
 
 switch ($action) {
     case 'debug_companies_db':
+        if (!isset($decodedUser) || !in_array($decodedUser['role'] ?? '', ['admin', 'superadmin', 'director'], true)) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'Forbidden']);
+            exit;
+        }
         $res = $conn->query("DESCRIBE companies")->fetch_all(MYSQLI_ASSOC);
         echo json_encode(['success' => true, 'columns' => $res]);
         exit;
 
     case 'get_zalo_send_logs':
+        if (!isset($decodedUser) || !in_array($decodedUser['role'] ?? '', ['admin', 'superadmin', 'director'], true)) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'Forbidden']);
+            exit;
+        }
         $logFile = __DIR__ . '/zalo_send_log.txt';
         if (file_exists($logFile)) {
             $content = file_get_contents($logFile);
@@ -2430,8 +2400,8 @@ switch ($action) {
             break;
         }
 
-        // Tìm theo email trước, fallback sang username cho super admin
-        $stmt = $conn->prepare("SELECT * FROM accounts WHERE email = ? OR (id = 1 AND username = ?) LIMIT 1");
+        // Tìm theo email hoặc username
+        $stmt = $conn->prepare("SELECT * FROM accounts WHERE email = ? OR username = ? LIMIT 1");
         $stmt->bind_param("ss", $loginField, $loginField);
         $stmt->execute();
         $res = $stmt->get_result();
@@ -2813,11 +2783,68 @@ switch ($action) {
         $lastMaxContactId = -1;
         $lastMaxLeadId = -1;
 
-        $maxIterations = 16; // Runs for ~48 seconds to free up PHP workers periodically
+        $lastCheckedNotifId = -1;
+        $lastCheckedUnreadNotifs = -1;
+        $lastCheckedDistLogId = -1;
+        $lastCheckedCId = -1;
+        $lastCheckedLId = -1;
+        $lastCheckedUnacceptedLeads = -1;
+        $lastCheckedCoopId = -1;
+
+        // Defensive scalar query helper (immune to bool return / disconnection in PHP 8)
+        $safeFetchInt = function($sql) use ($conn) {
+            try {
+                $res = $conn->query($sql);
+                if ($res && $res instanceof mysqli_result) {
+                    $row = $res->fetch_row();
+                    $val = (int)($row[0] ?? 0);
+                    $res->free();
+                    return $val;
+                }
+            } catch (Throwable $e) {}
+            return 0;
+        };
+
+        $maxIterations = 6; // High performance: runs for ~18 seconds to cycle PHP-FPM workers quickly
         for ($iteration = 0; $iteration < $maxIterations; $iteration++) {
             // Check connection status: if client disconnected, stop immediately
             if (connection_aborted()) {
                 break;
+            }
+
+            // High-Speed Fast Index Check on iterations > 0:
+            // Check primary key max values AND unread/unaccepted counts to detect both INSERTs and UPDATEs
+            if ($iteration > 0) {
+                $uidVal = (int) $decodedUser['id'];
+                $quickNotifId = $safeFetchInt("SELECT MAX(id) FROM notifications WHERE user_id = $uidVal");
+                $quickUnreadNotifs = $safeFetchInt("SELECT COUNT(*) FROM notifications WHERE user_id = $uidVal AND is_read = 0");
+                $quickDistLogId = $safeFetchInt("SELECT MAX(id) FROM distribution_logs" . ($isSale ? " WHERE assigned_to = " . (int)$saleId : ""));
+                $quickCId = $safeFetchInt("SELECT MAX(id) FROM contacts");
+                $quickLId = $safeFetchInt("SELECT MAX(id) FROM leads" . ($isSale ? " WHERE assigned_to = " . (int)$saleId : ""));
+                $quickUnacceptedLeads = $safeFetchInt("SELECT COUNT(*) FROM leads WHERE is_accepted = 0" . ($isSale ? " AND assigned_to = " . (int)$saleId : ""));
+                $quickCoopId = $safeFetchInt("SELECT MAX(id) FROM cooperation_slips WHERE status IN ('pending_signatures', 'approved_pending_signatures')");
+
+                if (
+                    $quickNotifId === $lastCheckedNotifId &&
+                    $quickUnreadNotifs === $lastCheckedUnreadNotifs &&
+                    $quickDistLogId === $lastCheckedDistLogId &&
+                    $quickCId === $lastCheckedCId &&
+                    $quickLId === $lastCheckedLId &&
+                    $quickUnacceptedLeads === $lastCheckedUnacceptedLeads &&
+                    $quickCoopId === $lastCheckedCoopId
+                ) {
+                    // Zero database mutation detected; skip 5 heavy subqueries
+                    sleep(3);
+                    continue;
+                }
+
+                $lastCheckedNotifId = $quickNotifId;
+                $lastCheckedUnreadNotifs = $quickUnreadNotifs;
+                $lastCheckedDistLogId = $quickDistLogId;
+                $lastCheckedCId = $quickCId;
+                $lastCheckedLId = $quickLId;
+                $lastCheckedUnacceptedLeads = $quickUnacceptedLeads;
+                $lastCheckedCoopId = $quickCoopId;
             }
 
             // 1. Count unaccepted leads
@@ -2922,6 +2949,17 @@ switch ($action) {
                 $stmt->execute();
                 $coopCount = (int)($stmt->get_result()->fetch_assoc()['cnt'] ?? 0);
                 $stmt->close();
+            }
+
+            if ($iteration === 0) {
+                $uidVal = (int) $decodedUser['id'];
+                $lastCheckedNotifId = $safeFetchInt("SELECT MAX(id) FROM notifications WHERE user_id = $uidVal");
+                $lastCheckedUnreadNotifs = $safeFetchInt("SELECT COUNT(*) FROM notifications WHERE user_id = $uidVal AND is_read = 0");
+                $lastCheckedDistLogId = $safeFetchInt("SELECT MAX(id) FROM distribution_logs" . ($isSale ? " WHERE assigned_to = " . (int)$saleId : ""));
+                $lastCheckedCId = $safeFetchInt("SELECT MAX(id) FROM contacts");
+                $lastCheckedLId = $safeFetchInt("SELECT MAX(id) FROM leads" . ($isSale ? " WHERE assigned_to = " . (int)$saleId : ""));
+                $lastCheckedUnacceptedLeads = $safeFetchInt("SELECT COUNT(*) FROM leads WHERE is_accepted = 0" . ($isSale ? " AND assigned_to = " . (int)$saleId : ""));
+                $lastCheckedCoopId = $safeFetchInt("SELECT MAX(id) FROM cooperation_slips WHERE status IN ('pending_signatures', 'approved_pending_signatures')");
             }
 
             // Detect changes
@@ -4375,7 +4413,7 @@ switch ($action) {
                     COUNT(*) as po_count,
                     SUM(e.amount) as po_total
                 FROM expenses e
-                WHERE COALESCE(e.refunded_at, e.date) >= '$startDate' AND COALESCE(e.refunded_at, e.date) <= '$endDate' AND e.deleted_at IS NULL $pendingFilterPO
+                WHERE COALESCE(e.refunded_at, e.date) >= '$startDate' AND COALESCE(e.refunded_at, e.date) <= '$endDate' AND e.deleted_at IS NULL AND e.amount > 0 $pendingFilterPO
                 GROUP BY DATE(COALESCE(e.refunded_at, e.date))
             ");
             if ($poRes) {
@@ -4414,7 +4452,7 @@ switch ($action) {
                     SUM(CASE WHEN e.is_refunded = 1 THEN e.amount ELSE 0 END) as po_approved,
                     SUM(CASE WHEN e.is_refunded = 0 THEN e.amount ELSE 0 END) as po_pending
                 FROM expenses e
-                WHERE COALESCE(e.refunded_at, e.date) >= '$startDate' AND COALESCE(e.refunded_at, e.date) <= '$endDate' AND e.deleted_at IS NULL
+                WHERE COALESCE(e.refunded_at, e.date) >= '$startDate' AND COALESCE(e.refunded_at, e.date) <= '$endDate' AND e.deleted_at IS NULL AND e.amount > 0
             ");
             $poSums = $poSumRes ? $poSumRes->fetch_assoc() : ['po_approved' => 0, 'po_pending' => 0];
 
@@ -4746,7 +4784,7 @@ switch ($action) {
                 LEFT JOIN users u2 ON e.approver_id = u2.id
                 LEFT JOIN users u4 ON e.approver_id_2 = u4.id
                 LEFT JOIN users u5 ON e.approver_id_3 = u5.id
-                WHERE DATE(COALESCE(e.refunded_at, e.date)) = '$escapedDate' AND e.deleted_at IS NULL $pendingFilterPO
+                WHERE DATE(COALESCE(e.refunded_at, e.date)) = '$escapedDate' AND e.deleted_at IS NULL AND e.amount > 0 $pendingFilterPO
                 ORDER BY e.id DESC
             ");
             if ($expRes) {
@@ -7917,6 +7955,10 @@ switch ($action) {
             $per_turns = $input['data_per_turns'] ?? [];
             $compensations = $input['compensations'] ?? [];
             $skipped_credits = isset($input['skipped_credits']) ? $input['skipped_credits'] : null;
+            // Bảo vệ chống can thiệp credits phân bổ: Chỉ Admin hoặc Giám đốc mới có quyền điều chỉnh skipped_credits thủ công
+            if (!$isAdminOrSuper && $userRole !== 'director') {
+                $skipped_credits = null;
+            }
 
             if (!empty($consultants)) {
                 if ($skipped_credits !== null) {
@@ -12920,6 +12962,12 @@ switch ($action) {
         break;
 
     case 'test_email':
+        if (!isset($decodedUser) || !in_array($decodedUser['role'] ?? '', ['admin', 'superadmin', 'director'], true)) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'Chỉ quản trị viên mới có quyền gửi email kiểm thử']);
+            exit();
+        }
+
         $input = json_decode(file_get_contents('php://input'), true);
         $email = trim($input['email'] ?? '');
         $type = $input['type'] ?? 'system';

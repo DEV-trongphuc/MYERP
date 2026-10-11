@@ -58,6 +58,7 @@ import { CustomModal } from '../components/ui/CustomModal';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
+import { getLocalDateStr } from '../utils/dateUtils';
 import { useLanguage } from '../contexts/LanguageContext';
 import { Avatar } from '../components/ui/Avatar';
 import { prewarmSmartCheckInGPS } from '../components/ui/SmartCheckInModal';
@@ -198,10 +199,14 @@ const getDueDateLabel = (dateStr: string | null | undefined, isDone: boolean, t:
 
 const formatVietnameseFullName = (nameStr: string) => {
   if (!nameStr || typeof nameStr !== 'string') return '';
-  const parts = nameStr.trim().split(/\s+/);
-  if (parts.length <= 1) return nameStr;
-  const lastName = parts.pop();
-  return `${lastName} ${parts.join(' ')}`;
+  return nameStr.trim();
+};
+
+const toLocalDateString = (d: Date = new Date()) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 const parseDescriptionAndChecklist = (descText: string) => {
@@ -1835,14 +1840,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   const [callsModalPageSize] = useState(5);
   const [wsStartDate, setWsStartDate] = useState('');
   const [wsEndDate, setWsEndDate] = useState('');
-  const [wsTasks, setWsTasks] = useState<any[]>(() => {
-    try {
-      const cached = sessionStorage.getItem('cached_ws_tasks');
-      return cached ? JSON.parse(cached) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [wsTasks, setWsTasks] = useState<any[]>([]);
   const [wsTeamId, setWsTeamId] = useState('all_teams_bypass');
   const [wsUserId, setWsUserId] = useState('');
   const [wsActivityType, setWsActivityType] = useState('task');
@@ -1923,10 +1921,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
   const formatVietnameseFullName = (nameStr: string) => {
     if (!nameStr || typeof nameStr !== 'string') return '';
-    const parts = nameStr.trim().split(/\s+/);
-    if (parts.length <= 1) return nameStr;
-    const lastName = parts.pop();
-    return `${lastName} ${parts.join(' ')}`;
+    return nameStr.trim();
   };
 
   const isUserAdminRole = ['admin', 'superadmin', 'assistant', 'super_admin'].includes(String(currentUser?.role).toLowerCase());
@@ -2294,6 +2289,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       task_group_color: task.task_group_color
     };
     setChecklist(checklistItems);
+    useUIStore.getState().closeTaskDrawer();
     setSelectedTaskForDetails(parsedTask);
   }, []);
 
@@ -2391,51 +2387,53 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     let start = '';
     let end = '';
     if (preset === 'today') {
-      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayStr = getLocalDateStr();
       start = todayStr;
       end = todayStr;
     } else if (preset === 'tomorrow') {
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
-      const tomStr = tomorrow.toISOString().slice(0, 10);
+      const tomStr = getLocalDateStr(tomorrow);
       start = tomStr;
       end = tomStr;
     } else if (preset === 'week') {
       const today = new Date();
-      const first = today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1);
+      const currentDay = today.getDay();
+      const distanceToMonday = currentDay === 0 ? -6 : 1 - currentDay;
       const monday = new Date(today);
-      const sunday = new Date(today);
+      monday.setDate(today.getDate() + distanceToMonday);
+      const sunday = new Date(monday);
       sunday.setDate(monday.getDate() + 6);
-      start = monday.toISOString().slice(0, 10);
-      end = sunday.toISOString().slice(0, 10);
+      start = getLocalDateStr(monday);
+      end = getLocalDateStr(sunday);
     } else if (preset === '7_days') {
       const now = new Date();
       const startD = new Date();
       startD.setDate(now.getDate() - 7);
-      start = startD.toISOString().slice(0, 10);
-      end = now.toISOString().slice(0, 10);
+      start = getLocalDateStr(startD);
+      end = getLocalDateStr(now);
     } else if (preset === '30_days') {
       const now = new Date();
       const startD = new Date();
       startD.setDate(now.getDate() - 30);
-      start = startD.toISOString().slice(0, 10);
-      end = now.toISOString().slice(0, 10);
+      start = getLocalDateStr(startD);
+      end = getLocalDateStr(now);
     } else if (preset === 'this_month') {
       const now = new Date();
       const startD = new Date(now.getFullYear(), now.getMonth(), 1);
       const endD = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-      start = startD.toISOString().slice(0, 10);
-      end = endD.toISOString().slice(0, 10);
+      start = getLocalDateStr(startD);
+      end = getLocalDateStr(endD);
     } else if (preset === 'last_month') {
       const now = new Date();
       const startD = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       const endD = new Date(now.getFullYear(), now.getMonth(), 0);
-      start = startD.toISOString().slice(0, 10);
-      end = endD.toISOString().slice(0, 10);
+      start = getLocalDateStr(startD);
+      end = getLocalDateStr(endD);
     } else if (preset === 'overdue') {
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
-      end = yesterday.toISOString().slice(0, 10);
+      end = getLocalDateStr(yesterday);
     } else if (preset === 'custom') {
       start = wsStartDate;
       end = wsEndDate;
@@ -2814,6 +2812,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   const [showDeletedFilter, setShowDeletedFilter] = useState<'none' | 'only' | 'all'>('none');
   const [publicLoading, setPublicLoading] = useState(false);
   const [isClaimingLeadId, setIsClaimingLeadId] = useState<number | null>(null);
+  const claimInFlightRef = useRef(false);
   const [publicQuota, setPublicQuota] = useState<any>(null);
   const [claimLeadConfirmOpen, setClaimLeadConfirmOpen] = useState(false);
   const [claimLeadPerson, setClaimLeadPerson] = useState<{ id: number; name: string } | null>(null);
@@ -3333,7 +3332,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   const fetchConsultantDocs = async () => {
     if (!targetConsultantId) return;
     try {
-      const res = await api.get(`/cloud-files?category=consultant_${targetConsultantId}&limit=1000`);
+      const res = await api.get(`/cloud-files?category=consultant_${targetConsultantId}&limit=100`);
       if (res.data && res.data.data && res.data.data.items) {
         setConsultantDocs(res.data.data.items);
       }
@@ -3827,9 +3826,6 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
           rawTasks = rawTasks.filter((item: any) => item.type === 'task' || (item.type === 'meeting' && (item.status === 'planned' || showDoneTasks)));
         }
         setWsTasks(rawTasks);
-        try {
-          sessionStorage.setItem('cached_ws_tasks', JSON.stringify(rawTasks));
-        } catch {}
         triggerRecurrenceCheck(rawTasks);
       }
 
@@ -4225,9 +4221,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
     // Optimistic local state update
     setWsTasks(prev => {
-      const next = prev.map(x => x.id === taskId ? { ...x, status: nextStatus, progress: nextProgress } : x);
-      try { sessionStorage.setItem('cached_ws_tasks', JSON.stringify(next)); } catch {}
-      return next;
+      return prev.map(x => x.id === taskId ? { ...x, status: nextStatus, progress: nextProgress } : x);
     });
     
     try {
@@ -4714,9 +4708,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       // Nếu công việc đã xong, click để mở lại (un-complete)
       if (isCurrentlyDone) {
         setWsTasks(prev => {
-          const next = prev.map(x => x.id === taskId ? { ...x, status: 'planned', progress: 0 } : x);
-          try { sessionStorage.setItem('cached_ws_tasks', JSON.stringify(next)); } catch {}
-          return next;
+          return prev.map(x => x.id === taskId ? { ...x, status: 'planned', progress: 0 } : x);
         });
         if (selectedTaskForDetails?.id === taskId) {
           setSelectedTaskForDetails((prev: any) => ({ ...prev, status: 'planned', progress: 0 }));
@@ -4770,9 +4762,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
     // Optimistic local update so card moves to Done immediately with confetti
     setWsTasks(prev => {
-      const next = prev.map(x => x.id === taskId ? { ...x, status: 'done', progress: 100 } : x);
-      try { sessionStorage.setItem('cached_ws_tasks', JSON.stringify(next)); } catch {}
-      return next;
+      return prev.map(x => x.id === taskId ? { ...x, status: 'done', progress: 100 } : x);
     });
     if (selectedTaskForDetails?.id === taskId) {
       setSelectedTaskForDetails((prev: any) => ({ ...prev, status: 'done', progress: 100 }));
@@ -5056,7 +5046,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     return weekdays.map((name, i) => {
       const date = new Date(monday);
       date.setDate(monday.getDate() + i);
-      const dateStr = date.toISOString().split('T')[0];
+      const dateStr = toLocalDateString(date);
       return {
         name,
         date: dateStr,
@@ -5074,11 +5064,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       const mondayDiff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
       const monday = new Date(today);
       monday.setDate(today.getDate() + mondayDiff);
-      const startStr = monday.toISOString().split('T')[0];
+      const startStr = toLocalDateString(monday);
 
       const sunday = new Date(monday);
       sunday.setDate(monday.getDate() + 6);
-      const endStr = sunday.toISOString().split('T')[0];
+      const endStr = toLocalDateString(sunday);
 
       const res = await fetchAPI(`check-ins&start_date=${startStr}&end_date=${endStr}&include_shifts=1`);
       if (res.success && res.data && res.data.shifts) {
@@ -5346,7 +5336,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   };
 
   const handleExecuteClaimLead = async () => {
-    if (!claimLeadPerson) return;
+    if (claimInFlightRef.current || !claimLeadPerson) return;
+    claimInFlightRef.current = true;
     const personId = claimLeadPerson.id;
     setIsClaimingLeadId(personId);
     try {
@@ -5371,6 +5362,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       toast.error(t('Lỗi: ') + e.message);
       setClaimLeadConfirmOpen(false);
     } finally {
+      claimInFlightRef.current = false;
       setIsClaimingLeadId(null);
     }
   };
@@ -5570,13 +5562,29 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     };
   }, []);
 
+  const contactAbortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (contactAbortControllerRef.current) {
+        contactAbortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
   const handleOpenContactProfile = useCallback(async (contactId: number, tab: string = 'info', initialData?: any) => {
     if (!contactId) return;
+    if (contactAbortControllerRef.current) {
+      contactAbortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    contactAbortControllerRef.current = controller;
+
     setProfileDrawerTab(tab);
     // Ngay lập tức mở Drawer với Skeleton / initial data thay vì chờ API xong
     setProfileContact(initialData || { id: contactId, _isLoading: true });
     try {
-      const res = await api.get(`/contacts/${contactId}`);
+      const res = await api.get(`/contacts/${contactId}`, { signal: controller.signal });
       if (res.data.success && res.data.data) {
         setProfileContact(res.data.data);
       } else {
@@ -5584,6 +5592,9 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         toast.error(t('Không thể lấy chi tiết liên hệ'));
       }
     } catch (e: any) {
+      if (e?.name === 'AbortError' || e?.code === 'ERR_CANCELED' || (api as any)?.isCancel?.(e)) {
+        return;
+      }
       console.error(e);
       setProfileContact(null);
       toast.error(t('Lỗi khi tải thông tin khách hàng'));
@@ -6266,7 +6277,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   const loadContactsDropdown = useCallback(async () => {
     if (contactsList.length > 0) return;
     try {
-      const conRes = await api.get('/contacts?limit=1000');
+      const conRes = await api.get('/contacts?limit=300');
       const conData = conRes.data?.data;
       const conItems = Array.isArray(conData?.items) ? conData.items : (Array.isArray(conData) ? conData : []);
       setContactsList(conItems);
@@ -8967,12 +8978,12 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
             {/* Subtitle note & Quick create button */}
             <div style={{
-              marginTop: '1.75rem',
+              marginTop: '1.25rem',
               display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '12px',
-              flexWrap: 'wrap'
+              gap: '12px'
             }}>
               <span style={{
                 fontSize: '0.82rem',
@@ -8983,26 +8994,29 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               </span>
               <button
                 type="button"
-                onClick={() => setShowTaskModal(true)}
+                onClick={() => {
+                  loadContactsDropdown();
+                  setShowTaskModal(true);
+                }}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '6px',
-                  padding: '5px 14px',
+                  padding: '7px 18px',
                   borderRadius: '8px',
                   backgroundColor: 'var(--color-primary, #BD1D2D)',
                   color: '#ffffff',
-                  fontSize: '0.78rem',
-                  fontWeight: 700,
+                  fontSize: '0.82rem',
+                  fontWeight: 600,
                   border: 'none',
                   cursor: 'pointer',
-                  boxShadow: '0 2px 10px rgba(189, 29, 45, 0.4)',
-                  transition: 'transform 0.15s ease'
+                  boxShadow: '0 2px 10px rgba(189, 29, 45, 0.35)',
+                  transition: 'all 0.15s ease'
                 }}
-                onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.05)'; }}
-                onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; }}
               >
-                <Plus size={13} />
+                <Plus size={15} />
                 <span>{t('Tạo việc mới')}</span>
               </button>
             </div>
@@ -9491,9 +9505,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       onUpdate={(updatedTask?: any) => {
                         if (updatedTask && updatedTask.id) {
                           setWsTasks(prev => {
-                            const next = prev.map(t => Number(t.id) === Number(updatedTask.id) ? { ...t, ...updatedTask } : t);
-                            try { sessionStorage.setItem('cached_ws_tasks', JSON.stringify(next)); } catch {}
-                            return next;
+                            return prev.map(t => Number(t.id) === Number(updatedTask.id) ? { ...t, ...updatedTask } : t);
                           });
                           if (selectedTaskForDetails && Number(selectedTaskForDetails.id) === Number(updatedTask.id)) {
                             setSelectedTaskForDetails((prev: any) => ({ ...prev, ...updatedTask }));
@@ -15002,7 +15014,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                           type: activeHRSubTab,
                           title: '',
                           decisionNumber: '',
-                          date: new Date().toISOString().split('T')[0],
+                          date: toLocalDateString(),
                           amount: '',
                           documentLink: '',
                           reason: ''
@@ -16425,7 +16437,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                             ) : (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '180px', overflowY: 'auto', paddingRight: '4px' }} className="custom-scrollbar">
                                 {leaveHistory.map((leave) => {
-                                  const todayStr = new Date().toISOString().split('T')[0];
+                                  const todayStr = toLocalDateString();
                                   const isPast = leave.end_date < todayStr;
                                   const isCurrent = todayStr >= leave.start_date && todayStr <= leave.end_date;
 
@@ -20924,9 +20936,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
             onUpdate={(updatedTask?: any) => {
               if (updatedTask && updatedTask.id) {
                 setWsTasks(prev => {
-                  const next = prev.map(t => Number(t.id) === Number(updatedTask.id) ? { ...t, ...updatedTask } : t);
-                  try { sessionStorage.setItem('cached_ws_tasks', JSON.stringify(next)); } catch {}
-                  return next;
+                  return prev.map(t => Number(t.id) === Number(updatedTask.id) ? { ...t, ...updatedTask } : t);
                 });
                 if (selectedTaskForDetails && Number(selectedTaskForDetails.id) === Number(updatedTask.id)) {
                   setSelectedTaskForDetails((prev: any) => ({ ...prev, ...updatedTask }));

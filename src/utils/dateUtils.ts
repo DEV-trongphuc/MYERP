@@ -181,3 +181,23 @@ export function getDayOfWeekVN(dateVal: string | Date | null | undefined): strin
     return '';
   }
 }
+
+/**
+ * Lấy ngày dạng chuỗi YYYY-MM-DD theo đúng múi giờ địa phương (local timezone).
+ * Khắc phục triệt để lỗi của new Date().toISOString().split('T')[0] làm lùi 1 ngày trước 7h sáng ở múi giờ UTC+7.
+ */
+export function getLocalDateStr(dateVal?: Date | string | number | null): string {
+  const d = dateVal ? (dateVal instanceof Date ? dateVal : new Date(dateVal)) : new Date();
+  if (isNaN(d.getTime())) {
+    const fallback = new Date();
+    const y = fallback.getFullYear();
+    const m = String(fallback.getMonth() + 1).padStart(2, '0');
+    const day = String(fallback.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+

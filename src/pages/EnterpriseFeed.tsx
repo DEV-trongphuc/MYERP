@@ -24,12 +24,21 @@ import { useUIStore } from '../store/uiStore';
 
 // High-performance DOMPurify HTML sanitizer cache (avoids repeated synchronous parsing)
 const sanitizeCache = new Map<string, string>();
+const defaultSanitizeConfig = {
+  ADD_TAGS: ['img', 'span', 'a'],
+  ADD_ATTR: [
+    'src', 'alt', 'style', 'class', 'href', 'target', 'rel', 
+    'data-user-id', 'data-user-name', 'data-mention-avatar', 'data-file-url', 'data-file-name'
+  ],
+  ALLOW_DATA_ATTR: true
+};
 const safeSanitize = (rawHtml: string, config?: any): string => {
   if (!rawHtml) return '';
-  const cacheKey = config ? `${rawHtml}_${JSON.stringify(config)}` : rawHtml;
+  const finalConfig = config ? { ...defaultSanitizeConfig, ...config } : defaultSanitizeConfig;
+  const cacheKey = `${rawHtml}_${JSON.stringify(finalConfig)}`;
   const cached = sanitizeCache.get(cacheKey);
   if (cached !== undefined) return cached;
-  const clean = String(DOMPurify.sanitize(rawHtml, config));
+  const clean = String(DOMPurify.sanitize(rawHtml, finalConfig));
   if (sanitizeCache.size > 800) {
     const firstKey = sanitizeCache.keys().next().value;
     if (firstKey) sanitizeCache.delete(firstKey);
@@ -130,8 +139,9 @@ const PostCommentBox: React.FC<PostCommentBoxProps> = ({
 
   const handleSend = async () => {
     if (submitting) return;
+    const hasMedia = text.includes('<img') || text.includes('/stickers/') || text.includes('data-file-url');
     const hasText = text.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, '').trim().length > 0;
-    if (!hasText) return;
+    if (!hasText && !hasMedia) return;
     setSubmitting(true);
     try {
       const ok = await onSend(postId, replyToId, text);
@@ -358,7 +368,8 @@ export const EnterpriseFeed: React.FC = () => {
       if (Array.isArray(post.tags)) {
         post.tags.forEach(tag => {
           const t = tag.trim().toLowerCase();
-          if (t) {
+          // Filter out hex color codes like e2e8f0, ffffff and empty strings
+          if (t && !/^[0-9a-f]{3}$|^[0-9a-f]{6}$|^[0-9a-f]{8}$/i.test(t)) {
             counts[t] = (counts[t] || 0) + 1;
           }
         });
@@ -909,8 +920,9 @@ export const EnterpriseFeed: React.FC = () => {
   // Handle post submit
   const handlePostSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const hasMedia = content.includes('<img') || content.includes('/stickers/') || content.includes('data-file-url') || attachments.length > 0;
     const hasText = content.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, '').trim().length > 0;
-    if (!hasText && attachments.length === 0) return;
+    if (!hasText && !hasMedia) return;
     if (visibility === 'team' && !selectedTeamId) {
       toast.error(t('Vui lòng chọn phòng ban đăng bài'));
       return;
@@ -1126,8 +1138,9 @@ export const EnterpriseFeed: React.FC = () => {
   // Handle add comment / reply
   const handleAddComment = async (postId: number, parentId: number | null = null, commentText?: string): Promise<boolean> => {
     const rawText = commentText !== undefined ? commentText : (newCommentText[postId] || '');
+    const hasMedia = rawText.includes('<img') || rawText.includes('/stickers/') || rawText.includes('data-file-url');
     const hasText = rawText.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, '').trim().length > 0;
-    if (!hasText) return false;
+    if (!hasText && !hasMedia) return false;
 
     try {
       const res = await api.post(`/posts/${postId}/comments`, {
@@ -1367,6 +1380,17 @@ export const EnterpriseFeed: React.FC = () => {
             if (target.tagName === 'SPAN' && target.textContent?.startsWith('#')) {
                const tag = target.textContent.replace('#', '');
                setActiveTag(tag);
+               return;
+            }
+            if (target.tagName === 'IMG') {
+               const imgEl = target as HTMLImageElement;
+               const src = imgEl.currentSrc || imgEl.src;
+               if (src && !imgEl.classList.contains('mention-avatar')) {
+                 setLightboxData({
+                   items: [{ url: src, type: 'image', name: imgEl.alt || 'Ảnh bài viết' }],
+                   initialIndex: 0
+                 });
+               }
             }
           }}
         />
@@ -1387,10 +1411,13 @@ export const EnterpriseFeed: React.FC = () => {
 
   const isOnlyStickerComment = (rawContent: string) => {
     if (!rawContent) return false;
-    const trimmed = rawContent.trim();
-    if (/^\/stickers\/[a-zA-Z0-9_\-\/]+\.(png|gif|webp|jpg)$/i.test(trimmed)) return true;
-    if (/^<img\s+[^>]*src=["'][^"']*\/stickers\/[^"']*["'][^>]*\/?>(?:&nbsp;|\s)*$/i.test(trimmed)) return true;
-    if (/^!\[.*?\]\([^\)]*\/stickers\/[^\)]*\)$/i.test(trimmed)) return true;
+    const cleaned = rawContent
+      .replace(/<\/?(?:p|div|span)[^>]*>/gi, '')
+      .replace(/&nbsp;/gi, '')
+      .trim();
+    if (/^\/stickers\/[a-zA-Z0-9_\-\/]+\.(png|gif|webp|jpg)$/i.test(cleaned)) return true;
+    if (/^<img\s+[^>]*src=["'][^"']*\/stickers\/[^"']*["'][^>]*\/?>$/i.test(cleaned)) return true;
+    if (/^!\[.*?\]\([^\)]*\/stickers\/[^\)]*\)$/i.test(cleaned)) return true;
     return false;
   };
 
@@ -1452,18 +1479,71 @@ export const EnterpriseFeed: React.FC = () => {
       .replace(/&nbsp;/gi, ' ')
       .replace(/[\u00A0\u200B\u200C\u200D\uFEFF]/g, ' ');
 
+    // Helper to extract non-avatar comment images into a separate wrapped media row below text
+    const formatCommentHtmlWithMediaRow = (html: string): string => {
+      if (!html || !html.includes('<img')) return html;
+      try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const commentImgs = Array.from(doc.body.querySelectorAll<HTMLImageElement>(
+          'img:not(.mention-avatar):not([data-mention-avatar]):not(.chat-comment-sticker):not(.feed-comment-sticker):not([src*="/stickers/"])'
+        ));
+        
+        if (commentImgs.length === 0) return html;
+
+        const mediaRow = doc.createElement('div');
+        mediaRow.className = 'feed-comment-media-row';
+
+        commentImgs.forEach(img => {
+          const parent = img.parentElement;
+          mediaRow.appendChild(img);
+          if (parent && parent !== doc.body && parent.textContent?.trim() === '' && parent.children.length === 0) {
+            parent.remove();
+          }
+        });
+
+        doc.body.appendChild(mediaRow);
+        return doc.body.innerHTML;
+      } catch {
+        return html;
+      }
+    };
+
     const isHtml = /<[a-z][\s\S]*>/i.test(cleanContent);
     if (isHtml) {
+      const sanitized = safeSanitize(cleanContent);
+      const structuredHtml = formatCommentHtmlWithMediaRow(sanitized);
       return (
         <div 
           className="rich-text-content feed-rich-comment" 
-          dangerouslySetInnerHTML={{ 
-            __html: safeSanitize(cleanContent, { 
-              ADD_TAGS: ['img', 'span', 'a'], 
-              ADD_ATTR: ['src', 'alt', 'style', 'class', 'href', 'target', 'rel'] 
-            }) 
-          }} 
+          dangerouslySetInnerHTML={{ __html: structuredHtml }} 
           style={{ fontSize: '0.8rem', color: 'var(--color-text)', lineHeight: 1.4, wordBreak: 'break-word' }}
+          onClick={(e) => {
+            const target = e.target as HTMLElement;
+            if (target.tagName === 'IMG') {
+              const imgEl = target as HTMLImageElement;
+              const src = imgEl.currentSrc || imgEl.src;
+              const isMentionAvatar = imgEl.classList.contains('mention-avatar') || 
+                                     imgEl.hasAttribute('data-mention-avatar') || 
+                                     Boolean(imgEl.closest('.mention'));
+              if (src && !isMentionAvatar) {
+                const container = target.closest('.feed-comment-media-row') || target.closest('.feed-rich-comment') || target.parentElement;
+                const commentImgs = container 
+                  ? Array.from(container.querySelectorAll<HTMLImageElement>('img:not(.mention-avatar):not([data-mention-avatar]):not(.chat-comment-sticker):not(.feed-comment-sticker)'))
+                  : [imgEl];
+                const items: AttachmentItem[] = commentImgs.map(img => ({
+                  url: img.currentSrc || img.src,
+                  type: 'image',
+                  name: img.alt || 'Ảnh bình luận'
+                }));
+                const clickedIndex = commentImgs.indexOf(imgEl);
+                setLightboxData({
+                  items: items.length > 0 ? items : [{ url: src, type: 'image', name: imgEl.alt || 'Ảnh bình luận' }],
+                  initialIndex: clickedIndex >= 0 ? clickedIndex : 0
+                });
+              }
+            }
+          }}
         />
       );
     }
@@ -1512,7 +1592,7 @@ export const EnterpriseFeed: React.FC = () => {
     if (urls.length === 1) {
       const url = urls[0];
       return (
-        <div className="feed-attachment-single" style={{ marginTop: '0.75rem', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--color-border-light)', lineHeight: 0 }}>
+        <div className="feed-attachment-single" style={{ marginTop: '0.75rem', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--color-border-light)', lineHeight: 0, background: 'var(--color-bg)' }}>
           {isImage(url) ? (
             <img 
               src={url} 
@@ -1520,11 +1600,11 @@ export const EnterpriseFeed: React.FC = () => {
               loading="lazy" 
               decoding="async" 
               onClick={() => handleOpenLightbox(0)}
-              style={{ display: 'block', width: '100%', maxHeight: '450px', objectFit: 'cover', cursor: 'pointer' }} 
+              style={{ display: 'block', width: '100%', maxHeight: '550px', objectFit: 'contain', cursor: 'pointer', background: 'rgba(0,0,0,0.02)' }} 
               title={t('Click để phóng to ảnh')}
             />
           ) : (
-            <video src={url} controls preload="none" style={{ display: 'block', width: '100%', maxHeight: '450px' }} />
+            <video src={url} controls preload="none" style={{ display: 'block', width: '100%', maxHeight: '550px' }} />
           )}
         </div>
       );
@@ -1655,6 +1735,93 @@ export const EnterpriseFeed: React.FC = () => {
         .feed-post-card {
           content-visibility: auto;
           contain-intrinsic-size: 0 420px;
+        }
+        .rich-text-content:not(.feed-rich-comment) img:not(.chat-comment-sticker):not(.feed-comment-sticker):not([src*="/stickers/"]):not(.mention-avatar):not([data-mention-avatar]):not(.inline-avatar) {
+          max-width: 100% !important;
+          max-height: 550px !important;
+          width: auto !important;
+          height: auto !important;
+          border-radius: 12px !important;
+          object-fit: contain !important;
+          cursor: zoom-in !important;
+          margin: 8px 0 !important;
+          display: block !important;
+          transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .rich-text-content img:hover {
+          box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+        }
+        .feed-rich-comment img:not(.chat-comment-sticker):not(.feed-comment-sticker):not([src*="/stickers/"]):not(.mention-avatar):not([data-mention-avatar]):not(.inline-avatar) {
+          max-width: min(220px, 100%) !important;
+          max-height: 180px !important;
+          width: auto !important;
+          height: auto !important;
+          border-radius: 8px !important;
+          cursor: zoom-in !important;
+          display: inline-block !important;
+          vertical-align: top !important;
+          margin: 4px 6px 4px 0 !important;
+          object-fit: cover !important;
+          background: rgba(0, 0, 0, 0.02) !important;
+          border: 1px solid var(--color-border-light, rgba(0, 0, 0, 0.08)) !important;
+          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06) !important;
+          transition: transform 0.15s ease, box-shadow 0.15s ease !important;
+        }
+        .feed-rich-comment img:not(.chat-comment-sticker):not(.feed-comment-sticker):not([src*="/stickers/"]):not(.mention-avatar):not([data-mention-avatar]):not(.inline-avatar):hover {
+          transform: scale(1.02);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+        }
+        .feed-comment-media-row {
+          display: flex !important;
+          flex-wrap: wrap !important;
+          gap: 6px !important;
+          margin-top: 6px !important;
+          margin-bottom: 2px !important;
+          width: 100% !important;
+          clear: both !important;
+        }
+        .feed-comment-media-row img {
+          max-width: min(220px, 100%) !important;
+          max-height: 180px !important;
+          width: auto !important;
+          height: auto !important;
+          border-radius: 8px !important;
+          cursor: zoom-in !important;
+          flex: 0 0 auto !important;
+          margin: 0 !important;
+          object-fit: cover !important;
+          background: rgba(0, 0, 0, 0.02) !important;
+          border: 1px solid var(--color-border-light, rgba(0, 0, 0, 0.08)) !important;
+          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06) !important;
+          transition: transform 0.15s ease, box-shadow 0.15s ease !important;
+        }
+        .feed-comment-media-row img:hover {
+          transform: scale(1.02);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+        }
+        /* Lock mention avatars strictly to 16x16 circle */
+        .feed-rich-comment span.mention img,
+        .feed-rich-comment .mention-avatar,
+        .feed-rich-comment img[data-mention-avatar],
+        .rich-text-content span.mention img,
+        .rich-text-content .mention-avatar,
+        .rich-text-content img[data-mention-avatar] {
+          width: 16px !important;
+          height: 16px !important;
+          min-width: 16px !important;
+          min-height: 16px !important;
+          max-width: 16px !important;
+          max-height: 16px !important;
+          border-radius: 50% !important;
+          object-fit: cover !important;
+          display: inline-block !important;
+          vertical-align: middle !important;
+          margin: 0 4px 0 0 !important;
+          padding: 0 !important;
+          box-shadow: none !important;
+          border: none !important;
+          cursor: default !important;
+          transform: none !important;
         }
         .feed-layout {
           display: grid;
@@ -2344,7 +2511,11 @@ export const EnterpriseFeed: React.FC = () => {
                 {renderPostContent(post.content)}
 
                 {/* Scraped Link Preview */}
-                {post.link_metadata && (
+                {post.link_metadata && post.link_metadata.url && !post.link_metadata.url.includes('/uploads/') && (
+                  Boolean(post.link_metadata.image) || 
+                  Boolean(post.link_metadata.description) || 
+                  (Boolean(post.link_metadata.title) && post.link_metadata.title !== parse_url_host(post.link_metadata.url))
+                ) && (
                   <a 
                     href={post.link_metadata.url} 
                     target="_blank" 
@@ -2591,8 +2762,9 @@ export const EnterpriseFeed: React.FC = () => {
                           {t('Chưa có bình luận nào. Hãy trở thành người đầu tiên!')}
                         </span>
                       ) : (
-                        commentsMap[post.id]
+                        [...commentsMap[post.id]]
                           .filter(c => !c.parent_id || Number(c.parent_id) === 0)
+                          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
                           .map(comment => (
                           <div 
                             key={comment.id} 

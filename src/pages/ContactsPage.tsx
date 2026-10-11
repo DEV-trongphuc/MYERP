@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef, lazy, Suspense } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { Plus, Search, Phone, PhoneOff, Mail, Eye, EyeOff, Clock, Ban, CheckCircle2, Trash2, X, Download, Upload, ChevronDown, Users, Tag as TagIcon, UserCheck, RefreshCw, Filter, LayoutGrid, List, ArrowDownUp, Columns, Building2, Briefcase, Loader2, User, UserPlus, Calendar, AlertTriangle, AlertCircle, CheckSquare, Layers, MoreHorizontal, ChevronRight, ChevronLeft, GraduationCap, SlidersHorizontal, RotateCcw, Sparkles } from 'lucide-react';
+import { Plus, Search, Phone, PhoneOff, Mail, Eye, EyeOff, Clock, Ban, CheckCircle2, Trash2, X, Download, Upload, ChevronDown, Users, Tag as TagIcon, UserCheck, RefreshCw, Filter, LayoutGrid, List, ArrowDownUp, Columns, Building2, Briefcase, Loader2, User, UserPlus, Calendar, AlertTriangle, AlertCircle, CheckSquare, Layers, MoreHorizontal, ChevronRight, ChevronLeft, GraduationCap, SlidersHorizontal, RotateCcw, Sparkles, BarChart3 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar, getColorFromName } from '../components/ui/Avatar';
 import { useUIStore } from '../store/uiStore';
@@ -27,7 +27,9 @@ import { fetchAPI } from '../utils/api';
 import { downloadExportFile } from '../utils/exportHelper';
 import { useDebounce } from '../hooks/useDebounce';
 import { useAuth } from '../contexts/AuthContext';
-import { isAcademic } from '../utils/roleUtils';
+import { isAcademic, isManagement, isExecutive } from '../utils/roleUtils';
+import { calculateLeadScore, getLeadHeatTier } from '../utils/leadScoring';
+import { SalesLeadPerformanceDeck } from '../components/Dashboard/SalesLeadPerformanceDeck';
 import { ReportDataModal } from '../components/ui/ReportDataModal';
 import { TableContextMenu } from '../components/ui/TableContextMenu';
 
@@ -230,104 +232,7 @@ const getContactStage = (c: any, stages: any[]) => {
 };
 
 const calcScore = (c: any, rules: any, decayDays = 5) => {
-  if (!c) return 0;
-  const r = rules || {
-    base_score: 10,
-    title_c_level: 20,
-    title_other: 5,
-    phone: 15,
-    mobile: 10,
-    both_phones: 10,
-    email: 10,
-    social_link: 10,
-    birthday: 10,
-    gender: 5,
-    customer_type: 5,
-    address: 15,
-    source_website: 15,
-    source_referral: 20,
-    project_id: 15,
-    company_id: 5,
-    industry: 5,
-    budget_range: 10,
-    revenue_high: 35,
-    revenue_medium: 20,
-    win_prob_high: 10,
-    status_qualified_customer: 15,
-    ttl1_completed: 25,
-    notes_long: 10,
-    has_tags: 10,
-    decay_no_interaction: -15
-  };
-  
-  let s = 0;
-  
-  // 1. Điểm khởi tạo (Mặc định)
-  s += Number(r.base_score ?? 10);
-
-  // 2. Chức danh
-  const title = (c.job_title || '').toLowerCase();
-  if (title.includes('giám đốc') || title.includes('ceo') || title.includes('sáng lập') || title.includes('founder') || title.includes('chủ tịch')) {
-    s += Number(r.title_c_level ?? 20);
-  } else if (title) {
-    s += Number(r.title_other ?? 5);
-  }
-
-  // 3. Số điện thoại & Thông tin liên hệ
-  if (c.phone) s += Number(r.phone ?? 15);
-  if (c.mobile) s += Number(r.mobile ?? 10);
-  if (c.phone && c.mobile) s += Number(r.both_phones ?? 10);
-  if (c.email) s += Number(r.email ?? 10);
-  if (c.zalo_link || c.fb_link) s += Number(r.social_link ?? 10);
-  if (c.birthday) s += Number(r.birthday ?? 10);
-  if (c.gender) s += Number(r.gender ?? 5);
-  if (c.customer_type) s += Number(r.customer_type ?? 5);
-
-  // 4. Địa chỉ
-  if (c.address) s += Number(r.address ?? 15);
-
-  // 5. Nguồn
-  if (c.source === 'website') s += Number(r.source_website ?? 15);
-  if (c.source === 'referral' || c.source === 'gioi_thieu') s += Number(r.source_referral ?? 20);
-
-  // 6. Liên kết dự án/công ty/phân khúc
-  if (c.project_id) s += Number(r.project_id ?? 15);
-  if (c.company_id) s += Number(r.company_id ?? 5);
-  if (c.industry) s += Number(r.industry ?? 5);
-  if (c.budget_range) s += Number(r.budget_range ?? 10);
-
-  // 7. Kỳ vọng doanh thu & Xác suất
-  const revenue = Number(c.expected_revenue) || 0;
-  if (revenue > 500000000) {
-    s += Number(r.revenue_high ?? 35);
-  } else if (revenue > 100000000) {
-    s += Number(r.revenue_medium ?? 20);
-  }
-  if (Number(c.win_probability) > 70) s += Number(r.win_prob_high ?? 10);
-
-  // 8. Trạng thái & TTL1
-  if (c.status === 'qualified' || c.status === 'customer') s += Number(r.status_qualified_customer ?? 15);
-  if (Number(c.ttl1_completed) === 1) s += Number(r.ttl1_completed ?? 25);
-
-  // 9. Ghi chú & Thẻ
-  if (c.notes && c.notes.trim().length > 10) s += Number(r.notes_long ?? 10);
-  
-  const tagList = typeof c.tags === 'string' 
-    ? c.tags.split(',').filter(Boolean) 
-    : (Array.isArray(c.tags) ? c.tags : []);
-  if (tagList.length > 0) s += Number(r.has_tags ?? 10);
-
-  // 10. Rớt nhiệt do quá X ngày không tương tác
-  const lastInteractionTime = c.last_contact || c.updated_at || c.created_at;
-  if (lastInteractionTime) {
-    const decayDaysInMs = decayDays * 24 * 60 * 60 * 1000;
-    const isDecayed = (new Date().getTime() - new Date(lastInteractionTime).getTime()) > decayDaysInMs;
-    if (isDecayed) {
-      s += Number(r.decay_no_interaction ?? -15);
-    }
-  }
-
-  return Math.min(100, Math.max(0, s));
+  return calculateLeadScore(c, rules, decayDays).score;
 };
 
 const formatTimeAgo = (dateStr?: string) => {
@@ -397,7 +302,7 @@ interface ContactsPageProps {
 
 export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'tiem_nang' }) => {
   const { user } = useAuth();
-  const isSale = user?.role === 'sale';
+  const isSale = ['sale', 'sales'].includes(String(user?.role).toLowerCase());
   const canAddOrAssign = useMemo(() => {
     const role = (user?.role as string) || '';
     return (
@@ -410,6 +315,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     );
   }, [user]);
   const navigate = useNavigate();
+  const isManagerOrAbove = useMemo(() => isManagement(user) || isExecutive(user), [user]);
+  const [activeMainTab, setActiveMainTab] = useState<'list' | 'performance'>('list');
   const { addToast, showConfirm, closeConfirm } = useUIStore();
   const [uncontactedCount, setUncontactedCount] = useState(() => {
     return Number(sessionStorage.getItem('sale-uncontacted-count')) || 0;
@@ -563,6 +470,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   const [createForm, setCreateForm] = useState({ full_name: '', email: '', phone: '', company_name: '', job_title: '', status: 'lead', source: 'other', owner_id: '', city: '', ward: '', address: '' });
   const [creating, setCreating] = useState(false);
   const [users, setUsers] = useState<any[]>([]);
+  const [showBulkAssignModal, setShowBulkAssignModal] = useState(false);
+  const [bulkAssignTargetUserId, setBulkAssignTargetUserId] = useState<string>('');
+  const [isBulkAssigning, setIsBulkAssigning] = useState(false);
 
   // Quick Filter state (Lost & Nurture & Uncontacted)
   const [showLost, setShowLost] = useState<boolean>(false);
@@ -1781,9 +1691,79 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       setIsExporting(false);
     }
   };
-  const bulkTag    = () => addToast('Mở gán tag hàng loạt...', 'info');
-  const bulkEmail  = () => addToast(`Soạn email cho ${selected.size} liên hệ...`, 'info');
-  const bulkAssign = () => addToast('Gán nhân viên phụ trách...', 'info');
+  const bulkTag = () => {
+    if (selected.size === 0) return;
+    showConfirm({
+      title: 'Gán Tag hàng loạt',
+      message: `Nhập tên tag cần gắn cho ${selected.size} liên hệ đã chọn:`,
+      confirmText: 'Gắn Tag',
+      cancelText: 'Hủy',
+      requirePromptInput: true,
+      promptPlaceholder: 'Nhập tên tag (ví dụ: VIP, Tiềm năng, Cần gọi lại)...',
+      onConfirm: async (tagName) => {
+        const cleanTag = (tagName || '').trim();
+        if (!cleanTag) {
+          addToast('Vui lòng nhập tên tag', 'error');
+          return;
+        }
+        try {
+          const contactIds = Array.from(selected);
+          for (const cid of contactIds) {
+            try {
+              await api.post(`/contacts/${cid}/tags`, { name: cleanTag });
+            } catch {}
+          }
+          addToast(`Đã gắn tag "${cleanTag}" cho ${contactIds.length} liên hệ`, 'success');
+          setSelected(new Set());
+          fetchData(true);
+        } catch (err: any) {
+          addToast('Lỗi khi gắn tag: ' + err.message, 'error');
+        }
+      }
+    });
+  };
+
+  const bulkEmail = () => {
+    if (selected.size === 0) return;
+    const emails = contacts.filter(c => selected.has(c.id) && c.email).map(c => c.email);
+    if (emails.length === 0) {
+      addToast('Không có liên hệ nào trong danh sách đã chọn có địa chỉ Email!', 'warning');
+      return;
+    }
+    window.open(`mailto:${emails.join(',')}`);
+  };
+
+  const bulkAssign = () => {
+    if (selected.size === 0) return;
+    setBulkAssignTargetUserId('');
+    setShowBulkAssignModal(true);
+  };
+
+  const handleExecuteBulkAssign = async () => {
+    if (!bulkAssignTargetUserId) {
+      addToast('Vui lòng chọn nhân sự phụ trách', 'error');
+      return;
+    }
+    setIsBulkAssigning(true);
+    try {
+      const contactIds = Array.from(selected);
+      let successCount = 0;
+      for (const cid of contactIds) {
+        try {
+          await api.post(`/contacts/${cid}/assign`, { owner_id: Number(bulkAssignTargetUserId) });
+          successCount++;
+        } catch (err) {}
+      }
+      addToast(`Đã điều chuyển thành công ${successCount}/${contactIds.length} khách hàng!`, 'success');
+      setShowBulkAssignModal(false);
+      setSelected(new Set());
+      fetchData(true);
+    } catch (e: any) {
+      addToast('Lỗi khi điều chuyển: ' + (e.response?.data?.message || e.message), 'error');
+    } finally {
+      setIsBulkAssigning(false);
+    }
+  };
 
   const handleCreateContact = async () => {
     if (!createForm.full_name.trim()) { addToast('Vui lòng nhập họ tên', 'error'); return; }
@@ -1835,10 +1815,78 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', width: '100%', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <h1 className="page-title" style={{ margin: 0 }}>{segment === 'customer' ? (studentSubTab === 'le_phi' ? 'Lệ phí hồ sơ' : studentSubTab === 'nop_ho_so' ? 'Nộp hồ sơ' : 'Học viên chính thức') : 'Tiềm năng'}</h1>
-              <span style={{ fontSize: '0.85rem', color: 'var(--color-text-light)', fontWeight: 600, marginTop: '2px' }}>
-                {loading ? '(...)' : `(${total} liên hệ)`}
-              </span>
+              {activeMainTab === 'list' && (
+                <span style={{ fontSize: '0.85rem', color: 'var(--color-text-light)', fontWeight: 600, marginTop: '2px' }}>
+                  {loading ? '(...)' : `(${total} liên hệ)`}
+                </span>
+              )}
             </div>
+
+            {isManagerOrAbove && segment === 'tiem_nang' && (
+              <div style={{
+                display: 'inline-flex',
+                background: 'var(--color-border-light)',
+                border: '1px solid var(--color-border)',
+                padding: '2px',
+                borderRadius: '9px',
+                gap: '2px'
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setActiveMainTab('list')}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '5px 12px',
+                    borderRadius: '7px',
+                    border: 'none',
+                    background: activeMainTab === 'list' ? 'var(--color-surface)' : 'transparent',
+                    color: activeMainTab === 'list' ? 'var(--color-text)' : 'var(--color-text-muted)',
+                    fontWeight: activeMainTab === 'list' ? 700 : 500,
+                    fontSize: '0.78rem',
+                    cursor: 'pointer',
+                    boxShadow: activeMainTab === 'list' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <Users size={14} />
+                  <span>Danh sách Tiềm năng</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveMainTab('performance')}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '5px 12px',
+                    borderRadius: '7px',
+                    border: 'none',
+                    background: activeMainTab === 'performance' ? 'var(--color-surface)' : 'transparent',
+                    color: activeMainTab === 'performance' ? 'var(--color-primary, #bd1d2d)' : 'var(--color-text-muted)',
+                    fontWeight: activeMainTab === 'performance' ? 700 : 500,
+                    fontSize: '0.78rem',
+                    cursor: 'pointer',
+                    boxShadow: activeMainTab === 'performance' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <BarChart3 size={14} />
+                  <span>Dashboard Hiệu suất</span>
+                  <span style={{
+                    fontSize: '0.65rem',
+                    padding: '1px 5px',
+                    borderRadius: '6px',
+                    background: 'rgba(239, 68, 68, 0.12)',
+                    color: 'var(--color-primary, #bd1d2d)',
+                    fontWeight: 700
+                  }}>
+                    Manager
+                  </span>
+                </button>
+              </div>
+            )}
           </div>
           {segment === 'customer' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
@@ -1895,8 +1943,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
         </div>
         
         {/* Render header action buttons */}
-        <div className="flex gap-2" style={{ alignItems: 'center' }}>
-          {canAddOrAssign && (
+        {activeMainTab === 'list' && (
+          <div className="flex gap-2" style={{ alignItems: 'center' }}>
+            {canAddOrAssign && (
             <>
               <button 
                 className="btn primary sm" 
@@ -2060,14 +2109,15 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
             </>
           )}
         </div>
+        )}
       </div>
 
-
-
-
-
-      {/* QUICK STATUS TABS (1 hàng ngang kéo chuột / lướt xem đầy đủ dữ liệu có nút next/prev) */}
-      {segment !== 'customer' && (
+      {activeMainTab === 'performance' && isManagerOrAbove && segment === 'tiem_nang' ? (
+        <SalesLeadPerformanceDeck embedInPage="contacts" />
+      ) : (
+        <>
+          {/* QUICK STATUS TABS (1 hàng ngang kéo chuột / lướt xem đầy đủ dữ liệu có nút next/prev) */}
+          {segment !== 'customer' && (
         <div style={{ position: 'relative', marginBottom: '0.85rem' }}>
           {/* Nút cuộn sang trái */}
           {canScrollLeft && (
@@ -5176,6 +5226,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
           </div>
         </div>
       )}
+        </>
+      )}
 
       {/* 360° Profile Drawer */}
       {profileContact && (
@@ -5226,6 +5278,55 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
           bulkExport();
         }}
       />
+
+      {showBulkAssignModal && (
+        <CustomModal
+          isOpen={showBulkAssignModal}
+          onClose={() => !isBulkAssigning && setShowBulkAssignModal(false)}
+          title={`Điều chuyển ${selected.size} khách hàng đã chọn`}
+          width={480}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '0.5rem 0' }}>
+            <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', margin: 0 }}>
+              Chọn nhân sự kinh doanh / tư vấn viên để nhận bàn giao <strong>{selected.size}</strong> khách hàng đã chọn:
+            </p>
+            <div className="form-group">
+              <label className="form-label" style={{ fontWeight: 600 }}>Nhân sự nhận bàn giao</label>
+              <CustomSelect
+                options={users.filter(u => u.is_active !== 0).map(u => ({
+                  value: String(u.id),
+                  label: u.full_name || u.name,
+                  avatar: u.avatar || u.avatar_url,
+                  sublabel: [u.phone, u.role].filter(Boolean).join(' - ')
+                }))}
+                value={bulkAssignTargetUserId}
+                onChange={val => setBulkAssignTargetUserId(String(val))}
+                placeholder="Chọn nhân sự phụ trách..."
+                searchable
+                showAvatars
+              />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
+              <button
+                type="button"
+                className="btn secondary"
+                disabled={isBulkAssigning}
+                onClick={() => setShowBulkAssignModal(false)}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                className="btn primary"
+                disabled={isBulkAssigning || !bulkAssignTargetUserId}
+                onClick={handleExecuteBulkAssign}
+              >
+                {isBulkAssigning ? 'Đang điều chuyển...' : 'Xác nhận điều chuyển'}
+              </button>
+            </div>
+          </div>
+        </CustomModal>
+      )}
 
       {/* Quick Create Contact Modal - Enhanced UI */}
       {typeof document !== 'undefined' && createPortal(

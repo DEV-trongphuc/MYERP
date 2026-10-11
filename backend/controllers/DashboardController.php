@@ -859,4 +859,364 @@ class DashboardController {
             'lePhi' => $lePhiCount,
         ], 'Lấy danh sách badges thành công');
     }
+
+    public function salesLeadPerformance(array $auth): void {
+        $userRole = strtolower($auth['role'] ?? '');
+        $allowedRoles = [
+            'admin', 'superadmin', 'super_admin', 'director', 
+            'manager', 'assistant', 'tro_ly', 'leader', 
+            'head_of_department', 'truongphong', 'quanly'
+        ];
+        $isManagerOrAbove = in_array($userRole, $allowedRoles, true);
+
+        if (!$isManagerOrAbove) {
+            $stmtUser = $this->db->prepare("SELECT job_title FROM users WHERE id = ? LIMIT 1");
+            $stmtUser->execute([$auth['user_id']]);
+            $uRow = $stmtUser->fetch(PDO::FETCH_ASSOC);
+            if ($uRow) {
+                $jobTitle = mb_strtolower((string)($uRow['job_title'] ?? ''));
+                if (
+                    str_contains($jobTitle, 'quản lý') || 
+                    str_contains($jobTitle, 'trưởng') || 
+                    str_contains($jobTitle, 'manager') || 
+                    str_contains($jobTitle, 'director') || 
+                    str_contains($jobTitle, 'leader') ||
+                    str_contains($jobTitle, 'giám đốc')
+                ) {
+                    $isManagerOrAbove = true;
+                }
+            }
+
+            if (!$isManagerOrAbove) {
+                $stmtTeamLead = $this->db->prepare("SELECT 1 FROM teams WHERE leader_id = ? OR (co_leader_ids IS NOT NULL AND co_leader_ids != '' AND FIND_IN_SET(?, REPLACE(REPLACE(co_leader_ids, '[', ''), ']', '')) > 0) LIMIT 1");
+                $stmtTeamLead->execute([$auth['user_id'], (string)$auth['user_id']]);
+                if ($stmtTeamLead->fetchColumn()) {
+                    $isManagerOrAbove = true;
+                }
+            }
+        }
+
+        if (!$isManagerOrAbove) {
+            respond(403, null, 'Chỉ cấp Quản lý trở lên mới có quyền truy cập Dashboard Hiệu suất Sales & Lead', false);
+            return;
+        }
+
+        $tid = (int)($auth['tenant_id'] ?? 1);
+        $month = trim($_GET['month'] ?? '');
+        if (!preg_match('/^\d{4}-\d{2}$/', $month)) {
+            $month = date('Y-m');
+        }
+
+        $from = $month . '-01';
+        $to = date('Y-m-t', strtotime($from));
+        $fromTs = $from . ' 00:00:00';
+        $toTs = $to . ' 23:59:59';
+
+        $prevMonth = date('Y-m', strtotime($from . ' -1 month'));
+        $prevFrom = $prevMonth . '-01';
+        $prevTo = date('Y-m-t', strtotime($prevFrom));
+        $prevFromTs = $prevFrom . ' 00:00:00';
+        $prevToTs = $prevTo . ' 23:59:59';
+
+        // 1. Current Month Leads Summary
+        $stmtLeads = $this->db->prepare("
+            SELECT 
+                COUNT(1) as total_leads,
+                SUM(CASE WHEN (lead_score >= 50 OR status IN ('qualified', 'customer')) THEN 1 ELSE 0 END) as qualified_leads,
+                SUM(CASE WHEN (last_contact IS NOT NULL AND last_contact != '') THEN 1 ELSE 0 END) as contacted_leads,
+                SUM(CASE WHEN (last_contact IS NULL OR last_contact = '') THEN 1 ELSE 0 END) as uncontacted_leads,
+                SUM(CASE WHEN (lead_score >= 80) THEN 1 ELSE 0 END) as hot_leads,
+                SUM(CASE WHEN (lead_score >= 50 AND lead_score < 80) THEN 1 ELSE 0 END) as warm_leads,
+                SUM(CASE WHEN (lead_score < 50 OR lead_score IS NULL) THEN 1 ELSE 0 END) as cold_leads
+            FROM contacts
+            WHERE tenant_id = ? AND deleted_at IS NULL AND created_at BETWEEN ? AND ?
+        ");
+        $stmtLeads->execute([$tid, $fromTs, $toTs]);
+        $leadRow = $stmtLeads->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        $totalLeads = (int)($leadRow['total_leads'] ?? 0);
+        $qualifiedLeads = (int)($leadRow['qualified_leads'] ?? 0);
+        $contactedLeads = (int)($leadRow['contacted_leads'] ?? 0);
+        $uncontactedLeads = (int)($leadRow['uncontacted_leads'] ?? 0);
+        $hotLeads = (int)($leadRow['hot_leads'] ?? 0);
+        $warmLeads = (int)($leadRow['warm_leads'] ?? 0);
+        $coldLeads = (int)($leadRow['cold_leads'] ?? 0);
+
+        // Prev Month Total Leads for Trend comparison
+        $stmtPrev = $this->db->prepare("SELECT COUNT(1) FROM contacts WHERE tenant_id = ? AND deleted_at IS NULL AND created_at BETWEEN ? AND ?");
+        $stmtPrev->execute([$tid, $prevFromTs, $prevToTs]);
+        $prevTotalLeads = (int)$stmtPrev->fetchColumn();
+
+        $leadGrowthRate = $prevTotalLeads > 0 
+            ? round((($totalLeads - $prevTotalLeads) / $prevTotalLeads) * 100, 1) 
+            : ($totalLeads > 0 ? 100.0 : 0.0);
+
+        // 2. Deals Summary for Current Month
+        $stmtDeals = $this->db->prepare("
+            SELECT 
+                COUNT(1) as total_deals,
+                COALESCE(SUM(d.value), 0) as total_deal_value,
+                SUM(CASE WHEN ps.is_won = 1 THEN 1 ELSE 0 END) as won_deals,
+                COALESCE(SUM(CASE WHEN ps.is_won = 1 THEN d.value ELSE 0 END), 0) as won_value
+            FROM deals d
+            LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id
+            WHERE d.tenant_id = ? AND d.deleted_at IS NULL AND d.created_at BETWEEN ? AND ?
+        ");
+        $stmtDeals->execute([$tid, $fromTs, $toTs]);
+        $dealRow = $stmtDeals->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        $totalDeals = (int)($dealRow['total_deals'] ?? 0);
+        $totalDealValue = (float)($dealRow['total_deal_value'] ?? 0);
+        $wonDeals = (int)($dealRow['won_deals'] ?? 0);
+        $wonValue = (float)($dealRow['won_value'] ?? 0);
+
+        $safeTotalLeads = max(1, $totalLeads);
+        $qualifiedRate = round(($qualifiedLeads / $safeTotalLeads) * 100, 1);
+        $connectedRate = round(($contactedLeads / $safeTotalLeads) * 100, 1);
+        $uncontactedRate = round(($uncontactedLeads / $safeTotalLeads) * 100, 1);
+        $dealConversionRate = round(($totalDeals / $safeTotalLeads) * 100, 1);
+        $winRate = round(($wonDeals / $safeTotalLeads) * 100, 1);
+
+        // 3. Pipeline Stages Conversion Funnel
+        $stmtStages = $this->db->prepare("
+            SELECT 
+                ps.id, ps.name, ps.color, ps.order_index, ps.is_won, ps.is_lost, ps.system_slug,
+                COUNT(c.id) as contact_count
+            FROM pipeline_stages ps
+            LEFT JOIN contacts c ON (c.stage_id = ps.id OR (c.stage_id IS NULL AND ps.system_slug = c.pipeline_status)) 
+                AND c.tenant_id = ? AND c.deleted_at IS NULL AND c.created_at BETWEEN ? AND ?
+            WHERE ps.tenant_id = ?
+            GROUP BY ps.id, ps.name, ps.color, ps.order_index, ps.is_won, ps.is_lost, ps.system_slug
+            ORDER BY ps.order_index ASC
+        ");
+        $stmtStages->execute([$tid, $fromTs, $toTs, $tid]);
+        $rawStages = $stmtStages->fetchAll(PDO::FETCH_ASSOC);
+
+        $funnel = [];
+        foreach ($rawStages as $st) {
+            $cnt = (int)$st['contact_count'];
+            $funnel[] = [
+                'id' => (int)$st['id'],
+                'name' => $st['name'],
+                'color' => $st['color'] ?: '#3b82f6',
+                'order_index' => (int)$st['order_index'],
+                'is_won' => (bool)$st['is_won'],
+                'is_lost' => (bool)$st['is_lost'],
+                'count' => $cnt,
+                'conversion_rate' => round(($cnt / $safeTotalLeads) * 100, 1)
+            ];
+        }
+
+        // 4. Source Quality Matrix (Marketing ROI)
+        // Group deals by contact_id first to eliminate duplication when a contact has multiple deals
+        $stmtSources = $this->db->prepare("
+            SELECT 
+                COALESCE(NULLIF(TRIM(c.source), ''), 'Chưa phân loại') as source_name,
+                COUNT(c.id) as total_leads,
+                SUM(CASE WHEN (c.last_contact IS NULL OR c.last_contact = '') THEN 1 ELSE 0 END) as uncontacted_leads,
+                SUM(CASE WHEN (c.last_contact IS NOT NULL AND c.last_contact != '') THEN 1 ELSE 0 END) as contacted_leads,
+                SUM(CASE WHEN (c.lead_score >= 50 OR c.status IN ('qualified', 'customer')) THEN 1 ELSE 0 END) as qualified_leads,
+                COALESCE(SUM(d.deal_count), 0) as deal_count,
+                COALESCE(SUM(d.won_count), 0) as won_count,
+                COALESCE(SUM(d.won_value), 0) as won_value
+            FROM contacts c
+            LEFT JOIN (
+                SELECT 
+                    d.contact_id,
+                    COUNT(d.id) as deal_count,
+                    SUM(CASE WHEN ps.is_won = 1 THEN 1 ELSE 0 END) as won_count,
+                    COALESCE(SUM(CASE WHEN ps.is_won = 1 THEN d.value ELSE 0 END), 0) as won_value
+                FROM deals d
+                LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id
+                WHERE d.tenant_id = ? AND d.deleted_at IS NULL
+                GROUP BY d.contact_id
+            ) d ON d.contact_id = c.id
+            WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND c.created_at BETWEEN ? AND ?
+            GROUP BY source_name
+            ORDER BY total_leads DESC
+            LIMIT 15
+        ");
+        $stmtSources->execute([$tid, $tid, $fromTs, $toTs]);
+        $rawSources = $stmtSources->fetchAll(PDO::FETCH_ASSOC);
+
+        $sources = [];
+        foreach ($rawSources as $src) {
+            $srcTotal = (int)$src['total_leads'];
+            $safeSrcTotal = max(1, $srcTotal);
+            $srcWon = (int)$src['won_count'];
+            $srcWinRate = round(($srcWon / $safeSrcTotal) * 100, 1);
+            $srcQualified = (int)$src['qualified_leads'];
+            $srcQualRate = round(($srcQualified / $safeSrcTotal) * 100, 1);
+            $srcConnected = (int)$src['contacted_leads'];
+            $srcConnRate = round(($srcConnected / $safeSrcTotal) * 100, 1);
+
+            $tier = 'neutral';
+            $tierLabel = 'Trung bình';
+            if ($srcWinRate >= 15 || ($srcQualRate >= 60 && $srcTotal >= 10)) {
+                $tier = 'vip';
+                $tierLabel = 'Nguồn Vàng';
+            } elseif ($srcWinRate >= 8 || $srcQualRate >= 40) {
+                $tier = 'good';
+                $tierLabel = 'Chất lượng Tốt';
+            } elseif ($srcQualRate < 25 && $srcTotal >= 20) {
+                $tier = 'warning';
+                $tierLabel = 'Cần tối ưu Ads';
+            }
+
+            $sources[] = [
+                'source' => $src['source_name'],
+                'total_leads' => $srcTotal,
+                'uncontacted_leads' => (int)$src['uncontacted_leads'],
+                'contacted_leads' => $srcConnected,
+                'connected_rate' => $srcConnRate,
+                'qualified_leads' => $srcQualified,
+                'qualified_rate' => $srcQualRate,
+                'deal_count' => (int)$src['deal_count'],
+                'won_count' => $srcWon,
+                'won_value' => (float)$src['won_value'],
+                'win_rate' => $srcWinRate,
+                'tier' => $tier,
+                'tier_label' => $tierLabel
+            ];
+        }
+
+        // 5. Sales Performance Leaderboard (Pre-aggregated subqueries to prevent Cartesian Product)
+        $stmtSales = $this->db->prepare("
+            SELECT 
+                u.id as user_id,
+                u.full_name,
+                u.avatar_url,
+                u.role,
+                u.job_title,
+                COALESCE(c.assigned_leads, 0) as assigned_leads,
+                COALESCE(c.contacted_leads, 0) as contacted_leads,
+                COALESCE(c.uncontacted_leads, 0) as uncontacted_leads,
+                COALESCE(c.qualified_leads, 0) as qualified_leads,
+                COALESCE(d.deal_count, 0) as deal_count,
+                COALESCE(d.pipeline_value, 0) as pipeline_value,
+                COALESCE(d.won_count, 0) as won_count,
+                COALESCE(d.won_value, 0) as won_value
+            FROM users u
+            LEFT JOIN (
+                SELECT 
+                    c.owner_id,
+                    COUNT(c.id) as assigned_leads,
+                    SUM(CASE WHEN (c.last_contact IS NOT NULL AND c.last_contact != '') THEN 1 ELSE 0 END) as contacted_leads,
+                    SUM(CASE WHEN (c.last_contact IS NULL OR c.last_contact = '') THEN 1 ELSE 0 END) as uncontacted_leads,
+                    SUM(CASE WHEN (c.lead_score >= 50 OR c.status IN ('qualified', 'customer')) THEN 1 ELSE 0 END) as qualified_leads
+                FROM contacts c
+                WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND c.created_at BETWEEN ? AND ?
+                GROUP BY c.owner_id
+            ) c ON c.owner_id = u.id
+            LEFT JOIN (
+                SELECT 
+                    d.owner_id,
+                    COUNT(d.id) as deal_count,
+                    COALESCE(SUM(d.value), 0) as pipeline_value,
+                    SUM(CASE WHEN ps.is_won = 1 THEN 1 ELSE 0 END) as won_count,
+                    COALESCE(SUM(CASE WHEN ps.is_won = 1 THEN d.value ELSE 0 END), 0) as won_value
+                FROM deals d
+                LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id
+                WHERE d.tenant_id = ? AND d.deleted_at IS NULL AND d.created_at BETWEEN ? AND ?
+                GROUP BY d.owner_id
+            ) d ON d.owner_id = u.id
+            WHERE u.tenant_id = ? AND u.is_active = 1 AND (c.assigned_leads > 0 OR d.deal_count > 0)
+            ORDER BY won_value DESC, contacted_leads DESC
+        ");
+        $stmtSales->execute([$tid, $fromTs, $toTs, $tid, $fromTs, $toTs, $tid]);
+        $rawSales = $stmtSales->fetchAll(PDO::FETCH_ASSOC);
+
+        $sales = [];
+        $rank = 1;
+        foreach ($rawSales as $s) {
+            $assigned = (int)$s['assigned_leads'];
+            $sContacted = (int)$s['contacted_leads'];
+            $sUncontacted = (int)$s['uncontacted_leads'];
+            $sDeals = (int)$s['deal_count'];
+            $sWon = (int)$s['won_count'];
+            $sWonVal = (float)$s['won_value'];
+            $contactRate = $assigned > 0 ? round(($sContacted / $assigned) * 100, 1) : 0.0;
+            $sWinRate = $assigned > 0 
+                ? round(($sWon / $assigned) * 100, 1) 
+                : ($sDeals > 0 ? round(($sWon / $sDeals) * 100, 1) : 0.0);
+
+            $statusNote = 'Ổn định';
+            if ($rank === 1 && $sWonVal > 0) {
+                $statusNote = 'Top 1 Performer';
+            } elseif ($contactRate < 70 && $assigned >= 10) {
+                $statusNote = 'Bỏ ngâm nhiều data';
+            } elseif ($contactRate >= 95 && $assigned >= 15) {
+                $statusNote = 'Kỷ luật xuất sắc';
+            }
+
+            $sales[] = [
+                'rank' => $rank++,
+                'user_id' => (int)$s['user_id'],
+                'full_name' => $s['full_name'],
+                'avatar_url' => $s['avatar_url'],
+                'role' => $s['role'],
+                'job_title' => $s['job_title'] ?: 'Chuyên viên Tư vấn',
+                'assigned_leads' => $assigned,
+                'contacted_leads' => $sContacted,
+                'uncontacted_leads' => $sUncontacted,
+                'contact_rate' => $contactRate,
+                'qualified_leads' => (int)$s['qualified_leads'],
+                'deal_count' => $sDeals,
+                'pipeline_value' => (float)$s['pipeline_value'],
+                'won_count' => $sWon,
+                'won_value' => $sWonVal,
+                'win_rate' => $sWinRate,
+                'status_note' => $statusNote
+            ];
+        }
+
+        // 6. Top Lost Reasons
+        $stmtLost = $this->db->prepare("
+            SELECT 
+                COALESCE(NULLIF(TRIM(lost_reason), ''), 'Không nêu lý do') as reason,
+                COUNT(1) as count
+            FROM contacts
+            WHERE tenant_id = ? AND deleted_at IS NULL AND lost_reason IS NOT NULL AND TRIM(lost_reason) != '' AND created_at BETWEEN ? AND ?
+            GROUP BY reason
+            ORDER BY count DESC
+            LIMIT 6
+        ");
+        $stmtLost->execute([$tid, $fromTs, $toTs]);
+        $lostReasons = $stmtLost->fetchAll(PDO::FETCH_ASSOC);
+
+        respond(200, [
+            'month' => $month,
+            'date_range' => [
+                'from' => $from,
+                'to' => $to,
+                'prev_month' => $prevMonth
+            ],
+            'summary' => [
+                'total_leads' => $totalLeads,
+                'prev_total_leads' => $prevTotalLeads,
+                'growth_rate' => $leadGrowthRate,
+                'qualified_leads' => $qualifiedLeads,
+                'qualified_rate' => $qualifiedRate,
+                'contacted_leads' => $contactedLeads,
+                'connected_rate' => $connectedRate,
+                'uncontacted_leads' => $uncontactedLeads,
+                'uncontacted_rate' => $uncontactedRate,
+                'total_deals' => $totalDeals,
+                'deal_conversion_rate' => $dealConversionRate,
+                'total_deal_value' => $totalDealValue,
+                'won_deals' => $wonDeals,
+                'won_value' => $wonValue,
+                'win_rate' => $winRate,
+                'quality_distribution' => [
+                    'hot' => $hotLeads,
+                    'warm' => $warmLeads,
+                    'cold' => $coldLeads
+                ]
+            ],
+            'funnel' => $funnel,
+            'sources' => $sources,
+            'sales_leaderboard' => $sales,
+            'lost_reasons' => $lostReasons
+        ], 'Lấy báo cáo hiệu suất Sales & Lead thành công');
+    }
 }

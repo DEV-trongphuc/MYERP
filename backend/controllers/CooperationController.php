@@ -1729,4 +1729,40 @@ class CooperationController {
             respond(500, null, 'Lỗi xử lý yêu cầu chỉnh sửa: ' . $e->getMessage(), false);
         }
     }
+
+    public function show(array $auth, int $id): void {
+        $stmt = $this->db->prepare("
+            SELECT cs.*, c.full_name as contact_name, c.phone as contact_phone, u.full_name as creator_name
+            FROM cooperation_slips cs
+            LEFT JOIN contacts c ON cs.contact_id = c.id
+            LEFT JOIN users u ON cs.created_by = u.id
+            WHERE cs.id = ?
+            LIMIT 1
+        ");
+        $stmt->execute([$id]);
+        $slip = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$slip) {
+            respond(404, null, 'Không tìm thấy phiếu hợp tác', false);
+        }
+        respond(200, $slip, 'Lấy chi tiết phiếu hợp tác thành công');
+    }
+
+    public function update(array $auth, int $id): void {
+        $b = getBody();
+        $updates = [];
+        $params = [];
+        foreach (['total_percentage', 'shares_json', 'signatures_json', 'status', 'dispute_details'] as $field) {
+            if (isset($b[$field])) {
+                $updates[] = "$field = ?";
+                $params[] = is_array($b[$field]) ? json_encode($b[$field], JSON_UNESCAPED_UNICODE) : $b[$field];
+            }
+        }
+        if (empty($updates)) {
+            respond(422, null, 'Không có thông tin cần cập nhật', false);
+        }
+        $params[] = $id;
+        $this->db->prepare("UPDATE cooperation_slips SET " . implode(', ', $updates) . ", updated_at = NOW() WHERE id = ?")
+            ->execute($params);
+        respond(200, ['id' => $id], 'Cập nhật phiếu hợp tác thành công');
+    }
 }

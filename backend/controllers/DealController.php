@@ -748,6 +748,14 @@ class DealController {
         return 'none';
     }
 
+    public function getStages(array $auth): void {
+        $tid = $auth['tenant_id'] ?? 1;
+        $stmt = $this->db->prepare("SELECT * FROM pipeline_stages WHERE tenant_id = ? OR tenant_id IS NULL ORDER BY order_index ASC");
+        $stmt->execute([$tid]);
+        $stages = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        respond(200, $stages, 'Lấy danh sách giai đoạn thành công');
+    }
+
     private function getSetting(string $key, string $default): string {
         $stmt = $this->db->prepare("SELECT setting_value FROM system_settings WHERE setting_key = ?");
         $stmt->execute([$key]);

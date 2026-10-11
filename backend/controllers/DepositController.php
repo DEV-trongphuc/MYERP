@@ -637,6 +637,15 @@ class DepositController {
                 $milestones = [['name' => 'Thanh toán đợt 1', 'amount' => $price]];
             }
 
+            // Validate milestone amounts: Không cho phép số âm hoặc 0
+            foreach ($milestones as $m) {
+                $mAmt = (float)($m['amount'] ?? 0);
+                if ($mAmt <= 0) {
+                    $this->db->rollBack();
+                    respond(422, null, 'Số tiền của từng đợt thanh toán phải lớn hơn 0', false);
+                }
+            }
+
             $stmtM = $this->db->prepare("
                 INSERT INTO deposit_milestones (deposit_id, milestone_name, expected_amount, expected_pay_date, status, original_amount, unc_file_path)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -646,9 +655,10 @@ class DepositController {
             foreach ($milestones as $m) {
                 $payDate = !empty($m['expected_pay_date']) ? $m['expected_pay_date'] : null;
                 $originalAmount = isset($m['original_amount']) ? (float)$m['original_amount'] : null;
-                $mStatus = ($isFirstMilestone && $initialUncPath) ? 'paid' : 'pending';
+                // Đợt cọc khởi tạo luôn ở trạng thái pending chờ Kế toán duyệt sao kê/UNC, không tự ý gán paid
+                $mStatus = 'pending';
                 $mUnc = ($isFirstMilestone && $initialUncPath) ? $initialUncPath : null;
-                $stmtM->execute([$depositId, trim($m['name'] ?? $m['milestone_name']), (float)$m['amount'], $payDate, $mStatus, $originalAmount, $mUnc]);
+                $stmtM->execute([$depositId, trim($m['name'] ?? $m['milestone_name'] ?? 'Đợt thanh toán'), (float)$m['amount'], $payDate, $mStatus, $originalAmount, $mUnc]);
                 $isFirstMilestone = false;
             }
 
@@ -872,9 +882,9 @@ class DepositController {
             JOIN contacts c ON d.contact_id = c.id
             LEFT JOIN projects p ON d.project_id = p.id
             LEFT JOIN users u ON c.owner_id = u.id
-            WHERE d.id = ? FOR UPDATE
+            WHERE d.id = ? AND d.tenant_id = ? FOR UPDATE
         ");
-        $stmtDep->execute([$id]);
+        $stmtDep->execute([$id, $auth['tenant_id']]);
         $depositData = $stmtDep->fetch();
 
         if (!$depositData) {
@@ -1898,4 +1908,76 @@ class DepositController {
         $val = $stmt->fetchColumn();
         return $val !== false ? $val : $default;
     }
+
+    public function confirmPayment(array $auth, int $id): void {
+        if (!in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'accountant', 'director'], true)) {
+            respond(403, null, 'Bạn không có quyền xác nhận thanh toán đặt cọc', false);
+        }
+
+        $this->db->beginTransaction();
+        try {
+            $stmt = $this->db->prepare("SELECT id, status, contact_id, title FROM deposits WHERE id = ? AND tenant_id = ? FOR UPDATE");
+            $stmt->execute([$id, $auth['tenant_id']]);
+            $dep = $stmt->fetch();
+            if (!$dep) {
+                $this->db->rollBack();
+                respond(404, null, 'Không tìm thấy phiếu đặt cọc', false);
+            }
+            if ($dep['status'] === 'approved') {
+                $this->db->rollBack();
+                respond(400, null, 'Phiếu đặt cọc đã được xác nhận thanh toán trước đó', false);
+            }
+
+            $this->db->prepare("UPDATE deposit_milestones SET status = 'completed', updated_at = NOW() WHERE deposit_id = ?")
+                ->execute([$id]);
+
+            $this->db->prepare("UPDATE deposits SET status = 'approved', updated_at = NOW() WHERE id = ? AND tenant_id = ?")
+                ->execute([$id, $auth['tenant_id']]);
+
+            if (function_exists('logActivity')) {
+                logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'CONFIRM_PAYMENT', 'deposit', $id, json_encode(['title' => $dep['title'] ?? '']));
+            }
+
+            $this->db->commit();
+            respond(200, ['id' => $id, 'status' => 'approved'], 'Xác nhận thanh toán đặt cọc thành công');
+        } catch (\Throwable $e) {
+            $this->db->rollBack();
+            respond(500, null, 'Lỗi xác nhận thanh toán: ' . $e->getMessage(), false);
+        }
+    }
+
+    public function refundDeposit(array $auth, int $id): void {
+        if (!in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'accountant', 'director'], true)) {
+            respond(403, null, 'Bạn không có quyền thực hiện hoàn cọc', false);
+        }
+
+        $this->db->beginTransaction();
+        try {
+            $stmt = $this->db->prepare("SELECT id, status, contact_id, title FROM deposits WHERE id = ? AND tenant_id = ? FOR UPDATE");
+            $stmt->execute([$id, $auth['tenant_id']]);
+            $dep = $stmt->fetch();
+            if (!$dep) {
+                $this->db->rollBack();
+                respond(404, null, 'Không tìm thấy phiếu đặt cọc', false);
+            }
+            if ($dep['status'] === 'cancelled') {
+                $this->db->rollBack();
+                respond(400, null, 'Phiếu đặt cọc đã được hủy hoặc hoàn cọc trước đó', false);
+            }
+
+            $this->db->prepare("UPDATE deposits SET status = 'cancelled', cancelled_reason = 'Hoàn cọc', updated_at = NOW() WHERE id = ? AND tenant_id = ?")
+                ->execute([$id, $auth['tenant_id']]);
+
+            if (function_exists('logActivity')) {
+                logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'REFUND_DEPOSIT', 'deposit', $id, json_encode(['title' => $dep['title'] ?? '']));
+            }
+
+            $this->db->commit();
+            respond(200, ['id' => $id, 'status' => 'cancelled'], 'Hoàn cọc thành công');
+        } catch (\Throwable $e) {
+            $this->db->rollBack();
+            respond(500, null, 'Lỗi hoàn cọc: ' . $e->getMessage(), false);
+        }
+    }
 }
+

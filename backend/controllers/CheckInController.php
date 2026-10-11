@@ -121,9 +121,13 @@ class CheckInController {
         }
 
         if (isset($_GET['month']) && !empty($_GET['month'])) {
-            $sql .= " AND YEAR(c.check_in_date) = ? AND MONTH(c.check_in_date) = ?";
-            $params[] = (int)($_GET['year'] ?? date('Y'));
-            $params[] = (int)$_GET['month'];
+            $year = (int)($_GET['year'] ?? date('Y'));
+            $month = (int)$_GET['month'];
+            $startOfMonth = sprintf('%04d-%02d-01', $year, $month);
+            $endOfMonth = date('Y-m-t', strtotime($startOfMonth));
+            $sql .= " AND c.check_in_date BETWEEN ? AND ?";
+            $params[] = $startOfMonth;
+            $params[] = $endOfMonth;
         } elseif (isset($_GET['from']) && !empty($_GET['from']) && isset($_GET['to']) && !empty($_GET['to'])) {
             $sql .= " AND c.check_in_date BETWEEN ? AND ?";
             $params[] = $_GET['from'];
@@ -2174,7 +2178,7 @@ class CheckInController {
                    ap.full_name as approved_by_name, ap.avatar_url as approved_by_avatar
             FROM check_ins c
             JOIN users u ON c.user_id = u.id
-            LEFT JOIN users m ON c.approver_id = m.id
+            LEFT JOIN users m ON c.manager_id = m.id
             LEFT JOIN users ap ON c.approved_by = ap.id
             WHERE c.id = ? AND u.tenant_id = ?
             LIMIT 1
@@ -2186,6 +2190,38 @@ class CheckInController {
             return;
         }
         respond(200, $row);
+    }
+
+    public function getStats(array $auth): void {
+        $tid = (int)($auth['tenant_id'] ?? 1);
+        $today = date('Y-m-d');
+        $month = date('Y-m');
+
+        $stmtToday = $this->db->prepare("
+            SELECT COUNT(DISTINCT user_id) as total_present,
+                   SUM(CASE WHEN late_minutes > 0 THEN 1 ELSE 0 END) as total_late,
+                   SUM(CASE WHEN early_minutes > 0 THEN 1 ELSE 0 END) as total_early
+            FROM check_ins
+            WHERE check_in_date = ?
+        ");
+        $stmtToday->execute([$today]);
+        $todayStats = $stmtToday->fetch(PDO::FETCH_ASSOC) ?: ['total_present' => 0, 'total_late' => 0, 'total_early' => 0];
+
+        $stmtUsers = $this->db->prepare("SELECT COUNT(*) FROM users WHERE is_active = 1 AND tenant_id = ?");
+        $stmtUsers->execute([$tid]);
+        $totalEmployees = (int)$stmtUsers->fetchColumn();
+
+        $stats = [
+            'date' => $today,
+            'month' => $month,
+            'total_employees' => $totalEmployees,
+            'present_today' => (int)($todayStats['total_present'] ?? 0),
+            'late_today' => (int)($todayStats['total_late'] ?? 0),
+            'early_today' => (int)($todayStats['total_early'] ?? 0),
+            'attendance_rate' => $totalEmployees > 0 ? round(((int)$todayStats['total_present'] / $totalEmployees) * 100, 1) : 100
+        ];
+
+        respond(200, $stats, 'Lấy thống kê chấm công thành công');
     }
 }
 

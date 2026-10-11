@@ -40,6 +40,7 @@ import { AttachmentLightboxModal, type AttachmentItem } from '../components/ui/A
 import { ExpenseCreateDrawer, parseMoneyVn } from '../components/ExpenseCreateDrawer';
 import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 import { getSystemTitle } from '../config/env';
+import { pushOverlay } from '../utils/overlayStack';
 
 const workflowList = [
   { id: 'payment', name: 'Đề nghị thanh toán', description: 'Đề xuất thanh toán nhà cung cấp, chi phí vận hành, đối tác.', category: 'finance', icon: FileSignature, bg: 'rgba(16, 185, 129, 0.08)', color: '#10b981' },
@@ -55,6 +56,7 @@ const workflowList = [
   { id: 'overtime', name: 'Đăng ký làm thêm', description: 'Đề xuất làm thêm giờ (OT), tăng ca ngoài giờ làm việc hành chính.', category: 'hr', icon: Plus, bg: 'rgba(20, 184, 166, 0.08)', color: '#14b8a6' },
   { id: 'remote_work', name: 'Đăng ký làm việc từ xa', description: 'Đề xuất làm việc tại nhà (WFH) hoặc làm việc từ xa.', category: 'hr', icon: Home, bg: 'rgba(14, 165, 233, 0.08)', color: '#0ea5e9' },
   { id: 'attendance_bulk', name: 'Đề nghị cập nhật công', description: 'Giải trình và cập nhật bổ sung công bị thiếu do quên chấm công.', category: 'hr', icon: CheckSquare, bg: 'rgba(99, 102, 241, 0.08)', color: '#6366f1' },
+  { id: 'recruitment', name: 'Đề xuất tuyển dụng', description: 'Đề xuất tuyển dụng nhân sự mới, tuyển thay thế hoặc mở rộng quy mô bộ phận/chi nhánh.', category: 'hr', icon: UserPlus, bg: 'rgba(99, 102, 241, 0.08)', color: '#6366f1' },
 
   { id: 'purchase_request', name: 'Mua sắm trang thiết bị', description: 'Đề xuất mua sắm công cụ dụng cụ, thiết bị văn phòng.', category: 'admin', icon: ShoppingCart, bg: 'rgba(168, 85, 247, 0.08)', color: '#a855f7' },
   { id: 'it_request', name: 'Cấp thiết bị IT', description: 'Yêu cầu cấp phát laptop, màn hình, tài khoản phần mềm.', category: 'admin', icon: Server, bg: 'rgba(6, 182, 212, 0.08)', color: '#06b6d4' },
@@ -397,14 +399,29 @@ const getFileNameFromUrl = (u: string) => {
   return normalizeFileUrl(u).split('/').pop() || '';
 };
 
+const normalizeExpenseItems = (items: any[]) => {
+  if (!Array.isArray(items)) return [];
+  return items
+    .filter(it => it && typeof it === 'object')
+    .map((it: any) => {
+      const rawContent = it.content || it.name || it.description || it.item_name || it.title || it.noi_dung || 'Chi phí';
+      return {
+        ...it,
+        content: rawContent,
+        name: rawContent,
+        description: it.description || rawContent
+      };
+    });
+};
+
 const parseExpenseLineItems = (text: string, directItems?: any) => {
   if (Array.isArray(directItems) && directItems.length > 0) {
-    return directItems;
+    return normalizeExpenseItems(directItems);
   }
   if (typeof directItems === 'string' && directItems.trim().startsWith('[')) {
     try {
       const parsed = JSON.parse(directItems);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) return normalizeExpenseItems(parsed);
     } catch (e) {}
   }
   if (!text) return null;
@@ -412,7 +429,7 @@ const parseExpenseLineItems = (text: string, directItems?: any) => {
   if (jsonMatch) {
     try {
       const parsed = JSON.parse(jsonMatch[1]);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) return normalizeExpenseItems(parsed);
     } catch (e) {}
   }
   const blockMatch = text.match(/\[Bảng chi tiết thanh toán\]:\s*([\s\S]*?)(?=\n\n\[|\n\[|$)/i);
@@ -431,7 +448,7 @@ const parseExpenseLineItems = (text: string, directItems?: any) => {
         parsedItems.push({ stt, name, content: name, quantity: qty, unit_price: price, price, amount: amt, total: amt });
       }
     }
-    if (parsedItems.length > 0) return parsedItems;
+    if (parsedItems.length > 0) return normalizeExpenseItems(parsedItems);
   }
   const expBlockMatch = text.match(/\[Chi tiết các khoản chi\]:\s*([\s\S]*?)(?=\n\n\[|\n\[|$)/i);
   if (expBlockMatch) {
@@ -447,7 +464,7 @@ const parseExpenseLineItems = (text: string, directItems?: any) => {
         parsedItems.push({ name, content: name, quantity: qty, unit_price: p, price: p, vat });
       }
     }
-    if (parsedItems.length > 0) return parsedItems;
+    if (parsedItems.length > 0) return normalizeExpenseItems(parsedItems);
   }
   return null;
 };
@@ -794,7 +811,21 @@ export default function Approvals() {
 
   // Form field states
   const [proposerUser, setProposerUser] = useState<any>(null);
-  const [formType, setFormType] = useState<'leave' | 'advance' | 'expense' | 'general' | 'attendance_bulk' | 'late_early' | 'overtime' | 'remote_work'>('expense');
+  const [formType, setFormType] = useState<'leave' | 'advance' | 'expense' | 'general' | 'attendance_bulk' | 'late_early' | 'overtime' | 'remote_work' | 'recruitment'>('expense');
+
+  // Recruitment proposal states
+  const [recruitmentJobTitle, setRecruitmentJobTitle] = useState('');
+  const [recruitmentHeadcount, setRecruitmentHeadcount] = useState<number | string>(1);
+  const [recruitmentDepartment, setRecruitmentDepartment] = useState('');
+  const [recruitmentJobType, setRecruitmentJobType] = useState('full_time');
+  const [recruitmentReason, setRecruitmentReason] = useState('expansion');
+  const [recruitmentReplacementWho, setRecruitmentReplacementWho] = useState('');
+  const [recruitmentSalaryMin, setRecruitmentSalaryMin] = useState<number | string>('');
+  const [recruitmentSalaryMax, setRecruitmentSalaryMax] = useState<number | string>('');
+  const [recruitmentSalaryNegotiable, setRecruitmentSalaryNegotiable] = useState(false);
+  const [recruitmentExpectedDate, setRecruitmentExpectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [recruitmentRequirements, setRecruitmentRequirements] = useState('');
+  const [recruitmentDescription, setRecruitmentDescription] = useState('');
   const [leaveSession, setLeaveSession] = useState<'full' | 'morning' | 'afternoon' | 'range' | 'intermittent'>('full');
   const [lateEarlyType, setLateEarlyType] = useState<'late' | 'early'>('late');
   const [lateEarlyMinutes, setLateEarlyMinutes] = useState(30);
@@ -1152,18 +1183,6 @@ export default function Approvals() {
     }
   }, [selectedWorkflowDef?.id, purchaseOrdersList.length]);
 
-  // Tự động đồng bộ các nhân viên nội bộ được chọn nhận hoa hồng vào danh sách Người liên quan (relatedUserIds)
-  useEffect(() => {
-    if (selectedWorkflowDef?.id === 'commission_payout') {
-      const recipientIds = commissionItems
-        .filter(it => !it.recipient_type || it.recipient_type === 'employee')
-        .map(it => Number(it.user_id))
-        .filter(id => !isNaN(id) && id > 0 && id !== Number(user?.id));
-      if (recipientIds.length > 0) {
-        setRelatedUserIds(prev => Array.from(new Set([...prev, ...recipientIds])));
-      }
-    }
-  }, [commissionItems, selectedWorkflowDef?.id, user?.id]);
 
   const onSelectWorkflowItem = (item: any) => {
     setSelectedWorkflowDef(item);
@@ -1312,6 +1331,7 @@ export default function Approvals() {
   const [isDraggingAttachments, setIsDraggingAttachments] = useState(false);
   const [uploadingAttachments, setUploadingAttachments] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const inFlightSubmitRef = useRef(false);
 
   const handleUploadFiles = async (files: File[]) => {
     if (!files || files.length === 0) return;
@@ -1397,6 +1417,8 @@ export default function Approvals() {
 
 
   const handleCreateSubmit = async () => {
+    if (inFlightSubmitRef.current || submitting) return;
+    inFlightSubmitRef.current = true;
     setSubmitting(true);
     try {
       if (editingItemId) {
@@ -1444,7 +1466,7 @@ export default function Approvals() {
       }
 
       // Always ensure HR Leader / Hành chính is included in related users for attendance/HR workflows
-      const isHrWf = selectedWorkflowDef?.category === 'hr' || ['leave', 'late_early', 'overtime', 'remote_work', 'attendance_bulk'].includes(formType);
+      const isHrWf = selectedWorkflowDef?.category === 'hr' || ['leave', 'late_early', 'overtime', 'remote_work', 'attendance_bulk', 'recruitment'].includes(formType);
       let finalRelatedUserIds = [...relatedUserIds];
       if (isHrWf) {
         const hrLeader = getDefaultHrLeader();
@@ -1728,6 +1750,98 @@ export default function Approvals() {
             related_user_ids: relatedUserIds,
             currency: currencyType
           })
+        });
+      } else if (formType === 'recruitment' || selectedWorkflowDef?.id === 'recruitment') {
+        const safeTitle = recruitmentJobTitle.trim();
+        if (!safeTitle) {
+          toast.error(t('Vui lòng nhập vị trí / chức danh cần tuyển dụng!'));
+          setSubmitting(false);
+          return;
+        }
+        const safeHeadcount = Number(recruitmentHeadcount);
+        if (isNaN(safeHeadcount) || safeHeadcount <= 0) {
+          toast.error(t('Số lượng cần tuyển phải lớn hơn hoặc bằng 1 người!'));
+          setSubmitting(false);
+          return;
+        }
+        if (safeHeadcount > 999) {
+          toast.error(t('Số lượng tuyển dụng vượt quá giới hạn hợp lệ (tối đa 999 người)!'));
+          setSubmitting(false);
+          return;
+        }
+
+        const safeSalaryMin = Number(recruitmentSalaryMin);
+        const safeSalaryMax = Number(recruitmentSalaryMax);
+        if (!recruitmentSalaryNegotiable && safeSalaryMin > 0 && safeSalaryMax > 0 && safeSalaryMin > safeSalaryMax) {
+          toast.error(t('Mức lương tối thiểu không được lớn hơn mức lương tối đa!'));
+          setSubmitting(false);
+          return;
+        }
+
+        if (!appVal1 && !finalApproverId) {
+          toast.error(t('Đề xuất tuyển dụng bắt buộc phải chọn người duyệt (Trưởng bộ phận / Quản lý).'));
+          setSubmitting(false);
+          return;
+        }
+
+        const jobTypeLabels: Record<string, string> = {
+          full_time: 'Toàn thời gian (Full-time)',
+          part_time: 'Bán thời gian (Part-time)',
+          intern: 'Thực tập sinh (Intern)',
+          probation: 'Thử việc',
+          contractor: 'Cộng tác viên / Thời vụ'
+        };
+
+        const reasonLabels: Record<string, string> = {
+          expansion: 'Tuyển mới mở rộng quy mô bộ phận / dự án mới',
+          replacement: 'Tuyển thay thế nhân sự',
+          project: 'Phục vụ dự án ngắn hạn / cao điểm',
+          other: 'Nhu cầu nhân sự khác'
+        };
+
+        let salaryDisplay = 'Thỏa thuận theo năng lực';
+        if (!recruitmentSalaryNegotiable) {
+          if (safeSalaryMin > 0 && safeSalaryMax > 0) {
+            salaryDisplay = `${formatApprovalCurrency(safeSalaryMin, 'VND')} - ${formatApprovalCurrency(safeSalaryMax, 'VND')}`;
+          } else if (safeSalaryMin > 0) {
+            salaryDisplay = `Từ ${formatApprovalCurrency(safeSalaryMin, 'VND')}`;
+          } else if (safeSalaryMax > 0) {
+            salaryDisplay = `Tối đa ${formatApprovalCurrency(safeSalaryMax, 'VND')}`;
+          }
+        }
+
+        const recruitmentNotes = [
+          `[Đề xuất tuyển dụng]:`,
+          `• Vị trí cần tuyển: ${safeTitle}`,
+          `• Số lượng cần tuyển: ${safeHeadcount} người`,
+          `• Hình thức làm việc: ${jobTypeLabels[recruitmentJobType] || recruitmentJobType}`,
+          recruitmentDepartment.trim() ? `• Phòng ban / Bộ phận tiếp nhận: ${recruitmentDepartment.trim()}` : '',
+          `• Lý do tuyển dụng: ${reasonLabels[recruitmentReason] || recruitmentReason}${recruitmentReason === 'replacement' && recruitmentReplacementWho.trim() ? ` (Thay thế cho: ${recruitmentReplacementWho.trim()})` : ''}`,
+          `• Mức lương dự kiến: ${salaryDisplay}`,
+          recruitmentExpectedDate ? `• Ngày dự kiến nhận việc: ${recruitmentExpectedDate}` : '',
+          recruitmentRequirements.trim() ? `• Tiêu chuẩn / Yêu cầu ứng viên: ${recruitmentRequirements.trim()}` : '',
+          recruitmentDescription.trim() ? `• Mô tả công việc tóm tắt: ${recruitmentDescription.trim()}` : '',
+          attachments.length > 0 ? `\n[Tài liệu đính kèm (${attachments.length} tệp)]:\n` + attachments.map(a => {
+            const baseUrl = (import.meta.env.VITE_API_URL || '/backend').replace(/\/+$/, '');
+            const norm = normalizeFileUrl(a.url);
+            return `• ${a.name || 'Tài liệu'} (${baseUrl}/${norm})`;
+          }).join('\n') : ''
+        ].filter(Boolean).join('\n');
+
+        const requestTitle = `Đề xuất tuyển dụng: ${safeTitle} (${safeHeadcount} người)`;
+
+        await api.post('/expenses', {
+          title: requestTitle,
+          description: recruitmentNotes,
+          notes: recruitmentNotes,
+          amount: 0,
+          category: 'hr',
+          status: 'pending',
+          approver_id: effectiveAppVal1 || finalApproverId,
+          approver_id_2: effectiveAppVal2,
+          approver_id_3: effectiveAppVal3,
+          related_user_ids: finalRelatedUserIds,
+          image_url: attachments[0]?.url || null
         });
       } else if (formType === 'general') {
         let generalDesc = '';
@@ -2099,18 +2213,12 @@ export default function Approvals() {
             vat: 0,
             vat_amount: 0,
             total: Number(c.amount) || 0,
-            is_paid: 0,
-            unc_file_url: null,
-            paid_at: null,
-            paid_by: null
+            is_paid: c.is_paid ? 1 : 0,
+            unc_file_url: c.unc_file_url || null,
+            paid_at: c.paid_at || null,
+            paid_by: c.paid_by || null
           }));
 
-          // Tự động gắn tất cả nhân viên nội bộ nhận hoa hồng thành Người liên quan (related_user_ids)
-          const beneIds = validCommission
-            .filter(c => !c.recipient_type || c.recipient_type === 'employee')
-            .map(c => Number(c.user_id))
-            .filter(id => !isNaN(id) && id > 0 && id !== Number(user?.id));
-          effectiveRelatedUserIds = Array.from(new Set([...effectiveRelatedUserIds, ...beneIds]));
 
           const commListStr = validCommission.map((c, idx) => {
             const isEmp = !c.recipient_type || c.recipient_type === 'employee';
@@ -2227,6 +2335,7 @@ export default function Approvals() {
     } catch (err: any) {
       toast.error(err?.response?.data?.message || err?.message || t('Lỗi gửi đề xuất'));
     } finally {
+      inFlightSubmitRef.current = false;
       setSubmitting(false);
     }
   };
@@ -2486,6 +2595,15 @@ export default function Approvals() {
       } else {
         if (defaultAccountant) setCustomApprover2(defaultAccountant);
       }
+    } else if (formType === 'recruitment' || selectedWorkflowDef?.id === 'recruitment') {
+      // Đề xuất tuyển dụng: Cấp 1 (Trưởng bộ phận/Quản lý), Cấp 2 (Ban Giám đốc)
+      setShowStepManager(true);
+      setShowStepAccountant(false);
+      setShowStepDirector(true);
+      const defaultApprover = getDefaultManagerApprover(proposerUser || user, selectedWorkflowDef);
+      if (defaultApprover) setCustomApprover1(defaultApprover);
+      if (defaultDirector) setCustomApprover3(defaultDirector);
+      setCustomApprover2(null);
     } else if (formType === 'leave' || formType === 'late_early' || formType === 'remote_work' || formType === 'attendance_bulk') {
       // Đề xuất nghỉ phép / đi muộn về sớm / WFH / giải trình chấm công: 1 cấp duyệt (Trưởng nhóm / Quản lý trực tiếp), HR Duy Phương tự động theo dõi bên dưới
       setShowStepManager(true);
@@ -2549,7 +2667,7 @@ export default function Approvals() {
   // Mặc định tự động chọn Leader / Trưởng phòng HR vào danh sách Người liên quan (theo dõi) cho đề xuất công / HR
   useEffect(() => {
     if (editingItemId || editingItemIdRef.current) return;
-    const isHrWf = selectedWorkflowDef?.category === 'hr' || ['leave', 'late_early', 'overtime', 'remote_work', 'attendance_bulk'].includes(formType);
+    const isHrWf = selectedWorkflowDef?.category === 'hr' || ['leave', 'late_early', 'overtime', 'remote_work', 'attendance_bulk', 'recruitment'].includes(formType);
     const isProposerManagerOrLeader = ['manager', 'director', 'admin', 'superadmin', 'super_admin', 'leader', 'truongphong', 'head_of_department'].includes(String(proposerUser?.role || user?.role).toLowerCase()) || Boolean(proposerUser?.is_team_leader || (user as any)?.is_team_leader);
 
     // QUY TẮC: Nếu là Trưởng phòng/Quản lý đề xuất cập nhật công (attendance_bulk):
@@ -2645,6 +2763,18 @@ export default function Approvals() {
       customApprover1Id: customApprover1?.id || defaultApp1?.id || null,
       customApprover2Id: customApprover2?.id || defaultAccountant?.id || null,
       customApprover3Id: customApprover3?.id || defaultDirector?.id || null,
+      recruitmentJobTitle: recruitmentJobTitle || '',
+      recruitmentHeadcount: recruitmentHeadcount || 1,
+      recruitmentDepartment: recruitmentDepartment || '',
+      recruitmentJobType: recruitmentJobType || 'full_time',
+      recruitmentReason: recruitmentReason || 'expansion',
+      recruitmentReplacementWho: recruitmentReplacementWho || '',
+      recruitmentSalaryMin: recruitmentSalaryMin || '',
+      recruitmentSalaryMax: recruitmentSalaryMax || '',
+      recruitmentSalaryNegotiable: recruitmentSalaryNegotiable || false,
+      recruitmentExpectedDate: recruitmentExpectedDate || '',
+      recruitmentRequirements: recruitmentRequirements || '',
+      recruitmentDescription: recruitmentDescription || '',
       showStepManager,
       showStepAccountant,
       showStepDirector,
@@ -2694,6 +2824,9 @@ export default function Approvals() {
     if (attachments && attachments.length > 0) return true;
     if (stationeryItems && stationeryItems.some(i => (i.name && i.name.trim() !== '') || (i.price && Number(i.price) > 0))) return true;
     if (expenseItems && expenseItems.some(i => (i.name && i.name.trim() !== '') || (i.price && Number(i.price) > 0))) return true;
+    if (recruitmentJobTitle && recruitmentJobTitle.trim() !== '') return true;
+    if (recruitmentRequirements && recruitmentRequirements.trim() !== '') return true;
+    if (recruitmentDescription && recruitmentDescription.trim() !== '') return true;
     if (relatedUserIds && relatedUserIds.length > 0) return true;
     return false;
   };
@@ -2764,6 +2897,18 @@ export default function Approvals() {
         paymentWalletType,
         paymentWalletPhone,
         paymentCorporateCard,
+        recruitmentJobTitle,
+        recruitmentHeadcount,
+        recruitmentDepartment,
+        recruitmentJobType,
+        recruitmentReason,
+        recruitmentReplacementWho,
+        recruitmentSalaryMin,
+        recruitmentSalaryMax,
+        recruitmentSalaryNegotiable,
+        recruitmentExpectedDate,
+        recruitmentRequirements,
+        recruitmentDescription,
         paymentDetails,
         currencyType,
         formType,
@@ -2982,6 +3127,18 @@ export default function Approvals() {
     if (fd.advanceSettlementDate) setAdvanceSettlementDate(fd.advanceSettlementDate);
     if (fd.expenseCategory) setExpenseCategory(fd.expenseCategory);
     if (fd.invoiceType) setInvoiceType(fd.invoiceType);
+    if (fd.recruitmentJobTitle !== undefined) setRecruitmentJobTitle(fd.recruitmentJobTitle);
+    if (fd.recruitmentHeadcount !== undefined) setRecruitmentHeadcount(fd.recruitmentHeadcount);
+    if (fd.recruitmentDepartment !== undefined) setRecruitmentDepartment(fd.recruitmentDepartment);
+    if (fd.recruitmentJobType !== undefined) setRecruitmentJobType(fd.recruitmentJobType);
+    if (fd.recruitmentReason !== undefined) setRecruitmentReason(fd.recruitmentReason);
+    if (fd.recruitmentReplacementWho !== undefined) setRecruitmentReplacementWho(fd.recruitmentReplacementWho);
+    if (fd.recruitmentSalaryMin !== undefined) setRecruitmentSalaryMin(fd.recruitmentSalaryMin);
+    if (fd.recruitmentSalaryMax !== undefined) setRecruitmentSalaryMax(fd.recruitmentSalaryMax);
+    if (fd.recruitmentSalaryNegotiable !== undefined) setRecruitmentSalaryNegotiable(fd.recruitmentSalaryNegotiable);
+    if (fd.recruitmentExpectedDate !== undefined) setRecruitmentExpectedDate(fd.recruitmentExpectedDate);
+    if (fd.recruitmentRequirements !== undefined) setRecruitmentRequirements(fd.recruitmentRequirements);
+    if (fd.recruitmentDescription !== undefined) setRecruitmentDescription(fd.recruitmentDescription);
     if (fd.customApprover1) setCustomApprover1(fd.customApprover1);
     if (fd.customApprover2) setCustomApprover2(fd.customApprover2);
     if (fd.customApprover3) setCustomApprover3(fd.customApprover3);
@@ -3616,7 +3773,9 @@ export default function Approvals() {
     return t || `Quy trình #${it.id}`;
   }, []);
 
-  const loadData = useCallback(async (isSilent = false) => {
+  const inFlightOpsRef = useRef<Record<string, boolean>>({});
+
+  const loadData = useCallback(async (isSilent = false, abortSignal?: AbortSignal) => {
     if (!isSilent) setLoading(true);
     try {
       let pList: ApprovalItem[] = [];
@@ -3625,7 +3784,8 @@ export default function Approvals() {
       let aList: ApprovalItem[] = [];
 
       try {
-        const overviewRes = await fetchAPI('hrm/approvals/overview');
+        const overviewRes = await fetchAPI('hrm/approvals/overview', { signal: abortSignal });
+        if (abortSignal?.aborted) return;
         if (overviewRes && overviewRes.success && overviewRes.data) {
           pList = Array.isArray(overviewRes.data.pending) ? overviewRes.data.pending : [];
           mList = Array.isArray(overviewRes.data.my_requests) ? overviewRes.data.my_requests : [];
@@ -3634,24 +3794,22 @@ export default function Approvals() {
         } else {
           throw new Error('Fallback to parallel');
         }
-      } catch {
+      } catch (subErr: any) {
+        if (abortSignal?.aborted || subErr?.name === 'AbortError') return;
         const [pendingRes, myRequestsRes, followingRes, allRes] = await Promise.all([
-          fetchAPI('hrm/approvals/pending').catch(() => ({ data: [] })),
-          fetchAPI('hrm/approvals/my-requests').catch(() => ({ data: [] })),
-          fetchAPI('hrm/approvals/following').catch(() => ({ data: [] })),
-          fetchAPI('hrm/approvals/all').catch(() => ({ data: [] }))
+          fetchAPI('hrm/approvals/pending', { signal: abortSignal }).catch(() => ({ data: [] })),
+          fetchAPI('hrm/approvals/my-requests', { signal: abortSignal }).catch(() => ({ data: [] })),
+          fetchAPI('hrm/approvals/following', { signal: abortSignal }).catch(() => ({ data: [] })),
+          fetchAPI('hrm/approvals/all', { signal: abortSignal }).catch(() => ({ data: [] }))
         ]);
+        if (abortSignal?.aborted) return;
         pList = Array.isArray(pendingRes?.data) ? pendingRes.data : [];
         mList = Array.isArray(myRequestsRes?.data) ? myRequestsRes.data : [];
         fList = Array.isArray(followingRes?.data) ? followingRes.data : [];
         aList = Array.isArray(allRes?.data) ? allRes.data : [];
       }
 
-      const isTestClearedItem = (it: any) => [6, 7, 8, 21].includes(Number(it.id)) && (!it.type || it.type === 'leave');
-      pList = pList.filter(it => !isTestClearedItem(it));
-      mList = mList.filter(it => !isTestClearedItem(it));
-      fList = fList.filter(it => !isTestClearedItem(it));
-      aList = aList.filter(it => !isTestClearedItem(it));
+      if (abortSignal?.aborted) return;
 
       const currentUid = Number(user?.id || 0);
       const currentUserName = (user?.name || (user as any)?.full_name || '').toLowerCase().trim();
@@ -3736,25 +3894,30 @@ export default function Approvals() {
         window.history.replaceState({}, document.title, window.location.pathname + (params.get('tab') ? `?tab=${params.get('tab')}` : ''));
       }
     } catch (err: any) {
+      if (err?.name === 'AbortError') return;
       console.error('Lỗi tải dữ liệu quy trình:', err);
     } finally {
       setLoading(false);
     }
-  }, [location.search, selectedTimelineItem]);
+  }, [location.search, selectedTimelineItem, isItemAtMyStepToApprove, user, draftsList]);
 
   useEffect(() => {
-    loadData();
+    const controller = new AbortController();
+    loadData(false, controller.signal);
     const handleRefresh = () => loadData(true);
     window.addEventListener('approval-updated', handleRefresh);
     window.addEventListener('refresh-approvals', handleRefresh);
     return () => {
+      controller.abort();
       window.removeEventListener('approval-updated', handleRefresh);
       window.removeEventListener('refresh-approvals', handleRefresh);
     };
   }, []);
 
   const handleApprove = async (item: ApprovalItem) => {
-    if (actionLoadingId) return;
+    const opKey = `approve-${item.type}-${item.id}`;
+    if (inFlightOpsRef.current[opKey] || actionLoadingId) return;
+    inFlightOpsRef.current[opKey] = true;
     setActionLoadingId(item.id);
     try {
       if (item.type === 'leave') {
@@ -3785,6 +3948,7 @@ export default function Approvals() {
     } catch (err: any) {
       toast.error(err?.response?.data?.message || err?.message || t('Lỗi khi phê duyệt'));
     } finally {
+      delete inFlightOpsRef.current[opKey];
       setActionLoadingId(null);
     }
   };
@@ -3798,12 +3962,15 @@ export default function Approvals() {
   const handleRejectSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedItem || isSubmittingReject) return;
+    const opKey = `reject-${selectedItem.type}-${selectedItem.id}`;
+    if (inFlightOpsRef.current[opKey]) return;
     if (!rejectReason.trim()) {
       toast.error(t('Vui lòng nhập lý do từ chối!'));
       return;
     }
 
     try {
+      inFlightOpsRef.current[opKey] = true;
       setIsSubmittingReject(true);
       if (selectedItem.type === 'leave') {
         await fetchAPI('hrm/leaves', {
@@ -3836,6 +4003,7 @@ export default function Approvals() {
     } catch (err: any) {
       toast.error(err?.response?.data?.message || err?.message || t('Lỗi khi từ chối'));
     } finally {
+      delete inFlightOpsRef.current[opKey];
       setIsSubmittingReject(false);
     }
   };
@@ -4170,6 +4338,99 @@ export default function Approvals() {
               setAttachments([{ name: mAtt[1].trim(), url: mAtt[2].trim() }]);
             }
           }
+
+          setShowCreateModal(true);
+          return;
+        }
+
+        // 4.15 Specialized: Đề xuất tuyển dụng (recruitment)
+        if (lowerTitle.includes('tuyển dụng') || notes.includes('[Đề xuất tuyển dụng]')) {
+          const def = workflowList.find(w => w.id === 'recruitment') || matchingDef;
+          setSelectedWorkflowDef(def);
+          setFormType('recruitment');
+          setExpenseTitle(expData.title || def.name);
+          setWorkflowTitleSuffix(extractTitleSuffix(expData.title || '', def?.name));
+
+          const extractBullet = (label: string) => {
+            const m = notes.match(new RegExp(`•\\s*${label}:\\s*([^\\n]+)`, 'i'));
+            return m ? m[1].trim() : '';
+          };
+
+          const rawJob = extractBullet('Vị trí cần tuyển') || extractBullet('Vị trí');
+          if (rawJob) setRecruitmentJobTitle(rawJob);
+
+          const rawQty = extractBullet('Số lượng cần tuyển') || extractBullet('Số lượng');
+          if (rawQty) {
+            const num = parseInt(rawQty);
+            if (!isNaN(num)) setRecruitmentHeadcount(num);
+          }
+
+          const rawDept = extractBullet('Phòng ban / Bộ phận tiếp nhận') || extractBullet('Phòng ban');
+          if (rawDept) setRecruitmentDepartment(rawDept);
+
+          const rawType = extractBullet('Hình thức làm việc');
+          if (rawType.includes('Bán thời gian') || rawType.includes('Part-time')) setRecruitmentJobType('part_time');
+          else if (rawType.includes('Thực tập') || rawType.includes('Intern')) setRecruitmentJobType('intern');
+          else if (rawType.includes('Thử việc')) setRecruitmentJobType('probation');
+          else if (rawType.includes('Cộng tác') || rawType.includes('Thời vụ')) setRecruitmentJobType('contractor');
+          else setRecruitmentJobType('full_time');
+
+          const rawReason = extractBullet('Lý do tuyển dụng');
+          if (rawReason.includes('thay thế') || rawReason.includes('Thay thế')) {
+            setRecruitmentReason('replacement');
+            const repMatch = rawReason.match(/Thay thế cho:\s*([^\)]+)/i);
+            if (repMatch) setRecruitmentReplacementWho(repMatch[1].trim());
+          } else if (rawReason.includes('dự án') || rawReason.includes('cao điểm')) {
+            setRecruitmentReason('project');
+          } else if (rawReason.includes('khác')) {
+            setRecruitmentReason('other');
+          } else {
+            setRecruitmentReason('expansion');
+          }
+
+          const rawSalary = extractBullet('Mức lương dự kiến');
+          if (rawSalary.includes('Thỏa thuận') || rawSalary.includes('thỏa thuận')) {
+            setRecruitmentSalaryNegotiable(true);
+          } else {
+            setRecruitmentSalaryNegotiable(false);
+            const salNumbers = rawSalary.match(/\d[\d.,]*/g);
+            if (salNumbers && salNumbers.length >= 2) {
+              setRecruitmentSalaryMin(salNumbers[0].replace(/\D/g, ''));
+              setRecruitmentSalaryMax(salNumbers[1].replace(/\D/g, ''));
+            } else if (salNumbers && salNumbers.length === 1) {
+              setRecruitmentSalaryMin(salNumbers[0].replace(/\D/g, ''));
+            }
+          }
+
+          const rawDate = extractBullet('Ngày dự kiến nhận việc');
+          if (rawDate) setRecruitmentExpectedDate(rawDate);
+
+          const extractMultilineBullet = (label: string) => {
+            const m = notes.match(new RegExp(`•\\s*${label}:\\s*([\\s\\S]*?)(?=\\n\\s*•|\\n\\n\\[|$)`, 'i'));
+            return m ? m[1].trim() : '';
+          };
+
+          const rawReq = extractMultilineBullet('Tiêu chuẩn / Yêu cầu ứng viên') || extractMultilineBullet('Yêu cầu ứng viên');
+          if (rawReq) setRecruitmentRequirements(rawReq);
+
+          const rawDesc = extractMultilineBullet('Mô tả công việc tóm tắt') || extractMultilineBullet('Mô tả công việc');
+          if (rawDesc) setRecruitmentDescription(rawDesc);
+
+          restoreApproversAndRelated(expData);
+          // Đối với đề xuất tuyển dụng: Cấp 2 là Ban Giám đốc (customApprover3), không qua Kế toán (customApprover2)
+          if (expData.approver_id_2 || (item as any)?.approver_id_2) {
+            const dirId = Number(expData.approver_id_2 || (item as any)?.approver_id_2);
+            const dirUser = users.find(x => Number(x.id) === dirId);
+            setCustomApprover3(dirUser || (expData.approver_name_2 ? { id: dirId, full_name: expData.approver_name_2, avatar_url: expData.approver_avatar_2 } : { id: dirId, full_name: `User #${dirId}` }));
+            setShowStepDirector(true);
+          } else {
+            setShowStepDirector(false);
+            setCustomApprover3(null);
+          }
+          setShowStepAccountant(false);
+          setCustomApprover2(null);
+
+          if (expData.image_url) setAttachments([{ name: expData.image_url.split('/').pop() || 'Tài liệu JD', url: expData.image_url }]);
 
           setShowCreateModal(true);
           return;
@@ -4573,7 +4834,11 @@ export default function Approvals() {
             bank_account: it.bank_account || it.bank_account_no || '',
             bank_owner: it.bank_owner || it.bank_account_name || '',
             amount: Number(it.amount || it.price || 0),
-            note: it.note || ''
+            note: it.note || '',
+            is_paid: it.is_paid,
+            unc_file_url: it.unc_file_url,
+            paid_at: it.paid_at,
+            paid_by: it.paid_by
           })));
         }
 
@@ -4592,12 +4857,6 @@ export default function Approvals() {
           });
         };
 
-        if (expData.image_url && !isDuplicateAtt(expData.image_url)) {
-          parsedAtts.push({
-            name: getFileNameFromUrl(expData.image_url) || 'Tài liệu',
-            url: expData.image_url
-          });
-        }
         if (notes) {
           const attMatches = notes.matchAll(/•\s*([^\n\r(]+)\s*\((https?:\/\/[^\s)]+|\/backend\/[^\s)]+|uploads\/[^\s)]+)\)/gi);
           for (const m of attMatches) {
@@ -4607,6 +4866,12 @@ export default function Approvals() {
               parsedAtts.push({ name: aName, url: aUrl });
             }
           }
+        }
+        if (expData.image_url && !isDuplicateAtt(expData.image_url)) {
+          parsedAtts.push({
+            name: getFileNameFromUrl(expData.image_url) || 'Tài liệu',
+            url: expData.image_url
+          });
         }
         setAttachments(parsedAtts);
 
@@ -4673,7 +4938,8 @@ export default function Approvals() {
       );
     }
     if (s === 'approved' || s === 'confirmed') {
-      if (isExpense) {
+      const isZeroCost = Number(it?.amount || 0) === 0 || String(it?.title || '').toLowerCase().includes('tuyển dụng');
+      if (isExpense && !isZeroCost) {
         if (!isPaid) {
           return (
             <span className="badge warning" style={{ fontSize: '0.65rem', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '3px', height: 'auto', borderRadius: '6px', color: '#d97706', background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.25)' }}>
@@ -4714,7 +4980,10 @@ export default function Approvals() {
     );
   };
 
-  const getTypeIcon = (type: string) => {
+  const getTypeIcon = (type: string, itemTitle?: string) => {
+    if (type === 'recruitment' || (itemTitle && itemTitle.toLowerCase().includes('tuyển dụng'))) {
+      return <UserPlus size={16} style={{ color: '#6366f1' }} />;
+    }
     switch (type) {
       case 'leave': return <Calendar size={16} style={{ color: '#ef4444' }} />;
       case 'advance': return <DollarSign size={16} style={{ color: '#3b82f6' }} />;
@@ -4845,7 +5114,8 @@ export default function Approvals() {
       let badgeIcon = <CheckCircle2 size={10} />;
       let badgeCustomStyle: React.CSSProperties = {};
 
-      if (isExpense) {
+      const isZeroCost = Number(item.amount || 0) === 0 || String(item.title || '').toLowerCase().includes('tuyển dụng');
+      if (isExpense && !isZeroCost) {
         if (isPaid) {
           badgeLabel = t('Đã hoàn tất');
         } else {
@@ -5232,7 +5502,8 @@ export default function Approvals() {
       if (isItemDraft) return false;
       const isItemApproved = ['approved', 'confirmed'].includes(rawStatus);
       const isPaid = Boolean((item as any).is_refunded) || rawStatus === 'paid' || rawStatus === 'refunded';
-      return isItemApproved && !isPaid && (Number(item.amount || 0) > 0 || item.type === 'expense' || item.type === 'advance');
+      const isFinancial = Number(item.amount || 0) > 0 && !String(item.title).toLowerCase().includes('tuyển dụng');
+      return isItemApproved && !isPaid && isFinancial;
     }).length;
   }, [currentRawList]);
 
@@ -5282,7 +5553,8 @@ export default function Approvals() {
       const isItemApproved = ['approved', 'confirmed'].includes(rawStatus);
       const isItemRejected = ['rejected', 'failed'].includes(rawStatus);
       const isPaid = Boolean((item as any).is_refunded) || rawStatus === 'paid' || rawStatus === 'refunded';
-      const isUnpaid = isItemApproved && !isPaid && (Number(item.amount || 0) > 0 || item.type === 'expense' || item.type === 'advance');
+      const isFinancial = Number(item.amount || 0) > 0 && !String(item.title).toLowerCase().includes('tuyển dụng');
+      const isUnpaid = isItemApproved && !isPaid && isFinancial;
 
       let matchesStatus = listStatusFilter === 'all';
       if (!matchesStatus) {
@@ -5991,7 +6263,7 @@ export default function Approvals() {
                             background: 'var(--color-bg-secondary)', display: 'flex',
                             alignItems: 'center', justifyContent: 'center', flexShrink: 0
                           }}>
-                            {getTypeIcon(item.type)}
+                            {getTypeIcon(item.type, item.title)}
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
                             <Avatar src={avatarUrl} name={item.employee_name || user?.name} size={22} />
@@ -6237,7 +6509,7 @@ export default function Approvals() {
                               background: 'var(--color-bg-secondary)', display: 'flex',
                               alignItems: 'center', justifyContent: 'center', flexShrink: 0
                             }}>
-                              {getTypeIcon(item.type)}
+                              {getTypeIcon(item.type, item.title)}
                             </div>
                             <div>
                               <div style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--color-text)', WebkitTextSizeAdjust: '100%', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
@@ -7133,6 +7405,27 @@ export default function Approvals() {
                                 } else if (item.id === 'remote_work') {
                                   setFormType('remote_work');
                                   setWfhSalaryRate(50);
+                                } else if (item.id === 'recruitment') {
+                                  setFormType('recruitment');
+                                  setRecruitmentJobTitle('');
+                                  setRecruitmentHeadcount(1);
+                                  setRecruitmentDepartment(departmentName || (user as any)?.department || (user as any)?.team_name || '');
+                                  setRecruitmentJobType('full_time');
+                                  setRecruitmentReason('expansion');
+                                  setRecruitmentReplacementWho('');
+                                  setRecruitmentSalaryMin('');
+                                  setRecruitmentSalaryMax('');
+                                  setRecruitmentSalaryNegotiable(false);
+                                  setRecruitmentExpectedDate(getTodayDateString());
+                                  setRecruitmentRequirements('');
+                                  setRecruitmentDescription('');
+                                  setShowStepManager(true);
+                                  setShowStepAccountant(false);
+                                  setShowStepDirector(true);
+                                  const defaultApprover = getDefaultManagerApprover(proposerUser || user, item);
+                                  if (defaultApprover) setCustomApprover1(defaultApprover);
+                                  if (defaultDirector) setCustomApprover3(defaultDirector);
+                                  setCustomApprover2(null);
                                 } else {
                                   setFormType('general');
                                 }
@@ -8921,6 +9214,418 @@ export default function Approvals() {
                               <span>{t('Lưu ý: Khoản tạm ứng này sẽ tự động trừ vào lương thực lãnh của tháng sau khi được duyệt đầy đủ các bước.')}</span>
                             </div>
                           </div>
+                        ) : formType === 'recruitment' ? (
+                          /* RECRUITMENT REQUISITION FORM */
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                            {/* Workflow Banner Highlight */}
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '12px',
+                              padding: '12px 16px',
+                              borderRadius: '12px',
+                              background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(79, 70, 229, 0.04) 100%)',
+                              border: '1px solid rgba(99, 102, 241, 0.25)'
+                            }}>
+                              <div style={{
+                                width: '36px',
+                                height: '36px',
+                                borderRadius: '10px',
+                                background: 'linear-gradient(135deg, #818cf8, #4f46e5)',
+                                color: '#ffffff',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                boxShadow: '0 4px 12px rgba(79, 70, 229, 0.25)',
+                                flexShrink: 0
+                              }}>
+                                <UserPlus size={18} />
+                              </div>
+                              <div>
+                                <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#4338ca' }}>
+                                  {t('TỜ TRÌNH ĐỀ XUẤT TUYỂN DỤNG NHÂN SỰ')}
+                                </div>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                  {t('Lập kế hoạch nhân sự, số lượng cần tuyển, hình thức làm việc và dải lương dự kiến trình Ban Giám đốc.')}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Section 1: Vị trí & Số lượng */}
+                            <div style={{
+                              background: 'var(--color-surface, #ffffff)',
+                              border: '1px solid var(--color-border)',
+                              borderRadius: '14px',
+                              padding: isMobile ? '1rem' : '1.25rem',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '14px'
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#4f46e5' }}>
+                                <Briefcase size={16} />
+                                <span style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                  {t('1. Thông tin vị trí & nhu cầu nhân sự')}
+                                </span>
+                              </div>
+
+                              {/* Quick selection chips for common job titles */}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                  {t('Gợi ý chức danh phổ biến')}
+                                </label>
+                                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                  {[
+                                    'Chuyên viên Tuyển sinh',
+                                    'Nhân viên Kinh doanh (Sales)',
+                                    'Giảng viên / Trợ giảng',
+                                    'Chuyên viên Marketing',
+                                    'Kế toán viên',
+                                    'Lập trình viên / IT',
+                                    'Chăm sóc khách hàng (CSKH)',
+                                    'Hành chính Nhân sự'
+                                  ].map(title => (
+                                    <button
+                                      key={title}
+                                      type="button"
+                                      onClick={() => {
+                                        setRecruitmentJobTitle(title);
+                                        setWorkflowTitleSuffix(title);
+                                        setExpenseTitle(`Đề xuất tuyển dụng: ${title}`);
+                                      }}
+                                      style={{
+                                        padding: '4px 10px',
+                                        borderRadius: 'var(--radius-full, 9999px)',
+                                        border: recruitmentJobTitle === title ? '1.5px solid #4f46e5' : '1px solid var(--color-border)',
+                                        background: recruitmentJobTitle === title ? 'rgba(99, 102, 241, 0.12)' : 'var(--color-bg-secondary, #f8fafc)',
+                                        color: recruitmentJobTitle === title ? '#4338ca' : 'var(--color-text)',
+                                        fontSize: '0.75rem',
+                                        fontWeight: recruitmentJobTitle === title ? 750 : 550,
+                                        cursor: 'pointer',
+                                        transition: 'all 0.15s ease'
+                                      }}
+                                    >
+                                      + {title}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr', gap: '1rem' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                                    {t('Vị trí / Chức danh cần tuyển')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                  </label>
+                                  <input
+                                    type="text"
+                                    className="form-input"
+                                    value={recruitmentJobTitle}
+                                    onChange={e => {
+                                      setRecruitmentJobTitle(e.target.value);
+                                      setWorkflowTitleSuffix(e.target.value);
+                                      setExpenseTitle(`Đề xuất tuyển dụng: ${e.target.value}`);
+                                    }}
+                                    placeholder={t('Ví dụ: Chuyên viên Tư vấn Tuyển sinh BBA...')}
+                                    style={{ height: '38px', fontSize: '0.85rem', fontWeight: 650 }}
+                                    required
+                                  />
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                                    {t('Số lượng cần tuyển (Người)')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                  </label>
+                                  <input
+                                    type="number"
+                                    className="form-input"
+                                    min="1"
+                                    max="999"
+                                    step="1"
+                                    value={recruitmentHeadcount}
+                                    onChange={e => setRecruitmentHeadcount(e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value) || 1))}
+                                    style={{ height: '38px', fontSize: '0.9rem', fontWeight: 800, color: '#4f46e5' }}
+                                    required
+                                  />
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.2fr 1fr 1fr', gap: '1rem' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                                    {t('Phòng ban / Bộ phận tiếp nhận')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                  </label>
+                                  <CustomSelect
+                                    value={recruitmentDepartment}
+                                    onChange={val => setRecruitmentDepartment(val)}
+                                    options={teams.length > 0 ? teams.map(tm => ({
+                                      value: tm.name,
+                                      label: tm.name
+                                    })) : [
+                                      { value: 'Phòng Kinh doanh', label: 'Phòng Kinh doanh (Sales)' },
+                                      { value: 'Phòng Tuyển sinh', label: 'Phòng Tuyển sinh' },
+                                      { value: 'Phòng Đào tạo', label: 'Phòng Đào tạo / Học vụ' },
+                                      { value: 'Phòng Marketing', label: 'Phòng Marketing' },
+                                      { value: 'Phòng Kỹ thuật & IT', label: 'Phòng Kỹ thuật & IT' },
+                                      { value: 'Phòng Kế toán', label: 'Phòng Kế toán - Tài chính' },
+                                      { value: 'Phòng Nhân sự', label: 'Phòng Hành chính - Nhân sự' }
+                                    ]}
+                                    placeholder={t('Chọn phòng ban...')}
+                                    width="100%"
+                                  />
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                                    {t('Hình thức làm việc')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                  </label>
+                                  <CustomSelect
+                                    value={recruitmentJobType}
+                                    onChange={val => setRecruitmentJobType(val)}
+                                    options={[
+                                      { value: 'full_time', label: t('Toàn thời gian (Full-time)') },
+                                      { value: 'part_time', label: t('Bán thời gian (Part-time)') },
+                                      { value: 'intern', label: t('Thực tập sinh (Intern)') },
+                                      { value: 'probation', label: t('Thử việc') },
+                                      { value: 'contractor', label: t('Cộng tác viên / Thời vụ') }
+                                    ]}
+                                    width="100%"
+                                  />
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                                    {t('Ngày dự kiến nhận việc')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                  </label>
+                                  <VietnameseDateInput
+                                    value={recruitmentExpectedDate}
+                                    onChange={val => setRecruitmentExpectedDate(val)}
+                                    inputStyle={{ height: '36px', fontSize: '0.82rem' }}
+                                    required
+                                  />
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : (recruitmentReason === 'replacement' ? '1.2fr 1fr' : '1fr'), gap: '1rem' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                                    {t('Lý do tuyển dụng')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                  </label>
+                                  <CustomSelect
+                                    value={recruitmentReason}
+                                    onChange={val => setRecruitmentReason(val)}
+                                    options={[
+                                      { value: 'expansion', label: t('Tuyển mới mở rộng quy mô bộ phận / dự án mới') },
+                                      { value: 'replacement', label: t('Tuyển thay thế nhân sự nghỉ việc / chuyển công tác') },
+                                      { value: 'project', label: t('Phục vụ dự án ngắn hạn / mùa cao điểm tuyển sinh') },
+                                      { value: 'other', label: t('Nhu cầu bổ sung nhân sự khác') }
+                                    ]}
+                                    width="100%"
+                                  />
+                                </div>
+
+                                {recruitmentReason === 'replacement' && (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#dc2626' }}>
+                                      {t('Thay thế cho nhân sự nào?')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                    </label>
+                                    <input
+                                      type="text"
+                                      className="form-input"
+                                      value={recruitmentReplacementWho}
+                                      onChange={e => setRecruitmentReplacementWho(e.target.value)}
+                                      placeholder={t('Họ tên nhân viên cũ hoặc sắp nghỉ...')}
+                                      style={{ height: '38px', fontSize: '0.85rem', borderColor: 'rgba(220, 38, 38, 0.4)' }}
+                                      required
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Section 2: Mức lương dự kiến */}
+                            <div style={{
+                              background: 'var(--color-surface, #ffffff)',
+                              border: '1px solid var(--color-border)',
+                              borderRadius: '14px',
+                              padding: isMobile ? '1rem' : '1.25rem',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '12px'
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#059669' }}>
+                                  <DollarSign size={16} />
+                                  <span style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                    {t('2. Chế độ lương & ngân sách dự kiến')}
+                                  </span>
+                                </div>
+
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 650, color: 'var(--color-text)' }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={recruitmentSalaryNegotiable}
+                                    onChange={e => setRecruitmentSalaryNegotiable(e.target.checked)}
+                                    style={{ width: '16px', height: '16px', accentColor: '#059669', cursor: 'pointer' }}
+                                  />
+                                  <span>{t('Lương thỏa thuận theo năng lực ứng viên')}</span>
+                                </label>
+                              </div>
+
+                              {!recruitmentSalaryNegotiable && (
+                                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: '1rem', marginTop: '4px' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Mức lương tối thiểu (VNĐ)')}
+                                    </label>
+                                    <input
+                                      type="text"
+                                      className="form-input"
+                                      value={recruitmentSalaryMin ? Number(recruitmentSalaryMin).toLocaleString('vi-VN') : ''}
+                                      onChange={e => {
+                                        const raw = e.target.value.replace(/\D/g, '');
+                                        setRecruitmentSalaryMin(raw ? Number(raw) : '');
+                                      }}
+                                      placeholder={t('Ví dụ: 8.000.000')}
+                                      style={{ height: '38px', fontSize: '0.85rem', fontWeight: 700 }}
+                                    />
+                                  </div>
+
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Mức lương tối đa (VNĐ)')}
+                                    </label>
+                                    <input
+                                      type="text"
+                                      className="form-input"
+                                      value={recruitmentSalaryMax ? Number(recruitmentSalaryMax).toLocaleString('vi-VN') : ''}
+                                      onChange={e => {
+                                        const raw = e.target.value.replace(/\D/g, '');
+                                        setRecruitmentSalaryMax(raw ? Number(raw) : '');
+                                      }}
+                                      placeholder={t('Ví dụ: 15.000.000')}
+                                      style={{ height: '38px', fontSize: '0.85rem', fontWeight: 700 }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Section 3: Yêu cầu & Mô tả công việc JD */}
+                            <div style={{
+                              background: 'var(--color-surface, #ffffff)',
+                              border: '1px solid var(--color-border)',
+                              borderRadius: '14px',
+                              padding: isMobile ? '1rem' : '1.25rem',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '12px'
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text)' }}>
+                                <FileText size={16} style={{ color: 'var(--color-primary)' }} />
+                                <span style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                  {t('3. Tiêu chuẩn ứng viên & Bản mô tả công việc (JD)')}
+                                </span>
+                              </div>
+
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                                  {t('Tiêu chuẩn / Yêu cầu ứng viên')}
+                                </label>
+                                <textarea
+                                  className="form-input"
+                                  value={recruitmentRequirements}
+                                  onChange={e => setRecruitmentRequirements(e.target.value)}
+                                  placeholder={t('Ví dụ: Tốt nghiệp Đại học chuyên ngành liên quan, tối thiểu 1 năm kinh nghiệm, giao tiếp tự tin, có khả năng làm việc theo nhóm...')}
+                                  style={{ minHeight: '80px', fontSize: '0.8rem', padding: '10px', resize: 'vertical' }}
+                                />
+                              </div>
+
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                                  {t('Mô tả tóm tắt nhiệm vụ chính')}
+                                </label>
+                                <textarea
+                                  className="form-input"
+                                  value={recruitmentDescription}
+                                  onChange={e => setRecruitmentDescription(e.target.value)}
+                                  placeholder={t('Ví dụ: Tìm kiếm và tư vấn học viên tiềm năng cho các chương trình đào tạo BBA, chăm sóc data khách hàng, báo cáo KPI định kỳ...')}
+                                  style={{ minHeight: '80px', fontSize: '0.8rem', padding: '10px', resize: 'vertical' }}
+                                />
+                              </div>
+
+                              {/* Tải lên file JD đính kèm */}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                                  {t('Đính kèm bản mô tả công việc (File JD - PDF/Word/Ảnh)')}
+                                </label>
+                                <div
+                                  tabIndex={0}
+                                  onClick={() => {
+                                    const el = document.getElementById('recruitment-jd-file-upload');
+                                    if (el) el.click();
+                                  }}
+                                  style={{
+                                    border: '2px dashed var(--color-border)',
+                                    borderRadius: '12px',
+                                    padding: '1.25rem',
+                                    textAlign: 'center',
+                                    background: 'var(--color-bg-secondary)',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s ease'
+                                  }}
+                                >
+                                  <input
+                                    id="recruitment-jd-file-upload"
+                                    type="file"
+                                    multiple
+                                    style={{ display: 'none' }}
+                                    onChange={async (e) => {
+                                      const files = Array.from(e.target.files || []);
+                                      if (files.length === 0) return;
+                                      await handleUploadFiles(files);
+                                      e.target.value = '';
+                                    }}
+                                  />
+                                  <Paperclip size={20} style={{ color: 'var(--color-primary)', marginBottom: '6px' }} />
+                                  <p style={{ fontSize: '0.8rem', color: 'var(--color-text)', margin: '0 0 2px 0', fontWeight: 650 }}>
+                                    {t('Nhấn để chọn tệp JD hoặc kéo thả file vào đây')}
+                                  </p>
+                                  <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                                    {t('Hỗ trợ .pdf, .docx, .doc, .png, .jpg (Tối đa 20MB)')}
+                                  </span>
+                                </div>
+
+                                {attachments.length > 0 && (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
+                                    {attachments.map((att, aIdx) => (
+                                      <div key={aIdx} style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        padding: '8px 12px',
+                                        background: 'var(--color-bg-secondary)',
+                                        borderRadius: '8px',
+                                        border: '1px solid var(--color-border-light)'
+                                      }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                                          <Paperclip size={14} style={{ color: 'var(--color-primary)' }} />
+                                          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            {att.name}
+                                          </span>
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => setAttachments(prev => prev.filter((_, i) => i !== aIdx))}
+                                          style={{ border: 'none', background: 'transparent', color: 'var(--color-danger)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}
+                                        >
+                                          {t('Xóa')}
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
                         ) : formType === 'general' ? (
                           /* GENERAL / OPERATIONAL FORM FIELDS */
                           selectedWorkflowDef?.id === 'print_stamp_send' ? (
@@ -10655,17 +11360,17 @@ export default function Approvals() {
                             {/* BENEFICIARY DYNAMIC SELECTORS */}
                             {selectedWorkflowDef?.id === 'commission_payout' ? (
                               <div style={{
-                                background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(217, 119, 6, 0.04))',
-                                border: '1px solid rgba(245, 158, 11, 0.25)',
-                                borderRadius: '12px',
-                                padding: '12px 16px',
+                                background: 'var(--color-bg-secondary)',
+                                border: '1px solid var(--color-border)',
+                                borderRadius: '10px',
+                                padding: '10px 14px',
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: '12px'
+                                gap: '10px'
                               }}>
-                                <Award size={22} color="#d97706" style={{ flexShrink: 0 }} />
-                                <div style={{ fontSize: '0.78rem', color: '#92400e', lineHeight: 1.5 }}>
-                                  <strong>{t('Chi trả hoa hồng nội bộ cho nhiều nhân sự:')}</strong> {t('Danh sách nhân viên nhận tiền, STK ngân hàng và số tiền được quản lý chi tiết theo từng dòng tại Bảng phân bổ hoa hồng bên dưới. Hệ thống sẽ tự động trích xuất STK ngân hàng của từng nhân sự sale.')}
+                                <Award size={18} color="var(--color-text-muted)" style={{ flexShrink: 0 }} />
+                                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', lineHeight: 1.4 }}>
+                                  <strong style={{ color: 'var(--color-text)' }}>{t('Chi trả hoa hồng nhiều nhân sự & đối tác:')}</strong> {t('Danh sách người nhận tiền, thông tin STK ngân hàng và số tiền được quản lý chi tiết tại Bảng phân bổ hoa hồng bên dưới.')}
                                 </div>
                               </div>
                             ) : paymentTarget === 'Nội bộ' && (
@@ -11532,10 +12237,10 @@ export default function Approvals() {
 
                       {/* Card: Bảng chi tiết thanh toán & Mục đích thanh toán (only for expense/payment) */}
                       {formType === 'expense' && (selectedWorkflowDef?.id === 'commission_payout' ? (
-                        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '14px', background: 'var(--color-surface)', border: '1px solid rgba(245, 158, 11, 0.3)', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)', overflow: 'visible' }}>
+                        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '14px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 2px 12px rgba(0, 0, 0, 0.03)', overflow: 'visible' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <Award size={18} color="#f59e0b" />
+                              <Award size={18} color="#dc2626" />
                               <div>
                                 <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                                   {t('BẢNG PHÂN BỔ HOA HỒNG (NHÂN SỰ & ĐỐI TÁC)')}
@@ -11549,7 +12254,6 @@ export default function Approvals() {
                               type="button"
                               onClick={() => {
                                 setCommissionItems(prev => [
-                                  ...prev,
                                   {
                                     id: Date.now() + Math.random(),
                                     recipient_type: 'employee',
@@ -11569,23 +12273,27 @@ export default function Approvals() {
                                     bank_owner: '',
                                     amount: 0,
                                     note: ''
-                                  }
+                                  },
+                                  ...prev
                                 ]);
                               }}
-                              className="btn primary"
+                              className="btn"
                               style={{
                                 height: '32px',
                                 padding: '0 14px',
                                 fontSize: '0.75rem',
-                                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                                background: '#dc2626',
                                 color: '#ffffff',
                                 fontWeight: 700,
                                 borderRadius: '8px',
-                                display: 'flex',
+                                display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '6px',
-                                boxShadow: '0 2px 8px rgba(245, 158, 11, 0.25)'
+                                border: 'none',
+                                cursor: 'pointer',
+                                boxShadow: '0 2px 6px rgba(220, 38, 38, 0.25)'
                               }}
+                              title={t('Thêm người nhận hoa hồng vào đầu danh sách')}
                             >
                               <Plus size={15} /> {t('Thêm người nhận hoa hồng')}
                             </button>
@@ -11600,14 +12308,14 @@ export default function Approvals() {
                                 <div
                                   key={cItem.id}
                                   style={{
-                                    border: isOther ? '1px solid rgba(217, 119, 6, 0.35)' : '1px solid var(--color-border)',
+                                    border: '1px solid var(--color-border)',
                                     borderRadius: '12px',
-                                    background: isOther ? 'rgba(245, 158, 11, 0.02)' : 'var(--color-bg-primary, #ffffff)',
+                                    background: 'var(--color-surface)',
                                     padding: '14px 16px',
                                     display: 'flex',
                                     flexDirection: 'column',
                                     gap: '12px',
-                                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
+                                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.03)',
                                     position: 'relative',
                                     overflow: 'visible'
                                   }}
@@ -11630,15 +12338,17 @@ export default function Approvals() {
                                             display: 'inline-flex',
                                             alignItems: 'center',
                                             justifyContent: 'center',
-                                            width: '22px',
+                                            minWidth: '22px',
                                             height: '22px',
-                                            borderRadius: '50%',
-                                            background: isOther ? 'rgba(217, 119, 6, 0.2)' : 'rgba(245, 158, 11, 0.15)',
-                                            color: isOther ? '#b45309' : '#d97706',
+                                            padding: '0 6px',
+                                            borderRadius: '6px',
+                                            background: 'var(--color-bg-secondary)',
+                                            color: 'var(--color-text)',
                                             fontSize: '0.72rem',
-                                            fontWeight: 800
+                                            fontWeight: 700,
+                                            border: '1px solid var(--color-border-light)'
                                           }}>
-                                            {idx + 1}
+                                            #{idx + 1}
                                           </span>
                                           <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>
                                             {t('Người thụ hưởng')} <span style={{ color: 'var(--color-danger)' }}>*</span>
@@ -11674,10 +12384,10 @@ export default function Approvals() {
                                               padding: '3px 8px',
                                               borderRadius: '6px',
                                               fontSize: '0.7rem',
-                                              fontWeight: (!cItem.recipient_type || cItem.recipient_type === 'employee') ? 750 : 500,
+                                              fontWeight: (!cItem.recipient_type || cItem.recipient_type === 'employee') ? 700 : 500,
                                               background: (!cItem.recipient_type || cItem.recipient_type === 'employee') ? 'var(--color-surface, #ffffff)' : 'transparent',
-                                              color: (!cItem.recipient_type || cItem.recipient_type === 'employee') ? 'var(--color-primary, #2563eb)' : 'var(--color-text-muted)',
-                                              boxShadow: (!cItem.recipient_type || cItem.recipient_type === 'employee') ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                                              color: (!cItem.recipient_type || cItem.recipient_type === 'employee') ? 'var(--color-text)' : 'var(--color-text-muted)',
+                                              boxShadow: (!cItem.recipient_type || cItem.recipient_type === 'employee') ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
                                               display: 'inline-flex',
                                               alignItems: 'center',
                                               gap: '4px',
@@ -11707,10 +12417,10 @@ export default function Approvals() {
                                               padding: '3px 8px',
                                               borderRadius: '6px',
                                               fontSize: '0.7rem',
-                                              fontWeight: cItem.recipient_type === 'other' ? 750 : 500,
+                                              fontWeight: cItem.recipient_type === 'other' ? 700 : 500,
                                               background: cItem.recipient_type === 'other' ? 'var(--color-surface, #ffffff)' : 'transparent',
-                                              color: cItem.recipient_type === 'other' ? '#d97706' : 'var(--color-text-muted)',
-                                              boxShadow: cItem.recipient_type === 'other' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                                              color: cItem.recipient_type === 'other' ? 'var(--color-text)' : 'var(--color-text-muted)',
+                                              boxShadow: cItem.recipient_type === 'other' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
                                               display: 'inline-flex',
                                               alignItems: 'center',
                                               gap: '4px',
@@ -11773,12 +12483,12 @@ export default function Approvals() {
                                             width="100%"
                                           />
                                           {cItem.user_id && !cItem.bank_account && (
-                                            <div style={{ fontSize: '0.72rem', color: '#d97706', marginTop: '2px', fontWeight: 600 }}>
+                                            <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '2px', fontWeight: 500 }}>
                                               ⚠️ {t('Nhân viên này chưa cập nhật STK trong hồ sơ. Vui lòng nhập STK ở Hàng 2 bên dưới.')}
                                             </div>
                                           )}
                                           {cItem.user_id && cItem.bank_account && (
-                                            <div style={{ fontSize: '0.72rem', color: '#059669', marginTop: '2px', fontWeight: 600 }}>
+                                            <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '2px', fontWeight: 500 }}>
                                               ✓ {t('Đã tự động liên kết STK ngân hàng từ hồ sơ nhân sự.')}
                                             </div>
                                           )}
@@ -11826,12 +12536,12 @@ export default function Approvals() {
                                             width="100%"
                                           />
                                           {cItem.other_id && !cItem.bank_account && (
-                                            <div style={{ fontSize: '0.72rem', color: '#d97706', marginTop: '2px', fontWeight: 600 }}>
+                                            <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '2px', fontWeight: 500 }}>
                                               ⚠️ {t('Đối tượng này chưa lưu STK trong danh bạ. Vui lòng nhập thông tin ngân hàng ở Hàng 2 bên dưới.')}
                                             </div>
                                           )}
                                           {cItem.other_id && cItem.bank_account && (
-                                            <div style={{ fontSize: '0.72rem', color: '#059669', marginTop: '2px', fontWeight: 600 }}>
+                                            <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '2px', fontWeight: 500 }}>
                                               ✓ {t('Đã tự động trích xuất STK ngân hàng từ danh bạ hệ thống.')}
                                             </div>
                                           )}
@@ -11843,7 +12553,7 @@ export default function Approvals() {
                                     {isOther && (
                                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                          <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#2563eb', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                          <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                             <FileText size={14} />
                                             {t('Mã PO thụ hưởng')} <span style={{ color: 'var(--color-danger)' }}>*</span>
                                           </label>
@@ -11873,10 +12583,7 @@ export default function Approvals() {
                                           style={{
                                             height: '38px',
                                             fontSize: '0.82rem',
-                                            fontWeight: 700,
-                                            color: '#1e40af',
-                                            borderColor: cItem.po_number ? '#3b82f6' : 'var(--color-border)',
-                                            background: cItem.po_number ? 'rgba(59, 130, 246, 0.05)' : 'var(--color-surface)'
+                                            fontWeight: 600
                                           }}
                                         />
                                         <datalist id={`po-datalist-${cItem.id}`}>
@@ -11887,11 +12594,11 @@ export default function Approvals() {
                                           ))}
                                         </datalist>
                                         {cItem.po_number ? (
-                                          <div style={{ fontSize: '0.7rem', color: '#2563eb', fontWeight: 650, display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                          <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}>
                                             <Check size={11} /> {t('PO liên kết:')} <strong>{cItem.po_number}</strong>
                                           </div>
                                         ) : (
-                                          <div style={{ fontSize: '0.7rem', color: '#d97706', fontStyle: 'italic' }}>
+                                          <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
                                             ℹ️ {t('Vui lòng ghi nhận mã PO thụ hưởng của đối tác')}
                                           </div>
                                         )}
@@ -11919,7 +12626,7 @@ export default function Approvals() {
                                         style={{ height: '38px', fontSize: '0.95rem', fontWeight: 800, color: '#059669', textAlign: 'right' }}
                                       />
                                       {cItem.amount > 0 && (
-                                        <div style={{ fontSize: '0.7rem', color: '#059669', fontStyle: 'italic', textAlign: 'right', fontWeight: 600, wordBreak: 'break-word' }}>
+                                        <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontStyle: 'italic', textAlign: 'right', fontWeight: 500, wordBreak: 'break-word' }}>
                                           {docSoTiengViet(cItem.amount)}
                                         </div>
                                       )}
@@ -11958,7 +12665,7 @@ export default function Approvals() {
                                     display: 'grid',
                                     gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr 1.4fr',
                                     gap: '10px',
-                                    background: isOther ? 'rgba(245, 158, 11, 0.04)' : 'var(--color-bg-secondary, #f8fafc)',
+                                    background: 'var(--color-bg-secondary, #f8fafc)',
                                     padding: '10px 12px',
                                     borderRadius: '8px',
                                     border: '1px solid var(--color-border-light)'
@@ -12049,13 +12756,64 @@ export default function Approvals() {
                             })}
                           </div>
 
+                          {/* NÚT THÊM Ở DƯỚI HÀNG (THÊM VÀO CUỐI HÀNG) */}
+                          <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCommissionItems(prev => [
+                                  ...prev,
+                                  {
+                                    id: Date.now() + Math.random(),
+                                    recipient_type: 'employee',
+                                    user_id: '',
+                                    user_name: '',
+                                    avatar: '',
+                                    role: '',
+                                    company_id: '',
+                                    supplier_id: '',
+                                    contact_id: '',
+                                    other_id: '',
+                                    other_type: '',
+                                    po_number: '',
+                                    po_id: '',
+                                    bank_name: '',
+                                    bank_account: '',
+                                    bank_owner: '',
+                                    amount: 0,
+                                    note: ''
+                                  }
+                                ]);
+                              }}
+                              className="btn"
+                              style={{
+                                height: '32px',
+                                padding: '0 14px',
+                                fontSize: '0.75rem',
+                                background: '#dc2626',
+                                color: '#ffffff',
+                                fontWeight: 700,
+                                borderRadius: '8px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                border: 'none',
+                                cursor: 'pointer',
+                                boxShadow: '0 2px 6px rgba(220, 38, 38, 0.25)'
+                              }}
+                              title={t('Thêm người nhận hoa hồng vào cuối danh sách')}
+                            >
+                              <Plus size={15} /> {t('Thêm người nhận hoa hồng')}
+                            </button>
+                          </div>
+
                           {/* Totals Summary */}
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--color-bg-secondary)', padding: '12px 18px', borderRadius: '12px', border: '1px solid var(--color-border-light)', flexWrap: 'wrap', gap: '10px' }}>
                             <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                               <span>{t('Tổng số người nhận hoa hồng:')} <strong style={{ color: 'var(--color-text)' }}>{commissionItems.filter(c => c.user_id || c.user_name).length}</strong></span>
                               {commissionItems.some(c => c.recipient_type === 'other') && (
-                                <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: '6px', background: 'rgba(245, 158, 11, 0.12)', color: '#d97706', fontWeight: 700 }}>
-                                  {commissionItems.filter(c => !c.recipient_type || c.recipient_type === 'employee').filter(c => c.user_id).length} {t('nhân viên')} • {commissionItems.filter(c => c.recipient_type === 'other').filter(c => c.user_name).length} {t('đối tác/khác')}
+                                <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                                  ({commissionItems.filter(c => !c.recipient_type || c.recipient_type === 'employee').filter(c => c.user_id).length} {t('nhân viên')} • {commissionItems.filter(c => c.recipient_type === 'other').filter(c => c.user_name).length} {t('đối tác/khác')})
                                 </span>
                               )}
                             </div>
@@ -13419,17 +14177,29 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
   const handleUpdateWatchers = async (newIds: number[]) => {
     setSavingWatchers(true);
     try {
+      const targetType = ((item as any)?.type === 'commission_payout' || !item.type) ? 'expense' : item.type;
       const res = await api.post('/hrm/approvals/update-related-users', {
-        type: item.type,
+        type: targetType,
         id: item.id,
         related_user_ids: newIds
       });
       if (res.data?.success) {
+        if (item) {
+          (item as any).related_user_ids = newIds;
+          if (Array.isArray((item as any).related_users)) {
+            (item as any).related_users = (item as any).related_users.filter((u: any) => newIds.includes(Number(u.id || u.user_id)));
+          }
+        }
         setDetail((prev: any) => ({
           ...(prev || {}),
-          related_user_ids: newIds
+          related_user_ids: newIds,
+          related_users: Array.isArray(prev?.related_users)
+            ? prev.related_users.filter((u: any) => newIds.includes(Number(u.id || u.user_id)))
+            : prev?.related_users
         }));
         toast.success(t('Đã cập nhật danh sách người theo dõi'));
+        window.dispatchEvent(new CustomEvent('approval-updated'));
+        window.dispatchEvent(new CustomEvent('refresh-approvals'));
       } else {
         toast.error(res.data?.message || t('Lỗi khi cập nhật người theo dõi'));
       }
@@ -13457,13 +14227,9 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
   }, [item?.id, item?.type]);
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        handleClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return pushOverlay('approval-detail-drawer', () => {
+      handleClose();
+    }, 100);
   }, [handleClose]);
 
   const handleCopyText = (text: string, label: string) => {
@@ -13740,10 +14506,15 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       const mapped = dbComments.map((c: any) => ({
         id: c.id,
         author: c.user_name || t('Tôi'),
+        user_name: c.user_name || t('Tôi'),
         avatar: c.avatar_url || c.avatar || c.user_avatar || c.user_avatar_url,
+        avatar_url: c.avatar_url || c.avatar || c.user_avatar || c.user_avatar_url,
         user_id: c.user_id,
+        parent_id: c.parent_id ? Number(c.parent_id) : null,
+        created_at: c.created_at,
         time: new Date(c.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
         text: c.body || '',
+        body: c.body || '',
         attachments: c.attachments || [],
         timestamp: new Date(c.created_at).getTime()
       }));
@@ -14874,9 +15645,39 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       return { beneficiaryTarget, beneficiaryName, beneficiaryPhone, taxCode, dept, profileInfo, paymentDetails, bankInfo, otherMethodInfo };
     };
 
+    const parseRecruitmentInfo = (text: string) => {
+      if (!text || (!text.includes('[Đề xuất tuyển dụng]') && !text.toLowerCase().includes('tuyển dụng'))) return null;
+      const blockMatch = text.match(/\[Đề xuất tuyển dụng\]:([\s\S]*?)(?=\n\n\[|$)/i);
+      const block = blockMatch ? blockMatch[1] : text;
+      
+      const getField = (prefix: string) => {
+        const m = block.match(new RegExp(`[•\\-*]?\\s*${prefix}:\\s*([^\\n]+)`, 'i'));
+        return m ? m[1].trim() : '';
+      };
+
+      const getMultilineField = (prefix: string) => {
+        const m = block.match(new RegExp(`[•\\-*]?\\s*${prefix}:\\s*([\\s\\S]*?)(?=\\n\\s*[•\\-*]|\\n\\n\\[|$)`, 'i'));
+        return m ? m[1].trim() : '';
+      };
+
+      const jobTitle = getField('Vị trí cần tuyển') || getField('Vị trí');
+      const headcount = getField('Số lượng cần tuyển') || getField('Số lượng');
+      const jobType = getField('Hình thức làm việc') || getField('Hình thức');
+      const department = getField('Phòng ban / Bộ phận tiếp nhận') || getField('Phòng ban');
+      const reason = getField('Lý do tuyển dụng') || getField('Lý do');
+      const salary = getField('Mức lương dự kiến') || getField('Mức lương');
+      const expectedDate = getField('Ngày dự kiến nhận việc') || getField('Ngày đi làm');
+      const requirements = getMultilineField('Tiêu chuẩn / Yêu cầu ứng viên') || getMultilineField('Yêu cầu ứng viên');
+      const description = getMultilineField('Mô tả công việc tóm tắt') || getMultilineField('Mô tả công việc');
+
+      if (!jobTitle && !headcount && !reason) return null;
+      return { jobTitle, headcount, jobType, department, reason, salary, expectedDate, requirements, description };
+    };
+
     const cleanResidualText = (text: string) => {
       if (!text) return '';
       return text
+        .replace(/\[Đề xuất tuyển dụng\]:[\s\S]*?(?=\n\n\[|$)/gi, '')
         .replace(/\[Thông tin tiếp khách\]:[\s\S]*?(?=\n\n\[|$)/gi, '')
         .replace(/\[(?:Thiết lập|Lặp lại) định kỳ\]:[\s\S]*?(?=\n\n\[|$)/gi, '')
         .replace(/\[(?:Kế hoạch thanh toán theo đợt|Thanh toán theo đợt)[^\]]*\]:[\s\S]*?(?=\n\n\[|$)/gi, '')
@@ -14908,6 +15709,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
     const recurringData = parseRecurringInfo(rawDesc);
     const phasedData = parsePhasedInfo(rawDesc);
     const advanceData = parseAdvanceInfo(rawDesc);
+    const recruitmentData = parseRecruitmentInfo(rawDesc);
     const paymentData = parsePaymentBeneficiaryInfo(rawDesc);
     const expenseItems = parseExpenseLineItems(rawDesc, detail?.items || (item as any)?.items);
 
@@ -15464,7 +16266,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                   <input
                     type="text"
                     className="form-input"
-                    value={departmentVal || detail?.department || creatorUser?.department || '—'}
+                    value={recruitmentData?.department || departmentVal || detail?.department || creatorUser?.department || '—'}
                     disabled
                     style={{ fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
                   />
@@ -16266,7 +17068,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                             {it.stt || (idx + 1)}
                           </td>
                           <td style={{ padding: '10px 12px', fontWeight: 650, color: 'var(--color-text)' }}>
-                            <div>{it.name || it.description || 'Chi phí'}</div>
+                            <div>{it.content || it.name || it.description || it.item_name || it.title || it.noi_dung || t('Chi phí')}</div>
                             {(invNum || invCode || invDate) && (
                               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
                                 {invNum && (
@@ -17081,6 +17883,212 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
               </div>
             )}
 
+            {/* VIP Card: Hồ sơ đề xuất tuyển dụng nhân sự */}
+            {recruitmentData && (
+              <div className="card" style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '14px',
+                background: 'linear-gradient(145deg, var(--color-surface) 0%, rgba(238, 242, 255, 0.6) 100%)',
+                border: '1px solid rgba(99, 102, 241, 0.25)',
+                borderRadius: '16px',
+                padding: isMobile ? '1.1rem' : '1.5rem',
+                boxShadow: '0 4px 20px rgba(99, 102, 241, 0.05)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '10px',
+                      background: 'rgba(99, 102, 241, 0.12)',
+                      color: '#4f46e5',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                      <UserPlus size={18} />
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4338ca', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        {t('Hồ sơ đề xuất tuyển dụng nhân sự')}
+                      </span>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
+                        {t('Thông tin vị trí, số lượng, dải lương và yêu cầu tuyển dụng')}
+                      </div>
+                    </div>
+                  </div>
+                  {recruitmentData.headcount && (
+                    <span style={{
+                      fontSize: '0.75rem',
+                      padding: '4px 12px',
+                      borderRadius: '8px',
+                      background: 'rgba(99, 102, 241, 0.12)',
+                      color: '#4338ca',
+                      fontWeight: 800,
+                      border: '1px solid rgba(99, 102, 241, 0.25)'
+                    }}>
+                      👥 {t('Số lượng:')} {recruitmentData.headcount}
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: '10px' }}>
+                  <div style={{
+                    padding: '10px 12px',
+                    background: 'var(--color-bg-secondary)',
+                    borderRadius: '10px',
+                    border: '1px solid var(--color-border-light)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                      {t('Vị trí cần tuyển')}
+                    </span>
+                    <span style={{ fontSize: '0.875rem', fontWeight: 800, color: 'var(--color-text)' }}>
+                      {recruitmentData.jobTitle || '—'}
+                    </span>
+                  </div>
+
+                  <div style={{
+                    padding: '10px 12px',
+                    background: 'var(--color-bg-secondary)',
+                    borderRadius: '10px',
+                    border: '1px solid var(--color-border-light)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                      {t('Hình thức làm việc')}
+                    </span>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#4f46e5' }}>
+                      {recruitmentData.jobType || '—'}
+                    </span>
+                  </div>
+
+                  <div style={{
+                    padding: '10px 12px',
+                    background: 'var(--color-bg-secondary)',
+                    borderRadius: '10px',
+                    border: '1px solid var(--color-border-light)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                      {t('Phòng ban / Bộ phận tiếp nhận')}
+                    </span>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                      {recruitmentData.department || '—'}
+                    </span>
+                  </div>
+
+                  <div style={{
+                    padding: '10px 12px',
+                    background: 'var(--color-bg-secondary)',
+                    borderRadius: '10px',
+                    border: '1px solid var(--color-border-light)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                      {t('Mức lương dự kiến')}
+                    </span>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 750, color: '#059669' }}>
+                      {recruitmentData.salary || t('Thỏa thuận')}
+                    </span>
+                  </div>
+
+                  <div style={{
+                    padding: '10px 12px',
+                    background: 'var(--color-bg-secondary)',
+                    borderRadius: '10px',
+                    border: '1px solid var(--color-border-light)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                      {t('Lý do tuyển dụng')}
+                    </span>
+                    <span style={{ fontSize: '0.825rem', fontWeight: 650, color: 'var(--color-text)' }}>
+                      {recruitmentData.reason || '—'}
+                    </span>
+                  </div>
+
+                  <div style={{
+                    padding: '10px 12px',
+                    background: 'var(--color-bg-secondary)',
+                    borderRadius: '10px',
+                    border: '1px solid var(--color-border-light)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                      {t('Ngày dự kiến nhận việc')}
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Calendar size={14} style={{ color: '#4f46e5' }} />
+                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                        {(() => {
+                          const rawD = recruitmentData.expectedDate;
+                          if (!rawD) return '—';
+                          if (/^\d{4}-\d{2}-\d{2}$/.test(rawD)) {
+                            const [y, m, d] = rawD.split('-');
+                            return `${d}/${m}/${y}`;
+                          }
+                          return rawD;
+                        })()}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {recruitmentData.requirements && (
+                  <div style={{
+                    padding: '10px 12px',
+                    background: 'var(--color-bg-secondary)',
+                    borderRadius: '10px',
+                    border: '1px solid var(--color-border-light)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                      {t('Tiêu chuẩn / Yêu cầu ứng viên')}
+                    </span>
+                    <div style={{ fontSize: '0.825rem', color: 'var(--color-text)', whiteSpace: 'pre-wrap', lineHeight: 1.45 }}>
+                      {recruitmentData.requirements}
+                    </div>
+                  </div>
+                )}
+
+                {recruitmentData.description && (
+                  <div style={{
+                    padding: '10px 12px',
+                    background: 'var(--color-bg-secondary)',
+                    borderRadius: '10px',
+                    border: '1px solid var(--color-border-light)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                      {t('Mô tả công việc tóm tắt')}
+                    </span>
+                    <div style={{ fontSize: '0.825rem', color: 'var(--color-text)', whiteSpace: 'pre-wrap', lineHeight: 1.45 }}>
+                      {recruitmentData.description}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* VIP Card: Hồ sơ đề nghị tạm ứng kinh phí */}
             {advanceData && (
               <div className="card" style={{
@@ -17604,58 +18612,84 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         {/* Card: Tài liệu chứng từ đính kèm trong chi tiết */}
         {(() => {
           const rawText = detail?.notes || detail?.description || item.description || '';
-          const baseUrl = import.meta.env.VITE_API_URL || '/backend';
+          const baseUrl = (import.meta.env.VITE_API_URL || '/backend').replace(/\/+$/, '');
           const extractedFiles: { name: string; url: string }[] = [];
-          const getCleanFileName = (raw: string) => {
-            if (!raw) return '';
-            return decodeURIComponent(raw.split('?')[0].split('#')[0].split('/').pop() || '').toLowerCase().trim();
-          };
+
           const normalizeUrl = (raw: string) => {
             if (!raw) return '';
             return decodeURIComponent(raw.replace(/^https?:\/\/[^\/]+/, '').replace(/^\/?(backend\/)?/, '').split('?')[0]).toLowerCase().trim();
           };
-          const isFileDuplicate = (candidateUrl: string) => {
-            const candNorm = normalizeUrl(candidateUrl);
-            return extractedFiles.some(existing => {
-              const exNorm = normalizeUrl(existing.url);
-              return candNorm === exNorm;
-            });
-          };
-          
-          if (detail?.image_url) {
-            const cleanName = decodeURIComponent(detail.image_url.split('/').pop() || 'Tài liệu đính kèm');
-            extractedFiles.push({
-              name: cleanName,
-              url: detail.image_url.startsWith('http') ? detail.image_url : `${baseUrl}/${detail.image_url.replace(/^\/?(backend\/)?/, '')}`
-            });
-          }
-          
-          if (Array.isArray(detail?.attachments)) {
-            detail.attachments.forEach((a: any) => {
-              const aUrl = typeof a === 'string' ? a : (a.url || a.path || '');
-              const aName = typeof a === 'object' ? (a.name || a.filename) : '';
-              if (aUrl && !isFileDuplicate(aUrl)) {
-                extractedFiles.push({
-                  name: aName || decodeURIComponent(aUrl.split('/').pop() || 'Tài liệu'),
-                  url: aUrl.startsWith('http') ? aUrl : `${baseUrl}/${aUrl.replace(/^\/?(backend\/)?/, '')}`
-                });
-              }
-            });
-          }
 
+          const isServerHashedName = (name: string) => {
+            if (!name) return false;
+            const clean = name.trim().toLowerCase();
+            return /^(img_|file_|expense_proof_)[a-f0-9_.]+/i.test(clean);
+          };
+
+          const beautifyFileName = (name: string, url?: string) => {
+            const raw = (name || '').trim();
+            if (!raw || isServerHashedName(raw)) {
+              const fullRef = url || raw;
+              const ext = fullRef.split('?')[0].split('#')[0].split('.').pop()?.toLowerCase();
+              const cleanExt = ext && ext.length <= 5 && /^[a-z0-9]+$/.test(ext) ? ` (.${ext})` : '';
+              return `Chứng từ đính kèm${cleanExt}`;
+            }
+            return raw;
+          };
+
+          const addOrUpdateFile = (candidateUrl: string, candidateName?: string) => {
+            if (!candidateUrl) return;
+            const candNorm = normalizeUrl(candidateUrl);
+            const resolvedUrl = candidateUrl.startsWith('http') ? candidateUrl : `${baseUrl}/${candidateUrl.replace(/^\/?(backend\/)?/, '')}`;
+            const cleanCandidateName = (candidateName || '').replace(/^[•\-\s]+/, '').trim();
+            const isCandHashed = isServerHashedName(cleanCandidateName);
+
+            const existing = extractedFiles.find(e => normalizeUrl(e.url) === candNorm);
+            if (existing) {
+              // If existing has a server-hashed or generic name, and candidate is a real original name, UPDATE it!
+              if ((isServerHashedName(existing.name) || existing.name === 'Tài liệu' || existing.name === 'Tệp đính kèm') && cleanCandidateName && !isCandHashed) {
+                existing.name = cleanCandidateName;
+              }
+            } else {
+              let finalName = cleanCandidateName;
+              if (!finalName || isCandHashed) {
+                finalName = beautifyFileName(finalName, candidateUrl);
+              }
+              extractedFiles.push({
+                name: finalName,
+                url: resolvedUrl
+              });
+            }
+          };
+
+          // 1. Scan raw text notes first to capture original user-defined filenames
           const matches = rawText.matchAll(/([^\n\r(•]+)\s*\((https?:\/\/[^\r\n)]+|\/backend\/[^\r\n)]+|uploads\/[^\r\n)]+)\)/gi);
           for (const m of matches) {
             const rawName = m[1].replace(/^[•\-\s]+/, '').trim();
             const url = m[2].trim();
-            const fileNameFromUrl = decodeURIComponent(url.split('/').pop() || '');
-            const finalName = rawName || fileNameFromUrl || 'Tệp đính kèm';
-            if (url && !isFileDuplicate(url)) {
-              extractedFiles.push({
-                name: finalName,
-                url: url.startsWith('http') ? url : `${baseUrl}/${url.replace(/^\/?(backend\/)?/, '')}`
-              });
-            }
+            addOrUpdateFile(url, rawName);
           }
+
+          // 2. Scan structured attachments array if available
+          if (Array.isArray(detail?.attachments)) {
+            detail.attachments.forEach((a: any) => {
+              const aUrl = typeof a === 'string' ? a : (a.url || a.path || '');
+              const aName = typeof a === 'object' ? (a.name || a.filename || '') : '';
+              addOrUpdateFile(aUrl, aName);
+            });
+          }
+
+          // 3. Fallback to image_url (main proof/thumbnail)
+          if (detail?.image_url) {
+            addOrUpdateFile(detail.image_url, '');
+          }
+
+          // 4. Final sanitization pass to make sure no hashed names leak into UI
+          extractedFiles.forEach(f => {
+            if (isServerHashedName(f.name)) {
+              f.name = beautifyFileName(f.name, f.url);
+            }
+          });
 
           if (extractedFiles.length === 0) return null;
 
@@ -18305,7 +19339,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
 
               {/* Related Persons in View Drawer */}
               {(() => {
-                const relIdsRaw = detail?.related_user_ids || (item as any)?.related_user_ids || (detail as any)?.related_users || (item as any)?.related_users;
+                const relIdsRaw = detail?.related_user_ids !== undefined ? detail.related_user_ids : ((item as any)?.related_user_ids || (detail as any)?.related_users || (item as any)?.related_users);
                 let rawList: any[] = [];
                 if (Array.isArray(relIdsRaw)) {
                   rawList = relIdsRaw;
@@ -18496,16 +19530,21 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 loadingComments={loadingComments}
                 loadingHistory={loadingComments}
                 currentUser={user}
+                users={effectiveUsers || users}
                 showAttachments={true}
-                onAddComment={async (text, fileAttachments) => {
+                onAddComment={async (text, fileAttachments, parentId) => {
                   const endpoint = getCommentsEndpoint(item.type, item.id);
                   if (!endpoint) {
                     const commentObj = {
                       id: Date.now(),
                       author: t('Tôi'),
+                      user_name: t('Tôi'),
                       time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
                       text: text,
-                      attachments: fileAttachments || []
+                      body: text,
+                      attachments: fileAttachments || [],
+                      parent_id: parentId || null,
+                      created_at: new Date().toISOString()
                     };
                     setLocalComments([...localComments, commentObj]);
                     toast.success(t('Đăng bình luận thành công!'));
@@ -18513,7 +19552,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                   }
                   await api.post(endpoint, {
                     body: text,
-                    attachments: fileAttachments || []
+                    attachments: fileAttachments || [],
+                    parent_id: parentId || null
                   });
                   toast.success(t('Thêm bình luận thành công'));
                   fetchComments();

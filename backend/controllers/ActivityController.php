@@ -2586,4 +2586,321 @@ class ActivityController {
 
         respond(200, ['success' => true, 'message' => 'Lưu lượt tập trung thành công']);
     }
+
+    public function getWhiteboard(array $auth, int $id): void {
+        $check = $this->db->prepare("SELECT * FROM activities WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
+        $check->execute([$id, $auth['tenant_id']]);
+        $task = $check->fetch(PDO::FETCH_ASSOC);
+        if (!$task) {
+            respond(404, null, 'Không tìm thấy công việc', false);
+        }
+
+        if (!$this->hasAccess($auth, $task)) {
+            respond(403, null, 'Bạn không có quyền xem bảng vẽ của công việc này', false);
+        }
+
+        $stmt = $this->db->prepare("
+            SELECT wb.*, u.full_name as last_edited_by_name, u.avatar_url as last_edited_by_avatar
+            FROM task_whiteboards wb
+            LEFT JOIN users u ON wb.last_edited_by = u.id
+            WHERE wb.task_id = ? AND wb.tenant_id = ?
+            LIMIT 1
+        ");
+        $stmt->execute([$id, $auth['tenant_id']]);
+        $whiteboard = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        $canEdit = $auth['role'] !== 'viewer';
+
+        if (!$whiteboard) {
+            respond(200, [
+                'id' => null,
+                'task_id' => $id,
+                'title' => 'Bản vẽ sơ đồ',
+                'canvas_data' => null,
+                'thumbnail_url' => null,
+                'version' => 0,
+                'node_count' => 0,
+                'last_edited_by' => null,
+                'last_edited_by_name' => null,
+                'last_edited_by_avatar' => null,
+                'can_edit' => $canEdit,
+                'updated_at' => null
+            ]);
+            return;
+        }
+
+        $whiteboard['can_edit'] = $canEdit;
+        $whiteboard['version'] = (int)$whiteboard['version'];
+        $whiteboard['node_count'] = (int)$whiteboard['node_count'];
+        respond(200, $whiteboard);
+    }
+
+    public function saveWhiteboard(array $auth, int $id): void {
+        if ($auth['role'] === 'viewer') {
+            respond(403, null, 'Bạn không có quyền chỉnh sửa bảng vẽ', false);
+        }
+
+        $check = $this->db->prepare("SELECT * FROM activities WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
+        $check->execute([$id, $auth['tenant_id']]);
+        $task = $check->fetch(PDO::FETCH_ASSOC);
+        if (!$task) {
+            respond(404, null, 'Không tìm thấy công việc', false);
+        }
+
+        if (!$this->hasAccess($auth, $task)) {
+            respond(403, null, 'Bạn không có quyền chỉnh sửa bảng vẽ của công việc này', false);
+        }
+
+        $b = getBody();
+        $canvasData = $b['canvas_data'] ?? null;
+        if ($canvasData === null) {
+            respond(422, null, 'Dữ liệu canvas không được để trống', false);
+        }
+
+        if (is_array($canvasData)) {
+            $canvasDataJson = json_encode($canvasData, JSON_UNESCAPED_UNICODE);
+        } else {
+            $canvasDataJson = (string)$canvasData;
+            if (json_decode($canvasDataJson) === null && json_last_error() !== JSON_ERROR_NONE) {
+                respond(422, null, 'Định dạng canvas_data phải là JSON hợp lệ', false);
+            }
+        }
+
+        $clientVersion = isset($b['version']) ? (int)$b['version'] : 0;
+        $title = !empty($b['title']) ? trim((string)$b['title']) : 'Bản vẽ sơ đồ';
+        $thumbnailUrl = !empty($b['thumbnail_url']) ? trim((string)$b['thumbnail_url']) : null;
+        $nodeCount = isset($b['node_count']) ? (int)$b['node_count'] : 0;
+        $isAutoSnapshot = !empty($b['create_snapshot']);
+        $snapshotName = !empty($b['snapshot_name']) ? trim((string)$b['snapshot_name']) : 'Cột mốc tự động';
+
+        $this->db->beginTransaction();
+        try {
+            $stmtExisting = $this->db->prepare("SELECT id, version FROM task_whiteboards WHERE task_id = ? AND tenant_id = ? FOR UPDATE");
+            $stmtExisting->execute([$id, $auth['tenant_id']]);
+            $existing = $stmtExisting->fetch(PDO::FETCH_ASSOC);
+
+            $newVersion = 1;
+            $wbId = 0;
+            if ($existing) {
+                $wbId = (int)$existing['id'];
+                $dbVersion = (int)$existing['version'];
+                if ($clientVersion > 0 && $clientVersion !== $dbVersion) {
+                    $this->db->rollBack();
+                    respond(409, [
+                        'current_version' => $dbVersion,
+                        'message' => 'Bảng vẽ đã được chỉnh sửa bởi phiên làm việc khác. Vui lòng tải lại để hợp nhất.'
+                    ], 'Xung đột phiên bản bảng vẽ (Optimistic Lock Concurrency Conflict)', false);
+                    return;
+                }
+
+                $newVersion = $dbVersion + 1;
+                $stmtUpdate = $this->db->prepare("
+                    UPDATE task_whiteboards 
+                    SET title = ?, canvas_data = ?, thumbnail_url = ?, version = ?, node_count = ?, last_edited_by = ?, updated_at = NOW()
+                    WHERE id = ? AND tenant_id = ?
+                ");
+                $stmtUpdate->execute([
+                    $title,
+                    $canvasDataJson,
+                    $thumbnailUrl,
+                    $newVersion,
+                    $nodeCount,
+                    $auth['user_id'],
+                    $wbId,
+                    $auth['tenant_id']
+                ]);
+            } else {
+                $stmtInsert = $this->db->prepare("
+                    INSERT INTO task_whiteboards 
+                    (tenant_id, task_id, title, canvas_data, thumbnail_url, version, node_count, last_edited_by, created_by, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, NOW(), NOW())
+                ");
+                $stmtInsert->execute([
+                    $auth['tenant_id'],
+                    $id,
+                    $title,
+                    $canvasDataJson,
+                    $thumbnailUrl,
+                    $nodeCount,
+                    $auth['user_id'],
+                    $auth['user_id']
+                ]);
+                $wbId = (int)$this->db->lastInsertId();
+                $newVersion = 1;
+            }
+
+            if ($isAutoSnapshot && $wbId > 0) {
+                $stmtSnap = $this->db->prepare("
+                    INSERT INTO task_whiteboard_snapshots 
+                    (whiteboard_id, task_id, snapshot_name, canvas_data, created_by, created_at)
+                    VALUES (?, ?, ?, ?, ?, NOW())
+                ");
+                $stmtSnap->execute([
+                    $wbId,
+                    $id,
+                    $snapshotName,
+                    $canvasDataJson,
+                    $auth['user_id']
+                ]);
+            }
+
+            $this->db->commit();
+
+            respond(200, [
+                'id' => $wbId,
+                'task_id' => $id,
+                'title' => $title,
+                'version' => $newVersion,
+                'node_count' => $nodeCount,
+                'thumbnail_url' => $thumbnailUrl,
+                'last_edited_by' => $auth['user_id'],
+                'updated_at' => date('Y-m-d H:i:s')
+            ], 'Lưu bảng vẽ thành công');
+        } catch (Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            respond(500, null, 'Lỗi lưu bảng vẽ: ' . $e->getMessage(), false);
+        }
+    }
+
+    public function getWhiteboardSnapshots(array $auth, int $id): void {
+        $check = $this->db->prepare("SELECT * FROM activities WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
+        $check->execute([$id, $auth['tenant_id']]);
+        $task = $check->fetch(PDO::FETCH_ASSOC);
+        if (!$task) {
+            respond(404, null, 'Không tìm thấy công việc', false);
+        }
+
+        if (!$this->hasAccess($auth, $task)) {
+            respond(403, null, 'Bạn không có quyền truy cập công việc này', false);
+        }
+
+        $stmt = $this->db->prepare("
+            SELECT s.id, s.whiteboard_id, s.task_id, s.snapshot_name, s.created_at,
+                   u.full_name as created_by_name, u.avatar_url as created_by_avatar,
+                   LENGTH(s.canvas_data) as data_size_bytes
+            FROM task_whiteboard_snapshots s
+            LEFT JOIN users u ON s.created_by = u.id
+            WHERE s.task_id = ?
+            ORDER BY s.id DESC
+            LIMIT 30
+        ");
+        $stmt->execute([$id]);
+        $snapshots = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        respond(200, $snapshots);
+    }
+
+    public function createWhiteboardSnapshot(array $auth, int $id): void {
+        if ($auth['role'] === 'viewer') {
+            respond(403, null, 'Bạn không có quyền tạo snapshot', false);
+        }
+
+        $check = $this->db->prepare("SELECT * FROM activities WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
+        $check->execute([$id, $auth['tenant_id']]);
+        $task = $check->fetch(PDO::FETCH_ASSOC);
+        if (!$task) {
+            respond(404, null, 'Không tìm thấy công việc', false);
+        }
+
+        if (!$this->hasAccess($auth, $task)) {
+            respond(403, null, 'Bạn không có quyền chỉnh sửa công việc này', false);
+        }
+
+        $b = getBody();
+        $snapshotName = !empty($b['snapshot_name']) ? trim((string)$b['snapshot_name']) : 'Cột mốc ' . date('d/m/Y H:i');
+
+        $stmtWb = $this->db->prepare("SELECT id, canvas_data FROM task_whiteboards WHERE task_id = ? AND tenant_id = ? LIMIT 1");
+        $stmtWb->execute([$id, $auth['tenant_id']]);
+        $wb = $stmtWb->fetch(PDO::FETCH_ASSOC);
+
+        if (!$wb) {
+            respond(404, null, 'Chưa có dữ liệu bảng vẽ để lưu cột mốc', false);
+        }
+
+        $canvasData = !empty($b['canvas_data']) ? (is_array($b['canvas_data']) ? json_encode($b['canvas_data'], JSON_UNESCAPED_UNICODE) : (string)$b['canvas_data']) : $wb['canvas_data'];
+
+        $stmt = $this->db->prepare("
+            INSERT INTO task_whiteboard_snapshots (whiteboard_id, task_id, snapshot_name, canvas_data, created_by, created_at)
+            VALUES (?, ?, ?, ?, ?, NOW())
+        ");
+        $stmt->execute([
+            (int)$wb['id'],
+            $id,
+            $snapshotName,
+            $canvasData,
+            $auth['user_id']
+        ]);
+        $snapId = (int)$this->db->lastInsertId();
+
+        respond(201, [
+            'id' => $snapId,
+            'snapshot_name' => $snapshotName,
+            'created_at' => date('Y-m-d H:i:s')
+        ], 'Đã tạo cột mốc lưu trữ thành công');
+    }
+
+    public function restoreWhiteboardSnapshot(array $auth, int $id): void {
+        if ($auth['role'] === 'viewer') {
+            respond(403, null, 'Bạn không có quyền khôi phục bảng vẽ', false);
+        }
+
+        $check = $this->db->prepare("SELECT * FROM activities WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
+        $check->execute([$id, $auth['tenant_id']]);
+        $task = $check->fetch(PDO::FETCH_ASSOC);
+        if (!$task) {
+            respond(404, null, 'Không tìm thấy công việc', false);
+        }
+
+        if (!$this->hasAccess($auth, $task)) {
+            respond(403, null, 'Bạn không có quyền chỉnh sửa công việc này', false);
+        }
+
+        $b = getBody();
+        $snapId = (int)($b['snapshot_id'] ?? 0);
+        if ($snapId <= 0) {
+            respond(422, null, 'ID cột mốc không hợp lệ', false);
+        }
+
+        $stmtSnap = $this->db->prepare("SELECT * FROM task_whiteboard_snapshots WHERE id = ? AND task_id = ? LIMIT 1");
+        $stmtSnap->execute([$snapId, $id]);
+        $snapshot = $stmtSnap->fetch(PDO::FETCH_ASSOC);
+
+        if (!$snapshot) {
+            respond(404, null, 'Không tìm thấy cột mốc snapshot', false);
+        }
+
+        $parsed = json_decode($snapshot['canvas_data'], true);
+        $nodeCount = is_array($parsed) && isset($parsed['nodes']) && is_array($parsed['nodes']) ? count($parsed['nodes']) : 0;
+
+        $this->db->beginTransaction();
+        try {
+            $stmtUpdate = $this->db->prepare("
+                UPDATE task_whiteboards
+                SET canvas_data = ?, node_count = ?, version = version + 1, last_edited_by = ?, updated_at = NOW()
+                WHERE task_id = ? AND tenant_id = ?
+            ");
+            $stmtUpdate->execute([
+                $snapshot['canvas_data'],
+                $nodeCount,
+                $auth['user_id'],
+                $id,
+                $auth['tenant_id']
+            ]);
+
+            $this->db->commit();
+
+            respond(200, [
+                'restored_snapshot_id' => $snapId,
+                'snapshot_name' => $snapshot['snapshot_name'],
+                'canvas_data' => $parsed
+            ], 'Đã khôi phục bảng vẽ về cột mốc: ' . $snapshot['snapshot_name']);
+        } catch (Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            respond(500, null, 'Lỗi khôi phục snapshot: ' . $e->getMessage(), false);
+        }
+    }
 }

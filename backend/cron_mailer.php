@@ -28,6 +28,15 @@ if (!flock($lockFp, LOCK_EX | LOCK_NB)) {
 // --- END PREVENT CONCURRENT EXECUTION ---
 
 function runMailerCron($conn) {
+    if ((defined('APP_ENV') && APP_ENV === 'staging') ||
+        getenv('APP_ENV') === 'staging' ||
+        ($_ENV['APP_ENV'] ?? '') === 'staging' ||
+        getenv('DISABLE_EMAILS') === '1' ||
+        ($_ENV['DISABLE_EMAILS'] ?? '') === '1') {
+        echo "[" . date('Y-m-d H:i:s') . "] Emails disabled on staging.\n";
+        return;
+    }
+
     // 1. Kéo cài đặt email từ DB
     $settings = [];
     $settingRes = $conn->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('email_provider', 'appscript_webhook_url', 'ses_host', 'ses_username', 'ses_password', 'ses_sender_email', 'ses_sender_name')");
@@ -273,6 +282,15 @@ function runMailerCron($conn) {
 }
 
 function runZaloMailerCron($conn) {
+    if ((defined('APP_ENV') && APP_ENV === 'staging') ||
+        getenv('APP_ENV') === 'staging' ||
+        ($_ENV['APP_ENV'] ?? '') === 'staging' ||
+        getenv('DISABLE_ZALO') === '1' ||
+        ($_ENV['DISABLE_ZALO'] ?? '') === '1') {
+        echo "[" . date('Y-m-d H:i:s') . "] Zalo messages disabled on staging.\n";
+        return;
+    }
+
     require_once __DIR__ . '/zalo_bot.php';
 
     // 1. Tự động khôi phục các tin nhắn Zalo bị kẹt ở trạng thái 'processing' từ phiên chạy trước bị lỗi (quá 10 phút)

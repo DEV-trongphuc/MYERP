@@ -257,6 +257,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
 }) => {
   const baseZIndex = zIndex || 2000000000;
   const { addToast } = useUIStore();
+  const saveInFlightRef = useRef(false);
   const [form, setForm] = useState<any>({ ...EMPTY_FORM });
   const [titleSuffix, setTitleSuffix] = useState<string>('');
 
@@ -332,10 +333,17 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
     setForm((prev: any) => ({ ...prev, title: combined }));
   };
 
+  interface ExpenseAttachmentItem {
+    url: string;
+    name: string;
+    size?: number;
+    type?: string;
+  }
+
   const [threshold, setThreshold] = useState<number>(5000000);
   const [saving, setSaving] = useState(false);
   const [uploadingImg, setUploadingImg] = useState(false);
-  const [images, setImages] = useState<string[]>([]);
+  const [images, setImages] = useState<(ExpenseAttachmentItem | string)[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
   const fileInputMultiRef = useRef<HTMLInputElement>(null);
   const [users, setUsers] = useState<any[]>(propUsers && propUsers.length > 0 ? propUsers : []);
@@ -702,28 +710,36 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
 
         if (editItem) {
           // Extract existing images with strict deduplication
-          const existingImages: string[] = [];
+          const existingImages: (ExpenseAttachmentItem | string)[] = [];
           const isDuplicateImg = (candidate: string) => {
             const norm = normalizeFileUrl(candidate);
             const name = getFileNameFromUrl(candidate);
             return existingImages.some(img => {
-              const existingNorm = normalizeFileUrl(img);
-              const existingName = getFileNameFromUrl(img);
+              const existingUrl = typeof img === 'string' ? img : img.url;
+              const existingNorm = normalizeFileUrl(existingUrl);
+              const existingName = typeof img === 'string' ? getFileNameFromUrl(img) : (img.name || getFileNameFromUrl(img.url));
               return (norm && existingNorm && norm === existingNorm) || (name && existingName && name === existingName);
             });
           };
 
-          if (editItem.image_url && !isDuplicateImg(editItem.image_url)) {
-            existingImages.push(editItem.image_url);
-          }
           if (editItem.notes) {
             const matches = editItem.notes.matchAll(/([^\n\r(•]+)\s*\((https?:\/\/[^\s)]+|\/backend\/[^\s)]+|uploads\/[^\s)]+)\)/gi);
             for (const m of matches) {
+              const rawName = m[1].replace(/^[•\-\s]+/, '').trim();
               const url = m[2].trim();
               if (url && !isDuplicateImg(url)) {
-                existingImages.push(url);
+                existingImages.push({
+                  url,
+                  name: rawName || getFileNameFromUrl(url) || 'Tài liệu'
+                });
               }
             }
+          }
+          if (editItem.image_url && !isDuplicateImg(editItem.image_url)) {
+            existingImages.push({
+              url: editItem.image_url,
+              name: getFileNameFromUrl(editItem.image_url) || 'Tài liệu đính kèm'
+            });
           }
           setImages(existingImages);
 
@@ -942,49 +958,57 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
     }
   }, [isOpen, editItem, users, teams, user, form.approver_id]);
 
-  const isAutoApprove = form.approver_id !== null && user?.id !== undefined && Number(form.approver_id) === Number(user.id);
+  const isManagerOrAbove = Boolean(user && ['admin', 'superadmin', 'super_admin', 'director', 'manager'].includes(String(user.role).toLowerCase()));
+  const isAutoApprove = Boolean(isManagerOrAbove && form.approver_id !== null && user?.id !== undefined && Number(form.approver_id) === Number(user.id));
 
   // Handle Save
   const handleSave = async () => {
-    if (editItem && editItem.id && !editItem.isClone) {
-      const creatorId = Number(editItem.created_by || editItem.user_id);
-      const currentUserId = Number(user?.id);
-      if (creatorId && currentUserId && creatorId !== currentUserId) {
-        addToast('Chỉ người tạo phiếu mới có quyền chỉnh sửa', 'error');
-        return;
-      }
-    }
+    if (saveInFlightRef.current) return;
+    saveInFlightRef.current = true;
 
-    let finalTitle = titleSuffix.trim() ? `Đề nghị thanh toán — ${titleSuffix.trim()}` : (form.title?.trim() || '');
-    const validItems = expenseItems.filter(it => it.content?.trim());
-    if (!titleSuffix.trim() && (!finalTitle || finalTitle === 'Đề nghị thanh toán')) {
-      if (validItems.length > 0) {
-        const autoSuffix = validItems.map(it => it.content.trim()).join(', ');
-        finalTitle = `Đề nghị thanh toán — ${autoSuffix}`;
-      } else {
-        addToast('Vui lòng nhập chi tiết nội dung chi trong bảng kê hoặc tiêu đề', 'error');
-        return;
-      }
-    }
-    if (itemsGrandTotal <= 0) {
-      addToast('Vui lòng nhập đầy đủ số tiền chi trong bảng chi tiết', 'error');
-      return;
-    }
-    if (form.approver_id === null) {
-      addToast('Vui lòng chọn người duyệt Cấp 1 (Trưởng nhóm / Quản lý)', 'error');
-      return;
-    }
-    if (form.approver_id_2 === null) {
-      addToast(itemsGrandTotal >= threshold ? 'Vui lòng chọn người duyệt Cấp 2 (Ban Giám đốc)' : 'Vui lòng chọn người duyệt Cấp 2 (Kế toán)', 'error');
-      return;
-    }
-    if (itemsGrandTotal >= threshold && form.approver_id_3 === null) {
-      addToast(`Khoản chi từ ${threshold.toLocaleString('vi-VN')}đ trở lên bắt buộc phê duyệt 3 cấp: Leader -> Ban Giám đốc -> Kế toán!`, 'error');
-      return;
-    }
-
-    setSaving(true);
     try {
+      if (editItem && editItem.id && !editItem.isClone) {
+        const creatorId = Number(editItem.created_by || editItem.user_id);
+        const currentUserId = Number(user?.id);
+        if (creatorId && currentUserId && creatorId !== currentUserId) {
+          addToast('Chỉ người tạo phiếu mới có quyền chỉnh sửa', 'error');
+          return;
+        }
+      }
+
+      let finalTitle = titleSuffix.trim() ? `Đề nghị thanh toán — ${titleSuffix.trim()}` : (form.title?.trim() || '');
+      const validItems = expenseItems.filter(it => it.content?.trim());
+      if (!titleSuffix.trim() && (!finalTitle || finalTitle === 'Đề nghị thanh toán')) {
+        if (validItems.length > 0) {
+          const autoSuffix = validItems.map(it => it.content.trim()).join(', ');
+          finalTitle = `Đề nghị thanh toán — ${autoSuffix}`;
+        } else {
+          addToast('Vui lòng nhập chi tiết nội dung chi trong bảng kê hoặc tiêu đề', 'error');
+          return;
+        }
+      }
+      if (itemsGrandTotal <= 0) {
+        addToast('Vui lòng nhập đầy đủ số tiền chi trong bảng chi tiết', 'error');
+        return;
+      }
+      if (form.approver_id === null) {
+        addToast('Vui lòng chọn người duyệt Cấp 1 (Trưởng nhóm / Quản lý)', 'error');
+        return;
+      }
+      if (!isManagerOrAbove && form.approver_id !== null && user?.id !== undefined && Number(form.approver_id) === Number(user.id)) {
+        addToast('Nhân viên không thể tự phê duyệt phiếu chi của mình. Vui lòng chọn Quản lý / Trưởng nhóm phê duyệt', 'error');
+        return;
+      }
+      if (form.approver_id_2 === null) {
+        addToast(itemsGrandTotal >= threshold ? 'Vui lòng chọn người duyệt Cấp 2 (Ban Giám đốc)' : 'Vui lòng chọn người duyệt Cấp 2 (Kế toán)', 'error');
+        return;
+      }
+      if (itemsGrandTotal >= threshold && form.approver_id_3 === null) {
+        addToast(`Khoản chi từ ${threshold.toLocaleString('vi-VN')}đ trở lên bắt buộc phê duyệt 3 cấp: Leader -> Ban Giám đốc -> Kế toán!`, 'error');
+        return;
+      }
+
+      setSaving(true);
       let payloadEntities = form.entities;
       if (form.entities.length > 0) {
         const splitAmt = itemsGrandTotal / form.entities.length;
@@ -1020,25 +1044,31 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
       }
 
       // Deduplicate images
-      const uniqueImages: string[] = [];
+      const uniqueAttachments: ExpenseAttachmentItem[] = [];
       for (const img of images) {
         if (!img) continue;
-        const norm = normalizeFileUrl(img);
-        const name = getFileNameFromUrl(img);
-        const already = uniqueImages.some(u => normalizeFileUrl(u) === norm || getFileNameFromUrl(u) === name);
+        const imgUrl = typeof img === 'string' ? img : img.url;
+        const imgName = typeof img === 'string' ? (getFileNameFromUrl(img) || 'Tài liệu') : (img.name || getFileNameFromUrl(img.url) || 'Tài liệu');
+        const norm = normalizeFileUrl(imgUrl);
+        const already = uniqueAttachments.some(u => normalizeFileUrl(u.url) === norm || (u.name && u.name === imgName));
         if (!already) {
-          uniqueImages.push(img);
+          uniqueAttachments.push({
+            url: imgUrl,
+            name: imgName,
+            size: typeof img === 'object' ? img.size : undefined,
+            type: typeof img === 'object' ? img.type : undefined
+          });
         }
       }
 
-      if (uniqueImages.length > 0) {
+      if (uniqueAttachments.length > 0) {
         const baseUrl = (import.meta.env.VITE_API_URL || '/backend').replace(/\/+$/, '');
-        const attsStr = uniqueImages.map(url => {
-          const normPath = normalizeFileUrl(url);
-          const fileName = getFileNameFromUrl(url) || 'Tài liệu';
+        const attsStr = uniqueAttachments.map(att => {
+          const normPath = normalizeFileUrl(att.url);
+          const fileName = att.name || getFileNameFromUrl(att.url) || 'Tài liệu';
           return `• ${fileName} (${baseUrl}/${normPath})`;
         }).join('\n');
-        finalNotes = `${finalNotes}\n\n[Tài liệu đính kèm (${uniqueImages.length} tệp)]:\n${attsStr}`.trim();
+        finalNotes = `${finalNotes}\n\n[Tài liệu đính kèm (${uniqueAttachments.length} tệp)]:\n${attsStr}`.trim();
       }
 
       const statusVal = isAutoApprove ? 'approved' : 'pending';
@@ -1057,7 +1087,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
         vat_amount: Number(itemsTotalVat),
         has_vat_invoice: invoiceType.startsWith('vat_'),
         is_vat_inclusive: true,
-        image_url: uniqueImages.length > 0 ? normalizeFileUrl(uniqueImages[0]) : null,
+        image_url: uniqueAttachments.length > 0 ? normalizeFileUrl(uniqueAttachments[0].url) : null,
         notes: finalNotes,
         items: expenseItems,
         entities: payloadEntities
@@ -1084,6 +1114,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
       console.error('Error saving expense:', err);
       addToast(err.response?.data?.message || err.message || 'Lỗi khi lưu đề xuất', 'error');
     } finally {
+      saveInFlightRef.current = false;
       setSaving(false);
     }
   };
@@ -2685,7 +2716,14 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                               });
                               if (res.data && res.data.success && res.data.data?.url) {
                                 const newUrl = res.data.data.url;
-                                setImages(prev => [...prev, newUrl]);
+                                const originalName = file.name || res.data.data.name || 'Tài liệu đính kèm';
+                                const newAtt: ExpenseAttachmentItem = {
+                                  url: newUrl,
+                                  name: originalName,
+                                  size: file.size,
+                                  type: file.type
+                                };
+                                setImages(prev => [...prev, newAtt]);
                                 setForm((prev: any) => ({ ...prev, image_url: prev.image_url || newUrl }));
                                 successCount++;
                               }
@@ -2731,9 +2769,19 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                           });
                           if (res.data && res.data.success && res.data.data?.url) {
                             const newUrl = res.data.data.url;
+                            const originalName = item.file.name || res.data.data.name || 'Tài liệu đính kèm';
+                            const newAtt: ExpenseAttachmentItem = {
+                              url: newUrl,
+                              name: originalName,
+                              size: item.file.size,
+                              type: item.file.type
+                            };
                             setImages(prev => {
-                              const isAlreadyIn = prev.some(existing => existing === newUrl);
-                              return isAlreadyIn ? prev : [...prev, newUrl];
+                              const isAlreadyIn = prev.some(existing => {
+                                const eUrl = typeof existing === 'string' ? existing : existing.url;
+                                return normalizeFileUrl(eUrl) === normalizeFileUrl(newUrl);
+                              });
+                              return isAlreadyIn ? prev : [...prev, newAtt];
                             });
                             setForm((prev: any) => ({ ...prev, image_url: prev.image_url || newUrl }));
                             addToast('Tải lên tệp đính kèm thành công!', 'success');
@@ -2760,10 +2808,12 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                   {images.length > 0 && (
                     <div style={{ marginTop: '10px' }}>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '8px' }}>
-                        {images.map((imgUrl, idx) => {
-                          const isImg = /\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i.test(imgUrl);
+                        {images.map((imgItem, idx) => {
+                          const imgUrl = typeof imgItem === 'string' ? imgItem : imgItem.url;
+                          const rawFileName = typeof imgItem === 'string' ? (imgUrl.split('/').pop() || `Tệp ${idx + 1}`) : (imgItem.name || imgUrl.split('/').pop() || `Tệp ${idx + 1}`);
+                          const isImg = /\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i.test(imgUrl) || (typeof imgItem === 'object' && imgItem.type?.startsWith('image/'));
                           const fileUrl = imgUrl.startsWith('http') ? imgUrl : `${import.meta.env.VITE_API_URL || '/backend'}${imgUrl.startsWith('/') ? '' : '/'}${imgUrl}`;
-                          const fileName = imgUrl.split('/').pop() || `Tệp ${idx + 1}`;
+                          const fileName = rawFileName;
                           return (
                             <div
                               key={idx}
@@ -2785,7 +2835,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                               {isImg ? (
                                 <img
                                   src={fileUrl}
-                                  alt={`Hóa đơn ${idx + 1}`}
+                                  alt={fileName}
                                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                                 />
                               ) : (
@@ -2807,7 +2857,8 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                                 onClick={() => {
                                   const next = images.filter((_, i) => i !== idx);
                                   setImages(next);
-                                  setForm((prev: any) => ({ ...prev, image_url: next[0] || '' }));
+                                  const firstUrl = next.length > 0 ? (typeof next[0] === 'string' ? next[0] : next[0].url) : '';
+                                  setForm((prev: any) => ({ ...prev, image_url: firstUrl }));
                                 }}
                                 style={{
                                   position: 'absolute',

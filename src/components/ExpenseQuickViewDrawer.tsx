@@ -16,6 +16,7 @@ import { AttachmentLightboxModal, type AttachmentItem } from './ui/AttachmentLig
 import { CustomSelect } from './ui/CustomSelect';
 import { formatWaitDuration } from '../pages/Approvals';
 import { DrawerSkeleton } from './ui/Skeleton';
+import { pushOverlay } from '../utils/overlayStack';
 
 const FMT = (n: number, currency: string = 'VND') => {
   const rawCurr = (currency || 'VND').toUpperCase().trim();
@@ -126,6 +127,46 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
   const [savingWatchers, setSavingWatchers] = useState(false);
   const [watcherSearch, setWatcherSearch] = useState('');
   const addWatcherDropdownRef = React.useRef<HTMLDivElement>(null);
+
+  // Inline expense date edit states
+  const [isEditingDate, setIsEditingDate] = useState(false);
+  const [tempExpenseDate, setTempExpenseDate] = useState('');
+  const [savingExpenseDate, setSavingExpenseDate] = useState(false);
+
+  const detectedDeadline = useMemo(() => {
+    if (!viewItem?.notes) return null;
+    const match = viewItem.notes.match(/(?:deadline|hạn)\s*(?:thanh\s*toán|chi)?\s*[:\s-]*(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/i);
+    if (match) {
+      const day = match[1].padStart(2, '0');
+      const month = match[2].padStart(2, '0');
+      const year = match[3];
+      return {
+        dateStr: `${year}-${month}-${day}`,
+        displayStr: `${day}/${month}/${year}`
+      };
+    }
+    return null;
+  }, [viewItem?.notes]);
+
+  const handleUpdateExpenseDate = async (newDateStr: string) => {
+    if (!viewItem?.id || !newDateStr) return;
+    setSavingExpenseDate(true);
+    try {
+      const res = await api.patch(`/expenses/${viewItem.id}`, { date: newDateStr });
+      if (res.data?.success || res.status === 200) {
+        setViewItem((prev: any) => ({ ...prev, date: newDateStr }));
+        setIsEditingDate(false);
+        addToast('Đã cập nhật ngày chi thành công', 'success');
+        onStatusChange?.();
+      } else {
+        addToast(res.data?.message || 'Không thể cập nhật ngày chi', 'error');
+      }
+    } catch (err: any) {
+      addToast(err?.response?.data?.message || err?.message || 'Lỗi khi cập nhật ngày chi', 'error');
+    } finally {
+      setSavingExpenseDate(false);
+    }
+  };
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -887,13 +928,11 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
   };
 
   useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && expenseId) {
+    if (expenseId) {
+      return pushOverlay('expense-quick-view-drawer', () => {
         handleClose();
-      }
-    };
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
+      }, 100);
+    }
   }, [expenseId, isClosing]);
 
   if (!expenseId) return null;
@@ -1443,12 +1482,27 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
 
               {/* Bảng kê chi tiết chi phí (nếu có các dòng chi phí con) */}
               {(() => {
+                const normalizeExpenseItems = (items: any[]) => {
+                  if (!Array.isArray(items)) return [];
+                  return items
+                    .filter(it => it && typeof it === 'object')
+                    .map((it: any) => {
+                      const rawContent = it.content || it.name || it.description || it.item_name || it.title || it.noi_dung || 'Chi phí';
+                      return {
+                        ...it,
+                        content: rawContent,
+                        name: rawContent,
+                        description: it.description || rawContent
+                      };
+                    });
+                };
+
                 const parseExpenseLineItems = (text: string, directItems?: any) => {
-                  if (Array.isArray(directItems) && directItems.length > 0) return directItems;
+                  if (Array.isArray(directItems) && directItems.length > 0) return normalizeExpenseItems(directItems);
                   if (typeof directItems === 'string' && directItems.trim().startsWith('[')) {
                     try {
                       const parsed = JSON.parse(directItems);
-                      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+                      if (Array.isArray(parsed) && parsed.length > 0) return normalizeExpenseItems(parsed);
                     } catch (e) {}
                   }
                   if (!text) return null;
@@ -1456,7 +1510,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                   if (jsonMatch) {
                     try {
                       const parsed = JSON.parse(jsonMatch[1]);
-                      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+                      if (Array.isArray(parsed) && parsed.length > 0) return normalizeExpenseItems(parsed);
                     } catch (e) {}
                   }
                   const blockMatch = text.match(/\[Bảng chi tiết thanh toán\]:\s*([\s\S]*?)(?=\n\n\[|\n\[|$)/i);
@@ -1472,10 +1526,10 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                         const qty = m[3] ? parseFloat(m[3].replace(/\./g, '').replace(',', '.')) : 1;
                         const price = m[4] ? parseFloat(m[4].replace(/\./g, '').replace(',', '.')) : 0;
                         const amt = m[5] ? parseFloat(m[5].replace(/\./g, '').replace(',', '.')) : 0;
-                        parsedItems.push({ stt, name, quantity: qty, unit_price: price, amount: amt, total: amt });
+                        parsedItems.push({ stt, name, content: name, quantity: qty, unit_price: price, amount: amt, total: amt });
                       }
                     }
-                    if (parsedItems.length > 0) return parsedItems;
+                    if (parsedItems.length > 0) return normalizeExpenseItems(parsedItems);
                   }
                   return null;
                 };
@@ -1576,7 +1630,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                                         {it.stt || (idx + 1)}
                                       </td>
                                       <td style={{ padding: '8px 10px', fontWeight: 650, color: 'var(--color-text)' }}>
-                                        <div>{it.name || it.description || 'Chi phí'}</div>
+                                        <div>{it.content || it.name || it.description || it.item_name || it.title || it.noi_dung || 'Chi phí'}</div>
                                         {(invNum || invCode || invDate) && (
                                           <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '2px' }}>
                                             {invNum && (
@@ -1736,10 +1790,119 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Ngày chi</span>
-                    <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                      {viewItem.date && !isNaN(Date.parse(viewItem.date)) ? new Date(viewItem.date).toLocaleDateString('vi-VN') : '—'}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Ngày chi</span>
+                      {!isEditingDate && !viewItem.isPurchaseOrder && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTempExpenseDate(viewItem.date ? viewItem.date.split('T')[0] : '');
+                            setIsEditingDate(true);
+                          }}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: 'var(--color-primary)',
+                            padding: '0 4px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '2px',
+                            fontSize: '0.7rem',
+                            fontWeight: 600
+                          }}
+                          title="Chỉnh sửa ngày chi"
+                        >
+                          <Pencil size={11} />
+                          <span>Đổi ngày</span>
+                        </button>
+                      )}
+                    </div>
+                    {isEditingDate ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px', flexWrap: 'wrap' }}>
+                        <input
+                          type="date"
+                          value={tempExpenseDate}
+                          onChange={(e) => setTempExpenseDate(e.target.value)}
+                          style={{
+                            padding: '2px 6px',
+                            borderRadius: '6px',
+                            border: '1px solid var(--color-border)',
+                            fontSize: '0.78rem',
+                            background: 'var(--color-bg-surface)',
+                            color: 'var(--color-text)',
+                            height: '28px'
+                          }}
+                        />
+                        <button
+                          type="button"
+                          disabled={savingExpenseDate || !tempExpenseDate}
+                          onClick={() => handleUpdateExpenseDate(tempExpenseDate)}
+                          style={{
+                            padding: '0 8px',
+                            height: '28px',
+                            borderRadius: '6px',
+                            border: 'none',
+                            background: 'var(--color-primary)',
+                            color: '#fff',
+                            fontSize: '0.72rem',
+                            fontWeight: 600,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {savingExpenseDate ? '...' : 'Lưu'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={savingExpenseDate}
+                          onClick={() => setIsEditingDate(false)}
+                          style={{
+                            padding: '0 6px',
+                            height: '28px',
+                            borderRadius: '6px',
+                            border: '1px solid var(--color-border)',
+                            background: 'transparent',
+                            color: 'var(--color-text-muted)',
+                            fontSize: '0.72rem',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Hủy
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                          {viewItem.date && !isNaN(Date.parse(viewItem.date)) ? new Date(viewItem.date).toLocaleDateString('vi-VN') : '—'}
+                        </span>
+                        {detectedDeadline && viewItem.date?.split('T')[0] !== detectedDeadline.dateStr && (
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateExpenseDate(detectedDeadline.dateStr)}
+                            disabled={savingExpenseDate}
+                            style={{
+                              marginTop: '2px',
+                              background: 'rgba(245, 158, 11, 0.12)',
+                              border: '1px solid rgba(245, 158, 11, 0.3)',
+                              borderRadius: '6px',
+                              padding: '2px 6px',
+                              color: '#d97706',
+                              fontSize: '0.7rem',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              textAlign: 'left'
+                            }}
+                            title={`Khớp với deadline ${detectedDeadline.displayStr} trong ghi chú`}
+                          >
+                            <span>💡 Khớp deadline: {detectedDeadline.displayStr}</span>
+                            <span style={{ textDecoration: 'underline' }}>[Áp dụng]</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -1955,11 +2118,25 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
               </div>
 
               {/* Refund confirmation for Accountant/Admin if approved but not yet refunded - Placed right above Bank Card */}
-              {viewItem.status === 'approved' && !viewItem.is_refunded && (
-                <div style={{ background: 'var(--color-surface)', padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--color-border-light)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <h4 style={{ fontSize: '0.85rem', fontWeight: 800, margin: 0, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Wallet size={16} style={{ color: 'var(--color-warning)' }} /> Hạch toán thanh toán khoản chi
-                  </h4>
+              {(() => {
+                const canDisburse = Boolean(user && ['admin', 'superadmin', 'super_admin', 'director', 'accountant', 'hr'].includes(String(user.role).toLowerCase()));
+                if (viewItem.status !== 'approved' || viewItem.is_refunded) return null;
+                if (!canDisburse) {
+                  return (
+                    <div style={{ background: 'var(--color-surface)', padding: '1rem 1.25rem', borderRadius: '12px', border: '1px solid rgba(245, 158, 11, 0.25)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <Clock size={18} style={{ color: '#f59e0b', flexShrink: 0 }} />
+                      <div>
+                        <div style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--color-text)' }}>Khoản chi đã được phê duyệt</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Đang chờ Bộ phận Kế toán / Ban Giám Đốc hạch toán giải ngân và đối soát UNC.</div>
+                      </div>
+                    </div>
+                  );
+                }
+                return (
+                  <div style={{ background: 'var(--color-surface)', padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--color-border-light)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <h4 style={{ fontSize: '0.85rem', fontWeight: 800, margin: 0, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Wallet size={16} style={{ color: 'var(--color-warning)' }} /> Hạch toán thanh toán khoản chi
+                    </h4>
                   <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: 0 }}>Khoản chi đã được duyệt. Tải lên ảnh UNC hoặc Biên lai thanh toán để hoàn tất hạch toán thực chi.</p>
                   
                   <div style={{ display: 'flex', gap: '16px', alignItems: 'center', background: 'var(--color-bg-secondary)', padding: '12px', borderRadius: '10px', border: '1px solid var(--color-border-light)' }}>
@@ -2155,7 +2332,8 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                     </div>
                   </div>
                 </div>
-              )}
+              );
+            })()}
 
               {/* Bank Transfer Info parsed from notes or description */}
               {(() => {
@@ -3201,11 +3379,12 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                     loadingComments={loadingComments}
                     loadingHistory={loadingHistory}
                     currentUser={user}
-                    onAddComment={async (text, fileAttachments) => {
+                    onAddComment={async (text, fileAttachments, parentId) => {
                       if ((!text.trim() && (!fileAttachments || fileAttachments.length === 0)) || !viewItem) return;
                       await api.post(`/expenses/${viewItem.id}/comments`, {
                         body: text.trim(),
-                        attachments: fileAttachments || []
+                        attachments: fileAttachments || [],
+                        parent_id: parentId || null
                       });
                       addToast('Thêm bình luận thành công', 'success');
                       fetchComments(viewItem.id);

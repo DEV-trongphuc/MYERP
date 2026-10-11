@@ -252,7 +252,7 @@ export const ChatComposer = forwardRef<ChatComposerRef, ChatComposerProps>(({
   useEffect(() => {
     if (textareaRef.current) {
       const minH = isMobile ? 56 : 64;
-      const maxH = 130;
+      const maxH = 140;
       if (!inputText) {
         textareaRef.current.style.height = `${minH}px`;
       } else {
@@ -350,26 +350,75 @@ export const ChatComposer = forwardRef<ChatComposerRef, ChatComposerProps>(({
   };
 
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
+    const clipboardData = e.clipboardData;
+    if (!clipboardData) return;
 
-    const pastedFiles: File[] = [];
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].type.indexOf('image') !== -1) {
-        const file = items[i].getAsFile();
-        if (file) {
-          pastedFiles.push(file);
+    // Check if plain text exists in clipboard
+    const pastedText = clipboardData.getData('text/plain');
+
+    // Check for image files
+    const items = clipboardData.items;
+    const pastedImageFiles: File[] = [];
+
+    if (items) {
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+          const file = items[i].getAsFile();
+          if (file) {
+            pastedImageFiles.push(file);
+          }
         }
       }
     }
 
-    if (pastedFiles.length > 0) {
+    // If clipboard has image files AND has NO meaningful plain text (e.g. Snipping tool, PrtScn):
+    if (pastedImageFiles.length > 0 && !pastedText.trim()) {
       e.preventDefault();
-      handleQueueFiles(pastedFiles, 'image');
+      handleQueueFiles(pastedImageFiles, 'image');
+      return;
+    }
+
+    // If clipboard contains plain text (e.g. copied from outside, Excel, Word, Notepad, Web):
+    // Intercept to normalize CRLF \r\n -> \n, preserve line breaks, and auto-expand textarea
+    if (pastedText) {
+      e.preventDefault();
+      const normalized = pastedText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+      const textarea = textareaRef.current;
+      if (textarea) {
+        const start = textarea.selectionStart ?? inputText.length;
+        const end = textarea.selectionEnd ?? inputText.length;
+        const before = inputText.substring(0, start);
+        const after = inputText.substring(end);
+        const newText = before + normalized + after;
+        setInputText(newText);
+
+        // Position cursor right after pasted text & adjust auto-expand
+        requestAnimationFrame(() => {
+          if (textareaRef.current) {
+            const nextCursor = start + normalized.length;
+            textareaRef.current.selectionStart = nextCursor;
+            textareaRef.current.selectionEnd = nextCursor;
+
+            const minH = isMobile ? 56 : 64;
+            const maxH = 140;
+            textareaRef.current.style.height = 'auto';
+            textareaRef.current.style.height = `${Math.min(Math.max(textareaRef.current.scrollHeight, minH), maxH)}px`;
+          }
+        });
+      } else {
+        setInputText(prev => prev + normalized);
+      }
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // 1. Mobile virtual keyboard: Return key should insert newline, NOT auto-send!
+    if (isMobile && e.key === 'Enter') {
+      return;
+    }
+
+    // 2. Desktop: Enter without Shift sends message
     if (e.key === 'Enter' && !e.shiftKey) {
       if ((e.nativeEvent as any).isComposing) return;
       e.preventDefault();
@@ -908,7 +957,7 @@ export const ChatComposer = forwardRef<ChatComposerRef, ChatComposerProps>(({
             alignItems: 'center',
             width: '100%',
             minHeight: isMobile ? '46px' : '52px',
-            maxHeight: '130px',
+            maxHeight: '150px',
             padding: '4px 6px 4px 14px',
             borderRadius: '16px',
             border: isInputFocused ? '1.5px solid #dc2626' : '1.5px solid #e2e8f0',
@@ -939,7 +988,7 @@ export const ChatComposer = forwardRef<ChatComposerRef, ChatComposerProps>(({
               flex: 1,
               minWidth: 0,
               minHeight: '26px',
-              maxHeight: '110px',
+              maxHeight: '140px',
               padding: '6px 0',
               border: 'none',
               outline: 'none',

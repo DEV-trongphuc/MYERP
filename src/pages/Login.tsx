@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { LogIn, Lock, Mail, Share2, Bell, BarChart3, Sparkles, ShieldCheck, Zap, Bot, Shield, KeyRound, Loader2, Eye, EyeOff } from 'lucide-react';
 import { fetchAPI } from '../utils/api';
+import { API_BASE } from '../config/env';
 import toast from 'react-hot-toast';
 import { CustomModal } from '../components/ui/CustomModal';
 import { DigitPinInput } from '../components/ui/DigitPinInput';
@@ -47,7 +48,7 @@ export const Login = () => {
     }
 
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || '/backend'}/api.php?action=login_google`, {
+      const res = await fetch(`${API_BASE}/api.php?action=login_google`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ credential: response.credential })
@@ -75,7 +76,7 @@ export const Login = () => {
 
   useEffect(() => {
     if (typeof (window as any).hideSplashScreen === 'function') {
-      (window as any).hideSplashScreen();
+      (window as any).hideSplashScreen(true);
     }
     let intervalId: any;
     

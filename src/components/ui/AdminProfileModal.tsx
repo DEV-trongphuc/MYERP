@@ -30,16 +30,17 @@ export const AdminProfileModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const handleSaveProfile = async () => {
     setLoading(true);
     try {
-      // In real app: await api.put('/users/profile', { full_name: formData.full_name, bio: formData.bio, avatar_url: formData.avatar_url });
-      // For now, we mock success and update store
-      setTimeout(() => {
-        const updatedUser = { ...user, full_name: formData.full_name, bio: formData.bio, avatar_url: formData.avatar_url } as any;
-        setUser(updatedUser);
-        addToast('Đã cập nhật thông tin cá nhân', 'success');
-        setLoading(false);
-      }, 1000);
-    } catch (e) {
-      addToast('Không thể cập nhật thông tin', 'error');
+      const res = await api.put('/auth/profile', {
+        full_name: formData.full_name,
+        bio: formData.bio,
+        avatar_url: formData.avatar_url
+      });
+      const updatedUser = res.data?.data || { ...user, full_name: formData.full_name, bio: formData.bio, avatar_url: formData.avatar_url };
+      setUser(updatedUser);
+      addToast('Đã cập nhật thông tin cá nhân thành công', 'success');
+    } catch (e: any) {
+      addToast(e?.response?.data?.message || 'Không thể cập nhật thông tin', 'error');
+    } finally {
       setLoading(false);
     }
   };
@@ -55,14 +56,15 @@ export const AdminProfileModal: React.FC<Props> = ({ isOpen, onClose }) => {
     }
     setLoading(true);
     try {
-      // await api.put('/users/password', { old_password: formData.old_password, new_password: formData.new_password });
-      setTimeout(() => {
-        addToast('Đã đổi mật khẩu thành công', 'success');
-        setFormData({ ...formData, old_password: '', new_password: '', confirm_password: '' });
-        setLoading(false);
-      }, 1000);
-    } catch (e) {
-      addToast('Mật khẩu cũ không chính xác', 'error');
+      await api.post('/auth/change-password', {
+        old_password: formData.old_password,
+        new_password: formData.new_password
+      });
+      addToast('Đã đổi mật khẩu thành công', 'success');
+      setFormData(prev => ({ ...prev, old_password: '', new_password: '', confirm_password: '' }));
+    } catch (e: any) {
+      addToast(e?.response?.data?.message || 'Mật khẩu cũ không chính xác', 'error');
+    } finally {
       setLoading(false);
     }
   };

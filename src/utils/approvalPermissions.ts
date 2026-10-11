@@ -37,18 +37,8 @@ export function hasModuleApprovalAccess(
     return false;
   }
 
-  // Parse approval matrix config from parameter or localStorage
-  let config: Record<string, any> = matrixConfig || {};
-  if (!matrixConfig || Object.keys(matrixConfig).length === 0) {
-    try {
-      const stored = localStorage.getItem('approval_matrix_config');
-      if (stored) {
-        config = JSON.parse(stored);
-      }
-    } catch (e) {
-      console.warn('Failed to parse approval_matrix_config from localStorage', e);
-    }
-  }
+  // Approval matrix config from authenticated server configuration only (Anti-Split-Brain)
+  const config: Record<string, any> = matrixConfig || {};
 
   const modCfg = config[moduleKey] || {};
 

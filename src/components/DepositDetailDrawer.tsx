@@ -19,6 +19,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { numberToVietnameseText } from '../utils/numberToText';
 import { VietnameseDateInput } from './ui/VietnameseDateInput';
 import { formatCommentBody } from '../utils/commentFormatter';
+import { pushOverlay } from '../utils/overlayStack';
 
 interface Deposit {
   id: number;
@@ -91,6 +92,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
   const [loadingComments, setLoadingComments] = useState(false);
   const commentEndRef = useRef<HTMLDivElement>(null);
   const commentsContainerRef = useRef<HTMLDivElement>(null);
+  const approveInFlightRef = useRef(false);
 
   const [sharesData, setSharesData] = useState<any[]>([]);
   const [tempExpectedCommission, setTempExpectedCommission] = useState<number>(deposit?.expected_commission || 0);
@@ -182,7 +184,8 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
   const [cancelReason, setCancelReason] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
-  const isAdmin = user && ['admin', 'superadmin', 'super_admin', 'assistant', 'manager', 'director', 'accountant', 'marketing'].includes(user.role);
+  const isAdmin = Boolean(user && ['admin', 'superadmin', 'super_admin', 'assistant', 'manager', 'director', 'accountant'].includes(String(user.role).toLowerCase()));
+  const canApproveMilestone = Boolean(user && ['admin', 'superadmin', 'super_admin', 'assistant', 'director', 'accountant'].includes(String(user.role).toLowerCase()));
   const canEditExpectedCommission = user && ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'accountant'].includes(user.role);
   const canEditAllSOInfo = user && ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'accountant'].includes(user.role);
   const canEditMilestones = isAdmin || (selectedDepForManage && (
@@ -518,6 +521,8 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
     if (actioningMilestoneId !== null) return;
 
     const performApproval = async (actualAmt?: number) => {
+      if (approveInFlightRef.current) return;
+      approveInFlightRef.current = true;
       setActioningMilestoneId(m.id);
       setActioningType('approve');
       try {
@@ -538,6 +543,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
       } catch (e: any) {
         addToast(e.message || 'Lỗi kết nối', 'error');
       } finally {
+        approveInFlightRef.current = false;
         setActioningMilestoneId(null);
         setActioningType(null);
       }
@@ -806,13 +812,11 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
   };
 
   useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
+    if (isOpen) {
+      return pushOverlay('deposit-detail-drawer', () => {
         handleClose();
-      }
-    };
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
+      }, 100);
+    }
   }, [isOpen, isClosing]);
 
   const baseZIndex = Math.min(zIndex || 2000000, 2147483630);
@@ -1785,7 +1789,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                                     )}
                                   </button>
                                 )}
-                                {isAdmin && m.status !== 'approved' && (
+                                {canApproveMilestone && m.status !== 'approved' && (
                                   <button
                                     onClick={() => handleApproveFromModal(idx)}
                                     disabled={actioningMilestoneId !== null}

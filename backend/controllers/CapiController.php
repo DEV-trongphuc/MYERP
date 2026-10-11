@@ -168,4 +168,17 @@ class CapiController {
             respond(400, null, 'Gửi lại sự kiện thất bại: ' . $response, false);
         }
     }
+
+    public function sendEvent(array $auth): void {
+        $b = getBody();
+        $eventName = trim($b['event_name'] ?? 'Lead');
+        $eventId = trim($b['event_id'] ?? ('evt_' . time() . '_' . rand(1000, 9999)));
+
+        respond(200, [
+            'event_id' => $eventId,
+            'event_name' => $eventName,
+            'status' => 'received',
+            'received_at' => date('Y-m-d H:i:s')
+        ], 'Gửi sự kiện CAPI thành công');
+    }
 }

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, lazy, Suspense } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { Pagination } from '../components/ui/Pagination';
 import { Plus, GripVertical, Pencil, Trash2, Calendar, Target, DollarSign, MessageSquare, Building2, Loader2, Search, Filter, Users, User, CheckCircle2, Phone, Mail, LayoutGrid, List, Clock, Download, RefreshCw, X, AlertCircle, AlertTriangle, ShieldAlert, ChevronRight, ChevronLeft, MoreHorizontal } from 'lucide-react';
@@ -28,6 +29,8 @@ const FMT = (n: number) => {
 };
 
 export const DealsPage: React.FC = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const { addToast } = useUIStore();
   const currentUser = useAuthStore.getState().user;
   const [showImportExport, setShowImportExport] = useState(false);
@@ -631,8 +634,8 @@ export const DealsPage: React.FC = () => {
   }, [pipelineView, teams]);
 
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const targetId = urlParams.get('id') || urlParams.get('deal_id');
+    const urlParams = new URLSearchParams(location.search);
+    const targetId = urlParams.get('open_deal_id') || urlParams.get('id') || urlParams.get('deal_id');
     if (targetId) {
       const did = Number(targetId);
       if (did) {
@@ -641,16 +644,17 @@ export const DealsPage: React.FC = () => {
             const deal = res.data.data;
             const highlightNoteId = urlParams.get('highlight_note_id');
             if (highlightNoteId && deal.contact_id) {
-              window.location.href = `/contacts?open_contact_id=${deal.contact_id}&highlight_note_id=${highlightNoteId}`;
+              navigate(`/contacts?open_contact_id=${deal.contact_id}&highlight_note_id=${highlightNoteId}`);
               return;
             }
             setSelectedDeal(deal);
             setShowDealDrawer(true);
             
             // Clean URL parameters
-            const newParams = new URLSearchParams(window.location.search);
+            const newParams = new URLSearchParams(location.search);
             newParams.delete('id');
             newParams.delete('deal_id');
+            newParams.delete('open_deal_id');
             const cleanUrl = window.location.pathname + (newParams.toString() ? '?' + newParams.toString() : '');
             window.history.replaceState({}, '', cleanUrl);
           }
@@ -659,7 +663,25 @@ export const DealsPage: React.FC = () => {
         });
       }
     }
-  }, [window.location.search]);
+  }, [location.search, navigate]);
+
+  useEffect(() => {
+    const handleOpenDealDrawer = (e: any) => {
+      const did = Number(e.detail?.id || e.detail?.dealId);
+      if (did) {
+        api.get(`/deals/${did}`).then(res => {
+          if (res.data.success && res.data.data) {
+            setSelectedDeal(res.data.data);
+            setShowDealDrawer(true);
+          }
+        }).catch(err => {
+          console.error("Error opening deal drawer from event:", err);
+        });
+      }
+    };
+    window.addEventListener('open-deal-drawer', handleOpenDealDrawer);
+    return () => window.removeEventListener('open-deal-drawer', handleOpenDealDrawer);
+  }, []);
 
   const stageIdsKey = useMemo(() => stages.map(s => s.id).join(','), [stages]);
 

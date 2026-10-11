@@ -21,6 +21,7 @@ import { SignaturePadModal } from '../components/ui/SignaturePadModal';
 import { ExtractIdDocumentModal } from '../components/ui/ExtractIdDocumentModal';
 import { compressToWebP } from '../utils/imageCompress';
 import { downloadFileWithWebpToJpg, convertWebpBlobToJpgBlob, isWebpFile, downloadFileWithName } from '../utils/fileDownloader';
+import { pushOverlay } from '../utils/overlayStack';
 const WorkspaceTaskDrawer = lazy(() => import('./WorkspaceTaskDrawer').then(module => ({ default: module.WorkspaceTaskDrawer })));
 const ExpenseCreateDrawer = lazy(() => import('../components/ExpenseCreateDrawer').then(module => ({ default: module.ExpenseCreateDrawer })));
 const DepositDetailDrawer = lazy(() => import('../components/DepositDetailDrawer').then(module => ({ default: module.DepositDetailDrawer })));
@@ -2055,6 +2056,14 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     }
   }, [hasChanges, onClose, showConfirm, handleSave, isClosing]);
 
+  useEffect(() => {
+    if (isOpen) {
+      return pushOverlay('customer-profile-drawer', () => {
+        handleClose();
+      }, 100);
+    }
+  }, [isOpen, handleClose]);
+
   const canDeleteContact = useMemo(() => {
     if (!contact) return false;
     const role = (currentUser?.role || '').toLowerCase();
@@ -2446,25 +2455,48 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     'pending': 'contact_attempted'
   };
 
-  const getStageFromVal = (val: any) => {
-    if (!val) return pipelineStages[0] || DEFAULT_PIPELINE_STAGES[0];
-    const searchVal = String(val).trim().toLowerCase();
-    const exact = pipelineStages.find(s => 
-      String(s.id).toLowerCase() === searchVal ||
-      String(s.system_slug || '').toLowerCase() === searchVal ||
-      String(s.name).toLowerCase() === searchVal
-    );
-    if (exact) return exact;
+  const getStageFromVal = (val: any, stageId?: any, stageName?: any) => {
+    const stagesToUse = (pipelineStages && pipelineStages.length > 0) ? pipelineStages : DEFAULT_PIPELINE_STAGES;
 
-    const mappedSlug = LEGACY_STAGE_MAPPING[searchVal];
-    if (mappedSlug) {
-      const mapped = pipelineStages.find(s => 
-        String(s.id).toLowerCase() === mappedSlug ||
-        String(s.system_slug || '').toLowerCase() === mappedSlug
-      );
-      if (mapped) return mapped;
+    // 1. Direct lookup by stageId if provided
+    if (stageId) {
+      const sIdStr = String(stageId).trim();
+      const byStageId = stagesToUse.find(s => String(s.id) === sIdStr);
+      if (byStageId) return byStageId;
     }
-    return pipelineStages[0] || DEFAULT_PIPELINE_STAGES[0];
+
+    // 2. Direct lookup in pipelineStages by status value (id, slug, or name)
+    if (val) {
+      const searchVal = String(val).trim().toLowerCase();
+      const exact = stagesToUse.find(s => 
+        String(s.id).toLowerCase() === searchVal ||
+        String(s.system_slug || '').toLowerCase() === searchVal ||
+        String(s.name).toLowerCase() === searchVal
+      );
+      if (exact) return exact;
+
+      const mappedSlug = LEGACY_STAGE_MAPPING[searchVal];
+      if (mappedSlug) {
+        const mapped = stagesToUse.find(s => 
+          String(s.id).toLowerCase() === mappedSlug ||
+          String(s.system_slug || '').toLowerCase() === mappedSlug
+        );
+        if (mapped) return mapped;
+      }
+    }
+
+    // 3. Fallback lookup by stageName if provided
+    if (stageName) {
+      const sNameStr = String(stageName).trim().toLowerCase();
+      const byName = stagesToUse.find(s => 
+        String(s.name).toLowerCase() === sNameStr ||
+        String(s.name).toLowerCase().includes(sNameStr) ||
+        sNameStr.includes(String(s.name).toLowerCase())
+      );
+      if (byName) return byName;
+    }
+
+    return stagesToUse[0] || DEFAULT_PIPELINE_STAGES[0];
   };
 
   const scrollToActiveStage = (smooth = true) => {
@@ -6669,105 +6701,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       addToast(err.message || 'Lỗi kết nối', 'error');
     }
   };
+  // Milestone approvals & management are fully delegated to <DepositDetailDrawer /> (lines 18528+)
 
-  const handleApproveFromModal = async (index: number) => {
-    const m = tempMilestones[index];
-    setActioningMilestoneId(m.id);
-    setActioningType('approve');
-    try {
-      const res = await api.post(`/deposits/${selectedDepForManage.id}/milestones/${m.id}/approve`);
-      if (res.data?.success || res.data) {
-        addToast('Phê duyệt đợt tiền thành công!', 'success');
-        
-        const updated = [...tempMilestones];
-        updated[index].status = 'approved';
-        setTempMilestones(updated);
-        
-        fetchData();
-      } else {
-        addToast(res.data?.message || 'Lỗi phê duyệt', 'error');
-      }
-    } catch (err: any) {
-      addToast(err?.response?.data?.message || err.message || 'Lỗi kết nối', 'error');
-    } finally {
-      setActioningMilestoneId(null);
-      setActioningType(null);
-    }
-  };
-
-  const handleRejectFromModal = async (index: number) => {
-    const m = tempMilestones[index];
-    setActioningMilestoneId(m.id);
-    setActioningType('reject');
-    try {
-      const res = await api.post(`/deposits/${selectedDepForManage.id}/milestones/${m.id}/reject`);
-      if (res.data?.success || res.data) {
-        addToast('Bác bỏ UNC đợt tiền thành công!', 'success');
-        
-        const updated = [...tempMilestones];
-        updated[index].status = 'failed';
-        setTempMilestones(updated);
-        
-        fetchData();
-      } else {
-        addToast(res.data?.message || 'Lỗi bác bỏ', 'error');
-      }
-    } catch (err: any) {
-      addToast(err?.response?.data?.message || err.message || 'Lỗi kết nối', 'error');
-    } finally {
-      setActioningMilestoneId(null);
-      setActioningType(null);
-    }
-  };
-
-  const handleSaveMilestones = async () => {
-    const totalAmount = tempMilestones.reduce((sum, m) => sum + (Number(m.expected_amount) || 0), 0);
-    if (Math.abs(totalAmount - selectedDepForManage.price) > 1) {
-      addToast(`Tổng tiền các đợt (${totalAmount.toLocaleString()} VND) phải bằng đúng Giá bán căn hộ (${selectedDepForManage.price.toLocaleString()} VND)`, 'error');
-      return;
-    }
-
-    const isAdmin = currentUser && ['admin', 'superadmin', 'super_admin', 'assistant', 'manager', 'director'].includes(currentUser.role);
-    if (isAdmin && tempSharesData && tempSharesData.length > 0) {
-      const totalPct = tempSharesData.reduce((sum, s) => sum + (Number(s.percentage) || 0), 0);
-      if (totalPct !== 100) {
-        addToast('Tổng tỷ lệ chia sẻ hoa hồng phải bằng 100%.', 'error');
-        return;
-      }
-    }
-
-    try {
-      setIsSavingMilestones(true);
-      const payload: any = {
-        milestones: tempMilestones.map(m => ({
-          id: m.id || null,
-          milestone_name: m.milestone_name,
-          expected_amount: m.expected_amount,
-          status: m.status
-        }))
-      };
-      if (isAdmin) {
-        payload.expected_commission = tempExpectedCommission;
-        payload.shares = tempSharesData.map(sh => ({
-          user_id: sh.user_id,
-          percentage: sh.percentage
-        }));
-      }
-      const res = await api.put(`/deposits/${selectedDepForManage.id}/milestones`, payload);
-
-      if (res.data?.success || res.data) {
-        addToast(`Lịch trình thanh toán và phân chia hoa hồng cho căn ${selectedDepForManage?.unit_code || ''} đã được lưu thành công!`, 'success');
-        setShowManageModal(false);
-        fetchData();
-      } else {
-        addToast(res.data?.message || 'Lỗi lưu lịch trình thanh toán.', 'error');
-      }
-    } catch (err: any) {
-      addToast(err?.response?.data?.message || err.message || 'Không thể kết nối đến máy chủ để lưu lịch trình thanh toán.', 'error');
-    } finally {
-      setIsSavingMilestones(false);
-    }
-  };
 
   const isReleaseBlocked = (() => {
     const currentStatus = contact?.pipeline_status || 'chua_xac_dinh';
@@ -6866,7 +6801,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   if (typeof document === 'undefined') return null;
 
   const handleStageTransition = (targetId: string, targetName: string, initialLeadStatus: 'active' | 'nurture' | 'lost' = 'active') => {
-    const currentStage = getStageFromVal(formData.pipeline_status || 'chua_xac_dinh');
+    const currentStage = getStageFromVal(formData.pipeline_status || contact?.pipeline_status || 'chua_xac_dinh', formData.stage_id || contact?.stage_id, formData.stage_name || contact?.stage_name);
     const currentIdx = currentStage ? pipelineStages.indexOf(currentStage) : -1;
     const safeIndex = currentIdx === -1 ? 0 : currentIdx;
 
@@ -7013,19 +6948,19 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     });
   };
 
-  const currentActiveStage = getStageFromVal(formData.pipeline_status || 'new_lead');
+  const currentActiveStage = getStageFromVal(formData.pipeline_status || contact?.pipeline_status || 'new_lead', formData.stage_id || contact?.stage_id, formData.stage_name || contact?.stage_name);
   const isCurrentlyNurture = formData.lead_status === 'nurture';
   const isCurrentlyLost = formData.lead_status === 'lost';
 
   // Tự động mở "Ghi chú ban đầu" nếu là pipeline đầu tiên, ngược lại tự động đóng
   useEffect(() => {
     if (!isOpen) return;
-    const currentStage = getStageFromVal(formData.pipeline_status || 'chua_xac_dinh');
+    const currentStage = getStageFromVal(formData.pipeline_status || contact?.pipeline_status || 'chua_xac_dinh', formData.stage_id || contact?.stage_id, formData.stage_name || contact?.stage_name);
     const currentIdx = currentStage ? pipelineStages.indexOf(currentStage) : -1;
     const safeIndex = currentIdx === -1 ? 0 : currentIdx;
     const isFirstStage = safeIndex === 0 && !isCurrentlyNurture && !isCurrentlyLost;
     setIsInitialNotesExpanded(isFirstStage);
-  }, [effectiveContactId, formData.pipeline_status, formData.lead_status, isCurrentlyNurture, isCurrentlyLost, pipelineStages, isOpen]);
+  }, [effectiveContactId, formData.pipeline_status, formData.stage_id, formData.stage_name, formData.lead_status, isCurrentlyNurture, isCurrentlyLost, pipelineStages, isOpen]);
 
   const isProfileLoading = Boolean(
     formData?._isLoading || 
@@ -7147,7 +7082,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         <div ref={pipelineContainerRef} id="pipeline-scroll-container" className="no-scrollbar" style={{ display: 'flex', padding: isMobileOrTablet ? '0.625rem 0.75rem' : (showScrollArrows ? '0.625rem 3rem' : '0.625rem 1.25rem'), gap: '10px', overflowX: 'auto', flex: 1, scrollBehavior: 'smooth', scrollbarWidth: 'none', msOverflowStyle: 'none', position: 'relative', alignItems: 'center', scrollSnapType: 'x proximity' }}>
           <style dangerouslySetInnerHTML={{ __html: `#pipeline-scroll-container::-webkit-scrollbar { display: none; }` }} />
           {(() => {
-            const currentStage = getStageFromVal(formData.pipeline_status || 'chua_xac_dinh');
+            const currentStage = getStageFromVal(formData.pipeline_status || contact?.pipeline_status || 'chua_xac_dinh', formData.stage_id || contact?.stage_id, formData.stage_name || contact?.stage_name);
             const currentIdx = currentStage ? pipelineStages.indexOf(currentStage) : -1;
             const safeIndex = currentIdx === -1 ? 0 : currentIdx;
             const isHocVien = formData.pipeline_status === 'hoc_vien';
@@ -11285,14 +11220,14 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 />
                               )
                             ) : (
-                              currentUser?.role === 'sale' ? (
+                              !isMainOwnerOrManagerAdmin ? (
                                 <div 
                                   style={{ padding: '8px 12px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: '8px', fontSize: '0.875rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
                                   onClick={() => {
                                     const ownerName = formData.owner_name || contact?.owner_name || contact?.consultant_name || 'chủ sở hữu';
-                                    addToast(`Chặn thao tác: Chỉ chủ sở hữu (${ownerName}) hoặc Admin mới có quyền chuyển nhượng người chăm sóc!`, 'error');
+                                    addToast(`Chặn thao tác: Chỉ chủ sở hữu (${ownerName}) hoặc Quản lý/Admin mới có quyền chuyển nhượng người chăm sóc!`, 'error');
                                   }}
-                                  title="Chỉ Owner hoặc Admin mới có quyền chuyển nhượng người chăm sóc"
+                                  title="Chỉ Chủ sở hữu hoặc Quản lý/Admin mới có quyền chuyển nhượng người chăm sóc"
                                 >
                                   <Avatar src={formData.owner_avatar} name={formData.owner_name} size="sm" />
                                   <span>{formData.owner_name || 'Chưa giao'}</span>
@@ -11321,7 +11256,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           {isPartnerSource && (
                             <div className="form-group" style={{ marginTop: '10px' }}>
                               <label className="form-label">{t('Sale hỗ trợ nội bộ')}</label>
-                              {currentUser?.role === 'sale' ? (
+                              {!isMainOwnerOrManagerAdmin ? (
                                 <div 
                                   style={{ padding: '8px 12px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: '8px', fontSize: '0.875rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '8px' }}
                                 >

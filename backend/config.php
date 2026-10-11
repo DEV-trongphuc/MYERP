@@ -15,7 +15,7 @@ if (!defined('JWT_EXPIRE_REFRESH')) define('JWT_EXPIRE_REFRESH', 60 * 60 * 24 * 
 
 // CORS allowed origins
 if (!defined('ALLOWED_ORIGINS'))
-    define('ALLOWED_ORIGINS', 'http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:3000,http://localhost:4173,http://open.Ideas.test,https://open.Ideas.test,https://myerp.ideas.edu.vn,http://myerp.ideas.edu.vn,https://crm-Ideas.vercel.app,https://crm-ideas.vercel.app');
+    define('ALLOWED_ORIGINS', 'http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:3000,http://localhost:4173,http://open.Ideas.test,https://open.Ideas.test,https://myerp.ideas.edu.vn,http://myerp.ideas.edu.vn,https://myerp-stagging.ideas.edu.vn,http://myerp-stagging.ideas.edu.vn,https://crm-Ideas.vercel.app,https://crm-ideas.vercel.app');
 
 // Storage
 if (!defined('UPLOAD_DIR')) define('UPLOAD_DIR', __DIR__ . '/uploads');
@@ -116,7 +116,7 @@ if (!function_exists('deleteAttachmentFiles')) {
 }
 
 // Environment
-if (!defined('APP_ENV')) define('APP_ENV', 'development');
+if (!defined('APP_ENV')) define('APP_ENV', $_ENV['APP_ENV'] ?? 'development');
 
 // Backend Version (auto-increments on backend edits)
 if (!defined('BACKEND_VERSION')) define('BACKEND_VERSION', '1.5.4.0');

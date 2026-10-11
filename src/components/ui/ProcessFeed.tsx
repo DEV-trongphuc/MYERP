@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
-import { MessageSquare, Activity, Info, Clock, Coffee, Trash2, Send, Paperclip, Loader2 } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { MessageSquare, Activity, Info, Clock, Coffee, Trash2, Send, Paperclip, Loader2, CornerDownRight, X } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import api from '../../api/axios';
 import { Avatar } from './Avatar';
 import { MentionInput } from './MentionInput';
 import { ConfirmModal } from './ConfirmModal';
 import { formatCommentBody, formatFileSize, getFileBadgeInfo } from '../../utils/commentFormatter';
+import { AttachmentLightboxModal, type AttachmentItem } from './AttachmentLightboxModal';
 
 export interface ProcessFeedComment {
   id: string | number;
@@ -19,6 +20,7 @@ export interface ProcessFeedComment {
   text?: string;
   user_id?: string | number;
   attachments?: any[];
+  parent_id?: string | number | null;
 }
 
 export interface ProcessFeedHistory {
@@ -42,7 +44,7 @@ interface ProcessFeedProps {
   loadingHistory?: boolean;
   currentUser: any;
   users?: any[];
-  onAddComment: (text: string, attachments?: any[]) => Promise<void> | void;
+  onAddComment: (text: string, attachments?: any[], parentId?: string | number | null) => Promise<void> | void;
   onDeleteComment?: (id: string | number) => Promise<void> | void;
   showAttachments?: boolean;
   maxHeight?: string | number;
@@ -65,10 +67,72 @@ export const ProcessFeed: React.FC<ProcessFeedProps> = ({
   const [commentText, setCommentText] = useState('');
   const [attachments, setAttachments] = useState<any[]>([]);
   const [submittingComment, setSubmittingComment] = useState(false);
+  const isSendingRef = useRef(false);
   const [commentToDelete, setCommentToDelete] = useState<string | number | null>(null);
+  const [replyTo, setReplyTo] = useState<{
+    id: string | number;
+    userName: string;
+    avatar?: string;
+    snippet?: string;
+  } | null>(null);
+  const [lightboxState, setLightboxState] = useState<{
+    isOpen: boolean;
+    items: AttachmentItem[];
+    initialIndex: number;
+  }>({
+    isOpen: false,
+    items: [],
+    initialIndex: 0
+  });
+
+  const handleFeedClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    if (!target) return;
+    const imgEl = target.closest('img') as HTMLImageElement | null;
+    if (!imgEl || !imgEl.src) return;
+
+    // Strict guard: Never trigger lightbox for avatars, icons, emojis, buttons
+    if (
+      imgEl.hasAttribute('data-avatar') ||
+      imgEl.hasAttribute('data-no-lightbox') ||
+      imgEl.hasAttribute('data-mention-avatar') ||
+      imgEl.closest('[data-avatar]') ||
+      imgEl.closest('[data-no-lightbox]') ||
+      imgEl.closest('.avatar') ||
+      imgEl.closest('.user-avatar') ||
+      imgEl.closest('.mention-avatar') ||
+      imgEl.closest('[class*="avatar"]') ||
+      imgEl.closest('button')
+    ) {
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const container = imgEl.closest('.rich-comment-content') || imgEl.closest('[class*="comment"]') || e.currentTarget;
+    const allImgs = Array.from(container.querySelectorAll('img:not([data-avatar]):not([data-no-lightbox]):not([data-mention-avatar]):not([class*="avatar"])')) as HTMLImageElement[];
+
+    const imgItems: AttachmentItem[] = allImgs
+      .map(img => ({
+        url: img.src,
+        name: img.alt || 'Hình ảnh',
+        type: 'image' as const
+      }))
+      .filter(x => Boolean(x.url));
+
+    const clickedIdx = imgItems.findIndex(x => x.url === imgEl.src);
+    setLightboxState({
+      isOpen: true,
+      items: imgItems.length > 0 ? imgItems : [{ url: imgEl.src, name: imgEl.alt || 'Hình ảnh', type: 'image' }],
+      initialIndex: Math.max(0, clickedIdx)
+    });
+  };
 
   const handleSend = async () => {
+    if (isSendingRef.current || submittingComment) return;
     if (!commentText.trim() && attachments.length === 0) return;
+    isSendingRef.current = true;
     setSubmittingComment(true);
     try {
       const uploadedAttachments: any[] = [];
@@ -98,12 +162,14 @@ export const ProcessFeed: React.FC<ProcessFeedProps> = ({
         }
       }
 
-      await onAddComment(commentText, uploadedAttachments);
+      await onAddComment(commentText, uploadedAttachments, replyTo ? replyTo.id : null);
       setCommentText('');
       setAttachments([]);
+      setReplyTo(null);
     } catch (err) {
       console.error('Failed to submit comment:', err);
     } finally {
+      isSendingRef.current = false;
       setSubmittingComment(false);
     }
   };
@@ -171,6 +237,204 @@ export const ProcessFeed: React.FC<ProcessFeedProps> = ({
     return { actionLabel, actionColor };
   };
 
+  // Group comments into root comments and replies threads
+  const rootComments: ProcessFeedComment[] = [];
+  const repliesMap = new Map<string, ProcessFeedComment[]>();
+
+  comments.forEach((item) => {
+    const pId = item.parent_id;
+    if (pId && comments.some(c => String(c.id) === String(pId))) {
+      const key = String(pId);
+      const list = repliesMap.get(key) || [];
+      list.push(item);
+      repliesMap.set(key, list);
+    } else {
+      rootComments.push(item);
+    }
+  });
+
+  // Sort replies inside each thread chronologically (oldest first so conversation reads naturally)
+  repliesMap.forEach((replies) => {
+    replies.sort((a, b) => {
+      const tA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const tB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return tA - tB;
+    });
+  });
+
+  const handleReplyClick = (targetComment: ProcessFeedComment) => {
+    const authorName = targetComment.user_name || targetComment.author || t('Đồng nghiệp');
+    const avatarSrc = targetComment.avatar_url || targetComment.avatar;
+    const rawSnippet = (targetComment.body || targetComment.text || '').replace(/<[^>]*>/g, '').trim();
+    const pId = targetComment.parent_id || targetComment.id;
+    setReplyTo({
+      id: pId,
+      userName: authorName,
+      avatar: avatarSrc,
+      snippet: rawSnippet.length > 50 ? rawSnippet.slice(0, 50) + '...' : rawSnippet
+    });
+    if (!commentText.trim()) {
+      setCommentText(`@${authorName} `);
+    }
+  };
+
+  const renderCommentCard = (item: ProcessFeedComment, isReply = false) => {
+    const authorName = item.user_name || item.author || t('Người dùng');
+    const isIdeasSystem = authorName.includes('Hệ thống') || authorName.includes('IDEAS') || authorName.includes('System');
+    const avatarSrc = item.avatar_url || item.avatar || (isIdeasSystem ? 'https://ideas.edu.vn/wp-content/uploads/2023/04/cropped-logofavicon-1.webp' : undefined);
+    const displayTime = item.created_at 
+      ? new Date(item.created_at).toLocaleString('vi-VN') 
+      : item.time || '';
+    const bodyText = item.body || item.text || '';
+    const showDelete = onDeleteComment && (
+      ['admin', 'superadmin', 'super_admin', 'director'].includes(currentUser?.role) ||
+      currentUser?.id === item.user_id
+    );
+
+    return (
+      <div 
+        key={item.id} 
+        style={{
+          display: 'flex',
+          gap: isReply ? '10px' : '12px',
+          padding: isReply ? '10px 14px' : '12px 16px',
+          background: isReply ? 'var(--color-bg-light, rgba(0,0,0,0.015))' : 'var(--color-bg)',
+          borderRadius: isReply ? '12px' : '14px',
+          border: '1px solid var(--color-border-light)',
+          boxShadow: isReply ? 'inset 0 1px 2px rgba(0,0,0,0.01)' : '0 2px 6px rgba(0,0,0,0.01)',
+          position: 'relative',
+          transition: 'all 0.2s ease'
+        }}
+      >
+        <Avatar src={avatarSrc} name={authorName} size={isReply ? 24 : 28} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px', flexWrap: 'wrap', gap: '4px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <strong style={{ fontSize: isReply ? '0.78rem' : '0.8rem', color: 'var(--color-text)', fontWeight: 700 }}>{authorName}</strong>
+              {isReply && (
+                <span style={{ fontSize: '0.66rem', color: 'var(--color-primary)', background: 'rgba(37,99,235,0.08)', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                  {t('Phản hồi')}
+                </span>
+              )}
+            </div>
+            <span style={{ fontSize: '0.675rem', color: 'var(--color-text-muted)' }}>{displayTime}</span>
+          </div>
+          {bodyText && (/<[a-z][\s\S]*>/i.test(bodyText) || /[📕📄📊📝📦🖼️📎]/.test(bodyText)) ? (
+            <div 
+              className="rich-comment-content text-left"
+              dangerouslySetInnerHTML={{ __html: formatCommentBody(bodyText) }}
+              style={{ fontSize: isReply ? '0.78rem' : '0.8rem', color: 'var(--color-text-light)', margin: '2px 0 0', lineHeight: '1.45', textAlign: 'left' }}
+            />
+          ) : (
+            <p style={{ margin: 0, fontSize: isReply ? '0.78rem' : '0.8rem', color: 'var(--color-text-light)', lineHeight: '1.45', whiteSpace: 'pre-wrap', textAlign: 'left', wordBreak: 'break-word' }}>{bodyText}</p>
+          )}
+
+          {/* Attached files chips list */}
+          {item.attachments && item.attachments.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
+              {item.attachments.map((file: any, index: number) => {
+                const fileUrl = file.url || file.file_url || (typeof file === 'string' ? file : '');
+                const fileName = file.name || 'Tệp đính kèm';
+                const isImage = /\.(jpg|jpeg|png|webp|gif|svg)(\?.*)?$/i.test(fileName || fileUrl) || file.type?.startsWith('image/');
+                const { label, cls } = getFileBadgeInfo(fileName);
+                return (
+                  <a 
+                    key={index} 
+                    href={fileUrl || undefined}
+                    target={isImage ? undefined : (fileUrl ? "_blank" : undefined)}
+                    rel="noopener noreferrer"
+                    download={isImage ? undefined : fileName}
+                    data-file-url={fileUrl}
+                    data-file-name={fileName}
+                    className="comment-attachment-chip"
+                    style={{ margin: 0, cursor: isImage ? 'zoom-in' : 'pointer' }}
+                    title={isImage ? `Bấm để phóng to xem ảnh: ${fileName}` : (fileUrl ? `Bấm để tải về / mở: ${fileName}` : undefined)}
+                    onClick={(e) => {
+                      if (isImage && fileUrl) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setLightboxState({
+                          isOpen: true,
+                          items: [{ url: fileUrl, name: fileName, type: 'image' }],
+                          initialIndex: 0
+                        });
+                      }
+                    }}
+                  >
+                    <span className={`file-doc-badge ${cls}`}>{label}</span>
+                    <span className="file-doc-name" style={{ maxWidth: '180px' }}>
+                      {fileName}
+                    </span>
+                    {file.size ? (
+                      <span className="file-doc-size">
+                        ({formatFileSize(file.size)})
+                      </span>
+                    ) : null}
+                    <span className="file-doc-action-icon">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    </span>
+                  </a>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Action Row: Phản hồi + Xóa */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '6px' }}>
+            {!isIdeasSystem && (
+              <button
+                type="button"
+                onClick={() => handleReplyClick(item)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  background: 'none',
+                  border: 'none',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  color: 'var(--color-primary)',
+                  fontSize: '0.72rem',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+                className="hover-bg"
+                title={t('Trả lời bình luận này')}
+              >
+                <CornerDownRight size={12} />
+                <span>{t('Phản hồi')}</span>
+              </button>
+            )}
+
+            {showDelete && (
+              <button
+                type="button"
+                onClick={() => setCommentToDelete(item.id)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                  background: 'none',
+                  border: 'none',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  color: 'var(--color-text-muted)',
+                  fontSize: '0.7rem',
+                  cursor: 'pointer'
+                }}
+                className="hover-danger"
+                title={t('Xóa bình luận')}
+              >
+                <Trash2 size={11} />
+                <span>{t('Xóa')}</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, overflow: 'hidden' }}>
       {/* Tabs Header */}
@@ -233,6 +497,7 @@ export const ProcessFeed: React.FC<ProcessFeedProps> = ({
           paddingRight: '6px'
         }} 
         className="custom-scrollbar"
+        onClick={handleFeedClick}
       >
         {activeTab === 'comments' ? (
           loadingComments ? (
@@ -245,92 +510,29 @@ export const ProcessFeed: React.FC<ProcessFeedProps> = ({
               <span style={{ fontSize: '0.8rem' }}>{t('Chưa có thảo luận nào. Hãy bắt đầu thảo luận!')}</span>
             </div>
           ) : (
-            comments.map((item) => {
-              const authorName = item.user_name || item.author || t('Người dùng');
-              const isIdeasSystem = authorName.includes('Hệ thống') || authorName.includes('IDEAS') || authorName.includes('System');
-              const avatarSrc = item.avatar_url || item.avatar || (isIdeasSystem ? 'https://ideas.edu.vn/wp-content/uploads/2023/04/cropped-logofavicon-1.webp' : undefined);
-              const displayTime = item.created_at 
-                ? new Date(item.created_at).toLocaleString('vi-VN') 
-                : item.time || '';
-              const bodyText = item.body || item.text || '';
-              const showDelete = onDeleteComment && (
-                ['admin', 'superadmin', 'super_admin', 'director'].includes(currentUser?.role) ||
-                currentUser?.id === item.user_id
-              );
-
+            rootComments.map((rootItem) => {
+              const threadReplies = repliesMap.get(String(rootItem.id)) || [];
               return (
-                <div key={item.id} style={{
-                  display: 'flex',
-                  gap: '12px',
-                  padding: '12px 16px',
-                  background: 'var(--color-bg)',
-                  borderRadius: '14px',
-                  border: '1px solid var(--color-border-light)',
-                  boxShadow: '0 2px 6px rgba(0,0,0,0.01)',
-                  position: 'relative'
-                }}>
-                  <Avatar src={avatarSrc} name={authorName} size={28} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
-                      <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)', fontWeight: 700 }}>{authorName}</strong>
-                      <span style={{ fontSize: '0.675rem', color: 'var(--color-text-muted)' }}>{displayTime}</span>
-                    </div>
-                    {bodyText && (/<[a-z][\s\S]*>/i.test(bodyText) || /[📕📄📊📝📦🖼️📎]/.test(bodyText)) ? (
-                      <div 
-                        className="rich-comment-content text-left"
-                        dangerouslySetInnerHTML={{ __html: formatCommentBody(bodyText) }}
-                        style={{ fontSize: '0.8rem', color: 'var(--color-text-light)', margin: '2px 0 0', lineHeight: '1.45', textAlign: 'left' }}
-                      />
-                    ) : (
-                      <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--color-text-light)', lineHeight: '1.45', whiteSpace: 'pre-wrap', textAlign: 'left', wordBreak: 'break-word' }}>{bodyText}</p>
-                    )}
+                <div key={rootItem.id} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {renderCommentCard(rootItem, false)}
 
-                    {/* Attached files chips list */}
-                    {item.attachments && item.attachments.length > 0 && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
-                        {item.attachments.map((file: any, index: number) => {
-                          const fileUrl = file.url || file.file_url || (typeof file === 'string' ? file : '');
-                          const fileName = file.name || 'Tệp đính kèm';
-                          const { label, cls } = getFileBadgeInfo(fileName);
-                          return (
-                            <a 
-                              key={index} 
-                              href={fileUrl || undefined}
-                              target={fileUrl ? "_blank" : undefined}
-                              rel="noopener noreferrer"
-                              download={fileName}
-                              data-file-url={fileUrl}
-                              data-file-name={fileName}
-                              className="comment-attachment-chip"
-                              style={{ margin: 0 }}
-                              title={fileUrl ? `Bấm để tải về / mở: ${fileName}` : undefined}
-                            >
-                              <span className={`file-doc-badge ${cls}`}>{label}</span>
-                              <span className="file-doc-name" style={{ maxWidth: '180px' }}>
-                                {fileName}
-                              </span>
-                              {file.size ? (
-                                <span className="file-doc-size">
-                                  ({formatFileSize(file.size)})
-                                </span>
-                              ) : null}
-                              <span className="file-doc-action-icon">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                              </span>
-                            </a>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                  {showDelete && (
-                    <button
-                      onClick={() => setCommentToDelete(item.id)}
-                      style={{ background: 'none', border: 'none', padding: '2px', cursor: 'pointer', color: 'var(--color-text-muted)', position: 'absolute', right: '8px', top: '8px' }}
-                      title={t('Xóa bình luận')}
-                    >
-                      <Trash2 size={12} />
-                    </button>
+                  {/* Nested Replies Thread */}
+                  {threadReplies.length > 0 && (
+                    <div style={{
+                      marginLeft: '20px',
+                      paddingLeft: '12px',
+                      borderLeft: '2px solid rgba(59, 130, 246, 0.25)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '6px',
+                      marginTop: '2px'
+                    }}>
+                      {threadReplies.map((replyItem) => (
+                        <div key={replyItem.id}>
+                          {renderCommentCard(replyItem, true)}
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
               );
@@ -405,7 +607,7 @@ export const ProcessFeed: React.FC<ProcessFeedProps> = ({
         <div style={{ 
           display: 'flex', 
           flexDirection: 'column', 
-          gap: '8px', 
+          gap: '6px', 
           borderTop: '1px solid var(--color-border-light)', 
           paddingTop: '8px',
           flexShrink: 0,
@@ -414,6 +616,57 @@ export const ProcessFeed: React.FC<ProcessFeedProps> = ({
           background: 'var(--color-surface)',
           zIndex: 10
         }}>
+          {/* Active Reply Banner */}
+          {replyTo && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '6px 12px',
+              background: 'rgba(37, 99, 235, 0.08)',
+              borderLeft: '3px solid #2563eb',
+              borderRadius: '8px',
+              fontSize: '0.78rem',
+              gap: '8px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+                <CornerDownRight size={14} color="#2563eb" style={{ flexShrink: 0 }} />
+                <Avatar src={replyTo.avatar} name={replyTo.userName} size={20} />
+                <div style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span style={{ color: 'var(--color-text-muted)' }}>{t('Đang trả lời')} </span>
+                  <strong style={{ color: '#2563eb' }}>@{replyTo.userName}</strong>
+                  {replyTo.snippet && (
+                    <span style={{ color: 'var(--color-text-muted)', marginLeft: '6px', fontStyle: 'italic' }}>
+                      "{replyTo.snippet}"
+                    </span>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReplyTo(null)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--color-text-muted)',
+                  cursor: 'pointer',
+                  padding: '2px 6px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '2px',
+                  borderRadius: '4px',
+                  fontSize: '0.72rem',
+                  fontWeight: 600
+                }}
+                className="hover-danger"
+                title={t('Hủy trả lời')}
+              >
+                <X size={13} />
+                <span>{t('Hủy')}</span>
+              </button>
+            </div>
+          )}
+
           <div style={{ background: 'rgba(0, 0, 0, 0.015)', border: '1px solid var(--color-border-light)', padding: '10px', borderRadius: '14px', display: 'flex', flexDirection: 'column', gap: '8px', boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.01)' }}>
             <div style={{ position: 'relative' }}>
               <MentionInput
@@ -529,6 +782,14 @@ export const ProcessFeed: React.FC<ProcessFeedProps> = ({
           message="Bạn có chắc chắn muốn xóa bình luận này không? Hành động này không thể hoàn tác."
         />
       )}
+
+      {/* Lightbox Modal for Fullscreen Image Zooming */}
+      <AttachmentLightboxModal
+        isOpen={lightboxState.isOpen}
+        onClose={() => setLightboxState(prev => ({ ...prev, isOpen: false }))}
+        items={lightboxState.items}
+        initialIndex={lightboxState.initialIndex}
+      />
     </div>
   );
 };

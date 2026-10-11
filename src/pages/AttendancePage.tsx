@@ -22,7 +22,7 @@ import { canSelectAttendanceUser, canApproveAttendance, canApproveShifts as chec
 import { isItemAtMyStepToApprove } from '../utils/approvalPermissions';
 import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 import { VietnameseMonthInput } from '../components/ui/VietnameseMonthInput';
-import { formatDateVN, formatDateTimeVN, formatMonthYearVN } from '../utils/dateUtils';
+import { formatDateVN, formatDateTimeVN, formatMonthYearVN, getLocalDateStr } from '../utils/dateUtils';
 
 const resolveAttachmentUrl = (path: string | null | undefined): string => {
   if (!path) return '';
@@ -644,14 +644,14 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   const [createLeaveType, setCreateLeaveType] = useState<'leave' | 'late_early' | 'overtime' | 'remote_work' | 'supplementary'>('leave');
   
   // Form fields states
-  const [supplementaryDateField, setSupplementaryDateField] = useState(() => new Date().toISOString().split('T')[0]);
+  const [supplementaryDateField, setSupplementaryDateField] = useState(() => getLocalDateStr());
   const [supplementaryInTimeField, setSupplementaryInTimeField] = useState('08:00');
   const [supplementaryOutTimeField, setSupplementaryOutTimeField] = useState('17:00');
   
   const [leaveTypeField, setLeaveTypeField] = useState('annual'); // 'annual' | 'sick' | 'compensatory' | 'unpaid'
   const [leaveSessionField, setLeaveSessionField] = useState('full'); // 'full' | 'morning' | 'afternoon' | 'range'
-  const [leaveFromField, setLeaveFromField] = useState(() => new Date().toISOString().split('T')[0]);
-  const [leaveToField, setLeaveToField] = useState(() => new Date().toISOString().split('T')[0]);
+  const [leaveFromField, setLeaveFromField] = useState(() => getLocalDateStr());
+  const [leaveToField, setLeaveToField] = useState(() => getLocalDateStr());
   const [leaveReasonField, setLeaveReasonField] = useState('');
 
   const handleOpenSupplementaryForDate = (dateStr: string) => {
@@ -666,10 +666,10 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   const [lateEarlyTypeField, setLateEarlyTypeField] = useState('late'); // 'late' | 'early'
   const [lateEarlyMinutesField, setLateEarlyMinutesField] = useState(30);
   const [isCustomMinutesMode, setIsCustomMinutesMode] = useState(false);
-  const [lateEarlyDateField, setLateEarlyDateField] = useState(() => new Date().toISOString().split('T')[0]);
+  const [lateEarlyDateField, setLateEarlyDateField] = useState(() => getLocalDateStr());
   const [lateEarlyTimeField, setLateEarlyTimeField] = useState('08:30');
   
-  const [otDateField, setOtDateField] = useState(() => new Date().toISOString().split('T')[0]);
+  const [otDateField, setOtDateField] = useState(() => getLocalDateStr());
   const [otStartField, setOtStartField] = useState('17:00');
   const [otEndField, setOtEndField] = useState('21:00');
   const [otTypeField, setOtTypeField] = useState<'compensatory' | 'salary'>('compensatory');
@@ -924,7 +924,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
           toast.error(t('Vui lòng nhập lý do đi muộn / về sớm!'));
           return;
         }
-        const d = lateEarlyDateField ? lateEarlyDateField.split('T')[0] : new Date().toISOString().split('T')[0];
+        const d = lateEarlyDateField ? lateEarlyDateField.split('T')[0] : getLocalDateStr();
         const timeVal = lateEarlyTimeField || (lateEarlyTypeField === 'early' ? '16:30' : '08:00');
         const [sh, sm] = timeVal.split(':').map(Number);
         const startH = isNaN(sh) ? (lateEarlyTypeField === 'early' ? 16 : 8) : sh;
@@ -9843,7 +9843,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                 /* Sub-tab 2: Fingerprint Excel / Supplementary Form */
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                   {(isSales || isViewingSelf) ? (() => {
-                    const todayStr = new Date().toISOString().slice(0, 10);
+                    const todayStr = getLocalDateStr();
                     const detailCheckIns = calendarCheckIns.filter(c => c.check_in_date === selectedDateForDetail);
                     const pendingCheckIn = detailCheckIns.find(c => c.status === 'pending_approval');
                     const approvedCheckIn = detailCheckIns.find(c => c.status === 'approved');

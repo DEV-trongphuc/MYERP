@@ -683,7 +683,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
     // Verify cooperation shares sum
     if (!hasExistingCoop && isCooperation) {
       const sum = Object.values(collaboratorShares).reduce((acc, c) => acc + (c || 0), 0);
-      if (sum !== 100) {
+      if (Math.abs(sum - 100) > 0.01) {
         addToast(`Tổng tỷ lệ chia sẻ hoa hồng phải bằng đúng 100% (Hiện tại là ${sum}%)`, 'error');
         return;
       }
@@ -1059,7 +1059,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
 
     if (isAdmin && tempSharesData && tempSharesData.length > 0) {
       const totalPct = tempSharesData.reduce((sum, s) => sum + (Number(s.percentage) || 0), 0);
-      if (totalPct !== 100) {
+      if (Math.abs(totalPct - 100) > 0.01) {
         addToast('Tổng tỷ lệ chia sẻ hoa hồng phải bằng 100%.', 'error');
         return;
       }

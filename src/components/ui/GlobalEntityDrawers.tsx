@@ -1,4 +1,5 @@
 import React, { lazy, Suspense, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useUIStore } from '../../store/uiStore';
 import { useAuthStore } from '../../store/authStore';
@@ -11,16 +12,17 @@ const ApprovalDetailDrawer = lazy(() => import('../../pages/Approvals').then(mod
 const DepositDetailDrawer = lazy(() => import('../DepositDetailDrawer').then(module => ({ default: module.DepositDetailDrawer })));
 
 export const GlobalEntityDrawers: React.FC = () => {
+  const navigate = useNavigate();
   const {
     customerDrawer, closeCustomerDrawer, openCustomerDrawer,
     taskDrawer, closeTaskDrawer, openTaskDrawer,
     expenseDrawer, closeExpenseDrawer, openExpenseDrawer,
-    approvalDrawer, closeApprovalDrawer, openApprovalDrawer
+    approvalDrawer, closeApprovalDrawer, openApprovalDrawer,
+    depositDrawer, closeDepositDrawer, openDepositDrawer
   } = useUIStore();
   const currentUser = useAuthStore(state => state.user);
   const [fullContact, setFullContact] = useState<any>(null);
   const [fullTask, setFullTask] = useState<any>(null);
-  const [depositDrawer, setDepositDrawer] = useState<{ isOpen: boolean; deposit: any | null }>({ isOpen: false, deposit: null });
 
   // Sync / fetch full contact if only ID is provided
   useEffect(() => {
@@ -71,6 +73,10 @@ export const GlobalEntityDrawers: React.FC = () => {
     const handleOpenCustomer = (e: Event) => {
       const custom = e as CustomEvent;
       if (custom.detail) {
+        // If already on /contacts, let ContactsPage handle its native drawer
+        if (window.location.pathname.startsWith('/contacts')) {
+          return;
+        }
         const c = custom.detail.contact || custom.detail.contactId || custom.detail.id;
         const tab = custom.detail.initialTab || 'info';
         if (c) openCustomerDrawer(c, tab);
@@ -80,6 +86,10 @@ export const GlobalEntityDrawers: React.FC = () => {
     const handleOpenTask = (e: Event) => {
       const custom = e as CustomEvent;
       if (custom.detail) {
+        // If already on /workspace, let SalePortal handle its native drawer
+        if (window.location.pathname.startsWith('/workspace') || window.location.pathname === '/') {
+          return;
+        }
         const t = custom.detail.task || custom.detail.taskId || custom.detail.id;
         if (t) openTaskDrawer(t);
       }
@@ -107,18 +117,19 @@ export const GlobalEntityDrawers: React.FC = () => {
     const handleOpenDeposit = (e: Event) => {
       const custom = e as CustomEvent;
       if (custom.detail) {
+        // If already on /deposits, let DepositsPage handle its native drawer
+        if (window.location.pathname.startsWith('/deposits')) {
+          return;
+        }
         const d = custom.detail.deposit || custom.detail.id || custom.detail.depositId;
         if (d) {
-          const depObj = typeof d === 'object' ? d : { id: Number(d) };
-          setDepositDrawer({ isOpen: true, deposit: depObj });
+          openDepositDrawer(d);
         }
       }
     };
 
     window.addEventListener('open-global-customer', handleOpenCustomer);
-    window.addEventListener('open-customer-drawer', handleOpenCustomer);
     window.addEventListener('open-global-task', handleOpenTask);
-    window.addEventListener('open-task-drawer', handleOpenTask);
     window.addEventListener('open-expense-drawer', handleOpenExpense);
     window.addEventListener('open-global-expense', handleOpenExpense);
     window.addEventListener('open-global-approval', handleOpenApproval);
@@ -145,8 +156,18 @@ export const GlobalEntityDrawers: React.FC = () => {
         openApprovalDrawer({ id: Number(id), type: type === 'workflow' ? 'leave' : type });
       } else if (type === 'company') {
         window.dispatchEvent(new CustomEvent('open-company-drawer', { detail: { id: Number(id) } }));
-      } else if (type === 'deal' || type === 'so' || type === 'deposit') {
-        setDepositDrawer({ isOpen: true, deposit: { id: Number(id) } });
+      } else if (type === 'deal') {
+        if (window.location.pathname.startsWith('/deals')) {
+          window.dispatchEvent(new CustomEvent('open-deal-drawer', { detail: { id: Number(id), dealId: Number(id) } }));
+        } else {
+          navigate(`/deals?open_deal_id=${id}`);
+        }
+      } else if (type === 'so' || type === 'deposit') {
+        if (window.location.pathname.startsWith('/deposits')) {
+          window.dispatchEvent(new CustomEvent('open-deposit-drawer', { detail: { id: Number(id), depositId: Number(id) } }));
+        } else {
+          openDepositDrawer(Number(id));
+        }
       }
     };
 
@@ -155,15 +176,13 @@ export const GlobalEntityDrawers: React.FC = () => {
     return () => {
       document.removeEventListener('click', handleGlobalEntityClick);
       window.removeEventListener('open-global-customer', handleOpenCustomer);
-      window.removeEventListener('open-customer-drawer', handleOpenCustomer);
       window.removeEventListener('open-global-task', handleOpenTask);
-      window.removeEventListener('open-task-drawer', handleOpenTask);
       window.removeEventListener('open-expense-drawer', handleOpenExpense);
       window.removeEventListener('open-global-expense', handleOpenExpense);
       window.removeEventListener('open-global-approval', handleOpenApproval);
       window.removeEventListener('open-deposit-drawer', handleOpenDeposit);
     };
-  }, [openCustomerDrawer, openTaskDrawer, openExpenseDrawer, openApprovalDrawer]);
+  }, [openCustomerDrawer, openTaskDrawer, openExpenseDrawer, openApprovalDrawer, openDepositDrawer, navigate]);
 
   const [usersList, setUsersList] = useState<any[]>([]);
 
@@ -267,10 +286,10 @@ export const GlobalEntityDrawers: React.FC = () => {
         <Suspense fallback={null}>
           <DepositDetailDrawer
             isOpen={depositDrawer.isOpen}
-            onClose={() => setDepositDrawer({ isOpen: false, deposit: null })}
+            onClose={closeDepositDrawer}
             deposit={depositDrawer.deposit}
             onSaveSuccess={() => {
-              setDepositDrawer({ isOpen: false, deposit: null });
+              closeDepositDrawer();
               window.dispatchEvent(new CustomEvent('refresh-deposits'));
             }}
             zIndex={2147483645}

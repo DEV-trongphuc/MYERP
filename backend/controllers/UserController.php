@@ -71,12 +71,17 @@ class UserController {
             ");
             $stmt->execute($params);
             $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            $canViewSensitivePii = in_array(strtolower($auth['role'] ?? ''), ['admin', 'super_admin', 'superadmin', 'director', 'hr'], true);
             foreach ($rows as &$r) {
                 if (isset($r['role']) && $r['role'] === 'sales') {
                     $r['role'] = 'sale';
                 }
                 $r['id'] = (int)$r['id'];
                 $r['is_active'] = 1;
+                // Bảo mật Zero-Trust: Chỉ HR/Admin hoặc chính chủ mới được thấy CCCD, ngân hàng, địa chỉ
+                if (!$canViewSensitivePii && (int)$r['id'] !== (int)$auth['user_id']) {
+                    unset($r['citizen_id'], $r['bank_name'], $r['bank_account'], $r['address'], $r['dob']);
+                }
             }
             respond(200, $rows);
         } catch (Throwable $e) {
@@ -143,6 +148,10 @@ class UserController {
             $stmt->execute([$id,$auth['tenant_id']]); $row=$stmt->fetch();
         }
         if(!$row) respond(404,null,'Không tìm thấy người dùng',false);
+        $canViewSensitivePii = in_array(strtolower($auth['role'] ?? ''), ['admin', 'super_admin', 'superadmin', 'director', 'hr'], true);
+        if (!$canViewSensitivePii && (int)$row['id'] !== (int)$auth['user_id']) {
+            unset($row['citizen_id'], $row['bank_name'], $row['bank_account'], $row['address'], $row['dob']);
+        }
         respond(200,$row);
     }
     public function update(array $auth,int $id): void {

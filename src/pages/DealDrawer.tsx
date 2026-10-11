@@ -15,6 +15,7 @@ import { Avatar } from '../components/ui/Avatar';
 import { numberToText } from '../utils/numberToText';
 import { CustomModal } from '../components/ui/CustomModal';
 import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
+import { pushOverlay } from '../utils/overlayStack';
 
 interface DealDrawerProps {
   isOpen: boolean;
@@ -93,13 +94,17 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
+      const unregister = pushOverlay('deal-drawer', () => {
+        onClose();
+      }, 100);
+      return () => {
+        document.body.style.overflow = '';
+        unregister();
+      };
     } else {
       document.body.style.overflow = '';
     }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [isOpen]);
+  }, [isOpen, onClose]);
 
   const renderFormattedText = (text: string) => {
     if (!text) return '';
@@ -327,11 +332,8 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
       addToast('Đã lưu ghi chú mới', 'success');
       fetchNotes();
     } catch (e: any) {
-      const mockNote = { id: Date.now(), author_name: 'Bạn', body: finalBody, created_at: new Date().toISOString() };
-      setNotes(prev => [mockNote, ...prev]);
-      setNewNote('');
-      removeNoteAttachment();
-      addToast('Đã lưu ghi chú (Local)', 'success');
+      console.error('Lỗi khi lưu ghi chú deal:', e);
+      addToast(e?.response?.data?.message || 'Không thể lưu ghi chú vào máy chủ. Vui lòng thử lại!', 'error');
     } finally {
       setIsSavingNote(false);
     }

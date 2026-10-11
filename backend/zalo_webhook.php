@@ -36,9 +36,9 @@ if (file_exists($logFile) && @filesize($logFile) > 5 * 1024 * 1024) {
 // 2. Lấy cấu hình Secret Token từ DB
 $secretToken = trim(get_system_setting($conn, 'zalo_webhook_secret'));
 
-// 3. Xác thực Secret Token (nếu có cấu hình secretToken và headerSecret không rỗng)
+// 3. Xác thực Secret Token (bắt buộc khớp nếu hệ thống đã cấu hình secretToken)
 if (!empty($secretToken)) {
-    if (!empty($headerSecret) && $headerSecret !== $secretToken) {
+    if (empty($headerSecret) || !hash_equals($secretToken, $headerSecret)) {
         @file_put_contents($logFile, date('[Y-m-d H:i:s]') . " REJECTED 403: HeaderSecret mismatch ('$headerSecret' vs '$secretToken')\n\n", FILE_APPEND | LOCK_EX);
         http_response_code(403);
         echo json_encode(["message" => "Unauthorized"]);

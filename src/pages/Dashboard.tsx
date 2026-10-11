@@ -30,12 +30,14 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 import toast from 'react-hot-toast';
 import { KpiCardSkeleton, Skeleton, ChartSkeleton } from '../components/ui/Skeleton';
+import { getLocalDateStr } from '../utils/dateUtils';
 
 import { Avatar } from '../components/ui/Avatar';
 import { Pagination } from '../components/ui/Pagination';
 import { WarRoomFlightDeck } from '../components/Dashboard/WarRoomFlightDeck';
 import { useAuth } from '../contexts/AuthContext';
-import { getUserJobTitle, getUserDisplayRoleOrTitle } from '../utils/roleUtils';
+import { getUserJobTitle, getUserDisplayRoleOrTitle, isManagement, isExecutive } from '../utils/roleUtils';
+import { SalesLeadPerformanceDeck } from '../components/Dashboard/SalesLeadPerformanceDeck';
 
 const ExpenseQuickViewDrawer = React.lazy(() => import('../components/ExpenseQuickViewDrawer').then(m => ({ default: m.ExpenseQuickViewDrawer })));
 const DepositDetailDrawer = React.lazy(() => import('../components/DepositDetailDrawer').then(m => ({ default: m.DepositDetailDrawer })));
@@ -124,13 +126,14 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
   const ORDER_PAGE_SIZE = 5;
 
   // Subtab and Marketing states
-  const [activeSubTab, setActiveSubTab] = useState<'default' | 'hr' | 'accountant' | 'marketing'>('default');
+  const [activeSubTab, setActiveSubTab] = useState<'default' | 'sales_performance' | 'hr' | 'accountant' | 'marketing'>('default');
   const [mktActiveTab, setMktActiveTab] = useState<'leads' | 'ads'>('leads');
   const [campaignsList, setCampaignsList] = useState<any[]>([]);
   const [mktFilterType, setMktFilterType] = useState<'close_date' | 'lead_date'>('close_date');
   const [seedingLoading, setSeedingLoading] = useState(false);
 
   const currentViewRole = useMemo(() => {
+    if (activeSubTab === 'sales_performance') return 'sales_performance';
     return (user?.role === 'admin' || user?.role === 'director' || user?.role === 'superadmin')
       ? activeSubTab
       : user?.role;
@@ -340,13 +343,12 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       if (settingsJson.success) setSettings(settingsJson.data);
       if (connectionsJson.success) setConnections(connectionsJson.data || []);
     } catch (e: any) {
-      // BUG-04 fix: Bỏ qua lỗi AbortError (do user đổi filter nhanh) - đây KHÔNG phải lỗi thực sự
       if (e?.name !== 'AbortError') {
         console.error('Dashboard fetch error:', e);
       }
-    }
-    setLoading(false);
-      // Wait for real content DOM to paint before dismissing the splash screen (NO SKELETON VISIBLE)
+    } finally {
+      setLoading(false);
+      // Wait for real content DOM to paint before dismissing the splash screen
       requestAnimationFrame(() => {
         setTimeout(() => {
           if (typeof (window as any).hideSplashScreen === 'function') {
@@ -354,7 +356,8 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
           }
         }, 100);
       });
-    };
+    }
+  };
 
   useEffect(() => {
     if (isActive) {
@@ -517,8 +520,8 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       monday.setDate(now.getDate() + diffToMonday);
       const saturday = new Date(monday);
       saturday.setDate(monday.getDate() + 5);
-      const mondayStr = monday.toISOString().substring(0, 10);
-      const saturdayStr = saturday.toISOString().substring(0, 10);
+      const mondayStr = getLocalDateStr(monday);
+      const saturdayStr = getLocalDateStr(saturday);
 
       const parts = parsedMonthStr.split('-');
       const y = parts[0];
@@ -797,8 +800,8 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       sunday.setDate(monday.getDate() + 6);
 
       mode = 'custom';
-      start = monday.toISOString().split('T')[0];
-      end = sunday.toISOString().split('T')[0];
+      start = getLocalDateStr(monday);
+      end = getLocalDateStr(sunday);
     } else if (filter === 'Tuần trước') {
       const now = new Date();
       const currentDay = now.getDay();
@@ -809,8 +812,8 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       prevSunday.setDate(prevMonday.getDate() + 6);
 
       mode = 'custom';
-      start = prevMonday.toISOString().split('T')[0];
-      end = prevSunday.toISOString().split('T')[0];
+      start = getLocalDateStr(prevMonday);
+      end = getLocalDateStr(prevSunday);
     } else if (filter === 'Tuần trước nữa') {
       const now = new Date();
       const currentDay = now.getDay();
@@ -821,8 +824,8 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       prev2Sunday.setDate(prev2Monday.getDate() + 6);
 
       mode = 'custom';
-      start = prev2Monday.toISOString().split('T')[0];
-      end = prev2Sunday.toISOString().split('T')[0];
+      start = getLocalDateStr(prev2Monday);
+      end = getLocalDateStr(prev2Sunday);
     } else {
       const match = filter.match(/^(\d{4}-\d{2}-\d{2})\s*(?:đến|đên|den|to|-)\s*(\d{4}-\d{2}-\d{2})$/i);
       if (match) {
@@ -1321,18 +1324,24 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       return renderMarketingToggle();
     }
 
-    if (!isAdmin) {
+    const isManagerUser = isManagement(user) || isExecutive(user);
+
+    if (!isAdmin && !isManagerUser) {
       return null;
     }
 
-    const TABS = [
+    const TABS = isAdmin ? [
       { key: 'default', label: t('Vận hành') },
+      { key: 'sales_performance', label: t('Hiệu suất Lead') },
       { key: 'hr', label: t('Nhân sự') },
       { key: 'accountant', label: t('Kế toán') },
       { key: 'marketing', label: t('Marketing') }
+    ] : [
+      { key: 'default', label: t('Vận hành') },
+      { key: 'sales_performance', label: t('Hiệu suất Lead') }
     ];
-    const activeTabIndex = TABS.findIndex(t => t.key === activeSubTab);
-    const tabWidth = 85;
+    const activeTabIndex = Math.max(0, TABS.findIndex(t => t.key === activeSubTab));
+    const tabWidth = 98;
     const gap = 2;
 
     return (
@@ -1914,6 +1923,15 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       </div>
     );
   };
+
+  if (currentViewRole === 'sales_performance') {
+    return renderDashboardWrapper(
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', animation: 'slideUp 0.4s ease-out both' }}>
+        {renderSubTabs()}
+        <SalesLeadPerformanceDeck embedInPage="dashboard" />
+      </div>
+    );
+  }
 
   if (currentViewRole === 'hr') {
     const isHrLoading = hrLoading || (hrProfiles.length === 0 && hrLeaves.length === 0);
@@ -3570,31 +3588,11 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                     </tr>
                   ))
                 ) : (
-                  // Default mock campaigns when campaigns table is empty
-                  [
-                    { name: 'Chiến dịch Mùa Hè Vinhomes GP', proj: 'Vinhomes Grand Park', start: '2026-05-01', end: '2026-08-31', status: 'active' },
-                    { name: 'Quảng cáo Grand Marina Căn hộ Hiệu hiệu', proj: 'Grand Marina Saigon', start: '2026-06-15', end: '2026-10-31', status: 'active' },
-                    { name: 'Kênh Tìm Kiếm Metropole Thủ Thiêm', proj: 'The Metropole Thu Thiem', start: '2026-04-10', end: '2026-07-31', status: 'active' }
-                  ].map((camp, idx) => (
-                    <tr key={idx} style={{ borderBottom: '1px solid var(--color-border-light)', height: '40px' }}>
-                      <td style={{ padding: '8px 12px', fontWeight: 700, color: 'var(--color-text)' }}>{camp.name}</td>
-                      <td style={{ padding: '8px 12px', color: 'var(--color-text-light)' }}>{camp.proj}</td>
-                      <td style={{ padding: '8px 12px', color: 'var(--color-text-muted)' }}>{new Date(camp.start).toLocaleDateString()}</td>
-                      <td style={{ padding: '8px 12px', color: 'var(--color-text-muted)' }}>{new Date(camp.end).toLocaleDateString()}</td>
-                      <td style={{ padding: '8px 12px' }}>
-                        <span style={{
-                          padding: '2px 8px',
-                          borderRadius: '12px',
-                          fontSize: '0.75rem',
-                          fontWeight: 700,
-                          background: 'rgba(16, 185, 129, 0.08)',
-                          color: '#10b981'
-                        }}>
-                          {t('Đang chạy')}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
+                  <tr>
+                    <td colSpan={5} style={{ padding: '24px 12px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+                      {t('Chưa có chiến dịch nào được khởi tạo')}
+                    </td>
+                  </tr>
                 )}
               </tbody>
             </table>

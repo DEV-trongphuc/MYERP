@@ -343,7 +343,10 @@ class QuoteController {
             $stmt = $this->db->prepare($sql . " FOR UPDATE");
             $stmt->execute($p);
             $q = $stmt->fetch();
-            if (!$q) throw new Exception('Không tìm thấy báo giá hoặc bạn không có quyền');
+            if (!$q) {
+                if ($this->db->inTransaction()) $this->db->rollBack();
+                respond(404, null, 'Không tìm thấy báo giá hoặc bạn không có quyền', false);
+            }
             if ($q['status'] === 'invoiced') throw new Exception('Báo giá này đã được chuyển thành hóa đơn trước đó');
 
             $itemsStmt = $this->db->prepare("SELECT * FROM quote_items WHERE quote_id=?");
@@ -379,8 +382,8 @@ class QuoteController {
             $this->db->commit();
             respond(200, ['invoice_id' => $invId], 'Đã chuyển báo giá thành hóa đơn thành công');
         } catch (Exception $e) {
-            $this->db->rollBack();
-            respond(500, null, $e->getMessage(), false);
+            if ($this->db->inTransaction()) $this->db->rollBack();
+            respond(400, null, $e->getMessage(), false);
         }
     }
 

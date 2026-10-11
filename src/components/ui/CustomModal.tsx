@@ -1,8 +1,9 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 import styles from './CustomModal.module.css';
+import { pushOverlay, autoFocusFirstInput } from '../../utils/overlayStack';
 
 interface CustomModalProps {
   isOpen: boolean;
@@ -61,22 +62,29 @@ export const CustomModal: React.FC<CustomModalProps> = ({
   disableClose = false,
   preventCloseOnBackdrop = false
 }) => {
-  // Safe body scroll lock with reference count and Escape key handling
+  const modalContentRef = useRef<HTMLDivElement>(null);
+  const reactId = useId();
+  const modalId = useMemo(() => `modal_${reactId.replace(/:/g, '')}`, [reactId]);
+
+  // Safe body scroll lock with reference count and LIFO Escape key handling
   useEffect(() => {
     if (isOpen) {
       lockBodyScroll();
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === 'Escape' && !disableClose) {
+      const resolvedZ = zIndex ? Math.min(zIndex, 2147483647) : 2000000000;
+      const unregister = pushOverlay(modalId, () => {
+        if (!disableClose) {
           onClose();
         }
-      };
-      window.addEventListener('keydown', handleKeyDown);
+      }, resolvedZ);
+
+      autoFocusFirstInput(modalContentRef.current);
+
       return () => {
         unlockBodyScroll();
-        window.removeEventListener('keydown', handleKeyDown);
+        unregister();
       };
     }
-  }, [isOpen, onClose, disableClose]);
+  }, [isOpen, onClose, disableClose, zIndex, modalId]);
 
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -164,6 +172,7 @@ export const CustomModal: React.FC<CustomModalProps> = ({
             />
 
             <div
+              ref={modalContentRef}
               className={modalClass}
               style={{ width: (isMobile && !centeredOnMobile) ? '100vw' : '100%', maxWidth: (isMobile && !centeredOnMobile) ? '100vw' : resolvedWidth }}
             >
@@ -216,6 +225,7 @@ export const CustomModal: React.FC<CustomModalProps> = ({
             />
 
             <motion.div
+              ref={modalContentRef}
               className={modalClass}
               style={{ width: (isMobile && !centeredOnMobile) ? '100vw' : '100%', maxWidth: (isMobile && !centeredOnMobile) ? '100vw' : resolvedWidth }}
               {...motionProps}

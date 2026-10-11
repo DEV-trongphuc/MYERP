@@ -22,6 +22,19 @@ if (file_exists($logFile) && @filesize($logFile) > 5 * 1024 * 1024) {
 }
 @file_put_contents($logFile, date('[Y-m-d H:i:s]') . " PAYLOAD: " . $rawBody . "\n\n", FILE_APPEND | LOCK_EX);
 
+// 2. Xác thực Webhook Secret Token từ Telegram
+$telegramSecret = trim((string)get_system_setting($conn, 'telegram_webhook_secret'));
+$headerSecret = $_SERVER['HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN'] ?? $_SERVER['HTTP_X_TELEGRAM_SECRET'] ?? '';
+
+if (!empty($telegramSecret)) {
+    if (empty($headerSecret) || !hash_equals($telegramSecret, $headerSecret)) {
+        @file_put_contents($logFile, date('[Y-m-d H:i:s]') . " REJECTED 403: Telegram secret mismatch\n\n", FILE_APPEND | LOCK_EX);
+        http_response_code(403);
+        echo json_encode(["message" => "Unauthorized"]);
+        exit;
+    }
+}
+
 $data = json_decode($rawBody, true);
 
 if (!$data || !isset($data['message'])) {

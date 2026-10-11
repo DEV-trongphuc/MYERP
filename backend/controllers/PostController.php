@@ -20,6 +20,7 @@ class PostController {
             if (empty($cols2)) {
                 $this->db->exec("ALTER TABLE `enterprise_posts` ADD COLUMN `excluded_user_ids` TEXT NULL DEFAULT NULL AFTER `target_user_ids`");
             }
+
             $checked = true;
         } catch (\Throwable $e) {}
     }
@@ -185,7 +186,23 @@ class PostController {
                 
                 $post['attachments'] = json_decode($post['attachments_json'] ?? '[]', true) ?: [];
                 $post['tags'] = json_decode($post['tags_json'] ?? '[]', true) ?: [];
-                $post['link_metadata'] = json_decode($post['link_metadata_json'] ?? 'null', true);
+                if (!empty($post['tags'])) {
+                    $post['tags'] = array_values(array_filter($post['tags'], function($t) {
+                        return !preg_match('/^[0-9a-fA-F]{3}$|^[0-9a-fA-F]{6}$|^[0-9a-fA-F]{8}$/', trim($t));
+                    }));
+                }
+                $linkMeta = json_decode($post['link_metadata_json'] ?? 'null', true);
+                if (!empty($linkMeta)) {
+                    $url = $linkMeta['url'] ?? '';
+                    $title = $linkMeta['title'] ?? '';
+                    $desc = $linkMeta['description'] ?? '';
+                    $img = $linkMeta['image'] ?? '';
+                    $host = parse_url($url, PHP_URL_HOST);
+                    $isBogus = (empty($desc) && empty($img) && ($title === $host || empty($title))) || strpos($url, '/uploads/') !== false;
+                    $post['link_metadata'] = $isBogus ? null : $linkMeta;
+                } else {
+                    $post['link_metadata'] = null;
+                }
                 unset($post['attachments_json'], $post['tags_json'], $post['link_metadata_json']);
 
                 // Reactions
@@ -269,15 +286,32 @@ class PostController {
             $visibility = 'global';
         }
 
-        // Extract hashtags
-        preg_match_all('/#(\w+)/u', $content, $matches);
-        $tags = !empty($matches[1]) ? array_values(array_unique($matches[1])) : [];
+        // Extract hashtags (strip HTML and CSS tags/attributes first, avoid matching hex color codes)
+        $cleanTextForTags = strip_tags($content);
+        $cleanTextForTags = html_entity_decode($cleanTextForTags, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        preg_match_all('/(?:^|\s|[.,!?;:])#([a-zA-ZÀ-ỹ0-9_]+)/u', $cleanTextForTags, $matches);
+        $tags = [];
+        if (!empty($matches[1])) {
+            foreach ($matches[1] as $rawTag) {
+                $trimmedTag = trim($rawTag);
+                if ($trimmedTag !== '' && !preg_match('/^[0-9a-fA-F]{3}$|^[0-9a-fA-F]{6}$|^[0-9a-fA-F]{8}$/', $trimmedTag)) {
+                    $tags[] = $trimmedTag;
+                }
+            }
+            $tags = array_values(array_unique($tags));
+        }
 
-        // Scrape Link Preview if any URL in content
+        // Scrape Link Preview only for real external text links (not internal uploads, not media files, not URLs inside HTML attributes like <img src="...">)
         $linkMetadata = null;
-        if (preg_match('@https?://[^\s<>]+@i', $content, $urlMatches)) {
-            $targetUrl = $urlMatches[0];
-            $linkMetadata = $this->scrapeUrlMetadata($targetUrl);
+        $textOnlyContent = strip_tags($content);
+        if (preg_match('@https?://[^\s<>"\']+@i', $textOnlyContent, $urlMatches)) {
+            $targetUrl = trim($urlMatches[0], ".,!?;:()[]{}'\"");
+            $isMediaFile = (bool)preg_match('/\.(png|jpg|jpeg|gif|webp|svg|mp4|webm|mov|ogg|mp3|pdf|doc|docx|xls|xlsx|zip)(\?.*)?$/i', $targetUrl);
+            $isInternalUpload = strpos($targetUrl, '/uploads/') !== false || strpos($targetUrl, '/storage/') !== false;
+            
+            if (!$isMediaFile && !$isInternalUpload) {
+                $linkMetadata = $this->scrapeUrlMetadata($targetUrl);
+            }
         }
         $teamId = isset($b['team_id']) ? (int)$b['team_id'] : null;
         if ($visibility !== 'team') {
@@ -502,7 +536,23 @@ class PostController {
         // Hydrate single post
         $post['attachments'] = json_decode($post['attachments_json'] ?? '[]', true) ?: [];
         $post['tags'] = json_decode($post['tags_json'] ?? '[]', true) ?: [];
-        $post['link_metadata'] = json_decode($post['link_metadata_json'] ?? 'null', true);
+        if (!empty($post['tags'])) {
+            $post['tags'] = array_values(array_filter($post['tags'], function($t) {
+                return !preg_match('/^[0-9a-fA-F]{3}$|^[0-9a-fA-F]{6}$|^[0-9a-fA-F]{8}$/', trim($t));
+            }));
+        }
+        $linkMeta = json_decode($post['link_metadata_json'] ?? 'null', true);
+        if (!empty($linkMeta)) {
+            $url = $linkMeta['url'] ?? '';
+            $title = $linkMeta['title'] ?? '';
+            $desc = $linkMeta['description'] ?? '';
+            $img = $linkMeta['image'] ?? '';
+            $host = parse_url($url, PHP_URL_HOST);
+            $isBogus = (empty($desc) && empty($img) && ($title === $host || empty($title))) || strpos($url, '/uploads/') !== false;
+            $post['link_metadata'] = $isBogus ? null : $linkMeta;
+        } else {
+            $post['link_metadata'] = null;
+        }
         unset($post['attachments_json'], $post['tags_json'], $post['link_metadata_json']);
 
         // Hydrate target and excluded user entities
@@ -669,7 +719,7 @@ class PostController {
             FROM enterprise_comments c
             JOIN users u ON c.user_id = u.id
             WHERE c.post_id = ? AND c.tenant_id = ? AND c.deleted_at IS NULL
-            ORDER BY c.created_at ASC
+            ORDER BY c.created_at DESC
         ");
         $stmt->execute([$id, $tenantId]);
         $comments = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -693,11 +743,17 @@ class PostController {
             }
         }
 
-        // Map child comments recursively
+        // Map child comments recursively (keep nested replies in chronological ASC order)
         $buildTree = function($commentList) use (&$buildTree, $byParent) {
             foreach ($commentList as &$c) {
                 $cid = (int)$c['id'];
-                $c['replies'] = isset($byParent[$cid]) ? $buildTree($byParent[$cid]) : [];
+                if (isset($byParent[$cid])) {
+                    $childReplies = $byParent[$cid];
+                    usort($childReplies, fn($a, $b) => strcmp($a['created_at'], $b['created_at']));
+                    $c['replies'] = $buildTree($childReplies);
+                } else {
+                    $c['replies'] = [];
+                }
             }
             return $commentList;
         };
@@ -717,7 +773,10 @@ class PostController {
 
         $rawContent = isset($b['content']) ? trim($b['content']) : '';
         $content = str_ireplace(['&amp;nbsp;', '&nbsp;', "\xc2\xa0"], ' ', $rawContent);
-        if (empty($content)) {
+        $attachments = isset($b['attachments']) && is_array($b['attachments']) ? $b['attachments'] : [];
+        $hasMedia = (bool)preg_match('/<img|\/stickers\/|data-file-url/i', $content) || !empty($attachments);
+        $plainText = trim(strip_tags($content));
+        if (empty($plainText) && !$hasMedia) {
             respond(400, null, 'Nội dung bình luận không được bỏ trống', false);
         }
 
@@ -904,12 +963,7 @@ class PostController {
         curl_close($ch);
 
         if (!$html || $httpCode !== 200) {
-            return [
-                'url' => $url,
-                'title' => parse_url($url, PHP_URL_HOST),
-                'description' => null,
-                'image' => null
-            ];
+            return null;
         }
 
         $meta = [
@@ -944,6 +998,11 @@ class PostController {
         // Clean values
         $meta['title'] = mb_strimwidth($meta['title'] ?: parse_url($url, PHP_URL_HOST), 0, 150, '...');
         $meta['description'] = mb_strimwidth($meta['description'], 0, 250, '...');
+
+        // If neither title nor description nor image found, don't create empty card
+        if (empty($meta['description']) && empty($meta['image']) && ($meta['title'] === parse_url($url, PHP_URL_HOST) || empty($meta['title']))) {
+            return null;
+        }
 
         return $meta;
     }

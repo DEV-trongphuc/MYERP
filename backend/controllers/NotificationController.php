@@ -24,12 +24,6 @@ class NotificationController {
         // Tự động gộp các thông báo tải tài liệu trùng lặp / liên tiếp cho cùng đối tượng trong 24h
         $this->consolidateUploadNotifications($userId);
 
-        // Dọn dẹp các ký tự html entities cũ như &nbsp; trong database
-        try {
-            $this->db->exec("UPDATE notifications SET body = REPLACE(body, '&nbsp;', ' ') WHERE body LIKE '%&nbsp;%'");
-            $this->db->exec("UPDATE notifications SET title = REPLACE(title, '&nbsp;', ' ') WHERE title LIKE '%&nbsp;%'");
-        } catch (\Throwable $cleanEx) {}
-
         $stmt = $this->db->prepare("SELECT * FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 100");
         $stmt->execute([$auth['user_id']]);
         $items = $stmt->fetchAll(PDO::FETCH_ASSOC);

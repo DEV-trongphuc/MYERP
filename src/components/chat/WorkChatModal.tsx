@@ -34,6 +34,7 @@ import type { ChatMessage, ChatConversation, ErpEntitySearchResult, MessageType,
 import api from '../../api/axios';
 import toast from 'react-hot-toast';
 import { isExecutive } from '../../utils/roleUtils';
+import { pushOverlay } from '../../utils/overlayStack';
 
 import { getFileFormatConfig, formatFileSize, extractFirstUrl } from '../../utils/chatFileUtils';
 import { compressImageFile } from '../../utils/imageCompressor';
@@ -287,7 +288,7 @@ const ChatImageBubble: React.FC<{
         )}
       </div>
       {content && content !== fileName && (
-        <div style={{ marginTop: '4px', fontSize: '0.85rem' }}>{content}</div>
+        <div style={{ marginTop: '4px', fontSize: '0.85rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{content}</div>
       )}
     </div>
   );
@@ -303,10 +304,15 @@ const renderFormattedText = (text: string, isMine?: boolean) => {
   const cached = formattedTextCache.get(cacheKey);
   if (cached) return cached;
 
-  const parts = text.split(/(@[\w\s\u00C0-\u1EF9]+(?=\s|$)|https?:\/\/[^\s()<>]+)/g);
+  // Chuẩn hóa ký tự xuống dòng CRLF \r\n hoặc \r về LF \n tiêu chuẩn
+  const cleanText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  // Mention pattern: dùng khoảng trắng ngang [^\S\r\n] để mention KHÔNG BAO GIỜ ăn lan qua dấu xuống dòng \n!
+  const parts = cleanText.split(/(@[\w\u00C0-\u1EF9]+(?:[^\S\r\n]+[\w\u00C0-\u1EF9]+){0,4}(?=[^\S\r\n]|$|\n)|https?:\/\/[^\s()<>]+)/g);
   const result = (
-    <span>
+    <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
       {parts.map((part, idx) => {
+        if (!part) return null;
         if (part.startsWith('http://') || part.startsWith('https://')) {
           return (
             <a
@@ -623,6 +629,36 @@ export const WorkChatModal: React.FC = () => {
     }, 250);
     return () => clearTimeout(timer);
   }, [inChatSearchQuery]);
+
+  // LIFO Overlay Stack registration for WorkChatModal (priority 1000)
+  useEffect(() => {
+    if (isOpen) {
+      const unregister = pushOverlay('work-chat-modal', () => {
+        closeChat();
+      }, 1000);
+      return () => unregister();
+    }
+  }, [isOpen, closeChat]);
+
+  // LIFO Overlay Stack registration for Image Preview Lightbox (priority 2500)
+  useEffect(() => {
+    if (selectedPreviewImage) {
+      const unregister = pushOverlay('chat-image-preview', () => {
+        setSelectedPreviewImage(null);
+      }, 2500);
+      return () => unregister();
+    }
+  }, [selectedPreviewImage]);
+
+  // LIFO Overlay Stack registration for Floating Context Menu (priority 3000)
+  useEffect(() => {
+    if (floatingMenu) {
+      const unregister = pushOverlay('chat-floating-menu', () => {
+        closeFloatingMenu();
+      }, 3000);
+      return () => unregister();
+    }
+  }, [floatingMenu, closeFloatingMenu]);
 
   // Drag & drop files onto message area
   const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -1115,9 +1151,9 @@ export const WorkChatModal: React.FC = () => {
 
     if (c.type === 'group' && c.last_msg_sender_name) {
       const shortName = c.last_msg_sender_name.trim().split(' ').pop() || c.last_msg_sender_name;
-      return `${shortName}: ${text}`;
+      return `${shortName}: ${text.replace(/[\r\n]+/g, ' ').trim()}`;
     }
-    return text;
+    return text.replace(/[\r\n]+/g, ' ').trim();
   };
 
   // Memoized filtered conversations
@@ -3350,6 +3386,7 @@ export const WorkChatModal: React.FC = () => {
                                     ? 'none'
                                     : '0 1px 3px rgba(0, 0, 0, 0.05)',
                                   wordBreak: 'break-word',
+                                  whiteSpace: 'pre-wrap',
                                   fontSize: '0.875rem'
                                 }}>
                                   {/* STICKER */}
@@ -4161,7 +4198,7 @@ export const WorkChatModal: React.FC = () => {
                                   ) : (() => {
                                     const extractedUrl = extractFirstUrl(msg.content);
                                     return (
-                                      <div style={{ wordBreak: 'break-word', lineHeight: '1.45' }}>
+                                      <div style={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap', lineHeight: '1.45' }}>
                                         <div>{renderFormattedText(msg.content, isMine)}</div>
                                         {extractedUrl && <LinkPreviewCard url={extractedUrl} isMine={isMine} />}
                                       </div>

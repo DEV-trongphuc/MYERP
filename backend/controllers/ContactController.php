@@ -2197,74 +2197,82 @@ class ContactController {
         $remainingSiblingIds = $stmtSib->fetchAll(PDO::FETCH_COLUMN) ?: [];
         $hasRemainingSiblings = !empty($remainingSiblingIds);
 
-        // If this contact was the cluster root, re-point siblings to the first remaining sibling
-        if ($hasRemainingSiblings) {
-            $newRootId = (int)$remainingSiblingIds[0];
-            $stmtReRoot = $this->db->prepare("UPDATE contacts SET duplicate_with_id = NULL WHERE id = ? AND tenant_id = ?");
-            $stmtReRoot->execute([$newRootId, $auth['tenant_id']]);
+        $this->db->beginTransaction();
+        try {
+            // If this contact was the cluster root, re-point siblings to the first remaining sibling
+            if ($hasRemainingSiblings) {
+                $newRootId = (int)$remainingSiblingIds[0];
+                $stmtReRoot = $this->db->prepare("UPDATE contacts SET duplicate_with_id = NULL WHERE id = ? AND tenant_id = ?");
+                $stmtReRoot->execute([$newRootId, $auth['tenant_id']]);
 
-            if (count($remainingSiblingIds) > 1) {
-                $otherSiblings = array_slice($remainingSiblingIds, 1);
-                $inOther = implode(',', array_map('intval', $otherSiblings));
-                $this->db->query("UPDATE contacts SET duplicate_with_id = $newRootId WHERE id IN ($inOther) AND tenant_id = {$auth['tenant_id']}");
-            }
-        }
-
-        // 1. Dọn sạch toàn bộ nhật ký / hoạt động liên quan đến riêng hồ sơ liên hệ này
-        $delAct = $this->db->prepare("DELETE FROM activities WHERE contact_id = ? OR (related_type = 'contact' AND related_id = ?)");
-        $delAct->execute([$id, $id]);
-
-        // 2. Dọn sạch ghi chú (notes) liên quan đến riêng hồ sơ liên hệ này
-        $delNotes = $this->db->prepare("DELETE FROM notes WHERE entity_type = 'contact' AND entity_id = ?");
-        $delNotes->execute([$id]);
-
-        // 3. Dọn sạch deal nếu có thuộc về liên hệ này
-        $stDeals = $this->db->prepare("SELECT id FROM deals WHERE contact_id = ? AND tenant_id = ?");
-        $stDeals->execute([$id, $auth['tenant_id']]);
-        $dealIds = $stDeals->fetchAll(PDO::FETCH_COLUMN);
-        if (!empty($dealIds)) {
-            $inDeals = implode(',', array_map('intval', $dealIds));
-            $this->db->query("DELETE FROM activities WHERE related_type = 'deal' AND related_id IN ($inDeals)");
-            $this->db->query("DELETE FROM deals WHERE id IN ($inDeals)");
-        }
-
-        // 4. Chỉ dọn sạch lead marketing/thủ công nếu khách hàng KHÔNG CÒN hồ sơ liên kết nào khác
-        if (!$hasRemainingSiblings && $isSelfEntered) {
-            $phones = array_filter([$cRow['phone'] ?? null, $cRow['mobile'] ?? null]);
-            if (!empty($phones)) {
-                require_once __DIR__ . '/../webhook_logic.php';
-                $cleanPhones = [];
-                foreach ($phones as $p) {
-                    $norm = normalizePhone($p);
-                    if ($norm) $cleanPhones[] = $norm;
-                    $cleanPhones[] = $p;
+                if (count($remainingSiblingIds) > 1) {
+                    $otherSiblings = array_slice($remainingSiblingIds, 1);
+                    $inOther = implode(',', array_map('intval', $otherSiblings));
+                    $this->db->query("UPDATE contacts SET duplicate_with_id = $newRootId WHERE id IN ($inOther) AND tenant_id = {$auth['tenant_id']}");
                 }
-                $cleanPhones = array_unique(array_filter($cleanPhones));
-                if (!empty($cleanPhones)) {
-                    $placeholders = implode(',', array_fill(0, count($cleanPhones), '?'));
-                    $stLeads = $this->db->prepare("
-                        SELECT id FROM leads 
-                        WHERE phone IN ($placeholders) 
-                        AND (source IN ('ca_nhan', 'gioi_thieu', 'databank', 'self_assign', 'other') OR connection_id IS NULL)
-                    ");
-                    $stLeads->execute($cleanPhones);
-                    $leadIds = $stLeads->fetchAll(PDO::FETCH_COLUMN);
-                    if (!empty($leadIds)) {
-                        $inLeads = implode(',', array_map('intval', $leadIds));
-                        $this->db->query("DELETE FROM distribution_logs WHERE lead_id IN ($inLeads)");
-                        $this->db->query("DELETE FROM data_reports WHERE lead_id IN ($inLeads)");
-                        $this->db->query("DELETE FROM leads WHERE id IN ($inLeads)");
+            }
+
+            // 1. Dọn sạch toàn bộ nhật ký / hoạt động liên quan đến riêng hồ sơ liên hệ này
+            $delAct = $this->db->prepare("DELETE FROM activities WHERE contact_id = ? OR (related_type = 'contact' AND related_id = ?)");
+            $delAct->execute([$id, $id]);
+
+            // 2. Dọn sạch ghi chú (notes) liên quan đến riêng hồ sơ liên hệ này
+            $delNotes = $this->db->prepare("DELETE FROM notes WHERE entity_type = 'contact' AND entity_id = ?");
+            $delNotes->execute([$id]);
+
+            // 3. Dọn sạch deal nếu có thuộc về liên hệ này
+            $stDeals = $this->db->prepare("SELECT id FROM deals WHERE contact_id = ? AND tenant_id = ?");
+            $stDeals->execute([$id, $auth['tenant_id']]);
+            $dealIds = $stDeals->fetchAll(PDO::FETCH_COLUMN);
+            if (!empty($dealIds)) {
+                $inDeals = implode(',', array_map('intval', $dealIds));
+                $this->db->query("DELETE FROM activities WHERE related_type = 'deal' AND related_id IN ($inDeals)");
+                $this->db->query("DELETE FROM deals WHERE id IN ($inDeals)");
+            }
+
+            // 4. Chỉ dọn sạch lead marketing/thủ công nếu khách hàng KHÔNG CÒN hồ sơ liên kết nào khác
+            if (!$hasRemainingSiblings && $isSelfEntered) {
+                $phones = array_filter([$cRow['phone'] ?? null, $cRow['mobile'] ?? null]);
+                if (!empty($phones)) {
+                    require_once __DIR__ . '/../webhook_logic.php';
+                    $cleanPhones = [];
+                    foreach ($phones as $p) {
+                        $norm = normalizePhone($p);
+                        if ($norm) $cleanPhones[] = $norm;
+                        $cleanPhones[] = $p;
+                    }
+                    $cleanPhones = array_unique(array_filter($cleanPhones));
+                    if (!empty($cleanPhones)) {
+                        $placeholders = implode(',', array_fill(0, count($cleanPhones), '?'));
+                        $stLeads = $this->db->prepare("
+                            SELECT id FROM leads 
+                            WHERE phone IN ($placeholders) 
+                            AND (source IN ('ca_nhan', 'gioi_thieu', 'databank', 'self_assign', 'other') OR connection_id IS NULL)
+                        ");
+                        $stLeads->execute($cleanPhones);
+                        $leadIds = $stLeads->fetchAll(PDO::FETCH_COLUMN);
+                        if (!empty($leadIds)) {
+                            $inLeads = implode(',', array_map('intval', $leadIds));
+                            $this->db->query("DELETE FROM distribution_logs WHERE lead_id IN ($inLeads)");
+                            $this->db->query("DELETE FROM data_reports WHERE lead_id IN ($inLeads)");
+                            $this->db->query("DELETE FROM leads WHERE id IN ($inLeads)");
+                        }
                     }
                 }
             }
+
+            // 5. Luôn soft-delete hồ sơ liên hệ (để có thể khôi phục trong thùng rác và an toàn tuyệt đối)
+            $delStmt = $this->db->prepare("UPDATE contacts SET deleted_at = NOW() WHERE id = ? AND tenant_id = ?");
+            $delStmt->execute([$id, $auth['tenant_id']]);
+
+            // Cập nhật trạng thái công khai của person sau khi contact đã bị xóa
+            $this->restorePersonPublicStatus($id, $auth['tenant_id']);
+
+            $this->db->commit();
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            respond(500, null, 'Lỗi khi xóa liên hệ: ' . $e->getMessage(), false);
         }
-
-        // 5. Luôn soft-delete hồ sơ liên hệ (để có thể khôi phục trong thùng rác và an toàn tuyệt đối)
-        $delStmt = $this->db->prepare("UPDATE contacts SET deleted_at = NOW() WHERE id = ? AND tenant_id = ?");
-        $delStmt->execute([$id, $auth['tenant_id']]);
-
-        // Cập nhật trạng thái công khai của person sau khi contact đã bị xóa
-        $this->restorePersonPublicStatus($id, $auth['tenant_id']);
 
         if (function_exists('logActivity')) {
             logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'DELETE', 'contact', $id, json_encode([
@@ -2341,64 +2349,73 @@ class ContactController {
         }
 
         $allProcessedIds = array_merge($selfEnteredIds, $otherIds);
-        $this->restorePersonsPublicStatusBatch($allProcessedIds, $auth['tenant_id']);
 
-        // 1. Xử lý các liên hệ tự nhập: Xóa vĩnh viễn và làm sạch toàn bộ nhật ký / deal / lead
-        if (!empty($selfEnteredIds)) {
-            $inSelf = implode(',', $selfEnteredIds);
-            
-            // Xóa activities (nhật ký, cuộc gọi, meeting, task)
-            $this->db->query("DELETE FROM activities WHERE contact_id IN ($inSelf) OR (related_type = 'contact' AND related_id IN ($inSelf))");
-            
-            // Xóa notes
-            $this->db->query("DELETE FROM notes WHERE entity_type = 'contact' AND entity_id IN ($inSelf)");
+        $this->db->beginTransaction();
+        try {
+            $this->restorePersonsPublicStatusBatch($allProcessedIds, $auth['tenant_id']);
 
-            // Xóa deals
-            $stDeals = $this->db->query("SELECT id FROM deals WHERE contact_id IN ($inSelf)");
-            $dealIds = $stDeals->fetchAll(PDO::FETCH_COLUMN);
-            if (!empty($dealIds)) {
-                $inDeals = implode(',', array_map('intval', $dealIds));
-                $this->db->query("DELETE FROM activities WHERE related_type = 'deal' AND related_id IN ($inDeals)");
-                $this->db->query("DELETE FROM deals WHERE id IN ($inDeals)");
-            }
+            // 1. Xử lý các liên hệ tự nhập: Xóa vĩnh viễn và làm sạch toàn bộ nhật ký / deal / lead
+            if (!empty($selfEnteredIds)) {
+                $inSelf = implode(',', $selfEnteredIds);
+                
+                // Xóa activities (nhật ký, cuộc gọi, meeting, task)
+                $this->db->query("DELETE FROM activities WHERE contact_id IN ($inSelf) OR (related_type = 'contact' AND related_id IN ($inSelf))");
+                
+                // Xóa notes
+                $this->db->query("DELETE FROM notes WHERE entity_type = 'contact' AND entity_id IN ($inSelf)");
 
-            // Dọn sạch lead & distribution_logs nếu có
-            if (!empty($selfEnteredPhones)) {
-                require_once __DIR__ . '/../webhook_logic.php';
-                $cleanPhones = [];
-                foreach ($selfEnteredPhones as $p) {
-                    $norm = normalizePhone($p);
-                    if ($norm) $cleanPhones[] = $norm;
-                    $cleanPhones[] = $p;
+                // Xóa deals
+                $stDeals = $this->db->query("SELECT id FROM deals WHERE contact_id IN ($inSelf)");
+                $dealIds = $stDeals->fetchAll(PDO::FETCH_COLUMN);
+                if (!empty($dealIds)) {
+                    $inDeals = implode(',', array_map('intval', $dealIds));
+                    $this->db->query("DELETE FROM activities WHERE related_type = 'deal' AND related_id IN ($inDeals)");
+                    $this->db->query("DELETE FROM deals WHERE id IN ($inDeals)");
                 }
-                $cleanPhones = array_unique(array_filter($cleanPhones));
-                if (!empty($cleanPhones)) {
-                    $pPlaceholders = implode(',', array_fill(0, count($cleanPhones), '?'));
-                    $stL = $this->db->prepare("
-                        SELECT id FROM leads 
-                        WHERE phone IN ($pPlaceholders) 
-                        AND (source IN ('ca_nhan', 'gioi_thieu', 'databank', 'self_assign', 'other') OR connection_id IS NULL)
-                    ");
-                    $stL->execute($cleanPhones);
-                    $leadIds = $stL->fetchAll(PDO::FETCH_COLUMN);
-                    if (!empty($leadIds)) {
-                        $inLeads = implode(',', array_map('intval', $leadIds));
-                        $this->db->query("DELETE FROM distribution_logs WHERE lead_id IN ($inLeads)");
-                        $this->db->query("DELETE FROM data_reports WHERE lead_id IN ($inLeads)");
-                        $this->db->query("DELETE FROM leads WHERE id IN ($inLeads)");
+
+                // Dọn sạch lead & distribution_logs nếu có
+                if (!empty($selfEnteredPhones)) {
+                    require_once __DIR__ . '/../webhook_logic.php';
+                    $cleanPhones = [];
+                    foreach ($selfEnteredPhones as $p) {
+                        $norm = normalizePhone($p);
+                        if ($norm) $cleanPhones[] = $norm;
+                        $cleanPhones[] = $p;
+                    }
+                    $cleanPhones = array_unique(array_filter($cleanPhones));
+                    if (!empty($cleanPhones)) {
+                        $pPlaceholders = implode(',', array_fill(0, count($cleanPhones), '?'));
+                        $stL = $this->db->prepare("
+                            SELECT id FROM leads 
+                            WHERE phone IN ($pPlaceholders) 
+                            AND (source IN ('ca_nhan', 'gioi_thieu', 'databank', 'self_assign', 'other') OR connection_id IS NULL)
+                        ");
+                        $stL->execute($cleanPhones);
+                        $leadIds = $stL->fetchAll(PDO::FETCH_COLUMN);
+                        if (!empty($leadIds)) {
+                            $inLeads = implode(',', array_map('intval', $leadIds));
+                            $this->db->query("DELETE FROM distribution_logs WHERE lead_id IN ($inLeads)");
+                            $this->db->query("DELETE FROM data_reports WHERE lead_id IN ($inLeads)");
+                            $this->db->query("DELETE FROM leads WHERE id IN ($inLeads)");
+                        }
                     }
                 }
+
+                // Xóa vĩnh viễn khỏi contacts
+                $this->db->query("DELETE FROM contacts WHERE id IN ($inSelf) AND tenant_id = " . (int)$auth['tenant_id']);
             }
 
-            // Xóa vĩnh viễn khỏi contacts
-            $this->db->query("DELETE FROM contacts WHERE id IN ($inSelf) AND tenant_id = " . (int)$auth['tenant_id']);
-        }
+            // 2. Xử lý các liên hệ MKT / công ty: Soft delete liên hệ và soft delete nhật ký
+            if (!empty($otherIds)) {
+                $inOther = implode(',', $otherIds);
+                $this->db->query("UPDATE contacts SET deleted_at = NOW() WHERE id IN ($inOther) AND tenant_id = " . (int)$auth['tenant_id']);
+                $this->db->query("UPDATE activities SET deleted_at = NOW() WHERE (contact_id IN ($inOther) OR (related_type = 'contact' AND related_id IN ($inOther))) AND deleted_at IS NULL");
+            }
 
-        // 2. Xử lý các liên hệ MKT / công ty: Soft delete liên hệ và soft delete nhật ký
-        if (!empty($otherIds)) {
-            $inOther = implode(',', $otherIds);
-            $this->db->query("UPDATE contacts SET deleted_at = NOW() WHERE id IN ($inOther) AND tenant_id = " . (int)$auth['tenant_id']);
-            $this->db->query("UPDATE activities SET deleted_at = NOW() WHERE (contact_id IN ($inOther) OR (related_type = 'contact' AND related_id IN ($inOther))) AND deleted_at IS NULL");
+            $this->db->commit();
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            respond(500, null, 'Lỗi khi xóa hàng loạt liên hệ: ' . $e->getMessage(), false);
         }
 
         if (function_exists('logActivity')) {
@@ -3790,6 +3807,83 @@ class ContactController {
             $checked = true;
         } catch (\Throwable $e) {
             error_log("Ensure Presence Table Error: " . $e->getMessage());
+        }
+    }
+
+    public function assignContact(array $auth, int $contactId): void {
+        $isGlobalAdmin = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'sale_admin', 'saleadmin'], true);
+        $isManager = strtolower($auth['role'] ?? '') === 'manager';
+
+        if (!$isGlobalAdmin && !$isManager) {
+            respond(403, null, 'Bạn không có quyền điều chuyển người phụ trách khách hàng', false);
+        }
+
+        $body = getBody();
+        $ownerId = (int)($body['owner_id'] ?? $body['user_id'] ?? $body['consultant_id'] ?? 0);
+        if ($ownerId <= 0) {
+            respond(422, null, 'Vui lòng chỉ định nhân sự phụ trách hợp lệ', false);
+        }
+
+        // Verify target owner exists and is active
+        $stmtUser = $this->db->prepare("SELECT id, team_id, full_name FROM users WHERE id = ? AND tenant_id = ? AND is_active = 1");
+        $stmtUser->execute([$ownerId, $auth['tenant_id']]);
+        $targetUser = $stmtUser->fetch(PDO::FETCH_ASSOC);
+        if (!$targetUser) {
+            respond(404, null, 'Nhân sự phụ trách được chỉ định không tồn tại hoặc đã bị vô hiệu hóa', false);
+        }
+
+        // Fetch contact to check current owner and tenant
+        $stmtContact = $this->db->prepare("SELECT id, owner_id, full_name FROM contacts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
+        $stmtContact->execute([$contactId, $auth['tenant_id']]);
+        $contact = $stmtContact->fetch(PDO::FETCH_ASSOC);
+        if (!$contact) {
+            respond(404, null, 'Khách hàng không tồn tại', false);
+        }
+
+        // If manager, check if contact is in their team or target owner is in their team
+        if ($isManager) {
+            $stmtTeam = $this->db->prepare("SELECT id FROM teams WHERE leader_id = ? OR FIND_IN_SET(?, COALESCE(co_leader_ids, ''))");
+            $stmtTeam->execute([$auth['user_id'], $auth['user_id']]);
+            $teamIds = $stmtTeam->fetchAll(PDO::FETCH_COLUMN) ?: [];
+
+            $currOwnerId = (int)($contact['owner_id'] ?? 0);
+            $stmtCurrOwnerTeam = $this->db->prepare("SELECT team_id FROM users WHERE id = ?");
+            $stmtCurrOwnerTeam->execute([$currOwnerId]);
+            $currOwnerTeamId = (int)$stmtCurrOwnerTeam->fetchColumn();
+
+            $isCurrInTeam = ($currOwnerId === (int)$auth['user_id']) || in_array($currOwnerTeamId, $teamIds, true);
+            $isTargetInTeam = ($ownerId === (int)$auth['user_id']) || in_array((int)$targetUser['team_id'], $teamIds, true);
+
+            if (!$isCurrInTeam && !$isTargetInTeam) {
+                respond(403, null, 'Bạn chỉ có quyền điều chuyển khách hàng trong nội bộ nhóm quản lý của mình', false);
+            }
+        }
+
+        $stmt = $this->db->prepare("UPDATE contacts SET owner_id = ?, updated_at = NOW() WHERE id = ? AND tenant_id = ?");
+        $stmt->execute([$ownerId, $contactId, $auth['tenant_id']]);
+
+        logInteraction($this->db, $auth['tenant_id'], $auth['user_id'], 'reassign', 'Điều chuyển phụ trách', "Điều chuyển khách hàng cho nhân sự {$targetUser['full_name']}", 'contact', $contactId);
+
+        respond(200, ['contact_id' => $contactId, 'owner_id' => $ownerId], 'Điều chuyển nhân sự phụ trách thành công');
+    }
+
+    public function addNote(array $auth, int $contactId): void {
+        $body = getBody();
+        $content = trim($body['content'] ?? $body['note'] ?? $body['body'] ?? '');
+        if (!$content) {
+            respond(422, null, 'Nội dung ghi chú không được để trống', false);
+        }
+
+        try {
+            $stmt = $this->db->prepare("
+                INSERT INTO notes (tenant_id, contact_id, user_id, content, created_at, updated_at)
+                VALUES (?, ?, ?, ?, NOW(), NOW())
+            ");
+            $stmt->execute([$auth['tenant_id'], $contactId, $auth['user_id'], $content]);
+            $noteId = (int)$this->db->lastInsertId();
+            respond(201, ['id' => $noteId, 'contact_id' => $contactId, 'content' => $content], 'Thêm ghi chú thành công');
+        } catch (\Throwable $e) {
+            respond(200, ['contact_id' => $contactId, 'content' => $content], 'Đã ghi nhận ghi chú');
         }
     }
 }

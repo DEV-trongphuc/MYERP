@@ -1039,4 +1039,172 @@ class ProjectController {
 
         respond(200, null, 'Xóa bình luận thành công');
     }
+
+    public function listAllTasks(array $auth): void {
+        $tid = $auth['tenant_id'];
+        $stmt = $this->db->prepare("
+            SELECT a.id, a.subject as title, a.body as description, a.status, a.priority, 
+                   a.due_date, a.user_id as assignee_id, a.created_by, a.created_at, a.updated_at,
+                   p.name as project_name, u.full_name as assignee_name, u.avatar_url as assignee_avatar
+            FROM activities a
+            LEFT JOIN projects p ON (a.related_type = 'project' AND a.related_id = p.id)
+            LEFT JOIN users u ON a.user_id = u.id
+            WHERE (a.tenant_id = ? OR a.tenant_id IS NULL) AND a.type = 'task' AND a.deleted_at IS NULL
+            ORDER BY a.id DESC
+            LIMIT 100
+        ");
+        $stmt->execute([$tid]);
+        $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        respond(200, $tasks, 'Lấy danh sách công việc thành công');
+    }
+
+    public function createStandaloneTask(array $auth): void {
+        $tid = $auth['tenant_id'];
+        $b = getBody();
+        $title = trim($b['title'] ?? $b['subject'] ?? 'Công việc mới');
+        $desc = trim($b['description'] ?? $b['body'] ?? '');
+        $status = in_array($b['status'] ?? '', ['planned', 'done', 'cancelled']) ? $b['status'] : 'planned';
+        $priority = in_array($b['priority'] ?? '', ['low', 'medium', 'high']) ? $b['priority'] : 'medium';
+        $dueDate = !empty($b['due_date']) ? $b['due_date'] : null;
+
+        $assigneeId = !empty($b['assignee_id']) ? (int)$b['assignee_id'] : (!empty($b['user_id']) ? (int)$b['user_id'] : (int)($auth['user_id'] ?? 0));
+        if ($assigneeId > 0) {
+            $chk = $this->db->prepare("SELECT id FROM users WHERE id = ? LIMIT 1");
+            $chk->execute([$assigneeId]);
+            if (!$chk->fetchColumn()) {
+                $assigneeId = (int)$this->db->query("SELECT id FROM users LIMIT 1")->fetchColumn();
+            }
+        } else {
+            $assigneeId = (int)$this->db->query("SELECT id FROM users LIMIT 1")->fetchColumn();
+        }
+
+        $creatorId = (int)($auth['user_id'] ?? 0);
+        if ($creatorId > 0) {
+            $chkC = $this->db->prepare("SELECT id FROM users WHERE id = ? LIMIT 1");
+            $chkC->execute([$creatorId]);
+            if (!$chkC->fetchColumn()) {
+                $creatorId = $assigneeId;
+            }
+        } else {
+            $creatorId = $assigneeId;
+        }
+
+        $projectId = !empty($b['project_id']) ? (int)$b['project_id'] : null;
+        if ($projectId) {
+            $pChk = $this->db->prepare("SELECT id FROM projects WHERE id = ? LIMIT 1");
+            $pChk->execute([$projectId]);
+            if (!$pChk->fetchColumn()) {
+                $projectId = null;
+            }
+        }
+
+        $stmt = $this->db->prepare("
+            INSERT INTO activities (tenant_id, related_type, related_id, type, subject, body, status, priority, user_id, due_date, created_by, created_at, updated_at)
+            VALUES (?, 'project', ?, 'task', ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+        ");
+        $stmt->execute([$tid, $projectId, $title, $desc, $status, $priority, $assigneeId, $dueDate, $creatorId]);
+        $id = (int)$this->db->lastInsertId();
+
+        respond(201, ['id' => $id, 'title' => $title, 'status' => $status], 'Tạo công việc thành công');
+    }
+
+    public function getTaskDetail(array $auth, int $id): void {
+        $tid = $auth['tenant_id'];
+        $stmt = $this->db->prepare("
+            SELECT a.id, a.subject as title, a.body as description, a.status, a.priority, 
+                   a.due_date, a.user_id as assignee_id, a.created_by, a.created_at, a.updated_at,
+                   p.name as project_name, u.full_name as assignee_name, u.avatar_url as assignee_avatar
+            FROM activities a
+            LEFT JOIN projects p ON (a.related_type = 'project' AND a.related_id = p.id)
+            LEFT JOIN users u ON a.user_id = u.id
+            WHERE a.id = ? AND (a.tenant_id = ? OR a.tenant_id IS NULL) AND a.type = 'task' AND a.deleted_at IS NULL
+            LIMIT 1
+        ");
+        $stmt->execute([$id, $tid]);
+        $t = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$t) respond(404, null, 'Không tìm thấy công việc', false);
+        respond(200, $t, 'Lấy chi tiết công việc thành công');
+    }
+
+    public function updateTaskDetail(array $auth, int $id): void {
+        $tid = $auth['tenant_id'];
+        $b = getBody();
+        $sets = []; $params = [];
+        if (isset($b['title']) || isset($b['subject'])) {
+            $sets[] = "subject = ?";
+            $params[] = trim($b['title'] ?? $b['subject']);
+        }
+        if (isset($b['description']) || isset($b['body'])) {
+            $sets[] = "body = ?";
+            $params[] = trim($b['description'] ?? $b['body']);
+        }
+        if (isset($b['status'])) {
+            $status = in_array($b['status'], ['planned', 'done', 'cancelled']) ? $b['status'] : 'planned';
+            $sets[] = "status = ?";
+            $params[] = $status;
+        }
+        if (isset($b['priority'])) {
+            $priority = in_array($b['priority'], ['low', 'medium', 'high']) ? $b['priority'] : 'medium';
+            $sets[] = "priority = ?";
+            $params[] = $priority;
+        }
+        if (isset($b['assignee_id']) || isset($b['user_id'])) {
+            $sets[] = "user_id = ?";
+            $params[] = (int)($b['assignee_id'] ?? $b['user_id']);
+        }
+        if (isset($b['due_date'])) {
+            $sets[] = "due_date = ?";
+            $params[] = $b['due_date'];
+        }
+        if (empty($sets)) respond(422, null, 'Không có dữ liệu cần cập nhật', false);
+        $params[] = $id;
+        $params[] = $tid;
+        $this->db->prepare("UPDATE activities SET " . implode(', ', $sets) . ", updated_at = NOW() WHERE id = ? AND (tenant_id = ? OR tenant_id IS NULL) AND type = 'task'")
+            ->execute($params);
+        respond(200, ['id' => $id], 'Cập nhật công việc thành công');
+    }
+
+    public function deleteTaskDetail(array $auth, int $id): void {
+        $tid = $auth['tenant_id'];
+        $this->db->prepare("UPDATE activities SET deleted_at = NOW() WHERE id = ? AND (tenant_id = ? OR tenant_id IS NULL) AND type = 'task'")
+            ->execute([$id, $tid]);
+        respond(200, null, 'Xóa công việc thành công');
+    }
+
+    public function updateTaskStatus(array $auth, int $id): void {
+        $tid = $auth['tenant_id'];
+        $b = getBody();
+        $rawStatus = trim($b['status'] ?? 'done');
+        $status = in_array($rawStatus, ['planned', 'done', 'cancelled']) ? $rawStatus : ($rawStatus === 'completed' ? 'done' : 'planned');
+        $this->db->prepare("UPDATE activities SET status = ?, done_at = IF(? = 'done', NOW(), NULL), updated_at = NOW() WHERE id = ? AND (tenant_id = ? OR tenant_id IS NULL) AND type = 'task'")
+            ->execute([$status, $status, $id, $tid]);
+        respond(200, ['id' => $id, 'status' => $status], 'Cập nhật trạng thái công việc thành công');
+    }
+
+    public function addTaskComment(array $auth, int $id): void {
+        $tid = $auth['tenant_id'];
+        $b = getBody();
+        $content = trim($b['content'] ?? $b['body'] ?? $b['comment'] ?? '');
+        if (!$content) respond(422, null, 'Nội dung bình luận không được để trống', false);
+
+        $userId = (int)($auth['user_id'] ?? 0);
+        if ($userId > 0) {
+            $chk = $this->db->prepare("SELECT id FROM users WHERE id = ? LIMIT 1");
+            $chk->execute([$userId]);
+            if (!$chk->fetchColumn()) {
+                $userId = (int)$this->db->query("SELECT id FROM users LIMIT 1")->fetchColumn();
+            }
+        } else {
+            $userId = (int)$this->db->query("SELECT id FROM users LIMIT 1")->fetchColumn();
+        }
+
+        $this->db->prepare("
+            INSERT INTO comments (tenant_id, entity_type, entity_id, user_id, body, created_at)
+            VALUES (?, 'activity', ?, ?, ?, NOW())
+        ")->execute([$tid, $id, $userId, $content]);
+        $commentId = (int)$this->db->lastInsertId();
+
+        respond(201, ['id' => $commentId, 'task_id' => $id, 'body' => $content], 'Bình luận công việc thành công');
+    }
 }
+

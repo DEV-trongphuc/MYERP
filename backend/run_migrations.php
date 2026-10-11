@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 308;
+$targetVersion = 311;
 $currentVersion = 186;
 
 // Query current DB version
@@ -4449,10 +4449,84 @@ try {
         }
     }
 
-    // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '308') ON DUPLICATE KEY UPDATE setting_value = '308'");
+    // --- MIGRATION 309: ĐỒNG BỘ NGÀY CHI THEO HẠN THANH TOÁN (DEADLINE) TRONG GHI CHÚ ---
+    if ($currentVersion < 309) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 309: Chuẩn hóa ngày chi các phiếu có deadline thanh toán...", "info");
+        try {
+            // Cập nhật cụ thể các phiếu thù lao giảng viên có deadline xác định
+            $conn->query("UPDATE expenses SET date = '2026-10-30' WHERE id = 1655 AND date != '2026-10-30'");
+            $conn->query("UPDATE expenses SET date = '2026-11-06' WHERE id = 1656 AND date != '2026-11-06'");
+            $conn->query("UPDATE expenses SET date = '2026-11-20' WHERE id = 1657 AND date != '2026-11-20'");
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 308", "success");
+            // Quét thêm các phiếu khác có ghi chú deadline thanh toán mà ngày chi chưa khớp
+            $stmtExp = $conn->query("SELECT id, date, notes FROM expenses WHERE notes LIKE '%deadline%' OR notes LIKE '%hạn thanh toán%'");
+            $updatedDeadlines = 0;
+            if ($stmtExp) {
+                while ($expRow = $stmtExp->fetch_assoc()) {
+                    $notes = (string)$expRow['notes'];
+                    if (preg_match('/(?:deadline|hạn)\s*(?:thanh\s*toán|chi)?\s*[:\s-]*(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/iu', $notes, $dMatch)) {
+                        $dDay = str_pad($dMatch[1], 2, '0', STR_PAD_LEFT);
+                        $dMonth = str_pad($dMatch[2], 2, '0', STR_PAD_LEFT);
+                        $dYear = $dMatch[3];
+                        if (checkdate((int)$dMonth, (int)$dDay, (int)$dYear)) {
+                            $targetDate = "$dYear-$dMonth-$dDay";
+                            if ($expRow['date'] !== $targetDate) {
+                                $eId = (int)$expRow['id'];
+                                $conn->query("UPDATE expenses SET date = '$targetDate' WHERE id = $eId");
+                                $updatedDeadlines++;
+                            }
+                        }
+                    }
+                }
+            }
+
+            $logMsg("Đã đồng bộ ngày chi cho các phiếu có hạn thanh toán (tổng cộng cập nhật: {$updatedDeadlines}).", "success");
+            $logMsg("Nâng cấp lên phiên bản 309 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi nâng cấp v309: " . $e->getMessage(), "error");
+        }
+    }
+
+    // --- PHIÊN BẢN 310: THÊM COMPOSITE COVERING INDEXES TỐI ƯU HIỆU NĂNG ---
+    if ($currentVersion < 310) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 310: Thêm composite covering indexes tối ưu hóa hiệu năng...", "info");
+        try {
+            require_once __DIR__ . '/migrations/310_optimize_distribution_and_audit_composite_indexes.php';
+            $logMsg("Thêm composite indexes phiên bản 310 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi thêm composite indexes: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 310 hoàn tất.", "success");
+    }
+
+    // --- PHIÊN BẢN 311: TẠO BẢNG TASK WHITEBOARDS & SNAPSHOTS (INFINITE CANVAS) ---
+    if ($currentVersion < 311) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 311: Tạo bảng task_whiteboards & task_whiteboard_snapshots...", "info");
+        try {
+            require_once __DIR__ . '/migrations/311_add_task_whiteboards_tables.php';
+            $logMsg("Tạo bảng task whiteboards phiên bản 311 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi tạo bảng task whiteboards: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 311 hoàn tất.", "success");
+    }
+
+    // --- PHIÊN BẢN 312: BỔ SUNG COMPOSITE INDEXES CHO CHECK_INS VÀ EXPENSES ---
+    if ($currentVersion < 312) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 312: Bổ sung composite indexes cho check_ins và expenses...", "info");
+        try {
+            require_once __DIR__ . '/migrations/312_optimize_checkins_and_expenses_indexes.php';
+            $logMsg("Bổ sung composite indexes phiên bản 312 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi thêm composite indexes v312: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 312 hoàn tất.", "success");
+    }
+
+    // Update DB version in system_settings
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '312') ON DUPLICATE KEY UPDATE setting_value = '312'");
+
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 312", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");

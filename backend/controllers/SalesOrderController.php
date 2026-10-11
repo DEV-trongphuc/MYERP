@@ -642,9 +642,13 @@ class SalesOrderController {
             $itemStmt->execute([$id]);
             $items = $itemStmt->fetchAll(PDO::FETCH_ASSOC);
 
-            $invNumber = 'INV-' . date('Ymd') . '-' . sprintf('%04d', rand(1, 9999));
             $issueDate = date('Y-m-d');
             $dueDate = date('Y-m-d', strtotime('+30 days'));
+
+            $seqStmt = $this->db->prepare("SELECT COUNT(*) FROM invoices WHERE tenant_id = ? AND issue_date = ?");
+            $seqStmt->execute([$tenantId, $issueDate]);
+            $seq = (int)$seqStmt->fetchColumn() + 1;
+            $invNumber = sprintf('INV-%s-%04d-%s', date('Ymd'), $seq, strtoupper(bin2hex(random_bytes(2))));
 
             $invInsert = $this->db->prepare("
                 INSERT INTO invoices (tenant_id, deal_id, company_id, contact_id, created_by, invoice_number, title, status, issue_date, due_date, subtotal, discount, tax, total, notes, so_id)

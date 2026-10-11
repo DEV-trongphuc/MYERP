@@ -251,19 +251,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   openChat: (conversationId, tab, options) => {
     const isMobileDevice = typeof window !== 'undefined' && window.innerWidth < 900;
     const willMaximize = !isMobileDevice && options?.maximized !== undefined ? options.maximized : undefined;
+    const initialConvId = conversationId || (willMaximize && get().conversations.length > 0 ? get().conversations[0].id : undefined);
     set((state) => ({ 
       isOpen: true,
       ...(tab ? { activeSidebarTab: tab } : {}),
       ...(isMobileDevice
         ? { isMaximized: false, showMediaVault: false }
         : (willMaximize !== undefined ? { isMaximized: willMaximize, ...(willMaximize ? { showMediaVault: true } : {}) } : {})),
-      ...(!conversationId ? { activeConversationId: null, activeConversation: null } : {})
+      ...(!initialConvId ? { activeConversationId: null, activeConversation: null } : {})
     }));
     get().fetchConversations();
     get().fetchStaffDirectory();
     
-    if (conversationId) {
-      get().selectConversation(conversationId);
+    if (initialConvId) {
+      get().selectConversation(initialConvId);
     }
   },
 
@@ -335,6 +336,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         };
       });
       persistConversationsToCache(get().conversations);
+      const current = get();
+      if (current.isOpen && current.isMaximized && !current.activeConversationId && current.conversations.length > 0) {
+        current.selectConversation(current.conversations[0].id);
+      }
     } catch (err) {
       set({ loadingConversations: false });
     }

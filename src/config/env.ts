@@ -1,5 +1,14 @@
-/** Base URL của backend — đổi khi deploy production */
-export const API_BASE = import.meta.env.VITE_API_URL ?? '/backend';
+/** Base URL của backend — tự động khớp theo origin trình duyệt (staging / production) */
+export const API_BASE = (() => {
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    const hostname = window.location.hostname;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return '/backend';
+    }
+    return `${window.location.origin}/backend`;
+  }
+  return import.meta.env.VITE_API_URL ?? '/backend';
+})();
 
 /** Tên / Title hệ thống ERP mặc định */
 export const DEFAULT_SYSTEM_TITLE = 'MYERP';

@@ -48,6 +48,15 @@ function sendEmailNotification($to, $subject, $title, $content, $ccEmailString =
         $db = $conn ?? $GLOBALS['conn'] ?? null;
     }
 
+    // BẢO VỆ CHỐNG BẮN EMAIL TRÊN MÔI TRƯỜNG STAGING, TEST HOẶC KHI TẮT EMAIL
+    if ((defined('APP_ENV') && APP_ENV === 'staging') ||
+        getenv('APP_ENV') === 'staging' ||
+        ($_ENV['APP_ENV'] ?? '') === 'staging' ||
+        getenv('DISABLE_EMAILS') === '1' ||
+        ($_ENV['DISABLE_EMAILS'] ?? '') === '1') {
+        return true;
+    }
+
     // BẢO VỆ CHỐNG BẮN EMAIL KHI CHẠY TEST HOẶC AUDIT
     if (defined('MYERP_TEST_MODE') && MYERP_TEST_MODE) {
         return true;

@@ -34,6 +34,23 @@ class CustomFieldController {
         respond(200, $fields);
     }
 
+    public function show(array $auth, int $id): void {
+        $stmt = $this->db->prepare("SELECT * FROM custom_fields WHERE id = ? AND tenant_id = ? LIMIT 1");
+        $stmt->execute([$id, $auth['tenant_id']]);
+        $f = $stmt->fetch();
+        if (!$f) {
+            respond(404, null, 'Không tìm thấy trường tùy chỉnh', false);
+        }
+        if (!empty($f['options'])) {
+            $f['options'] = json_decode($f['options'], true);
+        } else {
+            $f['options'] = [];
+        }
+        $f['is_required'] = (bool)$f['is_required'];
+        $f['is_filterable'] = (bool)$f['is_filterable'];
+        respond(200, $f);
+    }
+
     public function store(array $auth): void {
         if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true)) {
             respond(403, null, 'Bạn không có quyền quản lý trường tùy chỉnh', false);

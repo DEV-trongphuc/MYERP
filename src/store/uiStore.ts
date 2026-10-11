@@ -57,6 +57,10 @@ interface UIStore {
   approvalDrawer: { isOpen: boolean; item: any | null };
   openApprovalDrawer: (itemOrId: any, type?: string) => void;
   closeApprovalDrawer: () => void;
+  depositDrawer: { isOpen: boolean; deposit: any | null };
+  openDepositDrawer: (depositOrId: any) => void;
+  closeDepositDrawer: () => void;
+  closeAllDrawers: () => void;
 }
 
 const recentToastTimestamps = new Map<string, number>();
@@ -95,7 +99,13 @@ export const useUIStore = create<UIStore>((set) => ({
     const contactObj = (typeof contactOrId === 'object' && contactOrId !== null) 
       ? contactOrId 
       : { id: Number(contactOrId) };
-    set({ customerDrawer: { isOpen: true, contact: contactObj, initialTab } });
+    set({ 
+      customerDrawer: { isOpen: true, contact: contactObj, initialTab },
+      taskDrawer: { isOpen: false, task: null },
+      expenseDrawer: { isOpen: false, expenseId: null },
+      approvalDrawer: { isOpen: false, item: null },
+      depositDrawer: { isOpen: false, deposit: null }
+    });
   },
   closeCustomerDrawer: () => set({ customerDrawer: { isOpen: false, contact: null, initialTab: 'info' } }),
   taskDrawer: { isOpen: false, task: null },
@@ -103,12 +113,24 @@ export const useUIStore = create<UIStore>((set) => ({
     const taskObj = (typeof taskOrId === 'object' && taskOrId !== null)
       ? taskOrId
       : { id: Number(taskOrId) };
-    set({ taskDrawer: { isOpen: true, task: taskObj } });
+    set({ 
+      taskDrawer: { isOpen: true, task: taskObj },
+      customerDrawer: { isOpen: false, contact: null, initialTab: 'info' },
+      expenseDrawer: { isOpen: false, expenseId: null },
+      approvalDrawer: { isOpen: false, item: null },
+      depositDrawer: { isOpen: false, deposit: null }
+    });
   },
   closeTaskDrawer: () => set({ taskDrawer: { isOpen: false, task: null } }),
   expenseDrawer: { isOpen: false, expenseId: null },
   openExpenseDrawer: (expenseId: number) => {
-    set({ expenseDrawer: { isOpen: true, expenseId: Number(expenseId) } });
+    set({ 
+      expenseDrawer: { isOpen: true, expenseId: Number(expenseId) },
+      customerDrawer: { isOpen: false, contact: null, initialTab: 'info' },
+      taskDrawer: { isOpen: false, task: null },
+      approvalDrawer: { isOpen: false, item: null },
+      depositDrawer: { isOpen: false, deposit: null }
+    });
   },
   closeExpenseDrawer: () => set({ expenseDrawer: { isOpen: false, expenseId: null } }),
   approvalDrawer: { isOpen: false, item: null },
@@ -119,9 +141,36 @@ export const useUIStore = create<UIStore>((set) => ({
     } else {
       itemObj = { id: Number(itemOrId), type: type || 'leave' };
     }
-    set({ approvalDrawer: { isOpen: true, item: itemObj } });
+    set({ 
+      approvalDrawer: { isOpen: true, item: itemObj },
+      customerDrawer: { isOpen: false, contact: null, initialTab: 'info' },
+      taskDrawer: { isOpen: false, task: null },
+      expenseDrawer: { isOpen: false, expenseId: null },
+      depositDrawer: { isOpen: false, deposit: null }
+    });
   },
   closeApprovalDrawer: () => set({ approvalDrawer: { isOpen: false, item: null } }),
+  depositDrawer: { isOpen: false, deposit: null },
+  openDepositDrawer: (depositOrId: any) => {
+    const depObj = (typeof depositOrId === 'object' && depositOrId !== null)
+      ? depositOrId
+      : { id: Number(depositOrId) };
+    set({
+      depositDrawer: { isOpen: true, deposit: depObj },
+      customerDrawer: { isOpen: false, contact: null, initialTab: 'info' },
+      taskDrawer: { isOpen: false, task: null },
+      expenseDrawer: { isOpen: false, expenseId: null },
+      approvalDrawer: { isOpen: false, item: null }
+    });
+  },
+  closeDepositDrawer: () => set({ depositDrawer: { isOpen: false, deposit: null } }),
+  closeAllDrawers: () => set({
+    customerDrawer: { isOpen: false, contact: null, initialTab: 'info' },
+    taskDrawer: { isOpen: false, task: null },
+    expenseDrawer: { isOpen: false, expenseId: null },
+    approvalDrawer: { isOpen: false, item: null },
+    depositDrawer: { isOpen: false, deposit: null }
+  }),
   addToast: (message, type = 'info', action) => {
     // Deduplication check for string messages
     if (typeof message === 'string') {

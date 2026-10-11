@@ -8,10 +8,22 @@ class AuthController {
 
     public function login(): void {
         $body = getBody();
-        $email    = trim($body['email']    ?? '');
+        $email    = trim($body['email'] ?? $body['username'] ?? '');
         $password = trim($body['password'] ?? '');
 
         if (!$email || !$password) respond(422, null, 'Email và mật khẩu là bắt buộc', false);
+
+        // Hỗ trợ đồng bộ bí danh turnlodev <-> turniodev
+        if (strtolower($email) === 'turnlodev@gmail.com') {
+            $stmtChk = $this->db->prepare("SELECT id FROM users WHERE email = ? AND is_active = 1 LIMIT 1");
+            $stmtChk->execute([$email]);
+            if (!$stmtChk->fetch()) {
+                $email = 'turniodev@gmail.com';
+            }
+        }
+        if (strtolower($email) === 'info') {
+            $email = 'info@ideas.edu.vn';
+        }
 
         $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
         
@@ -131,6 +143,19 @@ class AuthController {
             respond(404, null, 'Tài khoản không tồn tại hoặc đã bị khóa', false);
         }
 
+        $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+        $email = $user['email'] ?? ($decoded['email'] ?? '');
+
+        // Chống Brute-force mã 2FA OTP: Giới hạn tối đa 5 lần nhập sai trong 15 phút
+        $stmtLimit = $this->db->prepare("
+            SELECT COUNT(*) FROM login_attempts 
+            WHERE (ip_address = ? OR email = ?) AND is_successful = 0 AND attempt_time > DATE_SUB(NOW(), INTERVAL 15 MINUTE)
+        ");
+        $stmtLimit->execute([$ip, $email]);
+        if ((int)$stmtLimit->fetchColumn() >= 5) {
+            respond(429, null, 'Bạn đã nhập sai mã xác thực 2FA quá 5 lần. Vui lòng quay lại sau 15 phút hoặc đăng nhập lại.', false);
+        }
+
         $type = $user['two_factor_type'] ?? 'email';
         $verified = false;
 
@@ -167,8 +192,14 @@ class AuthController {
         }
 
         if (!$verified) {
+            $this->db->prepare("INSERT INTO login_attempts (ip_address, email, is_successful) VALUES (?, ?, 0)")
+                 ->execute([$ip, $email]);
             respond(401, null, 'Mã xác thực không đúng hoặc đã hết hạn', false);
         }
+
+        // Record successful 2FA attempt
+        $this->db->prepare("INSERT INTO login_attempts (ip_address, email, is_successful) VALUES (?, ?, 1)")
+             ->execute([$ip, $email]);
 
         $this->issueFullTokens($user);
     }
@@ -178,6 +209,18 @@ class AuthController {
         $email = trim($body['email'] ?? '');
         if (!$email || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             respond(422, null, 'Email không hợp lệ', false);
+        }
+
+        // Chống spam email & OTP Flooding: Giới hạn tối đa 5 yêu cầu trong 15 phút
+        $stmtLimit = $this->db->prepare("
+            SELECT COUNT(*) FROM email_otps 
+            WHERE (email = ? OR user_id IN (SELECT id FROM users WHERE email = ?)) 
+              AND type = 'forgot_password' 
+              AND created_at > DATE_SUB(NOW(), INTERVAL 15 MINUTE)
+        ");
+        $stmtLimit->execute([$email, $email]);
+        if ((int)$stmtLimit->fetchColumn() >= 5) {
+            respond(429, null, 'Bạn đã gửi yêu cầu quá nhiều lần. Vui lòng thử lại sau 15 phút.', false);
         }
 
         $stmt = $this->db->prepare("SELECT id, full_name, email FROM users WHERE email = ? AND is_active = 1 LIMIT 1");
@@ -223,6 +266,18 @@ class AuthController {
             respond(422, null, 'Mật khẩu mới phải có ít nhất 8 ký tự, bao gồm cả chữ và số', false);
         }
 
+        $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+
+        // Chống Brute-force mã OTP: Tối đa 5 lần thử sai trong 15 phút
+        $stmtLimit = $this->db->prepare("
+            SELECT COUNT(*) FROM login_attempts 
+            WHERE (ip_address = ? OR email = ?) AND is_successful = 0 AND attempt_time > DATE_SUB(NOW(), INTERVAL 15 MINUTE)
+        ");
+        $stmtLimit->execute([$ip, $email]);
+        if ((int)$stmtLimit->fetchColumn() >= 10) {
+            respond(429, null, 'Bạn đã nhập sai mã xác thực quá nhiều lần. Vui lòng quay lại sau 15 phút hoặc yêu cầu mã mới.', false);
+        }
+
         $stmtOtp = $this->db->prepare("
             SELECT id, user_id FROM email_otps 
             WHERE email = ? AND otp_code = ? AND type = 'forgot_password' AND is_used = 0 AND expires_at > NOW() 
@@ -232,12 +287,19 @@ class AuthController {
         $otpRow = $stmtOtp->fetch();
 
         if (!$otpRow) {
+            // Ghi nhận lần thử sai
+            $this->db->prepare("INSERT INTO login_attempts (ip_address, email, is_successful) VALUES (?, ?, 0)")
+                 ->execute([$ip, $email]);
             respond(400, null, 'Mã OTP không đúng hoặc đã hết hạn', false);
         }
 
         $passwordHash = password_hash($newPassword, PASSWORD_BCRYPT);
         $this->db->prepare("UPDATE users SET password_hash = ? WHERE id = ?")->execute([$passwordHash, $otpRow['user_id']]);
         $this->db->prepare("UPDATE email_otps SET is_used = 1 WHERE id = ?")->execute([$otpRow['id']]);
+        
+        // Ghi nhận thành công
+        $this->db->prepare("INSERT INTO login_attempts (ip_address, email, is_successful) VALUES (?, ?, 1)")
+             ->execute([$ip, $email]);
 
         respond(200, null, 'Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại bằng mật khẩu mới.');
     }
@@ -404,5 +466,47 @@ class AuthController {
         $user = $stmt->fetch();
         if (!$user) respond(404, null, 'Người dùng không tồn tại', false);
         respond(200, $user);
+    }
+
+    public function updateProfile(array $auth): void {
+        $body = getBody();
+        $allowedFields = ['full_name', 'phone', 'bio', 'avatar_url', 'gender', 'dob', 'address', 'bank_name', 'bank_account'];
+        $updates = [];
+        $params = [];
+
+        foreach ($allowedFields as $field) {
+            if (array_key_exists($field, $body)) {
+                $updates[] = "$field = ?";
+                $params[] = $body[$field];
+            }
+        }
+
+        if (empty($updates)) {
+            respond(422, null, 'Không có thông tin nào để cập nhật', false);
+        }
+
+        $params[] = $auth['user_id'];
+        $sql = "UPDATE users SET " . implode(', ', $updates) . ", updated_at = NOW() WHERE id = ?";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+
+        $this->me($auth);
+    }
+
+    public function getPermissions(array $auth): void {
+        $stmt = $this->db->prepare("SELECT role, permissions_json FROM users WHERE id = ? LIMIT 1");
+        $stmt->execute([$auth['user_id']]);
+        $user = $stmt->fetch();
+        if (!$user) respond(404, null, 'Người dùng không tồn tại', false);
+
+        $perms = [];
+        if (!empty($user['permissions_json'])) {
+            $perms = json_decode($user['permissions_json'], true) ?: [];
+        }
+
+        respond(200, [
+            'role' => $user['role'],
+            'permissions' => $perms
+        ], 'Lấy danh sách quyền thành công');
     }
 }

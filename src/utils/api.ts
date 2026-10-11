@@ -1,5 +1,6 @@
-const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-const BASE_URL = isLocal ? '/backend/api.php' : (import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api.php` : '/backend/api.php');
+import { API_BASE } from '../config/env';
+const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+const BASE_URL = isLocal ? '/backend/api.php' : `${API_BASE}/api.php`;
 
 
 function getTranslatedError(key: string, replacements?: Record<string, string | number>): string {

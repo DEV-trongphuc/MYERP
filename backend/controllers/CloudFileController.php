@@ -462,12 +462,33 @@ class CloudFileController {
             respond(400, null, 'ID khách hàng không hợp lệ', false);
         }
 
-        // 1. Check contact exists
-        $stmtContact = $this->db->prepare("SELECT id, full_name FROM contacts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
+        // 1. Check contact exists and permissions
+        $stmtContact = $this->db->prepare("SELECT id, full_name, owner_id, created_by, collaborator_ids FROM contacts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
         $stmtContact->execute([$contactId, $tid]);
         $contact = $stmtContact->fetch(PDO::FETCH_ASSOC);
         if (!$contact) {
             respond(404, null, 'Không tìm thấy thông tin khách hàng', false);
+        }
+
+        $role = strtolower($auth['role'] ?? '');
+        $uid = (int)$auth['user_id'];
+        $isPrivileged = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'accountant', 'hr'], true);
+
+        if (!$isPrivileged) {
+            $isOwner = ((int)($contact['owner_id'] ?? 0) === $uid) || ((int)($contact['created_by'] ?? 0) === $uid);
+            $collabs = array_filter(array_map('intval', explode(',', (string)($contact['collaborator_ids'] ?? ''))));
+            $isCollab = in_array($uid, $collabs, true);
+
+            $isTeamLeader = false;
+            if ($role === 'manager') {
+                $teamStmt = $this->db->prepare("SELECT 1 FROM users WHERE id = ? AND team_id IN (SELECT id FROM teams WHERE leader_id = ?)");
+                $teamStmt->execute([(int)($contact['owner_id'] ?? 0), $uid]);
+                $isTeamLeader = (bool)$teamStmt->fetch();
+            }
+
+            if (!$isOwner && !$isCollab && !$isTeamLeader) {
+                respond(403, null, 'Bạn không có quyền tải xuống hồ sơ tài liệu của khách hàng này', false);
+            }
         }
 
         // 2. Collect files

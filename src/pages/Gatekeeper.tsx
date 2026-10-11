@@ -24,6 +24,7 @@ import { Avatar } from '../components/ui/Avatar';
 import { TableSkeleton, Skeleton, KpiCardSkeleton, ChartSkeleton } from '../components/ui/Skeleton';
 import { detectCountryFromPhone } from '../utils/phoneHelper';
 import { NotificationPreviewModal } from '../components/ui/NotificationPreviewModal';
+import { getLocalDateStr } from '../utils/dateUtils';
 
 type Lead = {
   id: number;
@@ -1123,8 +1124,8 @@ const GatekeeperInner = ({ isActive, searchParams, setSearchParams }: { isActive
       sunday.setDate(monday.getDate() + 6);
 
       mode = 'custom';
-      start = monday.toISOString().split('T')[0];
-      end = sunday.toISOString().split('T')[0];
+      start = getLocalDateStr(monday);
+      end = getLocalDateStr(sunday);
     } else if (filter === 'Tuần trước') {
       const now = new Date();
       const currentDay = now.getDay();
@@ -1135,8 +1136,8 @@ const GatekeeperInner = ({ isActive, searchParams, setSearchParams }: { isActive
       prevSunday.setDate(prevMonday.getDate() + 6);
 
       mode = 'custom';
-      start = prevMonday.toISOString().split('T')[0];
-      end = prevSunday.toISOString().split('T')[0];
+      start = getLocalDateStr(prevMonday);
+      end = getLocalDateStr(prevSunday);
     } else if (filter === 'Tuần trước nữa') {
       const now = new Date();
       const currentDay = now.getDay();
@@ -1147,8 +1148,8 @@ const GatekeeperInner = ({ isActive, searchParams, setSearchParams }: { isActive
       prev2Sunday.setDate(prev2Monday.getDate() + 6);
 
       mode = 'custom';
-      start = prev2Monday.toISOString().split('T')[0];
-      end = prev2Sunday.toISOString().split('T')[0];
+      start = getLocalDateStr(prev2Monday);
+      end = getLocalDateStr(prev2Sunday);
     } else {
       const match = filter.match(/^(\d{4}-\d{2}-\d{2})\s*(?:đến|đên|den|to|-)\s*(\d{4}-\d{2}-\d{2})$/i);
       if (match) {

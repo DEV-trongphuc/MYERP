@@ -25,6 +25,7 @@ import { detectCountryFromPhone } from '../utils/phoneHelper';
 import { NotificationPreviewModal } from '../components/ui/NotificationPreviewModal';
 import { RuleSettings } from './RuleSettings';
 import { TableContextMenu } from '../components/ui/TableContextMenu';
+import { getLocalDateStr } from '../utils/dateUtils';
 
 const ExpenseQuickViewDrawer = lazy(() => import('../components/ExpenseQuickViewDrawer').then(m => ({ default: m.ExpenseQuickViewDrawer })));
 const ExpenseCreateDrawer = lazy(() => import('../components/ExpenseCreateDrawer').then(m => ({ default: m.ExpenseCreateDrawer })));
@@ -446,8 +447,8 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
       sunday.setDate(monday.getDate() + 6);
 
       mode = 'custom';
-      start = monday.toISOString().split('T')[0];
-      end = sunday.toISOString().split('T')[0];
+      start = getLocalDateStr(monday);
+      end = getLocalDateStr(sunday);
     } else if (filter === 'Tuần trước') {
       const now = new Date();
       const currentDay = now.getDay();
@@ -458,8 +459,8 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
       prevSunday.setDate(prevMonday.getDate() + 6);
 
       mode = 'custom';
-      start = prevMonday.toISOString().split('T')[0];
-      end = prevSunday.toISOString().split('T')[0];
+      start = getLocalDateStr(prevMonday);
+      end = getLocalDateStr(prevSunday);
     } else if (filter === 'Tuần trước nữa') {
       const now = new Date();
       const currentDay = now.getDay();
@@ -470,8 +471,8 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
       prev2Sunday.setDate(prev2Monday.getDate() + 6);
 
       mode = 'custom';
-      start = prev2Monday.toISOString().split('T')[0];
-      end = prev2Sunday.toISOString().split('T')[0];
+      start = getLocalDateStr(prev2Monday);
+      end = getLocalDateStr(prev2Sunday);
     } else {
       const match = filter.match(/^(\d{4}-\d{2}-\d{2})\s*(?:đến|đên|den|to|-)\s*(\d{4}-\d{2}-\d{2})$/i);
       if (match) {
@@ -5425,7 +5426,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                           borderRadius: '5px',
                           transition: 'all 0.2s'
                         }}>
-                          {dayDetails.expenses?.length || 0}
+                          {(dayDetails.expenses || []).filter((e: any) => Number(e.amount || 0) > 0).length}
                         </span>
                       </button>
                       <button
@@ -5849,7 +5850,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                           type="button"
                           className="btn primary"
                           onClick={() => {
-                            setSelectedExpenseDate(selectedDate ? new Date(selectedDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
+                            setSelectedExpenseDate(selectedDate ? getLocalDateStr(selectedDate) : getLocalDateStr());
                             setShowCreateExpenseModal(true);
                           }}
                           style={{ height: '32px', padding: '0 0.85rem', fontSize: '0.78rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
@@ -5859,7 +5860,9 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                         </button>
                       </div>
 
-                      {dayDetails.expenses && dayDetails.expenses.length > 0 ? (
+                      {(() => {
+                        const poList = (dayDetails.expenses || []).filter((item: any) => Number(item.amount || 0) > 0);
+                        return poList.length > 0 ? (
                         <div className="premium-table-container">
                           <table className="premium-table">
                             <thead>
@@ -5872,7 +5875,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                               </tr>
                             </thead>
                             <tbody>
-                              {dayDetails.expenses.map((item: any, idx: number) => (
+                              {poList.map((item: any, idx: number) => (
                                 <tr key={item.id || idx} onClick={() => handleOpenPO(item.id)} style={{ cursor: 'pointer' }}>
                                   {/* 1. Mã phiếu / Ngày lập (ngắn gọn) */}
                                   <td style={{ width: '105px', whiteSpace: 'nowrap' }}>
@@ -5924,9 +5927,10 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                         </div>
                       ) : (
                         <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)', background: 'var(--color-surface)', borderRadius: '12px', border: '1px dashed var(--color-border)' }}>
-                          Không có Purchase Order nào trong ngày này.
+                          {t('Không có phiếu chi phí tài chính nào trong ngày này')}
                         </div>
-                      )}
+                      );
+                      })()}
                     </div>
                   )}
                 </div>

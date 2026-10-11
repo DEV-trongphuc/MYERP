@@ -16,48 +16,6 @@ class JWT {
     }
 
     public static function decode(string $token): ?array {
-        // Bypass for demo tokens
-        if ($token === 'demo_token_12345') {
-            return [
-                'username' => 'info',
-                'email' => 'info@ideas.edu.vn',
-                'name' => 'Admin Demo',
-                'role' => 'admin',
-                'user_id' => 999905,
-                'id' => 999905,
-                'tenant_id' => 1,
-                'exp' => time() + 86400
-            ];
-        }
-        if ($token === 'demo_token_marketing') {
-            return [
-                'username' => 'duongtnt',
-                'email' => 'duongtnt@ideas.edu.vn',
-                'name' => 'Trần Ngọc Thùy Dương',
-                'role' => 'marketing',
-                'user_id' => 100071,
-                'id' => 100071,
-                'tenant_id' => 1,
-                'exp' => time() + 86400
-            ];
-        }
-        if (strpos($token, 'demo_token_sale_') === 0) {
-            $cId = (int)str_replace('demo_token_sale_', '', $token);
-            $names = [1 => 'Hải Đăng', 2 => 'Thanh Thảo', 3 => 'Việt Dũng', 4 => 'Minh Tuấn'];
-            $emails = [1 => 'haidang@Ideas.test', 2 => 'thanhthao@Ideas.test', 3 => 'vietdung@Ideas.test', 4 => 'minhtuan@Ideas.test'];
-            return [
-                'username' => str_replace('@Ideas.test', '', $emails[$cId] ?? 'sale'),
-                'email' => $emails[$cId] ?? 'sale@Ideas.test',
-                'name' => $names[$cId] ?? 'Sale Demo',
-                'role' => 'sale',
-                'user_id' => $cId,
-                'id' => $cId,
-                'consultant_id' => $cId,
-                'tenant_id' => 1,
-                'exp' => time() + 86400
-            ];
-        }
-
         $parts = explode('.', $token);
         if (count($parts) !== 3) return null;
 

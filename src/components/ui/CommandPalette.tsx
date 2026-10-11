@@ -2,18 +2,20 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Search, ChevronRight, X, Loader2, Command
+  Search, ChevronRight, X, Loader2, Command, Zap
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUIStore } from '../../store/uiStore';
 import { AppIcon } from '../common/AppIcons';
 import { useChatStore } from '../../store/chatStore';
 import api from '../../api/axios';
+import { pushOverlay } from '../../utils/overlayStack';
 
 interface SearchItem {
   id: string | number;
-  group: 'contacts' | 'tasks' | 'approvals' | 'companies' | 'navigation';
+  group: 'actions' | 'contacts' | 'tasks' | 'approvals' | 'companies' | 'navigation';
   groupTitle?: string;
   title: string;
   subtitle?: string;
@@ -57,16 +59,11 @@ export const CommandPalette: React.FC = () => {
         e.preventDefault();
         e.stopPropagation();
         setOpen(prev => !prev);
-        return;
-      }
-      if (e.key === 'Escape') {
-        setOpen(false);
       }
     };
 
     const handleCustomOpen = () => setOpen(true);
 
-    // useCapture: true ensures it catches the event first
     window.addEventListener('keydown', handleGlobalKeyDown, true);
     window.addEventListener('open-command-palette', handleCustomOpen);
     return () => {
@@ -75,13 +72,19 @@ export const CommandPalette: React.FC = () => {
     };
   }, []);
 
-  // Focus input on open
+  // LIFO Overlay Stack registration for ESC dismissal & focus input on open
   useEffect(() => {
     if (open) {
       setSearch('');
       setSelectedIndex(0);
       setBackendResults({ contacts: [], tasks: [], approvals: [], companies: [] });
       setTimeout(() => inputRef.current?.focus(), 50);
+
+      const unregister = pushOverlay('command-palette', () => {
+        setOpen(false);
+      }, 2147483645);
+
+      return () => unregister();
     }
   }, [open]);
 
@@ -175,10 +178,112 @@ export const CommandPalette: React.FC = () => {
     { name: 'Nhật ký Data', label: 'Nhật ký Data', route: '/data' }
   ], []);
 
+  // Quick Actions List (Kích hoạt tức thời bằng '>' hoặc từ khóa tác vụ)
+  const quickActionsList = useMemo(() => [
+    {
+      id: 'action_create_expense',
+      title: 'Tạo phiếu chi phí mới (Create Expense)',
+      subtitle: 'Tạo đề xuất thanh toán, tạm ứng, chi tiêu mua sắm nội bộ',
+      badge: 'Tác vụ',
+      badgeColor: '#f59e0b',
+      badgeBg: 'rgba(245, 158, 11, 0.12)',
+      iconName: 'Purchase Order',
+      action: () => {
+        setOpen(false);
+        navigate('/expenses');
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('open-create-expense-modal'));
+        }, 150);
+      }
+    },
+    {
+      id: 'action_create_deposit',
+      title: 'Tạo đơn đặt cọc mới (Create Deposit)',
+      subtitle: 'Lập phiếu thu tiền, đặt cọc giữ chỗ và hợp đồng học vụ',
+      badge: 'Tác vụ',
+      badgeColor: '#10b981',
+      badgeBg: 'rgba(16, 185, 129, 0.12)',
+      iconName: 'Sales Order',
+      action: () => {
+        setOpen(false);
+        navigate('/deposits?action=create');
+      }
+    },
+    {
+      id: 'action_create_lead',
+      title: 'Thêm Khách hàng / Lead mới',
+      subtitle: 'Nhập thông tin liên hệ mới vào hệ thống CRM',
+      badge: 'Tác vụ',
+      badgeColor: '#3b82f6',
+      badgeBg: 'rgba(59, 130, 246, 0.12)',
+      iconName: 'Tiềm năng',
+      action: () => {
+        setOpen(false);
+        window.dispatchEvent(new CustomEvent('open-quick-add-lead'));
+      }
+    },
+    {
+      id: 'action_create_approval',
+      title: 'Nộp đơn đề xuất / Xin phê duyệt',
+      subtitle: 'Tạo đơn xin nghỉ phép, tạm ứng lương hoặc duyệt chi',
+      badge: 'Tác vụ',
+      badgeColor: '#ef4444',
+      badgeBg: 'rgba(239, 68, 68, 0.12)',
+      iconName: 'Quy trình',
+      action: () => {
+        setOpen(false);
+        navigate('/approvals');
+      }
+    },
+    {
+      id: 'action_toggle_theme',
+      title: 'Chuyển đổi Giao diện Sáng / Tối (Toggle Theme)',
+      subtitle: 'Đổi chế độ màu Dark Mode / Light Mode toàn hệ thống',
+      badge: 'Cài đặt',
+      badgeColor: '#8b5cf6',
+      badgeBg: 'rgba(139, 92, 246, 0.12)',
+      iconName: 'Cài đặt hệ thống',
+      action: () => {
+        setOpen(false);
+        const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+        const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', nextTheme);
+        localStorage.setItem('Ideas_theme', nextTheme);
+        toast.success(nextTheme === 'dark' ? '🌙 Đã kích hoạt chế độ Tối (Dark mode)' : '☀️ Đã kích hoạt chế độ Sáng (Light mode)');
+      }
+    },
+    {
+      id: 'action_keyboard_shortcuts',
+      title: 'Bảng tra cứu phím tắt công thái học',
+      subtitle: 'Xem toàn bộ danh mục phím tắt tăng tốc làm việc (Ctrl+S, ESC, J/K)',
+      badge: 'Trợ giúp',
+      badgeColor: '#6366f1',
+      badgeBg: 'rgba(99, 102, 241, 0.12)',
+      iconName: 'Helpdesk',
+      action: () => {
+        setOpen(false);
+        window.dispatchEvent(new CustomEvent('open-keyboard-shortcuts'));
+      }
+    },
+    {
+      id: 'action_gatekeeper',
+      title: 'Phân phối số tự động (Gatekeeper)',
+      subtitle: 'Xem hàng đợi tiếp nhận và nhận data phân bổ mới',
+      badge: 'Tác vụ',
+      badgeColor: '#ec4899',
+      badgeBg: 'rgba(236, 72, 153, 0.12)',
+      iconName: 'Vòng phân bổ',
+      action: () => {
+        setOpen(false);
+        navigate('/gatekeeper');
+      }
+    }
+  ], [navigate]);
+
   // Debounced API search for Entities (Contacts, Tasks, Approvals, Companies)
   useEffect(() => {
     const trimmed = search.trim();
-    if (!trimmed) {
+    if (!trimmed || trimmed.startsWith('>')) {
       setBackendResults({ contacts: [], tasks: [], approvals: [], companies: [] });
       setLoading(false);
       return;
@@ -212,7 +317,41 @@ export const CommandPalette: React.FC = () => {
   // Build combined searchable list
   const combinedItems: SearchItem[] = useMemo(() => {
     const items: SearchItem[] = [];
+    const isActionPrompt = search.startsWith('>');
+    const actionQuery = isActionPrompt ? search.slice(1).trim().toLowerCase() : '';
     const lowerQuery = search.toLowerCase().trim();
+
+    // 0. Quick Actions (Tác vụ nhanh)
+    const matchedActions = quickActionsList.filter(act => {
+      if (isActionPrompt) {
+        if (!actionQuery) return true;
+        return act.title.toLowerCase().includes(actionQuery) || act.subtitle.toLowerCase().includes(actionQuery);
+      }
+      if (!lowerQuery) {
+        // When search is empty, show all quick actions
+        return true;
+      }
+      return act.title.toLowerCase().includes(lowerQuery) || act.subtitle.toLowerCase().includes(lowerQuery);
+    });
+
+    matchedActions.forEach(act => {
+      items.push({
+        id: act.id,
+        group: 'actions',
+        title: act.title,
+        subtitle: act.subtitle,
+        badge: act.badge,
+        badgeColor: act.badgeColor,
+        badgeBg: act.badgeBg,
+        iconName: act.iconName,
+        action: act.action
+      });
+    });
+
+    // If user explicitly typed '>', only return quick actions
+    if (isActionPrompt) {
+      return items;
+    }
 
     // 1. Khách hàng / Học viên
     if (backendResults.contacts && backendResults.contacts.length > 0) {
@@ -376,7 +515,10 @@ export const CommandPalette: React.FC = () => {
       let gKey = item.group as string;
       let gLabel = 'Kết quả';
 
-      if (item.group === 'contacts') {
+      if (item.group === 'actions') {
+        gKey = 'actions';
+        gLabel = '⚡ Hành động nhanh (Quick Actions)';
+      } else if (item.group === 'contacts') {
         gKey = 'contacts';
         gLabel = 'Khách hàng & Học viên';
       } else if (item.group === 'tasks') {
@@ -399,7 +541,13 @@ export const CommandPalette: React.FC = () => {
       groups[gKey].items.push({ item, index });
     });
 
-    return Object.entries(groups).filter(([_, g]) => g.items.length > 0);
+    return Object.entries(groups)
+      .filter(([_, g]) => g.items.length > 0)
+      .sort(([a], [b]) => {
+        if (a === 'actions') return -1;
+        if (b === 'actions') return 1;
+        return 0;
+      });
   }, [combinedItems]);
 
   if (typeof document === 'undefined') return null;
@@ -466,6 +614,8 @@ export const CommandPalette: React.FC = () => {
             }}>
               {loading ? (
                 <Loader2 size={22} className="animate-spin" style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+              ) : search.startsWith('>') ? (
+                <Zap size={22} style={{ color: '#f59e0b', flexShrink: 0 }} />
               ) : (
                 <Search size={22} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
               )}
@@ -474,7 +624,7 @@ export const CommandPalette: React.FC = () => {
                 ref={inputRef}
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Tìm SĐT, Khách hàng, #Mã task, #Mã đơn duyệt, Chức năng..."
+                placeholder={search.startsWith('>') ? "⚡ Nhập tên tác vụ (Tạo chi phí, Đặt cọc, Lead, Đổi theme...)" : "Tìm SĐT, Khách hàng, #Task, #Đơn duyệt, hoặc gõ > cho Tác vụ..."}
                 style={{
                   flex: 1,
                   background: 'transparent',
@@ -485,6 +635,20 @@ export const CommandPalette: React.FC = () => {
                   color: 'var(--color-text)'
                 }}
               />
+
+              {search.startsWith('>') && (
+                <span style={{
+                  fontSize: '0.6875rem',
+                  fontWeight: 700,
+                  color: '#f59e0b',
+                  background: 'rgba(245, 158, 11, 0.12)',
+                  padding: '3px 8px',
+                  borderRadius: '6px',
+                  whiteSpace: 'nowrap'
+                }}>
+                  Chế độ Tác vụ
+                </span>
+              )}
 
               {search && (
                 <button
@@ -736,6 +900,10 @@ export const CommandPalette: React.FC = () => {
               color: 'var(--color-text-muted)'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                  <kbd className="spotlight-badge-kbd">&gt;</kbd>
+                  <span style={{ color: '#f59e0b', fontWeight: 600 }}>tác vụ nhanh</span>
+                </span>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                   <kbd className="spotlight-badge-kbd">↑</kbd>
                   <kbd className="spotlight-badge-kbd">↓</kbd>

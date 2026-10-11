@@ -28,6 +28,7 @@ import { QrImageModal } from '../components/ui/QrImageModal';
 import { getVietQrUrl } from '../utils/vietnamBanks';
 import { AttachmentLightboxModal, type AttachmentItem } from '../components/ui/AttachmentLightboxModal';
 import { formatWaitDuration } from './Approvals';
+import { getLocalDateStr } from '../utils/dateUtils';
 
 const ExpenseCreateDrawer = React.lazy(() => import('../components/ExpenseCreateDrawer').then(m => ({ default: m.ExpenseCreateDrawer })));
 
@@ -67,13 +68,13 @@ const formatTimestamp = (raw: any) => {
   return !isNaN(d.getTime()) ? d.toLocaleString('vi-VN') : '—';
 };
 
-const EMPTY_FORM = {
+const getEmptyForm = () => ({
   title: '',
   category: 'Khác',
   amount: '',
   currency: 'VND',
   vat_amount: '',
-  date: new Date().toISOString().split('T')[0],
+  date: getLocalDateStr(),
   notes: '',
   approver_id: null as number | null,
   related_user_ids: [] as number[],
@@ -86,7 +87,7 @@ const EMPTY_FORM = {
   bank_name: '',
   bank_account_number: '',
   bank_account_name: ''
-};
+});
 
 export const ExpensesPage: React.FC = () => {
   const location = useLocation();
@@ -132,7 +133,7 @@ export const ExpensesPage: React.FC = () => {
   const [total, setTotal] = useState(0);
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
-  const [form, setForm] = useState<any>(EMPTY_FORM);
+  const [form, setForm] = useState<any>(getEmptyForm);
   const [saving, setSaving] = useState(false);
   const [uploadingImg, setUploadingImg] = useState(false);
   // Unified delete confirmation under showConfirm store state
@@ -177,6 +178,46 @@ export const ExpensesPage: React.FC = () => {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [drawerRightTab, setDrawerRightTab] = useState<'discussion' | 'timeline'>('discussion');
   const [mobileDrawerTab, setMobileDrawerTab] = useState<'info' | 'discussion'>('info');
+
+  // Inline expense date edit states
+  const [isEditingExpenseDate, setIsEditingExpenseDate] = useState(false);
+  const [tempExpenseDate, setTempExpenseDate] = useState('');
+  const [savingExpenseDate, setSavingExpenseDate] = useState(false);
+
+  const detectedDeadline = useMemo(() => {
+    if (!viewItem?.notes) return null;
+    const match = viewItem.notes.match(/(?:deadline|hạn)\s*(?:thanh\s*toán|chi)?\s*[:\s-]*(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/i);
+    if (match) {
+      const day = match[1].padStart(2, '0');
+      const month = match[2].padStart(2, '0');
+      const year = match[3];
+      return {
+        dateStr: `${year}-${month}-${day}`,
+        displayStr: `${day}/${month}/${year}`
+      };
+    }
+    return null;
+  }, [viewItem?.notes]);
+
+  const handleUpdateExpenseDate = async (newDateStr: string) => {
+    if (!viewItem?.id || !newDateStr) return;
+    setSavingExpenseDate(true);
+    try {
+      const res = await api.patch(`/expenses/${viewItem.id}`, { date: newDateStr });
+      if (res.data?.success || res.status === 200) {
+        setViewItem((prev: any) => ({ ...prev, date: newDateStr }));
+        setIsEditingExpenseDate(false);
+        addToast('Đã cập nhật ngày chi thành công', 'success');
+        fetchExpenses();
+      } else {
+        addToast(res.data?.message || 'Không thể cập nhật ngày chi', 'error');
+      }
+    } catch (err: any) {
+      addToast(err?.response?.data?.message || err?.message || 'Lỗi khi cập nhật ngày chi', 'error');
+    } finally {
+      setSavingExpenseDate(false);
+    }
+  };
 
   const fetchComments = useCallback(async (expenseId: number) => {
     setLoadingComments(true);
@@ -346,7 +387,7 @@ export const ExpensesPage: React.FC = () => {
           }]
         : [];
       setForm({
-        ...EMPTY_FORM,
+        ...getEmptyForm(),
         entities: defaultEntities
       });
       setShowModal(true);
@@ -412,7 +453,7 @@ export const ExpensesPage: React.FC = () => {
     setEditItem(null); 
     const accountant = users.find((u: any) => u.role === 'accountant' || String(u.role).toLowerCase().includes('acc') || String(u.role).toLowerCase().includes('kế toán'));
     setForm({
-      ...EMPTY_FORM,
+      ...getEmptyForm(),
       approver_id: accountant ? accountant.id : (users[0]?.id || null)
     });
     setVendorSearch(''); 
@@ -2496,10 +2537,119 @@ export const ExpensesPage: React.FC = () => {
                         </div>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Ngày chi</span>
-                          <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                            {viewItem.date && !isNaN(Date.parse(viewItem.date)) ? new Date(viewItem.date).toLocaleDateString('vi-VN') : '—'}
-                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Ngày chi</span>
+                            {!isEditingExpenseDate && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTempExpenseDate(viewItem.date ? viewItem.date.split('T')[0] : '');
+                                  setIsEditingExpenseDate(true);
+                                }}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  color: 'var(--color-primary)',
+                                  padding: '0 4px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '2px',
+                                  fontSize: '0.7rem',
+                                  fontWeight: 600
+                                }}
+                                title="Chỉnh sửa ngày chi"
+                              >
+                                <Pencil size={11} />
+                                <span>Đổi ngày</span>
+                              </button>
+                            )}
+                          </div>
+                          {isEditingExpenseDate ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px', flexWrap: 'wrap' }}>
+                              <input
+                                type="date"
+                                value={tempExpenseDate}
+                                onChange={(e) => setTempExpenseDate(e.target.value)}
+                                style={{
+                                  padding: '2px 6px',
+                                  borderRadius: '6px',
+                                  border: '1px solid var(--color-border)',
+                                  fontSize: '0.78rem',
+                                  background: 'var(--color-bg-surface)',
+                                  color: 'var(--color-text)',
+                                  height: '28px'
+                                }}
+                              />
+                              <button
+                                type="button"
+                                disabled={savingExpenseDate || !tempExpenseDate}
+                                onClick={() => handleUpdateExpenseDate(tempExpenseDate)}
+                                style={{
+                                  padding: '0 8px',
+                                  height: '28px',
+                                  borderRadius: '6px',
+                                  border: 'none',
+                                  background: 'var(--color-primary)',
+                                  color: '#fff',
+                                  fontSize: '0.72rem',
+                                  fontWeight: 600,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                {savingExpenseDate ? '...' : 'Lưu'}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={savingExpenseDate}
+                                onClick={() => setIsEditingExpenseDate(false)}
+                                style={{
+                                  padding: '0 6px',
+                                  height: '28px',
+                                  borderRadius: '6px',
+                                  border: '1px solid var(--color-border)',
+                                  background: 'transparent',
+                                  color: 'var(--color-text-muted)',
+                                  fontSize: '0.72rem',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Hủy
+                              </button>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                              <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                                {viewItem.date && !isNaN(Date.parse(viewItem.date)) ? new Date(viewItem.date).toLocaleDateString('vi-VN') : '—'}
+                              </span>
+                              {detectedDeadline && viewItem.date?.split('T')[0] !== detectedDeadline.dateStr && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateExpenseDate(detectedDeadline.dateStr)}
+                                  disabled={savingExpenseDate}
+                                  style={{
+                                    marginTop: '2px',
+                                    background: 'rgba(245, 158, 11, 0.12)',
+                                    border: '1px solid rgba(245, 158, 11, 0.3)',
+                                    borderRadius: '6px',
+                                    padding: '2px 6px',
+                                    color: '#d97706',
+                                    fontSize: '0.7rem',
+                                    fontWeight: 600,
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    textAlign: 'left'
+                                  }}
+                                  title={`Khớp với deadline ${detectedDeadline.displayStr} trong ghi chú`}
+                                >
+                                  <span>💡 Khớp deadline: {detectedDeadline.displayStr}</span>
+                                  <span style={{ textDecoration: 'underline' }}>[Áp dụng]</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </div>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -2698,11 +2848,25 @@ export const ExpensesPage: React.FC = () => {
                     </div>
 
                     {/* Refund confirmation for Accountant/Admin if approved but not yet refunded - Placed right above Bank Card */}
-                    {viewItem.status === 'approved' && !viewItem.is_refunded && (
-                      <div style={{ background: 'var(--color-surface)', padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--color-border-light)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        <h4 style={{ fontSize: '0.85rem', fontWeight: 800, margin: 0, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <Wallet size={16} className="text-warning" /> Hạch toán thanh toán khoản chi
-                        </h4>
+                    {(() => {
+                      const canDisburse = Boolean(user && ['admin', 'superadmin', 'super_admin', 'director', 'accountant', 'hr'].includes(String(user.role).toLowerCase()));
+                      if (viewItem.status !== 'approved' || viewItem.is_refunded) return null;
+                      if (!canDisburse) {
+                        return (
+                          <div style={{ background: 'var(--color-surface)', padding: '1rem 1.25rem', borderRadius: '12px', border: '1px solid rgba(245, 158, 11, 0.25)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <Clock size={18} style={{ color: '#f59e0b', flexShrink: 0 }} />
+                            <div>
+                              <div style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--color-text)' }}>Khoản chi đã được phê duyệt</div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Đang chờ Bộ phận Kế toán / Ban Giám Đốc hạch toán giải ngân và đối soát UNC.</div>
+                            </div>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div style={{ background: 'var(--color-surface)', padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--color-border-light)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          <h4 style={{ fontSize: '0.85rem', fontWeight: 800, margin: 0, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Wallet size={16} className="text-warning" /> Hạch toán thanh toán khoản chi
+                          </h4>
                         <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: 0 }}>Khoản chi đã được duyệt. Tải lên ảnh UNC hoặc Biên lai thanh toán để hoàn tất hạch toán thực chi.</p>
                         
                         <div style={{ display: 'flex', gap: '16px', alignItems: 'center', background: 'var(--color-bg-secondary)', padding: '12px', borderRadius: '10px', border: '1px solid var(--color-border-light)' }}>
@@ -2898,7 +3062,8 @@ export const ExpensesPage: React.FC = () => {
                           </div>
                         </div>
                       </div>
-                    )}
+                    );
+                  })()}
 
                     {/* Bank Transfer Info parsed from notes or description */}
                     {(() => {
@@ -3823,11 +3988,12 @@ export const ExpensesPage: React.FC = () => {
                             loadingHistory={loadingHistory}
                             currentUser={user}
                             users={users}
-                            onAddComment={async (text, fileAttachments) => {
+                            onAddComment={async (text, fileAttachments, parentId) => {
                               if ((!text.trim() && (!fileAttachments || fileAttachments.length === 0)) || !viewItem) return;
                               await api.post(`/expenses/${viewItem.id}/comments`, {
                                 body: text.trim(),
-                                attachments: fileAttachments || []
+                                attachments: fileAttachments || [],
+                                parent_id: parentId || null
                               });
                               addToast('Thêm bình luận thành công', 'success');
                               fetchComments(viewItem.id);

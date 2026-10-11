@@ -30,9 +30,14 @@ export const showSplashScreen = (statusText: string = 'Đang tải dữ liệu..
       statusEl.textContent = statusText;
     }
   }
+
+  // Guaranteed safety fallback: auto dismiss splash screen after at most 4 seconds so the user is NEVER trapped
+  setTimeout(() => {
+    hideSplashScreen(true);
+  }, 4000);
 };
 
-// Smoothly dismiss the instant Mascot Splash Screen (min 2.5 seconds display time)
+// Smoothly dismiss the instant Mascot Splash Screen (min 1.5 seconds display time)
 export const hideSplashScreen = (force: boolean = false) => {
   const doHide = () => {
     const splash = document.getElementById('ideas-splash-screen');
@@ -42,6 +47,7 @@ export const hideSplashScreen = (force: boolean = false) => {
       window.dispatchEvent(new CustomEvent('splash-dismissed'));
       setTimeout(() => {
         splash.style.display = 'none';
+        document.documentElement.classList.add('hide-initial-splash');
       }, 550);
     }
   };
@@ -53,7 +59,7 @@ export const hideSplashScreen = (force: boolean = false) => {
   }
 
   const elapsed = Date.now() - splashStartTime;
-  const MIN_SPLASH_DURATION = 3000; // Minimum 3.0 seconds as requested
+  const MIN_SPLASH_DURATION = 1500; // 1.5s for smooth visual transition
   const remaining = Math.max(0, MIN_SPLASH_DURATION - elapsed);
 
   if (hideTimer) clearTimeout(hideTimer);

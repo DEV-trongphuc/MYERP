@@ -2950,46 +2950,12 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
   const gatewayPingText = useMemo(() => {
     const pendingCount = isPlaying
       ? yesterdayLogs.slice(0, simCurrentIndex).filter((log: any) => log.status === 'pending_work_hours').length
-      : (todayStats || stats)?.pending_work_hours_count || 38;
+      : (todayStats || stats)?.pending_work_hours_count || 0;
     return `PENDING_QUEUE: ${pendingCount} LEADS`;
   }, [isPlaying, yesterdayLogs, simCurrentIndex, todayStats, stats]);
 
-  // MOCK DATA HELPERS
-  const firstNames = ['Nguyễn', 'Trần', 'Lê', 'Phạm', 'Hoàng', 'Phan', 'Vũ', 'Đặng', 'Bùi', 'Đỗ'];
-  const middleNames = ['Thành', 'Thị', 'Văn', 'Minh', 'Hồng', 'Quang', 'Hữu', 'Anh', 'Ngọc', 'Khánh'];
-  const lastNames = ['Nam', 'Mai', 'Long', 'Trang', 'Hải', 'Hùng', 'Cường', 'Vy', 'Tuấn', 'Linh'];
-
   const getSimulationPool = () => {
-    if (yesterdayLogs.length > 0) return yesterdayLogs;
-
-    // Fallback mock pool if yesterday had no data
-    const fallback = [];
-    const statuses: ('assigned' | 'rejected' | 'duplicate' | 'compensation' | 'reminder')[] = ['assigned', 'assigned', 'assigned', 'rejected', 'duplicate', 'compensation', 'reminder'];
-    const fallbackSources = ['Facebook Ad Lead - TOPUP', 'Facebook Ad Male_30_45', 'Zalo Webhook & Direct API'];
-    const fallbackSales = ['Turnio DEV', 'Nguyễn Văn A', 'Trần Thị B', 'Lê Văn C'];
-
-    for (let i = 0; i < 15; i++) {
-      const name = `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${middleNames[Math.floor(Math.random() * middleNames.length)]} ${lastNames[Math.floor(Math.random() * lastNames.length)]}`;
-      const source = fallbackSources[Math.floor(Math.random() * fallbackSources.length)];
-      const sale = fallbackSales[Math.floor(Math.random() * fallbackSales.length)];
-      const status = statuses[Math.floor(Math.random() * statuses.length)];
-
-      const randHour = Math.floor(Math.random() * 24);
-      const randMin = Math.floor(Math.random() * 60);
-      const randSec = Math.floor(Math.random() * 60);
-      const date = new Date();
-      date.setDate(date.getDate() - 1);
-      date.setHours(randHour, randMin, randSec, 0);
-
-      fallback.push({
-        lead_name: name,
-        source: source,
-        assigned_to_name: sale,
-        status: status,
-        created_at: date.toISOString()
-      });
-    }
-    return fallback;
+    return yesterdayLogs || [];
   };
 
   const activeSources = useMemo(() => {

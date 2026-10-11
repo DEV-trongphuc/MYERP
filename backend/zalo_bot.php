@@ -17,6 +17,15 @@ function sendZaloMessage($botToken, $chatId, $text, $sync = true, $leadId = 0)
         return false;
     }
 
+    // BẢO VỆ CHỐNG BẮN ZALO TRÊN MÔI TRƯỜNG STAGING, TEST HOẶC KHI TẮT ZALO
+    if ((defined('APP_ENV') && APP_ENV === 'staging') ||
+        getenv('APP_ENV') === 'staging' ||
+        ($_ENV['APP_ENV'] ?? '') === 'staging' ||
+        getenv('DISABLE_ZALO') === '1' ||
+        ($_ENV['DISABLE_ZALO'] ?? '') === '1') {
+        return true;
+    }
+
     // BẢO VỆ CHỐNG BẮN ZALO KHI CHẠY TEST HOẶC AUDIT
     if (defined('MYERP_TEST_MODE') && MYERP_TEST_MODE) {
         return true;

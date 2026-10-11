@@ -19,6 +19,7 @@ import { NetworkStatusIndicator } from './components/ui/NetworkStatusIndicator';
 import { CommandPalette } from './components/ui/CommandPalette';
 import { GlobalEntityDrawers } from './components/ui/GlobalEntityDrawers';
 import { ChatFloatingLauncher } from './components/chat/ChatFloatingLauncher';
+import { popAndCloseTopOverlay, hasOpenOverlays } from './utils/overlayStack';
 
 
 // Lazy load all pages for Code Splitting (including Enterprise Social Feed)
@@ -67,6 +68,7 @@ const InternalSchedulePage = lazy(() => import('./pages/InternalSchedulePage').t
 const SplashPreviewPage = lazy(() => import('./pages/SplashPreviewPage').then(module => ({ default: module.SplashPreviewPage })));
 const DocumentationPage = lazy(() => import('./pages/DocumentationPage'));
 const ApiDocumentationPage = lazy(() => import('./pages/ApiDocumentationPage'));
+const ApiV1DocumentationPage = lazy(() => import('./pages/ApiV1DocumentationPage'));
 
 // Lightweight null fallback so each tab/page renders its own dedicated, tailored skeleton
 const PageLoader = () => null;
@@ -91,7 +93,12 @@ const ProtectedRoute = ({ allowedRoles }: { allowedRoles?: ('superadmin' | 'admi
   }, []);
 
   const hasToken = token || (typeof window !== 'undefined' && (localStorage.getItem('Ideas_token') || localStorage.getItem('access_token')));
-  if (!hasToken) return <Navigate to="/login" replace />;
+  if (!hasToken) {
+    if (typeof (window as any).hideSplashScreen === 'function') {
+      (window as any).hideSplashScreen(true);
+    }
+    return <Navigate to="/login" replace />;
+  }
 
   if (!user && checkingAuth) {
     return (
@@ -104,7 +111,12 @@ const ProtectedRoute = ({ allowedRoles }: { allowedRoles?: ('superadmin' | 'admi
     );
   }
 
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) {
+    if (typeof (window as any).hideSplashScreen === 'function') {
+      (window as any).hideSplashScreen(true);
+    }
+    return <Navigate to="/login" replace />;
+  }
   if (allowedRoles && !allowedRoles.includes(user.role)) return <Navigate to="/" replace />;
   return (
     <Layout>
@@ -311,6 +323,11 @@ const KeyboardShortcutsController = () => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // 1. Vietnamese IME Protection: never intercept composing strokes (Telex/VNI)
+      if (e.isComposing || e.keyCode === 229) {
+        return;
+      }
+
       const activeEl = document.activeElement;
       const isInputActive = activeEl && (
         activeEl.tagName === 'INPUT' ||
@@ -319,19 +336,109 @@ const KeyboardShortcutsController = () => {
         activeEl.hasAttribute('contenteditable')
       );
 
+      // 2. Global ESC Key Handler: LIFO overlay stack first
       if (e.key === 'Escape') {
+        if (popAndCloseTopOverlay()) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
         if (isInputActive) {
           (activeEl as HTMLElement).blur();
-        } else {
-          setShowHelpModal(false);
+          return;
+        }
+        setShowHelpModal(false);
+        return;
+      }
+
+      // 3. Global Ctrl + S / Cmd + S: Save active form
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        window.dispatchEvent(new CustomEvent('erp-save-active-form'));
+
+        const activeModal = document.querySelector('.custom-modal-overlay, [class*="modal"], [class*="drawer"]');
+        if (activeModal) {
+          const submitBtn = activeModal.querySelector<HTMLButtonElement>(
+            'button[type="submit"], button.btn.primary, button[class*="primary"]'
+          );
+          if (submitBtn && !submitBtn.disabled) {
+            submitBtn.click();
+            return;
+          }
         }
         return;
       }
 
+      // If user is actively typing in an input/textarea, do NOT intercept single letters
       if (isInputActive) {
         return;
       }
 
+      // 4. J / K or ArrowDown / ArrowUp Table Row Navigation (when no modal/drawer is open)
+      if (e.key === 'j' || e.key === 'J' || (e.key === 'ArrowDown' && !e.altKey && !e.ctrlKey && !e.metaKey)) {
+        if (!hasOpenOverlays()) {
+          const focusedRow = document.querySelector<HTMLElement>('tr.erp-row-focused, tr[data-focused="true"]');
+          const allRows = Array.from(document.querySelectorAll<HTMLElement>('table tbody tr:not(.empty-row)'));
+          if (allRows.length > 0) {
+            e.preventDefault();
+            let nextIdx = 0;
+            if (focusedRow) {
+              focusedRow.classList.remove('erp-row-focused');
+              focusedRow.removeAttribute('data-focused');
+              const currentIdx = allRows.indexOf(focusedRow);
+              nextIdx = Math.min(allRows.length - 1, currentIdx + 1);
+            }
+            const nextRow = allRows[nextIdx];
+            if (nextRow) {
+              nextRow.classList.add('erp-row-focused');
+              nextRow.setAttribute('data-focused', 'true');
+              nextRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }
+          }
+        }
+        return;
+      }
+
+      if (e.key === 'k' || e.key === 'K' || (e.key === 'ArrowUp' && !e.altKey && !e.ctrlKey && !e.metaKey)) {
+        if (!hasOpenOverlays()) {
+          const focusedRow = document.querySelector<HTMLElement>('tr.erp-row-focused, tr[data-focused="true"]');
+          const allRows = Array.from(document.querySelectorAll<HTMLElement>('table tbody tr:not(.empty-row)'));
+          if (allRows.length > 0) {
+            e.preventDefault();
+            let prevIdx = allRows.length - 1;
+            if (focusedRow) {
+              focusedRow.classList.remove('erp-row-focused');
+              focusedRow.removeAttribute('data-focused');
+              const currentIdx = allRows.indexOf(focusedRow);
+              prevIdx = Math.max(0, currentIdx - 1);
+            }
+            const prevRow = allRows[prevIdx];
+            if (prevRow) {
+              prevRow.classList.add('erp-row-focused');
+              prevRow.setAttribute('data-focused', 'true');
+              prevRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }
+          }
+        }
+        return;
+      }
+
+      // 5. Enter Key to open focused table row
+      if (e.key === 'Enter') {
+        if (!hasOpenOverlays()) {
+          const focusedRow = document.querySelector<HTMLElement>('tr.erp-row-focused, tr[data-focused="true"]');
+          if (focusedRow) {
+            e.preventDefault();
+            const clickable = focusedRow.querySelector<HTMLElement>('button, a, [role="button"]') || focusedRow;
+            clickable.click();
+            return;
+          }
+        }
+      }
+
+      // 6. Help modal & Alt shortcuts
       if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
         e.preventDefault();
         setShowHelpModal(prev => !prev);
@@ -403,28 +510,55 @@ const KeyboardShortcutsController = () => {
       <CustomModal
         isOpen={showHelpModal}
         onClose={() => setShowHelpModal(false)}
-        title={t("Bảng phím tắt điều hướng nhanh")}
-        width="650px"
+        title={t("Bảng phím tắt công thái học & điều hướng nhanh")}
+        width="720px"
       >
         {showHelpModal && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', padding: '0.5rem 0' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-primary)' }}>
               <Keyboard size={20} />
-              <span style={{ fontSize: '0.875rem', fontWeight: 700 }}>{t("Mẹo: Nhấn Alt + [Chữ cái] để chuyển hướng nhanh toàn hệ thống")}</span>
+              <span style={{ fontSize: '0.875rem', fontWeight: 700 }}>{t("Mẹo: Nhấn Alt + [Chữ cái] để chuyển trang; Ctrl + S để lưu; J / K để duyệt bảng")}</span>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: isSystemAdmin ? '1fr 1fr' : '1fr', gap: '1.5rem' }}>
-              {/* Column 1: Chung & Vận hành */}
+              {/* Column 1: Chung & Công thái học */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div>
+                  <h4 style={{ fontSize: '0.8125rem', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', marginBottom: '8px', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '4px' }}>
+                    {t("Công thái học Nhập liệu")}
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
+                      <span style={{ color: 'var(--color-text)', fontWeight: 600 }}>{t("Spotlight Search & Tác vụ")}</span>
+                      <kbd className="shortcuts-kbd" style={{ background: 'var(--color-primary)', color: '#ffffff', borderColor: 'var(--color-primary)' }}>Ctrl + K</kbd>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
+                      <span style={{ color: 'var(--color-text)', fontWeight: 600 }}>{t("Lưu nhanh biểu mẫu (Save Form)")}</span>
+                      <kbd className="shortcuts-kbd">Ctrl + S</kbd>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
+                      <span style={{ color: 'var(--color-text)', fontWeight: 600 }}>{t("Đóng Modal / Drawer (LIFO)")}</span>
+                      <kbd className="shortcuts-kbd">ESC</kbd>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
+                      <span style={{ color: 'var(--color-text)', fontWeight: 600 }}>{t("Xuống / Lên dòng bảng dữ liệu")}</span>
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <kbd className="shortcuts-kbd">J</kbd>
+                        <kbd className="shortcuts-kbd">K</kbd>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
+                      <span style={{ color: 'var(--color-text)', fontWeight: 600 }}>{t("Mở chi tiết dòng đang chọn")}</span>
+                      <kbd className="shortcuts-kbd">Enter</kbd>
+                    </div>
+                  </div>
+                </div>
+
                 <div>
                   <h4 style={{ fontSize: '0.8125rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '8px', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '4px' }}>
                     {t("Chung & Vận hành")}
                   </h4>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
-                      <span style={{ color: 'var(--color-primary)', fontWeight: 700 }}>{t("Spotlight Search toàn năng")}</span>
-                      <kbd className="shortcuts-kbd" style={{ background: 'var(--color-primary)', color: '#ffffff', borderColor: 'var(--color-primary)' }}>Ctrl + K</kbd>
-                    </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
                       <span style={{ color: 'var(--color-text)' }}>{t("Trang chủ Dashboard")}</span>
                       <kbd className="shortcuts-kbd">Alt + D</kbd>
@@ -442,7 +576,7 @@ const KeyboardShortcutsController = () => {
                       <kbd className="shortcuts-kbd">Alt + H</kbd>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
-                      <span style={{ color: 'var(--color-text)' }}>{t("Xem kịch bản trợ giúp này")}</span>
+                      <span style={{ color: 'var(--color-text)' }}>{t("Xem bảng trợ giúp này")}</span>
                       <kbd className="shortcuts-kbd">?</kbd>
                     </div>
                   </div>
@@ -583,7 +717,10 @@ export default function App() {
                   <Route path="/public-schedule/:customerId" element={<PublicSchedulePage />} />
                   <Route path="/docs" element={<DocumentationPage />} />
                   <Route path="/documentation" element={<DocumentationPage />} />
-                  <Route path="/api-docs" element={<ApiDocumentationPage />} />
+                  <Route path="/api-docs" element={<ApiV1DocumentationPage />} />
+                  <Route path="/api-v1-docs" element={<ApiV1DocumentationPage />} />
+                  <Route path="/api/v1/docs" element={<ApiV1DocumentationPage />} />
+                  <Route path="/api-docs-legacy" element={<ApiDocumentationPage />} />
 
                   {/* All authenticated users (sharing a single persistent AppTabs instance) */}
                   <Route element={<ProtectedRoute />}>

@@ -798,11 +798,14 @@ export const Header = ({
 
       const urlObj = new URL(targetLink, window.location.origin);
 
+      // Clean all existing global drawers before routing
+      useUIStore.getState().closeAllDrawers();
+
       // Route based strictly on target URL path (NO keyword matching):
       if (urlObj.pathname.startsWith('/workspace')) {
         const taskId = urlObj.searchParams.get('task_id') || urlObj.searchParams.get('id');
         const numTaskId = Number(taskId);
-        if (taskId && !isNaN(numTaskId) && numTaskId > 0) {
+        if (taskId && !isNaN(numTaskId) && numTaskId > 0 && (window.location.pathname.startsWith('/workspace') || window.location.pathname === '/')) {
           window.dispatchEvent(new CustomEvent('open-task-drawer', {
             detail: { id: numTaskId, taskId: numTaskId }
           }));
@@ -832,9 +835,11 @@ export const Header = ({
         }
 
         if (contactId) {
-          window.dispatchEvent(new CustomEvent('open-contact-drawer', {
-            detail: { id: contactId, contactId: contactId }
-          }));
+          if (window.location.pathname.startsWith('/contacts')) {
+            window.dispatchEvent(new CustomEvent('open-contact-drawer', {
+              detail: { id: contactId, contactId: contactId }
+            }));
+          }
           if (!idFromParam) {
             targetLink = `/contacts?open_contact_id=${contactId}`;
           }
@@ -862,7 +867,7 @@ export const Header = ({
       if (urlObj.pathname.startsWith('/deposits')) {
         const openId = urlObj.searchParams.get('open_id') || urlObj.searchParams.get('id') || urlObj.searchParams.get('open_deposit_id');
         const numOpenId = Number(openId);
-        if (openId && !isNaN(numOpenId) && numOpenId > 0) {
+        if (openId && !isNaN(numOpenId) && numOpenId > 0 && window.location.pathname.startsWith('/deposits')) {
           window.dispatchEvent(new CustomEvent('open-deposit-drawer', {
             detail: { id: numOpenId, depositId: numOpenId }
           }));
@@ -872,9 +877,9 @@ export const Header = ({
       }
 
       if (urlObj.pathname.startsWith('/deals')) {
-        const dealId = urlObj.searchParams.get('id') || urlObj.searchParams.get('open_deal_id');
+        const dealId = urlObj.searchParams.get('id') || urlObj.searchParams.get('open_deal_id') || urlObj.searchParams.get('deal_id');
         const numDealId = Number(dealId);
-        if (dealId && !isNaN(numDealId) && numDealId > 0) {
+        if (dealId && !isNaN(numDealId) && numDealId > 0 && window.location.pathname.startsWith('/deals')) {
           window.dispatchEvent(new CustomEvent('open-deal-drawer', {
             detail: { id: numDealId, dealId: numDealId }
           }));
@@ -889,6 +894,7 @@ export const Header = ({
     }
 
     // 2. Structured fallback when notif.link is missing
+    useUIStore.getState().closeAllDrawers();
     const notifType = (notif.type || '').toLowerCase();
     if (notifType.includes('attendance')) {
       navigate('/attendance');
@@ -898,9 +904,11 @@ export const Header = ({
     if (notifType.startsWith('task') || notifType === 'activity' || notifType === 'subtask') {
       const taskId = notif.task_id || notif.activity_id || notif.entity_id;
       if (taskId && !isNaN(Number(taskId))) {
-        window.dispatchEvent(new CustomEvent('open-task-drawer', {
-          detail: { id: Number(taskId), taskId: Number(taskId) }
-        }));
+        if (window.location.pathname.startsWith('/workspace') || window.location.pathname === '/') {
+          window.dispatchEvent(new CustomEvent('open-task-drawer', {
+            detail: { id: Number(taskId), taskId: Number(taskId) }
+          }));
+        }
         navigate(`/workspace?task_id=${taskId}`);
         return;
       }
@@ -927,9 +935,11 @@ export const Header = ({
     if (['contact', 'lead', 'customer'].includes(notifType)) {
       const cid = notif.contact_id || notif.entity_id;
       if (cid && !isNaN(Number(cid))) {
-        window.dispatchEvent(new CustomEvent('open-contact-drawer', {
-          detail: { id: Number(cid), contactId: Number(cid) }
-        }));
+        if (window.location.pathname.startsWith('/contacts')) {
+          window.dispatchEvent(new CustomEvent('open-contact-drawer', {
+            detail: { id: Number(cid), contactId: Number(cid) }
+          }));
+        }
         navigate(`/contacts?open_contact_id=${cid}`);
         return;
       }
@@ -940,13 +950,30 @@ export const Header = ({
     if (['deposit', 'sales_order'].includes(notifType)) {
       const depId = notif.deposit_id || notif.entity_id;
       if (depId && !isNaN(Number(depId))) {
-        window.dispatchEvent(new CustomEvent('open-deposit-drawer', {
-          detail: { id: Number(depId), depositId: Number(depId) }
-        }));
+        if (window.location.pathname.startsWith('/deposits')) {
+          window.dispatchEvent(new CustomEvent('open-deposit-drawer', {
+            detail: { id: Number(depId), depositId: Number(depId) }
+          }));
+        }
         navigate(`/deposits?open_id=${depId}`);
         return;
       }
       navigate('/deposits');
+      return;
+    }
+
+    if (['deal', 'pipeline_deal', 'opportunity'].includes(notifType)) {
+      const dealId = notif.deal_id || notif.entity_id;
+      if (dealId && !isNaN(Number(dealId))) {
+        if (window.location.pathname.startsWith('/deals')) {
+          window.dispatchEvent(new CustomEvent('open-deal-drawer', {
+            detail: { id: Number(dealId), dealId: Number(dealId) }
+          }));
+        }
+        navigate(`/deals?open_deal_id=${dealId}`);
+        return;
+      }
+      navigate('/deals');
       return;
     }
 

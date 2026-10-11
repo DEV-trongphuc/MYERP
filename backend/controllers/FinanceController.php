@@ -300,7 +300,12 @@ class FinanceController
                     $data['company_id'] = null;
             }
 
-            $isPaid = ($data['status'] ?? 'pending') === 'paid';
+            $isManagerOrAccountant = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'accountant'], true);
+            $invStatus = $data['status'] ?? 'pending';
+            if ($invStatus === 'paid' && !$isManagerOrAccountant) {
+                $invStatus = 'pending';
+            }
+            $isPaid = ($invStatus === 'paid');
             $stmt = $this->db->prepare("
                 INSERT INTO invoices (tenant_id,deal_id,company_id,contact_id,created_by,invoice_number,title,status,issue_date,due_date,subtotal,discount,tax,total,notes,shipping_customer_pay,shipping_fee,is_inventory_deducted,paid_at)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
@@ -313,7 +318,7 @@ class FinanceController
                 $uid,
                 $data['invoice_number'],
                 $data['title'],
-                $data['status'] ?? 'pending',
+                $invStatus,
                 empty($data['issue_date']) ? date('Y-m-d') : $data['issue_date'],
                 empty($data['due_date']) ? date('Y-m-d', strtotime('+30 days')) : $data['due_date'],
                 $data['subtotal'] ?? 0,
@@ -737,22 +742,26 @@ class FinanceController
             $params[] = (int)$creatorId;
         }
 
-        $includeZeroAdmin = ($_GET['include_zero_admin'] ?? '') === '1';
-        if (!$includeZeroAdmin) {
-            $where[] = '(e.amount > 0 OR (
-                e.title NOT LIKE "%IN ĐÓNG DẤU%"
-                AND e.title NOT LIKE "%in, đóng dấu%"
-                AND e.title NOT LIKE "%In, đóng dấu%"
-                AND e.title NOT LIKE "%văn phòng phẩm%"
-                AND e.title NOT LIKE "%phòng họp%"
-                AND e.title NOT LIKE "%phê duyệt văn bản%"
-                AND e.title NOT LIKE "%thiết bị IT%"
-                AND e.title NOT LIKE "%quy trình%"
-                AND e.title NOT LIKE "%QUY TRÌNH%"
-                AND e.notes NOT LIKE "%Quy trình: In, đóng dấu%"
-                AND e.notes NOT LIKE "%DANH SÁCH VĂN PHÒNG PHẨM%"
-                AND e.category NOT IN ("Hành chính", "admin", "general")
-            ))';
+        if ($role === 'accountant') {
+            $where[] = 'e.amount > 0';
+        } else {
+            $includeZeroAdmin = ($_GET['include_zero_admin'] ?? '') === '1';
+            if (!$includeZeroAdmin) {
+                $where[] = '(e.amount > 0 OR (
+                    e.title NOT LIKE "%IN ĐÓNG DẤU%"
+                    AND e.title NOT LIKE "%in, đóng dấu%"
+                    AND e.title NOT LIKE "%In, đóng dấu%"
+                    AND e.title NOT LIKE "%văn phòng phẩm%"
+                    AND e.title NOT LIKE "%phòng họp%"
+                    AND e.title NOT LIKE "%phê duyệt văn bản%"
+                    AND e.title NOT LIKE "%thiết bị IT%"
+                    AND e.title NOT LIKE "%quy trình%"
+                    AND e.title NOT LIKE "%QUY TRÌNH%"
+                    AND e.notes NOT LIKE "%Quy trình: In, đóng dấu%"
+                    AND e.notes NOT LIKE "%DANH SÁCH VĂN PHÒNG PHẨM%"
+                    AND e.category NOT IN ("Hành chính", "admin", "general")
+                ))';
+            }
         }
         if ($category) {
             if ($category === 'Vận Chuyển' || $category === 'Di chuyển') {
@@ -1004,9 +1013,10 @@ class FinanceController
             }
         }
 
-        // Force pending status if created by sales/sale role (Security Gate)
+        // Cấp Quản lý trở lên toàn quyền tạo phiếu chi approved; nhân sự cấp dưới bắt buộc pending chờ duyệt
+        $isManagerOrAbove = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager'], true);
         $statusVal = $data['status'] ?? 'pending';
-        if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
+        if (!$isManagerOrAbove) {
             $statusVal = 'pending';
         }
 
@@ -1064,6 +1074,19 @@ class FinanceController
         }
         $itemsJson = !empty($data['items']) ? (is_string($data['items']) ? $data['items'] : json_encode($data['items'], JSON_UNESCAPED_UNICODE)) : null;
 
+        $expenseDate = !empty($data['date']) ? trim($data['date']) : date('Y-m-d');
+        // Auto-detect deadline date from notes if user didn't specify custom date or left as today
+        if ((empty($data['date']) || $data['date'] === date('Y-m-d')) && !empty($data['notes'])) {
+            if (preg_match('/(?:deadline|hạn)\s*(?:thanh\s*toán|chi)?\s*[:\s-]*(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/iu', $data['notes'], $dMatch)) {
+                $dDay = str_pad($dMatch[1], 2, '0', STR_PAD_LEFT);
+                $dMonth = str_pad($dMatch[2], 2, '0', STR_PAD_LEFT);
+                $dYear = $dMatch[3];
+                if (checkdate((int)$dMonth, (int)$dDay, (int)$dYear)) {
+                    $expenseDate = "$dYear-$dMonth-$dDay";
+                }
+            }
+        }
+
         $this->db->beginTransaction();
         try {
             $stmt = $this->db->prepare("
@@ -1083,7 +1106,7 @@ class FinanceController
                 $totalAmount,
                 $currency,
                 $data['vat_amount'] ?? 0,
-                $data['date'] ?? date('Y-m-d'),
+                $expenseDate,
                 $statusVal,
                 $data['notes'] ?? null,
                 $itemsJson,
@@ -1258,13 +1281,15 @@ class FinanceController
         $this->db->beginTransaction();
         try {
             // Check permission and get current amount if not provided
-            $sqlCheck = "SELECT id, amount, created_by, title, status, approval_status, is_refunded FROM expenses WHERE id=? AND tenant_id=?";
+            $sqlCheck = "SELECT id, amount, created_by, title, status, approval_status, is_refunded, approver_id, approver_id_2, approver_id_3 FROM expenses WHERE id=? AND tenant_id=?";
             $cp = [$id, $auth['tenant_id']];
             if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
                 $sqlCheck .= " AND created_by=?";
                 $cp[] = $auth['user_id'];
             } else if ($auth['role'] === 'manager') {
-                $sqlCheck .= " AND (created_by = ? OR approver_id = ? OR created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)))";
+                $sqlCheck .= " AND (created_by = ? OR approver_id = ? OR approver_id_2 = ? OR approver_id_3 = ? OR created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)))";
+                $cp[] = $auth['user_id'];
+                $cp[] = $auth['user_id'];
                 $cp[] = $auth['user_id'];
                 $cp[] = $auth['user_id'];
                 $cp[] = $auth['user_id'];
@@ -1280,8 +1305,15 @@ class FinanceController
             if (!$isAdminOrFinance && ($row['status'] === 'approved' || $row['approval_status'] === 'approved' || !empty($row['is_refunded'])) && $updatingGeneralFields) {
                 respond(422, null, 'Đề xuất chi phí/tạm ứng đã được phê duyệt hoặc hoàn tất thanh toán, không thể chỉnh sửa thông tin', false);
             }
-            if (!$isCreator && $updatingGeneralFields) {
-                respond(403, null, 'Chỉ người tạo phiếu mới có quyền chỉnh sửa chi phí', false);
+            $isApprover = in_array((int)$auth['user_id'], array_filter([
+                (int)($row['approver_id'] ?? 0),
+                (int)($row['approver_id_2'] ?? 0),
+                (int)($row['approver_id_3'] ?? 0)
+            ]), true);
+            $onlyUpdatingDate = count(array_intersect(array_keys($data), ['title', 'category', 'amount', 'currency', 'items', 'vat_amount', 'notes', 'vendor_name', 'entities'])) === 0 && array_key_exists('date', $data);
+
+            if (!$isAdminOrFinance && !$isCreator && !($isApprover && $onlyUpdatingDate) && $updatingGeneralFields) {
+                respond(403, null, 'Chỉ người tạo phiếu, cấp duyệt hoặc ban quản trị/kế toán mới có quyền chỉnh sửa chi phí', false);
             }
 
             $currentTotal = (float) ($data['amount'] ?? $row['amount']);
@@ -1471,7 +1503,20 @@ class FinanceController
     public function approveExpense(array $auth, int $id): void
     {
         $data = getBody();
-        $statusInput = $data['status'] ?? 'approved'; // 'approved' or 'rejected'
+        $statusInput = $data['status'] ?? 'approved';
+        $rejectReason = $data['reject_reason'] ?? ($data['reason'] ?? null);
+        $this->executeExpenseApprovalAction($auth, $id, $statusInput, $rejectReason);
+    }
+
+    public function rejectExpense(array $auth, int $id): void
+    {
+        $data = getBody();
+        $rejectReason = $data['reject_reason'] ?? ($data['reason'] ?? null);
+        $this->executeExpenseApprovalAction($auth, $id, 'rejected', $rejectReason);
+    }
+
+    private function executeExpenseApprovalAction(array $auth, int $id, string $statusInput = 'approved', ?string $rejectReason = null): void
+    {
         if (!in_array($statusInput, ['approved', 'rejected'], true)) {
             respond(400, null, 'Trạng thái phê duyệt không hợp lệ', false);
         }
@@ -1511,7 +1556,7 @@ class FinanceController
                 respond(403, null, 'Bạn không có quyền duyệt chi phí này', false);
             }
 
-            if ($auth['role'] === 'manager') {
+            if ($auth['role'] === 'manager' && !$isAssigned) {
                 $creatorId = (int)$expenseRow['created_by'];
                 
                 // Check if creator belongs to the manager's team
@@ -1575,7 +1620,7 @@ class FinanceController
                 $nextStatus = 'rejected';
                 
                 $this->db->prepare("UPDATE expenses SET status='rejected', approval_status='rejected', $levelStatusField='rejected', $levelTimeField=NOW(), reject_reason=? WHERE id=?")
-                    ->execute([$data['reject_reason'] ?? null, $id]);
+                    ->execute([$rejectReason, $id]);
             } else {
                 $hasLevel2 = !empty($expenseRow['approver_id_2']) && $expenseRow['status_level_2'] !== 'none';
                 $hasLevel3 = !empty($expenseRow['approver_id_3']) && $expenseRow['status_level_3'] !== 'none';
@@ -1624,7 +1669,7 @@ class FinanceController
                     'title' => $expenseRow['title'],
                     'amount' => (float)$expenseRow['amount'],
                     'approver_name' => $auth['full_name'] ?? 'Người duyệt',
-                    'reject_reason' => $data['reject_reason'] ?? '',
+                    'reject_reason' => $rejectReason ?? '',
                     'ref_id' => $id,
                     'level' => $currentLevel
                 ]);
@@ -1644,7 +1689,7 @@ class FinanceController
                                     'title' => $expenseRow['title'],
                                     'amount' => (float)$expenseRow['amount'],
                                     'approver_name' => $auth['full_name'] ?? 'Người duyệt',
-                                    'reject_reason' => $data['reject_reason'] ?? '',
+                                    'reject_reason' => $rejectReason ?? '',
                                     'ref_id' => $id,
                                     'level' => $currentLevel
                                 ]);
@@ -1711,8 +1756,8 @@ class FinanceController
                 }
             }
 
-            logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'APPROVE', 'expense', $id, json_encode(['status' => $nextStatus]));
-            respond(200, null, 'Đã cập nhật trạng thái');
+            logActivity($this->db, $auth['tenant_id'], $auth['user_id'], $statusInput === 'rejected' ? 'REJECT' : 'APPROVE', 'expense', $id, json_encode(['status' => $nextStatus, 'reject_reason' => $rejectReason]));
+            respond(200, null, $statusInput === 'rejected' ? 'Đã từ chối chi phí' : 'Đã cập nhật trạng thái');
         } catch (Exception $e) {
             $this->db->rollBack();
             respond(500, null, 'Lỗi khi duyệt chi phí: ' . $e->getMessage(), false);
@@ -2016,6 +2061,11 @@ class FinanceController
             if (!$expenseRow) {
                 $this->db->rollBack();
                 respond(404, null, 'Không tìm thấy phiếu đề xuất chi phí', false);
+            }
+
+            if ($expenseRow['status'] !== 'approved') {
+                $this->db->rollBack();
+                respond(422, null, 'Chỉ có thể giải ngân hoa hồng cho phiếu đề xuất đã được phê duyệt hợp lệ', false);
             }
 
             $rawItems = $expenseRow['items'] ?? null;

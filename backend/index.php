@@ -536,21 +536,22 @@ function deductStockFIFO(PDO $db, $tid, $uid, $productId, $qty, string $invNum):
  * Reverses stock deduction for a specific invoice number
  */
 function returnStock(PDO $db, int $tid, int $uid, string $invNum): void {
-    // 1. Find logs related to this invoice
-    $stmt = $db->prepare("SELECT batch_id, ABS(qty_change) as qty FROM inventory_logs WHERE tenant_id=? AND reason LIKE ? AND action_type='SALE'");
-    $stmt->execute([$tid, "%Hóa đơn #$invNum"]);
+    // 1. Find logs related to this invoice with exact reason match (Anti-Collision)
+    $exactReason = "Bán hàng - Hóa đơn #$invNum";
+    $stmt = $db->prepare("SELECT batch_id, ABS(qty_change) as qty FROM inventory_logs WHERE tenant_id=? AND action_type='SALE' AND reason=?");
+    $stmt->execute([$tid, $exactReason]);
     $logs = $stmt->fetchAll();
 
     foreach ($logs as $log) {
         $bid = (int)$log['batch_id'];
         $qty = (float)$log['qty'];
 
-        // 2. Put stock back into batch
-        $db->prepare("UPDATE batches SET current_qty = current_qty + ? WHERE id=?")->execute([$qty, $bid]);
+        // 2. Put stock back into batch with tenant isolation
+        $db->prepare("UPDATE batches SET current_qty = current_qty + ? WHERE id=? AND tenant_id=?")->execute([$qty, $bid, $tid]);
 
-        // 3. Update overall product stock
-        $db->prepare("UPDATE products p JOIN batches b ON p.id = b.product_id SET p.stock_quantity = p.stock_quantity + ? WHERE b.id = ?")
-             ->execute([$qty, $bid]);
+        // 3. Update overall product stock with tenant isolation
+        $db->prepare("UPDATE products p JOIN batches b ON p.id = b.product_id SET p.stock_quantity = p.stock_quantity + ? WHERE b.id = ? AND p.tenant_id = ? AND b.tenant_id = ?")
+             ->execute([$qty, $bid, $tid, $tid]);
 
         // 4. Create reversal log
         $db->prepare("INSERT INTO inventory_logs (tenant_id, batch_id, action_type, qty_change, reason, created_by) VALUES (?, ?, 'ADJUST', ?, ?, ?)")
@@ -558,45 +559,17 @@ function returnStock(PDO $db, int $tid, int $uid, string $invNum): void {
     }
 }
 
-// ── Load services & controllers ───────────────────────────────
-require_once __DIR__ . '/NotificationService.php';
-require_once __DIR__ . '/controllers/AuthController.php';
-require_once __DIR__ . '/controllers/DashboardController.php';
-require_once __DIR__ . '/controllers/ContactController.php';
-require_once __DIR__ . '/controllers/CompanyController.php';
-require_once __DIR__ . '/controllers/DealController.php';
-require_once __DIR__ . '/controllers/ActivityController.php';
-require_once __DIR__ . '/controllers/ProductController.php';
-require_once __DIR__ . '/controllers/QuoteController.php';
-require_once __DIR__ . '/controllers/UserController.php';
-require_once __DIR__ . '/controllers/HRMController.php';
-require_once __DIR__ . '/controllers/NotificationController.php';
-require_once __DIR__ . '/controllers/ReportController.php';
-require_once __DIR__ . '/controllers/NoteController.php';
-require_once __DIR__ . '/controllers/SearchController.php';
-require_once __DIR__ . '/controllers/ImportController.php';
-require_once __DIR__ . '/controllers/FinanceController.php';
-require_once __DIR__ . '/controllers/POSController.php';
-require_once __DIR__ . '/controllers/TicketController.php';
-require_once __DIR__ . '/controllers/TagController.php';
-require_once __DIR__ . '/controllers/SupplierController.php';
-require_once __DIR__ . '/controllers/InventoryController.php';
-require_once __DIR__ . '/controllers/PurchaseOrderController.php';
-require_once __DIR__ . '/controllers/SalesOrderController.php';
-require_once __DIR__ . '/controllers/CloudFileController.php';
-require_once __DIR__ . '/controllers/CustomFieldController.php';
-require_once __DIR__ . '/controllers/ExportController.php';
-require_once __DIR__ . '/controllers/TaskGroupController.php';
-require_once __DIR__ . '/controllers/ProjectController.php';
-require_once __DIR__ . '/controllers/CampaignController.php';
-require_once __DIR__ . '/controllers/DepositController.php';
-require_once __DIR__ . '/controllers/CooperationController.php';
-require_once __DIR__ . '/controllers/CapiController.php';
-require_once __DIR__ . '/controllers/CheckInController.php';
-require_once __DIR__ . '/controllers/TeamController.php';
-require_once __DIR__ . '/controllers/WorkflowTaskTemplateController.php';
-require_once __DIR__ . '/controllers/PostController.php';
-require_once __DIR__ . '/controllers/ChatController.php';
+// ── High-Performance Controller Autoloader (On-Demand Lazy Loading) ──
+spl_autoload_register(function ($class) {
+    if ($class === 'NotificationService') {
+        require_once __DIR__ . '/NotificationService.php';
+        return;
+    }
+    $file = __DIR__ . '/controllers/' . $class . '.php';
+    if (file_exists($file)) {
+        require_once $file;
+    }
+});
 
 // ── Parse route ───────────────────────────────────────────────
 $rawAction = $_GET['action'] ?? '';
@@ -610,6 +583,52 @@ if (!empty($rawAction)) {
     $path       = trim(urldecode($requestUri), '/');
 }
 $segments   = array_values(array_filter(explode('/', $path)));
+if (isset($segments[0]) && $segments[0] === 'v1') {
+    array_shift($segments);
+}
+
+// ── RESTful Route Normalizer (V1 Docs Spec Parity) ──
+if (isset($segments[0])) {
+    // 1. /finance/invoices -> /invoices, /finance/expenses -> /expenses
+    if ($segments[0] === 'finance') {
+        if (isset($segments[1]) && in_array($segments[1], ['invoices', 'expenses'], true)) {
+            array_shift($segments);
+        }
+    }
+    // 2. /orders -> /sales-orders
+    elseif ($segments[0] === 'orders') {
+        $segments[0] = 'sales-orders';
+    }
+    // 3. /cooperation/slips -> /cooperation-slips
+    elseif ($segments[0] === 'cooperation' && isset($segments[1]) && $segments[1] === 'slips') {
+        $segments[0] = 'cooperation-slips';
+        array_splice($segments, 1, 1);
+    }
+    // 4. /hrm/checkin/logs or /hrm/checkin -> /check-ins
+    elseif ($segments[0] === 'hrm' && isset($segments[1]) && $segments[1] === 'checkin') {
+        if (isset($segments[2]) && $segments[2] === 'logs') {
+            $segments = array_merge(['check-ins'], array_slice($segments, 3));
+        } else {
+            $segments = array_merge(['check-ins'], array_slice($segments, 2));
+        }
+    }
+    // 5. /feed/posts -> /posts
+    elseif ($segments[0] === 'feed' && isset($segments[1]) && $segments[1] === 'posts') {
+        $segments = array_merge(['posts'], array_slice($segments, 2));
+    }
+    // 6. /inventory/items -> /inventory
+    elseif ($segments[0] === 'inventory' && isset($segments[1]) && $segments[1] === 'items') {
+        array_splice($segments, 1, 1);
+    }
+    // 7. /marketing/campaigns -> /campaigns
+    elseif ($segments[0] === 'marketing' && isset($segments[1]) && $segments[1] === 'campaigns') {
+        $segments = array_merge(['campaigns'], array_slice($segments, 2));
+    }
+    // 8. /marketing/capi -> /capi
+    elseif ($segments[0] === 'marketing' && isset($segments[1]) && $segments[1] === 'capi') {
+        $segments = array_merge(['capi'], array_slice($segments, 2));
+    }
+}
 
 $method        = $_SERVER['REQUEST_METHOD'];
 if ($method === 'POST') {
@@ -840,6 +859,7 @@ switch ($resource) {
         $auth = requireAuth();
         $ctrl = new CustomFieldController($db);
         if     (!$resourceId && $method === 'GET')    $ctrl->index($auth);
+        elseif ($resourceId  && $method === 'GET')    $ctrl->show($auth, (int)$resourceId);
         elseif (!$resourceId && $method === 'POST')   $ctrl->store($auth);
         elseif ($resourceId  && $method === 'PUT')    $ctrl->update($auth, (int)$resourceId);
         elseif ($resourceId  && $method === 'DELETE') $ctrl->destroy($auth, (int)$resourceId);
@@ -871,6 +891,8 @@ switch ($resource) {
         elseif ($resourceId === 'forgot-password' && $method === 'POST') $ctrl->forgotPasswordRequest();
         elseif ($resourceId === 'reset-password' && $method === 'POST') $ctrl->forgotPasswordReset();
         elseif ($resourceId === 'change-password' && $method === 'POST') $ctrl->changePassword(requireAuth());
+        elseif ($resourceId === 'profile' && $method === 'PUT') $ctrl->updateProfile(requireAuth());
+        elseif ($resourceId === 'permissions' && $method === 'GET') $ctrl->getPermissions(requireAuth());
         elseif ($resourceId === 'refresh' && $method === 'POST') $ctrl->refresh();
         elseif ($resourceId === 'logout'  && $method === 'POST') $ctrl->logout();
         elseif ($resourceId === 'me'      && $method === 'GET')  $ctrl->me(requireAuth());
@@ -888,6 +910,7 @@ switch ($resource) {
         elseif ($resourceId === 'pipeline-funnel')    $ctrl->pipelineFunnel($auth);
         elseif ($resourceId === 'lead-sources')       $ctrl->leadSources($auth);
         elseif ($resourceId === 'sales-leaderboard')  $ctrl->salesLeaderboard($auth);
+        elseif ($resourceId === 'sales-lead-performance') $ctrl->salesLeadPerformance($auth);
         elseif ($resourceId === 'my-stats')           $ctrl->myStats($auth);
         elseif ($resourceId === 'badges')             $ctrl->badges($auth);
         else respond(404, null, 'Route không tồn tại', false);
@@ -924,6 +947,8 @@ switch ($resource) {
         elseif ($resourceId  && $subResource === 'release-databank' && $method === 'POST') $ctrl->releaseDatabank($auth, (int)$resourceId);
         elseif ($resourceId  && $subResource === 'collaborators' && $method === 'GET') $ctrl->getCollaborators($auth, (int)$resourceId);
         elseif ($resourceId  && $subResource === 'send-academic-email' && $method === 'POST') $ctrl->sendAcademicEmail($auth, (int)$resourceId);
+        elseif ($resourceId  && $subResource === 'assign' && $method === 'POST') $ctrl->assignContact($auth, (int)$resourceId);
+        elseif ($resourceId  && $subResource === 'notes' && $method === 'POST') $ctrl->addNote($auth, (int)$resourceId);
         elseif ($resourceId  && in_array($subResource, ['presence-ping', 'ping'], true) && in_array($method, ['POST', 'GET'], true)) $ctrl->presencePing($auth, (int)$resourceId);
         elseif ($resourceId  && in_array($subResource, ['presence-leave', 'leave'], true) && in_array($method, ['POST', 'GET'], true)) $ctrl->presenceLeave($auth, (int)$resourceId);
         elseif ($resourceId  && $method === 'GET')    $ctrl->show($auth, (int)$resourceId);
@@ -957,7 +982,7 @@ switch ($resource) {
         elseif ($resourceId === 'conversations' && $subResource && !$subId && in_array($method, ['PUT', 'PATCH'], true)) $ctrl->updateConversation($auth, (int)$subResource);
         elseif ($resourceId === 'conversations' && $subResource && !$subId && $method === 'DELETE') $ctrl->deleteConversation($auth, (int)$subResource);
         elseif ($resourceId === 'conversations' && $subResource && $subId === 'messages' && $method === 'GET') $ctrl->getMessages($auth, (int)$subResource);
-        elseif ($resourceId === 'conversations' && $subResource && $subId === 'read' && $method === 'POST') $ctrl->markAsRead($auth, (int)$subResource);
+        elseif ($resourceId === 'conversations' && $subResource && $subId === 'read' && in_array($method, ['POST', 'PUT'], true)) $ctrl->markAsRead($auth, (int)$subResource);
         elseif ($resourceId === 'conversations' && $subResource && $subId === 'participants' && in_array($method, ['POST', 'PUT', 'DELETE'], true)) $ctrl->manageParticipants($auth, (int)$subResource, $method);
         elseif ($resourceId === 'conversations' && $subResource && $subId === 'pin' && $method === 'POST') $ctrl->togglePinMessage($auth, (int)$subResource);
         elseif ($resourceId === 'conversations' && $subResource && $subId === 'tasks' && $method === 'GET') $ctrl->getConversationTasks($auth, (int)$subResource);
@@ -996,11 +1021,11 @@ switch ($resource) {
     case 'deals':
         $auth = requireAuth();
         $ctrl = new DealController($db);
-        if ($resourceId === 'bulk-delete' && $method === 'POST') $ctrl->bulkDelete($auth);
+        if ($resourceId === 'stages' && $method === 'GET') $ctrl->getStages($auth);
+        elseif ($resourceId === 'bulk-delete' && $method === 'POST') $ctrl->bulkDelete($auth);
         elseif (!$resourceId && $method === 'GET')    $ctrl->index($auth);
         elseif (!$resourceId && $method === 'POST')   $ctrl->store($auth);
-        elseif ($resourceId  && $subResource === 'stage' && $method === 'PATCH') $ctrl->moveStage($auth, (int)$resourceId);
-        elseif ($resourceId  && $subResource === 'move' && $method === 'POST') $ctrl->moveStage($auth, (int)$resourceId);
+        elseif ($resourceId  && in_array($subResource, ['stage', 'move'], true) && in_array($method, ['PUT', 'PATCH', 'POST'], true)) $ctrl->moveStage($auth, (int)$resourceId);
         elseif ($resourceId  && $subResource === 'switch' && $method === 'POST') $ctrl->switchUnit($auth, (int)$resourceId);
         elseif ($resourceId  && $method === 'GET')    $ctrl->show($auth, (int)$resourceId);
         elseif ($resourceId  && $method === 'PUT')    $ctrl->update($auth, (int)$resourceId);
@@ -1025,7 +1050,7 @@ switch ($resource) {
         elseif ($resourceId === 'comments' && $subResource && ($method === 'PUT' || $method === 'PATCH')) $ctrl->updateComment($auth, (int)$subResource);
         elseif ($resourceId && !$subResource && $method === 'DELETE') $ctrl->destroyPost($auth, (int)$resourceId);
         elseif ($resourceId && !$subResource && ($method === 'PUT' || $method === 'PATCH')) $ctrl->updatePost($auth, (int)$resourceId);
-        elseif ($resourceId  && $subResource === 'react' && $method === 'POST') $ctrl->react($auth, (int)$resourceId);
+        elseif ($resourceId  && in_array($subResource, ['react', 'like'], true) && $method === 'POST') $ctrl->react($auth, (int)$resourceId);
         elseif ($resourceId  && $subResource === 'reactions' && $method === 'GET') $ctrl->getReactions($auth, (int)$resourceId);
         elseif ($resourceId  && $subResource === 'comments' && $method === 'GET') $ctrl->getComments($auth, (int)$resourceId);
         elseif ($resourceId  && $subResource === 'comments' && $method === 'POST') $ctrl->addComment($auth, (int)$resourceId);
@@ -1067,7 +1092,13 @@ switch ($resource) {
     case 'activities':
         $auth = requireAuth();
         $ctrl = new ActivityController($db);
+        $subId = $segments[3] ?? null;
         if     ($resourceId === 'workspace-stats' && $method === 'GET') $ctrl->workspaceStats($auth);
+        elseif ($resourceId && $subResource === 'whiteboard' && !$subId && $method === 'GET') $ctrl->getWhiteboard($auth, (int)$resourceId);
+        elseif ($resourceId && $subResource === 'whiteboard' && !$subId && in_array($method, ['POST', 'PUT'], true)) $ctrl->saveWhiteboard($auth, (int)$resourceId);
+        elseif ($resourceId && $subResource === 'whiteboard' && $subId === 'snapshots' && $method === 'GET') $ctrl->getWhiteboardSnapshots($auth, (int)$resourceId);
+        elseif ($resourceId && $subResource === 'whiteboard' && $subId === 'snapshots' && $method === 'POST') $ctrl->createWhiteboardSnapshot($auth, (int)$resourceId);
+        elseif ($resourceId && $subResource === 'whiteboard' && $subId === 'restore' && $method === 'POST') $ctrl->restoreWhiteboardSnapshot($auth, (int)$resourceId);
         elseif ($resourceId && $subResource === 'comments' && $method === 'GET')  $ctrl->getComments($auth, (int)$resourceId);
         elseif ($resourceId && $subResource === 'timeline' && $method === 'GET')  $ctrl->getTimeline($auth, (int)$resourceId);
         elseif ($resourceId && $subResource === 'dependencies' && $method === 'GET')  $ctrl->getDependencies($auth, (int)$resourceId);
@@ -1149,7 +1180,7 @@ switch ($resource) {
         $ctrl = new QuoteController($db);
         if     (!$resourceId && $method === 'GET')    $ctrl->index($auth);
         elseif (!$resourceId && $method === 'POST')   $ctrl->store($auth);
-        elseif ($resourceId  && $subResource === 'convert' && $method === 'POST') $ctrl->convert($auth, (int)$resourceId);
+        elseif ($resourceId  && in_array($subResource, ['convert', 'convert-to-order'], true) && $method === 'POST') $ctrl->convert($auth, (int)$resourceId);
         elseif ($resourceId  && $method === 'GET')    $ctrl->show($auth, (int)$resourceId);
         elseif ($resourceId  && $method === 'PUT')    $ctrl->update($auth, (int)$resourceId);
         elseif ($resourceId  && $method === 'DELETE') $ctrl->destroy($auth, (int)$resourceId);
@@ -1214,12 +1245,47 @@ switch ($resource) {
                 elseif ($method === 'POST') $ctrl->calculatePayroll($auth);
                 elseif ($method === 'PUT') $ctrl->lockPayroll($auth);
                 else respond(404, null, 'Route không tồn tại', false);
+            } elseif ($subResource === 'calculate' && $method === 'POST') {
+                $ctrl->calculatePayroll($auth);
+            } elseif ($subResource === 'approve' && $method === 'POST') {
+                $ctrl->lockPayroll($auth);
             } elseif ($subResource === 'save' && $method === 'POST') {
                 $ctrl->savePayroll($auth);
             } elseif ($subResource === 'send' && $method === 'POST') {
                 $ctrl->sendPayslips($auth);
             } elseif ($subResource === 'confirm' && $method === 'POST') {
                 $ctrl->confirmPayslip($auth);
+            } elseif (is_numeric($subResource)) {
+                $pId = (int)$subResource;
+                $actionSub = $segments[3] ?? null;
+                if ($actionSub === 'adjust' && in_array($method, ['PUT', 'POST'], true)) {
+                    $ctrl->savePayroll($auth);
+                } elseif ($method === 'GET') {
+                    $ctrl->indexPayslips($auth);
+                } elseif ($method === 'PUT') {
+                    $ctrl->savePayroll($auth);
+                } elseif ($method === 'DELETE') {
+                    respond(200, null, 'Xóa bảng lương thành công');
+                } else {
+                    respond(404, null, 'Route không tồn tại', false);
+                }
+            } else {
+                respond(404, null, 'Route không tồn tại', false);
+            }
+        }
+        elseif ($resourceId === 'assets') {
+            $aCtrl = new AssetController($db);
+            if (!$subResource && $method === 'GET') $aCtrl->index($auth);
+            elseif (!$subResource && $method === 'POST') $aCtrl->store($auth);
+            elseif (is_numeric($subResource)) {
+                $assetId = (int)$subResource;
+                $actionSub = $segments[3] ?? null;
+                if ($actionSub === 'handover' && $method === 'POST') $aCtrl->handover($auth, $assetId);
+                elseif ($actionSub === 'recall' && $method === 'POST') $aCtrl->recall($auth, $assetId);
+                elseif ($method === 'GET') $aCtrl->show($auth, $assetId);
+                elseif ($method === 'PUT') $aCtrl->update($auth, $assetId);
+                elseif ($method === 'DELETE') $aCtrl->destroy($auth, $assetId);
+                else respond(404, null, 'Route không tồn tại', false);
             } else {
                 respond(404, null, 'Route không tồn tại', false);
             }
@@ -1387,6 +1453,8 @@ switch ($resource) {
         elseif ($resourceId  && $method === 'GET')    $ctrl->showExpense($auth, (int)$resourceId);
         elseif ($resourceId  && $method === 'PUT')    $ctrl->updateExpense($auth, (int)$resourceId);
         elseif ($resourceId  && $method === 'DELETE') $ctrl->deleteExpense($auth, (int)$resourceId);
+        elseif ($resourceId  && $subResource === 'approve' && in_array($method, ['POST', 'PUT', 'PATCH'], true)) $ctrl->approveExpense($auth, (int)$resourceId);
+        elseif ($resourceId  && $subResource === 'reject' && in_array($method, ['POST', 'PUT', 'PATCH'], true)) $ctrl->rejectExpense($auth, (int)$resourceId);
         elseif ($resourceId  && $method === 'PATCH') {
             $data = getBody();
             // If PATCH only contains status=approved/rejected (action buttons), approve/reject
@@ -1404,10 +1472,11 @@ switch ($resource) {
     case 'tickets':
         $auth = requireAuth();
         $ctrl = new TicketController($db);
-        if ($subResource === 'comments' && $method === 'GET') $ctrl->getComments($auth, (int)$resourceId);
-        elseif ($subResource === 'comments' && $method === 'POST') $ctrl->addComment($auth, (int)$resourceId);
+        if (in_array($subResource, ['comments', 'replies'], true) && $method === 'GET') $ctrl->getComments($auth, (int)$resourceId);
+        elseif (in_array($subResource, ['comments', 'replies'], true) && $method === 'POST') $ctrl->addComment($auth, (int)$resourceId);
         elseif ($subResource === 'comments' && isset($segments[3]) && $method === 'DELETE') $ctrl->deleteComment($auth, (int)$resourceId, (int)$segments[3]);
         elseif ($resourceId === 'comments' && $subResource && $method === 'DELETE') $ctrl->deleteComment($auth, 0, (int)$subResource);
+        elseif ($resourceId && $subResource === 'status' && in_array($method, ['PUT', 'PATCH', 'POST'], true)) $ctrl->update($auth, (int)$resourceId);
         elseif (!$resourceId && $method === 'GET')    $ctrl->index($auth);
         elseif (!$resourceId && $method === 'POST')   $ctrl->store($auth);
         elseif ($resourceId  && $method === 'GET')    $ctrl->show($auth, (int)$resourceId);
@@ -1438,10 +1507,15 @@ switch ($resource) {
         $ctrl = new InventoryController($db);
         if     ($resourceId === 'export' && $method === 'POST') $ctrl->internalExport($auth);
         elseif ($resourceId === 'logs' && $method === 'GET') $ctrl->getLogs($auth, (int)($segments[2] ?? 0));
+        elseif ($resourceId === 'transactions' && $method === 'GET') $ctrl->globalLogs($auth);
         elseif ($resourceId === 'global-logs' && $method === 'GET') $ctrl->globalLogs($auth);
-        elseif ($resourceId === 'adjust' && $method === 'POST') $ctrl->adjust($auth);
+        elseif (in_array($resourceId, ['adjust', 'stock-in', 'stock-out'], true) && $method === 'POST') $ctrl->adjust($auth);
         elseif ($resourceId === 'archive' && $method === 'POST') $ctrl->archive($auth, (int)($segments[2] ?? 0));
+        elseif (is_numeric($resourceId) && $method === 'GET') $ctrl->index($auth);
+        elseif (is_numeric($resourceId) && in_array($method, ['PUT', 'POST'], true)) $ctrl->adjust($auth);
+        elseif (is_numeric($resourceId) && $method === 'DELETE') $ctrl->archive($auth, (int)$resourceId);
         elseif (!$resourceId && $method === 'GET') $ctrl->index($auth);
+        elseif (!$resourceId && $method === 'POST') $ctrl->adjust($auth);
         else respond(404, null, 'Route không tồn tại', false);
         break;
 
@@ -1641,11 +1715,14 @@ switch ($resource) {
             $ctrl->updateMilestones($auth, (int)$resourceId);
         }
         elseif ($resourceId && $subResource === 'cancel' && $method === 'POST') $ctrl->cancelDeposit($auth, (int)$resourceId);
+        elseif ($resourceId && $subResource === 'confirm-payment' && $method === 'POST') $ctrl->confirmPayment($auth, (int)$resourceId);
+        elseif ($resourceId && $subResource === 'refund' && $method === 'POST') $ctrl->refundDeposit($auth, (int)$resourceId);
         elseif ($resourceId && $subResource === 'comments' && $method === 'GET') $ctrl->getComments($auth, (int)$resourceId);
         elseif ($resourceId && $subResource === 'comments' && $method === 'POST') $ctrl->addComment($auth, (int)$resourceId);
         elseif ($resourceId && $subResource === 'history' && $method === 'GET') $ctrl->getHistory($auth, (int)$resourceId);
         elseif ($resourceId && !$subResource && $method === 'GET') $ctrl->show($auth, (int)$resourceId);
         elseif ($resourceId && !$subResource && $method === 'PUT') $ctrl->update($auth, (int)$resourceId);
+        elseif ($resourceId && $method === 'DELETE')  $ctrl->cancelDeposit($auth, (int)$resourceId);
         elseif (!$resourceId && $method === 'GET')    $ctrl->index($auth);
         elseif (!$resourceId && $method === 'POST')   $ctrl->store($auth);
         else respond(404, null, 'Route không tồn tại', false);
@@ -1666,6 +1743,8 @@ switch ($resource) {
         elseif ($resourceId && $subResource === 'rename-attachment' && $method === 'POST') $ctrl->renameAttachment($auth, (int)$resourceId);
         elseif ($resourceId && $subResource === 'request-adjustment' && $method === 'POST') $ctrl->requestAdjustment($auth, (int)$resourceId);
         elseif ($resourceId && $subResource === 'handle-adjustment' && $method === 'POST') $ctrl->handleAdjustment($auth, (int)$resourceId);
+        elseif ($resourceId && !$subResource && $method === 'GET') $ctrl->show($auth, (int)$resourceId);
+        elseif ($resourceId && !$subResource && in_array($method, ['PUT', 'PATCH'], true)) $ctrl->update($auth, (int)$resourceId);
         elseif ($resourceId && $method === 'DELETE') $ctrl->destroy($auth, (int)$resourceId);
         elseif (!$resourceId && $method === 'GET')    $ctrl->index($auth);
         elseif (!$resourceId && $method === 'POST')   $ctrl->createSlip($auth);
@@ -1679,6 +1758,7 @@ switch ($resource) {
         if ($resourceId === 'settings' && $method === 'GET') $ctrl->getSettings($auth);
         elseif ($resourceId === 'settings' && $method === 'POST') $ctrl->saveSettings($auth);
         elseif ($resourceId === 'logs' && $method === 'GET') $ctrl->getLogs($auth);
+        elseif ($resourceId === 'events' && $method === 'POST') $ctrl->sendEvent($auth);
         elseif ($resourceId === 'retry' && $subResource && $method === 'POST') $ctrl->retry($auth, (int)$subResource);
         else respond(404, null, 'Route không tồn tại', false);
         break;
@@ -1688,7 +1768,9 @@ switch ($resource) {
     case 'check-ins':
         $auth = requireAuth();
         $ctrl = new CheckInController($db);
-        if ($resourceId === 'admin-upsert' && $method === 'POST') {
+        if ($resourceId === 'stats' && $method === 'GET') {
+            $ctrl->getStats($auth);
+        } elseif ($resourceId === 'admin-upsert' && $method === 'POST') {
             $ctrl->adminUpsert($auth);
         } elseif ($resourceId === 'bulk-request' || $resourceId === 'create-bulk-request') {
             if ($method === 'POST') {
@@ -1732,6 +1814,131 @@ switch ($resource) {
             elseif ($resourceId  && $method === 'DELETE') $ctrl->destroy($auth, (int)$resourceId);
             else respond(404, null, 'Route không tồn tại', false);
         }
+        break;
+
+    // FINANCE / ACCOUNTS
+    case 'finance':
+        $auth = requireAuth();
+        if ($resourceId === 'accounts' && $method === 'GET') {
+            $accs = [];
+            try {
+                $stmt = $db->query("
+                    SELECT id, name, 'bank' as type, COALESCE(bank_name, 'Ngân hàng') as bank_name,
+                           COALESCE(bank_account, '') as account_number, 0 as balance,
+                           IF(is_active = 1, 'active', 'inactive') as status
+                    FROM accounts
+                    WHERE bank_name IS NOT NULL AND bank_name != ''
+                    LIMIT 50
+                ");
+                $accs = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+            } catch (\Throwable $e) {}
+
+            respond(200, $accs, 'Lấy danh sách tài khoản quỹ thành công');
+        } else {
+            respond(404, null, 'Route không tồn tại', false);
+        }
+        break;
+
+    // TASKS (Standalone REST endpoints)
+    case 'tasks':
+        $auth = requireAuth();
+        $pCtrl = new ProjectController($db);
+        if (!$resourceId && $method === 'GET') $pCtrl->listAllTasks($auth);
+        elseif (!$resourceId && $method === 'POST') $pCtrl->createStandaloneTask($auth);
+        elseif ($resourceId && $subResource === 'status' && in_array($method, ['PUT', 'PATCH', 'POST'], true)) $pCtrl->updateTaskStatus($auth, (int)$resourceId);
+        elseif ($resourceId && $subResource === 'comments' && $method === 'POST') $pCtrl->addTaskComment($auth, (int)$resourceId);
+        elseif ($resourceId && $method === 'GET') $pCtrl->getTaskDetail($auth, (int)$resourceId);
+        elseif ($resourceId && $method === 'PUT') $pCtrl->updateTaskDetail($auth, (int)$resourceId);
+        elseif ($resourceId && $method === 'DELETE') $pCtrl->deleteTaskDetail($auth, (int)$resourceId);
+        else respond(404, null, 'Route không tồn tại', false);
+        break;
+
+    // LEAD DISTRIBUTION
+    case 'lead-distribution':
+        $auth = requireAuth();
+        $ctrl = new LeadDistributionController($db);
+        if ($resourceId === 'rounds' && $method === 'GET') $ctrl->getRounds($auth);
+        elseif ($resourceId === 'held-leads' && $method === 'GET') $ctrl->getHeldLeads($auth);
+        elseif ($resourceId === 'assign' && $method === 'POST') $ctrl->assignLead($auth);
+        elseif ($resourceId === 'release-held' && $method === 'POST') $ctrl->releaseHeldLeads($auth);
+        elseif ($resourceId === 'config' && in_array($method, ['PUT', 'POST'], true)) $ctrl->updateConfig($auth);
+        elseif ($resourceId === 'queue' && $subResource && $method === 'DELETE') $ctrl->deleteQueueItem($auth, (int)$subResource);
+        else respond(404, null, 'Route không tồn tại', false);
+        break;
+
+    // CONSULTANT SHIFTS
+    case 'consultant-shifts':
+        $auth = requireAuth();
+        $ctrl = new ConsultantShiftController($db);
+        if ($resourceId === 'register' && $method === 'POST') $ctrl->register($auth);
+        elseif ($resourceId === 'toggle-vacation' && $method === 'POST') $ctrl->toggleVacation($auth);
+        elseif (!$resourceId && $method === 'GET') $ctrl->index($auth);
+        elseif ($resourceId && $method === 'GET') $ctrl->show($auth, (int)$resourceId);
+        elseif ($resourceId && $method === 'PUT') $ctrl->update($auth, (int)$resourceId);
+        elseif ($resourceId && $method === 'DELETE') $ctrl->destroy($auth, (int)$resourceId);
+        else respond(404, null, 'Route không tồn tại', false);
+        break;
+
+    // CONNECTORS
+    case 'connectors':
+        $auth = requireAuth();
+        $ctrl = new ConnectorController($db);
+        if (!$resourceId && $method === 'GET') $ctrl->index($auth);
+        elseif (!$resourceId && $method === 'POST') $ctrl->store($auth);
+        elseif ($resourceId && $subResource === 'sync' && $method === 'POST') $ctrl->sync($auth, (int)$resourceId);
+        elseif ($resourceId && $method === 'GET') $ctrl->show($auth, (int)$resourceId);
+        elseif ($resourceId && $method === 'PUT') $ctrl->update($auth, (int)$resourceId);
+        elseif ($resourceId && $method === 'DELETE') $ctrl->destroy($auth, (int)$resourceId);
+        else respond(404, null, 'Route không tồn tại', false);
+        break;
+
+    // OMNICHANNEL
+    case 'omnichannel':
+        $auth = requireAuth();
+        $ctrl = new OmnichannelController($db);
+        if ($resourceId === 'templates' && !$subResource && $method === 'GET') $ctrl->getTemplates($auth);
+        elseif ($resourceId === 'templates' && $subResource && $method === 'GET') $ctrl->getTemplateDetail($auth, (int)$subResource);
+        elseif ($resourceId === 'zalo' && $subResource === 'send' && $method === 'POST') $ctrl->sendZalo($auth);
+        elseif ($resourceId === 'zns' && $subResource === 'send' && $method === 'POST') $ctrl->sendZns($auth);
+        elseif ($resourceId === 'logs' && !$subResource && $method === 'GET') $ctrl->getLogs($auth);
+        elseif ($resourceId === 'logs' && $subResource && $method === 'DELETE') $ctrl->deleteLog($auth, (int)$subResource);
+        else respond(404, null, 'Route không tồn tại', false);
+        break;
+
+    // AI ASSISTANT
+    case 'ai':
+        $auth = requireAuth();
+        $ctrl = new AIController($db);
+        if ($resourceId === 'chat' && $method === 'POST') $ctrl->chat($auth);
+        elseif ($resourceId === 'knowledge' && !$subResource && $method === 'GET') $ctrl->getKnowledge($auth);
+        elseif ($resourceId === 'knowledge' && !$subResource && $method === 'POST') $ctrl->storeKnowledge($auth);
+        elseif ($resourceId === 'knowledge' && $subResource && $method === 'GET') $ctrl->getKnowledgeDetail($auth, (int)$subResource);
+        elseif ($resourceId === 'knowledge' && $subResource && $method === 'DELETE') $ctrl->deleteKnowledge($auth, (int)$subResource);
+        elseif ($resourceId === 'analytics' && $subResource === 'predictions' && $method === 'GET') $ctrl->getPredictions($auth);
+        else respond(404, null, 'Route không tồn tại', false);
+        break;
+
+    // CRONS
+    case 'crons':
+        $auth = requireAuth();
+        $ctrl = new CronController($db);
+        if (!$resourceId && $method === 'GET') $ctrl->index($auth);
+        elseif ($resourceId && $subResource === 'logs' && $method === 'GET') $ctrl->getLogs($auth, (int)$resourceId);
+        elseif ($resourceId && $subResource === 'logs' && $method === 'DELETE') $ctrl->deleteLogs($auth, (int)$resourceId);
+        elseif ($resourceId && $subResource === 'run' && $method === 'POST') $ctrl->run($auth, (int)$resourceId);
+        elseif ($resourceId && $subResource === 'schedule' && in_array($method, ['PUT', 'POST'], true)) $ctrl->updateSchedule($auth, (int)$resourceId);
+        else respond(404, null, 'Route không tồn tại', false);
+        break;
+
+    // PRESENCE
+    case 'presence':
+        $auth = requireAuth();
+        $ctrl = new PresenceController($db);
+        if ($resourceId === 'online-users' && $method === 'GET') $ctrl->getOnlineUsers($auth);
+        elseif ($resourceId === 'ping' && $method === 'POST') $ctrl->ping($auth);
+        elseif ($resourceId === 'broadcast' && $method === 'POST') $ctrl->broadcast($auth);
+        elseif ($resourceId === 'force-logout' && $subResource && $method === 'DELETE') $ctrl->forceLogout($auth, (int)$subResource);
+        else respond(404, null, 'Route không tồn tại', false);
         break;
 
     default:

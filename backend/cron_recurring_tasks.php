@@ -4,6 +4,16 @@
 
 if (!function_exists('runRecurringTasksCron')) {
     function runRecurringTasksCron($conn) {
+        $lockFile = sys_get_temp_dir() . '/cron_recurring_tasks_' . md5(__DIR__) . '.lock';
+        $lockFp = @fopen($lockFile, 'w');
+        if (!$lockFp) {
+            return;
+        }
+        if (!flock($lockFp, LOCK_EX | LOCK_NB)) {
+            fclose($lockFp);
+            return;
+        }
+
         if (function_exists('logSync')) {
             logSync("Starting recurring tasks processing...");
         } else {
@@ -26,6 +36,8 @@ if (!function_exists('runRecurringTasksCron')) {
             } else {
                 echo "[" . date('Y-m-d H:i:s') . "] " . $err . "\n";
             }
+            @flock($lockFp, LOCK_UN);
+            @fclose($lockFp);
             return;
         }
 
@@ -252,5 +264,16 @@ if (!function_exists('runRecurringTasksCron')) {
                 }
             }
         }
+
+        @flock($lockFp, LOCK_UN);
+        @fclose($lockFp);
+    }
+}
+
+// Allow direct CLI execution when spawned by cron_master.php
+if (php_sapi_name() === 'cli' && basename(__FILE__) === basename($_SERVER['SCRIPT_FILENAME'] ?? '')) {
+    require_once __DIR__ . '/db_connect.php';
+    if (isset($conn) && $conn instanceof mysqli) {
+        runRecurringTasksCron($conn);
     }
 }

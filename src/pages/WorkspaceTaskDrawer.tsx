@@ -22,6 +22,7 @@ import { showUndoToast } from '../components/ui/UndoToast';
 import { useAutoSaveDraft } from '../hooks/useAutoSaveDraft';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { pushOverlay } from '../utils/overlayStack';
 import { getUserDisplayRoleOrTitle } from '../utils/roleUtils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUIStore } from '../store/uiStore';
@@ -32,6 +33,7 @@ import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 import { AttachmentLightboxModal, type AttachmentItem } from '../components/ui/AttachmentLightboxModal';
 import { parseTaskBody, convertTextToHtmlParagraphs, formatVietnameseDescription } from '../utils/taskBodyParser';
 import { formatCommentBody } from '../utils/commentFormatter';
+import { getLocalDateStr } from '../utils/dateUtils';
 
 interface WorkspaceTaskDrawerProps {
   isOpen: boolean;
@@ -266,6 +268,14 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       }).catch(() => {});
     }
   }, [isOpen, taskGroups]);
+
+  useEffect(() => {
+    if (isOpen && !embedMode) {
+      return pushOverlay('workspace-task-drawer', () => {
+        onClose();
+      }, isFromCustomerDrawer ? 110 : 90);
+    }
+  }, [isOpen, embedMode, onClose, isFromCustomerDrawer]);
 
   const availableTaskGroups = Array.isArray(taskGroups) && taskGroups.length > 0 
     ? taskGroups 
@@ -547,7 +557,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   const getTomorrowString = () => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
-    return tomorrow.toISOString().split('T')[0];
+    return getLocalDateStr(tomorrow);
   };
 
   // Checklist adding state
@@ -3327,18 +3337,19 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                 .task-comment-body img:not(.mention-avatar):not([data-mention-avatar]):not(.inline-avatar),
                 .rich-comment-content img:not(.mention-avatar):not([data-mention-avatar]):not(.inline-avatar),
                 [id^="workspace-comment-"] .rich-text-editor-content img:not(.mention-avatar):not([data-mention-avatar]):not(.inline-avatar) {
-                  max-width: min(360px, 100%) !important;
-                  max-height: 220px !important;
+                  max-width: min(220px, 100%) !important;
+                  max-height: 180px !important;
                   width: auto !important;
                   height: auto !important;
                   border-radius: 8px !important;
                   cursor: zoom-in !important;
                   transition: transform 0.15s ease, box-shadow 0.15s ease !important;
-                  object-fit: contain !important;
+                  object-fit: cover !important;
                   background: rgba(0, 0, 0, 0.02) !important;
                   border: 1px solid var(--color-border-light, #e2e8f0) !important;
-                  display: block !important;
-                  margin: 6px 0 !important;
+                  display: inline-block !important;
+                  vertical-align: top !important;
+                  margin: 4px 6px 4px 0 !important;
                   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06) !important;
                 }
                 .task-comment-body img:not(.mention-avatar):not([data-mention-avatar]):not(.inline-avatar):hover,
@@ -3862,7 +3873,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                         e.stopPropagation();
                                         setEditingChecklistId(item.id);
                                         setEditingChecklistTitle(item.title);
-                                        setEditingChecklistDeadline(item.due_date ? new Date(item.due_date).toISOString().split('T')[0] : '');
+                                        setEditingChecklistDeadline(item.due_date ? getLocalDateStr(item.due_date) : '');
                                       }}
                                       style={{
                                         border: 'none',
