@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { CustomModal } from './CustomModal';
 import { AlertTriangle, Send, Loader2, Info, CheckCircle2, ShieldAlert, Sparkles, User, Phone, Mail, Layers } from 'lucide-react';
-import { fetchAPI } from '../../utils/api';
+import api from '../../api/axios';
 import toast from 'react-hot-toast';
 import { useLanguage } from '../../contexts/LanguageContext';
 
@@ -108,13 +108,9 @@ export const ReportDataModal: React.FC<ReportDataModalProps> = ({
         description: fullDescription
       };
 
-      const res = await fetchAPI('/tickets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      const res = await api.post('/tickets', payload);
 
-      if (res && res.success !== false) {
+      if (res && (res.data?.success !== false || res.status === 200 || res.status === 201)) {
         setSubmittedSuccess(true);
         toast.success(t('Đã gửi báo cáo data lỗi thành công! Đang chờ Quản lý duyệt bù vòng.'));
         setTimeout(() => {
@@ -123,10 +119,10 @@ export const ReportDataModal: React.FC<ReportDataModalProps> = ({
           onClose();
         }, 1500);
       } else {
-        toast.error(res?.message || t('Không thể gửi báo cáo data lỗi. Vui lòng thử lại.'));
+        toast.error(res?.data?.message || t('Không thể gửi báo cáo data lỗi. Vui lòng thử lại.'));
       }
     } catch (err: any) {
-      toast.error(err?.message || t('Lỗi kết nối khi gửi báo cáo.'));
+      toast.error(err?.response?.data?.message || err?.message || t('Lỗi kết nối khi gửi báo cáo.'));
     } finally {
       setSubmitting(false);
     }

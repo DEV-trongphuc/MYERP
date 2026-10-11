@@ -65,7 +65,8 @@ export async function fetchAPI(action: string, options: RequestInit = {}) {
   };
 
   const token = localStorage.getItem('Ideas_token');
-  const parts = action.split('?');
+  const cleanAction = action.replace(/^\/+/, '');
+  const parts = cleanAction.split('?');
   const baseAction = parts[0];
   let url = `api.php?action=${baseAction}`;
   if (parts[1]) {

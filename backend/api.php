@@ -62,24 +62,27 @@ if (isset($_GET['action']) && $_GET['action'] === 'version') {
 }
 
 // Intercept OOP controller routes and bridge them to index.php
-$action = urldecode($_GET['action'] ?? '');
+$rawAction = urldecode($_GET['action'] ?? '');
+$action = trim($rawAction, '/');
 
 // Self-healing check for actions passing query parameters using '?' instead of '&'
 if (strpos($action, '?') !== false) {
     $parts = explode('?', $action, 2);
-    $action = $parts[0];
+    $action = trim($parts[0], '/');
     $_GET['action'] = $action;
     parse_str($parts[1], $extraGet);
     $_GET = array_merge($_GET, $extraGet);
     $_REQUEST = array_merge($_REQUEST, $extraGet);
+} else {
+    $_GET['action'] = $action;
 }
 
-$segments = explode('/', $action);
-if (isset($segments[0]) && $segments[0] === 'v1' && isset($segments[1])) {
-    $action = substr($action, 3);
-    $segments = explode('/', $action);
+$segments = array_values(array_filter(explode('/', $action)));
+if (isset($segments[0]) && $segments[0] === 'v1') {
+    array_shift($segments);
+    $action = implode('/', $segments);
 }
-$baseAction = explode('&', $segments[0])[0];
+$baseAction = !empty($segments) ? explode('&', $segments[0])[0] : '';
 if (in_array($baseAction, [
     'auth',
     'projects',
