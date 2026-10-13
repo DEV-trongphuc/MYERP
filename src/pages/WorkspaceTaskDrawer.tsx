@@ -1317,21 +1317,27 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
   useEffect(() => {
     if (task) {
+      const isNew = task.id === 'new' || !task.id || task.id === 0 || task.id === '0';
       const isSaleRole = ['sale', 'sales'].includes(String(currentUser?.role || '').toLowerCase());
       const defaultUserId = task.user_id || (isSaleRole ? currentUser.id : null);
       let initialDueDate = task.due_date || null;
       if (initialDueDate && initialDueDate.length === 10) {
         initialDueDate = `${initialDueDate} 18:00:00`;
       }
+      const rawParticipants = task.participant_ids || task.collaborator_ids || task.related_user_ids || '';
+      const normalizedParticipants = Array.isArray(rawParticipants) ? rawParticipants.join(',') : String(rawParticipants || '');
       const normalizedTask = {
         ...task,
+        id: isNew ? 'new' : task.id,
         due_date: initialDueDate,
         subject: task.subject || task.title || '',
         body: task.body || task.description || '',
         user_id: defaultUserId ? Number(defaultUserId) : null,
-        created_by: task.id === 'new' ? currentUser?.id : task.created_by,
-        created_by_name: task.id === 'new' ? (currentUser?.name || (currentUser as any)?.full_name || '') : task.created_by_name,
-        created_by_avatar: task.id === 'new' ? (currentUser?.avatar || (currentUser as any)?.avatar_url || '') : task.created_by_avatar,
+        participant_ids: normalizedParticipants,
+        team_id: task.team_id ? Number(task.team_id) : undefined,
+        created_by: isNew ? (currentUser?.id || task.created_by) : (task.created_by || currentUser?.id),
+        created_by_name: isNew ? (currentUser?.name || (currentUser as any)?.full_name || task.created_by_name || '') : (task.created_by_name || currentUser?.name || (currentUser as any)?.full_name || ''),
+        created_by_avatar: isNew ? (currentUser?.avatar || (currentUser as any)?.avatar_url || task.created_by_avatar || '') : (task.created_by_avatar || currentUser?.avatar || (currentUser as any)?.avatar_url || ''),
         contact_id: task.contact_id || (task.related_type === 'contact' ? task.related_id : null)
       };
       // Parse erp metadata from task body cleanly using parseTaskBody
@@ -3019,8 +3025,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '4px', flexWrap: 'wrap', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                     <span>{t('Người tạo:')}</span>
-                    <Avatar src={formData.created_by_avatar || undefined} name={formData.created_by_name || t('Hệ thống / Admin')} size={20} />
-                    <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>{formData.created_by_name || t('Hệ thống / Admin')}</span>
+                    <Avatar src={formData.created_by_avatar || undefined} name={formData.created_by_name || currentUser?.name || (currentUser as any)?.full_name || t('Hệ thống / Admin')} size={20} />
+                    <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>{formData.created_by_name || currentUser?.name || (currentUser as any)?.full_name || t('Hệ thống / Admin')}</span>
                   </div>
 
                   {formData.created_at && (
@@ -3077,7 +3083,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
           <div style={{ display: 'flex', gap: isMobileOrTablet ? '6px' : '10px', alignItems: 'center', flexShrink: 0, justifyContent: 'flex-end' }}>
             {/* Share Task Button */}
-            {formData.id && formData.id !== 'new' && (
+            {Boolean(formData.id && formData.id !== 'new' && formData.id !== 0 && formData.id !== '0') && (
               <button
                 type="button"
                 onClick={handleShareTask}
@@ -3104,7 +3110,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             )}
 
             {/* Delete task button - only for creator on PC */}
-            {!isMobileOrTablet && isCreator && task?.id && task.id !== 'new' && (
+            {Boolean(!isMobileOrTablet && isCreator && task?.id && task.id !== 'new' && task.id !== 0 && task.id !== '0') && (
               <button
                 type="button"
                 onClick={handleDeleteTask}
@@ -3131,7 +3137,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             )}
 
             {/* Hide task eye button */}
-            {task?.id && task.id !== 'new' && (
+            {Boolean(task?.id && task.id !== 'new' && task.id !== 0 && task.id !== '0') && (
               <button
                 type="button"
                 onClick={handleHideClick}
@@ -3186,7 +3192,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             )}
 
             {/* Duplicate Task Button */}
-            {formData?.id && formData.id !== 'new' && (
+            {Boolean(formData?.id && formData.id !== 'new' && formData.id !== 0 && formData.id !== '0') && (
               <button
                 type="button"
                 onClick={handleDuplicateTask}

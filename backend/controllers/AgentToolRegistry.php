@@ -1328,7 +1328,15 @@ class AgentToolRegistry {
                         $params[] = $like;
                     }
 
-                    $sql = "SELECT c.id, c.full_name, c.phone, c.email, c.status, c.stage_id, ps.name as stage_name, ps.order_index as stage_order, u.full_name as owner_name
+                    $sql = "SELECT c.id, c.full_name, c.phone, c.email, c.status, c.stage_id, ps.name as stage_name, ps.order_index as stage_order, u.full_name as owner_name,
+                            (
+                                SELECT CONCAT('[', DATE_FORMAT(COALESCE(act.created_at, NOW()), '%d/%m/%Y %H:%i'), '] ', COALESCE(u_act.full_name, 'Tư vấn viên'), ' (', act.type, '): ', COALESCE(NULLIF(TRIM(act.body), ''), act.subject, ''))
+                                FROM activities act
+                                LEFT JOIN users u_act ON act.user_id = u_act.id
+                                WHERE ((act.related_id = c.id AND act.related_type IN ('contact', 'lead')) OR act.contact_id = c.id)
+                                  AND act.deleted_at IS NULL
+                                ORDER BY act.created_at DESC, act.id DESC LIMIT 1
+                            ) as latest_interaction
                             FROM contacts c
                             LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
                             LEFT JOIN users u ON c.owner_id = u.id
@@ -1369,7 +1377,8 @@ class AgentToolRegistry {
                                 'so_readiness_notice' => $isReadyForSo 
                                     ? 'Khách hàng đã ở bước Đóng cọc/Tạo đơn SO (Giai đoạn 13+).' 
                                     : "Khách hàng hiện ở bước {$stageOrder}/14 ('{$stageName}'), CHƯA đến bước tạo SO (Giai đoạn 13 – Deposit / Tuition Payment). Hãy chủ động hỏi người dùng có muốn chuyển Pipeline sang '13 – Deposit / Tuition Payment' kèm ghi chú không!",
-                                'owner' => $c['owner_name'] ?: 'Chưa phân công'
+                                'owner' => $c['owner_name'] ?: 'Chưa phân công',
+                                'latest_interaction' => $c['latest_interaction'] ?: 'Chưa có ghi chú tương tác gần đây'
                             ];
                         }, $contacts)
                     ];
@@ -1956,6 +1965,54 @@ class AgentToolRegistry {
                     $paramsJson = $args['params_json'] ?? '{}';
                     $params = json_decode($paramsJson, true) ?: [];
 
+                    $ambiguousNotice = null;
+                    if ($actionType === 'task') {
+                        // Creator is ALWAYS the current chatting user
+                        $params['created_by'] = $uid;
+                        $params['created_by_id'] = $uid;
+                        $params['created_by_name'] = $auth['full_name'] ?? ($auth['user_full_name'] ?? '');
+
+                        // Smart assignee lookup
+                        $targetAssignee = trim($params['assignee_name'] ?? ($params['assignee'] ?? ($params['user_name'] ?? '')));
+                        if (empty($params['user_id']) && !empty($targetAssignee)) {
+                            $stmtU = $db->prepare("
+                                SELECT id, full_name, email, role, job_title 
+                                FROM users 
+                                WHERE tenant_id = ? 
+                                  AND (full_name LIKE ? OR username LIKE ?) 
+                                  AND status != 'inactive' 
+                                  AND deleted_at IS NULL
+                            ");
+                            $stmtU->execute([$tid, '%' . $targetAssignee . '%', '%' . $targetAssignee . '%']);
+                            $matchedStaff = $stmtU->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                            if (count($matchedStaff) === 1) {
+                                $params['user_id'] = (int)$matchedStaff[0]['id'];
+                                $params['assignee_name'] = $matchedStaff[0]['full_name'];
+                            } elseif (count($matchedStaff) > 1) {
+                                $params['ambiguous_assignees'] = array_map(fn($s) => [
+                                    'id' => (int)$s['id'],
+                                    'name' => $s['full_name'],
+                                    'role' => $s['role'] ?? '',
+                                    'title' => $s['job_title'] ?? ''
+                                ], $matchedStaff);
+                                $ambiguousNames = array_map(fn($s) => "{$s['full_name']} ({$s['job_title']})", $matchedStaff);
+                                $ambiguousNotice = "CẢNH BÁO TRÙNG TÊN: Có " . count($matchedStaff) . " nhân sự tên '{$targetAssignee}': " . implode(', ', $ambiguousNames) . ". Bạn BẮT BUỘC hỏi lại người dùng để xác nhận giao cho ai!";
+                            }
+                        }
+
+                        // Smart team lookup
+                        $targetTeam = trim($params['team_name'] ?? ($params['department'] ?? ''));
+                        if (empty($params['team_id']) && !empty($targetTeam)) {
+                            $stmtT = $db->prepare("SELECT id, name FROM teams WHERE tenant_id = ? AND name LIKE ? LIMIT 1");
+                            $stmtT->execute([$tid, '%' . $targetTeam . '%']);
+                            $matchedTeam = $stmtT->fetch(PDO::FETCH_ASSOC);
+                            if ($matchedTeam) {
+                                $params['team_id'] = (int)$matchedTeam['id'];
+                                $params['team_name'] = $matchedTeam['name'];
+                            }
+                        }
+                    }
+
                     $proposalCard = [
                         'action_type' => $actionType,
                         'title' => $title,
@@ -1965,11 +2022,17 @@ class AgentToolRegistry {
 
                     $cardStr = "<<<ACTION_PROPOSAL: " . json_encode($proposalCard, JSON_UNESCAPED_UNICODE) . ">>>";
 
+                    $instruction = 'Bạn hãy gửi kèm thẻ hành động sau đây ở cuối câu trả lời để người dùng có thể bấm xác nhận hoặc kiểm tra lại ngay trên giao diện: ' . $cardStr;
+                    if ($ambiguousNotice) {
+                        $instruction .= "\n" . $ambiguousNotice;
+                    }
+
                     return [
                         'success' => true,
                         'action_type' => $actionType,
                         'card_rendered' => $cardStr,
-                        'instruction' => 'Bạn hãy gửi kèm thẻ hành động sau đây ở cuối câu trả lời để người dùng có thể bấm xác nhận hoặc kiểm tra lại ngay trên giao diện: ' . $cardStr
+                        'instruction' => $instruction,
+                        'ambiguous_assignees' => $params['ambiguous_assignees'] ?? null
                     ];
                 }
 
@@ -3292,25 +3355,115 @@ class AgentToolRegistry {
                         $collaboratorNames = array_values($resolvedCollabs);
                     }
 
-                    // 4. Fetch Consultation Notes Timeline (Note cái gì)
-                    $nStmt = $db->prepare("
-                        SELECT n.id, n.body, n.type, n.channel, n.note_type, n.created_at, u.full_name as author_name
-                        FROM notes n
-                        LEFT JOIN users u ON n.user_id = u.id
-                        WHERE n.tenant_id = ? AND n.entity_type = 'contact' AND n.entity_id = ?
-                        ORDER BY n.id DESC
-                        LIMIT 15
-                    ");
-                    $nStmt->execute([$tid, $contactId]);
-                    $notesRows = $nStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                    // 4. Fetch Full CRM Interactions & Consultation Timeline (Notes, Calls, Pipeline, Meetings from activities & notes tables)
+                    $timelineItems = [];
 
-                    $notesTimeline = [];
-                    foreach ($notesRows as $nr) {
-                        $timeStr = !empty($nr['created_at']) ? date('d/m/Y H:i', strtotime($nr['created_at'])) : 'Vừa xong';
-                        $author = $nr['author_name'] ?: 'Chuyên viên tư vấn';
-                        $cleanBody = strip_tags(trim($nr['body']));
-                        $notesTimeline[] = "[{$timeStr}] {$author} ({$nr['channel']}): {$cleanBody}";
+                    // 4a. Fetch from activities table (Primary CRM interactions in MYERP)
+                    try {
+                        $actStmt = $db->prepare("
+                            SELECT a.id, a.type, a.subject, a.body, a.description, a.created_at, 
+                                   COALESCE(u.full_name, uc.full_name, 'Chuyên viên tư vấn') as author_name
+                            FROM activities a
+                            LEFT JOIN users u ON a.user_id = u.id
+                            LEFT JOIN users uc ON a.created_by = uc.id
+                            WHERE (a.tenant_id = ? OR a.tenant_id IS NULL OR a.tenant_id = 0)
+                              AND (
+                                (a.related_type IN ('contact', 'lead') AND a.related_id = ?)
+                                OR a.contact_id = ?
+                              )
+                              AND a.deleted_at IS NULL
+                            ORDER BY a.created_at DESC, a.id DESC
+                            LIMIT 30
+                        ");
+                        $actStmt->execute([$tid, $contactId, $contactId]);
+                        $activityRows = $actStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                        // Fetch comments on these activities if any
+                        $activityComments = [];
+                        if (!empty($activityRows)) {
+                            $actIds = array_column($activityRows, 'id');
+                            $inActs = implode(',', array_map('intval', $actIds));
+                            $cmtStmt = $db->query("
+                                SELECT ac.activity_id, ac.content, ac.created_at, COALESCE(u.full_name, 'Người dùng') as author_name
+                                FROM activity_comments ac
+                                LEFT JOIN users u ON ac.user_id = u.id
+                                WHERE ac.activity_id IN ($inActs) AND ac.deleted_at IS NULL
+                                ORDER BY ac.id ASC
+                            ");
+                            if ($cmtStmt) {
+                                foreach ($cmtStmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $cm) {
+                                    $activityComments[(int)$cm['activity_id']][] = $cm;
+                                }
+                            }
+                        }
+
+                        foreach ($activityRows as $ar) {
+                            $timeStr = !empty($ar['created_at']) ? date('d/m/Y H:i', strtotime($ar['created_at'])) : 'Vừa xong';
+                            $author = $ar['author_name'] ?: 'Chuyên viên tư vấn';
+                            $typeLabel = match($ar['type']) {
+                                'call' => 'Cuộc gọi',
+                                'note' => 'Ghi chú',
+                                'meeting' => 'Cuộc hẹn/Lịch gặp',
+                                'task' => 'Công việc',
+                                default => ucfirst($ar['type'] ?? 'Tương tác')
+                            };
+                            $subject = trim($ar['subject'] ?? '');
+                            $rawBody = !empty($ar['body']) ? $ar['body'] : ($ar['description'] ?? '');
+                            $cleanBody = strip_tags(trim($rawBody));
+
+                            $line = "[{$timeStr}] {$author} ({$typeLabel}";
+                            if (!empty($subject)) {
+                                $line .= " - {$subject}";
+                            }
+                            $line .= "): {$cleanBody}";
+
+                            // Append comments if any
+                            if (!empty($activityComments[(int)$ar['id']])) {
+                                foreach ($activityComments[(int)$ar['id']] as $ac) {
+                                    $cleanCmt = strip_tags(trim($ac['content'] ?? ''));
+                                    $line .= " | [Bình luận của {$ac['author_name']}]: {$cleanCmt}";
+                                }
+                            }
+
+                            $timelineItems[] = [
+                                'timestamp' => strtotime($ar['created_at'] ?? 'now'),
+                                'text' => $line
+                            ];
+                        }
+                    } catch (\Throwable $e) {
+                        error_log("Error fetching contact activities: " . $e->getMessage());
                     }
+
+                    // 4b. Fetch from notes table (Legacy & quick notes)
+                    try {
+                        $nStmt = $db->prepare("
+                            SELECT n.id, n.body, n.type, n.channel, n.note_type, n.created_at, u.full_name as author_name
+                            FROM notes n
+                            LEFT JOIN users u ON n.user_id = u.id
+                            WHERE n.tenant_id = ? AND n.entity_type = 'contact' AND n.entity_id = ?
+                            ORDER BY n.id DESC
+                            LIMIT 15
+                        ");
+                        $nStmt->execute([$tid, $contactId]);
+                        $notesRows = $nStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                        foreach ($notesRows as $nr) {
+                            $timeStr = !empty($nr['created_at']) ? date('d/m/Y H:i', strtotime($nr['created_at'])) : 'Vừa xong';
+                            $author = $nr['author_name'] ?: 'Chuyên viên tư vấn';
+                            $cleanBody = strip_tags(trim($nr['body'] ?? ''));
+                            $channel = !empty($nr['channel']) ? $nr['channel'] : 'Ghi chú';
+                            $timelineItems[] = [
+                                'timestamp' => strtotime($nr['created_at'] ?? 'now'),
+                                'text' => "[{$timeStr}] {$author} ({$channel}): {$cleanBody}"
+                            ];
+                        }
+                    } catch (\Throwable $e) {
+                        error_log("Error fetching contact notes: " . $e->getMessage());
+                    }
+
+                    // Sort chronologically descending
+                    usort($timelineItems, fn($a, $b) => $b['timestamp'] <=> $a['timestamp']);
+                    $notesTimeline = array_map(fn($item) => $item['text'], array_slice($timelineItems, 0, 25));
 
                     // 5. Fetch Files from cloud_files (Hồ sơ có gì)
                     $cfStmt = $db->prepare("

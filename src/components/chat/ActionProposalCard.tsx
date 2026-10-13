@@ -8,6 +8,8 @@ import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
 import { useUIStore } from '../../store/uiStore';
+import { useAuthStore } from '../../store/authStore';
+import { useChatStore } from '../../store/chatStore';
 
 export interface ActionProposal {
   action_type: 'leave' | 'expense' | 'task' | 'lead' | 'sales_order' | 'deposit' | 'supplementary' | 'advance_payment' | 'inventory_receipt' | 'shift_swap' | 'admission_document_request' | 'legal_contract' | 'asset_handover' | 'marketing_campaign';
@@ -259,13 +261,50 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
         }
 
         case 'task': {
+          const currentUser = useAuthStore.getState().user;
+          let targetUserId = p.user_id ? Number(p.user_id) : undefined;
+          let targetUserName = p.assignee_name || p.user_name || undefined;
+
+          // Smart assignee resolution if user_id is missing but a name is mentioned
+          if (!targetUserId) {
+            const staffList = useChatStore.getState().staffDirectory || [];
+            const searchTarget = (p.assignee_name || p.assignee || p.user || '').toLowerCase().trim();
+            if (searchTarget) {
+              const matched = staffList.filter(s => s.full_name?.toLowerCase().includes(searchTarget));
+              if (matched.length === 1) {
+                targetUserId = matched[0].id;
+                targetUserName = matched[0].full_name;
+              }
+            } else {
+              // Check if subject, body or summary mentions "giao cho [Tên]"
+              const fullText = `${p.subject || ''} ${p.body || ''} ${proposal.summary || ''} ${proposal.title || ''}`;
+              const m = fullText.match(/giao cho\s+([a-zA-Z0-9_\u00C0-\u1EF9\s]+?)(?:\s+mai|\s+làm|\s+cập nhật|\s+hạn|\.|\,|$)/i);
+              if (m && m[1]) {
+                const cName = m[1].trim().toLowerCase();
+                const matched = staffList.filter(s => s.full_name?.toLowerCase().includes(cName));
+                if (matched.length === 1) {
+                  targetUserId = matched[0].id;
+                  targetUserName = matched[0].full_name;
+                }
+              }
+            }
+          }
+
           useUIStore.getState().openTaskDrawer({
-            id: 0,
+            id: 'new',
             subject: p.subject || p.title || 'Công việc mới từ AI IDEAS',
             due_date: p.due_date || p.deadline || new Date().toISOString().split('T')[0],
             priority: p.priority || 'medium',
             body: p.body || p.description || '',
-            user_id: p.user_id ? Number(p.user_id) : undefined
+            user_id: targetUserId,
+            user_name: targetUserName,
+            assignee_name: targetUserName,
+            created_by: currentUser?.id,
+            created_by_id: currentUser?.id,
+            created_by_name: currentUser?.full_name || 'Tôi',
+            created_by_avatar: currentUser?.avatar_url,
+            collaborator_ids: Array.isArray(p.collaborator_ids) ? p.collaborator_ids : (p.collaborator_ids ? String(p.collaborator_ids).split(',') : []),
+            team_id: p.team_id ? Number(p.team_id) : undefined
           });
           toast.success('Đã mở Công việc (Task) và điền sẵn thông tin!');
           break;
@@ -693,7 +732,7 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
             alignItems: 'center',
             gap: '3px'
           }}>
-            <Check className="w-3 h-3" /> Đã tạo #{resultId}
+            <Check className="w-3 h-3" /> {resultId ? `Đã tạo #${resultId}` : 'Sẵn sàng mở phiếu'}
           </span>
         )}
         {status === 'cancelled' && (
@@ -794,107 +833,66 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
         justifyContent: 'flex-end',
         gap: '8px'
       }}>
-        {status === 'idle' && (
-          <>
-            <button
-              onClick={handleCancel}
-              style={{
-                padding: '6px 12px',
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                color: '#64748b',
-                background: '#ffffff',
-                border: '1px solid #cbd5e1',
-                borderRadius: '7px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                transition: 'all 0.15s ease'
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = '#f1f5f9')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = '#ffffff')}
-            >
-              <X className="w-3.5 h-3.5" /> Hủy
-            </button>
-
-            <button
-              onClick={handleOpenAndPrefill}
-              style={{
-                padding: '6px 14px',
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                color: '#ffffff',
-                background: 'linear-gradient(135deg, #BD1D2D 0%, #991b1b 100%)',
-                border: 'none',
-                borderRadius: '7px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '5px',
-                boxShadow: '0 2px 6px rgba(189, 29, 45, 0.3)',
-                transition: 'all 0.15s ease'
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.filter = 'brightness(1.08)')}
-              onMouseLeave={(e) => (e.currentTarget.style.filter = 'none')}
-            >
-              <ArrowRight className="w-3.5 h-3.5" />
-              <span>Mở phiếu & Điền sẵn thông tin</span>
-            </button>
-          </>
-        )}
-
-        {status === 'submitting' && (
-          <div style={{
-            fontSize: '0.75rem',
-            color: '#1d4ed8',
-            fontWeight: 600,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px'
-          }}>
-            <Loader2 className="w-4 h-4 animate-spin text-[#BD1D2D]" />
-            <span>Đang mở phiếu và nạp dữ liệu...</span>
-          </div>
-        )}
-
-        {status === 'success' && (
-          <div style={{
-            fontSize: '0.75rem',
-            color: '#15803d',
-            fontWeight: 650,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px'
-          }}>
-            <Check className="w-4 h-4 text-emerald-600" />
-            <span>Đã chuyển dữ liệu vào phiếu để bạn kiểm tra & lưu</span>
-          </div>
-        )}
-
-        {status === 'cancelled' && (
-          <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontStyle: 'italic' }}>
-            Đề xuất đã bị hủy
-          </div>
-        )}
-
-        {status === 'error' && (
+        {status !== 'submitting' && (
           <button
-            onClick={handleOpenAndPrefill}
+            type="button"
+            onClick={handleCancel}
             style={{
-              padding: '5px 12px',
-              fontSize: '0.72rem',
-              fontWeight: 650,
-              color: '#b91c1c',
+              padding: '6px 12px',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              color: '#64748b',
               background: '#ffffff',
-              border: '1px solid #f87171',
-              borderRadius: '6px',
-              cursor: 'pointer'
+              border: '1px solid #cbd5e1',
+              borderRadius: '7px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              transition: 'all 0.15s ease'
             }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = '#f1f5f9')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = '#ffffff')}
           >
-            Thử lại
+            <X className="w-3.5 h-3.5" /> Hủy
           </button>
         )}
+
+        <button
+          type="button"
+          onClick={handleOpenAndPrefill}
+          disabled={status === 'submitting'}
+          style={{
+            padding: '6px 14px',
+            fontSize: '0.75rem',
+            fontWeight: 700,
+            color: '#ffffff',
+            background: 'linear-gradient(135deg, #BD1D2D 0%, #991b1b 100%)',
+            border: 'none',
+            borderRadius: '7px',
+            cursor: status === 'submitting' ? 'not-allowed' : 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+            boxShadow: '0 2px 6px rgba(189, 29, 45, 0.3)',
+            transition: 'all 0.15s ease',
+            opacity: status === 'submitting' ? 0.7 : 1
+          }}
+          onMouseEnter={(e) => { if (status !== 'submitting') e.currentTarget.style.filter = 'brightness(1.08)'; }}
+          onMouseLeave={(e) => (e.currentTarget.style.filter = 'none')}
+        >
+          {status === 'submitting' ? (
+            <>
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <span>Đang mở phiếu...</span>
+            </>
+          ) : (
+            <>
+              <ArrowRight className="w-3.5 h-3.5" />
+              <span>Mở phiếu & Điền sẵn thông tin</span>
+            </>
+          )}
+        </button>
       </div>
     </div>
   );

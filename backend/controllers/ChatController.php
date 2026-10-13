@@ -3571,10 +3571,14 @@ class ChatController {
                 . "4. TRÒ CHUYỆN & GIẢI ĐÁP ĐA NĂNG:\n"
                 . "   - Bạn sẵn sàng hỗ trợ giải đáp mọi câu hỏi thông thường, thắc mắc công việc, dịch thuật văn bản, tóm tắt báo cáo tài chính hoặc bảng tính Excel một cách thông minh, tự nhiên và ân cần như một người đồng nghiệp xuất sắc.\n\n"
                 . "QUY TRÌNH TẠO ĐƠN & THẺ HÀNH ĐỘNG ERP (SMART DRAFTER -> FINAL HUMAN COMMITTER):\n"
-                . "• HƯỚNG DẪN ĐẶC BIỆT KHI NGƯỜI DÙNG NHỜ TẠO TASK / GIAO VIỆC (Ví dụ: 'bạn có thể giúp tôi tạo task ko', 'giúp tôi tạo công việc', 'tôi muốn giao việc', 'tạo task'):\n"
-                . "  - BẮT BUỘC trả lời nhiệt tình, thân thiện: 'Dạ được chứ {$cleanCallName} ơi, em hỗ trợ mình tạo task/công việc ngay đây ạ! 🚀'\n"
-                . "  - Hỏi nhanh hoặc hướng dẫn 4 thông tin: (1) Tiêu đề công việc, (2) Hạn chót (Deadline), (3) Mức độ ưu tiên, (4) Nội dung mô tả/người phụ trách.\n"
-                . "  - ĐỒNG THỜI BẮT BUỘC gọi công cụ `draft_action_proposal` HOẶC xuất thẻ hành động `<<<ACTION_PROPOSAL: {\"action_type\": \"task\", \"title\": \"Tạo công việc mới\", \"summary\": \"Bấm để mở phiếu tạo việc trên Workspace\", \"params\": {\"subject\": \"Công việc mới\", \"priority\": \"medium\", \"body\": \"\"}}>>>` để người dùng có thể bấm vào là mở ngay form tạo việc tức thì!\n"
+                . "• HƯỚNG DẪN ĐẶC BIỆT KHI NGƯỜI DÙNG NHỜ TẠO TASK / GIAO VIỆC (Ví dụ: 'tạo task giao cho Phúc mai cập nhật hệ thống', 'giao việc cho Ý Nhi', 'tạo việc cho team Marketing'):\n"
+                . "  - BẮT BUỘC trả lời nhiệt tình, thân thiện: 'Dạ được chứ {$cleanCallName} ơi, em hỗ trợ mình tạo task giao việc ngay đây ạ! 🚀'\n"
+                . "  - QUY TẮC PHÂN CÔNG & XÁC THỰC DANH TÍNH:\n"
+                . "    + Người tạo (Creator): Luôn luôn là người đang chat ({$cleanCallName}).\n"
+                . "    + Người thực hiện chính (Assignee): Nếu người dùng nhắc đến tên nhân sự (ví dụ 'giao cho Phúc', 'giao cho Nhi'): Truyền `assignee_name` vào params của `draft_action_proposal`.\n"
+                . "    + XỬ LÝ TRÙNG TÊN: Nếu trong công ty có từ 2 nhân sự trùng tên trở lên (hoặc tool báo `ambiguous_assignees`): Bạn BẮT BUỘC hỏi lại người dùng để xác nhận rõ ràng: 'Dạ {$cleanCallName} ơi, trong hệ thống em thấy có [N] nhân sự tên [Tên]: 1. [Tên 1] ([Phòng ban/Chức vụ]), 2. [Tên 2] ([Phòng ban/Chức vụ]). Bạn muốn giao công việc này cho bạn nào ạ?'\n"
+                . "    + Nếu giao cho cả phòng ban/team: Truyền `team_name` hoặc `department` vào params để hệ thống tự liên kết nhóm.\n"
+                . "  - ĐỒNG THỜI BẮT BUỘC gọi công cụ `draft_action_proposal` với action_type: 'task', params: {subject, due_date, priority, body, assignee_name, user_id, team_name, collaborator_ids} để xuất Thẻ Hành Động điền sẵn 100% dữ liệu cho người dùng bấm mở phiếu kiểm tra và lưu!\n"
                 . "• Với các loại phiếu/đơn khác: Khi người dùng yêu cầu, kiểm tra đủ các trường dữ kiện; nếu thiếu thì hỏi {$userName} bổ sung chu đáo, đồng thời xuất thẻ hành động `<<<ACTION_PROPOSAL: {...}>>>` ở cuối tin nhắn (người dùng bấm sẽ mở drawer/modal điền sẵn để tự bấm lưu):\n"
                 . "1. Đơn nghỉ phép: action_type: 'leave', params: {leave_type, start_date, end_date, total_days, reason}\n"
                 . "2. Giải trình quên chấm công: action_type: 'supplementary', params: {date, in_time, out_time, reason}\n"
@@ -3582,7 +3586,7 @@ class ChatController {
                 . "4. Đề xuất thanh toán chi phí: action_type: 'expense', params: {title, amount, vendor_name, reason} (Khoản chi >= 5.000.000đ phải nhắc cần 2 cấp duyệt)\n"
                 . "5. Đề xuất tạm ứng công tác: action_type: 'advance_payment', params: {title, amount, reason}\n"
                 . "6. Phiếu nhập kho vật tư / giáo trình: action_type: 'inventory_receipt', params: {notes, supplier_name, items: [{name, quantity, unit_price}]}\n"
-                . "7. Giao việc / Task: action_type: 'task', params: {subject, due_date, priority, body}\n"
+                . "7. Giao việc / Task: action_type: 'task', params: {subject, due_date, priority, body, assignee_name, user_id, team_name}\n"
                 . "8. Thêm học viên / Lead CRM: action_type: 'lead', params: {name, phone, email, source, notes}\n"
                 . "9. Tạo phiếu thu / Đơn hàng SO (Lịch trình học phí): action_type: 'sales_order', params: {contact_id, customer_name, phone, email, total_amount, currency, notes, installments: [{name, amount, expected_pay_date}]}\n"
                 . "   - LƯU Ý VỚI SALES_ORDER: BẮT BUỘC truyền contact_id (nếu đã tìm thấy học viên trong CRM) cùng customer_name, phone, email; total_amount bằng số nguyên; và installments là mảng toàn bộ các đợt thanh toán (mỗi đợt gồm name, amount bằng số nguyên, expected_pay_date dạng YYYY-MM-DD).\n"
@@ -3600,16 +3604,16 @@ class ChatController {
                 . "HỖ TRỢ CẬP NHẬT HỒ SƠ KHÁCH HÀNG (PROFILE & NOTES):\n"
                 . "• Để cập nhật thông tin học viên (chức danh, công ty, địa chỉ, email, sđt...): Dùng công cụ `update_contact_profile`.\n"
                 . "• Để thêm ghi chú tư vấn/chăm sóc: Dùng công cụ `add_contact_consultation_note`.\n\n"
-                . "HỖ TRỢ ĐÀO SÂU & HỎI TỚI HỎI TỚI VỀ KHÁCH HÀNG 360° (CUSTOMER 360 DEEP-DIVE):\n"
-                . "• Khi người dùng hỏi đào sâu, hỏi tới hỏi tới về bất kỳ khách hàng/học viên nào (ví dụ: 'khách này từ lúc nào?', 'ai chăm sóc?', 'note cái gì?', 'hồ sơ có gì?', 'chuẩn hết chưa?', 'tổng quan tình trạng bạn này ra sao?'):\n"
+                . "HỖ TRỢ ĐÀO SÂU & HỎI TỚI HỎI TỚI VỀ KHÁCH HÀNG 360° (CUSTOMER 360 DEEP-DIVE & TIẾN ĐỘ TƯ VẤN):\n"
+                . "• Khi người dùng hỏi đào sâu về bất kỳ khách hàng/học viên nào (ví dụ: 'Tư vấn đc gì r', 'Học viên này chăm sóc đến đâu rồi', 'Có ghi chú gì không', 'Gọi điện chưa', 'khách này từ lúc nào?', 'ai chăm sóc?'):\n"
                 . "  BẮT BUỘC gọi ngay công cụ `get_contact_360_profile` với số điện thoại, email hoặc tên khách hàng trong tham số `contact_query`.\n"
                 . "  Dữ liệu trả về sẽ tổng hợp đầy đủ 5 trụ cột:\n"
                 . "  (1) Thời điểm vào CRM & Nguồn tiếp thị (từ lúc nào, chiến dịch nào).\n"
                 . "  (2) Chuyên viên tư vấn phụ trách & Chi nhánh (ai chăm sóc, cộng tác viên nào).\n"
-                . "  (3) Toàn bộ lịch sử ghi chú tư vấn chi tiết (note cái gì, các lần tương tác).\n"
+                . "  (3) Toàn bộ lịch sử cuộc gọi, ghi chú tư vấn, chuyển pipeline chi tiết (nội dung cuộc gọi, thời lượng cuộc gọi, ai gọi lúc mấy giờ, ghi chú nộp hồ sơ hay chốt học...).\n"
                 . "  (4) Danh mục tài liệu/hồ sơ đã tải lên kho cloud_files (hồ sơ có những gì, loại file).\n"
                 . "  (5) Thẩm định pháp lý & điều kiện nhập học (chuẩn hết chưa, thiếu CCCD/Bằng cấp/Bảng điểm/CV tiếng Anh, tình trạng đặt cọc & hợp đồng).\n"
-                . "  Hãy tổng hợp câu trả lời mạch lạc, chuyên nghiệp, chính xác 100% theo dữ liệu thực tế từ database MySQL, không bịa đặt hoặc phỏng đoán!\n\n"
+                . "  Hãy đọc kỹ và trích dẫn trung thực từng mốc tương tác thực tế từ database, tuyệt đối không báo thiếu tiến độ nếu trong dòng thời gian đã có cuộc gọi hay ghi chú!\n\n"
                 . $ragContextStr
                 . $ambientSnapshotStr
                 . $erpLookupStr;
@@ -4628,7 +4632,7 @@ class ChatController {
                     }
                 }
                 $qLower = mb_strtolower($lastMsgText);
-                if (preg_match('/(lead|khách hàng|crm|tư vấn|chốt sale|bỏ quên|ngâm lead|tỷ lệ chốt|fair share|vòng chia|lịch hẹn|gọi lại|đặt lịch|nhắc hẹn|cuộc hẹn|trùng lead|ai đang chăm|sđt này|khách này có chưa|tranh chấp)/iu', $qLower)) {
+                if (preg_match('/(lead|khách hàng|crm|tư vấn|chốt sale|bỏ quên|ngâm lead|tỷ lệ chốt|fair share|vòng chia|lịch hẹn|gọi lại|đặt lịch|nhắc hẹn|cuộc hẹn|trùng lead|ai đang chăm|sđt này|khách này có chưa|tranh chấp|giao cho ai|tiến độ chăm|chăm sóc)/iu', $qLower)) {
                     $activeAgentId = 'sales';
                 } elseif (preg_match('/(chi phí|phiếu chi|po|phiếu thu|so|cọc|đặt cọc|học phí|tiền|dòng tiền|tạm ứng|ngân sách|công nợ|nợ học phí|tiền vào|chuyển khoản|vừa nhận|đối soát|biên lai)/iu', $qLower)) {
                     $activeAgentId = 'finance';
@@ -4654,10 +4658,10 @@ class ChatController {
             }
 
             $agentToolMap = [
-                'sales' => ['get_contact_360_profile', 'search_contacts', 'check_lead_duplicate_and_fairshare_status', 'schedule_contact_activity', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'lookup_recent_cash_receipts_and_deposits', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'draft_action_proposal', 'get_system_navigation'],
+                'sales' => ['get_contact_360_profile', 'search_contacts', 'check_lead_duplicate_and_fairshare_status', 'schedule_contact_activity', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'lookup_recent_cash_receipts_and_deposits', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'get_company_staff_directory', 'draft_action_proposal', 'get_system_navigation'],
                 'finance' => ['get_contact_financial_summary', 'lookup_recent_cash_receipts_and_deposits', 'get_my_payment_proposals', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'draft_action_proposal', 'get_system_navigation'],
                 'hrm' => ['get_company_staff_directory', 'get_company_leave_and_absence', 'get_my_attendance_summary', 'get_my_payslip', 'get_pending_approvals', 'trace_approval_blocker', 'draft_action_proposal', 'get_system_navigation'],
-                'tasks' => ['get_my_tasks', 'get_task_detail', 'schedule_contact_activity', 'draft_action_proposal', 'get_system_navigation'],
+                'tasks' => ['get_my_tasks', 'get_task_detail', 'get_company_staff_directory', 'schedule_contact_activity', 'draft_action_proposal', 'get_system_navigation'],
                 'academic' => ['get_program_details', 'get_academic_schedule_and_intakes', 'get_active_projects_and_campaigns', 'search_ideas_knowledge', 'draft_action_proposal', 'get_system_navigation'],
                 'records_legal' => ['check_student_admission_records', 'get_contact_360_profile', 'attach_files_to_contact', 'draft_action_proposal', 'get_system_navigation'],
                 'assets_inventory' => ['get_inventory_and_asset_status', 'draft_action_proposal', 'get_system_navigation'],
