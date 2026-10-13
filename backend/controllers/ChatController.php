@@ -636,9 +636,12 @@ class ChatController {
             $stmt = $this->db->prepare("
                 SELECT m.id, m.conversation_id, m.sender_id, m.message_type, m.content,
                        m.metadata, m.reply_to_id, m.is_pinned, m.is_edited, m.deleted_at, m.created_at,
-                       u.full_name as sender_name, u.avatar_url as sender_avatar, u.job_title as sender_title,
+                       COALESCE(u.full_name, CASE WHEN m.sender_id = 9000001 THEN 'SI IDEAS' ELSE 'Đồng nghiệp' END) as sender_name,
+                       COALESCE(u.avatar_url, CASE WHEN m.sender_id = 9000001 THEN '/stickers/ideas/ideas_3.webp' ELSE NULL END) as sender_avatar,
+                       COALESCE(u.job_title, CASE WHEN m.sender_id = 9000001 THEN 'Smart Multi Agent' ELSE '' END) as sender_title,
                        r.content as reply_content, r.message_type as reply_type, r.metadata as reply_metadata,
-                       ru.full_name as reply_sender_name
+                       COALESCE(ru.full_name, CASE WHEN r.sender_id = 9000001 THEN 'SI IDEAS' ELSE 'Đồng nghiệp' END) as reply_sender_name,
+                       COALESCE(ru.avatar_url, CASE WHEN r.sender_id = 9000001 THEN '/stickers/ideas/ideas_3.webp' ELSE NULL END) as reply_sender_avatar
                 FROM chat_messages m
                 LEFT JOIN users u ON m.sender_id = u.id
                 LEFT JOIN chat_messages r ON m.reply_to_id = r.id
@@ -3177,6 +3180,21 @@ class ChatController {
         if ($uid <= 0) return 0;
 
         try {
+            // Guarantee user 9000001 exists with correct avatar & name in users table
+            try {
+                $this->db->exec("
+                    INSERT INTO users (id, tenant_id, username, email, full_name, role, job_title, avatar_url, is_active, status)
+                    VALUES (9000001, 1, 'si_ideas', 'ai@ideas.edu.vn', 'SI IDEAS', 'bot', 'Smart Multi Agent', '/stickers/ideas/ideas_3.webp', 1, 'active')
+                    ON DUPLICATE KEY UPDATE 
+                        full_name = 'SI IDEAS',
+                        job_title = 'Smart Multi Agent',
+                        role = 'bot',
+                        avatar_url = '/stickers/ideas/ideas_3.webp',
+                        is_active = 1,
+                        status = 'active';
+                ");
+            } catch (\Throwable $eUser) {}
+
             $stmt = $this->db->prepare("
                 SELECT c.id 
                 FROM chat_conversations c
@@ -3533,9 +3551,10 @@ class ChatController {
                 . "2. Nếu vấn đề chưa có thông tin chính xác: Trả lời mềm mại: 'Dạ vấn đề này hiện em chưa có thông tin chính xác nhất. Nhờ {$userName} để lại thông tin hoặc em sẽ báo chuyên viên kiểm tra và báo lại ngay cho mình nhé!'\n"
                 . "3. Với nội dung chưa rõ hoặc phụ thuộc từng hồ sơ, trả lời theo hướng 'tùy hồ sơ', 'cần xét duyệt thêm', 'sẽ được tư vấn cụ thể'.\n\n"
                 . "NĂNG LỰC PHÂN TÍCH ĐA PHƯƠNG TIỆN, TÀI LIỆU, BROCHURE & HỢP ĐỒNG (MULTIMODAL INTELLIGENCE):\n"
-                . "Bạn sở hữu năng lực đa phương tiện toàn diện (xử lý hình ảnh, PDF, Word, Excel, Slide) và trò chuyện, phân tích tài liệu tự nhiên như một chuyên gia tư vấn cấp cao:\n"
-                . "1. ĐÁNH GIÁ & RÀ SOÁT HỢP ĐỒNG (CONTRACT REVIEW & LEGAL RISK AUDIT):\n"
-                . "   - Khi người dùng gửi file hoặc nội dung hợp đồng (hợp đồng đào tạo, hợp đồng dịch vụ, biên bản thỏa thuận):\n"
+                . "QUY TẮC BẤT KHẢ XÂM PHẠM: TUYỆT ĐỐI KHÔNG ĐÒI HỎI HAY BÁO THIẾU TÀI LIỆU ĐÍNH KÈM / FILE / HỢP ĐỒNG NẾU NGƯỜI DÙNG KHÔNG CHỦ ĐỘNG GỬI HOẶC KHÔNG NHẮC ĐẾN FILE!\n"
+                . "Khi người dùng hỏi han, nhờ tạo task, giao việc, tra cứu, xin tư vấn: CẤM TUYỆT ĐỐI các câu như 'em chưa thấy tài liệu đính kèm', 'hãy gửi file', 'hãy gửi hợp đồng'. Chỉ phân tích file khi trong tin nhắn THỰC SỰ có file đính kèm hoặc người dùng nhờ rà soát tệp tin!\n\n"
+                . "1. ĐÁNH GIÁ & RÀ SOÁT HỢP ĐỒNG (KHI CÓ FILE HOẶC VĂN BẢN ĐÍNH KÈM):\n"
+                . "   - Chỉ kích hoạt khi người dùng gửi file hoặc trích dẫn nội dung hợp đồng.\n"
                 . "   - Phân tích chi tiết từng điều khoản: Quyền & nghĩa vụ hai bên, điều khoản học phí/thanh toán, cam kết đầu ra/văn bằng, điều khoản bảo mật, phạt vi phạm & chấm dứt hợp đồng.\n"
                 . "   - Cảnh báo các điểm rủi ro pháp lý tiềm ẩn hoặc các điều khoản chưa rõ ràng cần đàm phán lại.\n"
                 . "   - Nếu là hợp đồng chốt sale học viên: Tự động bóc tách Tên, SĐT, Email, Khóa học, Học phí, Lịch thanh toán; trò chuyện đối chiếu với dữ liệu CRM trên hệ thống; và xuất thẻ hành động `<<<ACTION_PROPOSAL: {\"action_type\": \"sales_order\", ...}>>>` để người dùng xác nhận tạo đơn SO ngay.\n"
@@ -3552,8 +3571,11 @@ class ChatController {
                 . "4. TRÒ CHUYỆN & GIẢI ĐÁP ĐA NĂNG:\n"
                 . "   - Bạn sẵn sàng hỗ trợ giải đáp mọi câu hỏi thông thường, thắc mắc công việc, dịch thuật văn bản, tóm tắt báo cáo tài chính hoặc bảng tính Excel một cách thông minh, tự nhiên và ân cần như một người đồng nghiệp xuất sắc.\n\n"
                 . "QUY TRÌNH TẠO ĐƠN & THẺ HÀNH ĐỘNG ERP (SMART DRAFTER -> FINAL HUMAN COMMITTER):\n"
-                . "Khi người dùng yêu cầu tạo phiếu/đơn/thủ tục, kiểm tra đủ các trường dữ kiện bắt buộc; nếu thiếu thì hỏi {$userName} bổ sung chu đáo.\n"
-                . "Khi đã đủ dữ kiện, xuất thẻ hành động `<<<ACTION_PROPOSAL: {...}>>>` ở cuối tin nhắn (người dùng bấm sẽ mở drawer/modal điền sẵn để tự bấm lưu):\n"
+                . "• HƯỚNG DẪN ĐẶC BIỆT KHI NGƯỜI DÙNG NHỜ TẠO TASK / GIAO VIỆC (Ví dụ: 'bạn có thể giúp tôi tạo task ko', 'giúp tôi tạo công việc', 'tôi muốn giao việc', 'tạo task'):\n"
+                . "  - BẮT BUỘC trả lời nhiệt tình, thân thiện: 'Dạ được chứ {$cleanCallName} ơi, em hỗ trợ mình tạo task/công việc ngay đây ạ! 🚀'\n"
+                . "  - Hỏi nhanh hoặc hướng dẫn 4 thông tin: (1) Tiêu đề công việc, (2) Hạn chót (Deadline), (3) Mức độ ưu tiên, (4) Nội dung mô tả/người phụ trách.\n"
+                . "  - ĐỒNG THỜI BẮT BUỘC gọi công cụ `draft_action_proposal` HOẶC xuất thẻ hành động `<<<ACTION_PROPOSAL: {\"action_type\": \"task\", \"title\": \"Tạo công việc mới\", \"summary\": \"Bấm để mở phiếu tạo việc trên Workspace\", \"params\": {\"subject\": \"Công việc mới\", \"priority\": \"medium\", \"body\": \"\"}}>>>` để người dùng có thể bấm vào là mở ngay form tạo việc tức thì!\n"
+                . "• Với các loại phiếu/đơn khác: Khi người dùng yêu cầu, kiểm tra đủ các trường dữ kiện; nếu thiếu thì hỏi {$userName} bổ sung chu đáo, đồng thời xuất thẻ hành động `<<<ACTION_PROPOSAL: {...}>>>` ở cuối tin nhắn (người dùng bấm sẽ mở drawer/modal điền sẵn để tự bấm lưu):\n"
                 . "1. Đơn nghỉ phép: action_type: 'leave', params: {leave_type, start_date, end_date, total_days, reason}\n"
                 . "2. Giải trình quên chấm công: action_type: 'supplementary', params: {date, in_time, out_time, reason}\n"
                 . "3. Đề xuất đổi ca trực: action_type: 'shift_swap', params: {date, shift_type, reason}\n"

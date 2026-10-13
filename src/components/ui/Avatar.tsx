@@ -106,6 +106,10 @@ export const Avatar: React.FC<AvatarProps> = ({ src, name, size = 'md', classNam
   }
 
   // Force brand sticker for AI IDEAS / IDEAS AI
+  if (isAi && !resolvedSrc) {
+    resolvedSrc = '/stickers/ideas/ideas_3.webp';
+  }
+
   if (name) {
     const trimmedLower = name.trim().toLowerCase();
     if (
@@ -116,9 +120,12 @@ export const Avatar: React.FC<AvatarProps> = ({ src, name, size = 'md', classNam
       trimmedLower === 'ai ideas' ||
       trimmedLower === 'ideas ai' ||
       trimmedLower.includes('ideas ai') ||
-      trimmedLower.includes('ai ideas')
+      trimmedLower.includes('ai ideas') ||
+      trimmedLower.startsWith('agent ')
     ) {
-      resolvedSrc = '/stickers/ideas/ideas_3.webp';
+      if (!resolvedSrc) {
+        resolvedSrc = '/stickers/ideas/ideas_3.webp';
+      }
     } else if (!resolvedSrc) {
       if (
         trimmedLower === 'hệ thống' ||
@@ -133,6 +140,10 @@ export const Avatar: React.FC<AvatarProps> = ({ src, name, size = 'md', classNam
         resolvedSrc = IDEAS_SYSTEM_LOGO;
       }
     }
+  }
+
+  if (!resolvedSrc && (isAi || (typeof name === 'string' && (name.toLowerCase().includes('ideas') || name.toLowerCase().includes('agent'))))) {
+    resolvedSrc = '/stickers/ideas/ideas_3.webp';
   }
 
   // Reset error state if resolvedSrc changes

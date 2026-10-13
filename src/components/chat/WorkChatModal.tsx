@@ -3336,18 +3336,25 @@ export const WorkChatModal: React.FC = () => {
                           )}
 
                           <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', maxWidth: '85%' }}>
-                            {!isMine && (
-                              isLastInBurst ? (
+                            {!isMine && (() => {
+                              const isAiMsg = Boolean(Number(msg.sender_id) === 9000001 || msg.sender_name?.includes('IDEAS') || msg.sender_avatar?.includes('ideas_'));
+                              const fallbackAvatar = isAiMsg 
+                                ? '/stickers/ideas/ideas_3.webp' 
+                                : activeConversation?.participants?.find((p: any) => Number(p.user_id) === Number(msg.sender_id))?.avatar_url;
+                              const finalAvatar = msg.sender_avatar || fallbackAvatar;
+                              const finalName = msg.sender_name || (isAiMsg ? 'SI IDEAS' : 'U');
+
+                              return (isLastInBurst || isAiMsg) ? (
                                 <Avatar 
-                                  src={msg.sender_avatar} 
-                                  name={msg.sender_name || 'U'} 
+                                  src={finalAvatar} 
+                                  name={finalName} 
                                   size={28} 
-                                  isAi={Boolean(msg.sender_id === 9000001 || msg.sender_name?.includes('IDEAS') || msg.sender_avatar?.includes('ideas_3.webp'))}
+                                  isAi={isAiMsg}
                                 />
                               ) : (
                                 <div style={{ width: 28, height: 28, flexShrink: 0 }} />
-                              )
-                            )}
+                              );
+                            })()}
 
                             <div style={{ position: 'relative', paddingTop: '4px' }}>
                               {/* Hover Action Bar */}

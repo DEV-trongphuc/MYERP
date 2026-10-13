@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 313;
+$targetVersion = 315;
 $currentVersion = 186;
 
 // Query current DB version
@@ -4535,10 +4535,34 @@ try {
         $logMsg("Nâng cấp lên phiên bản 313 hoàn tất.", "success");
     }
 
-    // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '313') ON DUPLICATE KEY UPDATE setting_value = '313'");
+    // --- PHIÊN BẢN 314: TẠO BẢNG AI_QUERY_AUDIT_LOGS ---
+    if ($currentVersion < 314) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 314: Tạo bảng ai_query_audit_logs...", "info");
+        try {
+            require_once __DIR__ . '/migrations/314_create_ai_query_audit_logs.php';
+            $logMsg("Tạo bảng ai_query_audit_logs phiên bản 314 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi tạo bảng ai_query_audit_logs: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 314 hoàn tất.", "success");
+    }
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 313", "success");
+    // --- PHIÊN BẢN 315: CẬP NHẬT CHẤM CÔNG NGÀY 13/10/2026 CHO PHUCLPH VÀ NGANTK ---
+    if ($currentVersion < 315) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 315: Cập nhật chấm công 13/10/2026 cho phuclph và ngantk...", "info");
+        try {
+            require_once __DIR__ . '/migrations/315_migrate_attendance_phuclph_ngantk_20261013.php';
+            $logMsg("Cập nhật chấm công 13/10/2026 phiên bản 315 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi chạy migration 315: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 315 hoàn tất.", "success");
+    }
+
+    // Update DB version in system_settings
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '315') ON DUPLICATE KEY UPDATE setting_value = '315'");
+
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 315", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");
