@@ -264,14 +264,14 @@ class AgentToolRegistry {
                     ],
                     [
                         'name' => 'draft_action_proposal',
-                        'description' => 'Khởi tạo Thẻ Hành Động (Action Proposal Card) trực quan để người dùng xác nhận và lưu vào hệ thống ERP hoặc 1-Click tải file Excel/CSV xuất dữ liệu (tạo việc, tạo đơn nghỉ phép, giải trình công, đề xuất chi/tạm ứng, thêm lead, tạo đơn SO, nhập kho, đổi ca, yêu cầu bổ sung hồ sơ học viên, đề xuất hợp đồng pháp lý, biên bản bàn giao tài sản, chiến dịch marketing, xuất dữ liệu toàn diện export_data).',
+                        'description' => 'Khởi tạo Thẻ Hành Động (Action Proposal Card) trực quan để người dùng xác nhận và lưu vào hệ thống ERP hoặc 1-Click tải file Excel/CSV xuất dữ liệu (tạo việc, tạo đơn nghỉ phép, giải trình công, đề xuất chi/tạm ứng, đặt cọc giữ chỗ, thêm lead, tạo đơn SO, báo giá, ticket CSKH hỗ trợ học viên, cơ hội deal, nhập kho, đổi ca, yêu cầu bổ sung hồ sơ học viên, đề xuất hợp đồng pháp lý, biên bản bàn giao tài sản, chiến dịch marketing, xuất dữ liệu toàn diện export_data).',
                         'parameters' => [
                             'type' => 'OBJECT',
                             'properties' => [
                                 'action_type' => [
                                     'type' => 'STRING',
-                                    'enum' => ['task', 'leave', 'supplementary', 'expense', 'advance_payment', 'lead', 'sales_order', 'inventory_receipt', 'shift_swap', 'admission_document_request', 'legal_contract', 'asset_handover', 'marketing_campaign', 'export_data'],
-                                    'description' => 'Loại hành động ERP'
+                                    'enum' => ['task', 'leave', 'supplementary', 'expense', 'advance_payment', 'lead', 'sales_order', 'deposit', 'ticket', 'quote', 'deal', 'inventory_receipt', 'shift_swap', 'admission_document_request', 'legal_contract', 'asset_handover', 'marketing_campaign', 'export_data'],
+                                    'description' => 'Loại hành động ERP: task (công việc), leave (nghỉ phép), supplementary (bổ sung công), expense (chi phí PO), advance_payment (tạm ứng), lead (học viên mới), sales_order (đơn hàng SO chia đợt), deposit (đặt cọc giữ chỗ), ticket (ticket CSKH hỗ trợ), quote (báo giá), deal (cơ hội tuyển sinh), inventory_receipt (nhập kho), shift_swap (đổi ca/OT), admission_document_request (hồ sơ nhập học), legal_contract (hợp đồng đào tạo), asset_handover (bàn giao tài sản), marketing_campaign (chiến dịch), export_data (xuất file Excel)'
                                 ],
                                 'title' => [
                                     'type' => 'STRING',
@@ -822,6 +822,65 @@ class AgentToolRegistry {
                         ]
                     ],
                     [
+                        'name' => 'manage_lead_round_distribution',
+                        'description' => 'Thực thi nghiệp vụ Vòng xoay phân bổ Lead: Tra cứu tải thực tế của các vòng (giải đáp "nên giao vòng nào?"), gán số điện thoại/khách hàng trực tiếp vào vòng xoay, bù data cho chuyên viên tư vấn (khi lead trùng/rác) và điều chỉnh ca trực nhận số.',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'action' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['list_rounds', 'get_round_load_audit', 'distribute_lead', 'compensate_consultant', 'toggle_consultant_shift'],
+                                    'description' => 'Hành động cần thực thi: "get_round_load_audit" (khảo sát tải để biết nên giao vòng nào), "distribute_lead" (giao khách/SĐT vào vòng), "compensate_consultant" (bù data cho Sale), "toggle_consultant_shift" (bật/tắt ca trực nhận số), "list_rounds" (xem danh sách vòng)'
+                                ],
+                                'round_id' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Mã ID vòng phân bổ (distribution_rounds.id)'
+                                ],
+                                'round_name' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tên vòng phân bổ gần đúng (vd: "BBA", "IELTS", "Tuyển sinh")'
+                                ],
+                                'consultant_id' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Mã ID chuyên viên tư vấn / Sale (users.id)'
+                                ],
+                                'consultant_name' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tên gần đúng của chuyên viên tư vấn (vd: "Phúc", "Trần Trọng Phúc")'
+                                ],
+                                'compensation_count' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Số lượng data cần bù (mặc định 1, tối đa 10)'
+                                ],
+                                'lead_phone' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Số điện thoại của khách hàng cần giao vào vòng xoay'
+                                ],
+                                'lead_name' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Họ tên của khách hàng'
+                                ],
+                                'lead_email' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Email của khách hàng nếu có'
+                                ],
+                                'lead_note' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Nhu cầu hoặc ghi chú nguồn của Lead'
+                                ],
+                                'shift_active' => [
+                                    'type' => 'BOOLEAN',
+                                    'description' => 'Trạng thái ca trực (true: đang trực nhận số, false: tạm dừng)'
+                                ],
+                                'reason' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Lý do bù data hoặc thay đổi ca trực (phục vụ Audit Log)'
+                                ]
+                            ],
+                            'required' => ['action']
+                        ]
+                    ],
+                    [
                         'name' => 'schedule_contact_activity',
                         'description' => 'Lên lịch hẹn tư vấn, cuộc gọi nhắc nhở chăm sóc hoặc tác vụ gắn trực tiếp với học viên/lead. Tự động lưu vào bảng activities của học viên và đồng bộ hiển thị lên Lịch làm việc cá nhân (/calendar) của chuyên viên tư vấn.',
                         'parameters' => [
@@ -934,7 +993,8 @@ class AgentToolRegistry {
                 'update_task_progress_and_status',
                 'complete_task_checklist_item',
                 'quick_log_crm_activity',
-                'reassign_lead_owner'
+                'reassign_lead_owner',
+                'manage_lead_round_distribution'
             ];
             $effectiveAllowed = array_unique(array_merge($allowedToolNames, $essential));
 
@@ -1300,7 +1360,7 @@ class AgentToolRegistry {
 
                     if (in_array($appType, ['all', 'expense'], true) && $expenseCount > 0) {
                         $stmtEList = $db->prepare("
-                            SELECT e.id, e.title, e.amount, e.currency, e.vendor_name, e.created_at, u.full_name as creator_name
+                            SELECT e.id, e.title, e.amount, e.vendor_name, e.created_at, u.full_name as creator_name
                             FROM expenses e
                             LEFT JOIN users u ON e.created_by = u.id
                             WHERE e.tenant_id = ? AND e.deleted_at IS NULL AND e.status = 'pending'
@@ -1310,7 +1370,7 @@ class AgentToolRegistry {
                         ");
                         $stmtEList->execute([$tid, $uid, $uid, $uid, $uid]);
                         foreach ($stmtEList->fetchAll(PDO::FETCH_ASSOC) as $row) {
-                            $amt = number_format((float)$row['amount'], 0, ',', '.') . ' ' . ($row['currency'] ?: 'VND');
+                            $amt = number_format((float)$row['amount'], 0, ',', '.') . ' VND';
                             $items[] = [
                                 'type' => 'Đề xuất chi / PO',
                                 'id' => (int)$row['id'],
@@ -1638,7 +1698,7 @@ class AgentToolRegistry {
                     }
 
                     $stmt = $db->prepare("
-                        SELECT e.id, e.title, e.amount, e.currency, e.vendor_name, e.status, e.created_at, e.reject_reason
+                        SELECT e.id, e.title, e.amount, e.vendor_name, e.status, e.created_at, e.reject_reason
                         FROM expenses e
                         WHERE $where
                         ORDER BY e.id DESC LIMIT 5
@@ -1648,7 +1708,7 @@ class AgentToolRegistry {
 
                     $formatted = [];
                     foreach ($proposals as $p) {
-                        $amt = number_format((float)$p['amount'], 0, ',', '.') . ' ' . ($p['currency'] ?: 'VND');
+                        $amt = number_format((float)$p['amount'], 0, ',', '.') . ' VND';
                         $st = $p['status'] === 'approved' ? 'Đã phê duyệt' : ($p['status'] === 'pending' ? 'Đang chờ duyệt' : 'Từ chối');
                         $formatted[] = [
                             'id' => (int)$p['id'],
@@ -2095,12 +2155,12 @@ class AgentToolRegistry {
                         $cWhere = "c.tenant_id = ? AND (c.status = 'active' OR c.status IS NULL OR c.status = '1')";
                         $cParams = [$tid];
                         if (!empty($search)) {
-                            $cWhere .= " AND (c.name LIKE ? OR c.code LIKE ?)";
+                            $cWhere .= " AND (c.name LIKE ? OR c.description LIKE ?)";
                             $cParams[] = '%' . $search . '%';
                             $cParams[] = '%' . $search . '%';
                         }
                         $cStmt = $db->prepare("
-                            SELECT c.id, c.name, c.code, c.project_id, (SELECT name FROM projects WHERE id = c.project_id) as project_name
+                            SELECT c.id, c.name, c.description, c.project_id, (SELECT name FROM projects WHERE id = c.project_id) as project_name
                             FROM marketing_campaigns c
                             WHERE $cWhere ORDER BY c.id DESC LIMIT $limit
                         ");
@@ -2124,7 +2184,8 @@ class AgentToolRegistry {
                             return [
                                 'id' => (int)$c['id'],
                                 'name' => $c['name'],
-                                'code' => $c['code'],
+                                'code' => 'CAMP-' . $c['id'],
+                                'description' => $c['description'] ?: '',
                                 'project_name' => $c['project_name'] ?: 'Chung'
                             ];
                         }, $resCampaigns),
@@ -2322,8 +2383,15 @@ class AgentToolRegistry {
                     $actionType = $args['action_type'] ?? 'task';
                     $title = $args['title'] ?? 'Đề xuất hành động ERP';
                     $summary = $args['summary'] ?? '';
-                    $paramsJson = $args['params_json'] ?? '{}';
-                    $params = json_decode($paramsJson, true) ?: [];
+                    $params = [];
+                    if (isset($args['params']) && is_array($args['params'])) {
+                        $params = $args['params'];
+                    } elseif (isset($args['params_json']) && is_array($args['params_json'])) {
+                        $params = $args['params_json'];
+                    } elseif (!empty($args['params_json']) && is_string($args['params_json'])) {
+                        $params = json_decode($args['params_json'], true) ?: [];
+                    }
+
 
                     $ambiguousNotice = null;
                     
@@ -2447,115 +2515,316 @@ class AgentToolRegistry {
                     $actionVerb = ($decision === 'approved') ? 'phê duyệt' : 'từ chối';
 
                     if ($ticketType === 'leave') {
-                        $q = $db->prepare("SELECT l.*, u.full_name as employee_name FROM hrm_leave_requests l LEFT JOIN users u ON l.user_id = u.id WHERE l.id = ?");
-                        $q->execute([$ticketId]);
-                        $ticket = $q->fetch(PDO::FETCH_ASSOC);
-                        if (!$ticket) {
-                            return ['success' => false, 'message' => "Không tìm thấy đơn nghỉ phép ID #{$ticketId}."];
+                        $db->beginTransaction();
+                        try {
+                            $q = $db->prepare("SELECT l.*, u.full_name as employee_name FROM hrm_leave_requests l JOIN users u ON l.user_id = u.id WHERE l.id = ? AND u.tenant_id = ? FOR UPDATE");
+                            $q->execute([$ticketId, $tid]);
+                            $ticket = $q->fetch(PDO::FETCH_ASSOC);
+                            if (!$ticket) {
+                                $db->rollBack();
+                                return ['success' => false, 'message' => "Không tìm thấy đơn nghỉ phép ID #{$ticketId} hoặc không thuộc chi nhánh của bạn."];
+                            }
+
+                            if ($ticket['status'] !== 'pending') {
+                                $db->rollBack();
+                                return ['success' => false, 'message' => "Đơn nghỉ phép #{$ticketId} đã được xử lý trước đó (Trạng thái hiện tại: {$ticket['status']})."];
+                            }
+
+                            $isCreator = ((int)$ticket['user_id'] === $uid);
+                            if ($isCreator && !$isGlobalAdmin) {
+                                $db->rollBack();
+                                return ['success' => false, 'message' => 'Người tạo đơn không được tự phê duyệt đề xuất nghỉ phép của chính mình.'];
+                            }
+
+                            $isApprover1 = ((int)($ticket['approver_id'] ?? 0) === $uid);
+                            $isApprover2 = ((int)($ticket['approver_id_2'] ?? 0) === $uid);
+                            $canApprove = $isGlobalAdmin || $isHR || $isManager || $isApprover1 || $isApprover2;
+                            if (!$canApprove) {
+                                $db->rollBack();
+                                return ['success' => false, 'message' => "Bạn không có quyền {$actionVerb} đơn nghỉ phép này."];
+                            }
+
+                            if ($isApprover2 && !$isApprover1 && !$isGlobalAdmin) {
+                                if (($ticket['status_level_1'] ?? 'pending') === 'pending') {
+                                    $db->rollBack();
+                                    return ['success' => false, 'message' => 'Cần có phê duyệt Cấp 1 trước khi người phê duyệt Cấp 2 xử lý đơn này.'];
+                                }
+                            }
+
+                            $empName = $ticket['employee_name'] ?: 'Nhân sự';
+
+                            if ($decision === 'rejected') {
+                                $upFields = ["status = 'rejected'", "updated_at = NOW()"];
+                                $upParams = [];
+                                if ($isApprover1 || $isGlobalAdmin) {
+                                    $upFields[] = "status_level_1 = 'rejected'";
+                                    $upFields[] = "approved_by = ?";
+                                    $upParams[] = $uid;
+                                }
+                                if ($isApprover2 || $isGlobalAdmin) {
+                                    $upFields[] = "status_level_2 = 'rejected'";
+                                    $upFields[] = "approved_by_2 = ?";
+                                    $upParams[] = $uid;
+                                }
+                                $upParams[] = $ticketId;
+                                $db->prepare("UPDATE hrm_leave_requests SET " . implode(', ', $upFields) . " WHERE id = ?")->execute($upParams);
+                                $db->commit();
+                                return [
+                                    'success' => true,
+                                    'ticket_type' => 'leave',
+                                    'ticket_id' => $ticketId,
+                                    'decision' => $decision,
+                                    'employee_name' => $empName,
+                                    'summary' => "Đã từ chối đơn xin nghỉ phép #{$ticketId} của {$empName}."
+                                ];
+                            } else {
+                                $hasLevel2 = !empty($ticket['approver_id_2']) && (int)$ticket['approver_id_2'] > 0;
+                                $upFields = ["updated_at = NOW()"];
+                                $upParams = [];
+
+                                if ($isApprover1 || (!$isApprover2 && ($isGlobalAdmin || $isHR || $isManager))) {
+                                    $upFields[] = "status_level_1 = 'approved'";
+                                    $upFields[] = "approved_by = ?";
+                                    $upParams[] = $uid;
+                                    if ($hasLevel2 && !$isGlobalAdmin) {
+                                        $upFields[] = "status = 'pending'";
+                                        $targetStatus = 'pending (Chờ cấp 2 duyệt)';
+                                    } else {
+                                        $upFields[] = "status = 'approved'";
+                                        $upFields[] = "approved_at = NOW()";
+                                        $targetStatus = 'approved';
+                                    }
+                                } elseif ($isApprover2) {
+                                    $upFields[] = "status_level_2 = 'approved'";
+                                    $upFields[] = "approved_by_2 = ?";
+                                    $upParams[] = $uid;
+                                    $upFields[] = "status = 'approved'";
+                                    $upFields[] = "approved_at = NOW()";
+                                    $targetStatus = 'approved';
+                                } else {
+                                    $upFields[] = "status = 'approved'";
+                                    $upFields[] = "approved_by = ?";
+                                    $upParams[] = $uid;
+                                    $targetStatus = 'approved';
+                                }
+
+                                $upParams[] = $ticketId;
+                                $db->prepare("UPDATE hrm_leave_requests SET " . implode(', ', $upFields) . " WHERE id = ?")->execute($upParams);
+                                $db->commit();
+                                return [
+                                    'success' => true,
+                                    'ticket_type' => 'leave',
+                                    'ticket_id' => $ticketId,
+                                    'decision' => $decision,
+                                    'employee_name' => $empName,
+                                    'summary' => "Đã {$actionVerb} đơn xin nghỉ phép #{$ticketId} của {$empName}. Trạng thái cập nhật: {$targetStatus}."
+                                ];
+                            }
+                        } catch (\Throwable $e) {
+                            if ($db->inTransaction()) $db->rollBack();
+                            throw $e;
                         }
-
-                        $canApprove = $isGlobalAdmin || $isHR || $isManager || (int)($ticket['approver_id'] ?? 0) === $uid || (int)($ticket['approver_id_2'] ?? 0) === $uid;
-                        if (!$canApprove) {
-                            return ['success' => false, 'message' => "Bạn không có quyền {$actionVerb} đơn nghỉ phép này."];
-                        }
-
-                        $targetStatus = ($decision === 'approved') ? 'approved' : 'rejected';
-                        $up = $db->prepare("UPDATE hrm_leave_requests SET status = ?, approved_by = ?, approver_id = COALESCE(approver_id, ?), updated_at = NOW() WHERE id = ?");
-                        $up->execute([$targetStatus, $uid, $uid, $ticketId]);
-
-                        $empName = $ticket['employee_name'] ?: 'Nhân sự';
-                        return [
-                            'success' => true,
-                            'ticket_type' => 'leave',
-                            'ticket_id' => $ticketId,
-                            'decision' => $decision,
-                            'employee_name' => $empName,
-                            'summary' => "Đã {$actionVerb} thành công đơn xin nghỉ phép #{$ticketId} của {$empName}. Trạng thái cập nhật: {$targetStatus}."
-                        ];
                     } elseif ($ticketType === 'salary_advance') {
-                        $q = $db->prepare("SELECT a.*, u.full_name as employee_name FROM hrm_salary_advances a LEFT JOIN users u ON a.user_id = u.id WHERE a.id = ?");
-                        $q->execute([$ticketId]);
-                        $ticket = $q->fetch(PDO::FETCH_ASSOC);
-                        if (!$ticket) {
-                            return ['success' => false, 'message' => "Không tìm thấy đơn tạm ứng lương ID #{$ticketId}."];
+                        $db->beginTransaction();
+                        try {
+                            $q = $db->prepare("SELECT a.*, u.full_name as employee_name FROM hrm_salary_advances a JOIN users u ON a.user_id = u.id WHERE a.id = ? AND u.tenant_id = ? FOR UPDATE");
+                            $q->execute([$ticketId, $tid]);
+                            $ticket = $q->fetch(PDO::FETCH_ASSOC);
+                            if (!$ticket) {
+                                $db->rollBack();
+                                return ['success' => false, 'message' => "Không tìm thấy đơn tạm ứng lương ID #{$ticketId} hoặc không thuộc chi nhánh của bạn."];
+                            }
+
+                            if ($ticket['status'] !== 'pending') {
+                                $db->rollBack();
+                                return ['success' => false, 'message' => "Đơn tạm ứng lương #{$ticketId} đã được xử lý trước đó (Trạng thái hiện tại: {$ticket['status']})."];
+                            }
+
+                            $isCreator = ((int)$ticket['user_id'] === $uid);
+                            if ($isCreator && !$isGlobalAdmin) {
+                                $db->rollBack();
+                                return ['success' => false, 'message' => 'Người tạo đơn không được tự phê duyệt đơn tạm ứng lương của chính mình.'];
+                            }
+
+                            $canApprove = $isGlobalAdmin || $isAccountant || $isHR || $isManager || (int)($ticket['approver_id'] ?? 0) === $uid;
+                            if (!$canApprove) {
+                                $db->rollBack();
+                                return ['success' => false, 'message' => "Bạn không có quyền {$actionVerb} đơn tạm ứng lương này."];
+                            }
+
+                            $targetStatus = ($decision === 'approved') ? 'approved' : 'rejected';
+                            $up = $db->prepare("UPDATE hrm_salary_advances SET status = ?, approver_id = COALESCE(approver_id, ?), updated_at = NOW() WHERE id = ?");
+                            $up->execute([$targetStatus, $uid, $ticketId]);
+                            $db->commit();
+
+                            $empName = $ticket['employee_name'] ?: 'Nhân sự';
+                            $amountFmt = number_format((float)($ticket['amount'] ?? 0), 0, ',', '.') . ' VND';
+                            return [
+                                'success' => true,
+                                'ticket_type' => 'salary_advance',
+                                'ticket_id' => $ticketId,
+                                'decision' => $decision,
+                                'amount' => $amountFmt,
+                                'employee_name' => $empName,
+                                'summary' => "Đã {$actionVerb} thành công đơn tạm ứng {$amountFmt} (#{$ticketId}) của {$empName}."
+                            ];
+                        } catch (\Throwable $e) {
+                            if ($db->inTransaction()) $db->rollBack();
+                            throw $e;
                         }
-
-                        $canApprove = $isGlobalAdmin || $isAccountant || $isHR || $isManager || (int)($ticket['approver_id'] ?? 0) === $uid;
-                        if (!$canApprove) {
-                            return ['success' => false, 'message' => "Bạn không có quyền {$actionVerb} đơn tạm ứng lương này."];
-                        }
-
-                        $targetStatus = ($decision === 'approved') ? 'approved' : 'rejected';
-                        $up = $db->prepare("UPDATE hrm_salary_advances SET status = ?, approver_id = COALESCE(approver_id, ?), updated_at = NOW() WHERE id = ?");
-                        $up->execute([$targetStatus, $uid, $ticketId]);
-
-                        $empName = $ticket['employee_name'] ?: 'Nhân sự';
-                        $amountFmt = number_format((float)($ticket['amount'] ?? 0), 0, ',', '.') . ' VND';
-                        return [
-                            'success' => true,
-                            'ticket_type' => 'salary_advance',
-                            'ticket_id' => $ticketId,
-                            'decision' => $decision,
-                            'amount' => $amountFmt,
-                            'employee_name' => $empName,
-                            'summary' => "Đã {$actionVerb} thành công đơn tạm ứng {$amountFmt} (#{$ticketId}) của {$empName}."
-                        ];
                     } elseif ($ticketType === 'expense') {
-                        $q = $db->prepare("SELECT e.*, u.full_name as creator_name FROM expenses e LEFT JOIN users u ON e.created_by = u.id WHERE e.id = ? AND e.tenant_id = ? AND e.deleted_at IS NULL");
-                        $q->execute([$ticketId, $tid]);
-                        $ticket = $q->fetch(PDO::FETCH_ASSOC);
-                        if (!$ticket) {
-                            return ['success' => false, 'message' => "Không tìm thấy phiếu chi/đề xuất chi phí ID #{$ticketId}."];
+                        $db->beginTransaction();
+                        try {
+                            $q = $db->prepare("SELECT e.*, u.full_name as creator_name FROM expenses e LEFT JOIN users u ON e.created_by = u.id WHERE e.id = ? AND e.tenant_id = ? AND e.deleted_at IS NULL FOR UPDATE");
+                            $q->execute([$ticketId, $tid]);
+                            $ticket = $q->fetch(PDO::FETCH_ASSOC);
+                            if (!$ticket) {
+                                $db->rollBack();
+                                return ['success' => false, 'message' => "Không tìm thấy phiếu chi/đề xuất chi phí ID #{$ticketId}."];
+                            }
+
+                            if ($ticket['status'] !== 'pending') {
+                                $db->rollBack();
+                                return ['success' => false, 'message' => "Phiếu chi #{$ticketId} đã được xử lý trước đó (Trạng thái hiện tại: {$ticket['status']})."];
+                            }
+
+                            $isCreator = ((int)$ticket['created_by'] === $uid);
+                            if ($isCreator && !$isGlobalAdmin) {
+                                $db->rollBack();
+                                return ['success' => false, 'message' => 'Người tạo đề xuất không được tự phê duyệt chi phí của chính mình.'];
+                            }
+
+                            $isApp1 = ((int)($ticket['approver_id'] ?? 0) === $uid);
+                            $isApp2 = ((int)($ticket['approver_id_2'] ?? 0) === $uid);
+                            $isApp3 = ((int)($ticket['approver_id_3'] ?? 0) === $uid);
+
+                            $canApprove = $isGlobalAdmin || $isAccountant || $isManager || $isApp1 || $isApp2 || $isApp3;
+                            if (!$canApprove) {
+                                $db->rollBack();
+                                return ['success' => false, 'message' => "Bạn không có quyền {$actionVerb} phiếu chi/PO này."];
+                            }
+
+                            $currentLevel = 0;
+                            if (($ticket['status_level_1'] ?? 'pending') === 'pending') {
+                                $currentLevel = 1;
+                            } elseif ($ticket['status_level_1'] === 'approved' && ($ticket['status_level_2'] ?? 'pending') === 'pending') {
+                                $currentLevel = 2;
+                            } elseif ($ticket['status_level_1'] === 'approved' && $ticket['status_level_2'] === 'approved' && ($ticket['status_level_3'] ?? 'pending') === 'pending') {
+                                $currentLevel = 3;
+                            }
+                            if ($currentLevel === 0 && $ticket['status'] === 'pending') {
+                                $currentLevel = 1;
+                            }
+
+                            $expectedApproverId = 0;
+                            if ($currentLevel === 1) $expectedApproverId = (int)($ticket['approver_id'] ?? 0);
+                            elseif ($currentLevel === 2) $expectedApproverId = (int)($ticket['approver_id_2'] ?? 0);
+                            elseif ($currentLevel === 3) $expectedApproverId = (int)($ticket['approver_id_3'] ?? 0);
+
+                            if ($expectedApproverId > 0 && $expectedApproverId !== $uid && !$isGlobalAdmin) {
+                                $db->rollBack();
+                                return ['success' => false, 'message' => "Bạn không có quyền duyệt cấp {$currentLevel} hoặc chưa đến lượt phê duyệt của bạn."];
+                            }
+
+                            $amountFmt = number_format((float)($ticket['amount'] ?? 0), 0, ',', '.') . ' ' . ($ticket['currency'] ?: 'VND');
+
+                            if ($decision === 'rejected') {
+                                $levelStatusField = "status_level_" . max(1, $currentLevel);
+                                $levelTimeField = ($currentLevel === 1) ? 'approved_at' : (($currentLevel === 2) ? 'approved_at_2' : 'approved_at_3');
+                                $upStmt = $db->prepare("UPDATE expenses SET status = 'rejected', approval_status = 'rejected', {$levelStatusField} = 'rejected', {$levelTimeField} = NOW(), reject_reason = ?, updated_at = NOW() WHERE id = ? AND tenant_id = ?");
+                                $upStmt->execute([$reason ?: 'Từ chối qua AI Agent', $ticketId, $tid]);
+                                $db->commit();
+                                return [
+                                    'success' => true,
+                                    'ticket_type' => 'expense',
+                                    'ticket_id' => $ticketId,
+                                    'decision' => $decision,
+                                    'title' => $ticket['title'],
+                                    'amount' => $amountFmt,
+                                    'summary' => "Đã từ chối phiếu đề xuất chi phí #{$ticketId} ('{$ticket['title']}')."
+                                ];
+                            } else {
+                                $hasLevel2 = !empty($ticket['approver_id_2']) && ($ticket['status_level_2'] ?? '') !== 'none';
+                                $hasLevel3 = !empty($ticket['approver_id_3']) && ($ticket['status_level_3'] ?? '') !== 'none';
+
+                                $levelStatusField = "status_level_" . max(1, $currentLevel);
+                                $levelTimeField = ($currentLevel === 1) ? 'approved_at' : (($currentLevel === 2) ? 'approved_at_2' : 'approved_at_3');
+
+                                $isFinalLevel = true;
+                                if ($currentLevel === 1 && $hasLevel2) $isFinalLevel = false;
+                                if ($currentLevel === 2 && $hasLevel3) $isFinalLevel = false;
+                                if ($isGlobalAdmin) $isFinalLevel = true;
+
+                                if ($isFinalLevel) {
+                                    $upStmt = $db->prepare("UPDATE expenses SET status = 'approved', approval_status = 'approved', {$levelStatusField} = 'approved', {$levelTimeField} = NOW(), approver_id = COALESCE(approver_id, ?), approved_at = NOW(), updated_at = NOW() WHERE id = ? AND tenant_id = ?");
+                                    $upStmt->execute([$uid, $ticketId, $tid]);
+                                    $statusSummary = "Đã phê duyệt hoàn tất (Trạng thái: approved)";
+                                } else {
+                                    $nextLevel = $currentLevel + 1;
+                                    $upStmt = $db->prepare("UPDATE expenses SET status = 'pending', approval_status = 'pending', {$levelStatusField} = 'approved', {$levelTimeField} = NOW(), updated_at = NOW() WHERE id = ? AND tenant_id = ?");
+                                    $upStmt->execute([$ticketId, $tid]);
+                                    $statusSummary = "Đã duyệt Cấp {$currentLevel}, đang chuyển sang Cấp {$nextLevel} phê duyệt";
+                                }
+
+                                $db->commit();
+                                return [
+                                    'success' => true,
+                                    'ticket_type' => 'expense',
+                                    'ticket_id' => $ticketId,
+                                    'decision' => $decision,
+                                    'title' => $ticket['title'],
+                                    'amount' => $amountFmt,
+                                    'summary' => "{$statusSummary} phiếu đề xuất chi phí #{$ticketId} ('{$ticket['title']}') trị giá {$amountFmt}."
+                                ];
+                            }
+                        } catch (\Throwable $e) {
+                            if ($db->inTransaction()) $db->rollBack();
+                            throw $e;
                         }
-
-                        $canApprove = $isGlobalAdmin || $isAccountant || $isManager || (int)($ticket['approver_id'] ?? 0) === $uid || (int)($ticket['approver_id_2'] ?? 0) === $uid || (int)($ticket['approver_id_3'] ?? 0) === $uid;
-                        if (!$canApprove) {
-                            return ['success' => false, 'message' => "Bạn không có quyền {$actionVerb} phiếu chi/PO này."];
-                        }
-
-                        $targetStatus = ($decision === 'approved') ? 'approved' : 'rejected';
-                        $up = $db->prepare("UPDATE expenses SET status = ?, approver_id = COALESCE(approver_id, ?), approved_at = NOW(), updated_at = NOW() WHERE id = ? AND tenant_id = ?");
-                        $up->execute([$targetStatus, $uid, $ticketId, $tid]);
-
-                        $amountFmt = number_format((float)($ticket['amount'] ?? 0), 0, ',', '.') . ' ' . ($ticket['currency'] ?: 'VND');
-                        return [
-                            'success' => true,
-                            'ticket_type' => 'expense',
-                            'ticket_id' => $ticketId,
-                            'decision' => $decision,
-                            'title' => $ticket['title'],
-                            'amount' => $amountFmt,
-                            'summary' => "Đã {$actionVerb} thành công phiếu đề xuất chi phí #{$ticketId} ('{$ticket['title']}') trị giá {$amountFmt}."
-                        ];
                     } elseif ($ticketType === 'check_in') {
-                        $q = $db->prepare("SELECT c.*, u.full_name as employee_name FROM check_ins c LEFT JOIN users u ON c.user_id = u.id WHERE c.id = ?");
-                        $q->execute([$ticketId]);
-                        $ticket = $q->fetch(PDO::FETCH_ASSOC);
-                        if (!$ticket) {
-                            return ['success' => false, 'message' => "Không tìm thấy bản ghi chấm công/giải trình ID #{$ticketId}."];
+                        $db->beginTransaction();
+                        try {
+                            $q = $db->prepare("SELECT c.*, u.full_name as employee_name FROM check_ins c JOIN users u ON c.user_id = u.id WHERE c.id = ? AND u.tenant_id = ? FOR UPDATE");
+                            $q->execute([$ticketId, $tid]);
+                            $ticket = $q->fetch(PDO::FETCH_ASSOC);
+                            if (!$ticket) {
+                                $db->rollBack();
+                                return ['success' => false, 'message' => "Không tìm thấy bản ghi chấm công/giải trình ID #{$ticketId} hoặc không thuộc chi nhánh của bạn."];
+                            }
+
+                            $isCreator = ((int)$ticket['user_id'] === $uid);
+                            if ($isCreator && !$isGlobalAdmin) {
+                                $db->rollBack();
+                                return ['success' => false, 'message' => 'Không được tự phê duyệt giải trình chấm công của chính mình.'];
+                            }
+
+                            $canApprove = $isGlobalAdmin || $isHR || $isManager;
+                            if (!$canApprove) {
+                                $db->rollBack();
+                                return ['success' => false, 'message' => "Bạn không có quyền {$actionVerb} bản ghi chấm công này (yêu cầu quyền HR, Quản lý hoặc Giám đốc)."];
+                            }
+
+                            $targetStatus = ($decision === 'approved') ? 'approved' : 'rejected';
+                            $noteAppend = "[{$targetStatus} bởi {$userName} ({$uid}) lúc " . date('d/m/Y H:i') . ($reason ? ": {$reason}" : "") . "]";
+                            $adminNote = trim(($ticket['admin_note'] ?? '') . " " . $noteAppend);
+
+                            $up = $db->prepare("UPDATE check_ins SET status = ?, admin_note = ? WHERE id = ?");
+                            $up->execute([$targetStatus, $adminNote, $ticketId]);
+                            $db->commit();
+
+                            $empName = $ticket['employee_name'] ?: 'Nhân sự';
+                            return [
+                                'success' => true,
+                                'ticket_type' => 'check_in',
+                                'ticket_id' => $ticketId,
+                                'decision' => $decision,
+                                'employee_name' => $empName,
+                                'summary' => "Đã {$actionVerb} giải trình chấm công ngày {$ticket['check_in_date']} (#{$ticketId}) của {$empName}."
+                            ];
+                        } catch (\Throwable $e) {
+                            if ($db->inTransaction()) $db->rollBack();
+                            throw $e;
                         }
-
-                        $canApprove = $isGlobalAdmin || $isHR || $isManager;
-                        if (!$canApprove) {
-                            return ['success' => false, 'message' => "Bạn không có quyền {$actionVerb} bản ghi chấm công này (yêu cầu quyền HR, Quản lý hoặc Giám đốc)."];
-                        }
-
-                        $targetStatus = ($decision === 'approved') ? 'approved' : 'rejected';
-                        $noteAppend = "[{$targetStatus} bởi {$userName} ({$uid}) lúc " . date('d/m/Y H:i') . ($reason ? ": {$reason}" : "") . "]";
-                        $adminNote = trim(($ticket['admin_note'] ?? '') . " " . $noteAppend);
-
-                        $up = $db->prepare("UPDATE check_ins SET status = ?, admin_note = ? WHERE id = ?");
-                        $up->execute([$targetStatus, $adminNote, $ticketId]);
-
-                        $empName = $ticket['employee_name'] ?: 'Nhân sự';
-                        return [
-                            'success' => true,
-                            'ticket_type' => 'check_in',
-                            'ticket_id' => $ticketId,
-                            'decision' => $decision,
-                            'employee_name' => $empName,
-                            'summary' => "Đã {$actionVerb} giải trình chấm công ngày {$ticket['check_in_date']} (#{$ticketId}) của {$empName}."
-                        ];
                     }
                 }
 
@@ -3781,24 +4050,29 @@ class AgentToolRegistry {
                     $upParams = [];
                     $changes = [];
 
-                    $allowedMap = [
-                        'full_name' => 'Họ tên',
-                        'phone' => 'Số điện thoại',
-                        'email' => 'Email',
-                        'address' => 'Địa chỉ',
-                        'job_title' => 'Chức danh',
-                        'company_name' => 'Công ty',
-                        'notes' => 'Ghi chú'
+                    $fieldConfig = [
+                        'full_name' => ['col' => 'full_name', 'label' => 'Họ tên'],
+                        'phone' => ['col' => 'phone', 'label' => 'Số điện thoại'],
+                        'email' => ['col' => 'email', 'label' => 'Email'],
+                        'address' => ['col' => 'address', 'label' => 'Địa chỉ'],
+                        'job_title' => ['col' => 'job_title', 'label' => 'Chức danh'],
+                        'company' => ['col' => 'company', 'label' => 'Công ty'],
+                        'company_name' => ['col' => 'company', 'label' => 'Công ty'],
+                        'notes' => ['col' => 'notes', 'label' => 'Ghi chú']
                     ];
 
-                    foreach ($allowedMap as $fKey => $fLabel) {
-                        if (isset($args[$fKey]) && trim((string)$args[$fKey]) !== '') {
-                            $newVal = trim((string)$args[$fKey]);
-                            $oldVal = (string)($curr[$fKey] ?? '');
+                    $handledCols = [];
+                    foreach ($fieldConfig as $inputKey => $cfg) {
+                        $dbCol = $cfg['col'];
+                        if (isset($handledCols[$dbCol])) continue;
+                        if (isset($args[$inputKey]) && trim((string)$args[$inputKey]) !== '') {
+                            $newVal = trim((string)$args[$inputKey]);
+                            $oldVal = (string)($curr[$dbCol] ?? '');
                             if ($newVal !== $oldVal) {
-                                $upFields[] = "{$fKey} = ?";
+                                $upFields[] = "{$dbCol} = ?";
                                 $upParams[] = $newVal;
-                                $changes[] = "{$fLabel}: '{$oldVal}' ➔ '{$newVal}'";
+                                $changes[] = "{$cfg['label']}: '{$oldVal}' ➔ '{$newVal}'";
+                                $handledCols[$dbCol] = true;
                             }
                         }
                     }
@@ -3875,6 +4149,16 @@ class AgentToolRegistry {
 
                     if ($contactId <= 0) {
                         return ['success' => false, 'message' => "Không tìm thấy học viên/khách hàng phù hợp trong phạm vi quyền hạn để thẩm định hồ sơ."];
+                    }
+
+                    // Zero-Trust RBAC Check: Ensure contact belongs to requesting user if not admin/manager/academic
+                    if (!$canAccessAllContacts && !$isAcademic) {
+                        $checkRbac = $getContactRbacClause('');
+                        $checkStmt = $db->prepare("SELECT id FROM contacts WHERE id = ? AND tenant_id = ? AND " . $checkRbac['clause']);
+                        $checkStmt->execute(array_merge([$contactId, $tid], $checkRbac['params']));
+                        if (!$checkStmt->fetchColumn()) {
+                            return ['success' => false, 'message' => 'Bạn không có quyền thẩm định hồ sơ của học viên này (thuộc quyền quản lý của nhân sự khác).'];
+                        }
                     }
 
                     // Contact profile
@@ -3962,8 +4246,8 @@ class AgentToolRegistry {
 
                     // 1. Assets from hrm_assets
                     if ($type === 'assets' || $type === 'all') {
-                        $assetWhere = ["a.status = 'assigned'"];
-                        $assetParams = [];
+                        $assetWhere = ["a.status = 'assigned'", "u.tenant_id = ?"];
+                        $assetParams = [$tid];
 
                         if (!$isGlobalAdmin && !$isHR && !$isManager) {
                             $assetWhere[] = "a.user_id = ?";
@@ -3979,7 +4263,7 @@ class AgentToolRegistry {
 
                         $assetSql = "SELECT a.id, a.asset_name, a.asset_code, a.given_date, u.full_name as assignee_name, u.job_title
                                      FROM hrm_assets a
-                                     LEFT JOIN users u ON a.user_id = u.id
+                                     JOIN users u ON a.user_id = u.id
                                      WHERE " . implode(' AND ', $assetWhere) . "
                                      ORDER BY a.given_date DESC LIMIT 10";
                         $assetStmt = $db->prepare($assetSql);
@@ -3997,21 +4281,41 @@ class AgentToolRegistry {
                         ];
                     }
 
-                    // 2. Promotional & Admission Gift Inventory overview
+                    // 2. Promotional & Admission Gift Inventory overview (Real MySQL from products & batches)
                     if ($type === 'inventory' || $type === 'all') {
-                        // Standard IDEAS admission inventory catalog
-                        $catalogItems = [
-                            ['name' => 'Balo cao cấp IDEAS Business School', 'category' => 'Quà tặng tân học viên', 'stock_estimate' => '120 chiếc', 'status' => 'Sẵn sàng'],
-                            ['name' => 'Áo Polo IDEAS Swiss UMEF & ISTEC', 'category' => 'Đồng phục sự kiện', 'stock_estimate' => '85 chiếc', 'status' => 'Sẵn sàng'],
-                            ['name' => 'Sổ tay da & Bút ký kim loại cao cấp', 'category' => 'Ấn phẩm hội thảo', 'stock_estimate' => '210 bộ', 'status' => 'Dồi dào'],
-                            ['name' => 'Brochure & Khung chương trình EMBA / MBA in ấn', 'category' => 'Tài liệu tuyển sinh', 'stock_estimate' => '350 cuốn', 'status' => 'Dồi dào'],
-                            ['name' => 'Giáo trình Quản trị chiến lược & AI ứng dụng', 'category' => 'Học liệu môn học', 'stock_estimate' => '45 cuốn', 'status' => 'Cần in thêm đợt mới']
-                        ];
+                        $invWhere = ["p.tenant_id = ?"];
+                        $invParams = [$tid];
 
                         if (!empty($keyword)) {
-                            $catalogItems = array_values(array_filter($catalogItems, function($it) use ($keyword) {
-                                return mb_stripos($it['name'], $keyword) !== false || mb_stripos($it['category'], $keyword) !== false;
-                            }));
+                            $invWhere[] = "(p.name LIKE ? OR p.sku LIKE ? OR p.category LIKE ?)";
+                            $invParams[] = '%' . $keyword . '%';
+                            $invParams[] = '%' . $keyword . '%';
+                            $invParams[] = '%' . $keyword . '%';
+                        }
+
+                        $invSql = "SELECT p.id, p.name, p.sku, p.category, p.unit,
+                                          COALESCE(SUM(CASE WHEN b.status = 'active' THEN b.current_qty ELSE 0 END), 0) as total_qty
+                                   FROM products p
+                                   LEFT JOIN batches b ON p.id = b.product_id AND b.tenant_id = ?
+                                   WHERE " . implode(' AND ', $invWhere) . "
+                                   GROUP BY p.id, p.name, p.sku, p.category, p.unit
+                                   ORDER BY total_qty DESC, p.name ASC
+                                   LIMIT 15";
+                        
+                        $invStmt = $db->prepare($invSql);
+                        $invStmt->execute(array_merge([$tid], $invParams));
+                        $rawProducts = $invStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                        $catalogItems = [];
+                        foreach ($rawProducts as $rp) {
+                            $qty = (int)$rp['total_qty'];
+                            $status = $qty > 10 ? 'Dồi dào' : ($qty > 0 ? 'Sắp hết hàng' : 'Hết hàng');
+                            $catalogItems[] = [
+                                'name' => $rp['name'] . ($rp['sku'] ? " [Mã: {$rp['sku']}]" : ''),
+                                'category' => $rp['category'] ?: 'Học liệu / Quà tặng',
+                                'stock_estimate' => "{$qty} " . ($rp['unit'] ?: 'chiếc/bộ'),
+                                'status' => $status
+                            ];
                         }
 
                         $results['promotional_inventory'] = [
@@ -4258,16 +4562,29 @@ class AgentToolRegistry {
                         ];
                     }
 
+                    // Zero-Trust RBAC Check: Ensure contact belongs to requesting user if not admin/manager
+                    if (!$canAccessAllContacts) {
+                        $checkRbac = $getContactRbacClause('');
+                        $checkStmt = $db->prepare("SELECT id FROM contacts WHERE id = ? AND tenant_id = ? AND " . $checkRbac['clause']);
+                        $checkStmt->execute(array_merge([$contactId, $tid], $checkRbac['params']));
+                        if (!$checkStmt->fetchColumn()) {
+                            return [
+                                'success' => false,
+                                'message' => 'Bạn không có quyền truy cập hồ sơ 360 độ của khách hàng này (thuộc quyền quản lý của nhân sự khác).'
+                            ];
+                        }
+                    }
+
                     // 2. Fetch Detailed Contact Profile & Ownership
-                    $cSql = "SELECT c.id, c.full_name, c.phone, c.email, c.source, c.utm_source, c.utm_campaign, c.utm_medium,
-                                    c.owner_id, c.collaborator_ids, c.branch_id, c.stage_id, c.status, c.pipeline_status,
-                                    c.created_at, c.last_contact, c.address, c.job_title, c.company_name,
+                    $cSql = "SELECT c.id, c.full_name, c.phone, c.email, c.source, c.utm_campaign, c.utm_medium,
+                                    c.owner_id, c.collaborator_ids, c.stage_id, c.status, c.pipeline_status,
+                                    c.created_at, c.last_contact, c.address, c.job_title, c.company as company_name,
                                     u.full_name as owner_name, u.email as owner_email,
-                                    b.name as branch_name,
+                                    COALESCE(t.branch, 'Hội sở chính') as branch_name,
                                     ps.name as stage_name
                              FROM contacts c
                              LEFT JOIN users u ON c.owner_id = u.id
-                             LEFT JOIN branches b ON c.branch_id = b.id
+                             LEFT JOIN teams t ON u.team_id = t.id
                              LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
                              WHERE c.id = ? AND c.tenant_id = ?";
                     $cStmt = $db->prepare($cSql);
@@ -4292,7 +4609,7 @@ class AgentToolRegistry {
                     // 4a. Fetch from activities table (Primary CRM interactions in MYERP)
                     try {
                         $actStmt = $db->prepare("
-                            SELECT a.id, a.type, a.subject, a.body, a.description, a.created_at, 
+                            SELECT a.id, a.type, a.subject, a.body, a.created_at, 
                                    COALESCE(u.full_name, uc.full_name, 'Chuyên viên tư vấn') as author_name
                             FROM activities a
                             LEFT JOIN users u ON a.user_id = u.id
@@ -4318,7 +4635,7 @@ class AgentToolRegistry {
                                 SELECT ac.activity_id, ac.content, ac.created_at, COALESCE(u.full_name, 'Người dùng') as author_name
                                 FROM activity_comments ac
                                 LEFT JOIN users u ON ac.user_id = u.id
-                                WHERE ac.activity_id IN ($inActs) AND ac.deleted_at IS NULL
+                                WHERE ac.activity_id IN ($inActs)
                                 ORDER BY ac.id ASC
                             ");
                             if ($cmtStmt) {
@@ -4551,8 +4868,8 @@ class AgentToolRegistry {
                     $statSql = "
                         SELECT 
                             COUNT(1) as total_leads,
-                            SUM(CASE WHEN (c.stage_id < 14 OR c.stage_id IS NULL) AND (c.status IS NULL OR c.status != 'inactive') THEN 1 ELSE 0 END) as active_leads,
-                            SUM(CASE WHEN c.stage_id = 14 OR c.pipeline_status = 'enrolled' THEN 1 ELSE 0 END) as enrolled_leads
+                            SUM(CASE WHEN (c.stage_id IN (SELECT id FROM pipeline_stages WHERE tenant_id = c.tenant_id AND order_index < 14) OR c.stage_id IS NULL) AND (c.status IS NULL OR c.status != 'inactive') THEN 1 ELSE 0 END) as active_leads,
+                            SUM(CASE WHEN (c.stage_id IN (SELECT id FROM pipeline_stages WHERE tenant_id = c.tenant_id AND order_index >= 14) OR c.pipeline_status = 'enrolled') THEN 1 ELSE 0 END) as enrolled_leads
                         FROM contacts c
                         WHERE {$baseWhere}
                     ";
@@ -4561,14 +4878,14 @@ class AgentToolRegistry {
                     $stats = $statStmt->fetch(PDO::FETCH_ASSOC) ?: ['total_leads' => 0, 'active_leads' => 0, 'enrolled_leads' => 0];
 
                     // 3. Query Stale Leads (Active in funnel + last note/interaction >= $daysThreshold days)
-                    $staleWhere = "{$baseWhere} AND (c.stage_id < 14 OR c.stage_id IS NULL) AND (c.status IS NULL OR c.status != 'inactive')";
+                    $staleWhere = "{$baseWhere} AND (c.stage_id IN (SELECT id FROM pipeline_stages WHERE tenant_id = c.tenant_id AND order_index < 14) OR c.stage_id IS NULL) AND (c.status IS NULL OR c.status != 'inactive')";
                     
                     $staleSql = "
                         SELECT 
-                            c.id, COALESCE(c.full_name, c.name, 'Học viên') as customer_name, c.phone, c.email,
+                            c.id, COALESCE(c.full_name, 'Học viên') as customer_name, c.phone, c.email,
                             c.stage_id, ps.name as stage_name,
                             u.full_name as sale_name,
-                            b.name as branch_name,
+                            COALESCE(t.branch, 'Hội sở chính') as branch_name,
                             c.created_at,
                             last_n.last_note_at,
                             last_n.last_note_content,
@@ -4576,7 +4893,7 @@ class AgentToolRegistry {
                         FROM contacts c
                         LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
                         LEFT JOIN users u ON c.owner_id = u.id
-                        LEFT JOIN branches b ON c.branch_id = b.id
+                        LEFT JOIN teams t ON u.team_id = t.id
                         LEFT JOIN (
                             SELECT entity_id as contact_id, MAX(created_at) as last_note_at, SUBSTRING(MAX(body), 1, 100) as last_note_content
                             FROM notes
@@ -4697,7 +5014,7 @@ class AgentToolRegistry {
                             so.id, so.so_number, so.total, so.paid_amount,
                             (so.total - COALESCE(so.paid_amount, 0)) as remaining_debt,
                             so.order_date, so.status, so.payment_status,
-                            c.id as student_id, COALESCE(c.full_name, c.name, 'Học viên') as student_name,
+                            c.id as student_id, COALESCE(c.full_name, 'Học viên') as student_name,
                             c.phone as student_phone,
                             u.full_name as sale_name
                         FROM sales_orders so
@@ -4775,7 +5092,7 @@ class AgentToolRegistry {
 
                         $eSql = "
                             SELECT 
-                                e.id, e.title, e.amount, e.currency, e.created_at, e.created_by,
+                                e.id, e.title, e.amount, e.created_at, e.created_by,
                                 e.approver_id, e.approver_id_2, e.approver_id_3,
                                 e.status_level_1, e.status_level_2,
                                 TIMESTAMPDIFF(HOUR, e.created_at, NOW()) as hours_pending,
@@ -4818,7 +5135,7 @@ class AgentToolRegistry {
                                 'type' => 'Đề xuất chi / PO',
                                 'id' => (int)$er['id'],
                                 'title' => $er['title'],
-                                'amount' => number_format((float)$er['amount'], 0, ',', '.') . ' ' . ($er['currency'] ?: 'VND'),
+                                'amount' => number_format((float)$er['amount'], 0, ',', '.') . ' VND',
                                 'creator' => $er['creator_name'] ?: 'Nhân sự',
                                 'submitted_at' => date('d/m/Y H:i', strtotime($er['created_at'])),
                                 'pending_duration' => "{$hours} giờ ({$days} ngày)",
@@ -4905,6 +5222,16 @@ class AgentToolRegistry {
                     $where = "t.tenant_id = ?";
                     $params = [$tid];
 
+                    $isSupportPrivileged = $isGlobalAdmin || $isManager || in_array($role, ['support', 'cskh', 'admin', 'director'], true);
+                    $rbacTicketWhere = "";
+                    $rbacTicketParams = [];
+                    if (!$isSupportPrivileged) {
+                        $rbacTicketWhere = " AND (t.created_by = ? OR t.assignee_id = ?)";
+                        $rbacTicketParams = [$uid, $uid];
+                        $where .= $rbacTicketWhere;
+                        $params = array_merge($params, $rbacTicketParams);
+                    }
+
                     if ($statusFilter === 'all_open') {
                         $where .= " AND t.status IN ('open', 'in_progress', 'waiting')";
                     } elseif ($statusFilter === 'breached_only') {
@@ -4924,10 +5251,10 @@ class AgentToolRegistry {
                                        OR (TIMESTAMPDIFF(HOUR, t.created_at, NOW()) > 48) THEN 1 ELSE 0 END) as total_breached,
                             SUM(CASE WHEN t.priority = 'urgent' THEN 1 ELSE 0 END) as urgent_count
                         FROM tickets t
-                        WHERE t.tenant_id = ? AND t.status IN ('open', 'in_progress', 'waiting')
+                        WHERE t.tenant_id = ? AND t.status IN ('open', 'in_progress', 'waiting') {$rbacTicketWhere}
                     ";
                     $statStmt = $db->prepare($statSql);
-                    $statStmt->execute([$tid]);
+                    $statStmt->execute(array_merge([$tid], $rbacTicketParams));
                     $stats = $statStmt->fetch(PDO::FETCH_ASSOC) ?: ['total_open' => 0, 'total_breached' => 0, 'urgent_count' => 0];
 
                     // 2. Fetch sample tickets
@@ -5087,7 +5414,7 @@ class AgentToolRegistry {
                                 (SELECT COUNT(1) FROM contacts c WHERE c.owner_id = u.id AND c.tenant_id = ? AND c.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)) as leads_month,
                                 (SELECT COUNT(1) FROM contacts c WHERE c.owner_id = u.id AND c.tenant_id = ? AND DATE(c.created_at) = CURDATE()) as leads_today
                             FROM users u
-                            WHERE u.team_id = ? AND u.tenant_id = ? AND u.deleted_at IS NULL
+                            WHERE u.team_id = ? AND u.tenant_id = ? AND u.is_active = 1
                             ORDER BY leads_month DESC
                         ");
                         $mStmt->execute([$tid, $tid, $tmId, $tid]);
@@ -5237,10 +5564,11 @@ class AgentToolRegistry {
 
                     $sql = "
                         SELECT 
-                            c.id, c.full_name, c.phone, c.email, c.pipeline_stage, c.lead_status,
+                            c.id, c.full_name, c.phone, c.email, c.stage_id, c.pipeline_status,
                             c.owner_id, c.created_at,
                             u.full_name as owner_name, u.email as owner_email,
-                            b.name as branch_name,
+                            COALESCE(t.branch, 'Hội sở chính') as branch_name,
+                            ps.name as stage_name,
                             (
                                 SELECT MAX(n.created_at) FROM notes n WHERE n.entity_type = 'contact' AND n.entity_id = c.id
                             ) as last_note_at,
@@ -5249,7 +5577,8 @@ class AgentToolRegistry {
                             ) as last_activity_at
                         FROM contacts c
                         LEFT JOIN users u ON c.owner_id = u.id
-                        LEFT JOIN branches b ON c.branch_id = b.id
+                        LEFT JOIN teams t ON u.team_id = t.id
+                        LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
                         WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND ({$whereClause})
                         ORDER BY c.id DESC
                         LIMIT 5
@@ -5292,7 +5621,7 @@ class AgentToolRegistry {
                             'phone_masked' => $phoneMasked,
                             'current_owner' => $m['owner_name'] ?: 'Chưa phân bổ',
                             'branch' => $m['branch_name'] ?: 'Hồ Chí Minh',
-                            'stage' => $m['pipeline_stage'] ?: 'Mới nhận',
+                            'stage' => $m['stage_name'] ?: ($m['pipeline_status'] ?: 'Mới nhận'),
                             'last_interaction' => date('d/m/Y', strtotime($lastInteract)) . " ({$daysNeglected} ngày trước)",
                             'is_stale_over_7_days' => $isStale,
                             'fair_share_verdict' => $fairShareVerdict
@@ -5345,8 +5674,7 @@ class AgentToolRegistry {
 
                     $sql = "
                         SELECT 
-                            d.id, d.unit_code, d.title, d.price, d.status, d.created_at, d.notes,
-                            d.payment_method,
+                            d.id, d.unit_code, COALESCE(p.name, d.unit_code, 'Phiếu thu/cọc học phí') as title, d.price, d.status, d.created_at, d.notes,
                             c.id as contact_id, c.full_name as contact_name, c.phone as contact_phone,
                             u.full_name as creator_name,
                             p.name as project_name
@@ -5399,13 +5727,15 @@ class AgentToolRegistry {
                     $programKw = trim($args['program_keyword'] ?? '');
                     $limit = max(1, min(15, (int)($args['limit'] ?? 5)));
 
-                    $where = "mc.status NOT IN ('deleted', 'archived', 'inactive')";
-                    $params = [];
+                    $where = "mc.tenant_id = ? AND mc.status NOT IN ('deleted', 'archived', 'inactive')";
+                    $params = [$tid];
 
                     if (!empty($programKw)) {
                         $where .= " AND (mc.name LIKE ? OR p.name LIKE ? OR p.code LIKE ?)";
                         $kw = '%' . $programKw . '%';
-                        $params = [$kw, $kw, $kw];
+                        $params[] = $kw;
+                        $params[] = $kw;
+                        $params[] = $kw;
                     }
 
                     $sql = "
@@ -5474,6 +5804,580 @@ class AgentToolRegistry {
                             ? "Không tìm thấy lịch học hoặc khóa đào tạo nào khớp với từ khóa '{$programKw}'."
                             : "Tìm thấy " . count($scheduleResults) . " khóa/lớp đào tạo. Dữ liệu lịch học và giảng viên được trích xuất từ phân hệ Quản lý Đào tạo IDEAS."
                     ];
+                }
+
+                // ==========================================
+                // 38. MANAGE LEAD ROUND DISTRIBUTION & COMPENSATION
+                // ==========================================
+                case 'manage_lead_round_distribution': {
+                    $action = $args['action'] ?? 'get_round_load_audit';
+                    $roundId = isset($args['round_id']) ? (int)$args['round_id'] : 0;
+                    $roundNameKw = trim($args['round_name'] ?? '');
+                    $consultantId = isset($args['consultant_id']) ? (int)$args['consultant_id'] : 0;
+                    $consultantNameKw = trim($args['consultant_name'] ?? '');
+                    $compCount = isset($args['compensation_count']) ? (int)$args['compensation_count'] : 1;
+                    $leadPhone = preg_replace('/[^\d+]/', '', trim($args['lead_phone'] ?? ''));
+                    $leadName = trim($args['lead_name'] ?? '');
+                    $leadEmail = trim($args['lead_email'] ?? '');
+                    $leadNote = trim($args['lead_note'] ?? '');
+                    $shiftActive = isset($args['shift_active']) ? (bool)$args['shift_active'] : true;
+                    $reason = trim($args['reason'] ?? 'Điều phối tự động qua AI Agent');
+                    $canManageRounds = $isGlobalAdmin || $isManager || in_array($role, ['sale_admin', 'saleadmin', 'lead_manager', 'admin', 'director'], true);
+
+                    // Helper: Fuzzy Resolve Round
+                    $resolveRound = function() use ($db, $tid, $roundId, $roundNameKw) {
+                        if ($roundId > 0) {
+                            $stmt = $db->prepare("SELECT id, round_name, is_active, last_assigned_consultant_id FROM distribution_rounds WHERE id = ? AND tenant_id = ? LIMIT 1");
+                            $stmt->execute([$roundId, $tid]);
+                            $r = $stmt->fetch(PDO::FETCH_ASSOC);
+                            if ($r) return ['exact' => $r];
+                        }
+                        if (!empty($roundNameKw)) {
+                            $stmt = $db->prepare("SELECT id, round_name, is_active, last_assigned_consultant_id FROM distribution_rounds WHERE tenant_id = ? AND round_name LIKE ? ORDER BY is_active DESC, id ASC LIMIT 5");
+                            $stmt->execute([$tid, "%{$roundNameKw}%"]);
+                            $matches = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                            if (count($matches) === 1) return ['exact' => $matches[0]];
+                            if (count($matches) > 1) return ['multiple' => $matches];
+                        }
+                        return null;
+                    };
+
+                    // Helper: Fuzzy Resolve Consultant
+                    $resolveConsultant = function() use ($db, $tid, $consultantId, $consultantNameKw) {
+                        if ($consultantId > 0) {
+                            $stmt = $db->prepare("SELECT id, full_name, email, phone, is_active FROM users WHERE id = ? AND tenant_id = ? AND is_active = 1 LIMIT 1");
+                            $stmt->execute([$consultantId, $tid]);
+                            $u = $stmt->fetch(PDO::FETCH_ASSOC);
+                            if ($u) return ['exact' => $u];
+                        }
+                        if (!empty($consultantNameKw)) {
+                            $stmt = $db->prepare("SELECT id, full_name, email, phone, is_active FROM users WHERE tenant_id = ? AND is_active = 1 AND (full_name LIKE ? OR username LIKE ? OR phone LIKE ?) ORDER BY id ASC LIMIT 5");
+                            $stmt->execute([$tid, "%{$consultantNameKw}%", "%{$consultantNameKw}%", "%{$consultantNameKw}%"]);
+                            $matches = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                            if (count($matches) === 1) return ['exact' => $matches[0]];
+                            if (count($matches) > 1) return ['multiple' => $matches];
+                        }
+                        return null;
+                    };
+
+                    switch ($action) {
+                        // ----------------------------------------------------
+                        // ACTION 1: GET ROUND LOAD AUDIT ("Nên giao vòng nào?")
+                        // ----------------------------------------------------
+                        case 'get_round_load_audit': {
+                            $rStmt = $db->prepare("
+                                SELECT id, round_name, description, is_active, last_assigned_consultant_id
+                                FROM distribution_rounds
+                                WHERE tenant_id = ? AND is_active = 1
+                                ORDER BY id ASC
+                            ");
+                            $rStmt->execute([$tid]);
+                            $rounds = $rStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                            if (empty($rounds)) {
+                                return [
+                                    'success' => true,
+                                    'rounds_audited' => 0,
+                                    'message' => 'Hiện tại hệ thống chưa kích hoạt vòng phân bổ lead nào (distribution_rounds). Vui lòng kiểm tra lại cấu hình phân bổ.'
+                                ];
+                            }
+
+                            $auditData = [];
+                            $bestCandidate = null;
+                            $minAvgLeads = PHP_FLOAT_MAX;
+                            $minTotalLeads = PHP_INT_MAX;
+
+                            foreach ($rounds as $r) {
+                                $rId = (int)$r['id'];
+
+                                // Get enrolled active consultants
+                                $cStmt = $db->prepare("
+                                    SELECT rc.consultant_id, rc.is_active as shift_active, rc.compensation_count, rc.receive_ratio,
+                                           u.full_name as consultant_name, u.phone as consultant_phone
+                                    FROM round_consultants rc
+                                    JOIN users u ON rc.consultant_id = u.id
+                                    WHERE rc.round_id = ? AND rc.is_active = 1 AND u.is_active = 1
+                                    ORDER BY rc.compensation_count DESC, rc.consultant_id ASC
+                                ");
+                                $cStmt->execute([$rId]);
+                                $consultants = $cStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                                // Count leads assigned today in this round
+                                $lStmt = $db->prepare("
+                                    SELECT COUNT(1) FROM distribution_logs 
+                                    WHERE round_id = ? AND DATE(received_at) = CURDATE()
+                                ");
+                                $lStmt->execute([$rId]);
+                                $leadsToday = (int)$lStmt->fetchColumn();
+
+                                // Check consultants with compensation backlog
+                                $compQueue = [];
+                                foreach ($consultants as $c) {
+                                    if ((int)$c['compensation_count'] > 0) {
+                                        $compQueue[] = [
+                                            'consultant_id' => (int)$c['consultant_id'],
+                                            'name' => $c['consultant_name'],
+                                            'compensation_count' => (int)$c['compensation_count']
+                                        ];
+                                    }
+                                }
+
+                                $activeCount = count($consultants);
+                                $avgLeads = $activeCount > 0 ? round($leadsToday / $activeCount, 1) : 0;
+
+                                $roundItem = [
+                                    'round_id' => $rId,
+                                    'round_name' => $r['round_name'],
+                                    'description' => $r['description'] ?: 'Không có mô tả',
+                                    'active_consultants_count' => $activeCount,
+                                    'leads_today' => $leadsToday,
+                                    'avg_leads_per_consultant' => $avgLeads,
+                                    'compensation_backlog_count' => count($compQueue),
+                                    'compensation_queue' => $compQueue,
+                                    'consultants_on_duty' => array_map(fn($c) => [
+                                        'id' => (int)$c['consultant_id'],
+                                        'name' => $c['consultant_name'],
+                                        'has_compensation' => (int)$c['compensation_count'] > 0
+                                    ], $consultants)
+                                ];
+
+                                if ($activeCount > 0) {
+                                    if ($avgLeads < $minAvgLeads || ($avgLeads == $minAvgLeads && $leadsToday < $minTotalLeads)) {
+                                        $minAvgLeads = $avgLeads;
+                                        $minTotalLeads = $leadsToday;
+                                        $bestCandidate = $roundItem;
+                                    }
+                                }
+
+                                $auditData[] = $roundItem;
+                            }
+
+                            $recommendation = "";
+                            if ($bestCandidate) {
+                                $recommendation = "Khuyến nghị ưu tiên giao vào Vòng [{$bestCandidate['round_name']}] (ID: {$bestCandidate['round_id']}) vì vòng này hiện có {$bestCandidate['active_consultants_count']} chuyên viên đang trực và tải bình quân hôm nay thấp nhất ({$bestCandidate['avg_leads_per_consultant']} lead/người, tổng {$bestCandidate['leads_today']} lead).";
+                            } else {
+                                $recommendation = "Các vòng hiện tại chưa có chuyên viên nào bật trạng thái trực nhận số. Cần kiểm tra lại phân công ca trực trước khi giao số.";
+                            }
+
+                            return [
+                                'success' => true,
+                                'total_active_rounds' => count($auditData),
+                                'rounds' => $auditData,
+                                'recommended_round' => $bestCandidate ? [
+                                    'round_id' => $bestCandidate['round_id'],
+                                    'round_name' => $bestCandidate['round_name']
+                                ] : null,
+                                'recommendation_verdict' => $recommendation
+                            ];
+                        }
+
+                        // ----------------------------------------------------
+                        // ACTION 2: COMPENSATE CONSULTANT ("Bù cho Phúc 1 data")
+                        // ----------------------------------------------------
+                        case 'compensate_consultant': {
+                            // RBAC: Only Admin, Director, Manager, or Sale Admin
+                            if (!$canManageRounds) {
+                                return [
+                                    'success' => false,
+                                    'error' => "Bạn không có thẩm quyền điều chỉnh hạn mức bù số của vòng xoay phân bổ (Yêu cầu vai trò Quản lý hoặc Quản trị viên/Sale Admin)."
+                                ];
+                            }
+
+                            if ($compCount <= 0 || $compCount > 10) {
+                                return [
+                                    'success' => false,
+                                    'error' => "Số lượng data cần bù không hợp lệ ({$compCount}). Giá trị cho phép từ 1 đến 10 data/lần."
+                                ];
+                            }
+
+                            // 1. Resolve Consultant
+                            $cRes = $resolveConsultant();
+                            if (!$cRes) {
+                                return [
+                                    'success' => false,
+                                    'error' => "Không tìm thấy chuyên viên tư vấn nào khớp với tên hoặc ID '{$consultantNameKw}'. Vui lòng cung cấp chính xác họ tên hoặc mã ID nhân sự."
+                                ];
+                            }
+                            if (isset($cRes['multiple'])) {
+                                $names = array_map(fn($m) => "[ID: {$m['id']}] {$m['full_name']} (SĐT: {$m['phone']})", $cRes['multiple']);
+                                return [
+                                    'success' => false,
+                                    'error' => "Tìm thấy nhiều nhân sự khớp với tên '{$consultantNameKw}': " . implode(", ", $names) . ". Vui lòng chỉ định rõ ID nhân sự cần bù data."
+                                ];
+                            }
+                            $consultant = $cRes['exact'];
+                            $targetConsultantId = (int)$consultant['id'];
+
+                            // 2. Resolve Round
+                            $rRes = $resolveRound();
+                            $targetRound = null;
+                            if ($rRes && isset($rRes['exact'])) {
+                                $targetRound = $rRes['exact'];
+                            } elseif ($rRes && isset($rRes['multiple'])) {
+                                $rNames = array_map(fn($m) => "[ID: {$m['id']}] {$m['round_name']}", $rRes['multiple']);
+                                return [
+                                    'success' => false,
+                                    'error' => "Tìm thấy nhiều vòng phân bổ khớp với từ khóa: " . implode(", ", $rNames) . ". Vui lòng chỉ định rõ ID vòng cần bù."
+                                ];
+                            } else {
+                                // Find rounds this consultant is currently in
+                                $rcStmt = $db->prepare("
+                                    SELECT dr.id, dr.round_name, dr.is_active
+                                    FROM round_consultants rc
+                                    JOIN distribution_rounds dr ON rc.round_id = dr.id
+                                    WHERE rc.consultant_id = ? AND dr.tenant_id = ? AND dr.is_active = 1
+                                    LIMIT 5
+                                ");
+                                $rcStmt->execute([$targetConsultantId, $tid]);
+                                $assignedRounds = $rcStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                                if (count($assignedRounds) === 1) {
+                                    $targetRound = $assignedRounds[0];
+                                } elseif (count($assignedRounds) > 1) {
+                                    $rNames = array_map(fn($m) => "[ID: {$m['id']}] {$m['round_name']}", $assignedRounds);
+                                    return [
+                                        'success' => false,
+                                        'error' => "Chuyên viên {$consultant['full_name']} đang tham gia nhiều vòng xoay: " . implode(", ", $rNames) . ". Vui lòng nói rõ muốn bù data vào vòng nào."
+                                    ];
+                                } else {
+                                    // Default to first active round in system
+                                    $defStmt = $db->prepare("SELECT id, round_name, is_active FROM distribution_rounds WHERE tenant_id = ? AND is_active = 1 ORDER BY id ASC LIMIT 1");
+                                    $defStmt->execute([$tid]);
+                                    $targetRound = $defStmt->fetch(PDO::FETCH_ASSOC);
+                                    if (!$targetRound) {
+                                        return [
+                                            'success' => false,
+                                            'error' => "Hệ thống chưa có vòng phân bổ nào hoạt động để bù data."
+                                        ];
+                                    }
+                                }
+                            }
+
+                            $targetRoundId = (int)$targetRound['id'];
+
+                            // 3. Atomic Database Update
+                            $db->beginTransaction();
+                            try {
+                                $chkStmt = $db->prepare("
+                                    SELECT compensation_count FROM round_consultants 
+                                    WHERE round_id = ? AND consultant_id = ? FOR UPDATE
+                                ");
+                                $chkStmt->execute([$targetRoundId, $targetConsultantId]);
+                                $existing = $chkStmt->fetch(PDO::FETCH_ASSOC);
+
+                                $prevCount = 0;
+                                $newCount = $compCount;
+
+                                if ($existing) {
+                                    $prevCount = (int)$existing['compensation_count'];
+                                    $newCount = $prevCount + $compCount;
+                                    $upd = $db->prepare("UPDATE round_consultants SET compensation_count = compensation_count + ? WHERE round_id = ? AND consultant_id = ?");
+                                    $upd->execute([$compCount, $targetRoundId, $targetConsultantId]);
+                                } else {
+                                    $ins = $db->prepare("INSERT INTO round_consultants (round_id, consultant_id, is_active, receive_ratio, compensation_count) VALUES (?, ?, 1, 1, ?)");
+                                    $ins->execute([$targetRoundId, $targetConsultantId, $compCount]);
+                                }
+
+                                // Audit Log in distribution_logs
+                                $auditMsg = "AI Agent bù {$compCount} data cho {$consultant['full_name']} tại Vòng {$targetRound['round_name']} (Lý do: {$reason}, Người thực hiện: {$userName})";
+                                $logStmt = $db->prepare("INSERT INTO distribution_logs (lead_id, assigned_to, round_id, status, message, received_at) VALUES (NULL, ?, ?, 'compensation', ?, NOW())");
+                                $logStmt->execute([$targetConsultantId, $targetRoundId, $auditMsg]);
+
+                                $db->commit();
+
+                                return [
+                                    'success' => true,
+                                    'action' => 'compensate_consultant',
+                                    'consultant' => [
+                                        'id' => $targetConsultantId,
+                                        'name' => $consultant['full_name']
+                                    ],
+                                    'round' => [
+                                        'id' => $targetRoundId,
+                                        'name' => $targetRound['round_name']
+                                    ],
+                                    'added_count' => $compCount,
+                                    'previous_compensation_count' => $prevCount,
+                                    'current_compensation_count' => $newCount,
+                                    'message' => "Đã ghi nhận bù thành công {$compCount} data cho chuyên viên {$consultant['full_name']} tại Vòng [{$targetRound['round_name']}]. Số lượt ưu tiên bù hiện tại: {$newCount}."
+                                ];
+                            } catch (\Throwable $e) {
+                                if ($db->inTransaction()) $db->rollBack();
+                                throw $e;
+                            }
+                        }
+
+                        // ----------------------------------------------------
+                        // ACTION 3: DISTRIBUTE LEAD ("Giao số 09... tên ... vào vòng")
+                        // ----------------------------------------------------
+                        case 'distribute_lead': {
+                            if (!$canManageRounds) {
+                                return [
+                                    'success' => false,
+                                    'error' => "Bạn không có thẩm quyền điều phối hoặc đưa khách hàng vào vòng phân bổ (Yêu cầu vai trò Quản lý hoặc Quản trị viên/Sale Admin)."
+                                ];
+                            }
+
+                            if (strlen($leadPhone) < 8) {
+                                return [
+                                    'success' => false,
+                                    'error' => "Số điện thoại khách hàng không hợp lệ ('{$leadPhone}'). Vui lòng cung cấp số điện thoại tối thiểu 8 chữ số."
+                                ];
+                            }
+
+                            // 1. Resolve Target Round
+                            $rRes = $resolveRound();
+                            $targetRound = null;
+                            if ($rRes && isset($rRes['exact'])) {
+                                $targetRound = $rRes['exact'];
+                            } else {
+                                // Default to active round with lowest load
+                                $defStmt = $db->prepare("
+                                    SELECT dr.id, dr.round_name, dr.last_assigned_consultant_id,
+                                           (SELECT COUNT(1) FROM distribution_logs dl WHERE dl.round_id = dr.id AND DATE(dl.received_at) = CURDATE()) as leads_today
+                                    FROM distribution_rounds dr
+                                    WHERE dr.tenant_id = ? AND dr.is_active = 1
+                                    ORDER BY leads_today ASC, dr.id ASC LIMIT 1
+                                ");
+                                $defStmt->execute([$tid]);
+                                $targetRound = $defStmt->fetch(PDO::FETCH_ASSOC);
+                                if (!$targetRound) {
+                                    return [
+                                        'success' => false,
+                                        'error' => "Không tìm thấy vòng phân bổ lead nào đang hoạt động trong hệ thống."
+                                    ];
+                                }
+                            }
+
+                            $targetRoundId = (int)$targetRound['id'];
+
+                            // 2. Atomic Allocation Transaction
+                            $db->beginTransaction();
+                            try {
+                                // Find or Create Contact in contacts table
+                                $chkC = $db->prepare("SELECT id, full_name, phone, owner_id FROM contacts WHERE phone = ? AND tenant_id = ? LIMIT 1 FOR UPDATE");
+                                $chkC->execute([$leadPhone, $tid]);
+                                $existingContact = $chkC->fetch(PDO::FETCH_ASSOC);
+
+                                $contactId = 0;
+                                $isExisting = false;
+
+                                if ($existingContact) {
+                                    $contactId = (int)$existingContact['id'];
+                                    $isExisting = true;
+                                    $currentOwnerId = (int)($existingContact['owner_id'] ?? 0);
+                                    if ($currentOwnerId > 0) {
+                                        $ownerStmt = $db->prepare("SELECT full_name FROM users WHERE id = ?");
+                                        $ownerStmt->execute([$currentOwnerId]);
+                                        $ownerName = $ownerStmt->fetchColumn() ?: "ID #{$currentOwnerId}";
+                                        $db->rollBack();
+                                        return [
+                                            'success' => false,
+                                            'error' => "Khách hàng {$leadPhone} ({$existingContact['full_name']}) đã tồn tại trên hệ thống và đang thuộc quyền chăm sóc của chuyên viên [{$ownerName}]. Không thể tự ý chiếm đoạt hoặc phân bổ lại vào vòng xoay."
+                                        ];
+                                    }
+
+                                    // Update notes or name if provided
+                                    if (!empty($leadName) || !empty($leadNote)) {
+                                        $updC = $db->prepare("UPDATE contacts SET full_name = COALESCE(NULLIF(?, ''), full_name), notes = CONCAT(IFNULL(notes, ''), '\n[AI Ghi chú]: ', ?) WHERE id = ?");
+                                        $updC->execute([$leadName, $leadNote ?: 'Cập nhật từ AI chat', $contactId]);
+                                    }
+                                } else {
+                                    $cName = !empty($leadName) ? $leadName : "Khách hàng {$leadPhone}";
+                                    $insC = $db->prepare("
+                                        INSERT INTO contacts (tenant_id, full_name, phone, email, notes, pipeline_status, created_by, created_at)
+                                        VALUES (?, ?, ?, ?, ?, 'assigned', ?, NOW())
+                                    ");
+                                    $insC->execute([$tid, $cName, $leadPhone, $leadEmail, $leadNote ?: 'Tạo từ AI Chat', $uid]);
+                                    $contactId = (int)$db->lastInsertId();
+                                }
+
+                                // 3. Select Winner Consultant in Round
+                                // A. Priority 1: Consultant with compensation_count > 0
+                                $compStmt = $db->prepare("
+                                    SELECT rc.consultant_id, rc.compensation_count, u.full_name as consultant_name, u.phone as consultant_phone
+                                    FROM round_consultants rc
+                                    JOIN users u ON rc.consultant_id = u.id
+                                    WHERE rc.round_id = ? AND rc.is_active = 1 AND rc.compensation_count > 0 AND u.is_active = 1
+                                    ORDER BY rc.compensation_count DESC, rc.consultant_id ASC
+                                    LIMIT 1
+                                    FOR UPDATE
+                                ");
+                                $compStmt->execute([$targetRoundId]);
+                                $compWinner = $compStmt->fetch(PDO::FETCH_ASSOC);
+
+                                $winnerId = 0;
+                                $winnerName = "";
+                                $winnerPhone = "";
+                                $distType = "rotation";
+
+                                if ($compWinner) {
+                                    $winnerId = (int)$compWinner['consultant_id'];
+                                    $winnerName = $compWinner['consultant_name'];
+                                    $winnerPhone = $compWinner['consultant_phone'];
+                                    $distType = "compensation";
+
+                                    // Decrement compensation count
+                                    $decComp = $db->prepare("UPDATE round_consultants SET compensation_count = compensation_count - 1 WHERE round_id = ? AND consultant_id = ?");
+                                    $decComp->execute([$targetRoundId, $winnerId]);
+                                } else {
+                                    // B. Priority 2: Next in Round-Robin rotation
+                                    $rotStmt = $db->prepare("
+                                        SELECT rc.consultant_id, u.full_name as consultant_name, u.phone as consultant_phone
+                                        FROM round_consultants rc
+                                        JOIN users u ON rc.consultant_id = u.id
+                                        WHERE rc.round_id = ? AND rc.is_active = 1 AND u.is_active = 1
+                                        ORDER BY rc.consultant_id ASC
+                                    ");
+                                    $rotStmt->execute([$targetRoundId]);
+                                    $activeConsultants = $rotStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                                    if (empty($activeConsultants)) {
+                                        $db->rollBack();
+                                        return [
+                                            'success' => false,
+                                            'error' => "Vòng [{$targetRound['round_name']}] hiện tại không có chuyên viên nào đang trong ca trực nhận số. Vui lòng bật ca trực cho tư vấn viên trước."
+                                        ];
+                                    }
+
+                                    // Pick next after last_assigned_consultant_id
+                                    $lastId = (int)($targetRound['last_assigned_consultant_id'] ?? 0);
+                                    $picked = null;
+
+                                    foreach ($activeConsultants as $ac) {
+                                        if ((int)$ac['consultant_id'] > $lastId) {
+                                            $picked = $ac;
+                                            break;
+                                        }
+                                    }
+                                    if (!$picked) {
+                                        $picked = $activeConsultants[0]; // Wrap around
+                                    }
+
+                                    $winnerId = (int)$picked['consultant_id'];
+                                    $winnerName = $picked['consultant_name'];
+                                    $winnerPhone = $picked['consultant_phone'];
+
+                                    // Update last_assigned_consultant_id on round
+                                    $updRound = $db->prepare("UPDATE distribution_rounds SET last_assigned_consultant_id = ? WHERE id = ?");
+                                    $updRound->execute([$winnerId, $targetRoundId]);
+                                }
+
+                                // 4. Assign Owner to Contact
+                                $updOwner = $db->prepare("UPDATE contacts SET owner_id = ?, pipeline_status = 'assigned' WHERE id = ?");
+                                $updOwner->execute([$winnerId, $contactId]);
+
+                                // 5. Insert Distribution Log
+                                $logMsg = $distType === 'compensation'
+                                    ? "AI Agent phân bổ khách hàng theo diện Ưu Tiên Bù Số cho {$winnerName}."
+                                    : "AI Agent phân bổ khách hàng theo vòng xoay Round-Robin cho {$winnerName}.";
+                                $insLog = $db->prepare("
+                                    INSERT INTO distribution_logs (lead_id, assigned_to, round_id, status, message, received_at)
+                                    VALUES (?, ?, ?, ?, ?, NOW())
+                                ");
+                                $insLog->execute([$contactId, $winnerId, $targetRoundId, $distType === 'compensation' ? 'compensation' : 'assigned', $logMsg]);
+
+                                $db->commit();
+
+                                return [
+                                    'success' => true,
+                                    'action' => 'distribute_lead',
+                                    'contact' => [
+                                        'id' => $contactId,
+                                        'name' => !empty($leadName) ? $leadName : "Khách hàng {$leadPhone}",
+                                        'phone' => $leadPhone,
+                                        'is_new' => !$isExisting
+                                    ],
+                                    'round' => [
+                                        'id' => $targetRoundId,
+                                        'name' => $targetRound['round_name']
+                                    ],
+                                    'assigned_consultant' => [
+                                        'id' => $winnerId,
+                                        'name' => $winnerName,
+                                        'phone' => $winnerPhone
+                                    ],
+                                    'distribution_type' => $distType,
+                                    'distribution_message' => $logMsg,
+                                    'verdict' => "Đã giao thành công khách hàng {$leadPhone} (" . (!empty($leadName) ? $leadName : 'Chưa có tên') . ") vào Vòng [{$targetRound['round_name']}]. Người nhận số: {$winnerName} (Diện: " . ($distType === 'compensation' ? 'Ưu tiên bù số' : 'Vòng xoay luân phiên') . ")."
+                                ];
+                            } catch (\Throwable $e) {
+                                if ($db->inTransaction()) $db->rollBack();
+                                throw $e;
+                            }
+                        }
+
+                        // ----------------------------------------------------
+                        // ACTION 4: TOGGLE CONSULTANT SHIFT ("Bật/tắt ca trực")
+                        // ----------------------------------------------------
+                        case 'toggle_consultant_shift': {
+                            if (!$canManageRounds) {
+                                return [
+                                    'success' => false,
+                                    'error' => "Bạn không có quyền điều chỉnh ca trực nhận số của chuyên viên (Yêu cầu vai trò Quản lý hoặc Quản trị viên/Sale Admin)."
+                                ];
+                            }
+
+                            $cRes = $resolveConsultant();
+                            if (!$cRes || !isset($cRes['exact'])) {
+                                return [
+                                    'success' => false,
+                                    'error' => "Không tìm thấy chuyên viên tư vấn phù hợp để thay đổi ca trực."
+                                ];
+                            }
+                            $consultant = $cRes['exact'];
+                            $targetConsultantId = (int)$consultant['id'];
+
+                            $rRes = $resolveRound();
+                            if (!$rRes || !isset($rRes['exact'])) {
+                                return [
+                                    'success' => false,
+                                    'error' => "Vui lòng chỉ định rõ vòng phân bổ cần điều chỉnh ca trực."
+                                ];
+                            }
+                            $round = $rRes['exact'];
+                            $targetRoundId = (int)$round['id'];
+
+                            $newStatus = $shiftActive ? 1 : 0;
+                            $updShift = $db->prepare("UPDATE round_consultants SET is_active = ? WHERE round_id = ? AND consultant_id = ?");
+                            $updShift->execute([$newStatus, $targetRoundId, $targetConsultantId]);
+
+                            return [
+                                'success' => true,
+                                'action' => 'toggle_consultant_shift',
+                                'consultant' => ['id' => $targetConsultantId, 'name' => $consultant['full_name']],
+                                'round' => ['id' => $targetRoundId, 'name' => $round['round_name']],
+                                'shift_active' => (bool)$newStatus,
+                                'message' => "Đã " . ($newStatus ? "BẬT" : "TẮT") . " trạng thái trực nhận số của chuyên viên {$consultant['full_name']} tại Vòng [{$round['round_name']}]."
+                            ];
+                        }
+
+                        // ----------------------------------------------------
+                        // ACTION 5: LIST ROUNDS
+                        // ----------------------------------------------------
+                        case 'list_rounds':
+                        default: {
+                            $stmt = $db->prepare("
+                                SELECT dr.id, dr.round_name, dr.description, dr.is_active, dr.last_assigned_consultant_id,
+                                       u.full_name as last_assigned_consultant_name,
+                                       (SELECT COUNT(1) FROM round_consultants rc WHERE rc.round_id = dr.id AND rc.is_active = 1) as active_consultant_count,
+                                       (SELECT COUNT(1) FROM distribution_logs dl WHERE dl.round_id = dr.id AND DATE(dl.received_at) = CURDATE()) as leads_today
+                                FROM distribution_rounds dr
+                                LEFT JOIN users u ON dr.last_assigned_consultant_id = u.id
+                                WHERE dr.tenant_id = ?
+                                ORDER BY dr.is_active DESC, dr.id ASC
+                            ");
+                            $stmt->execute([$tid]);
+                            $rounds = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                            return [
+                                'success' => true,
+                                'total_rounds' => count($rounds),
+                                'rounds' => $rounds,
+                                'summary' => "Hiện có " . count($rounds) . " vòng phân bổ lead trong hệ thống."
+                            ];
+                        }
+                    }
                 }
 
                 default:

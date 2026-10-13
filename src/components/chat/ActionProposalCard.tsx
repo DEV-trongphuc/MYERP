@@ -14,7 +14,7 @@ import { useChatStore } from '../../store/chatStore';
 import { Avatar } from '../ui/Avatar';
 
 export interface ActionProposal {
-  action_type: 'leave' | 'expense' | 'task' | 'lead' | 'sales_order' | 'deposit' | 'supplementary' | 'advance_payment' | 'inventory_receipt' | 'shift_swap' | 'admission_document_request' | 'legal_contract' | 'asset_handover' | 'marketing_campaign' | 'export_data' | 'export' | (string & {});
+  action_type: 'leave' | 'expense' | 'task' | 'lead' | 'sales_order' | 'deposit' | 'supplementary' | 'advance_payment' | 'inventory_receipt' | 'shift_swap' | 'admission_document_request' | 'legal_contract' | 'asset_handover' | 'marketing_campaign' | 'ticket' | 'quote' | 'deal' | 'export_data' | 'export' | (string & {});
   title: string;
   params: Record<string, any>;
   summary: string;
@@ -452,6 +452,40 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
           break;
         }
 
+        case 'ticket': {
+          const ticketDraft = {
+            subject: p.subject || p.title || 'Hỗ trợ học viên từ AI IDEAS',
+            priority: p.priority || 'medium',
+            customer_name: p.customer_name || p.student_name || '',
+            contact_id: p.contact_id || null,
+            description: p.description || p.notes || p.body || ''
+          };
+          sessionStorage.setItem('pending_ticket_draft', JSON.stringify(ticketDraft));
+          navigate('/support-tickets?create=1');
+          toast.success('Đã mở Phiếu hỗ trợ / Khiếu nại (Ticket) và điền sẵn thông tin!');
+          break;
+        }
+
+        case 'quote': {
+          const quoteDraft = {
+            title: p.title || 'Báo giá chương trình đào tạo',
+            customer_name: p.customer_name || p.contact_name || '',
+            contact_id: p.contact_id || null,
+            total: p.total || p.amount || 0,
+            notes: p.notes || ''
+          };
+          sessionStorage.setItem('pending_quote_draft', JSON.stringify(quoteDraft));
+          navigate('/quotes?create=1');
+          toast.success('Đã mở Báo giá (Quote) và điền sẵn thông tin!');
+          break;
+        }
+
+        case 'deal': {
+          navigate('/deals');
+          toast.success('Đã mở phân hệ Cơ hội tuyển sinh / Deal!');
+          break;
+        }
+
         case 'export_data':
         case 'export': {
           setStatus('submitting');
@@ -591,6 +625,33 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
           label: 'MARKETING',
           icon: <Sparkles size={13} color="#db2777" />
         };
+      case 'ticket':
+        return {
+          bg: '#fef2f2',
+          text: '#dc2626',
+          border: '#fecaca',
+          accent: '#ef4444',
+          label: 'TICKET CSKH',
+          icon: <AlertCircle size={13} color="#ef4444" />
+        };
+      case 'quote':
+        return {
+          bg: '#f0f9ff',
+          text: '#0369a1',
+          border: '#bae6fd',
+          accent: '#0284c7',
+          label: 'BÁO GIÁ',
+          icon: <FileText size={13} color="#0284c7" />
+        };
+      case 'deal':
+        return {
+          bg: '#fdf4ff',
+          text: '#a21caf',
+          border: '#f5d0fe',
+          accent: '#c026d3',
+          label: 'DEAL CRM',
+          icon: <Sparkles size={13} color="#c026d3" />
+        };
       case 'leave':
       case 'expense':
       case 'advance_payment':
@@ -656,6 +717,12 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
     summaryRowText = `[Nghỉ phép]: ${p.leave_type || 'Phép'}${p.total_days ? ` • ${p.total_days} ngày` : ''}${p.reason ? ` • Lý do: ${p.reason}` : ''}`;
   } else if (proposal.action_type === 'sales_order' || proposal.action_type === 'deposit') {
     summaryRowText = `[Đơn hàng]: ${p.customer_name ? `KH: ${p.customer_name}` : ''}${p.total_amount ? ` • ${Number(p.total_amount).toLocaleString('vi-VN')} đ` : ''}`;
+  } else if (proposal.action_type === 'ticket') {
+    summaryRowText = `[Ticket CSKH]: ${p.customer_name ? `Học viên: ${p.customer_name} • ` : ''}Ưu tiên: ${p.priority || 'Trung bình'}`;
+  } else if (proposal.action_type === 'quote') {
+    summaryRowText = `[Báo giá]: ${p.customer_name ? `KH: ${p.customer_name} • ` : ''}${p.total ? `${Number(p.total).toLocaleString('vi-VN')} đ` : ''}`;
+  } else if (proposal.action_type === 'deal') {
+    summaryRowText = `[Deal]: ${p.title || 'Cơ hội chốt tuyển sinh'}${p.value ? ` • ${Number(p.value).toLocaleString('vi-VN')} đ` : ''}`;
   } else if (proposal.summary) {
     summaryRowText = `[Chi tiết]: ${proposal.summary}`;
   }

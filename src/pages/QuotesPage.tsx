@@ -115,6 +115,28 @@ export const QuotesPage: React.FC = () => {
     setShowEditor(true);
   };
 
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('create') === '1' || sessionStorage.getItem('pending_quote_draft')) {
+      let initialQuote: any = null;
+      try {
+        const pending = sessionStorage.getItem('pending_quote_draft');
+        if (pending) {
+          initialQuote = JSON.parse(pending);
+          sessionStorage.removeItem('pending_quote_draft');
+        }
+      } catch (e) {}
+
+      handleOpenEditor(initialQuote);
+
+      if (urlParams.get('create') === '1') {
+        urlParams.delete('create');
+        const cleanUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
+        window.history.replaceState({}, '', cleanUrl);
+      }
+    }
+  }, []);
+
   const handleDelete = (id: number) => {
     showConfirm({
       title: 'Xóa báo giá',

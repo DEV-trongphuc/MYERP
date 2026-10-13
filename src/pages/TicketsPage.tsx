@@ -195,13 +195,22 @@ export const TicketsPage: React.FC = () => {
         });
         setIsBugTicket(true);
       } else {
+        let initialDraft: any = null;
+        try {
+          const pending = sessionStorage.getItem('pending_ticket_draft');
+          if (pending) {
+            initialDraft = JSON.parse(pending);
+            sessionStorage.removeItem('pending_ticket_draft');
+          }
+        } catch (e) {}
+
         setCreateForm({
-          subject: '',
-          priority: 'medium',
-          customer_name: '',
-          contact_id: null,
-          description: '',
-          related_contacts: [],
+          subject: initialDraft?.subject || initialDraft?.title || '',
+          priority: initialDraft?.priority || 'medium',
+          customer_name: initialDraft?.customer_name || initialDraft?.student_name || '',
+          contact_id: initialDraft?.contact_id || null,
+          description: initialDraft?.description || initialDraft?.notes || initialDraft?.body || '',
+          related_contacts: initialDraft?.contact_id ? [initialDraft.contact_id] : [],
           related_users: [],
           attachments: []
         });

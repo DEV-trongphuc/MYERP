@@ -63,6 +63,45 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
   // Check for saved draft when opening
   useEffect(() => {
     if (showModal) {
+      // 1. Check AI Agent draft from sessionStorage first
+      try {
+        const aiDraftRaw = sessionStorage.getItem('pending_po_draft');
+        if (aiDraftRaw) {
+          sessionStorage.removeItem('pending_po_draft');
+          const aiDraft = JSON.parse(aiDraftRaw);
+          if (aiDraft) {
+            const rawItems = Array.isArray(aiDraft.items) ? aiDraft.items : [];
+            const mappedItems = rawItems.map((it: any) => {
+              const qty = Number(it.quantity) || 1;
+              const cost = Number(it.unit_cost || it.unit_price || it.price || 0);
+              return {
+                name: it.name || 'Vật tư / Giáo trình',
+                quantity: qty,
+                unit_cost: cost,
+                subtotal: qty * cost
+              };
+            });
+
+            setFormData(prev => ({
+              ...prev,
+              notes: aiDraft.notes || prev.notes,
+              items: mappedItems.length > 0 ? mappedItems : prev.items
+            }));
+
+            if (aiDraft.supplier_name && suppliers.length > 0) {
+              const sTarget = aiDraft.supplier_name.toLowerCase().trim();
+              const matchedSup = suppliers.find((s: any) => (s.name || '').toLowerCase().includes(sTarget));
+              if (matchedSup) {
+                setFormData(prev => ({ ...prev, supplier_id: String(matchedSup.id) }));
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Error restoring AI PO draft:', e);
+      }
+
+      // 2. Check local saved draft
       try {
         const saved = localStorage.getItem(PO_DRAFT_KEY);
         if (saved) {
@@ -81,7 +120,7 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
     } else {
       setShowExitConfirm(false);
     }
-  }, [showModal]);
+  }, [showModal, suppliers]);
 
   const isFormDirty = () => {
     return Boolean(

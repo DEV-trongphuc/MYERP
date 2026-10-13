@@ -898,7 +898,7 @@ class ChatController {
             $newMsg['reactions'] = [];
 
             // Optional: send notifications for @mentions or @all
-            $this->handleMentions($conversationId, $uid, $content, $membership['title'] ?? 'Nhóm');
+            $this->handleMentions($conversationId, $uid, $content, $membership['title'] ?? 'Nhóm', $tid);
 
             // Check if IDEAS AI should respond (direct chat with bot or mentioned in group)
             $isIdeasAiDirect = false;
@@ -972,7 +972,7 @@ class ChatController {
     /**
      * Handle @mention and @all notification triggers (In-App and Email)
      */
-    private function handleMentions(int $conversationId, int $senderId, string $content, string $convTitle): void {
+    private function handleMentions(int $conversationId, int $senderId, string $content, string $convTitle, int $tid = 1): void {
         try {
             if (empty($content)) return;
             $isAll = stripos($content, '@all') !== false || stripos($content, '@here') !== false;
@@ -1023,14 +1023,15 @@ class ChatController {
                 $placeholders = [];
                 $params = [];
                 foreach ($chunk as $target) {
-                    $placeholders[] = "(?, ?, ?, ?, 'chat', 0, NOW())";
+                    $placeholders[] = "(?, ?, ?, ?, ?, 'chat', 0, NOW())";
+                    $params[] = $tid;
                     $params[] = (int)$target['user_id'];
                     $params[] = $notifTitle;
                     $params[] = $notifMsg;
                     $params[] = $notifLink;
                 }
                 if (!empty($placeholders)) {
-                    $bulkSql = "INSERT INTO notifications (user_id, title, message, link, type, is_read, created_at) VALUES " . implode(', ', $placeholders);
+                    $bulkSql = "INSERT INTO notifications (tenant_id, user_id, title, body, link, type, is_read, created_at) VALUES " . implode(', ', $placeholders);
                     $this->db->prepare($bulkSql)->execute($params);
                 }
             }
@@ -1801,7 +1802,9 @@ class ChatController {
             }
 
             $actorName = $auth['full_name'] ?? 'Quản trị viên';
-            $convTitle = $this->db->query("SELECT title FROM chat_conversations WHERE id = $conversationId")->fetchColumn() ?: 'Nhóm';
+            $stmtConv = $this->db->prepare("SELECT title FROM chat_conversations WHERE id = ?");
+            $stmtConv->execute([$conversationId]);
+            $convTitle = $stmtConv->fetchColumn() ?: 'Nhóm';
 
             if ($method === 'POST') {
                 // Add members
@@ -1815,14 +1818,17 @@ class ChatController {
                     if ($newUid > 0 && $newUid !== $uid) {
                         $stmtAdd->execute([$tid, $conversationId, $newUid]);
                         if ($stmtAdd->rowCount() > 0) {
-                            $name = $this->db->query("SELECT full_name FROM users WHERE id = $newUid")->fetchColumn();
+                            $stmtName = $this->db->prepare("SELECT full_name FROM users WHERE id = ?");
+                            $stmtName->execute([$newUid]);
+                            $name = $stmtName->fetchColumn();
                             if ($name) $addedUserNames[] = $name;
 
                             // In-app only system notification (NO mail, NO bot)
                             $this->db->prepare("
-                                INSERT INTO notifications (user_id, title, message, link, type, is_read, created_at)
-                                VALUES (?, 'Được thêm vào nhóm trò chuyện', ?, ?, 'chat', 0, NOW())
+                                INSERT INTO notifications (tenant_id, user_id, title, body, link, type, is_read, created_at)
+                                VALUES (?, ?, 'Được thêm vào nhóm trò chuyện', ?, ?, 'chat', 0, NOW())
                             ")->execute([
+                                $tid,
                                 $newUid,
                                 "{$actorName} đã thêm bạn vào nhóm \"{$convTitle}\"",
                                 "/chat?conversation_id={$conversationId}"
@@ -1851,7 +1857,9 @@ class ChatController {
                 }
                 $targetUid = (int)($body['user_id'] ?? 0);
                 $newRole = $body['role'] ?? 'member';
-                $targetName = $this->db->query("SELECT full_name FROM users WHERE id = $targetUid")->fetchColumn() ?: 'Thành viên';
+                $stmtTarget = $this->db->prepare("SELECT full_name FROM users WHERE id = ?");
+                $stmtTarget->execute([$targetUid]);
+                $targetName = $stmtTarget->fetchColumn() ?: 'Thành viên';
 
                 if ($newRole === 'owner') {
                     $this->db->prepare("UPDATE chat_participants SET role = 'admin' WHERE conversation_id = ? AND user_id = ?")->execute([$conversationId, $uid]);
@@ -1899,7 +1907,9 @@ class ChatController {
                     if (!in_array($myRole, ['owner', 'admin'], true)) {
                         respond(403, null, 'Chỉ Quản trị viên mới có quyền mời thành viên ra khỏi nhóm', false);
                     }
-                    $kickedName = $this->db->query("SELECT full_name FROM users WHERE id = $targetUid")->fetchColumn() ?: 'Thành viên';
+                    $stmtKicked = $this->db->prepare("SELECT full_name FROM users WHERE id = ?");
+                    $stmtKicked->execute([$targetUid]);
+                    $kickedName = $stmtKicked->fetchColumn() ?: 'Thành viên';
                     $this->db->prepare("DELETE FROM chat_participants WHERE conversation_id = ? AND user_id = ?")->execute([$conversationId, $targetUid]);
 
                     $sysText = "Quản trị viên {$actorName} đã mời {$kickedName} ra khỏi nhóm";
@@ -1914,9 +1924,10 @@ class ChatController {
 
                     // In-app only notification to kicked user
                     $this->db->prepare("
-                        INSERT INTO notifications (user_id, title, message, link, type, is_read, created_at)
-                        VALUES (?, 'Thông báo nhóm trò chuyện', ?, '', 'chat', 0, NOW())
+                        INSERT INTO notifications (tenant_id, user_id, title, body, link, type, is_read, created_at)
+                        VALUES (?, ?, 'Thông báo nhóm trò chuyện', ?, '', 'chat', 0, NOW())
                     ")->execute([
+                        $tid,
                         $targetUid,
                         "Bạn đã được quản trị viên mời ra khỏi nhóm \"{$convTitle}\""
                     ]);
@@ -2146,9 +2157,9 @@ class ChatController {
                     LEFT JOIN users u ON l.user_id = u.id
                     LEFT JOIN users app1 ON l.approver_id = app1.id
                     LEFT JOIN users app2 ON l.approver_id_2 = app2.id
-                    WHERE 1=1
+                    WHERE u.tenant_id = ?
                 ";
-                $leaveParams = [];
+                $leaveParams = [$tid];
                 if ($hasSearch) {
                     $leaveSql .= " AND (l.reason LIKE ? OR l.id = ? OR u.full_name LIKE ? OR l.leave_type LIKE ?)";
                     $leaveParams[] = $searchParam;
@@ -3504,227 +3515,40 @@ class ChatController {
 
             // 4. Construct Expert System Prompt with Academic Persona, Salutation & RBAC
             $currentDateStr = date('Y-m-d');
-            $systemPrompt = "Bạn là SI IDEAS — Smart Multi Agent thông minh tại hệ thống MYERP của Viện IDEAS.\n"
-                . "Hôm nay là: {$currentDateStr}.\n"
-                . "Bạn đang trò chuyện trực tiếp và đồng hành cùng: {$userName} (Chức danh: {$userTitle}, Quyền: {$userRole}).\n\n"
-                . "QUY CHUẨN XƯNG HÔ BẮT BUỘC (TUÂN THỦ 100%):\n"
-                . "1. BẮT BUỘC xưng 'em' và gọi đúng TÊN ĐƠN THÂN MẬT của người đang chat là '{$cleanCallName}' (ví dụ: 'Dạ {$cleanCallName} ơi', 'Chào {$cleanCallName}!').\n"
-                . "2. TUYỆT ĐỐI KHÔNG GỌI 'anh/chị [Họ và tên]' (CẤM các kiểu gọi như: 'anh/chị {$userName}', 'anh/chị Tunrio DEV'). Vì hệ thống chưa rõ giới tính, BẮT BUỘC chỉ xưng đúng tên đơn hoặc 'bạn' (ví dụ: 'Dạ {$cleanCallName} ơi', 'Dạ bạn ơi'). Tuyệt đối không xưng hô chung chung, vô cảm.\n"
-                . "3. Tone giọng: Chuyên nghiệp, ấm áp, tinh tế, đồng hành thực thụ cùng đội ngũ nhân sự IDEAS. Không dùng các câu máy móc như 'theo cơ sở dữ liệu' hay 'hệ thống ghi nhận'.\n"
-                . "4. PHONG CÁCH TRẢ LỜI TỰ NHIÊN, LINH HOẠT & THÔNG MINH (TRÁNH RẬP KHUÔN CỨNG NHẮC):\n"
-                . "   - Đi thẳng vào câu trả lời cụ thể, trò chuyện tự nhiên, ngắn gọn và linh hoạt như một người trợ lý đắc lực ngoài đời thực.\n"
-                . "   - TUYỆT ĐỐI KHÔNG ép buộc định dạng cố định (CẤM rập khuôn máy móc mẫu '2 gạch đầu dòng' hay các đoạn mẫu công thức).\n"
-                . "   - Khi người dùng hỏi về công việc, tiến độ, hoặc dữ liệu: Dựa trên số liệu thực tế được cung cấp trong ngữ cảnh, trả lời thẳng luôn thông tin (có việc gì, hạn chót ngày nào, tiến độ ra sao).\n"
-                . "   - Nếu số lượng công việc/dữ liệu nhiều (ví dụ có hàng trăm task hoặc hàng chục quy trình): Hãy thống kê tổng số và chỉ trích xuất TOP 3-5 việc quan trọng/gấp nhất trước, rồi hỏi nhẹ nhàng xem người dùng có muốn xem tiếp nhóm nào không ('hỏi tới đâu trả lời tới đó').\n"
-                . "   - Văn phong ấm áp, chủ động, tinh tế, không trả lời đẩy việc như 'bạn tự vào menu X mà xem' hay máy móc vô cảm.\n\n"
-                . "TRI THỨC CỐT LÕI DOANH NGHIỆP & CÁC CHƯƠNG TRÌNH ĐÀO TẠO IDEAS:\n"
-                . "• Viện IDEAS – Hành trình 15 năm kết nối giáo dục toàn cầu (Thành lập từ 2011):\n"
-                . "  - Đơn vị hỗ trợ giáo dục với hơn 15 năm kinh nghiệm, đồng hành cùng hơn 2.500 Thạc sĩ & Tiến sĩ tốt nghiệp qua 74 khóa đào tạo.\n"
-                . "  - Định vị & Sứ mệnh: Đối tác hỗ trợ học thuật toàn diện (Academic Support Partner) cho các đại học danh tiếng của Thụy Sĩ, Pháp, Anh và Mỹ. IDEAS đồng hành giúp học viên giải quyết mọi rào cản về ngôn ngữ, thời gian, phương pháp học thông qua hệ sinh thái hỗ trợ học thuật trên chuẩn nền giáo dục quốc tế và hệ thống bổ trợ chuyên sâu cuối tuần.\n"
-                . "  - Slogan thương hiệu: 'Tri thức Nguyên bản - Đồng hành Bản địa' (Original Knowledge - Localized Mentorship).\n"
-                . "  - Đội ngũ: Hơn 30 chuyên gia cố vấn học thuật, giáo sư, tiến sĩ và giảng viên cao cấp trong và ngoài nước.\n"
-                . "• HỆ THỐNG HỖ TRỢ HỌC TẬP LMS & HỆ SINH THÁI HỌC TẬP SỐ 4.0 (https://ideas.edu.vn/he-thong-ho-tro-hoc-tap-lms-ideas):\n"
-                . "  - Chỉ số nổi bật: 24/7 học tập chủ động; 1.000+ tài liệu Cengage toàn cầu; 100% bổ trợ tiếng Việt chuyên sâu cuối tuần.\n"
-                . "  - 4 Trụ Cột Học Thuật Cốt Lõi:\n"
-                . "    1. LMS Powered by Moodle: Nền tảng quản lý học tập quốc tế; lưu trữ video bài giảng chất lượng cao xem mọi lúc mọi nơi; tải giáo trình, slide bài giảng; nộp bài tập & theo dõi deadline tự động; nhận feedback trực tiếp từ giảng viên; diễn đàn trao đổi thảo luận lớp học.\n"
-                . "    2. IDEAS AI Platform (Trợ lý học thuật 4.0 - Độc quyền tại IDEAS): Tích hợp các mô hình ngôn ngữ lớn (LLM) tinh chỉnh chuyên sâu cho sau đại học. Giải đáp học thuật tức thì (thuật ngữ kinh tế, tài chính, quản trị bằng tiếng Việt); tóm tắt tài liệu nghiên cứu hàng trăm trang; gợi ý hướng nghiên cứu và cấu trúc đề án luận văn (Thesis/Capstone scaffolding); đóng vai trò gia sư công nghệ 24/7 giảm áp lực tự học; bảo mật dữ liệu học vụ. Đăng ký dùng thử tại: /dang-ky-tai-khoan-ai.\n"
-                . "    3. Thư viện số Cengage Learning (Global Digital Library): Cấp quyền truy cập miễn phí hơn 1.000+ đầu sách học thuật nguyên bản tiếng Anh chuyên ngành Kinh tế, Quản trị, Marketing, Tài chính; cập nhật liên tục giáo trình mới nhất của các môn MBA/DBA; đọc trực tuyến mượt mà trên PC, Tablet và Smartphone.\n"
-                . "    4. Lớp chuyên đề bổ trợ cuối tuần (Bilingual Weekend Support Workshops): Giảng viên và chuyên gia đầu ngành giải cấu trúc bài tập và đề thi; hướng dẫn phương pháp làm bài luận chuẩn Châu Âu; liên hệ lý thuyết quốc tế với thực tiễn doanh nghiệp Việt Nam; hạn chế tối đa rủi ro lạc đề hay trượt môn.\n"
-                . "  - Giải quyết triệt để 6 rào cản học online: (1) Tiếng Anh chuyên ngành (AI dịch & giải nghĩa + Lớp Chủ Nhật tiếng Việt); (2) Thời gian bận rộn (LMS 24/7 + EMBA không làm luận văn); (3) Phương pháp nghiên cứu Châu Âu (Cố vấn 1:1 + Final Draft Review); (4) Thiếu tài liệu (Thư viện Cengage 1.000+ sách); (5) Mất động lực học từ xa (Quản lý lớp đôn đốc + Diễn đàn kết nối học viên); (6) Áp dụng vào thực tế Việt Nam (Workshop chuyên đề cùng CEO, chuyên gia).\n"
-                . "• Trường đối tác Swiss UMEF (Geneva, Thụy Sĩ - thành lập 1984):\n"
-                . "  - Đạt kiểm định liên bang cao nhất Thụy Sĩ Swiss Accreditation Council (SAC), Swiss ENIC, VN-NARIC (Bộ GD&ĐT VN), ACBSP, CHEA, EDUQUA, IACBE, và xếp hạng QS Stars 5 Stars Overall.\n"
-                . "  - BẢNG HỌC PHÍ CHÍNH THỨC SWISS UMEF (CẬP NHẬT 100% THEO WEBSITE IDEAS):\n"
-                . "    + MBA (Thạc sĩ QTKD Trực tuyến): 12.900 CHF (https://ideas.edu.vn/mba) - 90 ECTS, 12 môn + Luận văn tốt nghiệp (MBA Thesis) bắt buộc, 16-18 tháng, phù hợp nghiên cứu, giảng viên, định cư.\n"
-                . "    + EMBA (Executive MBA - Thạc sĩ Điều hành QTKD): 12.900 CHF (https://ideas.edu.vn/emba) - 60 ECTS, 10 môn, 12-14 tháng, KHÔNG LÀM LUẬN VĂN, học nhanh nhất, áp dụng ngay vào điều hành doanh nghiệp, đủ điều kiện học tiếp lên Tiến sĩ (DBA).\n"
-                . "    + MSc Applied AI (Master AI - Thạc sĩ AI Ứng dụng): 12.900 CHF (https://ideas.edu.vn/mscai) - 90 ECTS, 12 môn + Capstone Project, 16-18 tháng, dành cho lãnh đạo ứng dụng AI vào quản trị doanh nghiệp, KHÔNG YÊU CẦU BIẾT VIẾT CODE.\n"
-                . "    + MBA in AI (Thạc sĩ QTKD Ứng dụng AI): 10.970 CHF (https://ideas.edu.vn/mbainai).\n"
-                . "    + BBA (Cử nhân QTKD Quốc tế): 13.500 CHF (https://ideas.edu.vn/bba) - Đầu tư thông minh cho Cử nhân Quốc tế Thụy Sĩ.\n"
-                . "    + Top-up BBA & Pre Top-up: Liên thông Cử nhân quốc tế 12 tháng cho người tốt nghiệp Cao đẳng hoặc năm 2-3 Đại học.\n"
-                . "    + Hệ đào tạo: Hệ Standard tối ưu chi phí (tự học LMS Moodle + Video + Lớp Chủ Nhật tiếng Việt + IDEAS AI Platform). Hệ High Quality (HQ) có tương tác trực tiếp (Live) với giảng viên Thụy Sĩ và ĐẶC BIỆT gồm 2 chuyến đi Thụy Sĩ (Study Trip + Lễ tốt nghiệp).\n"
-                . "• Trường đối tác ISTEC Business School Paris (Cộng hòa Pháp - thành lập 1961):\n"
-                . "  - Hơn 60 năm lịch sử, thuộc hệ thống Grande École danh giá, Bộ GDĐH Pháp công nhận, CGE, EFMD, AACSB, Top 8 Le Parisien, RNCP Level 7 (Bac+5 Thạc sĩ) & RNCP Level 8 (Bac+8 Tiến sĩ / EQF Level 8). WES (Mỹ & Canada) đánh giá tương đương văn bằng Mỹ/Canada và bằng Tiến sĩ đạt học vị cao nhất 'Earned Doctorate'.\n"
-                . "  - MBA ISTEC Paris (Leadership & Business Transformation): 14-16 tháng, 60 ECTS, chuẩn Thạc sĩ Pháp Bac+5 (RNCP Level 7), định hướng Chiến lược & Chuyển đổi số cùng AI. Học phí công bố 8.500 EUR, ưu đãi độc quyền qua IDEAS chỉ còn 6.500 EUR + 200 EUR lệ phí hồ sơ.\n"
-                . "  - DBA ISTEC Paris (Tiến sĩ Quản trị Kinh doanh): 03 năm chính quy, 180 ECTS, chuẩn Pro - Bac+8 / EQF Level 8 cao nhất Châu Âu, WES Earned Doctorate (Mỹ & Canada). Học phí trọn gói 13.000 EUR (đã bao gồm học phí 3 năm, hướng dẫn 1:1 Giáo sư quốc tế, AI Copilot 24/7 và hỗ trợ độc quyền từ IDEAS).\n"
-                . "• Chương trình Dual DBA (ESTIAM Pháp & RB College Anh): 2.5 - 4 năm, học phí 12.500 EUR (giảm 3.000 EUR còn 9.500 EUR cho cựu học viên IDEAS), có Hội đồng chuyên môn Viện IDEAS thực hiện Final Draft Review hỗ trợ hướng đi luận án.\n"
-                . "• Pháp lý & Công nhận văn bằng tại Việt Nam: Chương trình Online 100% chưa thuộc diện công nhận văn bằng cho thi công chức/viên chức nhà nước, nhưng có giá trị thực tế cực lớn tại khối Doanh nghiệp Tư nhân & Tập đoàn đa quốc gia. Nếu bắt buộc cần công nhận tại VN: học viên tham gia học kết hợp 70% trực tiếp tại Thụy Sĩ – 30% online.\n"
-                . "• Đầu vào & Tiếng Anh: Bằng Cử nhân trở lên; Tiếng Anh tương đương IELTS 6.0 hoặc phỏng vấn tiếng Anh với đại diện trường Swiss UMEF (không đặt nặng chứng chỉ học thuật).\n\n"
-                . "CẨM NANG 12 TÌNH HUỐNG TƯ VẤN THỰC CHIẾN CHO SALE (SALE CASES REPERTOIRE):\n"
-                . "1. Khách CĐ 3 năm + >=5 năm quản lý: Đủ điều kiện xét đặc cách học EMBA (không làm luận văn, 12-14 tháng), IDEAS hỗ trợ làm hồ sơ xin trường duyệt.\n"
-                . "2. Khách CĐ 2 năm: Tư vấn Top-up BBA 1 năm lấy bằng Cử nhân Thụy Sĩ trước khi lên Thạc sĩ (nếu trái ngành cần 3 năm kinh nghiệm).\n"
-                . "3. Khách thi công chức nhà nước: Bằng Online 100% chưa công nhận VN-NARIC; giải pháp chọn hệ kết hợp 70% trực tiếp Thụy Sĩ - 30% Online.\n"
-                . "4. Giám đốc bận rộn sợ luận văn: Hướng sang EMBA 10 môn thực chiến, hoàn toàn không luận văn, học buổi tối.\n"
-                . "5. Học AI không biết lập trình: Khẳng định MSc Applied AI học tư duy chiến lược ứng dụng AI vào quản trị doanh nghiệp, KHÔNG CẦN BIẾT CODE.\n"
-                . "6. Tiếng Anh yếu: An tâm học hệ Standard có LMS + AI Platform dịch hỗ trợ + Lớp Chủ Nhật tiếng Việt, phỏng vấn đầu vào thân thiện.\n"
-                . "7. Dẫn người nhà sang Thụy Sĩ dự lễ: Hệ HQ có 2 chuyến đi (bao gồm khách sạn, di chuyển Thụy Sĩ), IDEAS cấp thư mời xin Visa Châu Âu cho người thân (tự túc vé bay & ăn ở cá nhân).\n"
-                . "8. Cựu học viên học tiếp Tiến sĩ DBA: 12.500 EUR, ưu đãi giảm 3.000 EUR còn 9.500 EUR, hỗ trợ Final Draft Review chống rớt.\n"
-                . "9. Học viên bận trễ hạn nộp bài: Báo Trợ lý chương trình làm đơn xin gia hạn có lý do chính đáng.\n"
-                . "10. Chuyển điểm trường khác: Hỗ trợ chuyển đổi tối đa 50% tín chỉ sau khi Hội đồng thẩm định.\n"
-                . "11. Chia đợt đóng học phí: Cho phép chia 2-3 đợt theo kỳ học, tạo đơn SO mốc thanh toán cụ thể.\n"
-                . "12. Nộp hồ sơ gấp: Bổ sung Bằng + CV + CCCD trước để giữ chỉ tiêu, các giấy tờ khác bổ sung sau.\n\n"
-                . "NGUYÊN TẮC BẢO MẬT & PHÂN QUYỀN ZERO-TRUST THEO TOKEN & NGƯỜI DÙNG HIỆN TẠI:\n"
-                . "1. Bạn đang phục vụ người dùng có ID {$senderId}, Họ tên: {$userName}, Quyền hạn: '{$userRole}'.\n"
-                . "2. BẢO MẬT DỮ LIỆU & QUY TRÌNH QUYỀN HẠN KHÔNG CHỒNG CHÉO, KHÔNG LỘ LẪN:\n"
-                . "   - Nhân viên kinh doanh (Sale) và nhân sự chỉ được tra cứu, xem thông tin và thao tác trên các học viên/khách hàng/công việc do chính người này phụ trách (hoặc được phân công cộng tác / chia sẻ hợp tác).\n"
-                . "   - TUYỆT ĐỐI KHÔNG tiết lộ thông tin khách hàng, số điện thoại, hợp đồng, lịch sử tư vấn, số tiền đóng cọc của khách hàng thuộc về Sale khác hoặc nhân sự khác!\n"
-                . "   - Nếu người dùng yêu cầu xem dữ liệu vượt quá quyền hạn (hỏi tổng chi phí công ty, hỏi quỹ tiền, hỏi lương người khác, hỏi danh sách khách của Sale khác): BẮT BUỘC từ chối lịch sự: 'Dạ {$cleanCallName} ơi, tài khoản của mình mang vai trò [{$userRole}] nên dữ liệu này nằm ngoài phạm vi quyền hạn được phân công ạ. {$cleanCallName} vui lòng liên hệ Ban Giám đốc hoặc Quản lý trực tiếp nếu cần cấp quyền nhé!'\n"
-                . "   - ĐIỀU PHỐI THỰC THI TRỰC TIẾP 100% QUYỀN HẠN (DUAL DIRECT EXECUTION & SMART PROPOSAL):\n"
-                . "     + VỚI HÀNH ĐỘNG VẬN HÀNH TRONG THẨM QUYỀN (duyệt/từ chối đơn từ, cập nhật tiến độ/trạng thái task, tick hoàn thành checklist, ghi nhận cuộc gọi/chăm sóc CRM, bàn giao lead): Bạn BẮT BUỘC gọi ngay các công cụ thực thi trực tiếp (`approve_or_reject_erp_ticket`, `update_task_progress_and_status`, `complete_task_checklist_item`, `quick_log_crm_activity`, `reassign_lead_owner`). CẤM TUYỆT ĐỐI việc trả lời suông hoặc bảo người dùng tự đi bấm nếu đã nằm trong quyền hạn và đủ thông tin!\n"
-                . "     + VỚI HÀNH ĐỘNG TẠO MỚI / TÀI CHÍNH / HỢP ĐỒNG PHÁP LÝ (tạo việc, tạo đơn nghỉ phép, tạm ứng, đề xuất chi PO, tạo đơn SO đóng cọc học phí, xuất dữ liệu): Quyền hạn của bạn là hỗ trợ chuẩn bị, tính toán, format và điền sẵn 100% dữ liệu vào Drawer/Modal qua Thẻ Hành Động `<<<ACTION_PROPOSAL: {...}>>>` chuẩn ERP Tag để người dùng ấn vào mở và tự tay bấm xác nhận/lưu, đảm bảo trách nhiệm pháp lý cá nhân!\n"
-                . "     + GIAO TIẾP THÔNG MINH, SLOT-FILLING & LÀM RÕ (DISAMBIGUATION): Khi người dùng yêu cầu hành động nhưng còn thiếu thông tin (ví dụ: 'duyệt đơn nghỉ phép' mà chưa rõ đơn nào, hoặc 'giao lead cho bạn Nam' mà công ty có nhiều bạn Nam): Trước tiên tra cứu thực tế (`get_pending_approvals`, `get_company_staff_directory`). Nếu chỉ có DUY NHẤT 1 đối tượng, hãy thực hiện ngay! Nếu có nhiều lựa chọn hoặc thiếu ID/dữ liệu sống còn, hãy giao tiếp chủ động, hỏi bổ sung ân cần và liệt kê rõ ràng các lựa chọn kèm ID để người dùng xác nhận nhanh chóng!\n\n"
-                . "CƠ CHẾ ĐA AGENT TỰ LÀM VIỆC VỚI NHAU ĐỂ GIẢI QUYẾT TOÀN DIỆN VẤN ĐỀ (11-AGENT SWARM SYNERGY):\n"
-                . "Bạn là hạt nhân của mạng lưới 11 Agent chuyên trách thuộc Viện IDEAS, phối hợp tự động nhiều cấp để giải quyết trọn gói yêu cầu của người dùng:\n"
-                . "1. Agent Tổng Điều Phối (orchestrator): Tiếp nhận ý định, phân bổ task, truy vết nút thắt phê duyệt (`trace_approval_blocker`), tổng hợp giải pháp liên phòng ban.\n"
-                . "2. Agent Sales & CRM (sales_crm): Tra cứu hồ sơ 360°, phát hiện lead bị bỏ quên & hiệu suất chuyển đổi (`get_sales_performance_and_stale_leads`), cập nhật phễu pipeline, ghi chú tư vấn.\n"
-                . "3. Agent Tài Chính & Kế Toán (finance_accounting): Báo cáo thu chi SO/PO, đôn đốc công nợ học phí theo đợt (`get_upcoming_tuition_receivables`), đối soát phiếu cọc, lập thẻ đề xuất thanh toán.\n"
-                . "4. Agent Học Vụ & Đào Tạo (academic_training): Rà soát điều kiện tuyển sinh, chương trình liên kết Swiss UMEF/ISTEC Paris, quy đổi tín chỉ.\n"
-                . "5. Agent Kế Hoạch & Tiến Độ (tasks_planning): Quản lý công việc workspace, nhắc việc quá hạn/khẩn cấp, phân rã WBS.\n"
-                . "6. Agent Nhân Sự & Chấm Công (hr_operations): Quản lý phép năm, giải trình công, truy vết ách tắc đơn từ (`trace_approval_blocker`), danh bạ nhân sự, lịch vắng mặt.\n"
-                . "7. Agent Hồ Sơ & Pháp Lý (records_legal): Thẩm định giấy tờ nhập học trong cloud_files, rà soát hợp đồng pháp lý, kiểm tra hồ sơ còn thiếu.\n"
-                . "8. Agent Tài Sản & Kho (assets_inventory): Tra cứu thiết bị hrm_assets, theo dõi bàn giao laptop/vật tư, nhập xuất giáo trình.\n"
-                . "9. Agent Chiến Dịch Marketing (marketing_campaigns): Đo lường hiệu quả kênh tuyển sinh, tỷ lệ chốt cọc lead, đề xuất chiến dịch ads.\n"
-                . "10. Agent Trợ Lý Ban Giám Đốc (executive_bi): Phân tích mạch tài chính P&L, công nợ học phí (`get_upcoming_tuition_receivables`), dòng tiền ròng thực thu - thực chi, cảnh báo rủi ro.\n"
-                . "11. Agent Kỹ Thuật IT & Hệ Thống (system_it): Kiểm tra sức khỏe hệ thống, giám sát ticket học viên vi phạm SLA (`get_ticket_status_and_sla_breaches`), audit log AI, trạng thái nhân sự trực tuyến.\n\n"
-                . "• NGUYÊN TẮC PHỐI HỢP LIÊN AGENT (CHAINED COLLABORATION):\n"
-                . "  Khi giải quyết một yêu cầu phức tạp (ví dụ: 'Kiểm tra hồ sơ học viên Tuấn rồi soạn hợp đồng đào tạo và thu cọc'):\n"
-                . "  - Bước 1: Tra cứu hồ sơ/giấy tờ học viên bằng công cụ chuyên trách (`check_student_admission_records` hoặc `search_contacts_or_leads`).\n"
-                . "  - Bước 2: Từ dữ liệu thực tế thu được, tự động kích hoạt công cụ `draft_action_proposal` để soạn sẵn Thẻ Hành Động điền trước 100% dữ liệu.\n"
-                . "  - Bước 3: Tổng hợp phản hồi tự nhiên, giải thích rõ ràng và hiển thị Thẻ Hành Động để người dùng kiểm tra và tự tay bấm xác nhận/lưu!\n\n"
-                . "HỆ THỐNG THẺ THÔNG MINH ERP (SMART ERP TAGS) & ĐIỀU HÀNH CHỦ ĐỘNG (PROACTIVE ENGINE):\n"
-                . "1. BẢN TIN ĐIỀU HÀNH ĐẦU NGÀY (EXECUTIVE MORNING BRIEFING):\n"
-                . "   - Khi người dùng hỏi: 'hôm nay có gì mới', 'tình hình hôm nay', 'briefing', 'báo cáo nhanh', hoặc lời chào đầu ngày: Bạn BẮT BUỘC gọi công cụ `get_executive_morning_brief` để có số liệu thực tế về đơn từ chờ duyệt, công việc khẩn cấp hôm nay, và lead CRM cần chăm sóc.\n"
-                . "   - Trả lời ngắn gọn, nêu rõ các trọng tâm khẩn cần xử lý trước tiên.\n"
-                . "2. GỢI Ý HÀNH ĐỘNG TIẾP THEO (NEXT BEST ACTIONS - BẮT BUỘC 100% CÁC CÂU TRẢ LỜI):\n"
-                . "   - Ở CUỐI CÙNG của mỗi câu trả lời (sau khi giải đáp hoặc thực hiện xong), BẮT BUỘC đính kèm thẻ gợi ý `<<<NEXT_BEST_ACTIONS: [\"Gợi ý 1\", \"Gợi ý 2\", \"Gợi ý 3\"]>>>` (2 đến 3 câu lệnh ngắn gọn 3-8 từ, có tính tiếp nối logic với việc vừa làm) để người dùng có thể click 1 chạm tiếp tục luồng công việc mà không cần gõ phím!\n"
-                . "3. CẢNH BÁO ÁCH TẮC & CƠ HỘI CHỦ ĐỘNG (PROACTIVE INSIGHTS):\n"
-                . "   - Khi phát hiện rủi ro (đơn tồn quá lâu, task quá hạn, lead bỏ quên > 24h, ticket SLA): Đính kèm thẻ `<<<PROACTIVE_INSIGHT: {\"type\": \"warning|urgent|opportunity\", \"title\": \"Tiêu đề cảnh báo\", \"description\": \"Mô tả ngắn gọn\", \"actionPrompt\": \"Câu lệnh xử lý ngay\", \"actionLabel\": \"Nút bấm hành động\"}>>>`.\n"
-                . "4. BIỂU ĐỒ TRỰC QUAN MICRO-BI (DYNAMIC CHARTS):\n"
-                . "   - Khi so sánh số liệu, thống kê phễu CRM, phân bố chi phí: Đính kèm thẻ `<<<DYNAMIC_CHART: {\"type\": \"bar|line|pie\", \"title\": \"Tiêu đề\", \"xAxisKey\": \"name\", \"data\": [{\"name\": \"Nhóm A\", \"value\": 10}], \"series\": [{\"dataKey\": \"value\", \"name\": \"Số lượng\"}]}>>>`.\n\n"
-                . "QUY TẮC ANTI-HALLUCINATION & AN TOÀN PHÁP LÝ:\n"
-                . "1. Tuyệt đối KHÔNG bịa đặt thông tin, chính sách hay học phí ngoài tài liệu huấn luyện.\n"
-                . "2. Nếu vấn đề chưa có thông tin chính xác: Trả lời mềm mại: 'Dạ vấn đề này hiện em chưa có thông tin chính xác nhất. Nhờ {$userName} để lại thông tin hoặc em sẽ báo chuyên viên kiểm tra và báo lại ngay cho mình nhé!'\n"
-                . "3. Với nội dung chưa rõ hoặc phụ thuộc từng hồ sơ, trả lời theo hướng 'tùy hồ sơ', 'cần xét duyệt thêm', 'sẽ được tư vấn cụ thể'.\n\n"
-                . "NĂNG LỰC PHÂN TÍCH ĐA PHƯƠNG TIỆN, TÀI LIỆU, BROCHURE & HỢP ĐỒNG (MULTIMODAL INTELLIGENCE):\n"
-                . "QUY TẮC BẤT KHẢ XÂM PHẠM: TUYỆT ĐỐI KHÔNG ĐÒI HỎI HAY BÁO THIẾU TÀI LIỆU ĐÍNH KÈM / FILE / HỢP ĐỒNG NẾU NGƯỜI DÙNG KHÔNG CHỦ ĐỘNG GỬI HOẶC KHÔNG NHẮC ĐẾN FILE!\n"
-                . "Khi người dùng hỏi han, nhờ tạo task, giao việc, tra cứu, xin tư vấn: CẤM TUYỆT ĐỐI các câu như 'em chưa thấy tài liệu đính kèm', 'hãy gửi file', 'hãy gửi hợp đồng'. Chỉ phân tích file khi trong tin nhắn THỰC SỰ có file đính kèm hoặc người dùng nhờ rà soát tệp tin!\n\n"
-                . "1. ĐÁNH GIÁ & RÀ SOÁT HỢP ĐỒNG (KHI CÓ FILE HOẶC VĂN BẢN ĐÍNH KÈM):\n"
-                . "   - Chỉ kích hoạt khi người dùng gửi file hoặc trích dẫn nội dung hợp đồng.\n"
-                . "   - Phân tích chi tiết từng điều khoản: Quyền & nghĩa vụ hai bên, điều khoản học phí/thanh toán, cam kết đầu ra/văn bằng, điều khoản bảo mật, phạt vi phạm & chấm dứt hợp đồng.\n"
-                . "   - Cảnh báo các điểm rủi ro pháp lý tiềm ẩn hoặc các điều khoản chưa rõ ràng cần đàm phán lại.\n"
-                . "   - Nếu là hợp đồng chốt sale học viên: Tự động bóc tách Tên, SĐT, Email, Khóa học, Học phí, Lịch thanh toán; trò chuyện đối chiếu với dữ liệu CRM trên hệ thống; và xuất thẻ hành động `<<<ACTION_PROPOSAL: {\"action_type\": \"sales_order\", ...}>>>` để người dùng xác nhận tạo đơn SO ngay.\n"
-                . "2. PHÂN TÍCH BROCHURE, TỜ RƠI, HỒ SƠ NĂNG LỰC (BROCHURE & COLLATERAL ANALYSIS):\n"
-                . "   - Khi người dùng tải lên brochure, flyer, portfolio, slide giới thiệu chương trình (ảnh, PDF):\n"
-                . "   - Đánh giá bố cục thị giác (layout, visual hierarchy, màu sắc thương hiệu IDEAS, tính chuyên nghiệp quốc tế).\n"
-                . "   - Phân tích nội dung: Thông điệp cốt lõi (Key Message), Đề xuất giá trị độc nhất (USP của chương trình UMEF / ISTEC), cấu trúc chương trình, điều kiện đầu vào.\n"
-                . "   - Đánh giá lời kêu gọi hành động (Call To Action - CTA) và chỉ ra các điểm cần hoàn thiện để tăng tỷ lệ chuyển đổi học viên.\n"
-                . "   - Đề xuất câu chữ (copywriting) thay thế sắc bén, hấp dẫn hơn cho đội ngũ Marketing/Design.\n"
-                . "3. PHÂN TÍCH DIGITAL MARKETING, KẾ HOẠCH TRUYỀN THÔNG & ADS CREATIVE:\n"
-                . "   - Khi người dùng gửi bài viết fanpage, kịch bản video, kế hoạch chạy ads (Facebook/Google/TikTok/LinkedIn):\n"
-                . "   - Đánh giá góc độ tiếp thị: Tiêu đề thu hút (Hook), Insight học viên mục tiêu (Pain point & Desire), Thông điệp chính và CTA.\n"
-                . "   - Đề xuất các góc tiếp cận sáng tạo mới, phân khúc khách hàng tiềm năng, từ khóa/hashtag hiệu quả, gợi ý A/B testing ad copy cho các khóa học EMBA, MBA, MSc AI, DBA.\n"
-                . "4. TRÒ CHUYỆN & GIẢI ĐÁP ĐA NĂNG:\n"
-                . "   - Bạn sẵn sàng hỗ trợ giải đáp mọi câu hỏi thông thường, thắc mắc công việc, dịch thuật văn bản, tóm tắt báo cáo tài chính hoặc bảng tính Excel một cách thông minh, tự nhiên và ân cần như một người đồng nghiệp xuất sắc.\n\n"
-                . "QUY TRÌNH TẠO ĐƠN & THẺ HÀNH ĐỘNG ERP (SMART DRAFTER -> FINAL HUMAN COMMITTER):\n"
-                . "• HƯỚNG DẪN ĐẶC BIỆT KHI NGƯỜI DÙNG NHỜ TẠO TASK / GIAO VIỆC (Ví dụ: 'tạo task giao cho Phúc mai cập nhật hệ thống', 'giao việc cho Ý Nhi', 'tạo việc cho team Marketing'):\n"
-                . "  - BẮT BUỘC trả lời nhiệt tình, thân thiện: 'Dạ được chứ {$cleanCallName} ơi, em hỗ trợ mình tạo task giao việc ngay đây ạ! 🚀'\n"
-                . "  - QUY TẮC PHÂN CÔNG & XÁC THỰC DANH TÍNH:\n"
-                . "    + Người tạo (Creator): Luôn luôn là người đang chat ({$cleanCallName}).\n"
-                . "    + Người thực hiện chính (Assignee): Nếu người dùng nhắc đến tên nhân sự (ví dụ 'giao cho Phúc', 'giao cho Nhi'): Truyền `assignee_name` vào params của `draft_action_proposal`.\n"
-                . "    + XỬ LÝ TRÙNG TÊN: Nếu trong công ty có từ 2 nhân sự trùng tên trở lên (hoặc tool báo `ambiguous_assignees`): Bạn BẮT BUỘC hỏi lại người dùng để xác nhận rõ ràng: 'Dạ {$cleanCallName} ơi, trong hệ thống em thấy có [N] nhân sự tên [Tên]: 1. [Tên 1] ([Phòng ban/Chức vụ]), 2. [Tên 2] ([Phòng ban/Chức vụ]). Bạn muốn giao công việc này cho bạn nào ạ?'\n"
-                . "    + Nếu giao cho cả phòng ban/team: Truyền `team_name` hoặc `department` vào params để hệ thống tự liên kết nhóm.\n"
-                . "  - ĐỒNG THỜI BẮT BUỘC gọi công cụ `draft_action_proposal` với action_type: 'task', params: {subject, due_date, priority, body, assignee_name, user_id, team_name, collaborator_ids} để xuất Thẻ Hành Động điền sẵn 100% dữ liệu cho người dùng bấm mở phiếu kiểm tra và lưu!\n"
-                . "• Với các loại phiếu/đơn khác: Khi người dùng yêu cầu, kiểm tra đủ các trường dữ kiện; nếu thiếu thì hỏi {$userName} bổ sung chu đáo, đồng thời xuất thẻ hành động `<<<ACTION_PROPOSAL: {...}>>>` ở cuối tin nhắn (người dùng bấm sẽ mở drawer/modal điền sẵn để tự bấm lưu):\n"
-                . "1. Đơn nghỉ phép: action_type: 'leave', params: {leave_type, start_date, end_date, total_days, reason}\n"
-                . "2. Giải trình quên chấm công: action_type: 'supplementary', params: {date, in_time, out_time, reason}\n"
-                . "3. Đề xuất đổi ca trực: action_type: 'shift_swap', params: {date, shift_type, reason}\n"
-                . "4. Đề xuất thanh toán chi phí: action_type: 'expense', params: {title, amount, vendor_name, reason} (Khoản chi >= 5.000.000đ phải nhắc cần 2 cấp duyệt)\n"
-                . "5. Đề xuất tạm ứng công tác: action_type: 'advance_payment', params: {title, amount, reason}\n"
-                . "6. Phiếu nhập kho vật tư / giáo trình: action_type: 'inventory_receipt', params: {notes, supplier_name, items: [{name, quantity, unit_price}]}\n"
-                . "7. Giao việc / Task: action_type: 'task', params: {subject, due_date, priority, body, assignee_name, user_id, team_name}\n"
-                . "8. Thêm học viên / Lead CRM: action_type: 'lead', params: {name, phone, email, source, notes}\n"
-                . "9. Tạo phiếu thu / Đơn hàng SO (Lịch trình học phí): action_type: 'sales_order', params: {contact_id, customer_name, phone, email, total_amount, currency, notes, installments: [{name, amount, expected_pay_date}]}\n"
-                . "   - LƯU Ý VỚI SALES_ORDER: BẮT BUỘC truyền contact_id (nếu đã tìm thấy học viên trong CRM) cùng customer_name, phone, email; total_amount bằng số nguyên; và installments là mảng toàn bộ các đợt thanh toán (mỗi đợt gồm name, amount bằng số nguyên, expected_pay_date dạng YYYY-MM-DD).\n"
-                . "   - KIỂM TRA BƯỚC TẠO SO / PIPELINE TRANSITION: Khi người dùng yêu cầu tạo SO hoặc chia đợt học phí cho học viên, hãy kiểm tra giai đoạn Pipeline hiện tại của học viên (qua tool search_contacts hoặc dữ liệu tra cứu ERP). Nếu học viên chưa đạt đến giai đoạn tạo SO (giai đoạn < 13, tức là chưa đến '13 – Deposit / Tuition Payment'):\n"
-                . "     + Bạn BẮT BUỘC chủ động nhắc người dùng một cách tinh tế: 'Dạ [Tên bạn] ơi, học viên [Tên KH] hiện đang ở giai đoạn \"[Tên giai đoạn hiện tại]\", chưa đến bước Tạo đơn SO / Đóng cọc (Giai đoạn 13 – Deposit / Tuition Payment). Bạn có muốn em hỗ trợ chuyển Pipeline sang \"13 – Deposit / Tuition Payment\" kèm ghi chú (note) gì không để em thực hiện luôn giúp mình nhé?'\n"
-                . "     + Đồng thời vẫn xuất thẻ hành động `<<<ACTION_PROPOSAL: {\"action_type\": \"sales_order\", ...}>>>` để người dùng có thể mở phiếu điền sẵn khi đã sẵn sàng.\n"
-                . "     + Khi người dùng đồng ý chuyển pipeline hoặc cập nhật ghi chú: Gọi ngay công cụ `update_contact_pipeline` hoặc `add_contact_consultation_note`!\n"
-                . "10. Yêu cầu bổ sung hồ sơ tuyển sinh: action_type: 'admission_document_request', params: {contact_id, student_name, program_code, missing_documents: ['Bằng ĐH', 'Bảng điểm', 'CCCD', 'CV', 'Ảnh 3x4'], deadline, notes}\n"
-                . "11. Đề xuất ký kết hợp đồng pháp lý: action_type: 'legal_contract', params: {contact_id, student_name, contract_type: 'Hợp đồng đào tạo EMBA', tuition_amount, payment_schedule, notes}\n"
-                . "12. Biên bản bàn giao tài sản thiết bị: action_type: 'asset_handover', params: {user_id, recipient_name, asset_name, asset_code, handover_date, condition: 'Mới 100%', notes}\n"
-                . "13. Khởi tạo chiến dịch Marketing: action_type: 'marketing_campaign', params: {campaign_name, channel: 'Facebook Ads', target_leads, estimated_budget, start_date, notes}\n"
-                . "14. Xuất dữ liệu / Trích xuất báo cáo ERP (1-Click Data Export):\n"
-                . "    Khi người dùng yêu cầu xuất dữ liệu, tải báo cáo, export file theo bất kỳ tiêu chí hay bộ lọc nào (ví dụ: 'xuất danh sách lead bị bỏ quên từ tuần trước', 'export học viên nợ học phí', 'xuất dữ liệu chấm công tháng này', 'xuất các khoản chi trên 10 triệu'):\n"
-                . "    - Bạn nắm toàn bộ cấu trúc CSDL MySQL và hệ thống tham số bộ lọc.\n"
-                . "    - BẮT BUỘC gọi ngay công cụ `draft_action_proposal` với:\n"
-                . "      action_type: 'export_data',\n"
-                . "      title: 'Tên báo cáo ngắn gọn (ví dụ: Xuất danh sách Lead chưa tương tác 7 ngày)',\n"
-                . "      summary: 'Tóm tắt các bộ lọc chính (ví dụ: Bộ lọc: Lead mới • 7 ngày chưa liên hệ • Toàn bộ chi nhánh)',\n"
-                . "      params_json: JSON string gồm: export_type (contact|deal|attendance|expense|task|inventory), title, estimated_count, filters_summary, download_url (hoặc các params search, status, lead_status, from, to, team_id để hệ thống tự tạo link).\n"
-                . "    - Người dùng sẽ thấy Thẻ Xuất Dữ Liệu đẹp mắt chuẩn ERP Tag và chỉ cần bấm nút 'Tải tệp Excel ngay' (hoặc click vào thẻ) là file được tải về tức thì!\n\n"
-                . "HỖ TRỢ ĐÍNH KÈM / LƯU FILE VÀO HỒ SƠ KHÁCH HÀNG CRM:\n"
-                . "• Khi người dùng gửi tệp tin, hình ảnh, tài liệu và nhắn yêu cầu như 'upload 2 file này lên hồ sơ cho khách hàng sđt ...', 'lưu file này vào hồ sơ học viên ...':\n"
-                . "  Gọi ngay công cụ `attach_files_to_contact` với số điện thoại hoặc tên của khách hàng trong tham số `contact_query`, chọn `category` phù hợp (mặc định: 'Hồ sơ học viên'). Công cụ sẽ tự động lưu các tệp đính kèm vừa gửi vào kho tài liệu `cloud_files` của khách hàng và thêm ghi chú lịch sử hồ sơ!\n\n"
-                . "HỖ TRỢ CẬP NHẬT HỒ SƠ KHÁCH HÀNG (PROFILE & NOTES):\n"
-                . "• Để cập nhật thông tin học viên (chức danh, công ty, địa chỉ, email, sđt...): Dùng công cụ `update_contact_profile`.\n"
-                . "• Để thêm ghi chú tư vấn/chăm sóc: Dùng công cụ `add_contact_consultation_note`.\n\n"
-                . "HỖ TRỢ ĐÀO SÂU & HỎI TỚI HỎI TỚI VỀ KHÁCH HÀNG 360° (CUSTOMER 360 DEEP-DIVE & TIẾN ĐỘ TƯ VẤN):\n"
-                . "• Khi người dùng hỏi đào sâu về bất kỳ khách hàng/học viên nào (ví dụ: 'Tư vấn đc gì r', 'Học viên này chăm sóc đến đâu rồi', 'Có ghi chú gì không', 'Gọi điện chưa', 'khách này từ lúc nào?', 'ai chăm sóc?'):\n"
-                . "  BẮT BUỘC gọi ngay công cụ `get_contact_360_profile` với số điện thoại, email hoặc tên khách hàng trong tham số `contact_query`.\n"
-                . "  Dữ liệu trả về sẽ tổng hợp đầy đủ 5 trụ cột:\n"
-                . "  (1) Thời điểm vào CRM & Nguồn tiếp thị (từ lúc nào, chiến dịch nào).\n"
-                . "  (2) Chuyên viên tư vấn phụ trách & Chi nhánh (ai chăm sóc, cộng tác viên nào).\n"
-                . "  (3) Toàn bộ lịch sử cuộc gọi, ghi chú tư vấn, chuyển pipeline chi tiết (nội dung cuộc gọi, thời lượng cuộc gọi, ai gọi lúc mấy giờ, ghi chú nộp hồ sơ hay chốt học...).\n"
-                . "  (4) Danh mục tài liệu/hồ sơ đã tải lên kho cloud_files (hồ sơ có những gì, loại file).\n"
-                . "  (5) Thẩm định pháp lý & điều kiện nhập học (chuẩn hết chưa, thiếu CCCD/Bằng cấp/Bảng điểm/CV tiếng Anh, tình trạng đặt cọc & hợp đồng).\n"
-                . "  Hãy đọc kỹ và trích dẫn trung thực từng mốc tương tác thực tế từ database, tuyệt đối không báo thiếu tiến độ nếu trong dòng thời gian đã có cuộc gọi hay ghi chú!\n\n"
-                . "HƯỚNG DẪN TRÌNH BÀY BIỂU ĐỒ MICRO-BI TRỰC QUAN (DYNAMIC CHARTS):\n"
-                . "• Khi người dùng hỏi về thống kê, so sánh, phân tích xu hướng, phễu tuyển sinh, cơ cấu thu chi, công nợ, hiệu suất:\n"
-                . "  Sau lời giải thích bằng lời, bạn BẮT BUỘC xuất thêm khối `<<<DYNAMIC_CHART: {...}>>>` để hệ thống tự động vẽ biểu đồ trực quan (Recharts) ngay trong tin nhắn!\n"
-                . "  Format chuẩn:\n"
-                . "  <<<DYNAMIC_CHART: {\n"
-                . "    \"type\": \"bar\" | \"line\" | \"pie\" | \"area\",\n"
-                . "    \"title\": \"Tiêu đề biểu đồ ngắn gọn\",\n"
-                . "    \"description\": \"Mô tả số liệu tóm tắt\",\n"
-                . "    \"xAxisKey\": \"name\",\n"
-                . "    \"data\": [\n"
-                . "      {\"name\": \"Tháng 7\", \"revenue\": 150000000, \"deposit\": 50000000},\n"
-                . "      {\"name\": \"Tháng 8\", \"revenue\": 190000000, \"deposit\": 75000000}\n"
-                . "    ],\n"
-                . "    \"series\": [\n"
-                . "      {\"dataKey\": \"revenue\", \"name\": \"Doanh thu\", \"color\": \"#6366f1\"},\n"
-                . "      {\"dataKey\": \"deposit\", \"name\": \"Thu cọc\", \"color\": \"#10b981\"}\n"
-                . "    ]\n"
-                . "  }>>>\n\n"
-                . "HƯỚNG DẪN GỢI Ý BƯỚC TIẾP THEO (NEXT BEST ACTIONS):\n"
-                . "• Ở cuối mọi câu trả lời hỗ trợ hoặc tư vấn công việc, BẮT BUỘC xuất thêm 2-4 nút gợi ý hành động logic tiếp theo qua khối `<<<NEXT_BEST_ACTIONS: [...]>>>`:\n"
-                . "  Format chuẩn:\n"
-                . "  <<<NEXT_BEST_ACTIONS: [\n"
-                . "    \"Hành động gợi ý 1\",\n"
-                . "    \"Hành động gợi ý 2\",\n"
-                . "    \"Hành động gợi ý 3\"\n"
-                . "  ]>>>\n"
-                . "  Khi người dùng click vào nút, hệ thống sẽ tự động gửi yêu cầu tiếp theo này cho bạn!\n\n"
-                . "HƯỚNG DẪN CẢNH BÁO CHỦ ĐỘNG & NÚT THẮT VẬN HÀNH (PROACTIVE INSIGHTS):\n"
-                . "• Nếu phát hiện rủi ro (học viên bị bỏ quên > 3 ngày, task quá hạn, phiếu phê duyệt kẹt > 48h, công nợ tới hạn):\n"
-                . "  Hãy nhắc nhở tinh tế và xuất thêm khối `<<<PROACTIVE_INSIGHT: {...}>>>`:\n"
-                . "  Format chuẩn:\n"
-                . "  <<<PROACTIVE_INSIGHT: {\n"
-                . "    \"type\": \"warning\" | \"opportunity\" | \"urgent\" | \"info\",\n"
-                . "    \"title\": \"Tiêu đề cảnh báo ngắn gọn\",\n"
-                . "    \"description\": \"Mô tả chi tiết nguyên nhân và rủi ro\",\n"
-                . "    \"actionPrompt\": \"Câu lệnh thực hiện khi người dùng click (ví dụ: Lọc danh sách lead trễ hạn)\",\n"
-                . "    \"actionLabel\": \"Nhãn nút bấm (ví dụ: Xem danh sách ngay)\"\n"
-                . "  }>>>\n\n"
-                . "PHƯƠNG PHÁP LẬP KẾ HOẠCH TỰ CHỦ & PHÂN RÃ CÔNG VIỆC (AUTONOMOUS REACT & AUTO-WBS):\n"
-                . "• Khi nhận nhiệm vụ chiến lược quy mô lớn (ví dụ: 'Lập kế hoạch tuyển sinh khóa EMBA tháng 11', 'Tổ chức hội thảo chuyển đổi số AI', 'Triển khai đào tạo in-house'):\n"
-                . "  Bạn KHÔNG chỉ trả lời sơ sài mà BẮT BUỘC phân rã thành Cấu trúc phân việc WBS (Work Breakdown Structure) gồm:\n"
-                . "  (1) Mục tiêu & KPI đo lường.\n"
-                . "  (2) Các giai đoạn (Phases) và Mốc thời gian (Milestones).\n"
-                . "  (3) Bảng phân công checklist chi tiết theo từng người phụ trách.\n"
-                . "  (4) ĐỒNG THỜI tạo ngay Thẻ Hành Động Giao Việc qua `draft_action_proposal` kèm danh sách subtask checklist để người dùng duyệt và kích hoạt!\n\n"
-                . "KHẢ NĂNG GHI NHỚ THÓI QUEN NGƯỜI DÙNG (EPISODIC MEMORY RECORDING):\n"
-                . "• Khi người dùng chia sẻ sở thích cá nhân, cách xưng hô mong muốn, hoặc trọng tâm công việc lâu dài:\n"
-                . "  Bạn có thể ghi nhớ bằng cách xuất khối `<<<SAVE_MEMORY: {\"key\": \"tên_khóa\", \"value\": \"nội_dung\", \"category\": \"preference\"|\"working_context\"}>>>` ở cuối câu trả lời (hệ thống sẽ tự động lưu vào bộ nhớ dài hạn và ẩn thẻ này khỏi màn hình chat).\n\n"
-                . $ragContextStr
+            $systemPrompt = "Bạn là SI IDEAS — Trợ lý AI điều hành thông minh tại hệ thống MYERP của Viện IDEAS.\n"
+                . "Hôm nay là: {$currentDateStr}. Bạn đang đồng hành cùng: {$userName} ({$userTitle}, Vai trò: {$userRole}).\n\n"
+                . "QUY CHUẨN XƯNG HÔ & PHONG CÁCH:\n"
+                . "• Xưng 'em' và gọi đúng TÊN ĐƠN của người chat là '{$cleanCallName}' (ví dụ: 'Dạ {$cleanCallName} ơi'). CẤM gọi ghép 'anh/chị {$userName}'.\n"
+                . "• Tone giọng ấm áp, chuyên nghiệp, tự nhiên, trả lời thẳng vào trọng tâm. Tránh máy móc rập khuôn. Khi dữ liệu nhiều, tóm tắt tổng số và trích xuất TOP 3-5 mục quan trọng nhất trước.\n\n"
+                . "TRI THỨC DOANH NGHIỆP (DYNAMIC RAG & VECTOR TRAINING):\n"
+                . "• Toàn bộ kiến thức về chương trình đào tạo, biểu phí, quy chế và kịch bản tư vấn được lấy động từ mục [KIẾN THỨC TỪ HUẤN LUYỆN AI DOANH NGHIỆP] bên dưới (trích xuất từ CSDL tri thức). Tuyệt đối không bịa đặt số liệu ngoài tài liệu.\n\n"
+                . "BẢO MẬT ZERO-TRUST & QUYỀN HẠN:\n"
+                . "• User ID: {$senderId}, Quyền: {$userRole}. Nhân sự chỉ xem và thao tác dữ liệu được phân công. Tuyệt đối không tiết lộ dữ liệu ngoài quyền hạn (quỹ tiền, lương người khác, khách của Sale khác).\n"
+                . "• THỰC THI TRỰC TIẾP (DIRECT EXECUTION): Với việc trong thẩm quyền (duyệt/từ chối đơn từ, cập nhật task/checklist, log CRM, điều phối lead), BẮT BUỘC gọi ngay công cụ thực thi (`approve_or_reject_erp_ticket`, `update_task_progress_and_status`, `complete_task_checklist_item`, `quick_log_crm_activity`, `reassign_lead_owner`). CẤM bảo người dùng tự đi thao tác.\n"
+                . "• ĐIỀU PHỐI VÒNG LEAD & BÙ DATA: BẮT BUỘC dùng `manage_lead_round_distribution`:\n"
+                . "  - Khi hỏi tình hình vòng / giao vòng nào: Gọi action 'get_round_load_audit'.\n"
+                . "  - Khi yêu cầu giao lead: Gọi action 'distribute_lead'.\n"
+                . "  - Khi bảo bù data (vd: 'bù cho Phúc 1 data vòng BBA'): Gọi action 'compensate_consultant'.\n"
+                . "  - Khi bật/tắt ca trực: Gọi action 'toggle_consultant_shift'.\n"
+                . "• THẺ HÀNH ĐỘNG ĐỀ XUẤT (SMART PROPOSAL): Với thao tác tạo mới / tài chính / hợp đồng / xuất file (tạo việc, tạo đơn nghỉ phép, tạm ứng, đề xuất chi PO, đơn SO đóng cọc, export Excel): Hãy gọi `draft_action_proposal` để điền sẵn 100% dữ liệu vào Thẻ Hành Động `<<<ACTION_PROPOSAL: {...}>>>` chuẩn ERP Tag để người dùng ấn mở và tự tay xác nhận lưu.\n"
+                . "  - Khi giao việc: Người tạo là {$cleanCallName}. Nếu trùng tên nhân sự, hãy hỏi lại để làm rõ.\n"
+                . "  - Khi tạo đơn SO: Kiểm tra pipeline học viên. Nếu chưa tới bước cọc/SO (< 13), hãy gợi ý chuyển pipeline kèm đề xuất đơn.\n\n"
+                . "ĐIỀU HÀNH THÔNG MINH & ĐỊNH DẠNG ERP TAGS:\n"
+                . "1. GỢI Ý BƯỚC TIẾP THEO (BẮT BUỘC Ở CUỐI MỌI CÂU TRẢ LỜI): Đính kèm `<<<NEXT_BEST_ACTIONS: [\"Gợi ý 1\", \"Gợi ý 2\", \"Gợi ý 3\"]>>>` (2-3 nút ngắn gọn 3-8 từ để user click 1 chạm).\n"
+                . "2. CẢNH BÁO CHỦ ĐỘNG: Khi phát hiện rủi ro (lead bỏ quên, task trễ hạn, đơn kẹt duyệt), đính kèm `<<<PROACTIVE_INSIGHT: {\"type\": \"warning|urgent|opportunity\", \"title\": \"...\", \"description\": \"...\", \"actionPrompt\": \"...\", \"actionLabel\": \"...\"}>>>`.\n"
+                . "3. BIỂU ĐỒ TRỰC QUAN MICRO-BI: Khi so sánh số liệu/xu hướng/phễu CRM, đính kèm `<<<DYNAMIC_CHART: {\"type\": \"bar|line|pie\", \"title\": \"...\", \"xAxisKey\": \"name\", \"data\": [...], \"series\": [...]}>>>`.\n"
+                . "4. GHI NHỚ THÓI QUEN: Đính kèm `<<<SAVE_MEMORY: {\"key\": \"...\", \"value\": \"...\", \"category\": \"preference|working_context\"}>>>` khi user chia sẻ sở thích làm việc.\n\n";
+
+            // Dynamic Multimodal Document / Contract Review (ONLY injected when file is present)
+            if (!empty($attachedFile)) {
+                $systemPrompt .= "NĂNG LỰC PHÂN TÍCH TÀI LIỆU & FILE ĐÍNH KÈM (MULTIMODAL INTELLIGENCE):\n"
+                    . "• Bạn đang nhận tệp đính kèm: '{$attachedFile['fileName']}'. Hãy phân tích sâu nội dung tệp tin:\n"
+                    . "  - Hợp đồng: Rà soát quyền/nghĩa vụ, học phí, cam kết, rủi ro pháp lý. Nếu là hợp đồng sale, bóc tách thông tin và đề xuất tạo đơn SO.\n"
+                    . "  - Brochure/Flyer/Slide: Đánh giá layout thị giác, USP chương trình, thông điệp truyền thông, gợi ý CTA và copywriting tối ưu.\n"
+                    . "  - Kế hoạch/Nội dung Marketing: Đánh giá Hook, Insight học viên, gợi ý A/B test ad copy cho các khóa EMBA, MBA, MSc AI, DBA.\n\n";
+            }
+
+            $systemPrompt .= $ragContextStr
                 . $ambientSnapshotStr
                 . $erpLookupStr
                 . $userMemoriesStr
@@ -4126,8 +3950,14 @@ class ChatController {
 
             // 2. Approvals stats
             $isGlobalAdmin = in_array(strtolower($role), ['admin', 'superadmin', 'super_admin', 'director'], true);
-            $stmtLv = $this->db->prepare("SELECT COUNT(1) FROM hrm_leave_requests WHERE status = 'pending' AND (user_id = ? OR approver_id = ? OR approver_id_2 = ? " . ($isGlobalAdmin ? "OR (approver_id IS NULL OR approver_id = 0)" : "") . ")");
-            $stmtLv->execute([$uid, $uid, $uid]);
+            $stmtLv = $this->db->prepare("
+                SELECT COUNT(1) 
+                FROM hrm_leave_requests l
+                JOIN users u ON l.user_id = u.id
+                WHERE u.tenant_id = ? AND l.status = 'pending' 
+                  AND (l.user_id = ? OR l.approver_id = ? OR l.approver_id_2 = ? " . ($isGlobalAdmin ? "OR (l.approver_id IS NULL OR l.approver_id = 0)" : "") . ")
+            ");
+            $stmtLv->execute([$tid, $uid, $uid, $uid]);
             $pendingLeaves = (int)$stmtLv->fetchColumn();
 
             $stmtExp = $this->db->prepare("SELECT COUNT(1) FROM expenses WHERE tenant_id = ? AND deleted_at IS NULL AND status = 'pending' AND (created_by = ? OR approver_id = ? OR approver_id_2 = ? OR approver_id_3 = ? " . ($isGlobalAdmin ? "OR (approver_id IS NULL OR approver_id = 0)" : "") . ")");
@@ -4288,10 +4118,10 @@ class ChatController {
             // 2. Pending approvals waiting > 48h
             $stmtAppr = $this->db->prepare("
                 SELECT 
-                    (SELECT COUNT(1) FROM hrm_leave_requests WHERE status = 'pending' AND created_at <= DATE_SUB(NOW(), INTERVAL 48 HOUR) AND (approver_id = ? OR approver_id_2 = ? " . ($isPrivileged ? "OR (approver_id IS NULL OR approver_id = 0)" : "") . ")) as pending_leave,
+                    (SELECT COUNT(1) FROM hrm_leave_requests l JOIN users u ON l.user_id = u.id WHERE u.tenant_id = ? AND l.status = 'pending' AND l.created_at <= DATE_SUB(NOW(), INTERVAL 48 HOUR) AND (l.approver_id = ? OR l.approver_id_2 = ? " . ($isPrivileged ? "OR (l.approver_id IS NULL OR l.approver_id = 0)" : "") . ")) as pending_leave,
                     (SELECT COUNT(1) FROM expenses WHERE tenant_id = ? AND deleted_at IS NULL AND status = 'pending' AND created_at <= DATE_SUB(NOW(), INTERVAL 48 HOUR) AND (approver_id = ? OR approver_id_2 = ? OR approver_id_3 = ? " . ($isPrivileged ? "OR (approver_id IS NULL OR approver_id = 0)" : "") . ")) as pending_expense
             ");
-            $stmtAppr->execute($isPrivileged ? [$userId, $userId, $tenantId, $userId, $userId, $userId] : [$userId, $userId, $tenantId, $userId, $userId, $userId]);
+            $stmtAppr->execute([$tenantId, $userId, $userId, $tenantId, $userId, $userId, $userId]);
             $apprRow = $stmtAppr->fetch(PDO::FETCH_ASSOC);
             $overdueApprs = ((int)($apprRow['pending_leave'] ?? 0)) + ((int)($apprRow['pending_expense'] ?? 0));
             if ($overdueApprs > 0) {
@@ -4314,16 +4144,18 @@ class ChatController {
                 $risks[] = "Có {$overdueTasks} công việc của bạn đã quá hạn chót (Deadline) cần xử lý hoặc gia hạn.";
             }
 
-            // 4. Overdue tuition installments (for accountant/admin/manager)
+            // 4. Overdue tuition orders with outstanding balances (for accountant/admin/manager)
             if ($isPrivileged) {
                 $stmtTuition = $this->db->prepare("
-                    SELECT COUNT(1) FROM sales_order_installments 
-                    WHERE is_paid = 0 AND expected_pay_date < CURDATE()
+                    SELECT COUNT(1) FROM sales_orders 
+                    WHERE tenant_id = ? AND payment_status IN ('unpaid', 'partial') 
+                      AND (status IS NULL OR status NOT IN ('cancelled', 'draft')) 
+                      AND (total - COALESCE(paid_amount, 0)) > 0
                 ");
-                $stmtTuition->execute();
+                $stmtTuition->execute([$tenantId]);
                 $overdueTuition = (int)$stmtTuition->fetchColumn();
                 if ($overdueTuition > 0) {
-                    $risks[] = "Có {$overdueTuition} đợt học phí đến hạn thanh toán chưa hoàn tất đối soát.";
+                    $risks[] = "Có {$overdueTuition} đơn hàng/học phí còn tồn đọng chưa thanh toán đủ hoặc đang chờ đối soát.";
                 }
             }
 
@@ -4573,7 +4405,7 @@ class ChatController {
                 }
 
                 if (!empty($eWhere)) {
-                    $sqlE = "SELECT e.id, e.title, e.amount, e.currency, e.vendor_name, e.status, u.full_name as creator_name
+                    $sqlE = "SELECT e.id, e.title, e.amount, e.vendor_name, e.status, u.full_name as creator_name
                              FROM expenses e
                              LEFT JOIN users u ON e.created_by = u.id
                              WHERE e.tenant_id = ? AND e.deleted_at IS NULL AND (" . implode(" OR ", $eWhere) . ")";
@@ -4590,7 +4422,7 @@ class ChatController {
                     $stmtE->execute($eParams);
                     $expenses = $stmtE->fetchAll(PDO::FETCH_ASSOC);
                     foreach ($expenses as $e) {
-                        $amt = number_format((float)$e['amount'], 0, ',', '.') . ' ' . ($e['currency'] ?: 'VND');
+                        $amt = number_format((float)$e['amount'], 0, ',', '.') . ' VND';
                         $vendor = $e['vendor_name'] ? " | Đơn vị thụ hưởng: {$e['vendor_name']}" : "";
                         $creator = $e['creator_name'] ? " | Người tạo: {$e['creator_name']}" : "";
                         $results[] = "💰 [Đề xuất chi #{$e['id']}]: {$e['title']} | Số tiền: {$amt} | Trạng thái: {$e['status']}{$vendor}{$creator}";
@@ -4938,6 +4770,159 @@ class ChatController {
     }
 
     /**
+     * DTO Slimming & Context Compacting for Gemini ReAct Loop
+     * Strips redundant metadata, nulls, oversized strings, and limits oversized arrays to save tokens.
+     */
+    private function compactToolResultForModel(mixed $data, int $depth = 0): mixed {
+        if ($depth > 5) {
+            return $data;
+        }
+
+        if (is_array($data)) {
+            $isAssoc = array_keys($data) !== range(0, count($data) - 1);
+
+            // If it's a huge sequential array (e.g. 50 items list), keep top 8 and add summary note
+            if (!$isAssoc && count($data) > 8) {
+                $totalCount = count($data);
+                $sliced = array_slice($data, 0, 8);
+                $compactedList = [];
+                foreach ($sliced as $item) {
+                    $compactedList[] = $this->compactToolResultForModel($item, $depth + 1);
+                }
+                $compactedList[] = [
+                    '_summary' => "Đã hiển thị 8 bản ghi tiêu biểu nhất trong tổng số {$totalCount} bản ghi thực tế."
+                ];
+                return $compactedList;
+            }
+
+            $cleaned = [];
+            $ignoredKeys = [
+                'avatar', 'avatar_url', 'deleted_at', 'password', 'password_hash', 
+                'token', 'access_token', 'refresh_token', 'secret', 'system_token',
+                'raw_query', 'system_logs'
+            ];
+
+            foreach ($data as $k => $v) {
+                if (is_string($k) && in_array(strtolower($k), $ignoredKeys, true)) {
+                    continue;
+                }
+
+                // Remove null or empty string values in associative arrays to cut token footprint
+                if ($isAssoc && ($v === null || $v === '')) {
+                    continue;
+                }
+
+                $cleaned[$k] = $this->compactToolResultForModel($v, $depth + 1);
+            }
+            return $cleaned;
+        }
+
+        if (is_string($data)) {
+            // Trim excessive text length (over 1000 chars) in tool returns to prevent token bloat
+            if (mb_strlen($data) > 1000) {
+                return mb_substr($data, 0, 1000) . '... [Dữ liệu tiếp theo đã được rút gọn để tối ưu token]';
+            }
+            return $data;
+        }
+
+        return $data;
+    }
+
+    /**
+     * AI Semantic Micro-Router for Multi-Agent Swarm (Zero Regex / Pure Agentic)
+     * Ultra-fast ~180ms classifier that maps user query intent into domain and tool requirements.
+     */
+    private function routeQueryWithAiMicroRouter(string $userQuery, string $apiKey, string $model): array {
+        $safeFallback = [
+            'intent_type' => 'database_action',
+            'primary_domain' => null,
+            'requires_tools' => true,
+            'is_multi_domain' => true,
+            'reasoning' => 'Fallback safe default'
+        ];
+
+        if (empty($userQuery) || empty($apiKey)) {
+            return $safeFallback;
+        }
+
+        $systemPrompt = "Bạn là AI Semantic Router tối cao của hệ thống MYERP (Viện IDEAS).\n"
+            . "Nhiệm vụ: Phân tích câu hỏi/yêu cầu của người dùng để phân loại Ý định (Intent) và Phân hệ nghiệp vụ (Domain).\n"
+            . "11 Phân hệ nghiệp vụ chuyên trách:\n"
+            . "- 'sales': Quản lý Lead, CRM, tư vấn tuyển sinh, phân bổ lead, vòng xoay chia số, bù data cho Sale, trùng lead, lịch hẹn gọi lại, chốt deal.\n"
+            . "- 'finance': Thu chi, học phí, công nợ học viên, phiếu thu, phiếu chi, đặt cọc, tạm ứng, dòng tiền, SO/PO.\n"
+            . "- 'hrm': Nhân sự, chấm công, nghỉ phép, giải trình, bảng lương, phiếu lương, danh bạ nhân sự, duyệt đơn từ.\n"
+            . "- 'tasks': Công việc cá nhân, tiến độ, deadline, checklist, giao việc, dự án.\n"
+            . "- 'academic': Chương trình đào tạo (EMBA, MBA, MSc AI, DBA), môn học, thời khóa biểu, lịch khai giảng, giảng viên.\n"
+            . "- 'records_legal': Hồ sơ nhập học (CCCD, bằng cấp, bảng điểm), tính hợp lệ, pháp lý, hợp đồng đào tạo.\n"
+            . "- 'assets_inventory': Tồn kho, ấn phẩm, quà tặng, balo, áo polo, tài sản, laptop thiết bị bàn giao.\n"
+            . "- 'b2b_partner': Khách hàng doanh nghiệp, đối tác B2B, thỏa thuận hợp tác, đào tạo in-house.\n"
+            . "- 'marketing_campaigns': Chiến dịch tiếp thị, quảng cáo Ads, CPL, CAC, nguồn lead tuyển sinh.\n"
+            . "- 'executive_bi': Báo cáo tổng hợp P&L, dòng tiền ròng, KPI toàn viện, sức khỏe tài chính Ban Giám Đốc.\n"
+            . "- 'system_it': Lỗi phần mềm, ticket CNTT, giám sát SLA vi phạm, hạ tầng kỹ thuật.\n\n"
+            . "Phân loại intent_type:\n"
+            . "- 'conversational': Lời chào, cảm ơn, khen ngợi, tạm biệt, trò chuyện xã giao.\n"
+            . "- 'knowledge_qa': Hỏi thông tin chung, quy chế, chính sách, học phí niêm yết, kiến thức đào tạo (không yêu cầu tra cứu dữ liệu động người cụ thể).\n"
+            . "- 'database_action': Tra cứu hoặc thao tác dữ liệu cụ thể (khách hàng, học viên, nhân sự, phiếu thu, task cụ thể), tạo đơn từ, đề xuất hành động.\n"
+            . "- 'cross_domain': Yêu cầu phức tạp đan xen nhiều phân hệ khác nhau.\n\n"
+            . "QUY TẮC:\n"
+            . "- requires_tools: false nếu là 'conversational' hoặc 'knowledge_qa' thuần túy; true nếu là 'database_action' hoặc 'cross_domain'.\n"
+            . "- is_multi_domain: true nếu câu hỏi liên quan từ 2 phân hệ trở lên.\n"
+            . "Trả về duy nhất 1 JSON object chuẩn, không kèm markdown backticks:\n"
+            . "{\"intent_type\": \"conversational\"|\"knowledge_qa\"|\"database_action\"|\"cross_domain\", \"primary_domain\": \"sales\"|\"finance\"|\"hrm\"|\"tasks\"|\"academic\"|\"records_legal\"|\"assets_inventory\"|\"b2b_partner\"|\"marketing_campaigns\"|\"executive_bi\"|\"system_it\"|\"none\", \"requires_tools\": boolean, \"is_multi_domain\": boolean, \"reasoning\": \"lý do ngắn gọn\"}";
+
+        $payload = [
+            'systemInstruction' => [
+                'parts' => [
+                    ['text' => $systemPrompt]
+                ]
+            ],
+            'contents' => [
+                [
+                    'role' => 'user',
+                    'parts' => [
+                        ['text' => "Yêu cầu cần phân loại: \"" . mb_substr($userQuery, 0, 500) . "\""]
+                    ]
+                ]
+            ],
+            'generationConfig' => [
+                'temperature' => 0.1,
+                'maxOutputTokens' => 180,
+                'responseMimeType' => 'application/json'
+            ]
+        ];
+
+        $routerUrl = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key=" . urlencode($apiKey);
+
+        $ch = curl_init($routerUrl);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload, JSON_UNESCAPED_UNICODE));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+
+        $resp = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode === 200 && $resp) {
+            $json = json_decode($resp, true);
+            $rawText = $json['candidates'][0]['content']['parts'][0]['text'] ?? '';
+            if (!empty($rawText)) {
+                $cleanJson = trim(preg_replace('/^```(?:json)?|```$/m', '', $rawText));
+                $parsed = json_decode($cleanJson, true);
+                if (is_array($parsed) && isset($parsed['intent_type'])) {
+                    return $parsed;
+                }
+            }
+        }
+
+        error_log("AI Semantic Micro-Router fallback activated (HTTP $httpCode)");
+        return $safeFallback;
+    }
+
+    /**
      * Call Gemini 3.5 Flash Lite via Google Generative Language REST API
      * Supports Autonomous Two-Way Tool Loop (Function Calling) with Zero-Trust RBAC
      */
@@ -4979,6 +4964,19 @@ class ChatController {
                 }
 
                 $msgText = trim($msg['content'] ?? '');
+
+                // Historical Context Compaction: For previous assistant messages,
+                // replace giant UI widget JSON blocks (charts, action proposals, next best actions, memories)
+                // with compact summaries to save thousands of tokens on every chat turn!
+                if ($role === 'model' && $idx < $historyCount - 1 && !empty($msgText)) {
+                    $msgText = preg_replace('/<<<DYNAMIC_CHART:\s*[\s\S]*?>>>/', '[Đã hiển thị biểu đồ trực quan]', $msgText);
+                    $msgText = preg_replace('/<<<ACTION_PROPOSAL:\s*[\s\S]*?>>>/', '[Đã xuất thẻ hành động điền sẵn]', $msgText);
+                    $msgText = preg_replace('/<<<PROACTIVE_INSIGHT:\s*[\s\S]*?>>>/', '', $msgText);
+                    $msgText = preg_replace('/<<<NEXT_BEST_ACTIONS:\s*[\s\S]*?>>>/', '', $msgText);
+                    $msgText = preg_replace('/<<<SAVE_MEMORY:\s*[\s\S]*?>>>/', '', $msgText);
+                    $msgText = trim(preg_replace('/\n{3,}/', "\n\n", $msgText));
+                }
+
                 if (!empty($msgText)) {
                     $parts[] = ['text' => $msgText];
                 } elseif (empty($parts)) {
@@ -5000,44 +4998,8 @@ class ChatController {
             // ==========================================
             require_once __DIR__ . '/AgentToolRegistry.php';
 
-            $activeAgentId = $authContext['metadata']['active_agent_id'] ?? null;
-            if (empty($activeAgentId)) {
-                $lastMsgText = '';
-                foreach ($contents as $c) {
-                    if (($c['role'] ?? '') === 'user') {
-                        foreach ($c['parts'] ?? [] as $p) {
-                            if (!empty($p['text'])) $lastMsgText = $p['text'];
-                        }
-                    }
-                }
-                $qLower = mb_strtolower($lastMsgText);
-                if (preg_match('/(lead|khách hàng|crm|tư vấn|chốt sale|bỏ quên|ngâm lead|tỷ lệ chốt|fair share|vòng chia|lịch hẹn|gọi lại|đặt lịch|nhắc hẹn|cuộc hẹn|trùng lead|ai đang chăm|sđt này|khách này có chưa|tranh chấp|giao cho ai|tiến độ chăm|chăm sóc)/iu', $qLower)) {
-                    $activeAgentId = 'sales';
-                } elseif (preg_match('/(chi phí|phiếu chi|po|phiếu thu|so|cọc|đặt cọc|học phí|tiền|dòng tiền|tạm ứng|ngân sách|công nợ|nợ học phí|tiền vào|chuyển khoản|vừa nhận|đối soát|biên lai)/iu', $qLower)) {
-                    $activeAgentId = 'finance';
-                } elseif (preg_match('/(chấm công|nghỉ phép|phép năm|giải trình|quên chấm|bảng lương|lương|phê duyệt|ai đang giữ đơn|kẹt đơn|sao chưa duyệt)/iu', $qLower)) {
-                    $activeAgentId = 'hrm';
-                } elseif (preg_match('/(task|công việc|kế hoạch|việc con|subtask|tiến độ|deadline|giao việc)/iu', $qLower)) {
-                    $activeAgentId = 'tasks';
-                } elseif (preg_match('/(emba|mba|msc ai|dba|tín chỉ|luận văn|đào tạo|xét tuyển|học viện|istec|umef|lịch học|thời khóa biểu|thứ mấy học|thầy nào dạy|giảng viên nào|môn tiếp theo)/iu', $qLower)) {
-                    $activeAgentId = 'academic';
-                } elseif (preg_match('/(hồ sơ|bằng cấp|bảng điểm|dịch thuật|công chứng|cccd|hợp đồng|pháp lý|chuẩn hết chưa|thiếu giấy tờ)/iu', $qLower)) {
-                    $activeAgentId = 'records_legal';
-                } elseif (preg_match('/(kho|tồn kho|ấn phẩm|quà tặng|balo|áo polo|tài sản|thiết bị|bàn giao laptop)/iu', $qLower)) {
-                    $activeAgentId = 'assets_inventory';
-                } elseif (preg_match('/(doanh nghiệp|đối tác|b2b|công ty đối tác|thỏa thuận|mã số thuế)/iu', $qLower)) {
-                    $activeAgentId = 'b2b_partner';
-                } elseif (preg_match('/(marketing|chiến dịch|nguồn lead|cpl|cac|ads|quảng cáo|facebook ads|google ads)/iu', $qLower)) {
-                    $activeAgentId = 'marketing_campaigns';
-                } elseif (preg_match('/(p&l|doanh thu tổng|dòng tiền ròng|báo cáo giám đốc|kpi toàn viện)/iu', $qLower)) {
-                    $activeAgentId = 'executive_bi';
-                } elseif (preg_match('/(kỹ thuật|hệ thống|lỗi app|webhook|cronjob|ticket|khiếu nại|sla|trễ hạn)/iu', $qLower)) {
-                    $activeAgentId = 'system_it';
-                }
-            }
-
             $agentToolMap = [
-                'sales' => ['get_contact_360_profile', 'search_contacts', 'check_lead_duplicate_and_fairshare_status', 'schedule_contact_activity', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'lookup_recent_cash_receipts_and_deposits', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'quick_log_crm_activity', 'reassign_lead_owner', 'get_company_staff_directory', 'draft_action_proposal', 'get_system_navigation'],
+                'sales' => ['get_contact_360_profile', 'search_contacts', 'check_lead_duplicate_and_fairshare_status', 'schedule_contact_activity', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'manage_lead_round_distribution', 'lookup_recent_cash_receipts_and_deposits', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'quick_log_crm_activity', 'reassign_lead_owner', 'get_company_staff_directory', 'draft_action_proposal', 'get_system_navigation'],
                 'finance' => ['get_contact_financial_summary', 'lookup_recent_cash_receipts_and_deposits', 'get_my_payment_proposals', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'approve_or_reject_erp_ticket', 'draft_action_proposal', 'get_system_navigation'],
                 'hrm' => ['get_company_staff_directory', 'get_company_leave_and_absence', 'get_my_attendance_summary', 'get_my_payslip', 'get_pending_approvals', 'trace_approval_blocker', 'approve_or_reject_erp_ticket', 'update_task_progress_and_status', 'draft_action_proposal', 'get_system_navigation'],
                 'tasks' => ['get_my_tasks', 'get_task_detail', 'get_company_staff_directory', 'schedule_contact_activity', 'update_task_progress_and_status', 'complete_task_checklist_item', 'draft_action_proposal', 'get_system_navigation'],
@@ -5046,23 +5008,56 @@ class ChatController {
                 'assets_inventory' => ['get_inventory_and_asset_status', 'draft_action_proposal', 'get_system_navigation'],
                 'b2b_partner' => ['get_b2b_partner_and_contract_summary', 'draft_action_proposal', 'get_system_navigation'],
                 'marketing_campaigns' => ['get_campaign_marketing_stats', 'get_active_projects_and_campaigns', 'draft_action_proposal', 'get_system_navigation'],
-                'executive_bi' => ['get_executive_financial_pulse', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'lookup_recent_cash_receipts_and_deposits', 'get_system_health_status', 'approve_or_reject_erp_ticket', 'update_task_progress_and_status', 'reassign_lead_owner', 'draft_action_proposal', 'get_system_navigation'],
-                'system_it' => ['get_system_health_status', 'get_ticket_status_and_sla_breaches', 'get_system_navigation']
+                'executive_bi' => ['get_executive_financial_pulse', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'lookup_recent_cash_receipts_and_deposits', 'get_system_health_status', 'manage_lead_round_distribution', 'approve_or_reject_erp_ticket', 'update_task_progress_and_status', 'reassign_lead_owner', 'draft_action_proposal', 'get_system_navigation'],
+                'system_it' => ['get_system_health_status', 'get_ticket_status_and_sla_breaches', 'draft_action_proposal', 'get_system_navigation']
             ];
 
-            // If user explicitly chose a sub-agent persona in UI tabs, scope to that agent + essentials.
-            // If user is in general WorkChat / Master Agent, provide the complete swarm tools (null)
-            // so cross-departmental queries (e.g. Sales + Academic + Finance + Task) resolve with 100% precision!
+            // 1. Check if user explicitly chose a sub-agent persona in UI tabs
             $explicitAgentId = $authContext['metadata']['active_agent_id'] ?? null;
-            $scopedTools = ($explicitAgentId && isset($agentToolMap[$explicitAgentId])) ? $agentToolMap[$explicitAgentId] : null;
-            $tools = AgentToolRegistry::getGeminiToolsDeclaration($scopedTools);
-
-            // Performance Fast-Path: If user input is pure conversational greeting / acknowledgment, omit tools to cut latency in half
+            $tools = null;
             $isPureConversational = false;
-            if (empty($attachedFile) && count($contents) <= 2 && !empty($lastMsgText)) {
+
+            if (!empty($explicitAgentId) && isset($agentToolMap[$explicitAgentId])) {
+                // Scoped directly to the UI-selected sub-agent
+                $tools = AgentToolRegistry::getGeminiToolsDeclaration($agentToolMap[$explicitAgentId]);
+            } else {
+                // Extract last user message for AI Semantic Micro-Routing
+                $lastMsgText = '';
+                foreach ($contents as $c) {
+                    if (($c['role'] ?? '') === 'user') {
+                        foreach ($c['parts'] ?? [] as $p) {
+                            if (!empty($p['text'])) $lastMsgText = $p['text'];
+                        }
+                    }
+                }
+
+                // 2. Zero-latency pre-check for trivial 1-word greetings/acknowledgments
                 $trimmedMsg = mb_strtolower(trim($lastMsgText));
-                if (in_array($trimmedMsg, ['chào', 'chào bạn', 'chào em', 'hello', 'hi', 'hi bạn', 'xin chào', 'cảm ơn', 'cảm ơn em', 'cảm ơn bạn', 'thanks', 'tks', 'thank you', 'bye', 'tạm biệt', 'ok', 'oke', 'ok em', 'ok bạn', 'tuyệt vời', 'tuyệt'], true)) {
+                if (empty($attachedFile) && count($contents) <= 2 && in_array($trimmedMsg, ['chào', 'chào bạn', 'chào em', 'hello', 'hi', 'hi bạn', 'xin chào', 'cảm ơn', 'cảm ơn em', 'cảm ơn bạn', 'thanks', 'tks', 'thank you', 'bye', 'tạm biệt', 'ok', 'oke', 'ok em', 'ok bạn', 'tuyệt vời', 'tuyệt'], true)) {
                     $isPureConversational = true;
+                    $tools = null;
+                } else {
+                    // 3. AI SEMANTIC MICRO-ROUTER (ZERO REGEX / 100% LLM INTENT PARSER)
+                    $routeDecision = $this->routeQueryWithAiMicroRouter($lastMsgText, $apiKey, $model);
+                    $intentType = $routeDecision['intent_type'] ?? 'database_action';
+                    $primaryDomain = $routeDecision['primary_domain'] ?? null;
+                    $isMultiDomain = (bool)($routeDecision['is_multi_domain'] ?? false);
+                    $requiresTools = (bool)($routeDecision['requires_tools'] ?? true);
+
+                    if ($intentType === 'conversational' || !$requiresTools) {
+                        // Conversational or pure General Policy/Training Q&A: answered directly from System Prompt / RAG without tools
+                        $isPureConversational = ($intentType === 'conversational');
+                        $tools = null;
+                    } elseif ($isMultiDomain || $intentType === 'cross_domain' || empty($primaryDomain) || $primaryDomain === 'none') {
+                        // Cross-departmental multi-domain request: Full Swarm 43 tools
+                        $tools = AgentToolRegistry::getGeminiToolsDeclaration(null);
+                    } elseif (isset($agentToolMap[$primaryDomain])) {
+                        // Single-domain focused: Prune to specialized agent + 10 essential tools
+                        $tools = AgentToolRegistry::getGeminiToolsDeclaration($agentToolMap[$primaryDomain]);
+                    } else {
+                        // Safe fallback: Full Swarm 43 tools
+                        $tools = AgentToolRegistry::getGeminiToolsDeclaration(null);
+                    }
                 }
             }
 
@@ -5177,13 +5172,16 @@ class ChatController {
                     $this->autoRecordEntityFromTool($ctxUid, $ctxTid, $toolName, $toolArgs, $toolResult);
                 }
 
+                // DTO Slimming & Context Compacting before passing back into Gemini ReAct loop
+                $compactResult = $this->compactToolResultForModel($toolResult);
+
                 // Append Model Function Call Turn
                 $contents[] = $candidate['content'];
 
                 // Append User Function Response Turn
                 $functionResponseData = [
                     'name' => $toolName,
-                    'response' => (object)$toolResult
+                    'response' => (object)$compactResult
                 ];
                 if (!empty($functionCallPart['id'])) {
                     $functionResponseData['id'] = $functionCallPart['id'];
@@ -5208,7 +5206,15 @@ class ChatController {
                     'update_task_progress_and_status',
                     'complete_task_checklist_item',
                     'quick_log_crm_activity',
-                    'reassign_lead_owner'
+                    'reassign_lead_owner',
+                    'distribute_lead',
+                    'compensate_consultant',
+                    'toggle_consultant_shift',
+                    'update_contact_pipeline',
+                    'add_contact_consultation_note',
+                    'attach_files_to_contact',
+                    'update_contact_profile',
+                    'schedule_contact_activity'
                 ], true);
 
                 if ($isTerminalAction || $toolTurn >= ($maxToolTurns - 1)) {
@@ -5352,6 +5358,7 @@ class ChatController {
                 return;
             }
 
+            $tid = (int)($auth['tenant_id'] ?? 1);
             $onlyGaps = isset($_GET['only_gaps']) && $_GET['only_gaps'] === '1';
             $limit = min(100, max(10, (int)($_GET['limit'] ?? 50)));
 
@@ -5359,26 +5366,29 @@ class ChatController {
                 SELECT l.*, u.full_name AS user_name
                 FROM ai_query_audit_logs l
                 LEFT JOIN users u ON l.user_id = u.id
-                WHERE 1=1
+                WHERE l.tenant_id = ?
             ";
+            $params = [$tid];
             if ($onlyGaps) {
                 $sql .= " AND l.needs_training = 1";
             }
             $sql .= " ORDER BY l.id DESC LIMIT " . (int)$limit;
 
             $stmt = $this->db->prepare($sql);
-            $stmt->execute();
+            $stmt->execute($params);
             $logs = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-            // Compute summary statistics
-            $stmtStats = $this->db->query("
+            // Compute summary statistics for this tenant
+            $stmtStats = $this->db->prepare("
                 SELECT 
                     COUNT(*) AS total_queries,
                     SUM(CASE WHEN needs_training = 1 THEN 1 ELSE 0 END) AS total_gaps,
                     SUM(CASE WHEN has_action_proposal = 1 THEN 1 ELSE 0 END) AS total_action_proposals,
                     SUM(CASE WHEN fallback_triggered = 1 THEN 1 ELSE 0 END) AS total_fallbacks
                 FROM ai_query_audit_logs
+                WHERE tenant_id = ?
             ");
+            $stmtStats->execute([$tid]);
             $stats = $stmtStats->fetch(PDO::FETCH_ASSOC) ?: [];
 
             respond(200, [

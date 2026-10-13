@@ -305,7 +305,7 @@ class PurchaseOrderController {
                     foreach ($relIds as $rUserId) {
                         if ($rUserId !== (int)$auth['user_id'] && $rUserId !== $approver_id) {
                             $stmtNotif = $this->db->prepare("
-                                INSERT INTO notifications (tenant_id, user_id, title, message, link, type, is_read, created_at)
+                                INSERT INTO notifications (tenant_id, user_id, title, body, link, type, is_read, created_at)
                                 VALUES (?, ?, ?, ?, ?, 'purchase_order', 0, NOW())
                             ");
                             $creatorName = !empty($auth['full_name']) ? $auth['full_name'] : 'Thành viên hệ thống';
