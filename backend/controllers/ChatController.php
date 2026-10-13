@@ -4683,7 +4683,11 @@ class ChatController {
                 'system_it' => ['get_system_health_status', 'get_ticket_status_and_sla_breaches', 'get_system_navigation']
             ];
 
-            $scopedTools = ($activeAgentId && isset($agentToolMap[$activeAgentId])) ? $agentToolMap[$activeAgentId] : null;
+            // If user explicitly chose a sub-agent persona in UI tabs, scope to that agent + essentials.
+            // If user is in general WorkChat / Master Agent, provide the complete swarm tools (null)
+            // so cross-departmental queries (e.g. Sales + Academic + Finance + Task) resolve with 100% precision!
+            $explicitAgentId = $authContext['metadata']['active_agent_id'] ?? null;
+            $scopedTools = ($explicitAgentId && isset($agentToolMap[$explicitAgentId])) ? $agentToolMap[$explicitAgentId] : null;
             $tools = AgentToolRegistry::getGeminiToolsDeclaration($scopedTools);
 
             $payload = [
@@ -4811,8 +4815,17 @@ class ChatController {
                 $payload['contents'] = $contents;
 
                 // Check if this tool execution completes the chain:
-                // If draft_action_proposal was called OR we reached the max turns limit, force mode to NONE and stream the final synthesis!
-                if ($toolName === 'draft_action_proposal' || $toolTurn >= ($maxToolTurns - 1)) {
+                // If an action or terminal tool was executed OR we reached the max turns limit, force mode to NONE and stream the final synthesis!
+                $isTerminalAction = in_array($toolName, [
+                    'draft_action_proposal',
+                    'approve_or_reject_erp_ticket',
+                    'update_task_progress_and_status',
+                    'complete_task_checklist_item',
+                    'quick_log_crm_activity',
+                    'reassign_lead_owner'
+                ], true);
+
+                if ($isTerminalAction || $toolTurn >= ($maxToolTurns - 1)) {
                     $payload['toolConfig'] = [
                         'functionCallingConfig' => [
                             'mode' => 'NONE'

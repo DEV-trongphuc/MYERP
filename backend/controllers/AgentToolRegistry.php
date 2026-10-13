@@ -910,7 +910,18 @@ class AgentToolRegistry {
                 ];
 
         if ($allowedToolNames !== null && !empty($allowedToolNames)) {
-            $essential = ['draft_action_proposal', 'get_system_navigation'];
+            $essential = [
+                'draft_action_proposal',
+                'get_system_navigation',
+                'get_company_staff_directory',
+                'get_my_tasks',
+                'get_pending_approvals',
+                'approve_or_reject_erp_ticket',
+                'update_task_progress_and_status',
+                'complete_task_checklist_item',
+                'quick_log_crm_activity',
+                'reassign_lead_owner'
+            ];
             $effectiveAllowed = array_unique(array_merge($allowedToolNames, $essential));
 
             $filtered = [];
