@@ -10,10 +10,8 @@ class AgentToolRegistry {
     /**
      * Get OpenAPI-compliant tools schema declaration for Google Gemini API
      */
-    public static function getGeminiToolsDeclaration(): array {
-        return [
-            [
-                'functionDeclarations' => [
+    public static function getGeminiToolsDeclaration(?array $allowedToolNames = null): array {
+        $declarations = [
                     [
                         'name' => 'get_my_tasks',
                         'description' => 'Tra cứu công việc/nhiệm vụ của người dùng hiện tại trên Bàn làm việc (Workspace). Trích xuất đầy đủ thông tin: tiêu đề, mô tả chi tiết, hạn chót, tiến độ %, trạng thái, mức độ ưu tiên, người phụ trách, người giao việc, nhóm việc, checklist tóm tắt.',
@@ -557,10 +555,133 @@ class AgentToolRegistry {
                                 ]
                             ]
                         ]
+                    ],
+                    [
+                        'name' => 'get_sales_performance_and_stale_leads',
+                        'description' => 'Tra cứu hiệu suất tư vấn CRM, tỷ lệ chuyển đổi tuyển sinh, và phát hiện danh sách khách hàng tiềm năng/học viên (Lead) đang bị "bỏ quên" (quá 3 - 5 ngày không có ghi chú chăm sóc hoặc tương tác), giúp Sale và Quản lý nắm bắt ngay các cơ hội sắp nguội lạnh.',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'days_threshold' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Số ngày không có ghi chú tương tác để xếp vào diện bỏ quên (mặc định 3 ngày, tối thiểu 1, tối đa 30)'
+                                ],
+                                'assigned_to' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Mã user ID của nhân viên sale nếu quản lý muốn lọc riêng (để trống nếu xem cá nhân/toàn viện)'
+                                ],
+                                'limit' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Số lượng lead bỏ quên cần hiển thị mẫu chi tiết (mặc định 5, tối đa 20)'
+                                ]
+                            ]
+                        ]
+                    ],
+                    [
+                        'name' => 'get_upcoming_tuition_receivables',
+                        'description' => 'Tra cứu các khoản công nợ học phí và đơn hàng bán (sales_orders) còn tồn đọng chưa thanh toán đủ hoặc đang đóng theo đợt (payment_status != paid), trích xuất tổng công nợ phải thu, số tiền đã thu, và danh sách học viên cần đôn đốc thu hồi học phí.',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'limit' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Số lượng đơn hàng/khoản phải thu lớn nhất cần hiển thị (mặc định 5, tối đa 20)'
+                                ],
+                                'contact_id' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Mã ID học viên nếu muốn kiểm tra công nợ của riêng 1 học viên cụ thể'
+                                ]
+                            ]
+                        ]
+                    ],
+                    [
+                        'name' => 'trace_approval_blocker',
+                        'description' => 'Truy vết nút thắt phê duyệt (Approval Blocker) chuyên sâu: Khi người dùng thắc mắc đơn đề xuất chi tiêu (PO), tạm ứng công tác, hoặc đơn xin nghỉ phép gửi nhiều ngày rồi chưa xong, công cụ chỉ mặt đặt tên chính xác ai là người duyệt hiện tại (cấp 1, cấp 2), chức vụ, phòng ban, và đơn đã nộp bao nhiêu giờ/ngày.',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'item_type' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['all', 'expense', 'advance', 'leave'],
+                                    'description' => 'Loại đơn phê duyệt cần truy vết nút thắt (mặc định: all)'
+                                ],
+                                'item_id' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Mã ID cụ thể của đơn cần tra cứu nút thắt (nếu biết)'
+                                ],
+                                'limit' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Số lượng đơn kẹt cần phân tích (mặc định 5, tối đa 15)'
+                                ]
+                            ]
+                        ]
+                    ],
+                    [
+                        'name' => 'get_ticket_status_and_sla_breaches',
+                        'description' => 'Tra cứu tình trạng các ticket khiếu nại, phản ánh và hỗ trợ học viên/nội bộ, tự động phát hiện các ticket bị vi phạm cam kết thời gian phản hồi SLA (Urgent > 12h, High > 24h, Normal > 48h chưa xử lý xong) để điều phối kịp thời.',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'status' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['all_open', 'breached_only', 'all'],
+                                    'description' => 'Bộ lọc trạng thái ticket (mặc định: breached_only để bắt các sự cố trễ hạn SLA)'
+                                ],
+                                'limit' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Số lượng ticket cần hiển thị (mặc định 5, tối đa 15)'
+                                ]
+                            ]
+                        ]
+                    ],
+                    [
+                        'name' => 'get_b2b_partner_and_contract_summary',
+                        'description' => 'Tra cứu đối tác doanh nghiệp B2B, hợp đồng hợp tác đào tạo và các cơ hội kinh doanh liên kết (deals), kiểm tra ngành nghề, quy mô, đầu mối phụ trách và tình trạng hợp đồng.',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'keyword' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tên doanh nghiệp, mã số thuế hoặc ngành nghề'
+                                ],
+                                'limit' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Số lượng doanh nghiệp cần hiển thị (mặc định 5, tối đa 15)'
+                                ]
+                            ]
+                        ]
+                    ],
+                    [
+                        'name' => 'get_consultant_shift_and_fairshare_audit',
+                        'description' => 'Tra cứu vòng phân bổ lead (rounds), ca trực tư vấn và kiểm toán phân chia cơ hội học viên công bằng (Fair Share Audit) giữa các tư vấn viên trong đội ngũ kinh doanh.',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'team_id' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Mã ID nhóm bán hàng hoặc vòng phân bổ (nếu muốn lọc)'
+                                ]
+                            ]
+                        ]
                     ]
-                ]
-            ]
-        ];
+                ];
+
+        if ($allowedToolNames !== null && !empty($allowedToolNames)) {
+            $essential = ['draft_action_proposal', 'get_system_navigation'];
+            $effectiveAllowed = array_unique(array_merge($allowedToolNames, $essential));
+
+            $filtered = [];
+            foreach ($declarations as $dec) {
+                if (in_array($dec['name'], $effectiveAllowed, true)) {
+                    $filtered[] = $dec;
+                }
+            }
+            if (!empty($filtered)) {
+                return [['functionDeclarations' => $filtered]];
+            }
+        }
+
+        return [['functionDeclarations' => $declarations]];
     }
 
     /**
@@ -3217,6 +3338,604 @@ class AgentToolRegistry {
                         'suggested_next_steps' => count($missingItems) > 0
                             ? "Khởi tạo Thẻ Hành Động 'admission_document_request' để nhắc học viên gửi nốt: " . implode(', ', $missingItems)
                             : "Hồ sơ đã đạt chuẩn 100%. Có thể lập đơn SO (sales_order) hoặc chuyển pipeline sang '14 – Enrolled' (Đã nhập học)."
+                    ];
+                }
+
+                // ==========================================
+                // 25. GET SALES PERFORMANCE & STALE LEADS (CRM AUDIT)
+                // ==========================================
+                case 'get_sales_performance_and_stale_leads': {
+                    $daysThreshold = max(1, min(30, (int)($args['days_threshold'] ?? 3)));
+                    $limit = max(1, min(20, (int)($args['limit'] ?? 5)));
+                    $filterAssigned = isset($args['assigned_to']) ? (int)$args['assigned_to'] : 0;
+
+                    // 1. Base RBAC filter for contacts
+                    $baseWhere = "c.tenant_id = ? AND c.deleted_at IS NULL";
+                    $baseParams = [$tid];
+
+                    if (!$canAccessAllContacts) {
+                        $rbac = $getContactRbacClause('c');
+                        $baseWhere .= " AND " . $rbac['clause'];
+                        $baseParams = array_merge($baseParams, $rbac['params']);
+                    } elseif ($filterAssigned > 0) {
+                        $baseWhere .= " AND (c.owner_id = ? OR FIND_IN_SET(?, IFNULL(c.collaborator_ids, '')))";
+                        $baseParams[] = $filterAssigned;
+                        $baseParams[] = (string)$filterAssigned;
+                    }
+
+                    // 2. Aggregate counts: total, active in funnel, enrolled
+                    $statSql = "
+                        SELECT 
+                            COUNT(1) as total_leads,
+                            SUM(CASE WHEN (c.stage_id < 14 OR c.stage_id IS NULL) AND (c.status IS NULL OR c.status != 'inactive') THEN 1 ELSE 0 END) as active_leads,
+                            SUM(CASE WHEN c.stage_id = 14 OR c.pipeline_status = 'enrolled' THEN 1 ELSE 0 END) as enrolled_leads
+                        FROM contacts c
+                        WHERE {$baseWhere}
+                    ";
+                    $statStmt = $db->prepare($statSql);
+                    $statStmt->execute($baseParams);
+                    $stats = $statStmt->fetch(PDO::FETCH_ASSOC) ?: ['total_leads' => 0, 'active_leads' => 0, 'enrolled_leads' => 0];
+
+                    // 3. Query Stale Leads (Active in funnel + last note/interaction >= $daysThreshold days)
+                    $staleWhere = "{$baseWhere} AND (c.stage_id < 14 OR c.stage_id IS NULL) AND (c.status IS NULL OR c.status != 'inactive')";
+                    
+                    $staleSql = "
+                        SELECT 
+                            c.id, COALESCE(c.full_name, c.name, 'Học viên') as customer_name, c.phone, c.email,
+                            c.stage_id, ps.name as stage_name,
+                            u.full_name as sale_name,
+                            b.name as branch_name,
+                            c.created_at,
+                            last_n.last_note_at,
+                            last_n.last_note_content,
+                            DATEDIFF(NOW(), COALESCE(last_n.last_note_at, c.created_at)) as days_neglected
+                        FROM contacts c
+                        LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
+                        LEFT JOIN users u ON c.owner_id = u.id
+                        LEFT JOIN branches b ON c.branch_id = b.id
+                        LEFT JOIN (
+                            SELECT entity_id as contact_id, MAX(created_at) as last_note_at, SUBSTRING(MAX(body), 1, 100) as last_note_content
+                            FROM notes
+                            WHERE entity_type = 'contact'
+                            GROUP BY entity_id
+                        ) last_n ON c.id = last_n.contact_id
+                        WHERE {$staleWhere}
+                          AND DATEDIFF(NOW(), COALESCE(last_n.last_note_at, c.created_at)) >= ?
+                        ORDER BY days_neglected DESC, c.id DESC
+                        LIMIT ?
+                    ";
+                    $staleParams = array_merge($baseParams, [$daysThreshold, $limit]);
+                    $stmtStale = $db->prepare($staleSql);
+                    $stmtStale->execute($staleParams);
+                    $staleRows = $stmtStale->fetchAll(PDO::FETCH_ASSOC);
+
+                    // Count total stale leads
+                    $countStaleSql = "
+                        SELECT COUNT(1)
+                        FROM contacts c
+                        LEFT JOIN (
+                            SELECT entity_id as contact_id, MAX(created_at) as last_note_at
+                            FROM notes
+                            WHERE entity_type = 'contact'
+                            GROUP BY entity_id
+                        ) last_n ON c.id = last_n.contact_id
+                        WHERE {$staleWhere}
+                          AND DATEDIFF(NOW(), COALESCE(last_n.last_note_at, c.created_at)) >= ?
+                    ";
+                    $countParams = array_merge($baseParams, [$daysThreshold]);
+                    $countStmt = $db->prepare($countStaleSql);
+                    $countStmt->execute($countParams);
+                    $totalStaleCount = (int)$countStmt->fetchColumn();
+
+                    $sampleList = [];
+                    foreach ($staleRows as $sr) {
+                        $phoneMasked = $sr['phone'] ? (substr($sr['phone'], 0, 4) . '***' . substr($sr['phone'], -3)) : 'Chưa có SĐT';
+                        $sampleList[] = [
+                            'contact_id' => (int)$sr['id'],
+                            'name' => $sr['customer_name'],
+                            'phone' => $phoneMasked,
+                            'current_stage' => $sr['stage_name'] ?: 'Lead mới',
+                            'sale_in_charge' => $sr['sale_name'] ?: 'Chưa phân bổ',
+                            'branch' => $sr['branch_name'] ?: 'Hồ Chí Minh',
+                            'days_neglected' => (int)$sr['days_neglected'] . ' ngày',
+                            'last_note' => $sr['last_note_content'] ? (strip_tags(trim($sr['last_note_content'])) . '...') : 'Chưa có ghi chú nào',
+                            'suggested_action' => 'Gọi điện hoặc gửi Zalo ZNS chăm sóc ngay'
+                        ];
+                    }
+
+                    $totalLeads = (int)$stats['total_leads'];
+                    $enrolledLeads = (int)$stats['enrolled_leads'];
+                    $convRate = $totalLeads > 0 ? round(($enrolledLeads / $totalLeads) * 100, 1) . '%' : '0%';
+
+                    return [
+                        'success' => true,
+                        'scope' => $canAccessAllContacts ? ($filterAssigned > 0 ? "Nhân sự ID {$filterAssigned}" : "Toàn viện / Chi nhánh") : "Cá nhân {$userName}",
+                        'metrics' => [
+                            'total_leads' => $totalLeads,
+                            'active_in_funnel' => (int)$stats['active_leads'],
+                            'enrolled_count' => $enrolledLeads,
+                            'conversion_rate' => $convRate,
+                            'stale_leads_count' => $totalStaleCount,
+                            'stale_criteria' => "Không có tương tác ghi chú >= {$daysThreshold} ngày"
+                        ],
+                        'stale_leads_sample' => $sampleList,
+                        'verdict' => $totalStaleCount > 0 
+                            ? "Cảnh báo: Có {$totalStaleCount} cơ hội học viên tiềm năng đang bị gián đoạn chăm sóc quá {$daysThreshold} ngày. Đề xuất liên hệ ngay để tránh rớt phễu."
+                            : "Tuyệt vời: Toàn bộ danh sách học viên tiềm năng đều được duy trì chăm sóc định kỳ đều đặn."
+                    ];
+                }
+
+                // ==========================================
+                // 26. GET UPCOMING TUITION RECEIVABLES (FINANCE SO DEBT AUDIT)
+                // ==========================================
+                case 'get_upcoming_tuition_receivables': {
+                    $limit = max(1, min(20, (int)($args['limit'] ?? 5)));
+                    $contactId = isset($args['contact_id']) ? (int)$args['contact_id'] : 0;
+
+                    $where = "so.tenant_id = ? AND so.status != 'cancelled' AND so.payment_status != 'paid' AND (so.total - COALESCE(so.paid_amount, 0)) > 0";
+                    $params = [$tid];
+
+                    if ($contactId > 0) {
+                        $where .= " AND so.contact_id = ?";
+                        $params[] = $contactId;
+                    } elseif (!$isGlobalAdmin && !$isManager && !$isAccountant) {
+                        // Regular user can only see SOs created by self or contacts owned
+                        $where .= " AND (so.created_by = ? OR c.owner_id = ? OR FIND_IN_SET(?, IFNULL(c.collaborator_ids, '')))";
+                        $params[] = $uid;
+                        $params[] = $uid;
+                        $params[] = (string)$uid;
+                    }
+
+                    // 1. Calculate Aggregate Financial Pulse
+                    $sumSql = "
+                        SELECT 
+                            COUNT(1) as total_unpaid_orders,
+                            COALESCE(SUM(so.total - COALESCE(so.paid_amount, 0)), 0) as total_receivable,
+                            COALESCE(SUM(so.total), 0) as total_order_amount,
+                            COALESCE(SUM(so.paid_amount), 0) as total_collected
+                        FROM sales_orders so
+                        LEFT JOIN contacts c ON so.contact_id = c.id
+                        WHERE {$where}
+                    ";
+                    $sumStmt = $db->prepare($sumSql);
+                    $sumStmt->execute($params);
+                    $summary = $sumStmt->fetch(PDO::FETCH_ASSOC) ?: [
+                        'total_unpaid_orders' => 0,
+                        'total_receivable' => 0,
+                        'total_order_amount' => 0,
+                        'total_collected' => 0
+                    ];
+
+                    // 2. Query Top Receivables
+                    $listSql = "
+                        SELECT 
+                            so.id, so.so_number, so.total, so.paid_amount,
+                            (so.total - COALESCE(so.paid_amount, 0)) as remaining_debt,
+                            so.order_date, so.status, so.payment_status,
+                            c.id as student_id, COALESCE(c.full_name, c.name, 'Học viên') as student_name,
+                            c.phone as student_phone,
+                            u.full_name as sale_name
+                        FROM sales_orders so
+                        LEFT JOIN contacts c ON so.contact_id = c.id
+                        LEFT JOIN users u ON c.owner_id = u.id
+                        WHERE {$where}
+                        ORDER BY remaining_debt DESC, so.id DESC
+                        LIMIT ?
+                    ";
+                    $listParams = array_merge($params, [$limit]);
+                    $listStmt = $db->prepare($listSql);
+                    $listStmt->execute($listParams);
+                    $rows = $listStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                    $receivables = [];
+                    foreach ($rows as $r) {
+                        $phoneMasked = $r['student_phone'] ? (substr($r['student_phone'], 0, 4) . '***' . substr($r['student_phone'], -3)) : 'Chưa có SĐT';
+                        $receivables[] = [
+                            'so_id' => (int)$r['id'],
+                            'so_number' => $r['so_number'] ?: ('SO-' . $r['id']),
+                            'student_name' => $r['student_name'],
+                            'student_phone' => $phoneMasked,
+                            'total_order' => number_format((float)$r['total'], 0, ',', '.') . ' VND',
+                            'already_paid' => number_format((float)$r['paid_amount'], 0, ',', '.') . ' VND',
+                            'remaining_due' => number_format((float)$r['remaining_debt'], 0, ',', '.') . ' VND',
+                            'order_date' => $r['order_date'] ? date('d/m/Y', strtotime($r['order_date'])) : 'Chưa rõ',
+                            'sale_in_charge' => $r['sale_name'] ?: 'Nội bộ',
+                            'payment_stage' => $r['payment_status'] === 'partial' ? 'Đã đóng 1 phần (Đang theo lịch)' : 'Chưa thanh toán'
+                        ];
+                    }
+
+                    $totalOrders = (int)$summary['total_unpaid_orders'];
+                    $totalReceivableAmt = (float)$summary['total_receivable'];
+                    $totalCollectedAmt = (float)$summary['total_collected'];
+                    $totalOrderAmt = (float)$summary['total_order_amount'];
+                    $collectRate = $totalOrderAmt > 0 ? round(($totalCollectedAmt / $totalOrderAmt) * 100, 1) . '%' : '0%';
+
+                    return [
+                        'success' => true,
+                        'summary' => [
+                            'unpaid_orders_count' => $totalOrders,
+                            'total_receivable_due' => number_format($totalReceivableAmt, 0, ',', '.') . ' VND',
+                            'total_already_collected' => number_format($totalCollectedAmt, 0, ',', '.') . ' VND',
+                            'collection_completion_rate' => $collectRate
+                        ],
+                        'top_receivables' => $receivables,
+                        'recommendation' => $totalOrders > 0 
+                            ? "Đề xuất Kế toán và Chuyên viên tư vấn đối soát các khoản nợ học phí lớn nhất để đôn đốc lịch trình thanh toán đợt 2 hoặc xuất phiếu thu."
+                            : "Hiện không ghi nhận khoản công nợ học phí nào đang bị tồn đọng chưa thu đủ."
+                    ];
+                }
+
+                // ==========================================
+                // 27. TRACE APPROVAL BLOCKER (MULTI-LEVEL PINPOINTING)
+                // ==========================================
+                case 'trace_approval_blocker': {
+                    $itemType = $args['item_type'] ?? 'all';
+                    $itemId = isset($args['item_id']) ? (int)$args['item_id'] : 0;
+                    $limit = max(1, min(15, (int)($args['limit'] ?? 5)));
+
+                    $blockers = [];
+
+                    // A. Trace Expenses (PO / Đề xuất chi phí)
+                    if (in_array($itemType, ['all', 'expense'], true)) {
+                        $eWhere = "e.tenant_id = ? AND e.deleted_at IS NULL AND e.status = 'pending'";
+                        $eParams = [$tid];
+
+                        if ($itemId > 0) {
+                            $eWhere .= " AND e.id = ?";
+                            $eParams[] = $itemId;
+                        } elseif (!$isGlobalAdmin && !$isManager && !$isAccountant) {
+                            $eWhere .= " AND (e.created_by = ? OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ?)";
+                            $eParams = array_merge($eParams, [$uid, $uid, $uid, $uid]);
+                        }
+
+                        $eSql = "
+                            SELECT 
+                                e.id, e.title, e.amount, e.currency, e.created_at, e.created_by,
+                                e.approver_id, e.approver_id_2, e.approver_id_3,
+                                e.status_level_1, e.status_level_2,
+                                TIMESTAMPDIFF(HOUR, e.created_at, NOW()) as hours_pending,
+                                u_c.full_name as creator_name,
+                                u_app1.full_name as app1_name, u_app1.job_title as app1_title,
+                                u_app2.full_name as app2_name, u_app2.job_title as app2_title
+                            FROM expenses e
+                            LEFT JOIN users u_c ON e.created_by = u_c.id
+                            LEFT JOIN users u_app1 ON e.approver_id = u_app1.id
+                            LEFT JOIN users u_app2 ON e.approver_id_2 = u_app2.id
+                            WHERE {$eWhere}
+                            ORDER BY e.created_at ASC
+                            LIMIT ?
+                        ";
+                        $eParamsWithLimit = array_merge($eParams, [$limit]);
+                        $eStmt = $db->prepare($eSql);
+                        $eStmt->execute($eParamsWithLimit);
+
+                        foreach ($eStmt->fetchAll(PDO::FETCH_ASSOC) as $er) {
+                            $hours = (int)$er['hours_pending'];
+                            $days = round($hours / 24, 1);
+                            
+                            // Determine current blocker
+                            if ($er['status_level_1'] !== 'approved') {
+                                $blockerName = $er['app1_name'] ?: 'Trưởng phòng / Người duyệt Cấp 1';
+                                $blockerTitle = $er['app1_title'] ?: 'Cấp duyệt 1';
+                                $currentStep = 'Chờ duyệt Cấp 1';
+                            } elseif ($er['approver_id_2'] && $er['status_level_2'] !== 'approved') {
+                                $blockerName = $er['app2_name'] ?: 'Ban Giám Đốc / Người duyệt Cấp 2';
+                                $blockerTitle = $er['app2_title'] ?: 'Cấp duyệt 2';
+                                $currentStep = 'Chờ duyệt Cấp 2 (Ban Giám Đốc)';
+                            } else {
+                                $blockerName = 'Kế toán giải ngân';
+                                $blockerTitle = 'Phòng Kế Toán';
+                                $currentStep = 'Chờ chi tiền / Hoàn tất';
+                            }
+
+                            $urgency = $hours >= 72 ? 'BÁO ĐỘNG ĐỎ (> 3 ngày)' : ($hours >= 24 ? 'CẦN NHẮC NHỞ (> 24h)' : 'Bình thường');
+
+                            $blockers[] = [
+                                'type' => 'Đề xuất chi / PO',
+                                'id' => (int)$er['id'],
+                                'title' => $er['title'],
+                                'amount' => number_format((float)$er['amount'], 0, ',', '.') . ' ' . ($er['currency'] ?: 'VND'),
+                                'creator' => $er['creator_name'] ?: 'Nhân sự',
+                                'submitted_at' => date('d/m/Y H:i', strtotime($er['created_at'])),
+                                'pending_duration' => "{$hours} giờ ({$days} ngày)",
+                                'urgency' => $urgency,
+                                'current_step' => $currentStep,
+                                'current_blocker' => "{$blockerName} ({$blockerTitle})",
+                                'recommended_action' => "Gửi tin nhắn WorkChat hoặc gọi trực tiếp cho {$blockerName} để giải phóng nút thắt."
+                            ];
+                        }
+                    }
+
+                    // B. Trace Leave Requests (Đơn xin nghỉ phép / WFH)
+                    if (in_array($itemType, ['all', 'leave'], true) && count($blockers) < $limit) {
+                        $rem = $limit - count($blockers);
+                        $lWhere = "l.status = 'pending'";
+                        $lParams = [];
+
+                        if ($itemId > 0) {
+                            $lWhere .= " AND l.id = ?";
+                            $lParams[] = $itemId;
+                        } elseif (!$isGlobalAdmin && !$isManager && !$isHR) {
+                            $lWhere .= " AND (l.user_id = ? OR l.approver_id = ? OR l.approver_id_2 = ?)";
+                            $lParams = array_merge($lParams, [$uid, $uid, $uid]);
+                        }
+
+                        $lSql = "
+                            SELECT 
+                                l.id, l.leave_type, l.total_days, l.reason, l.created_at,
+                                l.approver_id, l.approver_id_2,
+                                TIMESTAMPDIFF(HOUR, l.created_at, NOW()) as hours_pending,
+                                u_c.full_name as creator_name,
+                                u_app.full_name as app_name, u_app.job_title as app_title
+                            FROM hrm_leave_requests l
+                            LEFT JOIN users u_c ON l.user_id = u_c.id
+                            LEFT JOIN users u_app ON l.approver_id = u_app.id
+                            WHERE {$lWhere}
+                            ORDER BY l.created_at ASC
+                            LIMIT ?
+                        ";
+                        $lParamsWithLimit = array_merge($lParams, [$rem]);
+                        $lStmt = $db->prepare($lSql);
+                        $lStmt->execute($lParamsWithLimit);
+
+                        foreach ($lStmt->fetchAll(PDO::FETCH_ASSOC) as $lr) {
+                            $hours = (int)$lr['hours_pending'];
+                            $days = round($hours / 24, 1);
+                            $blockerName = $lr['app_name'] ?: 'Trưởng bộ phận';
+                            $blockerTitle = $lr['app_title'] ?: 'Quản lý';
+                            $urgency = $hours >= 48 ? 'BÁO ĐỘNG ĐỎ (> 2 ngày)' : ($hours >= 24 ? 'CẦN NHẮC NHỞ' : 'Bình thường');
+
+                            $blockers[] = [
+                                'type' => 'Đơn xin nghỉ phép',
+                                'id' => (int)$lr['id'],
+                                'title' => "Nghỉ phép {$lr['total_days']} ngày (" . ($lr['leave_type'] ?: 'Nghỉ phép') . ")",
+                                'amount' => "{$lr['total_days']} ngày",
+                                'creator' => $lr['creator_name'] ?: 'Nhân sự',
+                                'submitted_at' => date('d/m/Y H:i', strtotime($lr['created_at'])),
+                                'pending_duration' => "{$hours} giờ ({$days} ngày)",
+                                'urgency' => $urgency,
+                                'current_step' => 'Chờ Quản lý trực tiếp phê duyệt',
+                                'current_blocker' => "{$blockerName} ({$blockerTitle})",
+                                'recommended_action' => "Báo cho {$blockerName} để duyệt đơn phép không ảnh hưởng chấm công."
+                            ];
+                        }
+                    }
+
+                    return [
+                        'success' => true,
+                        'total_blocked_proposals' => count($blockers),
+                        'blocked_items' => $blockers,
+                        'verdict' => count($blockers) > 0 
+                            ? "Đã truy vết được " . count($blockers) . " đề xuất đang bị nghẽn quy trình. Mọi thông tin người phê duyệt cấp 1, cấp 2 và số giờ tồn đọng đã được bóc tách chi tiết."
+                            : "Hiện không có đơn phê duyệt nào bị ách tắc vượt hạn định."
+                    ];
+                }
+
+                // ==========================================
+                // 28. GET TICKET STATUS & SLA BREACHES (STUDENT & IT SUPPORT)
+                // ==========================================
+                case 'get_ticket_status_and_sla_breaches': {
+                    $statusFilter = $args['status'] ?? 'breached_only';
+                    $limit = max(1, min(15, (int)($args['limit'] ?? 5)));
+
+                    $where = "t.tenant_id = ?";
+                    $params = [$tid];
+
+                    if ($statusFilter === 'all_open') {
+                        $where .= " AND t.status IN ('open', 'in_progress', 'waiting')";
+                    } elseif ($statusFilter === 'breached_only') {
+                        $where .= " AND t.status IN ('open', 'in_progress', 'waiting') AND (
+                            (t.priority = 'urgent' AND TIMESTAMPDIFF(HOUR, t.created_at, NOW()) > 12)
+                            OR (t.priority = 'high' AND TIMESTAMPDIFF(HOUR, t.created_at, NOW()) > 24)
+                            OR (TIMESTAMPDIFF(HOUR, t.created_at, NOW()) > 48)
+                        )";
+                    }
+
+                    // 1. Calculate general ticket metrics
+                    $statSql = "
+                        SELECT 
+                            COUNT(1) as total_open,
+                            SUM(CASE WHEN (t.priority = 'urgent' AND TIMESTAMPDIFF(HOUR, t.created_at, NOW()) > 12)
+                                       OR (t.priority = 'high' AND TIMESTAMPDIFF(HOUR, t.created_at, NOW()) > 24)
+                                       OR (TIMESTAMPDIFF(HOUR, t.created_at, NOW()) > 48) THEN 1 ELSE 0 END) as total_breached,
+                            SUM(CASE WHEN t.priority = 'urgent' THEN 1 ELSE 0 END) as urgent_count
+                        FROM tickets t
+                        WHERE t.tenant_id = ? AND t.status IN ('open', 'in_progress', 'waiting')
+                    ";
+                    $statStmt = $db->prepare($statSql);
+                    $statStmt->execute([$tid]);
+                    $stats = $statStmt->fetch(PDO::FETCH_ASSOC) ?: ['total_open' => 0, 'total_breached' => 0, 'urgent_count' => 0];
+
+                    // 2. Fetch sample tickets
+                    $sql = "
+                        SELECT 
+                            t.id, t.subject, t.status, t.priority, t.created_at,
+                            TIMESTAMPDIFF(HOUR, t.created_at, NOW()) as hours_open,
+                            u.full_name as assignee_name,
+                            uc.full_name as creator_name
+                        FROM tickets t
+                        LEFT JOIN users u ON t.assignee_id = u.id
+                        LEFT JOIN users uc ON t.created_by = uc.id
+                        WHERE {$where}
+                        ORDER BY hours_open DESC, t.id DESC
+                        LIMIT ?
+                    ";
+                    $listParams = array_merge($params, [$limit]);
+                    $stmt = $db->prepare($sql);
+                    $stmt->execute($listParams);
+                    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+                    $ticketList = [];
+                    foreach ($rows as $r) {
+                        $h = (int)$r['hours_open'];
+                        $slaLimit = $r['priority'] === 'urgent' ? 12 : ($r['priority'] === 'high' ? 24 : 48);
+                        $isBreached = $h > $slaLimit;
+
+                        $ticketList[] = [
+                            'ticket_id' => (int)$r['id'],
+                            'subject' => $r['subject'],
+                            'priority' => strtoupper($r['priority'] ?: 'NORMAL'),
+                            'status' => $r['status'],
+                            'assignee' => $r['assignee_name'] ?: 'Chưa phân công',
+                            'creator' => $r['creator_name'] ?: 'Người dùng / Học viên',
+                            'created_at' => date('d/m/Y H:i', strtotime($r['created_at'])),
+                            'hours_open' => "{$h} giờ",
+                            'sla_limit' => "{$slaLimit} giờ",
+                            'sla_status' => $isBreached ? "VI PHẠM SLA (Trễ " . ($h - $slaLimit) . "h)" : "Trong hạn SLA"
+                        ];
+                    }
+
+                    $totalOpen = (int)$stats['total_open'];
+                    $totalBreached = (int)$stats['total_breached'];
+
+                    return [
+                        'success' => true,
+                        'metrics' => [
+                            'total_open_tickets' => $totalOpen,
+                            'sla_breached_count' => $totalBreached,
+                            'urgent_tickets' => (int)$stats['urgent_count'],
+                            'sla_compliance_rate' => $totalOpen > 0 ? round((($totalOpen - $totalBreached) / $totalOpen) * 100, 1) . '%' : '100%'
+                        ],
+                        'tickets' => $ticketList,
+                        'verdict' => $totalBreached > 0 
+                            ? "Cảnh báo dịch vụ: Có {$totalBreached} ticket hỗ trợ/khiếu nại đã vượt quá thời gian cam kết SLA. Đề xuất Trưởng bộ phận đốc thúc xử lý ngay."
+                            : "Dịch vụ hỗ trợ hoạt động tốt: 100% ticket đang được xử lý trong hạn cam kết SLA."
+                    ];
+                }
+
+                // ==========================================
+                // 29. GET B2B PARTNER & CONTRACT SUMMARY
+                // ==========================================
+                case 'get_b2b_partner_and_contract_summary': {
+                    $keyword = trim($args['keyword'] ?? '');
+                    $limit = max(1, min(15, (int)($args['limit'] ?? 5)));
+
+                    $where = "c.tenant_id = ? AND c.deleted_at IS NULL";
+                    $params = [$tid];
+
+                    if (!empty($keyword)) {
+                        $where .= " AND (c.name LIKE ? OR c.tax_id LIKE ? OR c.industry LIKE ? OR c.city LIKE ?)";
+                        $params[] = '%' . $keyword . '%';
+                        $params[] = '%' . $keyword . '%';
+                        $params[] = '%' . $keyword . '%';
+                        $params[] = '%' . $keyword . '%';
+                    }
+
+                    // Strict RBAC: Sales can only see their owned companies unless manager/admin
+                    if (!$canAccessAllContacts && !$isManager && !$isGlobalAdmin) {
+                        $where .= " AND (c.owner_id = ? OR c.created_by = ? OR c.dedicated_rep_id = ?)";
+                        $params[] = $uid;
+                        $params[] = $uid;
+                        $params[] = $uid;
+                    }
+
+                    $sql = "
+                        SELECT 
+                            c.id, c.name, c.tax_id, c.tier, c.industry, c.city, c.phone, c.email,
+                            u.full_name as owner_name,
+                            (SELECT COUNT(1) FROM deals d WHERE d.company_id = c.id AND d.deleted_at IS NULL) as deals_count,
+                            (SELECT COALESCE(SUM(d.value), 0) FROM deals d WHERE d.company_id = c.id AND d.deleted_at IS NULL) as total_deal_value
+                        FROM companies c
+                        LEFT JOIN users u ON c.owner_id = u.id
+                        WHERE {$where}
+                        ORDER BY c.id DESC
+                        LIMIT ?
+                    ";
+                    $paramsWithLimit = array_merge($params, [$limit]);
+                    $stmt = $db->prepare($sql);
+                    $stmt->execute($paramsWithLimit);
+                    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+                    $companies = [];
+                    foreach ($rows as $r) {
+                        $companies[] = [
+                            'company_id' => (int)$r['id'],
+                            'name' => $r['name'],
+                            'tax_id' => $r['tax_id'] ?: 'Chưa cập nhật',
+                            'tier' => strtoupper($r['tier'] ?: 'STANDARD'),
+                            'industry' => $r['industry'] ?: 'Giáo dục / Dịch vụ',
+                            'city' => $r['city'] ?: 'Toàn quốc',
+                            'owner' => $r['owner_name'] ?: 'Chưa phân bổ',
+                            'active_deals' => (int)$r['deals_count'],
+                            'total_deal_value' => number_format((float)$r['total_deal_value'], 0, ',', '.') . ' VND'
+                        ];
+                    }
+
+                    return [
+                        'success' => true,
+                        'total_found' => count($companies),
+                        'companies' => $companies,
+                        'recommendation' => count($companies) > 0
+                            ? "Đã tìm thấy " . count($companies) . " đối tác doanh nghiệp B2B theo yêu cầu tra cứu."
+                            : "Không tìm thấy doanh nghiệp phù hợp với từ khóa tra cứu."
+                    ];
+                }
+
+                // ==========================================
+                // 30. GET CONSULTANT SHIFT & FAIR SHARE AUDIT
+                // ==========================================
+                case 'get_consultant_shift_and_fairshare_audit': {
+                    $teamId = isset($args['team_id']) ? (int)$args['team_id'] : 0;
+
+                    // 1. Fetch rounds / teams
+                    $tWhere = "t.tenant_id = ?";
+                    $tParams = [$tid];
+                    if ($teamId > 0) {
+                        $tWhere .= " AND t.id = ?";
+                        $tParams[] = $teamId;
+                    }
+
+                    $tStmt = $db->prepare("
+                        SELECT t.id, t.name, t.leader_id, u.full_name as leader_name
+                        FROM teams t
+                        LEFT JOIN users u ON t.leader_id = u.id
+                        WHERE {$tWhere}
+                        ORDER BY t.id ASC
+                    ");
+                    $tStmt->execute($tParams);
+                    $teams = $tStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                    $auditResults = [];
+                    foreach ($teams as $tm) {
+                        $tmId = (int)$tm['id'];
+                        // Get members and count of leads assigned this month
+                        $mStmt = $db->prepare("
+                            SELECT 
+                                u.id as user_id, u.full_name, u.is_active,
+                                (SELECT COUNT(1) FROM contacts c WHERE c.owner_id = u.id AND c.tenant_id = ? AND c.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)) as leads_month,
+                                (SELECT COUNT(1) FROM contacts c WHERE c.owner_id = u.id AND c.tenant_id = ? AND DATE(c.created_at) = CURDATE()) as leads_today
+                            FROM users u
+                            WHERE u.team_id = ? AND u.tenant_id = ? AND u.deleted_at IS NULL
+                            ORDER BY leads_month DESC
+                        ");
+                        $mStmt->execute([$tid, $tid, $tmId, $tid]);
+                        $members = $mStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                        $leadCounts = array_map(fn($m) => (int)$m['leads_month'], $members);
+                        $minLeads = !empty($leadCounts) ? min($leadCounts) : 0;
+                        $maxLeads = !empty($leadCounts) ? max($leadCounts) : 0;
+                        $diff = $maxLeads - $minLeads;
+
+                        $auditResults[] = [
+                            'team_id' => $tmId,
+                            'team_name' => $tm['name'],
+                            'leader' => $tm['leader_name'] ?: 'Chưa phân công',
+                            'member_count' => count($members),
+                            'fair_share_status' => $diff > 10 ? "Chênh lệch cao (Max: {$maxLeads}, Min: {$minLeads})" : "Phân bổ đồng đều",
+                            'members_distribution' => array_map(fn($m) => [
+                                'user_id' => (int)$m['user_id'],
+                                'name' => $m['full_name'],
+                                'leads_today' => (int)$m['leads_today'],
+                                'leads_30_days' => (int)$m['leads_month']
+                            ], $members)
+                        ];
+                    }
+
+                    return [
+                        'success' => true,
+                        'total_teams_audited' => count($auditResults),
+                        'teams' => $auditResults,
+                        'verdict' => "Báo cáo phân bổ Lead và kiểm toán Fair Share đã được tổng hợp trực tiếp từ bảng cơ sở dữ liệu."
                     ];
                 }
 

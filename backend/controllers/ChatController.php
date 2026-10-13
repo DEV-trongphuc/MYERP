@@ -3512,17 +3512,17 @@ class ChatController {
                 . "   - Khi người dùng yêu cầu tạo giúp, thêm, sửa phiếu/đơn/hồ sơ: Quyền hạn của bạn là hỗ trợ chuẩn bị, tính toán, format và điền sẵn (prefill) vào Drawer/Modal qua thẻ hành động `<<<ACTION_PROPOSAL: {...}>>>`. QUYỀN HẠN CUỐI CÙNG LÀ CỦA NGƯỜI DÙNG: Người dùng sẽ kiểm tra và tự tay bấm nút 'Lưu' hoặc 'Xác nhận' để lưu vào hệ thống, đảm bảo tính pháp lý và trách nhiệm cá nhân!\n\n"
                 . "CƠ CHẾ ĐA AGENT TỰ LÀM VIỆC VỚI NHAU ĐỂ GIẢI QUYẾT TOÀN DIỆN VẤN ĐỀ (11-AGENT SWARM SYNERGY):\n"
                 . "Bạn là hạt nhân của mạng lưới 11 Agent chuyên trách thuộc Viện IDEAS, phối hợp tự động nhiều cấp để giải quyết trọn gói yêu cầu của người dùng:\n"
-                . "1. Agent Tổng Điều Phối (orchestrator): Tiếp nhận ý định, phân bổ task, tổng hợp giải pháp liên phòng ban.\n"
-                . "2. Agent Sales & CRM (sales_crm): Tra cứu lead/học viên, kiểm tra giai đoạn pipeline, cập nhật hồ sơ, ghi chú chăm sóc.\n"
-                . "3. Agent Tài Chính & Kế Toán (finance_accounting): Báo cáo thu chi SO/PO, tính toán đợt thanh toán (installments), đối soát công nợ.\n"
+                . "1. Agent Tổng Điều Phối (orchestrator): Tiếp nhận ý định, phân bổ task, truy vết nút thắt phê duyệt (`trace_approval_blocker`), tổng hợp giải pháp liên phòng ban.\n"
+                . "2. Agent Sales & CRM (sales_crm): Tra cứu hồ sơ 360°, phát hiện lead bị bỏ quên & hiệu suất chuyển đổi (`get_sales_performance_and_stale_leads`), cập nhật phễu pipeline, ghi chú tư vấn.\n"
+                . "3. Agent Tài Chính & Kế Toán (finance_accounting): Báo cáo thu chi SO/PO, đôn đốc công nợ học phí theo đợt (`get_upcoming_tuition_receivables`), đối soát phiếu cọc, lập thẻ đề xuất thanh toán.\n"
                 . "4. Agent Học Vụ & Đào Tạo (academic_training): Rà soát điều kiện tuyển sinh, chương trình liên kết Swiss UMEF/ISTEC Paris, quy đổi tín chỉ.\n"
-                . "5. Agent Kế Hoạch & Tiến Độ (tasks_planning): Quản lý công việc workspace, nhắc việc quá hạn/khẩn cấp, đôn đốc KPI.\n"
-                . "6. Agent Nhân Sự & Chấm Công (hr_operations): Quản lý phép năm, giải trình công, danh bạ nhân sự, lịch nghỉ vắng mặt.\n"
+                . "5. Agent Kế Hoạch & Tiến Độ (tasks_planning): Quản lý công việc workspace, nhắc việc quá hạn/khẩn cấp, phân rã WBS.\n"
+                . "6. Agent Nhân Sự & Chấm Công (hr_operations): Quản lý phép năm, giải trình công, truy vết ách tắc đơn từ (`trace_approval_blocker`), danh bạ nhân sự, lịch vắng mặt.\n"
                 . "7. Agent Hồ Sơ & Pháp Lý (records_legal): Thẩm định giấy tờ nhập học trong cloud_files, rà soát hợp đồng pháp lý, kiểm tra hồ sơ còn thiếu.\n"
                 . "8. Agent Tài Sản & Kho (assets_inventory): Tra cứu thiết bị hrm_assets, theo dõi bàn giao laptop/vật tư, nhập xuất giáo trình.\n"
                 . "9. Agent Chiến Dịch Marketing (marketing_campaigns): Đo lường hiệu quả kênh tuyển sinh, tỷ lệ chốt cọc lead, đề xuất chiến dịch ads.\n"
-                . "10. Agent Trợ Lý Ban Giám Đốc (executive_bi): Phân tích mạch tài chính P&L, dòng tiền ròng thực thu - thực chi, cảnh báo rủi ro (dành cho Admin/Director/Accountant).\n"
-                . "11. Agent Kỹ Thuật IT & Hệ Thống (system_it): Kiểm tra sức khỏe hệ thống, audit log AI, trạng thái nhân sự trực tuyến.\n\n"
+                . "10. Agent Trợ Lý Ban Giám Đốc (executive_bi): Phân tích mạch tài chính P&L, công nợ học phí (`get_upcoming_tuition_receivables`), dòng tiền ròng thực thu - thực chi, cảnh báo rủi ro.\n"
+                . "11. Agent Kỹ Thuật IT & Hệ Thống (system_it): Kiểm tra sức khỏe hệ thống, giám sát ticket học viên vi phạm SLA (`get_ticket_status_and_sla_breaches`), audit log AI, trạng thái nhân sự trực tuyến.\n\n"
                 . "• NGUYÊN TẮC PHỐI HỢP LIÊN AGENT (CHAINED COLLABORATION):\n"
                 . "  Khi giải quyết một yêu cầu phức tạp (ví dụ: 'Kiểm tra hồ sơ học viên Tuấn rồi soạn hợp đồng đào tạo và thu cọc'):\n"
                 . "  - Bước 1: Tra cứu hồ sơ/giấy tờ học viên bằng công cụ chuyên trách (`check_student_admission_records` hoặc `search_contacts_or_leads`).\n"
@@ -4590,9 +4590,63 @@ class ChatController {
                 return null;
             }
 
-            // Include Tools Schema from AgentToolRegistry
+            // ==========================================
+            // HUB & SPOKE DYNAMIC TOOL SCOPING (ENTERPRISE MULTI-AGENT SWARM)
+            // ==========================================
             require_once __DIR__ . '/AgentToolRegistry.php';
-            $tools = AgentToolRegistry::getGeminiToolsDeclaration();
+
+            $activeAgentId = $authContext['metadata']['active_agent_id'] ?? null;
+            if (empty($activeAgentId)) {
+                $lastMsgText = '';
+                foreach ($contents as $c) {
+                    if (($c['role'] ?? '') === 'user') {
+                        foreach ($c['parts'] ?? [] as $p) {
+                            if (!empty($p['text'])) $lastMsgText = $p['text'];
+                        }
+                    }
+                }
+                $qLower = mb_strtolower($lastMsgText);
+                if (preg_match('/(lead|khách hàng|crm|tư vấn|chốt sale|bỏ quên|ngâm lead|tỷ lệ chốt|fair share|vòng chia)/iu', $qLower)) {
+                    $activeAgentId = 'sales';
+                } elseif (preg_match('/(chi phí|phiếu chi|po|phiếu thu|so|cọc|đặt cọc|học phí|tiền|dòng tiền|tạm ứng|ngân sách|công nợ|nợ học phí)/iu', $qLower)) {
+                    $activeAgentId = 'finance';
+                } elseif (preg_match('/(chấm công|nghỉ phép|phép năm|giải trình|quên chấm|bảng lương|lương|phê duyệt|ai đang giữ đơn|kẹt đơn|sao chưa duyệt)/iu', $qLower)) {
+                    $activeAgentId = 'hrm';
+                } elseif (preg_match('/(task|công việc|kế hoạch|việc con|subtask|tiến độ|deadline|giao việc)/iu', $qLower)) {
+                    $activeAgentId = 'tasks';
+                } elseif (preg_match('/(emba|mba|msc ai|dba|tín chỉ|luận văn|đào tạo|xét tuyển|học viện|istec|umef)/iu', $qLower)) {
+                    $activeAgentId = 'academic';
+                } elseif (preg_match('/(hồ sơ|bằng cấp|bảng điểm|dịch thuật|công chứng|cccd|hợp đồng|pháp lý|chuẩn hết chưa|thiếu giấy tờ)/iu', $qLower)) {
+                    $activeAgentId = 'records_legal';
+                } elseif (preg_match('/(kho|tồn kho|ấn phẩm|quà tặng|balo|áo polo|tài sản|thiết bị|bàn giao laptop)/iu', $qLower)) {
+                    $activeAgentId = 'assets_inventory';
+                } elseif (preg_match('/(doanh nghiệp|đối tác|b2b|công ty đối tác|thỏa thuận|mã số thuế)/iu', $qLower)) {
+                    $activeAgentId = 'b2b_partner';
+                } elseif (preg_match('/(marketing|chiến dịch|nguồn lead|cpl|cac|ads|quảng cáo|facebook ads|google ads)/iu', $qLower)) {
+                    $activeAgentId = 'marketing_campaigns';
+                } elseif (preg_match('/(p&l|doanh thu tổng|dòng tiền ròng|báo cáo giám đốc|kpi toàn viện)/iu', $qLower)) {
+                    $activeAgentId = 'executive_bi';
+                } elseif (preg_match('/(kỹ thuật|hệ thống|lỗi app|webhook|cronjob|ticket|khiếu nại|sla|trễ hạn)/iu', $qLower)) {
+                    $activeAgentId = 'system_it';
+                }
+            }
+
+            $agentToolMap = [
+                'sales' => ['get_contact_360_profile', 'search_contacts', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'draft_action_proposal', 'get_system_navigation'],
+                'finance' => ['get_contact_financial_summary', 'get_my_payment_proposals', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'draft_action_proposal', 'get_system_navigation'],
+                'hrm' => ['get_company_staff_directory', 'get_company_leave_and_absence', 'get_my_attendance_summary', 'get_my_payslip', 'get_pending_approvals', 'trace_approval_blocker', 'draft_action_proposal', 'get_system_navigation'],
+                'tasks' => ['get_my_tasks', 'get_task_detail', 'draft_action_proposal', 'get_system_navigation'],
+                'academic' => ['get_program_details', 'get_active_projects_and_campaigns', 'search_ideas_knowledge', 'draft_action_proposal', 'get_system_navigation'],
+                'records_legal' => ['check_student_admission_records', 'get_contact_360_profile', 'attach_files_to_contact', 'draft_action_proposal', 'get_system_navigation'],
+                'assets_inventory' => ['get_inventory_and_asset_status', 'draft_action_proposal', 'get_system_navigation'],
+                'b2b_partner' => ['get_b2b_partner_and_contract_summary', 'draft_action_proposal', 'get_system_navigation'],
+                'marketing_campaigns' => ['get_campaign_marketing_stats', 'get_active_projects_and_campaigns', 'draft_action_proposal', 'get_system_navigation'],
+                'executive_bi' => ['get_executive_financial_pulse', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'get_system_health_status', 'draft_action_proposal', 'get_system_navigation'],
+                'system_it' => ['get_system_health_status', 'get_ticket_status_and_sla_breaches', 'get_system_navigation']
+            ];
+
+            $scopedTools = ($activeAgentId && isset($agentToolMap[$activeAgentId])) ? $agentToolMap[$activeAgentId] : null;
+            $tools = AgentToolRegistry::getGeminiToolsDeclaration($scopedTools);
 
             $payload = [
                 'systemInstruction' => [

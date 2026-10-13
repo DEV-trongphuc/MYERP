@@ -493,7 +493,243 @@ function distributeLeadAfterAI($conn, $leadId, $targetRoundId, $aiScreenerResult
     return true;
 }
 
+/**
+ * Proactive Event-Driven AI Agent Worker (WorkChat Bot Push)
+ * Dispatches targeted briefings:
+ * - 8h00 - 10h00: Morning Briefing for Sales (Stale Leads + Tuition Due)
+ * - 11h30 - 13h00: Approval & SLA Alert for Managers/Approvers (Pending POs/Expenses/Leaves + Breached Tickets)
+ * - 17h00 - 19h00: Evening Wrap-up for Staff (Pending Tasks due today)
+ */
+function runProactiveAgentBriefingWorker($conn) {
+    if (!($conn instanceof mysqli)) return;
+
+    date_default_timezone_set('Asia/Ho_Chi_Minh');
+    $currentHour = (int)date('G');
+
+    // 1. Determine active slot
+    $slot = null;
+    if ($currentHour >= 8 && $currentHour < 10) {
+        $slot = 'morning';
+    } elseif ($currentHour >= 11 && $currentHour < 13) {
+        $slot = 'midday';
+    } elseif ($currentHour >= 17 && $currentHour < 19) {
+        $slot = 'evening';
+    }
+
+    if (!$slot) {
+        return; // Outside briefing hours
+    }
+
+    // Helper: Find or create direct conversation with Bot (9000001)
+    $getOrCreateBotConv = function($userId, $tenantId = 1) use ($conn) {
+        $stmt = $conn->prepare("
+            SELECT c.id 
+            FROM chat_conversations c
+            JOIN chat_participants p1 ON c.id = p1.conversation_id AND p1.user_id = ?
+            JOIN chat_participants p2 ON c.id = p2.conversation_id AND p2.user_id = 9000001
+            WHERE (c.tenant_id = ? OR c.tenant_id = 1) AND c.type = 'direct'
+            LIMIT 1
+        ");
+        $stmt->bind_param("ii", $userId, $tenantId);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $row = $res->fetch_assoc();
+        $stmt->close();
+
+        if ($row && !empty($row['id'])) {
+            return (int)$row['id'];
+        }
+
+        // Create new direct conversation
+        $conn->begin_transaction();
+        $cStmt = $conn->prepare("
+            INSERT INTO chat_conversations (tenant_id, type, title, avatar_url, created_by, last_message_at, created_at, updated_at)
+            VALUES (?, 'direct', 'SI IDEAS', '/stickers/ideas/ideas_3.webp', 9000001, NOW(), NOW(), NOW())
+        ");
+        $cStmt->bind_param("i", $tenantId);
+        $cStmt->execute();
+        $convId = $conn->insert_id;
+        $cStmt->close();
+
+        $p1 = $conn->prepare("INSERT INTO chat_participants (tenant_id, conversation_id, user_id, role, is_pinned, joined_at) VALUES (?, ?, ?, 'member', 1, NOW())");
+        $p1->bind_param("iii", $tenantId, $convId, $userId);
+        $p1->execute();
+        $p1->close();
+
+        $p2 = $conn->prepare("INSERT INTO chat_participants (tenant_id, conversation_id, user_id, role, is_pinned, joined_at) VALUES (?, ?, 9000001, 'owner', 0, NOW())");
+        $p2->bind_param("ii", $tenantId, $convId);
+        $p2->execute();
+        $p2->close();
+
+        $conn->commit();
+        return (int)$convId;
+    };
+
+    // Helper: Send briefing message to conversation if not already sent today
+    $sendBriefingIfNotSent = function($convId, $userId, $tenantId, $slotName, $text) use ($conn) {
+        $slotTag = "\"briefing_slot\":\"{$slotName}\"";
+        $checkStmt = $conn->prepare("
+            SELECT COUNT(1) FROM chat_messages 
+            WHERE conversation_id = ? AND sender_id = 9000001 
+              AND metadata LIKE ? AND DATE(created_at) = CURDATE()
+        ");
+        $likeTag = "%" . $slotTag . "%";
+        $checkStmt->bind_param("is", $convId, $likeTag);
+        $checkStmt->execute();
+        $alreadySent = (int)$checkStmt->get_result()->fetch_row()[0];
+        $checkStmt->close();
+
+        if ($alreadySent > 0) {
+            return false; // Already notified today
+        }
+
+        $metaJson = json_encode(['briefing_slot' => $slotName, 'proactive' => true, 'date' => date('Y-m-d')]);
+        $ins = $conn->prepare("
+            INSERT INTO chat_messages (tenant_id, conversation_id, sender_id, message_type, content, metadata, created_at)
+            VALUES (?, ?, 9000001, 'text', ?, ?, NOW())
+        ");
+        $ins->bind_param("iiss", $tenantId, $convId, $text, $metaJson);
+        $ins->execute();
+        $msgId = $conn->insert_id;
+        $ins->close();
+
+        $upd = $conn->prepare("UPDATE chat_conversations SET last_message_id = ?, last_message_at = NOW() WHERE id = ?");
+        $upd->bind_param("ii", $msgId, $convId);
+        $upd->execute();
+        $upd->close();
+
+        return true;
+    };
+
+    // Slot 1: Morning Briefing (8h00 - 10h00)
+    if ($slot === 'morning') {
+        $uRes = $conn->query("SELECT id, full_name, tenant_id FROM users WHERE is_active = 1 AND role IN ('sale', 'sales', 'consultant', 'admin', 'manager')");
+        if ($uRes) {
+            while ($u = $uRes->fetch_assoc()) {
+                $uId = (int)$u['id'];
+                $tId = (int)($u['tenant_id'] ?: 1);
+                $uName = $u['full_name'] ?: 'bạn';
+
+                // Count stale leads for this user (no note in >= 3 days)
+                $sRes = $conn->query("
+                    SELECT COUNT(1) FROM contacts c
+                    LEFT JOIN (SELECT entity_id, MAX(created_at) as last_n FROM notes WHERE entity_type = 'contact' GROUP BY entity_id) n ON c.id = n.entity_id
+                    WHERE c.owner_id = {$uId} AND c.deleted_at IS NULL AND (c.stage_id < 14 OR c.stage_id IS NULL)
+                      AND DATEDIFF(NOW(), COALESCE(n.last_n, c.created_at)) >= 3
+                ");
+                $staleCount = $sRes ? (int)$sRes->fetch_row()[0] : 0;
+
+                // Count unpaid sales orders
+                $soRes = $conn->query("
+                    SELECT COUNT(1), COALESCE(SUM(so.total - COALESCE(so.paid_amount, 0)), 0) 
+                    FROM sales_orders so
+                    LEFT JOIN contacts c ON so.contact_id = c.id
+                    WHERE (c.owner_id = {$uId} OR so.created_by = {$uId}) AND so.status != 'cancelled' AND so.payment_status != 'paid' AND (so.total - COALESCE(so.paid_amount, 0)) > 0
+                ");
+                $soRow = $soRes ? $soRes->fetch_row() : [0, 0];
+                $unpaidSoCount = (int)$soRow[0];
+                $debtAmt = (float)$soRow[1];
+
+                if ($staleCount > 0 || $unpaidSoCount > 0) {
+                    $cId = $getOrCreateBotConv($uId, $tId);
+                    $debtFormatted = number_format($debtAmt, 0, ',', '.') . ' VND';
+                    $msg = "🌅 **[BẢN TIN SÁNG TỪ SI IDEAS]**\n"
+                         . "Chào **{$uName}**, chúc bạn một ngày mới tràn đầy năng lượng!\n\n"
+                         . "📊 **Điểm tin công việc sáng nay của bạn:**\n";
+                    if ($staleCount > 0) {
+                        $msg .= "• Có **{$staleCount} cơ hội học viên tiềm năng** bị gián đoạn tương tác trên 3 ngày. Bạn nhớ gọi điện/nhắn Zalo chăm sóc ngay nhé!\n";
+                    }
+                    if ($unpaidSoCount > 0) {
+                        $msg .= "• Có **{$unpaidSoCount} đơn hàng/học phí** còn nợ đợt tiếp theo (tổng nợ: **{$debtFormatted}**). Hãy đôn đốc học viên đóng đúng hạn nhé!\n";
+                    }
+                    $msg .= "\n💡 *Bạn có thể nhắn cho mình bất cứ lúc nào để tra cứu sâu hồ sơ khách hàng hoặc nhờ mình soạn đề xuất nhé!*";
+
+                    $sendBriefingIfNotSent($cId, $uId, $tId, 'morning', $msg);
+                }
+            }
+        }
+    }
+
+    // Slot 2: Midday Approval & SLA Alert (11h30 - 13h00)
+    elseif ($slot === 'midday') {
+        $mRes = $conn->query("SELECT id, full_name, tenant_id FROM users WHERE is_active = 1 AND role IN ('admin', 'superadmin', 'director', 'manager', 'accountant')");
+        if ($mRes) {
+            while ($m = $mRes->fetch_assoc()) {
+                $mId = (int)$m['id'];
+                $tId = (int)($m['tenant_id'] ?: 1);
+                $mName = $m['full_name'] ?: 'Sếp';
+
+                // Count pending expenses waiting for this manager
+                $eRes = $conn->query("
+                    SELECT COUNT(1) FROM expenses 
+                    WHERE status = 'pending' AND deleted_at IS NULL 
+                      AND (approver_id = {$mId} OR approver_id_2 = {$mId} OR approver_id_3 = {$mId})
+                ");
+                $expCount = $eRes ? (int)$eRes->fetch_row()[0] : 0;
+
+                // Count breached tickets
+                $tRes = $conn->query("
+                    SELECT COUNT(1) FROM tickets 
+                    WHERE status IN ('open', 'in_progress', 'waiting') 
+                      AND ((priority = 'urgent' AND TIMESTAMPDIFF(HOUR, created_at, NOW()) > 12)
+                        OR (priority = 'high' AND TIMESTAMPDIFF(HOUR, created_at, NOW()) > 24)
+                        OR (TIMESTAMPDIFF(HOUR, created_at, NOW()) > 48))
+                ");
+                $breachedCount = $tRes ? (int)$tRes->fetch_row()[0] : 0;
+
+                if ($expCount > 0 || $breachedCount > 0) {
+                    $cId = $getOrCreateBotConv($mId, $tId);
+                    $msg = "⏰ **[ĐIỂM NGHẼN PHÊ DUYỆT & DỊCH VỤ TRƯA]**\n"
+                         . "Kính gửi **{$mName}**,\n\n"
+                         . "Trước giờ nghỉ trưa, hệ thống phát hiện một số đầu việc cần được tháo gỡ:\n";
+                    if ($expCount > 0) {
+                        $msg .= "• Có **{$expCount} đề xuất chi tiêu / tạm ứng** đang chờ phê duyệt từ bạn.\n";
+                    }
+                    if ($breachedCount > 0) {
+                        $msg .= "• Có **{$breachedCount} ticket khiếu nại học viên** đã vượt hạn cam kết SLA cần được chỉ đạo giải quyết.\n";
+                    }
+                    $msg .= "\n👉 *Nhờ {$mName} dành ít phút vào phê duyệt để các phòng ban kịp thời triển khai công việc buổi chiều ạ!*";
+
+                    $sendBriefingIfNotSent($cId, $mId, $tId, 'midday', $msg);
+                }
+            }
+        }
+    }
+
+    // Slot 3: Evening Wrap-up (17h00 - 19h00)
+    elseif ($slot === 'evening') {
+        $uRes = $conn->query("SELECT id, full_name, tenant_id FROM users WHERE is_active = 1");
+        if ($uRes) {
+            while ($u = $uRes->fetch_assoc()) {
+                $uId = (int)$u['id'];
+                $tId = (int)($u['tenant_id'] ?: 1);
+                $uName = $u['full_name'] ?: 'bạn';
+
+                // Count tasks due today or overdue
+                $tRes = $conn->query("
+                    SELECT COUNT(1) FROM activities 
+                    WHERE user_id = {$uId} AND deleted_at IS NULL 
+                      AND (status IS NULL OR status NOT IN ('completed', 'done', 'hoan_thanh', 'cancelled'))
+                      AND due_date IS NOT NULL AND due_date <= NOW()
+                ");
+                $dueTaskCount = $tRes ? (int)$tRes->fetch_row()[0] : 0;
+
+                if ($dueTaskCount > 0) {
+                    $cId = $getOrCreateBotConv($uId, $tId);
+                    $msg = "🌇 **[TỔNG KẾT NGÀY LÀM VIỆC TỪ SI IDEAS]**\n"
+                         . "Chào **{$uName}**, một ngày làm việc sắp khép lại!\n\n"
+                         . "📋 Hệ thống ghi nhận bạn còn **{$dueTaskCount} công việc** đến hạn hôm nay chưa bấm hoàn thành.\n"
+                         . "Bạn hãy kiểm tra lại Bàn làm việc để cập nhật tiến độ công việc và đừng quên điểm danh chấm công ra về nhé! 🎉";
+
+                    $sendBriefingIfNotSent($cId, $uId, $tId, 'evening', $msg);
+                }
+            }
+        }
+    }
+}
+
 // Chạy trực tiếp nếu từ CLI hoặc cron
 if (basename(__FILE__) === basename($_SERVER['SCRIPT_FILENAME'] ?? '')) {
     runAIScreenerWorker($conn);
+    runProactiveAgentBriefingWorker($conn);
 }

@@ -723,8 +723,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               body: JSON.stringify({
                 conversation_id: activeConversationId,
                 message_type,
-                content,
-                metadata,
+                metadata: {
+                  ...(typeof metadata === 'object' && metadata ? metadata : {}),
+                  active_agent_id: initialMatchedAgent?.id || (activeConversationId ? get().activeAgentByConvId[activeConversationId]?.id : undefined)
+                },
                 reply_to_id: actualReplyId,
                 stream: true
               })

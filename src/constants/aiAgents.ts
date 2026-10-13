@@ -41,9 +41,10 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
       'Điều phối & phân luồng hội đồng 11 Agent nghiệp vụ',
       'Tra cứu toàn bộ cơ sở tri thức đào tạo & kiểm định quốc tế IDEAS',
       'Phân tích đa phương tiện (Brochure, Hợp đồng, File PDF/Word/Excel)',
+      'Truy vết nút thắt phê duyệt và điểm nghẽn quy trình liên phòng ban',
       'Tổng hợp báo cáo đa phân hệ & định tuyến người dùng'
     ],
-    allowedTools: ['search_ideas_knowledge', 'get_program_details', 'get_system_navigation', 'get_system_health_status'],
+    allowedTools: ['search_ideas_knowledge', 'get_program_details', 'get_system_navigation', 'get_system_health_status', 'trace_approval_blocker'],
     actionProposals: ['Tất cả các loại Thẻ Hành Động ERP'],
     synergyWith: ['sales', 'academic', 'records_legal', 'finance', 'hrm'],
     securityGuardrails: [
@@ -89,15 +90,16 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
     badgeBg: '#d1fae5',
     description: 'Phiếu chi PO, phiếu thu SO, tiền cọc học phí, tạm ứng và dòng tiền.',
     statusText: 'Đang đối soát số liệu PO / SO & thu chi...',
-    keywords: ['chi phí', 'phiếu chi', 'po', 'purchase order', 'phiếu thu', 'so', 'sales order', 'cọc', 'đặt cọc', 'học phí', 'tiền', 'dòng tiền', 'tạm ứng', 'ngân sách', 'hóa đơn'],
-    suggestedPrompt: 'Tạo phiếu chi PO 5.000.000đ mua văn phòng phẩm',
+    keywords: ['chi phí', 'phiếu chi', 'po', 'purchase order', 'phiếu thu', 'so', 'sales order', 'cọc', 'đặt cọc', 'học phí', 'tiền', 'dòng tiền', 'tạm ứng', 'ngân sách', 'hóa đơn', 'công nợ', 'nợ học phí', 'phải thu', 'đợt 2'],
+    suggestedPrompt: 'Kiểm tra công nợ học phí các đơn hàng và danh sách cần đôn đốc thu tiền',
     permissions: [
       'Tra cứu lịch sử đặt cọc, phiếu thu học phí của học viên (deposits)',
       'Tra cứu đề xuất thanh toán chi phí & tạm ứng của người dùng',
+      'Đôn đốc công nợ học phí và theo dõi tiến độ thanh toán theo đợt',
       'Xem tổng quan doanh thu & dòng tiền tháng (Admin/Kế toán)',
       'Đề xuất lập phiếu chi PO, tạm ứng, và đơn hàng bán SO có chia đợt'
     ],
-    allowedTools: ['get_contact_financial_summary', 'get_my_payment_proposals', 'get_financial_overview', 'draft_action_proposal'],
+    allowedTools: ['get_contact_financial_summary', 'get_my_payment_proposals', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'draft_action_proposal'],
     actionProposals: [
       'Thẻ Đề xuất thanh toán chi phí (expense)',
       'Thẻ Đề xuất tạm ứng công tác (advance_payment)',
@@ -120,16 +122,17 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
     badgeBg: '#fef3c7',
     description: 'Tra cứu khách hàng 360°, lịch sử tương tác, kịch bản tư vấn, 12 tình huống chốt sale.',
     statusText: 'Đang phân tích dữ liệu khách hàng & kịch bản tư vấn...',
-    keywords: ['lead', 'tiềm năng', 'khách hàng', 'crm', 'tư vấn', 'chốt sale', 'từ chối', 'học viên', 'phễu', 'pipeline', 'chăm sóc', 'từ lúc nào', 'ai chăm sóc', 'note cái gì', 'chuẩn hết chưa'],
-    suggestedPrompt: 'Khách hàng này từ lúc nào, ai chăm sóc, note cái gì và hồ sơ chuẩn hết chưa?',
+    keywords: ['lead', 'tiềm năng', 'khách hàng', 'crm', 'tư vấn', 'chốt sale', 'từ chối', 'học viên', 'phễu', 'pipeline', 'chăm sóc', 'từ lúc nào', 'ai chăm sóc', 'note cái gì', 'chuẩn hết chưa', 'bỏ quên', 'ngâm lead', 'hiệu suất sale', 'tỷ lệ chốt'],
+    suggestedPrompt: 'Có bao nhiêu Lead đang bị ngâm quá 3 ngày không ai gọi chăm sóc?',
     permissions: [
       'Tra cứu hồ sơ khách hàng 360° (ngày tạo, nguồn lead, người chăm sóc, note, hồ sơ, cọc)',
+      'Phân tích hiệu suất chuyển đổi và phát hiện Lead bị gián đoạn chăm sóc',
       'Tìm kiếm khách hàng tiềm năng theo Tên, SĐT, Email trong phạm vi quản lý',
       'Tra cứu hộp thư CRM Inbox và các tương tác gần nhất',
       'Cập nhật bước chuyển phễu Pipeline & thêm ghi chú chăm sóc',
       'Cập nhật thông tin liên hệ (chức danh, công ty, địa chỉ)'
     ],
-    allowedTools: ['get_contact_360_profile', 'search_contacts', 'get_my_crm_inbox', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'draft_action_proposal'],
+    allowedTools: ['get_contact_360_profile', 'search_contacts', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'draft_action_proposal'],
     actionProposals: [
       'Thẻ Thêm học viên / Khách tiềm năng (lead)',
       'Thẻ Đơn hàng bán / Lịch thu học phí (sales_order)'
@@ -151,16 +154,17 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
     badgeBg: '#ede9fe',
     description: 'Sơ đồ phòng ban, ai quản lý, nhân sự nghỉ việc, chấm công, nay ai nghỉ & phép.',
     statusText: 'Đang tra cứu sơ đồ phòng ban, nhân sự & lịch nghỉ...',
-    keywords: ['chấm công', 'nghỉ phép', 'phép năm', 'giải trình', 'quên chấm', 'đi trễ', 'bổ sung công', 'đổi ca', 'duyệt đơn', 'phiếu lương', 'bảng lương', 'lương', 'phê duyệt', 'công ty có ai', 'phòng ban', 'quản lý', 'trưởng phòng', 'trưởng nhóm', 'leader', 'nhân sự', 'nhân viên', 'nghỉ việc', 'nay ai nghỉ', 'hôm nay ai nghỉ', 'sắp tới ai nghỉ', 'ai nghỉ', 'ai off', 'vắng mặt', 'wfh', 'công tác'],
-    suggestedPrompt: 'Hôm nay ai nghỉ phép hay WFH và sắp tới có ai đăng ký nghỉ không?',
+    keywords: ['chấm công', 'nghỉ phép', 'phép năm', 'giải trình', 'quên chấm', 'đi trễ', 'bổ sung công', 'đổi ca', 'duyệt đơn', 'phiếu lương', 'bảng lương', 'lương', 'phê duyệt', 'công ty có ai', 'phòng ban', 'quản lý', 'trưởng phòng', 'trưởng nhóm', 'leader', 'nhân sự', 'nhân viên', 'nghỉ việc', 'nay ai nghỉ', 'hôm nay ai nghỉ', 'sắp tới ai nghỉ', 'ai nghỉ', 'ai off', 'vắng mặt', 'wfh', 'công tác', 'ai đang giữ đơn', 'kẹt đơn', 'tắc ở đâu'],
+    suggestedPrompt: 'Đơn của tôi gửi mấy ngày rồi sao chưa thấy duyệt, hiện đang kẹt ở ai?',
     permissions: [
       'Tra cứu danh bạ nhân sự, sơ đồ quản lý và danh sách nhân sự nghỉ việc',
       'Tra cứu lịch nghỉ phép, vắng mặt toàn viện (hôm nay ai nghỉ, ai sắp nghỉ)',
       'Tra cứu dữ liệu chấm công, phép năm, phiếu lương cá nhân của người dùng',
+      'Truy vết chính xác nút thắt phê duyệt đơn từ (ai đang duyệt, cấp 1, cấp 2)',
       'Tra cứu phiếu phê duyệt đang chờ duyệt (nghỉ phép, giải trình công)',
       'Đề xuất tạo đơn xin nghỉ phép, bổ sung công và đổi ca trực'
     ],
-    allowedTools: ['get_company_staff_directory', 'get_company_leave_and_absence', 'get_my_attendance_summary', 'get_my_payslip', 'get_pending_approvals', 'draft_action_proposal'],
+    allowedTools: ['get_company_staff_directory', 'get_company_leave_and_absence', 'get_my_attendance_summary', 'get_my_payslip', 'get_pending_approvals', 'trace_approval_blocker', 'draft_action_proposal'],
     actionProposals: [
       'Thẻ Đơn xin nghỉ phép (leave)',
       'Thẻ Giải trình quên chấm công (supplementary)',
@@ -302,10 +306,11 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
     permissions: [
       'Báo cáo mạch tài chính tổng thể: Thực thu cọc/học phí, thực chi giải ngân, dòng tiền ròng',
       'Cảnh báo các khoản chi lớn nhất và các biến động bất thường về dòng tiền',
+      'Đôn đốc công nợ học phí phải thu và tỷ lệ hoàn thành thu tiền toàn viện',
       'Tổng hợp số lượng đơn cọc mới và tiến độ hoàn thành KPI tuyển sinh toàn viện',
       'Báo cáo P&L thời gian thực phục vụ Ban Giám đốc ra quyết định điều hành'
     ],
-    allowedTools: ['get_executive_financial_pulse', 'get_financial_overview', 'get_system_health_status'],
+    allowedTools: ['get_executive_financial_pulse', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'get_system_health_status'],
     actionProposals: ['Thẻ Báo cáo điều hành P&L', 'Thẻ Khuyến nghị can thiệp dòng tiền'],
     synergyWith: ['finance', 'sales', 'hrm', 'master'],
     securityGuardrails: [
@@ -324,15 +329,16 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
     badgeBg: '#e0f2fe',
     description: 'Giám sát đồng bộ Google Sheets, webhook, cronjob, tra cứu audit log và hỗ trợ lỗi hệ thống.',
     statusText: 'Đang kiểm tra trạng thái hệ thống & nhật ký vận hành...',
-    keywords: ['kỹ thuật', 'hệ thống', 'lỗi app', 'webhook', 'sync sheet', 'đồng bộ', 'cronjob', 'audit log', 'ai_query_audit_logs', 'kết nối', 'hỗ trợ it', 'sự cố'],
-    suggestedPrompt: 'Kiểm tra trạng thái đồng bộ Google Sheets và webhook gần đây',
+    keywords: ['kỹ thuật', 'hệ thống', 'lỗi app', 'webhook', 'sync sheet', 'đồng bộ', 'cronjob', 'audit log', 'ai_query_audit_logs', 'kết nối', 'hỗ trợ it', 'sự cố', 'ticket', 'khiếu nại', 'sla', 'trễ hạn'],
+    suggestedPrompt: 'Có ticket hỗ trợ hay khiếu nại nào của học viên bị quá hạn SLA không?',
     permissions: [
       'Kiểm tra tình trạng sức khỏe toàn diện của hệ thống MYERP',
+      'Giám sát khiếu nại học viên & phát hiện ticket vi phạm cam kết SLA',
       'Tra cứu nhật ký truy vấn AI (ai_query_audit_logs) và phát hiện các lỗ hổng cần huấn luyện',
       'Theo dõi số lượng nhân sự đang trực tuyến thời gian thực (presence)',
       'Hỗ trợ định hướng link điều hướng và xử lý các sự cố vận hành kỹ thuật'
     ],
-    allowedTools: ['get_system_health_status', 'get_system_navigation'],
+    allowedTools: ['get_system_health_status', 'get_ticket_status_and_sla_breaches', 'get_system_navigation'],
     actionProposals: ['Thẻ Báo cáo sự cố hệ thống IT', 'Thẻ Yêu cầu bảo trì kỹ thuật'],
     synergyWith: ['master', 'executive_bi'],
     securityGuardrails: [
