@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, ShieldCheck, Wrench, Sparkles, Send, Users, 
   CheckCircle2, AlertTriangle, Lock, Cpu, ChevronRight, Info
 } from 'lucide-react';
 import { type SpecializedAgent, SPECIALIZED_AGENTS } from '../../constants/aiAgents';
+import { pushOverlay } from '../../utils/overlayStack';
 
 interface AgentDetailModalProps {
   isOpen: boolean;
@@ -19,12 +21,22 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
   onClose,
   onSelectPrompt
 }) => {
-  const [currentAgent, setCurrentAgent] = useState<SpecializedAgent | null>(agent);
+  const [overrideAgent, setOverrideAgent] = useState<SpecializedAgent | null>(null);
 
-  // Sync state if prop changes
-  React.useEffect(() => {
-    setCurrentAgent(agent);
-  }, [agent]);
+  // Sync state if prop changes or modal re-opens
+  useEffect(() => {
+    setOverrideAgent(null);
+  }, [agent, isOpen]);
+
+  // Handle escape key and overlay stacking
+  useEffect(() => {
+    if (isOpen) {
+      const unregister = pushOverlay('agent-detail-modal', onClose, 2300);
+      return () => unregister();
+    }
+  }, [isOpen, onClose]);
+
+  const currentAgent = overrideAgent || agent;
 
   if (!isOpen || !currentAgent) return null;
 
@@ -32,19 +44,23 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
     .map(id => SPECIALIZED_AGENTS.find(a => a.id === id))
     .filter(Boolean) as SpecializedAgent[];
 
-  return (
+  return createPortal(
     <AnimatePresence>
       <div 
         style={{
           position: 'fixed',
-          inset: 0,
-          zIndex: 9999,
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 2147483647,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           padding: '16px',
-          background: 'rgba(15, 23, 42, 0.65)',
-          backdropFilter: 'blur(5px)'
+          background: 'rgba(15, 23, 42, 0.72)',
+          backdropFilter: 'blur(6px)',
+          WebkitBackdropFilter: 'blur(6px)'
         }}
         onClick={onClose}
       >
@@ -383,7 +399,7 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
                   {collaboratingAgents.map((ag) => (
                     <div
                       key={ag.id}
-                      onClick={() => setCurrentAgent(ag)}
+                      onClick={() => setOverrideAgent(ag)}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -517,6 +533,7 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
           </div>
         </motion.div>
       </div>
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 };
