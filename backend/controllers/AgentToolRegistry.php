@@ -663,6 +663,106 @@ class AgentToolRegistry {
                                 ]
                             ]
                         ]
+                    ],
+                    [
+                        'name' => 'schedule_contact_activity',
+                        'description' => 'Lên lịch hẹn tư vấn, cuộc gọi nhắc nhở chăm sóc hoặc tác vụ gắn trực tiếp với học viên/lead. Tự động lưu vào bảng activities của học viên và đồng bộ hiển thị lên Lịch làm việc cá nhân (/calendar) của chuyên viên tư vấn.',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'contact_id' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Mã ID học viên / lead cần đặt lịch hẹn (Bắt buộc)'
+                                ],
+                                'type' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['call', 'meeting', 'task', 'email'],
+                                    'description' => 'Loại hoạt động: call (cuộc gọi lại), meeting (lịch hẹn tư vấn/gặp trực tiếp), task (nhiệm vụ cần làm), email (mặc định: call)'
+                                ],
+                                'subject' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tiêu đề cuộc hẹn hoặc nội dung cần nhắc (vd: "Gọi tư vấn học phí EMBA K28", "Hẹn gặp tại Viện IDEAS")'
+                                ],
+                                'due_date' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Thời điểm diễn ra hoặc hạn chót, định dạng YYYY-MM-DD HH:mm:ss hoặc YYYY-MM-DD'
+                                ],
+                                'notes' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Ghi chú chi tiết cho cuộc hẹn (địa điểm, nội dung trao đổi, chuẩn bị hồ sơ)'
+                                ],
+                                'priority' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['low', 'medium', 'high', 'urgent'],
+                                    'description' => 'Mức độ ưu tiên (mặc định: medium)'
+                                ]
+                            ],
+                            'required' => ['contact_id', 'subject']
+                        ]
+                    ],
+                    [
+                        'name' => 'check_lead_duplicate_and_fairshare_status',
+                        'description' => 'Kiểm tra tranh chấp lead và trùng lặp khách hàng theo số điện thoại hoặc email. Trích xuất chuyên viên phụ trách hiện tại, lần tương tác gần nhất và thẩm định quy chế Fair Share: nếu quá 7 ngày không chăm sóc thì được coi là Bị bỏ quên (Stale Lead) và có thể xin chuyển giao.',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'phone' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Số điện thoại của khách hàng / học viên cần kiểm tra'
+                                ],
+                                'email' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Email của khách hàng / học viên nếu có'
+                                ],
+                                'name' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Họ tên của khách hàng để đối chiếu nếu có'
+                                ]
+                            ]
+                        ]
+                    ],
+                    [
+                        'name' => 'lookup_recent_cash_receipts_and_deposits',
+                        'description' => 'Tra cứu và đối soát các phiếu thu tiền, phiếu đặt cọc và biến động dòng tiền vào mới nhất để xác nhận học viên đã đóng tiền hay chưa. Tìm kiếm linh hoạt theo số tiền (VND), từ khóa nội dung/tên học viên, trạng thái (đã thu / chờ duyệt) hoặc ngày nộp.',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'amount' => [
+                                    'type' => 'NUMBER',
+                                    'description' => 'Số tiền cần tìm kiếm (VND), ví dụ: 5000000 hoặc 15000000'
+                                ],
+                                'keyword' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Từ khóa tìm kiếm: Tên học viên, SĐT, mã phiếu hoặc nội dung chuyển khoản'
+                                ],
+                                'status' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['all', 'approved', 'pending'],
+                                    'description' => 'Trạng thái phiếu: approved (kế toán đã duyệt/tiền đã vào), pending (đang chờ duyệt), all (tất cả)'
+                                ],
+                                'limit' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Số lượng giao dịch cần trích xuất (mặc định 5, tối đa 15)'
+                                ]
+                            ]
+                        ]
+                    ],
+                    [
+                        'name' => 'get_academic_schedule_and_intakes',
+                        'description' => 'Tra cứu lịch học, lịch khai giảng các khóa học (EMBA, MBA, MSc AI, DBA), thông tin giảng viên đứng lớp, phòng học, hình thức học (Zoom/Trực tiếp) và các mốc luận văn tốt nghiệp từ hệ thống đào tạo IDEAS.',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'program_keyword' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Từ khóa tên khóa học hoặc môn học (ví dụ: "EMBA", "MBA", "Chiến lược", "AI", "K28")'
+                                ],
+                                'limit' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Số lượng lớp hoặc môn học cần trích xuất (mặc định 5, tối đa 15)'
+                                ]
+                            ]
+                        ]
                     ]
                 ];
 
@@ -3934,6 +4034,361 @@ class AgentToolRegistry {
                         'total_teams_audited' => count($auditResults),
                         'teams' => $auditResults,
                         'verdict' => "Báo cáo phân bổ Lead và kiểm toán Fair Share đã được tổng hợp trực tiếp từ bảng cơ sở dữ liệu."
+                    ];
+                }
+
+                // ==========================================
+                // 34. SCHEDULE CONTACT ACTIVITY (CALENDAR & CRM ENGAGEMENT)
+                // ==========================================
+                case 'schedule_contact_activity': {
+                    $contactId = (int)($args['contact_id'] ?? 0);
+                    $type = in_array($args['type'] ?? '', ['call', 'meeting', 'task', 'email'], true) ? $args['type'] : 'call';
+                    $subject = trim($args['subject'] ?? '');
+                    $notes = trim($args['notes'] ?? '');
+                    $priority = in_array($args['priority'] ?? '', ['low', 'medium', 'high', 'urgent'], true) ? $args['priority'] : 'medium';
+                    $dueDateRaw = trim($args['due_date'] ?? '');
+
+                    if ($contactId <= 0) {
+                        return ['success' => false, 'message' => 'Vui lòng cung cấp mã contact_id của học viên cần lên lịch hẹn.'];
+                    }
+                    if (empty($subject)) {
+                        $subject = ($type === 'call' ? 'Gọi điện tư vấn' : ($type === 'meeting' ? 'Lịch hẹn tư vấn' : 'Công việc chăm sóc')) . " học viên";
+                    }
+
+                    $dueDate = null;
+                    if (!empty($dueDateRaw)) {
+                        $ts = strtotime($dueDateRaw);
+                        if ($ts !== false) {
+                            $dueDate = date('Y-m-d H:i:s', $ts);
+                        }
+                    }
+                    if (!$dueDate) {
+                        $dueDate = date('Y-m-d 09:00:00', strtotime('+1 day'));
+                    }
+
+                    // Zero-Trust RBAC Check: Ensure contact exists & user has rights
+                    $cStmt = $db->prepare("SELECT id, full_name, phone, owner_id FROM contacts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
+                    $cStmt->execute([$contactId, $tid]);
+                    $contact = $cStmt->fetch(PDO::FETCH_ASSOC);
+                    if (!$contact) {
+                        return ['success' => false, 'message' => "Không tìm thấy học viên hoặc liên hệ có ID #{$contactId} trong hệ thống."];
+                    }
+
+                    if (!$canAccessAllContacts && $contact['owner_id'] != $uid) {
+                        $collabStmt = $db->prepare("SELECT 1 FROM contacts WHERE id = ? AND FIND_IN_SET(?, IFNULL(collaborator_ids, ''))");
+                        $collabStmt->execute([$contactId, (string)$uid]);
+                        if (!$collabStmt->fetchColumn()) {
+                            return ['success' => false, 'message' => "Bạn không có quyền lên lịch trên học viên này (đang thuộc quyền quản lý của nhân sự khác)."];
+                        }
+                    }
+
+                    $actStmt = $db->prepare("
+                        INSERT INTO activities (
+                            tenant_id, user_id, created_by, type, subject, body,
+                            status, priority, due_date, related_type, related_id, contact_id,
+                            created_at, updated_at
+                        ) VALUES (
+                            ?, ?, ?, ?, ?, ?,
+                            'planned', ?, ?, 'contact', ?, ?,
+                            NOW(), NOW()
+                        )
+                    ");
+                    $actStmt->execute([
+                        $tid, $uid, $uid, $type, $subject, $notes,
+                        $priority, $dueDate, $contactId, $contactId
+                    ]);
+                    $newActId = (int)$db->lastInsertId();
+
+                    $typeLabel = $type === 'call' ? 'Cuộc gọi lại' : ($type === 'meeting' ? 'Lịch hẹn gặp trực tiếp' : ($type === 'email' ? 'Gửi email' : 'Tác vụ nhắc việc'));
+                    $dueFormatted = date('d/m/Y H:i', strtotime($dueDate));
+
+                    return [
+                        'success' => true,
+                        'activity_id' => $newActId,
+                        'contact_id' => $contactId,
+                        'contact_name' => $contact['full_name'] ?: 'Học viên',
+                        'activity_type' => $typeLabel,
+                        'subject' => $subject,
+                        'scheduled_at' => $dueFormatted,
+                        'notes' => $notes ?: 'Không có ghi chú thêm',
+                        'calendar_synced' => true,
+                        'summary' => "Đã lên lịch {$typeLabel} thành công cho học viên {$contact['full_name']} lúc {$dueFormatted}. Hoạt động đã được đồng bộ trực tiếp vào Lịch làm việc (/calendar) và Tab Hoạt động của học viên."
+                    ];
+                }
+
+                // ==========================================
+                // 35. CHECK LEAD DUPLICATE & FAIR SHARE STATUS
+                // ==========================================
+                case 'check_lead_duplicate_and_fairshare_status': {
+                    $phone = trim($args['phone'] ?? '');
+                    $email = trim($args['email'] ?? '');
+                    $name = trim($args['name'] ?? '');
+
+                    $cleanPhone = preg_replace('/\D/', '', $phone);
+                    if (strlen($cleanPhone) >= 9) {
+                        $cleanPhone = substr($cleanPhone, -9);
+                    }
+
+                    if (empty($cleanPhone) && empty($email) && empty($name)) {
+                        return ['success' => false, 'message' => 'Vui lòng cung cấp Số điện thoại, Email hoặc Họ tên để kiểm tra trùng lặp.'];
+                    }
+
+                    $conditions = [];
+                    $params = [$tid];
+
+                    if (!empty($cleanPhone)) {
+                        $conditions[] = "REPLACE(REPLACE(REPLACE(c.phone, ' ', ''), '-', ''), '+', '') LIKE ?";
+                        $params[] = '%' . $cleanPhone . '%';
+                    }
+                    if (!empty($email)) {
+                        $conditions[] = "c.email = ?";
+                        $params[] = $email;
+                    }
+                    if (empty($cleanPhone) && empty($email) && !empty($name)) {
+                        $conditions[] = "c.full_name LIKE ?";
+                        $params[] = '%' . $name . '%';
+                    }
+
+                    $whereClause = implode(' OR ', $conditions);
+
+                    $sql = "
+                        SELECT 
+                            c.id, c.full_name, c.phone, c.email, c.pipeline_stage, c.lead_status,
+                            c.owner_id, c.created_at,
+                            u.full_name as owner_name, u.email as owner_email,
+                            b.name as branch_name,
+                            (
+                                SELECT MAX(n.created_at) FROM notes n WHERE n.entity_type = 'contact' AND n.entity_id = c.id
+                            ) as last_note_at,
+                            (
+                                SELECT MAX(a.created_at) FROM activities a WHERE (a.contact_id = c.id OR (a.related_type = 'contact' AND a.related_id = c.id)) AND a.deleted_at IS NULL
+                            ) as last_activity_at
+                        FROM contacts c
+                        LEFT JOIN users u ON c.owner_id = u.id
+                        LEFT JOIN branches b ON c.branch_id = b.id
+                        WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND ({$whereClause})
+                        ORDER BY c.id DESC
+                        LIMIT 5
+                    ";
+                    $stmt = $db->prepare($sql);
+                    $stmt->execute($params);
+                    $matches = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+                    if (empty($matches)) {
+                        return [
+                            'success' => true,
+                            'is_duplicate' => false,
+                            'message' => 'SỐ ĐIỆN THOẠI / HỒ SƠ MỚI HOÀN TOÀN! Khách hàng này chưa từng tồn tại trên hệ thống CRM của Viện IDEAS. Bạn có thể tự tin tiếp nhận, tư vấn và tạo hồ sơ mới ngay.',
+                            'recommendation' => 'Sử dụng Thẻ Thêm Học Viên Nhanh (quick add lead) để đưa vào danh bạ chăm sóc.'
+                        ];
+                    }
+
+                    $leadReports = [];
+                    foreach ($matches as $m) {
+                        $lastInteract = $m['last_note_at'] ?: ($m['last_activity_at'] ?: $m['created_at']);
+                        $daysNeglected = (int)floor((time() - strtotime($lastInteract)) / 86400);
+
+                        $isStale = $daysNeglected >= 7;
+                        $isOwnedBySelf = ((int)$m['owner_id'] === $uid);
+
+                        $fairShareVerdict = '';
+                        if ($isOwnedBySelf) {
+                            $fairShareVerdict = "Học viên này ĐÃ THUỘC VỀ BẠN. Hãy tiếp tục chăm sóc!";
+                        } elseif ($isStale) {
+                            $fairShareVerdict = "BỊ BỎ QUÊN ({$daysNeglected} ngày không có tương tác). Theo Quy chế Fair Share của IDEAS, bạn CÓ QUYỀN YÊU CẦU TRƯỞNG NHÓM CHUYỂN GIAO để chăm sóc.";
+                        } else {
+                            $fairShareVerdict = "ĐANG ĐƯỢC CHĂM SÓC TÍCH CỰC bởi {$m['owner_name']} (tương tác {$daysNeglected} ngày trước). Vui lòng không nhận để tránh tranh chấp quyền lợi!";
+                        }
+
+                        $phoneMasked = $m['phone'] ? (substr($m['phone'], 0, 4) . '***' . substr($m['phone'], -3)) : 'Chưa có SĐT';
+
+                        $leadReports[] = [
+                            'contact_id' => (int)$m['id'],
+                            'full_name' => $m['full_name'],
+                            'phone_masked' => $phoneMasked,
+                            'current_owner' => $m['owner_name'] ?: 'Chưa phân bổ',
+                            'branch' => $m['branch_name'] ?: 'Hồ Chí Minh',
+                            'stage' => $m['pipeline_stage'] ?: 'Mới nhận',
+                            'last_interaction' => date('d/m/Y', strtotime($lastInteract)) . " ({$daysNeglected} ngày trước)",
+                            'is_stale_over_7_days' => $isStale,
+                            'fair_share_verdict' => $fairShareVerdict
+                        ];
+                    }
+
+                    return [
+                        'success' => true,
+                        'is_duplicate' => true,
+                        'total_matches' => count($leadReports),
+                        'leads' => $leadReports,
+                        'summary' => "Phát hiện " . count($leadReports) . " hồ sơ trùng khớp trên hệ thống CRM. " . $leadReports[0]['fair_share_verdict']
+                    ];
+                }
+
+                // ==========================================
+                // 36. LOOKUP RECENT CASH RECEIPTS & DEPOSITS (BANK RECONCILIATION)
+                // ==========================================
+                case 'lookup_recent_cash_receipts_and_deposits': {
+                    $searchAmount = isset($args['amount']) ? (float)$args['amount'] : 0;
+                    $keyword = trim($args['keyword'] ?? '');
+                    $statusFilter = in_array($args['status'] ?? '', ['approved', 'pending', 'all'], true) ? $args['status'] : 'all';
+                    $limit = max(1, min(15, (int)($args['limit'] ?? 5)));
+
+                    $where = "d.tenant_id = ?";
+                    $params = [$tid];
+
+                    if ($statusFilter !== 'all') {
+                        $where .= " AND d.status = ?";
+                        $params[] = $statusFilter;
+                    }
+
+                    if ($searchAmount > 0) {
+                        $where .= " AND (d.price BETWEEN ? AND ?)";
+                        $params[] = $searchAmount * 0.999;
+                        $params[] = $searchAmount * 1.001;
+                    }
+
+                    if (!empty($keyword)) {
+                        $where .= " AND (c.full_name LIKE ? OR c.phone LIKE ? OR d.unit_code LIKE ? OR d.title LIKE ? OR IFNULL(d.notes, '') LIKE ?)";
+                        $kw = '%' . $keyword . '%';
+                        $params = array_merge($params, [$kw, $kw, $kw, $kw, $kw]);
+                    }
+
+                    // Zero-Trust RBAC: Non-admin/accountant sees only deposits of contacts owned or self-created
+                    if (!$isGlobalAdmin && !$isAccountant && !$isManager) {
+                        $where .= " AND (d.created_by = ? OR c.owner_id = ? OR FIND_IN_SET(?, IFNULL(c.collaborator_ids, '')))";
+                        $params = array_merge($params, [$uid, $uid, (string)$uid]);
+                    }
+
+                    $sql = "
+                        SELECT 
+                            d.id, d.unit_code, d.title, d.price, d.status, d.created_at, d.notes,
+                            d.payment_method,
+                            c.id as contact_id, c.full_name as contact_name, c.phone as contact_phone,
+                            u.full_name as creator_name,
+                            p.name as project_name
+                        FROM deposits d
+                        LEFT JOIN contacts c ON d.contact_id = c.id
+                        LEFT JOIN users u ON d.created_by = u.id
+                        LEFT JOIN projects p ON d.project_id = p.id
+                        WHERE {$where}
+                        ORDER BY d.id DESC
+                        LIMIT " . (int)$limit . "
+                    ";
+                    $stmt = $db->prepare($sql);
+                    $stmt->execute($params);
+                    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+                    $slips = [];
+                    foreach ($rows as $r) {
+                        $statusText = $r['status'] === 'approved' ? 'Đã duyệt thu (Tiền đã vào tài khoản)' : ($r['status'] === 'pending' ? 'Chờ kế toán xác nhận' : $r['status']);
+                        $phoneMasked = $r['contact_phone'] ? (substr($r['contact_phone'], 0, 4) . '***' . substr($r['contact_phone'], -3)) : 'Chưa có SĐT';
+
+                        $slips[] = [
+                            'deposit_id' => (int)$r['id'],
+                            'slip_code' => $r['unit_code'] ?: ('DEP-' . $r['id']),
+                            'title' => $r['title'] ?: 'Phiếu thu/cọc học phí',
+                            'amount' => number_format((float)$r['price'], 0, ',', '.') . ' VND',
+                            'status' => $statusText,
+                            'student_name' => $r['contact_name'] ?: 'Khách hàng',
+                            'student_phone' => $phoneMasked,
+                            'program' => $r['project_name'] ?: 'Chương trình IDEAS',
+                            'creator' => $r['creator_name'] ?: 'Nhân viên kinh doanh',
+                            'created_at' => date('d/m/Y H:i', strtotime($r['created_at'])),
+                            'notes' => $r['notes'] ?: 'Không có ghi chú'
+                        ];
+                    }
+
+                    return [
+                        'success' => true,
+                        'total_found' => count($slips),
+                        'slips' => $slips,
+                        'summary' => empty($slips) 
+                            ? "Không tìm thấy giao dịch thu tiền/cọc nào khớp với điều kiện tra cứu." 
+                            : "Tìm thấy " . count($slips) . " giao dịch thu/cọc phù hợp. Bạn có thể kiểm tra chi tiết để đối soát."
+                    ];
+                }
+
+                // ==========================================
+                // 37. GET ACADEMIC SCHEDULE & INTAKES (LMS & CLASS TIMETABLE)
+                // ==========================================
+                case 'get_academic_schedule_and_intakes': {
+                    $programKw = trim($args['program_keyword'] ?? '');
+                    $limit = max(1, min(15, (int)($args['limit'] ?? 5)));
+
+                    $where = "mc.status NOT IN ('deleted', 'archived', 'inactive')";
+                    $params = [];
+
+                    if (!empty($programKw)) {
+                        $where .= " AND (mc.name LIKE ? OR p.name LIKE ? OR p.code LIKE ?)";
+                        $kw = '%' . $programKw . '%';
+                        $params = [$kw, $kw, $kw];
+                    }
+
+                    $sql = "
+                        SELECT 
+                            mc.id, mc.name as cohort_name, mc.project_id, mc.subjects_json, 
+                            mc.thesis_milestones_json, mc.status,
+                            p.name as program_name, p.code as program_code
+                        FROM marketing_campaigns mc
+                        INNER JOIN projects p ON mc.project_id = p.id
+                        WHERE {$where}
+                        ORDER BY mc.id DESC
+                        LIMIT " . (int)$limit . "
+                    ";
+                    $stmt = $db->prepare($sql);
+                    $stmt->execute($params);
+                    $cohorts = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+                    $scheduleResults = [];
+                    foreach ($cohorts as $c) {
+                        $subjects = [];
+                        if (!empty($c['subjects_json'])) {
+                            $rawSubs = json_decode($c['subjects_json'], true);
+                            if (is_array($rawSubs)) {
+                                foreach ($rawSubs as $s) {
+                                    $sName = $s['name'] ?? ($s['subject_name'] ?? 'Môn học');
+                                    $lecturer = $s['lecturer_name'] ?? ($s['instructor'] ?? 'Chưa công bố');
+                                    $time = $s['time'] ?? ($s['schedule'] ?? ($s['dates'] ?? 'Theo thông báo đào tạo'));
+                                    $room = $s['room'] ?? ($s['location'] ?? 'Viện IDEAS / Trực tuyến');
+                                    $subjects[] = [
+                                        'subject' => $sName,
+                                        'lecturer' => $lecturer,
+                                        'schedule_time' => $time,
+                                        'location' => $room
+                                    ];
+                                }
+                            }
+                        }
+
+                        $milestones = [];
+                        if (!empty($c['thesis_milestones_json'])) {
+                            $rawMiles = json_decode($c['thesis_milestones_json'], true);
+                            if (is_array($rawMiles)) {
+                                foreach ($rawMiles as $m) {
+                                    $mTitle = $m['title'] ?? ($m['name'] ?? 'Mốc luận văn');
+                                    $mDate = $m['deadline'] ?? ($m['date'] ?? 'Chưa ấn định');
+                                    $milestones[] = "{$mTitle} (Hạn: {$mDate})";
+                                }
+                            }
+                        }
+
+                        $scheduleResults[] = [
+                            'cohort_id' => (int)$c['id'],
+                            'cohort_name' => $c['cohort_name'],
+                            'program' => $c['program_name'] . ' (' . $c['program_code'] . ')',
+                            'total_subjects' => count($subjects),
+                            'upcoming_subjects' => array_slice($subjects, 0, 4),
+                            'thesis_milestones' => $milestones
+                        ];
+                    }
+
+                    return [
+                        'success' => true,
+                        'total_cohorts' => count($scheduleResults),
+                        'cohorts' => $scheduleResults,
+                        'summary' => empty($scheduleResults)
+                            ? "Không tìm thấy lịch học hoặc khóa đào tạo nào khớp với từ khóa '{$programKw}'."
+                            : "Tìm thấy " . count($scheduleResults) . " khóa/lớp đào tạo. Dữ liệu lịch học và giảng viên được trích xuất từ phân hệ Quản lý Đào tạo IDEAS."
                     ];
                 }
 

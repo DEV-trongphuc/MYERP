@@ -71,7 +71,7 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
       'Đề xuất phân rã việc con (WBS) & giao việc cho nhân sự phòng ban',
       'Cảnh báo công việc quá hạn (overdue) và mức độ khẩn cấp'
     ],
-    allowedTools: ['get_my_tasks', 'get_task_detail', 'draft_action_proposal'],
+    allowedTools: ['get_my_tasks', 'get_task_detail', 'schedule_contact_activity', 'draft_action_proposal'],
     actionProposals: ['Thẻ Giao việc / Phân rã Task (task)'],
     synergyWith: ['hrm', 'sales', 'marketing_campaigns'],
     securityGuardrails: [
@@ -99,11 +99,12 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
       'Xem tổng quan doanh thu & dòng tiền tháng (Admin/Kế toán)',
       'Đề xuất lập phiếu chi PO, tạm ứng, và đơn hàng bán SO có chia đợt'
     ],
-    allowedTools: ['get_contact_financial_summary', 'get_my_payment_proposals', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'draft_action_proposal'],
+    allowedTools: ['get_contact_financial_summary', 'lookup_recent_cash_receipts_and_deposits', 'get_my_payment_proposals', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'draft_action_proposal'],
     actionProposals: [
       'Thẻ Đề xuất thanh toán chi phí (expense)',
       'Thẻ Đề xuất tạm ứng công tác (advance_payment)',
-      'Thẻ Đơn hàng bán & Lịch trình học phí (sales_order)'
+      'Thẻ Đơn hàng bán & Lịch trình học phí (sales_order)',
+      'Thẻ Đặt cọc / Giữ chỗ học phí (deposit)'
     ],
     synergyWith: ['sales', 'executive_bi', 'records_legal'],
     securityGuardrails: [
@@ -132,10 +133,11 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
       'Cập nhật bước chuyển phễu Pipeline & thêm ghi chú chăm sóc',
       'Cập nhật thông tin liên hệ (chức danh, công ty, địa chỉ)'
     ],
-    allowedTools: ['get_contact_360_profile', 'search_contacts', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'draft_action_proposal'],
+    allowedTools: ['get_contact_360_profile', 'search_contacts', 'check_lead_duplicate_and_fairshare_status', 'schedule_contact_activity', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'lookup_recent_cash_receipts_and_deposits', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'draft_action_proposal'],
     actionProposals: [
       'Thẻ Thêm học viên / Khách tiềm năng (lead)',
-      'Thẻ Đơn hàng bán / Lịch thu học phí (sales_order)'
+      'Thẻ Đơn hàng bán / Lịch thu học phí (sales_order)',
+      'Thẻ Đặt cọc / Giữ chỗ học phí (deposit)'
     ],
     synergyWith: ['records_legal', 'finance', 'academic', 'marketing_campaigns'],
     securityGuardrails: [
@@ -195,7 +197,7 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
       'Tra cứu dự án & chương trình đào tạo đang mở tuyển sinh',
       'Tư vấn chính sách bảo lưu, chuyển tiếp tín chỉ và lộ trình luận văn tốt nghiệp'
     ],
-    allowedTools: ['get_program_details', 'get_active_projects_and_campaigns', 'search_ideas_knowledge'],
+    allowedTools: ['get_program_details', 'get_academic_schedule_and_intakes', 'get_active_projects_and_campaigns', 'search_ideas_knowledge'],
     actionProposals: ['Thẻ Đăng ký chương trình đào tạo / Khóa học'],
     synergyWith: ['sales', 'records_legal', 'master'],
     securityGuardrails: [

@@ -4606,15 +4606,15 @@ class ChatController {
                     }
                 }
                 $qLower = mb_strtolower($lastMsgText);
-                if (preg_match('/(lead|khách hàng|crm|tư vấn|chốt sale|bỏ quên|ngâm lead|tỷ lệ chốt|fair share|vòng chia)/iu', $qLower)) {
+                if (preg_match('/(lead|khách hàng|crm|tư vấn|chốt sale|bỏ quên|ngâm lead|tỷ lệ chốt|fair share|vòng chia|lịch hẹn|gọi lại|đặt lịch|nhắc hẹn|cuộc hẹn|trùng lead|ai đang chăm|sđt này|khách này có chưa|tranh chấp)/iu', $qLower)) {
                     $activeAgentId = 'sales';
-                } elseif (preg_match('/(chi phí|phiếu chi|po|phiếu thu|so|cọc|đặt cọc|học phí|tiền|dòng tiền|tạm ứng|ngân sách|công nợ|nợ học phí)/iu', $qLower)) {
+                } elseif (preg_match('/(chi phí|phiếu chi|po|phiếu thu|so|cọc|đặt cọc|học phí|tiền|dòng tiền|tạm ứng|ngân sách|công nợ|nợ học phí|tiền vào|chuyển khoản|vừa nhận|đối soát|biên lai)/iu', $qLower)) {
                     $activeAgentId = 'finance';
                 } elseif (preg_match('/(chấm công|nghỉ phép|phép năm|giải trình|quên chấm|bảng lương|lương|phê duyệt|ai đang giữ đơn|kẹt đơn|sao chưa duyệt)/iu', $qLower)) {
                     $activeAgentId = 'hrm';
                 } elseif (preg_match('/(task|công việc|kế hoạch|việc con|subtask|tiến độ|deadline|giao việc)/iu', $qLower)) {
                     $activeAgentId = 'tasks';
-                } elseif (preg_match('/(emba|mba|msc ai|dba|tín chỉ|luận văn|đào tạo|xét tuyển|học viện|istec|umef)/iu', $qLower)) {
+                } elseif (preg_match('/(emba|mba|msc ai|dba|tín chỉ|luận văn|đào tạo|xét tuyển|học viện|istec|umef|lịch học|thời khóa biểu|thứ mấy học|thầy nào dạy|giảng viên nào|môn tiếp theo)/iu', $qLower)) {
                     $activeAgentId = 'academic';
                 } elseif (preg_match('/(hồ sơ|bằng cấp|bảng điểm|dịch thuật|công chứng|cccd|hợp đồng|pháp lý|chuẩn hết chưa|thiếu giấy tờ)/iu', $qLower)) {
                     $activeAgentId = 'records_legal';
@@ -4632,16 +4632,16 @@ class ChatController {
             }
 
             $agentToolMap = [
-                'sales' => ['get_contact_360_profile', 'search_contacts', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'draft_action_proposal', 'get_system_navigation'],
-                'finance' => ['get_contact_financial_summary', 'get_my_payment_proposals', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'draft_action_proposal', 'get_system_navigation'],
+                'sales' => ['get_contact_360_profile', 'search_contacts', 'check_lead_duplicate_and_fairshare_status', 'schedule_contact_activity', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'lookup_recent_cash_receipts_and_deposits', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'draft_action_proposal', 'get_system_navigation'],
+                'finance' => ['get_contact_financial_summary', 'lookup_recent_cash_receipts_and_deposits', 'get_my_payment_proposals', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'draft_action_proposal', 'get_system_navigation'],
                 'hrm' => ['get_company_staff_directory', 'get_company_leave_and_absence', 'get_my_attendance_summary', 'get_my_payslip', 'get_pending_approvals', 'trace_approval_blocker', 'draft_action_proposal', 'get_system_navigation'],
-                'tasks' => ['get_my_tasks', 'get_task_detail', 'draft_action_proposal', 'get_system_navigation'],
-                'academic' => ['get_program_details', 'get_active_projects_and_campaigns', 'search_ideas_knowledge', 'draft_action_proposal', 'get_system_navigation'],
+                'tasks' => ['get_my_tasks', 'get_task_detail', 'schedule_contact_activity', 'draft_action_proposal', 'get_system_navigation'],
+                'academic' => ['get_program_details', 'get_academic_schedule_and_intakes', 'get_active_projects_and_campaigns', 'search_ideas_knowledge', 'draft_action_proposal', 'get_system_navigation'],
                 'records_legal' => ['check_student_admission_records', 'get_contact_360_profile', 'attach_files_to_contact', 'draft_action_proposal', 'get_system_navigation'],
                 'assets_inventory' => ['get_inventory_and_asset_status', 'draft_action_proposal', 'get_system_navigation'],
                 'b2b_partner' => ['get_b2b_partner_and_contract_summary', 'draft_action_proposal', 'get_system_navigation'],
                 'marketing_campaigns' => ['get_campaign_marketing_stats', 'get_active_projects_and_campaigns', 'draft_action_proposal', 'get_system_navigation'],
-                'executive_bi' => ['get_executive_financial_pulse', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'get_system_health_status', 'draft_action_proposal', 'get_system_navigation'],
+                'executive_bi' => ['get_executive_financial_pulse', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'lookup_recent_cash_receipts_and_deposits', 'get_system_health_status', 'draft_action_proposal', 'get_system_navigation'],
                 'system_it' => ['get_system_health_status', 'get_ticket_status_and_sla_breaches', 'get_system_navigation']
             ];
 

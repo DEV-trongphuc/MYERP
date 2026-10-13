@@ -10,7 +10,7 @@ import api from '../../api/axios';
 import { useUIStore } from '../../store/uiStore';
 
 export interface ActionProposal {
-  action_type: 'leave' | 'expense' | 'task' | 'lead' | 'sales_order' | 'supplementary' | 'advance_payment' | 'inventory_receipt' | 'shift_swap' | 'admission_document_request' | 'legal_contract' | 'asset_handover' | 'marketing_campaign';
+  action_type: 'leave' | 'expense' | 'task' | 'lead' | 'sales_order' | 'deposit' | 'supplementary' | 'advance_payment' | 'inventory_receipt' | 'shift_swap' | 'admission_document_request' | 'legal_contract' | 'asset_handover' | 'marketing_campaign';
   title: string;
   params: Record<string, any>;
   summary: string;
@@ -214,6 +214,50 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
           break;
         }
 
+        case 'deposit': {
+          let contactId = p.contact_id || p.customer_id || p.id || null;
+          const phone = p.contact_phone || p.phone || p['SĐT'] || p['sdt'] || '';
+          const email = p.contact_email || p.email || '';
+          const fullName = p.contact_name || p.customer_name || p.name || p.full_name || '';
+
+          if (!contactId && (phone || email || fullName)) {
+            try {
+              const searchQ = phone || email || fullName;
+              const res = await api.get('/contacts', { params: { search: searchQ } });
+              const list = Array.isArray(res.data) ? res.data : (res.data?.data?.items || res.data?.data || res.data?.items || []);
+              if (list.length > 0) {
+                const cleanPhone = String(phone).replace(/\D/g, '');
+                const matched = list.find((c: any) => {
+                  const cPhone = String(c.phone || '').replace(/\D/g, '');
+                  if (cleanPhone && cPhone && (cPhone.includes(cleanPhone) || cleanPhone.includes(cPhone))) return true;
+                  if (email && c.email && String(c.email).toLowerCase() === String(email).toLowerCase()) return true;
+                  return false;
+                }) || list[0];
+                if (matched && matched.id) {
+                  contactId = matched.id;
+                }
+              }
+            } catch (err) {
+              console.warn('Auto contact lookup error:', err);
+            }
+          }
+
+          const depositAmount = p.amount || p.deposit_amount || p.price || p.total || p.total_amount || '';
+
+          useUIStore.getState().setShowPOS({
+            id: contactId ? Number(contactId) : null,
+            full_name: fullName || 'Học viên',
+            phone: phone || '',
+            email: email || '',
+            price: depositAmount ? String(depositAmount) : '',
+            notes: p.notes || p.description || 'Phiếu đặt cọc/giữ chỗ từ AI IDEAS Agent',
+            projectId: p.project_id || p.course_id || p.program_id || '',
+            currency: p.currency || 'VND'
+          });
+          toast.success('Đã mở Phiếu Đặt Cọc / Giữ Chỗ và điền sẵn thông tin! Bạn hãy kiểm tra và bấm Lưu nhé.');
+          break;
+        }
+
         case 'task': {
           useUIStore.getState().openTaskDrawer({
             id: 0,
@@ -412,6 +456,8 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
         return <User className="w-5 h-5 text-amber-600" />;
       case 'sales_order':
         return <DollarSign className="w-5 h-5 text-[#BD1D2D]" />;
+      case 'deposit':
+        return <DollarSign className="w-5 h-5 text-amber-600" />;
       case 'admission_document_request':
         return <FileText className="w-5 h-5 text-amber-700" />;
       case 'legal_contract':
@@ -440,6 +486,8 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
       total_amount_VND: 'Tổng số tiền (VND)',
       total_amount_vnd: 'Tổng số tiền (VND)',
       currency: 'Loại tiền tệ',
+      deposit_amount: 'Số tiền đặt cọc',
+      scheduled_at: 'Thời gian hẹn',
       price: 'Số tiền',
       category: 'Hạng mục chi',
       vendor_name: 'Đơn vị thụ hưởng',
