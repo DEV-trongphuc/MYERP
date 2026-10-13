@@ -1,7 +1,8 @@
 // src/components/chat/ChatDynamicChart.tsx
 // In-Chat Micro-BI Visual Charts for SI IDEAS using Recharts
+// Absolute Optimization: Copy to Excel/TSV, Expand/Collapse height, Zero-Flicker useMemo
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   BarChart,
   Bar,
@@ -19,7 +20,8 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
-import { BarChart3, TrendingUp, PieChart as PieIcon, Table as TableIcon, Eye } from 'lucide-react';
+import { BarChart3, TrendingUp, PieChart as PieIcon, Table as TableIcon, Eye, Copy, Check, Maximize2, Minimize2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import type { DynamicChartData } from './chatTagParsers';
 
 const PALETTE = ['#6366f1', '#10b981', '#f59e0b', '#06b6d4', '#ec4899', '#8b5cf6', '#ef4444'];
@@ -41,15 +43,38 @@ interface ChatDynamicChartProps {
 
 export const ChatDynamicChart: React.FC<ChatDynamicChartProps> = ({ chart }) => {
   const [viewMode, setViewMode] = useState<'chart' | 'table'>('chart');
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
+
+  const xAxisKey = useMemo(() => chart?.xAxisKey || 'name', [chart?.xAxisKey]);
+  const series = useMemo(() => {
+    return chart?.series && chart.series.length > 0 ? chart.series : [{ dataKey: 'value', name: 'Số lượng' }];
+  }, [chart?.series]);
 
   if (!chart || !Array.isArray(chart.data) || chart.data.length === 0) {
     return null;
   }
 
-  const xAxisKey = chart.xAxisKey || 'name';
-  const series = chart.series && chart.series.length > 0 ? chart.series : [{ dataKey: 'value', name: 'Số lượng' }];
-
   const ChartIcon = chart.type === 'pie' ? PieIcon : chart.type === 'line' ? TrendingUp : BarChart3;
+
+  const handleCopyData = () => {
+    try {
+      const headers = ['Tiêu chí', ...series.map((s) => s.name || s.dataKey)];
+      const rows = chart.data.map((row, rIdx) => [
+        row[xAxisKey] || `Hàng #${rIdx + 1}`,
+        ...series.map((s) => row[s.dataKey] ?? ''),
+      ]);
+      const tsv = [headers.join('\t'), ...rows.map((r) => r.join('\t'))].join('\n');
+      navigator.clipboard.writeText(tsv);
+      setIsCopied(true);
+      toast.success('Đã sao chép bảng số liệu vào clipboard (dán ngay vào Excel)');
+      setTimeout(() => setIsCopied(false), 2000);
+    } catch {
+      toast.error('Không thể sao chép số liệu');
+    }
+  };
+
+  const chartHeight = isExpanded ? 340 : 220;
 
   return (
     <div
@@ -58,12 +83,13 @@ export const ChatDynamicChart: React.FC<ChatDynamicChartProps> = ({ chart }) => 
         marginBottom: '6px',
         borderRadius: '12px',
         border: '1px solid rgba(148, 163, 184, 0.25)',
-        background: 'rgba(255, 255, 255, 0.85)',
+        background: 'rgba(255, 255, 255, 0.9)',
         backdropFilter: 'blur(8px)',
         padding: '12px',
         boxShadow: '0 4px 14px rgba(0, 0, 0, 0.04)',
         maxWidth: '100%',
         overflow: 'hidden',
+        transition: 'all 0.25s ease',
       }}
       className="dark:!bg-slate-900/90 dark:!border-slate-800"
     >
@@ -118,42 +144,88 @@ export const ChatDynamicChart: React.FC<ChatDynamicChartProps> = ({ chart }) => 
           </div>
         </div>
 
-        {/* View mode toggle */}
-        <button
-          onClick={() => setViewMode(viewMode === 'chart' ? 'table' : 'chart')}
-          title={viewMode === 'chart' ? 'Xem dạng bảng' : 'Xem dạng biểu đồ'}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px',
-            fontSize: '11px',
-            fontWeight: 500,
-            padding: '4px 8px',
-            borderRadius: '6px',
-            border: '1px solid rgba(148, 163, 184, 0.3)',
-            background: 'transparent',
-            color: '#475569',
-            cursor: 'pointer',
-          }}
-          className="dark:!text-slate-300 dark:!border-slate-700 hover:!bg-slate-100 dark:hover:!bg-slate-800"
-        >
-          {viewMode === 'chart' ? (
-            <>
-              <TableIcon size={12} />
-              <span>Bảng số liệu</span>
-            </>
-          ) : (
-            <>
-              <Eye size={12} />
-              <span>Biểu đồ</span>
-            </>
+        {/* Toolbar */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+          {/* Copy data button */}
+          <button
+            onClick={handleCopyData}
+            title="Sao chép bảng số liệu vào clipboard (dán Excel)"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontSize: '11px',
+              padding: '4px 7px',
+              borderRadius: '6px',
+              border: '1px solid rgba(148, 163, 184, 0.3)',
+              background: 'transparent',
+              color: isCopied ? '#10b981' : '#475569',
+              cursor: 'pointer',
+            }}
+            className="dark:!text-slate-300 dark:!border-slate-700 hover:!bg-slate-100 dark:hover:!bg-slate-800"
+          >
+            {isCopied ? <Check size={12} /> : <Copy size={12} />}
+          </button>
+
+          {/* Expand/Collapse */}
+          {viewMode === 'chart' && (
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              title={isExpanded ? 'Thu nhỏ biểu đồ' : 'Phóng to biểu đồ'}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                fontSize: '11px',
+                padding: '4px 6px',
+                borderRadius: '6px',
+                border: '1px solid rgba(148, 163, 184, 0.3)',
+                background: 'transparent',
+                color: '#475569',
+                cursor: 'pointer',
+              }}
+              className="dark:!text-slate-300 dark:!border-slate-700 hover:!bg-slate-100 dark:hover:!bg-slate-800"
+            >
+              {isExpanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+            </button>
           )}
-        </button>
+
+          {/* View mode toggle */}
+          <button
+            onClick={() => setViewMode(viewMode === 'chart' ? 'table' : 'chart')}
+            title={viewMode === 'chart' ? 'Xem dạng bảng' : 'Xem dạng biểu đồ'}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontSize: '11px',
+              fontWeight: 500,
+              padding: '4px 8px',
+              borderRadius: '6px',
+              border: '1px solid rgba(148, 163, 184, 0.3)',
+              background: 'transparent',
+              color: '#475569',
+              cursor: 'pointer',
+            }}
+            className="dark:!text-slate-300 dark:!border-slate-700 hover:!bg-slate-100 dark:hover:!bg-slate-800"
+          >
+            {viewMode === 'chart' ? (
+              <>
+                <TableIcon size={12} />
+                <span>Bảng</span>
+              </>
+            ) : (
+              <>
+                <Eye size={12} />
+                <span>Biểu đồ</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Main View */}
       {viewMode === 'chart' ? (
-        <div style={{ width: '100%', height: '220px', marginTop: '6px' }}>
+        <div style={{ width: '100%', height: `${chartHeight}px`, marginTop: '6px', transition: 'height 0.25s ease' }}>
           <ResponsiveContainer width="100%" height="100%">
             {chart.type === 'line' ? (
               <LineChart data={chart.data} margin={{ top: 10, right: 15, left: -15, bottom: 0 }}>
@@ -228,8 +300,8 @@ export const ChatDynamicChart: React.FC<ChatDynamicChartProps> = ({ chart }) => 
                   nameKey={xAxisKey}
                   cx="50%"
                   cy="50%"
-                  innerRadius={36}
-                  outerRadius={70}
+                  innerRadius={isExpanded ? 50 : 36}
+                  outerRadius={isExpanded ? 100 : 70}
                   paddingAngle={3}
                 >
                   {chart.data.map((_, index) => (
@@ -268,7 +340,7 @@ export const ChatDynamicChart: React.FC<ChatDynamicChartProps> = ({ chart }) => 
         </div>
       ) : (
         // Table View
-        <div style={{ marginTop: '8px', maxHeight: '200px', overflowY: 'auto' }}>
+        <div style={{ marginTop: '8px', maxHeight: `${chartHeight}px`, overflowY: 'auto' }}>
           <table
             style={{
               width: '100%',

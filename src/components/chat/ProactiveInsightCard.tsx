@@ -1,8 +1,9 @@
 // src/components/chat/ProactiveInsightCard.tsx
 // Proactive Early Warning & Operational Opportunity Insight Card for SI IDEAS Copilot
+// Absolute Optimization: Dismissible state, Smooth micro-interactions, High-contrast tags
 
-import React from 'react';
-import { AlertTriangle, TrendingUp, Info, ShieldAlert, ArrowRight } from 'lucide-react';
+import React, { useState } from 'react';
+import { AlertTriangle, TrendingUp, Info, ShieldAlert, ArrowRight, X } from 'lucide-react';
 import type { ProactiveInsightData } from './chatTagParsers';
 
 interface ProactiveInsightCardProps {
@@ -11,7 +12,9 @@ interface ProactiveInsightCardProps {
 }
 
 export const ProactiveInsightCard: React.FC<ProactiveInsightCardProps> = ({ insight, onAction }) => {
-  if (!insight || (!insight.title && !insight.description)) return null;
+  const [isDismissed, setIsDismissed] = useState(false);
+
+  if (!insight || (!insight.title && !insight.description) || isDismissed) return null;
 
   const type = insight.type || 'warning';
 
@@ -74,10 +77,36 @@ export const ProactiveInsightCard: React.FC<ProactiveInsightCardProps> = ({ insi
         background: typeConfig.bgGradient,
         padding: '11px 13px',
         boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)',
+        position: 'relative',
+        transition: 'all 0.2s ease',
       }}
       className="dark:!bg-slate-900/90 dark:!border-slate-700"
     >
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '9px' }}>
+      {/* Dismiss Button */}
+      <button
+        onClick={() => setIsDismissed(true)}
+        title="Đóng thông báo này"
+        type="button"
+        style={{
+          position: 'absolute',
+          top: '8px',
+          right: '8px',
+          background: 'transparent',
+          border: 'none',
+          color: '#94a3b8',
+          cursor: 'pointer',
+          padding: '3px',
+          borderRadius: '4px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+        className="hover:!text-slate-700 dark:hover:!text-slate-200"
+      >
+        <X size={14} />
+      </button>
+
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '9px', paddingRight: '16px' }}>
         <div
           style={{
             marginTop: '2px',

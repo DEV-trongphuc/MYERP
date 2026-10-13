@@ -154,6 +154,9 @@ export function parseAllChatTags(rawContent: string): ParsedChatTags {
   // 5. Clean any residual <<<SAVE_MEMORY:...>>> tags if present
   text = text.replace(/<<<SAVE_MEMORY:\s*({[\s\S]*?})\s*>>>/g, '').trim();
 
+  // 6. Streaming Anti-Flicker Guard: Strip any unclosed <<<TAG: partial content at the very end of stream
+  text = text.replace(/<<<[A-Z_]+(?::[\s\S]*)?$/, '').trim();
+
   return {
     cleanContent: text,
     proposal,

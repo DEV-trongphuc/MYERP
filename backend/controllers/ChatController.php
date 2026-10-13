@@ -3481,6 +3481,27 @@ class ChatController {
             $recentEntityStr = $this->loadRecentEntityContext($senderId, $tid);
             $operationalRisksStr = $this->detectProactiveOperationalRisks($senderId, $tid, $userRole);
 
+            // Grounding Pronoun & Anaphora Disambiguation (Resolves 'bạn ấy', 'học viên đó', 'task này')
+            $pronounAnchorStr = "";
+            if (preg_match('/\b(bạn ấy|bạn đó|học viên ấy|học viên đó|khách ấy|khách đó|task ấy|task đó|công việc đó|phiếu ấy|phiếu đó|đơn đó)\b/iu', $userMessage)) {
+                try {
+                    $latestStmt = $this->db->prepare("
+                        SELECT entity_type, entity_id, entity_name 
+                        FROM ai_entity_context 
+                        WHERE user_id = ? AND tenant_id = ? 
+                        ORDER BY last_referenced_at DESC 
+                        LIMIT 1
+                    ");
+                    $latestStmt->execute([$senderId, $tid]);
+                    $latestEntity = $latestStmt->fetch(PDO::FETCH_ASSOC);
+                    if ($latestEntity) {
+                        $pronounAnchorStr = "\n[GHI CHÚ HỆ THỐNG GIẢI NGHĨA ĐẠI TỪ]: Người dùng đang dùng đại từ tham chiếu ('bạn ấy', 'học viên đó',...). Thực thể gần nhất đang được thảo luận là: [Loại: {$latestEntity['entity_type']}] ID #{$latestEntity['entity_id']} - {$latestEntity['entity_name']}. Hãy ưu tiên giải nghĩa đại từ theo thực thể này nếu phù hợp.\n";
+                    }
+                } catch (\Throwable $eP) {
+                    // Safe ignore
+                }
+            }
+
             // 4. Construct Expert System Prompt with Academic Persona, Salutation & RBAC
             $currentDateStr = date('Y-m-d');
             $systemPrompt = "Bạn là SI IDEAS — Smart Multi Agent thông minh tại hệ thống MYERP của Viện IDEAS.\n"
@@ -3682,7 +3703,8 @@ class ChatController {
                 . $erpLookupStr
                 . $userMemoriesStr
                 . $recentEntityStr
-                . $operationalRisksStr;
+                . $operationalRisksStr
+                . $pronounAnchorStr;
 
             // 5. Fetch last 6 messages from this conversation for context
             $stmtHistory = $this->db->prepare("
@@ -4203,6 +4225,11 @@ class ChatController {
                     last_referenced_at = NOW()
             ");
             $stmt->execute([$tenantId, $userId, $entityType, $entityId, mb_substr(trim($entityName), 0, 255), $json]);
+
+            // Lightweight Garbage Collector: Purge stale entity contexts older than 30 days (1% probability)
+            if (mt_rand(1, 100) === 1) {
+                $this->db->exec("DELETE FROM ai_entity_context WHERE last_referenced_at < DATE_SUB(NOW(), INTERVAL 30 DAY)");
+            }
         } catch (\Throwable $e) {
             // Safe ignore
         }
@@ -5004,6 +5031,15 @@ class ChatController {
             $scopedTools = ($explicitAgentId && isset($agentToolMap[$explicitAgentId])) ? $agentToolMap[$explicitAgentId] : null;
             $tools = AgentToolRegistry::getGeminiToolsDeclaration($scopedTools);
 
+            // Performance Fast-Path: If user input is pure conversational greeting / acknowledgment, omit tools to cut latency in half
+            $isPureConversational = false;
+            if (empty($attachedFile) && count($contents) <= 2 && !empty($lastMsgText)) {
+                $trimmedMsg = mb_strtolower(trim($lastMsgText));
+                if (in_array($trimmedMsg, ['chào', 'chào bạn', 'chào em', 'hello', 'hi', 'hi bạn', 'xin chào', 'cảm ơn', 'cảm ơn em', 'cảm ơn bạn', 'thanks', 'tks', 'thank you', 'bye', 'tạm biệt', 'ok', 'oke', 'ok em', 'ok bạn', 'tuyệt vời', 'tuyệt'], true)) {
+                    $isPureConversational = true;
+                }
+            }
+
             $payload = [
                 'systemInstruction' => [
                     'parts' => [
@@ -5011,18 +5047,21 @@ class ChatController {
                     ]
                 ],
                 'contents' => $contents,
-                'tools' => $tools,
-                'toolConfig' => [
-                    'functionCallingConfig' => [
-                        'mode' => 'AUTO'
-                    ]
-                ],
                 'generationConfig' => [
                     'temperature' => 0.2,
                     'maxOutputTokens' => 10000,
                     'topP' => 0.95
                 ]
             ];
+
+            if (!$isPureConversational && !empty($tools)) {
+                $payload['tools'] = $tools;
+                $payload['toolConfig'] = [
+                    'functionCallingConfig' => [
+                        'mode' => 'AUTO'
+                    ]
+                ];
+            }
 
             // ==========================================
             // AUTONOMOUS MULTI-TURN TOOL LOOP (UP TO 3 TURNS)
