@@ -41,6 +41,10 @@ import { compressImageFile } from '../../utils/imageCompressor';
 import { SPECIALIZED_AGENTS, type SpecializedAgent } from '../../constants/aiAgents';
 import { AgentDetailModal } from './AgentDetailModal';
 import { ActionProposalCard, parseActionProposal } from './ActionProposalCard';
+import { parseAllChatTags } from './chatTagParsers';
+import { ChatDynamicChart } from './ChatDynamicChart';
+import { NextBestActionChips } from './NextBestActionChips';
+import { ProactiveInsightCard } from './ProactiveInsightCard';
 
 const EMOJI_MAP: Record<string, string> = {
   like: '👍', love: '❤️', fire: '🔥', haha: '😂',
@@ -4477,10 +4481,18 @@ export const WorkChatModal: React.FC = () => {
                                       </div>
                                     </div>
                                   ) : (() => {
-                                    const { cleanContent, proposal } = parseActionProposal(msg.content);
+                                    const { cleanContent, proposal, chart, nextBestActions, proactiveInsight } = parseAllChatTags(msg.content);
                                     const extractedUrl = extractFirstUrl(cleanContent);
                                     return (
                                       <div style={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap', lineHeight: '1.45' }}>
+                                        {proactiveInsight && (
+                                          <ProactiveInsightCard
+                                            insight={proactiveInsight}
+                                            onAction={(prompt) => {
+                                              sendMessage({ content: prompt });
+                                            }}
+                                          />
+                                        )}
                                         <div>
                                           {renderFormattedText(cleanContent, isMine)}
                                           {msg.is_streaming && (
@@ -4498,10 +4510,19 @@ export const WorkChatModal: React.FC = () => {
                                             />
                                           )}
                                         </div>
+                                        {chart && <ChatDynamicChart chart={chart} />}
                                         {proposal && (
                                           <ActionProposalCard 
                                             proposal={proposal} 
                                             messageId={msg.id} 
+                                          />
+                                        )}
+                                        {nextBestActions && nextBestActions.length > 0 && (
+                                          <NextBestActionChips
+                                            actions={nextBestActions}
+                                            onSelectAction={(prompt) => {
+                                              sendMessage({ content: prompt });
+                                            }}
                                           />
                                         )}
                                         {extractedUrl && <LinkPreviewCard url={extractedUrl} isMine={isMine} />}

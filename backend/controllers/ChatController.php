@@ -3477,6 +3477,9 @@ class ChatController {
             // 3. Dynamic Ambient Context Snapshot (Instant 360-degree awareness without hardcoded keywords)
             $ambientSnapshotStr = $this->getAmbientUserStateSnapshot($senderId, $tid, $userRole);
             $erpLookupStr = $this->executeSmartErpLookup($userMessage, $senderId, $tid, $userRole);
+            $userMemoriesStr = $this->loadUserMemories($senderId, $tid);
+            $recentEntityStr = $this->loadRecentEntityContext($senderId, $tid);
+            $operationalRisksStr = $this->detectProactiveOperationalRisks($senderId, $tid, $userRole);
 
             // 4. Construct Expert System Prompt with Academic Persona, Salutation & RBAC
             $currentDateStr = date('Y-m-d');
@@ -3626,9 +3629,60 @@ class ChatController {
                 . "  (4) Danh mục tài liệu/hồ sơ đã tải lên kho cloud_files (hồ sơ có những gì, loại file).\n"
                 . "  (5) Thẩm định pháp lý & điều kiện nhập học (chuẩn hết chưa, thiếu CCCD/Bằng cấp/Bảng điểm/CV tiếng Anh, tình trạng đặt cọc & hợp đồng).\n"
                 . "  Hãy đọc kỹ và trích dẫn trung thực từng mốc tương tác thực tế từ database, tuyệt đối không báo thiếu tiến độ nếu trong dòng thời gian đã có cuộc gọi hay ghi chú!\n\n"
+                . "HƯỚNG DẪN TRÌNH BÀY BIỂU ĐỒ MICRO-BI TRỰC QUAN (DYNAMIC CHARTS):\n"
+                . "• Khi người dùng hỏi về thống kê, so sánh, phân tích xu hướng, phễu tuyển sinh, cơ cấu thu chi, công nợ, hiệu suất:\n"
+                . "  Sau lời giải thích bằng lời, bạn BẮT BUỘC xuất thêm khối `<<<DYNAMIC_CHART: {...}>>>` để hệ thống tự động vẽ biểu đồ trực quan (Recharts) ngay trong tin nhắn!\n"
+                . "  Format chuẩn:\n"
+                . "  <<<DYNAMIC_CHART: {\n"
+                . "    \"type\": \"bar\" | \"line\" | \"pie\" | \"area\",\n"
+                . "    \"title\": \"Tiêu đề biểu đồ ngắn gọn\",\n"
+                . "    \"description\": \"Mô tả số liệu tóm tắt\",\n"
+                . "    \"xAxisKey\": \"name\",\n"
+                . "    \"data\": [\n"
+                . "      {\"name\": \"Tháng 7\", \"revenue\": 150000000, \"deposit\": 50000000},\n"
+                . "      {\"name\": \"Tháng 8\", \"revenue\": 190000000, \"deposit\": 75000000}\n"
+                . "    ],\n"
+                . "    \"series\": [\n"
+                . "      {\"dataKey\": \"revenue\", \"name\": \"Doanh thu\", \"color\": \"#6366f1\"},\n"
+                . "      {\"dataKey\": \"deposit\", \"name\": \"Thu cọc\", \"color\": \"#10b981\"}\n"
+                . "    ]\n"
+                . "  }>>>\n\n"
+                . "HƯỚNG DẪN GỢI Ý BƯỚC TIẾP THEO (NEXT BEST ACTIONS):\n"
+                . "• Ở cuối mọi câu trả lời hỗ trợ hoặc tư vấn công việc, BẮT BUỘC xuất thêm 2-4 nút gợi ý hành động logic tiếp theo qua khối `<<<NEXT_BEST_ACTIONS: [...]>>>`:\n"
+                . "  Format chuẩn:\n"
+                . "  <<<NEXT_BEST_ACTIONS: [\n"
+                . "    \"Hành động gợi ý 1\",\n"
+                . "    \"Hành động gợi ý 2\",\n"
+                . "    \"Hành động gợi ý 3\"\n"
+                . "  ]>>>\n"
+                . "  Khi người dùng click vào nút, hệ thống sẽ tự động gửi yêu cầu tiếp theo này cho bạn!\n\n"
+                . "HƯỚNG DẪN CẢNH BÁO CHỦ ĐỘNG & NÚT THẮT VẬN HÀNH (PROACTIVE INSIGHTS):\n"
+                . "• Nếu phát hiện rủi ro (học viên bị bỏ quên > 3 ngày, task quá hạn, phiếu phê duyệt kẹt > 48h, công nợ tới hạn):\n"
+                . "  Hãy nhắc nhở tinh tế và xuất thêm khối `<<<PROACTIVE_INSIGHT: {...}>>>`:\n"
+                . "  Format chuẩn:\n"
+                . "  <<<PROACTIVE_INSIGHT: {\n"
+                . "    \"type\": \"warning\" | \"opportunity\" | \"urgent\" | \"info\",\n"
+                . "    \"title\": \"Tiêu đề cảnh báo ngắn gọn\",\n"
+                . "    \"description\": \"Mô tả chi tiết nguyên nhân và rủi ro\",\n"
+                . "    \"actionPrompt\": \"Câu lệnh thực hiện khi người dùng click (ví dụ: Lọc danh sách lead trễ hạn)\",\n"
+                . "    \"actionLabel\": \"Nhãn nút bấm (ví dụ: Xem danh sách ngay)\"\n"
+                . "  }>>>\n\n"
+                . "PHƯƠNG PHÁP LẬP KẾ HOẠCH TỰ CHỦ & PHÂN RÃ CÔNG VIỆC (AUTONOMOUS REACT & AUTO-WBS):\n"
+                . "• Khi nhận nhiệm vụ chiến lược quy mô lớn (ví dụ: 'Lập kế hoạch tuyển sinh khóa EMBA tháng 11', 'Tổ chức hội thảo chuyển đổi số AI', 'Triển khai đào tạo in-house'):\n"
+                . "  Bạn KHÔNG chỉ trả lời sơ sài mà BẮT BUỘC phân rã thành Cấu trúc phân việc WBS (Work Breakdown Structure) gồm:\n"
+                . "  (1) Mục tiêu & KPI đo lường.\n"
+                . "  (2) Các giai đoạn (Phases) và Mốc thời gian (Milestones).\n"
+                . "  (3) Bảng phân công checklist chi tiết theo từng người phụ trách.\n"
+                . "  (4) ĐỒNG THỜI tạo ngay Thẻ Hành Động Giao Việc qua `draft_action_proposal` kèm danh sách subtask checklist để người dùng duyệt và kích hoạt!\n\n"
+                . "KHẢ NĂNG GHI NHỚ THÓI QUEN NGƯỜI DÙNG (EPISODIC MEMORY RECORDING):\n"
+                . "• Khi người dùng chia sẻ sở thích cá nhân, cách xưng hô mong muốn, hoặc trọng tâm công việc lâu dài:\n"
+                . "  Bạn có thể ghi nhớ bằng cách xuất khối `<<<SAVE_MEMORY: {\"key\": \"tên_khóa\", \"value\": \"nội_dung\", \"category\": \"preference\"|\"working_context\"}>>>` ở cuối câu trả lời (hệ thống sẽ tự động lưu vào bộ nhớ dài hạn và ẩn thẻ này khỏi màn hình chat).\n\n"
                 . $ragContextStr
                 . $ambientSnapshotStr
-                . $erpLookupStr;
+                . $erpLookupStr
+                . $userMemoriesStr
+                . $recentEntityStr
+                . $operationalRisksStr;
 
             // 5. Fetch last 6 messages from this conversation for context
             $stmtHistory = $this->db->prepare("
@@ -3659,6 +3713,26 @@ class ChatController {
             $aiReplyText = $this->callGeminiFlashLite($history, $systemPrompt, $attachedFile, $onChunk, $authContext);
             if (empty($aiReplyText)) {
                 $aiReplyText = "Tôi đã ghi nhận thông tin của bạn. Hiện tại hệ thống đang xử lý tác vụ, vui lòng gửi lại câu hỏi hoặc cung cấp thêm thông tin chi tiết.";
+            }
+
+            // Extract & Save episodic user memory if present
+            if (preg_match('/<<<SAVE_MEMORY:\s*({[\s\S]*?})\s*>>>/', $aiReplyText, $memMatch)) {
+                try {
+                    $memJson = json_decode($memMatch[1], true);
+                    if ($memJson && !empty($memJson['key']) && !empty($memJson['value'])) {
+                        $this->saveUserMemory(
+                            $senderId,
+                            $tid,
+                            $memJson['key'],
+                            $memJson['value'],
+                            $memJson['category'] ?? 'preference',
+                            (int)($memJson['importance'] ?? 1)
+                        );
+                    }
+                } catch (\Throwable $eMem) {
+                    // Safe ignore
+                }
+                $aiReplyText = trim(str_replace($memMatch[0], '', $aiReplyText));
             }
 
             // 7. Insert AI Reply into chat_messages
@@ -4022,6 +4096,246 @@ class ChatController {
                  . "--- [HẾT TRẠNG THÁI TỔNG QUAN] ---\n";
         } catch (\Throwable $e) {
             return "";
+        }
+    }
+
+    /**
+     * Load Long-Term Episodic User Memories from ai_user_memories table
+     */
+    private function loadUserMemories(int $userId, int $tenantId): string {
+        try {
+            $stmt = $this->db->prepare("
+                SELECT memory_key, memory_value, category, importance 
+                FROM ai_user_memories 
+                WHERE user_id = ? AND tenant_id = ? 
+                ORDER BY importance DESC, updated_at DESC 
+                LIMIT 15
+            ");
+            $stmt->execute([$userId, $tenantId]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            if (empty($rows)) return "";
+
+            $out = "\n--- [TRÍ NHỚ DÀI HẠN & THÓI QUEN LÀM VIỆC CỦA NGƯỜI DÙNG (EPISODIC MEMORY)] ---\n";
+            foreach ($rows as $r) {
+                $out .= "• [{$r['category']}] {$r['memory_key']}: {$r['memory_value']}\n";
+            }
+            $out .= "--- [HẾT TRÍ NHỚ DÀI HẠN] ---\n";
+            return $out;
+        } catch (\Throwable $e) {
+            return "";
+        }
+    }
+
+    /**
+     * Save Episodic User Memory into ai_user_memories table
+     */
+    private function saveUserMemory(int $userId, int $tenantId, string $key, string $value, string $category = 'preference', int $importance = 1): void {
+        try {
+            if ($userId <= 0 || empty($key) || empty($value)) return;
+            $stmt = $this->db->prepare("
+                INSERT INTO ai_user_memories (tenant_id, user_id, memory_key, memory_value, category, importance, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
+                ON DUPLICATE KEY UPDATE
+                    memory_value = VALUES(memory_value),
+                    category = VALUES(category),
+                    importance = VALUES(importance),
+                    updated_at = NOW()
+            ");
+            $stmt->execute([$tenantId, $userId, mb_substr(trim($key), 0, 100), trim($value), $category, $importance]);
+        } catch (\Throwable $e) {
+            // Safe ignore
+        }
+    }
+
+    /**
+     * Load Working Context Entities (Recent 48h) from ai_entity_context table
+     * Seamlessly resolves pronouns like 'bạn ấy', 'học viên đó', 'task này', 'phiếu vừa rồi'
+     */
+    private function loadRecentEntityContext(int $userId, int $tenantId): string {
+        try {
+            $stmt = $this->db->prepare("
+                SELECT entity_type, entity_id, entity_name, metadata_json, last_referenced_at 
+                FROM ai_entity_context 
+                WHERE user_id = ? AND tenant_id = ? AND last_referenced_at >= DATE_SUB(NOW(), INTERVAL 48 HOUR)
+                ORDER BY last_referenced_at DESC 
+                LIMIT 8
+            ");
+            $stmt->execute([$userId, $tenantId]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            if (empty($rows)) return "";
+
+            $out = "\n--- [NGỮ CẢNH CÔNG VIỆC GẦN ĐÂY (ENTITY WORKING CONTEXT - 48 GIỜ QUA)] ---\n";
+            $out .= "Nếu người dùng xưng hô hoặc nhắc đến các đại từ 'bạn ấy', 'học viên đó', 'task này', 'phiếu vừa rồi', hãy ưu tiên tham chiếu tới các thực thể gần nhất sau:\n";
+            foreach ($rows as $r) {
+                $metaStr = "";
+                if (!empty($r['metadata_json'])) {
+                    $m = json_decode($r['metadata_json'], true);
+                    if (is_array($m)) {
+                        $metaParts = [];
+                        foreach ($m as $k => $v) {
+                            if (is_scalar($v) && !empty($v)) $metaParts[] = "$k: $v";
+                        }
+                        if (!empty($metaParts)) $metaStr = " (" . implode(', ', array_slice($metaParts, 0, 3)) . ")";
+                    }
+                }
+                $out .= "• [Thực thể: {$r['entity_type']}] ID #{$r['entity_id']} - {$r['entity_name']}{$metaStr}\n";
+            }
+            $out .= "--- [HẾT NGỮ CẢNH CÔNG VIỆC GẦN ĐÂY] ---\n";
+            return $out;
+        } catch (\Throwable $e) {
+            return "";
+        }
+    }
+
+    /**
+     * Record or Update Working Context Entity in ai_entity_context table
+     */
+    private function recordEntityContext(int $userId, int $tenantId, string $entityType, int $entityId, string $entityName, array $metadata = []): void {
+        try {
+            if ($entityId <= 0 || empty($entityName) || $userId <= 0) return;
+            $json = !empty($metadata) ? json_encode($metadata, JSON_UNESCAPED_UNICODE) : null;
+            $stmt = $this->db->prepare("
+                INSERT INTO ai_entity_context (tenant_id, user_id, entity_type, entity_id, entity_name, metadata_json, last_referenced_at)
+                VALUES (?, ?, ?, ?, ?, ?, NOW())
+                ON DUPLICATE KEY UPDATE
+                    entity_name = VALUES(entity_name),
+                    metadata_json = VALUES(metadata_json),
+                    last_referenced_at = NOW()
+            ");
+            $stmt->execute([$tenantId, $userId, $entityType, $entityId, mb_substr(trim($entityName), 0, 255), $json]);
+        } catch (\Throwable $e) {
+            // Safe ignore
+        }
+    }
+
+    /**
+     * Proactive Operational Risk & Bottleneck Detection Engine (Zero-Mock Real SQL)
+     */
+    private function detectProactiveOperationalRisks(int $userId, int $tenantId, string $userRole): string {
+        try {
+            $risks = [];
+            $roleLower = strtolower($userRole);
+            $isPrivileged = in_array($roleLower, ['admin', 'superadmin', 'director', 'manager', 'accountant'], true);
+
+            // 1. Stale leads for sales/consultants (uncontacted > 3 days)
+            $stmtLead = $this->db->prepare("
+                SELECT COUNT(1) FROM contacts 
+                WHERE tenant_id = ? AND deleted_at IS NULL 
+                  AND (" . ($isPrivileged ? "1=1" : "owner_id = ?") . ")
+                  AND stage_id IN (SELECT id FROM pipeline_stages WHERE name NOT LIKE '%Đã đóng%' AND name NOT LIKE '%Lost%' AND name NOT LIKE '%Won%')
+                  AND created_at <= DATE_SUB(NOW(), INTERVAL 3 DAY)
+                  AND (last_contact IS NULL OR last_contact <= DATE_SUB(NOW(), INTERVAL 3 DAY))
+            ");
+            $stmtLead->execute($isPrivileged ? [$tenantId] : [$tenantId, $userId]);
+            $staleCount = (int)$stmtLead->fetchColumn();
+            if ($staleCount > 0) {
+                $risks[] = "Có {$staleCount} học viên/lead chưa được tương tác lại trên 3 ngày (nguy cơ bỏ quên học viên).";
+            }
+
+            // 2. Pending approvals waiting > 48h
+            $stmtAppr = $this->db->prepare("
+                SELECT 
+                    (SELECT COUNT(1) FROM hrm_leave_requests WHERE status = 'pending' AND created_at <= DATE_SUB(NOW(), INTERVAL 48 HOUR) AND (approver_id = ? OR approver_id_2 = ? " . ($isPrivileged ? "OR (approver_id IS NULL OR approver_id = 0)" : "") . ")) as pending_leave,
+                    (SELECT COUNT(1) FROM expenses WHERE tenant_id = ? AND deleted_at IS NULL AND status = 'pending' AND created_at <= DATE_SUB(NOW(), INTERVAL 48 HOUR) AND (approver_id = ? OR approver_id_2 = ? OR approver_id_3 = ? " . ($isPrivileged ? "OR (approver_id IS NULL OR approver_id = 0)" : "") . ")) as pending_expense
+            ");
+            $stmtAppr->execute($isPrivileged ? [$userId, $userId, $tenantId, $userId, $userId, $userId] : [$userId, $userId, $tenantId, $userId, $userId, $userId]);
+            $apprRow = $stmtAppr->fetch(PDO::FETCH_ASSOC);
+            $overdueApprs = ((int)($apprRow['pending_leave'] ?? 0)) + ((int)($apprRow['pending_expense'] ?? 0));
+            if ($overdueApprs > 0) {
+                $risks[] = "Có {$overdueApprs} phiếu đề xuất/nghỉ phép đang chờ bạn phê duyệt quá 48 giờ.";
+            }
+
+            // 3. Overdue tasks
+            $stmtTasks = $this->db->prepare("
+                SELECT COUNT(1) FROM activities 
+                WHERE tenant_id = ? AND deleted_at IS NULL 
+                  AND type IN ('task', 'meeting')
+                  AND (user_id = ? OR created_by = ?)
+                  AND (status IS NULL OR status NOT IN ('completed', 'cancelled', 'done', 'hoan_thanh', 'da_xong'))
+                  AND (progress < 100 OR progress IS NULL)
+                  AND due_date IS NOT NULL AND due_date < NOW()
+            ");
+            $stmtTasks->execute([$tenantId, $userId, $userId]);
+            $overdueTasks = (int)$stmtTasks->fetchColumn();
+            if ($overdueTasks > 0) {
+                $risks[] = "Có {$overdueTasks} công việc của bạn đã quá hạn chót (Deadline) cần xử lý hoặc gia hạn.";
+            }
+
+            // 4. Overdue tuition installments (for accountant/admin/manager)
+            if ($isPrivileged) {
+                $stmtTuition = $this->db->prepare("
+                    SELECT COUNT(1) FROM sales_order_installments 
+                    WHERE is_paid = 0 AND expected_pay_date < CURDATE()
+                ");
+                $stmtTuition->execute();
+                $overdueTuition = (int)$stmtTuition->fetchColumn();
+                if ($overdueTuition > 0) {
+                    $risks[] = "Có {$overdueTuition} đợt học phí đến hạn thanh toán chưa hoàn tất đối soát.";
+                }
+            }
+
+            if (empty($risks)) return "";
+
+            $out = "\n--- [CẢNH BÁO RỦI RO VẬN HÀNH & NÚT THẮT (PROACTIVE OPERATIONAL RISKS)] ---\n";
+            foreach ($risks as $r) {
+                $out .= "• CẢNH BÁO: {$r}\n";
+            }
+            $out .= "HƯỚNG DẪN PROACTIVE: Nếu câu hỏi của người dùng có liên quan hoặc ở cuối câu trả lời tổng hợp, bạn hãy nhắc nhở khéo léo hoặc xuất khối <<<PROACTIVE_INSIGHT: {...}>>> để hỗ trợ xử lý kịp thời!\n";
+            $out .= "--- [HẾT CẢNH BÁO RỦI RO] ---\n";
+            return $out;
+        } catch (\Throwable $e) {
+            return "";
+        }
+    }
+
+    /**
+     * Auto-record Entity Context from Tool execution results
+     */
+    private function autoRecordEntityFromTool(int $uid, int $tid, string $toolName, array $toolArgs, array $toolResult): void {
+        try {
+            if ($uid <= 0) return;
+
+            if ($toolName === 'get_contact_360_profile') {
+                $cId = (int)($toolResult['contact_id'] ?? ($toolResult['profile']['id'] ?? ($toolArgs['contact_id'] ?? 0)));
+                $cName = $toolResult['profile']['full_name'] ?? ($toolResult['contact']['full_name'] ?? '');
+                if ($cId > 0 && !empty($cName)) {
+                    $meta = [
+                        'phone' => $toolResult['profile']['phone'] ?? '',
+                        'email' => $toolResult['profile']['email'] ?? '',
+                        'stage' => $toolResult['profile']['stage_name'] ?? ''
+                    ];
+                    $this->recordEntityContext($uid, $tid, 'contact', $cId, $cName, $meta);
+                }
+            } elseif ($toolName === 'search_contacts') {
+                $contacts = $toolResult['contacts'] ?? [];
+                if (!empty($contacts) && is_array($contacts)) {
+                    $top = $contacts[0];
+                    $cId = (int)($top['id'] ?? 0);
+                    $cName = $top['full_name'] ?? '';
+                    if ($cId > 0 && !empty($cName)) {
+                        $this->recordEntityContext($uid, $tid, 'contact', $cId, $cName, ['phone' => $top['phone'] ?? '']);
+                    }
+                }
+            } elseif ($toolName === 'get_task_detail') {
+                $t = $toolResult['task'] ?? ($toolResult['data'] ?? []);
+                $tId = (int)($t['id'] ?? ($toolArgs['task_id'] ?? 0));
+                $tTitle = $t['subject'] ?? ($t['title'] ?? '');
+                if ($tId > 0 && !empty($tTitle)) {
+                    $this->recordEntityContext($uid, $tid, 'task', $tId, $tTitle, ['due_date' => $t['due_date'] ?? '']);
+                }
+            } elseif ($toolName === 'draft_action_proposal') {
+                $type = $toolArgs['action_type'] ?? 'proposal';
+                $title = $toolArgs['title'] ?? 'Đề xuất ERP';
+                $p = $toolArgs['params'] ?? [];
+                if (is_string($p)) $p = json_decode($p, true) ?: [];
+                $cId = (int)($p['contact_id'] ?? ($p['user_id'] ?? 0));
+                if ($cId > 0) {
+                    $name = $p['customer_name'] ?? ($p['student_name'] ?? ($p['recipient_name'] ?? ($p['assignee_name'] ?? $title)));
+                    $this->recordEntityContext($uid, $tid, $type, $cId, $name);
+                }
+            }
+        } catch (\Throwable $e) {
+            // Safe ignore
         }
     }
 
@@ -4790,6 +5104,13 @@ class ChatController {
                 $toolName = $functionCallPart['name'] ?? '';
                 $toolArgs = $functionCallPart['args'] ?? [];
                 $toolResult = AgentToolRegistry::executeTool($this->db, $toolName, $toolArgs, $authContext ?? []);
+
+                // Auto-record working context entity into ai_entity_context
+                $ctxUid = (int)($authContext['user_id'] ?? 0);
+                $ctxTid = (int)($authContext['tenant_id'] ?? 1);
+                if ($ctxUid > 0 && is_array($toolResult)) {
+                    $this->autoRecordEntityFromTool($ctxUid, $ctxTid, $toolName, $toolArgs, $toolResult);
+                }
 
                 // Append Model Function Call Turn
                 $contents[] = $candidate['content'];
