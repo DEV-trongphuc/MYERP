@@ -250,13 +250,13 @@ class AgentToolRegistry {
                     ],
                     [
                         'name' => 'draft_action_proposal',
-                        'description' => 'Khởi tạo Thẻ Hành Động (Action Proposal Card) trực quan để người dùng xác nhận và lưu vào hệ thống ERP (tạo việc, tạo đơn nghỉ phép, giải trình công, đề xuất chi/tạm ứng, thêm lead, tạo đơn SO, nhập kho, đổi ca, yêu cầu bổ sung hồ sơ học viên, đề xuất hợp đồng pháp lý, biên bản bàn giao tài sản, chiến dịch marketing).',
+                        'description' => 'Khởi tạo Thẻ Hành Động (Action Proposal Card) trực quan để người dùng xác nhận và lưu vào hệ thống ERP hoặc 1-Click tải file Excel/CSV xuất dữ liệu (tạo việc, tạo đơn nghỉ phép, giải trình công, đề xuất chi/tạm ứng, thêm lead, tạo đơn SO, nhập kho, đổi ca, yêu cầu bổ sung hồ sơ học viên, đề xuất hợp đồng pháp lý, biên bản bàn giao tài sản, chiến dịch marketing, xuất dữ liệu toàn diện export_data).',
                         'parameters' => [
                             'type' => 'OBJECT',
                             'properties' => [
                                 'action_type' => [
                                     'type' => 'STRING',
-                                    'enum' => ['task', 'leave', 'supplementary', 'expense', 'advance_payment', 'lead', 'sales_order', 'inventory_receipt', 'shift_swap', 'admission_document_request', 'legal_contract', 'asset_handover', 'marketing_campaign'],
+                                    'enum' => ['task', 'leave', 'supplementary', 'expense', 'advance_payment', 'lead', 'sales_order', 'inventory_receipt', 'shift_swap', 'admission_document_request', 'legal_contract', 'asset_handover', 'marketing_campaign', 'export_data'],
                                     'description' => 'Loại hành động ERP'
                                 ],
                                 'title' => [
@@ -1966,6 +1966,36 @@ class AgentToolRegistry {
                     $params = json_decode($paramsJson, true) ?: [];
 
                     $ambiguousNotice = null;
+                    
+                    // Attach sender metadata to all proposal cards
+                    if (empty($params['created_by'])) $params['created_by'] = $uid;
+                    if (empty($params['created_by_name'])) $params['created_by_name'] = $auth['full_name'] ?? ($auth['user_full_name'] ?? '');
+                    if (empty($params['created_by_avatar']) && !empty($auth['avatar_url'])) $params['created_by_avatar'] = $auth['avatar_url'];
+                    if (empty($params['created_at'])) $params['created_at'] = date('H:i:s d/m/Y');
+
+                    if ($actionType === 'export_data') {
+                        $exportType = $params['export_type'] ?? ($params['type'] ?? 'contact');
+                        if (empty($params['download_url'])) {
+                            $queryParams = http_build_query(array_filter([
+                                'type' => $exportType,
+                                'search' => $params['search'] ?? '',
+                                'lead_status' => $params['lead_status'] ?? '',
+                                'status' => $params['status'] ?? '',
+                                'segment' => $params['segment'] ?? '',
+                                'from' => $params['from'] ?? '',
+                                'to' => $params['to'] ?? '',
+                                'date_field' => $params['date_field'] ?? '',
+                                'team_id' => $params['team_id'] ?? '',
+                                'owner_id' => $params['owner_id'] ?? '',
+                                'tag' => $params['tag'] ?? ''
+                            ]));
+                            $params['download_url'] = '/export?' . $queryParams;
+                        }
+                        if (empty($params['filename'])) {
+                            $params['filename'] = 'export_' . $exportType . '_' . date('Ymd_His') . '.csv';
+                        }
+                    }
+
                     if ($actionType === 'task') {
                         // Creator is ALWAYS the current chatting user
                         $params['created_by'] = $uid;

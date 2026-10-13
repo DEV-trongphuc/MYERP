@@ -2,7 +2,8 @@ import React, { useState, useRef } from 'react';
 import { 
   Sparkles, Check, X, Loader2, Calendar, DollarSign, 
   CheckSquare, User, ArrowRight, ExternalLink, AlertCircle, Clock,
-  Package, RefreshCw, FileText
+  Package, RefreshCw, FileText, FileSpreadsheet, Download, ClipboardList,
+  Users
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
@@ -10,9 +11,10 @@ import api from '../../api/axios';
 import { useUIStore } from '../../store/uiStore';
 import { useAuthStore } from '../../store/authStore';
 import { useChatStore } from '../../store/chatStore';
+import { Avatar } from '../ui/Avatar';
 
 export interface ActionProposal {
-  action_type: 'leave' | 'expense' | 'task' | 'lead' | 'sales_order' | 'deposit' | 'supplementary' | 'advance_payment' | 'inventory_receipt' | 'shift_swap' | 'admission_document_request' | 'legal_contract' | 'asset_handover' | 'marketing_campaign';
+  action_type: 'leave' | 'expense' | 'task' | 'lead' | 'sales_order' | 'deposit' | 'supplementary' | 'advance_payment' | 'inventory_receipt' | 'shift_swap' | 'admission_document_request' | 'legal_contract' | 'asset_handover' | 'marketing_campaign' | 'export_data' | 'export' | (string & {});
   title: string;
   params: Record<string, any>;
   summary: string;
@@ -450,6 +452,44 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
           break;
         }
 
+        case 'export_data':
+        case 'export': {
+          setStatus('submitting');
+          const expType = p.export_type || p.type || 'contact';
+          let downloadUrl = p.download_url || p.url || '';
+          if (!downloadUrl) {
+            const paramsObj: Record<string, string> = { type: expType };
+            if (p.search) paramsObj.search = p.search;
+            if (p.segment) paramsObj.segment = p.segment;
+            if (p.lead_status) paramsObj.lead_status = p.lead_status;
+            if (p.status) paramsObj.status = p.status;
+            if (p.from) paramsObj.from = p.from;
+            if (p.to) paramsObj.to = p.to;
+            if (p.owner_id) paramsObj.owner_id = p.owner_id;
+            if (p.team_id) paramsObj.team_id = p.team_id;
+            if (p.tag) paramsObj.tag = p.tag;
+            const qs = new URLSearchParams(paramsObj).toString();
+            downloadUrl = `/export?${qs}`;
+          }
+
+          toast.loading('Đang trích xuất và tải tệp Excel...', { id: 'export-action-toast' });
+          const fileName = p.filename || p.file_name || `export_${expType}_${new Date().toISOString().slice(0, 10)}.csv`;
+
+          const res = await api.get(downloadUrl, { responseType: 'blob' });
+          const blob = new Blob([res.data], { type: 'text/csv;charset=utf-8;' });
+          const blobUrl = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = blobUrl;
+          link.setAttribute('download', fileName);
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          window.URL.revokeObjectURL(blobUrl);
+
+          toast.success('Đã tải tệp Excel thành công!', { id: 'export-action-toast' });
+          break;
+        }
+
         default:
           throw new Error('Loại hành động không được hỗ trợ: ' + proposal.action_type);
       }
@@ -474,424 +514,369 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
     toast('Đã hủy đề xuất khởi tạo.', { icon: 'ℹ️' });
   };
 
-  // Icon mapping
-  const getActionIcon = () => {
+  const currentUser = useAuthStore((s) => s.user);
+
+  const getCardTheme = () => {
     switch (proposal.action_type) {
-      case 'leave':
-        return <Calendar className="w-5 h-5 text-[#BD1D2D]" />;
-      case 'supplementary':
-        return <Clock className="w-5 h-5 text-amber-600" />;
-      case 'expense':
-        return <DollarSign className="w-5 h-5 text-emerald-600" />;
-      case 'advance_payment':
-        return <DollarSign className="w-5 h-5 text-indigo-600" />;
-      case 'inventory_receipt':
-        return <Package className="w-5 h-5 text-amber-600" />;
-      case 'shift_swap':
-        return <RefreshCw className="w-5 h-5 text-blue-600" />;
+      case 'export_data':
+      case 'export':
+        return {
+          bg: '#f5f3ff',
+          text: '#6d28d9',
+          border: '#ddd6fe',
+          accent: '#7c3aed',
+          label: 'XUẤT DỮ LIỆU',
+          icon: <FileSpreadsheet size={13} color="#7c3aed" />
+        };
       case 'task':
-        return <CheckSquare className="w-5 h-5 text-indigo-600" />;
-      case 'lead':
-        return <User className="w-5 h-5 text-amber-600" />;
+        return {
+          bg: '#eff6ff',
+          text: '#1d4ed8',
+          border: '#bfdbfe',
+          accent: '#2563eb',
+          label: 'CÔNG VIỆC',
+          icon: <CheckSquare size={13} color="#2563eb" />
+        };
       case 'sales_order':
-        return <DollarSign className="w-5 h-5 text-[#BD1D2D]" />;
+        return {
+          bg: '#ecfdf5',
+          text: '#047857',
+          border: '#a7f3d0',
+          accent: '#059669',
+          label: 'ĐƠN HÀNG (SO)',
+          icon: <FileText size={13} color="#059669" />
+        };
       case 'deposit':
-        return <DollarSign className="w-5 h-5 text-amber-600" />;
-      case 'admission_document_request':
-        return <FileText className="w-5 h-5 text-amber-700" />;
-      case 'legal_contract':
-        return <FileText className="w-5 h-5 text-indigo-700" />;
+        return {
+          bg: '#ecfdf5',
+          text: '#047857',
+          border: '#a7f3d0',
+          accent: '#059669',
+          label: 'ĐẶT CỌC',
+          icon: <DollarSign size={13} color="#059669" />
+        };
+      case 'lead':
+        return {
+          bg: '#f0f9ff',
+          text: '#0369a1',
+          border: '#bae6fd',
+          accent: '#0284c7',
+          label: 'KHÁCH HÀNG CRM',
+          icon: <User size={13} color="#0284c7" />
+        };
+      case 'inventory_receipt':
+        return {
+          bg: '#fffbeb',
+          text: '#b45309',
+          border: '#fde68a',
+          accent: '#d97706',
+          label: 'KHO VẬT TƯ',
+          icon: <Package size={13} color="#d97706" />
+        };
       case 'asset_handover':
-        return <Package className="w-5 h-5 text-orange-600" />;
+        return {
+          bg: '#fffbeb',
+          text: '#b45309',
+          border: '#fde68a',
+          accent: '#d97706',
+          label: 'TÀI SẢN',
+          icon: <Package size={13} color="#d97706" />
+        };
       case 'marketing_campaign':
-        return <Sparkles className="w-5 h-5 text-pink-600" />;
+        return {
+          bg: '#fdf2f8',
+          text: '#be185d',
+          border: '#fbcfe8',
+          accent: '#db2777',
+          label: 'MARKETING',
+          icon: <Sparkles size={13} color="#db2777" />
+        };
+      case 'leave':
+      case 'expense':
+      case 'advance_payment':
+      case 'supplementary':
+      case 'shift_swap':
+      case 'admission_document_request':
+      case 'legal_contract':
       default:
-        return <Sparkles className="w-5 h-5 text-[#BD1D2D]" />;
+        return {
+          bg: '#f5f3ff',
+          text: '#6d28d9',
+          border: '#ddd6fe',
+          accent: '#7c3aed',
+          label: 'QUY TRÌNH',
+          icon: <ClipboardList size={13} color="#7c3aed" />
+        };
     }
   };
 
-  // Format parameter labels
-  const formatParamKey = (k: string) => {
-    const map: Record<string, string> = {
-      leave_type: 'Loại nghỉ',
-      start_date: 'Từ ngày',
-      end_date: 'Đến ngày',
-      total_days: 'Số ngày',
-      reason: 'Lý do',
-      title: 'Tiêu đề',
-      amount: 'Số tiền',
-      total: 'Tổng giá trị',
-      total_amount: 'Tổng số tiền',
-      total_amount_VND: 'Tổng số tiền (VND)',
-      total_amount_vnd: 'Tổng số tiền (VND)',
-      currency: 'Loại tiền tệ',
-      deposit_amount: 'Số tiền đặt cọc',
-      scheduled_at: 'Thời gian hẹn',
-      price: 'Số tiền',
-      category: 'Hạng mục chi',
-      vendor_name: 'Đơn vị thụ hưởng',
-      supplier_name: 'Nhà cung cấp',
-      notes: 'Ghi chú',
-      date: 'Ngày',
-      in_time: 'Giờ vào',
-      out_time: 'Giờ ra',
-      order_date: 'Ngày tạo đơn',
-      terms: 'Lịch thanh toán',
-      installments: 'Lịch trình thanh toán',
-      milestones: 'Lịch trình thanh toán',
-      items: 'Danh sách đợt/mục',
-      subject: 'Tên việc',
-      due_date: 'Hạn chót',
-      priority: 'Ưu tiên',
-      body: 'Nội dung',
-      name: 'Họ tên',
-      full_name: 'Họ tên',
-      customer_name: 'Học viên / Khách hàng',
-      contact_name: 'Học viên / Khách hàng',
-      contact_phone: 'SĐT khách hàng',
-      contact_email: 'Email khách hàng',
-      phone: 'SĐT',
-      email: 'Email',
-      source: 'Nguồn',
-      approver_id: 'Người duyệt',
-      approver_id_2: 'Duyệt cấp 2'
-    };
-    return map[k] || k;
+  const getStatusBadge = () => {
+    if (status === 'submitting') {
+      return { label: 'Đang xử lý...', bg: '#eff6ff', text: '#1d4ed8' };
+    }
+    if (status === 'success') {
+      if (proposal.action_type === 'export_data' || proposal.action_type === 'export') {
+        return { label: 'Đã tải xong', bg: '#ecfdf5', text: '#047857' };
+      }
+      return { label: resultId ? `Đã tạo #${resultId}` : 'Đã mở phiếu', bg: '#ecfdf5', text: '#047857' };
+    }
+    if (status === 'cancelled') {
+      return { label: 'Đã hủy', bg: '#f1f5f9', text: '#64748b' };
+    }
+    if (status === 'error') {
+      return { label: 'Lỗi', bg: '#fef2f2', text: '#dc2626' };
+    }
+    // Idle
+    if (proposal.action_type === 'export_data' || proposal.action_type === 'export') {
+      return { label: 'Sẵn sàng tải', bg: '#ecfdf5', text: '#047857' };
+    }
+    return { label: 'Chờ duyệt', bg: '#fffbeb', text: '#b45309' };
   };
 
-  const formatParamValue = (k: string, v: any): React.ReactNode => {
-    if (v === null || v === undefined || v === '') return '—';
+  const theme = getCardTheme();
+  const statBadge = getStatusBadge();
+  const p = proposal.params || {};
 
-    // 1. Array of installments/items/milestones
-    if (Array.isArray(v)) {
-      if (v.length === 0) return 'Chưa thiết lập';
-      if (typeof v[0] === 'object' && v[0] !== null) {
-        return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '3px' }}>
-            <span style={{ fontWeight: 700, color: '#BD1D2D' }}>
-              {v.length} đợt thanh toán:
-            </span>
-            <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '3px',
-              maxHeight: '140px',
-              overflowY: 'auto',
-              background: '#f8fafc',
-              padding: '6px 8px',
-              borderRadius: '6px',
-              border: '1px solid #e2e8f0',
-              fontSize: '0.72rem'
-            }}>
-              {v.map((item: any, idx: number) => {
-                const name = item.name || item.title || item.label || `Đợt ${idx + 1}`;
-                const amt = item.amount || item.unit_price || item.price || 0;
-                const amtStr = Number(amt) > 0 ? Number(amt).toLocaleString('vi-VN') + ' đ' : (amt ? String(amt) : '0 đ');
-                const date = item.date || item.expected_pay_date || item.pay_date || '';
-                return (
-                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ color: '#334155' }}>• {name} {date ? `(${date})` : ''}</span>
-                    <span style={{ fontWeight: 650, color: '#0f172a', whiteSpace: 'nowrap' }}>{amtStr}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      }
-      return v.join(', ');
-    }
+  const senderName = p.created_by_name || p.creator_name || currentUser?.full_name || 'Người dùng';
+  const senderAvatar = p.created_by_avatar || p.creator_avatar || currentUser?.avatar_url || '';
+  const createdAtStr = p.created_at || (proposal as any).created_at || '';
 
-    // 2. Object handling
-    if (typeof v === 'object') {
-      try {
-        return JSON.stringify(v);
-      } catch {
-        return '—';
-      }
-    }
+  const approverOrAssigneeName = p.approver_name || p.assignee_name || p.user_name || (p.approver_id ? `Người duyệt #${p.approver_id}` : null);
+  const approverAvatar = p.approver_avatar || p.assignee_avatar || '';
+  const approverLabel = p.approver_name ? 'Người duyệt' : (p.assignee_name || p.user_name ? 'Người thực hiện' : 'Người duyệt');
 
-    // 3. Amount / Currency formatting
-    const kLower = k.toLowerCase();
-    if (kLower.includes('amount') || kLower.includes('price') || kLower.includes('total')) {
-      const num = Number(v);
-      if (!isNaN(num) && num > 0) {
-        return num.toLocaleString('vi-VN') + ' đ';
-      }
-    }
+  let summaryRowText = '';
+  if (proposal.action_type === 'expense' || proposal.action_type === 'advance_payment') {
+    summaryRowText = `[Hồ sơ chi phí]: Danh mục: ${p.category || 'Khác'}${p.amount ? ` • ${Number(p.amount).toLocaleString('vi-VN')} đ` : ''}`;
+  } else if (proposal.action_type === 'export_data' || proposal.action_type === 'export') {
+    summaryRowText = `[Bộ lọc dữ liệu]: ${p.filters_summary || proposal.summary || 'Toàn bộ dữ liệu phù hợp'}`;
+  } else if (proposal.action_type === 'task') {
+    summaryRowText = `[Công việc]: ${p.priority ? `Ưu tiên: ${p.priority}` : ''}${p.due_date ? ` • Hạn: ${new Date(p.due_date).toLocaleDateString('vi-VN')}` : ''}`;
+  } else if (proposal.action_type === 'leave') {
+    summaryRowText = `[Nghỉ phép]: ${p.leave_type || 'Phép'}${p.total_days ? ` • ${p.total_days} ngày` : ''}${p.reason ? ` • Lý do: ${p.reason}` : ''}`;
+  } else if (proposal.action_type === 'sales_order' || proposal.action_type === 'deposit') {
+    summaryRowText = `[Đơn hàng]: ${p.customer_name ? `KH: ${p.customer_name}` : ''}${p.total_amount ? ` • ${Number(p.total_amount).toLocaleString('vi-VN')} đ` : ''}`;
+  } else if (proposal.summary) {
+    summaryRowText = `[Chi tiết]: ${proposal.summary}`;
+  }
 
-    if (k === 'total_days') {
-      return `${v} ngày`;
+  const idTag = p.id || p.code || p.entity_id || (String(messageId).replace(/\D/g, '').slice(-4) || '1685');
+
+  const getButtonContent = () => {
+    if (status === 'submitting') {
+      return (
+        <>
+          <Loader2 size={13} className="animate-spin" />
+          <span>Đang xử lý...</span>
+        </>
+      );
     }
-    if (k === 'leave_type') {
-      const typeMap: Record<string, string> = {
-        annual: 'Phép năm',
-        remote_work: 'Làm từ xa (WFH)',
-        overtime: 'Làm thêm giờ (OT)',
-        unpaid: 'Nghỉ không lương',
-        sick: 'Nghỉ ốm',
-        late_early: 'Đi muộn / về sớm',
-        special_paid: 'Việc riêng có lương'
-      };
-      return typeMap[v] || v;
+    if (proposal.action_type === 'export_data' || proposal.action_type === 'export') {
+      return (
+        <>
+          <Download size={13} />
+          <span>Tải tệp Excel ngay {p.estimated_count ? `(${p.estimated_count} dòng)` : ''}</span>
+        </>
+      );
     }
-    if (k === 'priority') {
-      const pMap: Record<string, string> = {
-        urgent: 'Khẩn cấp 🔴',
-        high: 'Cao 🟠',
-        medium: 'Bình thường 🔵',
-        low: 'Thấp ⚪'
-      };
-      return pMap[v] || v;
+    if (proposal.action_type === 'task') {
+      return (
+        <>
+          <CheckSquare size={13} />
+          <span>Mở Task & Điền sẵn thông tin</span>
+        </>
+      );
     }
-    return String(v);
+    return (
+      <>
+        <ExternalLink size={13} />
+        <span>Xem chi tiết quy trình</span>
+      </>
+    );
   };
 
   return (
-    <div style={{
-      marginTop: '10px',
-      marginBottom: '6px',
-      background: '#ffffff',
-      border: '1.5px solid #fecaca',
-      borderRadius: '12px',
-      overflow: 'hidden',
-      boxShadow: '0 4px 14px rgba(189, 29, 45, 0.08)',
-      maxWidth: '480px',
-      fontFamily: 'inherit'
-    }}>
-      {/* Header */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '10px 14px',
-        background: '#fff5f5',
-        borderBottom: '1px solid #fee2e2'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+    <div
+      onClick={handleOpenAndPrefill}
+      style={{
+        marginTop: '8px',
+        marginBottom: '6px',
+        background: '#ffffff',
+        border: `1px solid ${theme.border}`,
+        borderRadius: '12px',
+        padding: '10px 12px',
+        boxShadow: '0 3px 10px rgba(0, 0, 0, 0.06)',
+        minWidth: '240px',
+        maxWidth: '300px',
+        color: '#0f172a',
+        textAlign: 'left',
+        cursor: 'pointer',
+        transition: 'all 0.15s ease'
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.boxShadow = '0 5px 14px rgba(0, 0, 0, 0.09)';
+        e.currentTarget.style.transform = 'translateY(-1px)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.boxShadow = '0 3px 10px rgba(0, 0, 0, 0.06)';
+        e.currentTarget.style.transform = 'none';
+      }}
+    >
+      {/* Top Header Tags */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px', gap: '6px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
           <div style={{
-            background: '#ffffff',
-            padding: '5px',
-            borderRadius: '8px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-            display: 'flex',
+            display: 'inline-flex',
             alignItems: 'center',
-            justifyContent: 'center'
+            gap: '4px',
+            fontSize: '0.62rem',
+            fontWeight: 700,
+            padding: '1.5px 6px',
+            borderRadius: '4px',
+            background: theme.bg,
+            color: theme.text,
+            border: `1px solid ${theme.border}`,
+            whiteSpace: 'nowrap'
           }}>
-            {getActionIcon()}
+            {theme.icon}
+            <span>{theme.label}</span>
           </div>
-          <div>
-            <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#991b1b' }}>
-              {proposal.title || 'Đề xuất Khởi tạo Quy trình'}
-            </div>
-            <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
-              Hệ thống ERP • AI IDEAS Super Intelligent
-            </div>
-          </div>
+          {statBadge && (
+            <span style={{
+              fontSize: '0.62rem',
+              fontWeight: 700,
+              padding: '1.5px 5px',
+              borderRadius: '4px',
+              background: statBadge.bg,
+              color: statBadge.text,
+              whiteSpace: 'nowrap'
+            }}>
+              {statBadge.label}
+            </span>
+          )}
+        </div>
+        <span style={{ fontSize: '0.64rem', color: '#94a3b8', fontWeight: 600, flexShrink: 0 }}>
+          #{idTag}
+        </span>
+      </div>
+
+      {/* Card Title */}
+      <div style={{
+        fontWeight: 700,
+        fontSize: '0.80rem',
+        color: '#0f172a',
+        lineHeight: 1.3,
+        marginBottom: '6px'
+      }}>
+        {proposal.title || 'Đề xuất Khởi tạo Quy trình'}
+      </div>
+
+      {/* Metadata rows */}
+      <div style={{ fontSize: '0.74rem', color: '#64748b', display: 'flex', flexDirection: 'column', gap: '5px', marginBottom: '8px' }}>
+        {/* Row 1: Sender */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <Avatar src={senderAvatar} name={senderName} size={18} />
+          <span>
+            Người gửi: <strong style={{ color: '#334155' }}>{senderName}</strong> {createdAtStr ? <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>({createdAtStr})</span> : ''}
+          </span>
         </div>
 
-        {/* Status Badge */}
-        {status === 'idle' && (
-          <span style={{
-            fontSize: '0.7rem',
-            fontWeight: 650,
-            background: '#fef3c7',
-            color: '#b45309',
-            padding: '2px 8px',
-            borderRadius: '10px',
-            border: '1px solid #fde68a'
-          }}>
-            Chờ xác nhận
-          </span>
+        {/* Row 2: Approver / Assignee */}
+        {approverOrAssigneeName && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Avatar src={approverAvatar} name={approverOrAssigneeName} size={18} />
+            <span>
+              {approverLabel}: <strong style={{ color: '#334155' }}>{approverOrAssigneeName}</strong>
+            </span>
+          </div>
         )}
-        {status === 'submitting' && (
-          <span style={{
-            fontSize: '0.7rem',
-            fontWeight: 650,
-            background: '#eff6ff',
-            color: '#1d4ed8',
-            padding: '2px 8px',
-            borderRadius: '10px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px'
-          }}>
-            <Loader2 className="w-3 h-3 animate-spin" /> Đang tạo...
-          </span>
-        )}
-        {status === 'success' && (
-          <span style={{
-            fontSize: '0.7rem',
-            fontWeight: 700,
-            background: '#dcfce7',
-            color: '#15803d',
-            padding: '2px 8px',
-            borderRadius: '10px',
-            border: '1px solid #bbf7d0',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '3px'
-          }}>
-            <Check className="w-3 h-3" /> {resultId ? `Đã tạo #${resultId}` : 'Sẵn sàng mở phiếu'}
-          </span>
-        )}
-        {status === 'cancelled' && (
-          <span style={{
-            fontSize: '0.7rem',
-            fontWeight: 600,
-            background: '#f1f5f9',
-            color: '#64748b',
-            padding: '2px 8px',
-            borderRadius: '10px'
-          }}>
-            Đã hủy
-          </span>
-        )}
-        {status === 'error' && (
-          <span style={{
-            fontSize: '0.7rem',
-            fontWeight: 600,
-            background: '#fee2e2',
-            color: '#b91c1c',
-            padding: '2px 8px',
-            borderRadius: '10px'
-          }}>
-            Lỗi
-          </span>
+
+        {/* Row 3: Summary / Filter details */}
+        {summaryRowText && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Clock size={13} color="#64748b" style={{ flexShrink: 0 }} />
+            <span style={{ wordBreak: 'break-word', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {summaryRowText}
+            </span>
+          </div>
         )}
       </div>
 
-      {/* Summary Banner */}
-      {proposal.summary && (
+      {/* Error message if any */}
+      {errorMsg && (
         <div style={{
-          padding: '8px 14px',
-          background: '#fafafa',
-          borderBottom: '1px dashed #e2e8f0',
-          fontSize: '0.78rem',
-          color: '#334155',
-          lineHeight: '1.4'
+          marginBottom: '6px',
+          padding: '4px 8px',
+          background: '#fef2f2',
+          border: '1px solid #fecaca',
+          borderRadius: '5px',
+          color: '#991b1b',
+          fontSize: '0.70rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '5px'
         }}>
-          <strong>Tóm tắt:</strong> {proposal.summary}
+          <AlertCircle size={12} className="flex-shrink-0" />
+          <span>{errorMsg}</span>
         </div>
       )}
 
-      {/* Structured Parameters Grid */}
-      <div style={{ padding: '10px 14px', fontSize: '0.75rem' }}>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-          gap: '6px 12px'
-        }}>
-          {Object.entries(proposal.params || {}).map(([key, val]) => {
-            const isFullWidth = key === 'installments' || key === 'milestones' || key === 'items' || key === 'notes' || key === 'body' || key === 'reason';
-            return (
-              <div 
-                key={key} 
-                style={{ 
-                  display: 'flex', 
-                  flexDirection: 'column',
-                  gridColumn: isFullWidth ? 'span 2' : 'auto'
-                }}
-              >
-                <span style={{ color: '#64748b', fontSize: '0.7rem', fontWeight: 500 }}>
-                  {formatParamKey(key)}
-                </span>
-                <span style={{ color: '#0f172a', fontWeight: 600, wordBreak: 'break-word' }}>
-                  {formatParamValue(key, val)}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-
-        {errorMsg && (
-          <div style={{
-            marginTop: '8px',
-            padding: '6px 10px',
-            background: '#fef2f2',
-            border: '1px solid #fecaca',
-            borderRadius: '6px',
-            color: '#991b1b',
-            fontSize: '0.72rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px'
-          }}>
-            <AlertCircle className="w-4 h-4 flex-shrink-0" />
-            <span>{errorMsg}</span>
-          </div>
-        )}
-      </div>
-
-      {/* Action Footer */}
-      <div style={{
-        padding: '10px 14px',
-        background: '#f8fafc',
-        borderTop: '1px solid #f1f5f9',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'flex-end',
-        gap: '8px'
-      }}>
-        {status !== 'submitting' && (
+      {/* Action Button */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        {status === 'idle' && (
           <button
             type="button"
-            onClick={handleCancel}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleCancel();
+            }}
+            title="Hủy bỏ"
             style={{
-              padding: '6px 12px',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              color: '#64748b',
-              background: '#ffffff',
-              border: '1px solid #cbd5e1',
+              padding: '6px 8px',
               borderRadius: '7px',
+              border: '1px solid #e2e8f0',
+              background: '#f8fafc',
+              color: '#94a3b8',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              gap: '4px',
+              justifyContent: 'center',
               transition: 'all 0.15s ease'
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = '#f1f5f9')}
-            onMouseLeave={(e) => (e.currentTarget.style.background = '#ffffff')}
+            onMouseEnter={(e) => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = '#fef2f2'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.background = '#f8fafc'; }}
           >
-            <X className="w-3.5 h-3.5" /> Hủy
+            <X size={12} />
           </button>
         )}
-
         <button
           type="button"
-          onClick={handleOpenAndPrefill}
           disabled={status === 'submitting'}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleOpenAndPrefill();
+          }}
           style={{
-            padding: '6px 14px',
-            fontSize: '0.75rem',
-            fontWeight: 700,
-            color: '#ffffff',
-            background: 'linear-gradient(135deg, #BD1D2D 0%, #991b1b 100%)',
-            border: 'none',
+            flex: 1,
+            padding: '6px 10px',
             borderRadius: '7px',
+            border: 'none',
+            background: theme.accent,
+            color: '#ffffff',
+            fontSize: '0.74rem',
+            fontWeight: 700,
             cursor: status === 'submitting' ? 'not-allowed' : 'pointer',
             display: 'flex',
             alignItems: 'center',
+            justifyContent: 'center',
             gap: '5px',
-            boxShadow: '0 2px 6px rgba(189, 29, 45, 0.3)',
-            transition: 'all 0.15s ease',
-            opacity: status === 'submitting' ? 0.7 : 1
+            boxShadow: `0 1.5px 5px ${theme.border}`,
+            transition: 'opacity 0.15s ease'
           }}
-          onMouseEnter={(e) => { if (status !== 'submitting') e.currentTarget.style.filter = 'brightness(1.08)'; }}
-          onMouseLeave={(e) => (e.currentTarget.style.filter = 'none')}
+          onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.9'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
         >
-          {status === 'submitting' ? (
-            <>
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              <span>Đang mở phiếu...</span>
-            </>
-          ) : (
-            <>
-              <ArrowRight className="w-3.5 h-3.5" />
-              <span>Mở phiếu & Điền sẵn thông tin</span>
-            </>
-          )}
+          {getButtonContent()}
         </button>
       </div>
     </div>

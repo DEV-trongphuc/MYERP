@@ -3956,18 +3956,79 @@ export const WorkChatModal: React.FC = () => {
                                       : (stat === 'pending')
                                       ? { label: eType === 'workflow' ? 'Chờ duyệt' : 'Chờ xử lý', bg: '#fffbeb', text: '#b45309' } : null;
 
+                                    const handleOpenCardEntity = (e?: React.MouseEvent) => {
+                                      if (e) e.stopPropagation();
+                                      if (isMobile) {
+                                        closeChat();
+                                      }
+                                      if (eType === 'contact') {
+                                        openCustomerDrawer(meta.entity_id);
+                                      } else if (eType === 'task') {
+                                        openTaskDrawer(meta.entity_id);
+                                      } else if (eType === 'so') {
+                                        if (meta.contact_id) {
+                                          openCustomerDrawer(meta.contact_id, 'deals');
+                                        } else {
+                                          window.dispatchEvent(new CustomEvent('open-deposit-drawer', { detail: { id: Number(meta.entity_id), depositId: Number(meta.entity_id) } }));
+                                        }
+                                      } else if (eType === 'po') {
+                                        openExpenseDrawer(Number(meta.entity_id || meta.id));
+                                      } else if (eType === 'workflow') {
+                                        const subType = String(meta.sub_type || '').toLowerCase();
+                                        const category = String(meta.category || '').toUpperCase();
+                                        if (subType === 'advance') {
+                                          openApprovalDrawer({
+                                            id: Number(meta.entity_id),
+                                            type: 'advance',
+                                            title: meta.title,
+                                            status: meta.status,
+                                            employee_name: meta.creator_name,
+                                            approver_name: meta.approver_name,
+                                            approver_name_2: meta.approver_name_2
+                                          });
+                                        } else if (subType === 'expense' || category === 'EXPENSE' || category === 'PAYMENT') {
+                                          openExpenseDrawer(Number(meta.entity_id));
+                                        } else {
+                                          openApprovalDrawer({
+                                            id: Number(meta.entity_id),
+                                            type: 'leave',
+                                            title: meta.title,
+                                            status: meta.status,
+                                            employee_name: meta.creator_name,
+                                            approver_name: meta.approver_name,
+                                            approver_name_2: meta.approver_name_2
+                                          });
+                                        }
+                                      } else {
+                                        toast.success(`Đang mở đối tượng ERP #${meta.entity_id}`);
+                                      }
+                                    };
+
                                     return (
-                                      <div style={{
-                                        background: '#ffffff',
-                                        padding: '10px 12px',
-                                        borderRadius: '12px',
-                                        border: `1px solid ${theme.border}`,
-                                        boxShadow: '0 3px 10px rgba(0, 0, 0, 0.06)',
-                                        minWidth: '230px',
-                                        maxWidth: '290px',
-                                        color: '#0f172a',
-                                        textAlign: 'left'
-                                      }}>
+                                      <div 
+                                        onClick={handleOpenCardEntity}
+                                        style={{
+                                          background: '#ffffff',
+                                          padding: '10px 12px',
+                                          borderRadius: '12px',
+                                          border: `1px solid ${theme.border}`,
+                                          boxShadow: '0 3px 10px rgba(0, 0, 0, 0.06)',
+                                          minWidth: '230px',
+                                          maxWidth: '290px',
+                                          color: '#0f172a',
+                                          textAlign: 'left',
+                                          cursor: 'pointer',
+                                          transition: 'all 0.15s ease'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                          e.currentTarget.style.boxShadow = '0 5px 14px rgba(0, 0, 0, 0.09)';
+                                          e.currentTarget.style.transform = 'translateY(-1px)';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                          e.currentTarget.style.boxShadow = '0 3px 10px rgba(0, 0, 0, 0.06)';
+                                          e.currentTarget.style.transform = 'none';
+                                        }}
+                                      >
                                         {/* Card Header */}
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px', gap: '6px' }}>
                                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
@@ -4317,53 +4378,7 @@ export const WorkChatModal: React.FC = () => {
                                         {/* Action / View Detail Button */}
                                         <button
                                           type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            if (isMobile) {
-                                              closeChat();
-                                            }
-                                            if (eType === 'contact') {
-                                              openCustomerDrawer(meta.entity_id);
-                                            } else if (eType === 'task') {
-                                              openTaskDrawer(meta.entity_id);
-                                            } else if (eType === 'so') {
-                                              if (meta.contact_id) {
-                                                openCustomerDrawer(meta.contact_id, 'deals');
-                                              } else {
-                                                window.dispatchEvent(new CustomEvent('open-deposit-drawer', { detail: { id: Number(meta.entity_id), depositId: Number(meta.entity_id) } }));
-                                              }
-                                            } else if (eType === 'po') {
-                                              openExpenseDrawer(Number(meta.entity_id || meta.id));
-                                            } else if (eType === 'workflow') {
-                                              const subType = String(meta.sub_type || '').toLowerCase();
-                                              const category = String(meta.category || '').toUpperCase();
-                                              if (subType === 'advance') {
-                                                openApprovalDrawer({
-                                                  id: Number(meta.entity_id),
-                                                  type: 'advance',
-                                                  title: meta.title,
-                                                  status: meta.status,
-                                                  employee_name: meta.creator_name,
-                                                  approver_name: meta.approver_name,
-                                                  approver_name_2: meta.approver_name_2
-                                                });
-                                              } else if (subType === 'expense' || category === 'EXPENSE' || category === 'PAYMENT') {
-                                                openExpenseDrawer(Number(meta.entity_id));
-                                              } else {
-                                                openApprovalDrawer({
-                                                  id: Number(meta.entity_id),
-                                                  type: 'leave',
-                                                  title: meta.title,
-                                                  status: meta.status,
-                                                  employee_name: meta.creator_name,
-                                                  approver_name: meta.approver_name,
-                                                  approver_name_2: meta.approver_name_2
-                                                });
-                                              }
-                                            } else {
-                                              toast.success(`Đang mở đối tượng ERP #${meta.entity_id}`);
-                                            }
-                                          }}
+                                          onClick={(e) => handleOpenCardEntity(e)}
                                           style={{
                                             width: '100%',
                                             padding: '6px 10px',
