@@ -178,6 +178,20 @@ class AgentToolRegistry {
                         ]
                     ],
                     [
+                        'name' => 'get_executive_morning_brief',
+                        'description' => 'Bản tin điều hành đầu ngày & tổng quan trạng thái cá nhân hóa: tổng hợp các việc khẩn cấp cần làm hôm nay, đơn từ chờ duyệt, lead nóng chưa tương tác trong 24h, công việc quá hạn và sự kiện lịch trong ngày.',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'focus' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['overview', 'approvals', 'tasks', 'crm'],
+                                    'description' => 'Trọng tâm bản tin: tổng quan (overview), phê duyệt (approvals), công việc (tasks), hoặc CRM (crm).'
+                                ]
+                            ]
+                        ]
+                    ],
+                    [
                         'name' => 'get_my_crm_inbox',
                         'description' => 'Tra cứu hòm thư CRM/tiềm năng của người dùng (dành cho Tư vấn viên/Sales): Thống kê số lượng lead mới hôm nay, số lead chưa liên hệ, tổng lead đang phụ trách và danh sách TOP các tiềm năng mới nhất cần liên hệ chăm sóc.',
                         'parameters' => [
@@ -1848,6 +1862,117 @@ class AgentToolRegistry {
                         'is_confirmed' => !empty($ps['confirmed_at']),
                         'route_url' => '/my-payslips',
                         'summary' => "Phiếu lương kỳ {$ps['month_year']} của bạn: Thực nhận " . number_format((float)$ps['net_salary'], 0, ',', '.') . " VND. Số ngày công thực tế: {$ps['work_days_actual']}/{$ps['work_days_required']} ngày. Trạng thái: {$stText}."
+                    ];
+                }
+
+                // ==========================================
+                // 9B. GET EXECUTIVE MORNING BRIEF (PROACTIVE ANTICIPATION)
+                // ==========================================
+                case 'get_executive_morning_brief': {
+                    $focus = $args['focus'] ?? 'overview';
+
+                    // 1. Pending Approvals awaiting current user
+                    $pendingApprovalsCount = 0;
+                    try {
+                        $stmtExp = $db->prepare("SELECT COUNT(*) FROM expenses WHERE tenant_id = ? AND deleted_at IS NULL AND status = 'pending' AND (created_by = ? OR approver_id = ? OR approver_id_2 = ? OR approver_id_3 = ? " . ($isGlobalAdmin ? "OR approver_id IS NULL OR approver_id = 0" : "") . ")");
+                        $stmtExp->execute([$tid, $uid, $uid, $uid, $uid]);
+                        $expCount = (int)$stmtExp->fetchColumn();
+
+                        $stmtLv = $db->prepare("SELECT COUNT(*) FROM hrm_leave_requests WHERE status = 'pending' AND (user_id = ? OR approver_id = ? OR approver_id_2 = ? " . ($isGlobalAdmin ? "OR approver_id IS NULL OR approver_id = 0" : "") . ")");
+                        $stmtLv->execute([$uid, $uid, $uid]);
+                        $lvCount = (int)$stmtLv->fetchColumn();
+
+                        $pendingApprovalsCount = $expCount + $lvCount;
+                    } catch (\Throwable $e) {}
+
+                    // 2. Urgent / Overdue Tasks assigned to current user
+                    $urgentTasks = [];
+                    $overdueTasksCount = 0;
+                    try {
+                        $stmtTask = $db->prepare("
+                            SELECT a.id, a.subject, a.due_date, a.priority, a.progress
+                            FROM activities a
+                            WHERE a.tenant_id = ? AND a.deleted_at IS NULL AND a.type = 'task'
+                              AND a.status NOT IN ('done', 'completed', 'cancelled')
+                              AND (a.user_id = ? OR FIND_IN_SET(?, IFNULL(a.participant_ids, '')))
+                              AND a.due_date IS NOT NULL AND a.due_date <= CURDATE()
+                            ORDER BY a.due_date ASC, a.priority DESC
+                            LIMIT 5
+                        ");
+                        $stmtTask->execute([$tid, $uid, (string)$uid]);
+                        $tasksRows = $stmtTask->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                        $overdueTasksCount = count($tasksRows);
+                        foreach ($tasksRows as $tr) {
+                            $isOverdue = (strtotime($tr['due_date']) < strtotime(date('Y-m-d')));
+                            $urgentTasks[] = [
+                                'id' => (int)$tr['id'],
+                                'title' => $tr['subject'],
+                                'due_date' => date('d/m/Y', strtotime($tr['due_date'])),
+                                'is_overdue' => $isOverdue,
+                                'progress' => (int)$tr['progress'] . '%'
+                            ];
+                        }
+                    } catch (\Throwable $e) {}
+
+                    // 3. CRM Leads (New today / Stale > 24h)
+                    $crmHighlights = [
+                        'today_new_leads' => 0,
+                        'stale_uncontacted' => 0
+                    ];
+                    try {
+                        $baseCrmWhere = "tenant_id = ? AND deleted_at IS NULL";
+                        $baseCrmParams = [$tid];
+                        if (!$canAccessAllContacts) {
+                            $rbac = $getContactRbacClause('');
+                            $baseCrmWhere .= " AND " . $rbac['clause'];
+                            $baseCrmParams = array_merge($baseCrmParams, $rbac['params']);
+                        }
+                        $stmtCrm = $db->prepare("
+                            SELECT 
+                                SUM(CASE WHEN DATE(created_at) = CURDATE() THEN 1 ELSE 0 END) as today_new,
+                                SUM(CASE WHEN (status IN ('new', 'chua_lien_he', 'moi') OR stage_id IN (1, 2)) AND created_at < DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN 1 ELSE 0 END) as stale_count
+                            FROM contacts
+                            WHERE $baseCrmWhere
+                        ");
+                        $stmtCrm->execute($baseCrmParams);
+                        $crmRow = $stmtCrm->fetch(PDO::FETCH_ASSOC) ?: [];
+                        $crmHighlights['today_new_leads'] = (int)($crmRow['today_new'] ?? 0);
+                        $crmHighlights['stale_uncontacted'] = (int)($crmRow['stale_count'] ?? 0);
+                    } catch (\Throwable $e) {}
+
+                    // 4. Synthesize Briefing Summary
+                    $greetingName = $authContext['clean_name'] ?? ($authContext['name'] ?? 'bạn');
+                    $bullets = [];
+                    if ($pendingApprovalsCount > 0) {
+                        $bullets[] = "⚡ Có {$pendingApprovalsCount} đơn từ / đề xuất chi đang chờ bạn xử lý.";
+                    }
+                    if ($overdueTasksCount > 0) {
+                        $bullets[] = "📌 Có {$overdueTasksCount} công việc quá hạn hoặc cần hoàn thành trong hôm nay.";
+                    }
+                    if ($crmHighlights['today_new_leads'] > 0 || $crmHighlights['stale_uncontacted'] > 0) {
+                        $bullets[] = "🎯 CRM: {$crmHighlights['today_new_leads']} lead mới hôm nay, {$crmHighlights['stale_uncontacted']} lead chưa tương tác quá 24h.";
+                    }
+
+                    if (empty($bullets)) {
+                        $summaryText = "Dạ {$greetingName} ơi, hôm nay tiến độ công việc của mình rất ổn định, không có phiếu phê duyệt tồn đọng hay công việc khẩn cấp bị quá hạn.";
+                    } else {
+                        $summaryText = "Dạ {$greetingName} ơi, đây là bản tin điều hành nhanh hôm nay:\n" . implode("\n", $bullets);
+                    }
+
+                    return [
+                        'success' => true,
+                        'date' => date('d/m/Y'),
+                        'summary' => $summaryText,
+                        'pending_approvals_count' => $pendingApprovalsCount,
+                        'overdue_tasks_count' => $overdueTasksCount,
+                        'urgent_tasks' => $urgentTasks,
+                        'crm_highlights' => $crmHighlights,
+                        'recommended_actions' => array_values(array_filter([
+                            $pendingApprovalsCount > 0 ? "Xem danh sách {$pendingApprovalsCount} đơn chờ duyệt" : null,
+                            $overdueTasksCount > 0 ? "Xử lý các công việc gấp hôm nay" : null,
+                            $crmHighlights['stale_uncontacted'] > 0 ? "Chăm sóc lead tồn đọng quá 24h" : null,
+                            "Tra cứu bảng lương hoặc chấm công tháng này"
+                        ]))
                     ];
                 }
 

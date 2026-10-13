@@ -3589,6 +3589,16 @@ class ChatController {
                 . "  - Bước 1: Tra cứu hồ sơ/giấy tờ học viên bằng công cụ chuyên trách (`check_student_admission_records` hoặc `search_contacts_or_leads`).\n"
                 . "  - Bước 2: Từ dữ liệu thực tế thu được, tự động kích hoạt công cụ `draft_action_proposal` để soạn sẵn Thẻ Hành Động điền trước 100% dữ liệu.\n"
                 . "  - Bước 3: Tổng hợp phản hồi tự nhiên, giải thích rõ ràng và hiển thị Thẻ Hành Động để người dùng kiểm tra và tự tay bấm xác nhận/lưu!\n\n"
+                . "HỆ THỐNG THẺ THÔNG MINH ERP (SMART ERP TAGS) & ĐIỀU HÀNH CHỦ ĐỘNG (PROACTIVE ENGINE):\n"
+                . "1. BẢN TIN ĐIỀU HÀNH ĐẦU NGÀY (EXECUTIVE MORNING BRIEFING):\n"
+                . "   - Khi người dùng hỏi: 'hôm nay có gì mới', 'tình hình hôm nay', 'briefing', 'báo cáo nhanh', hoặc lời chào đầu ngày: Bạn BẮT BUỘC gọi công cụ `get_executive_morning_brief` để có số liệu thực tế về đơn từ chờ duyệt, công việc khẩn cấp hôm nay, và lead CRM cần chăm sóc.\n"
+                . "   - Trả lời ngắn gọn, nêu rõ các trọng tâm khẩn cần xử lý trước tiên.\n"
+                . "2. GỢI Ý HÀNH ĐỘNG TIẾP THEO (NEXT BEST ACTIONS - BẮT BUỘC 100% CÁC CÂU TRẢ LỜI):\n"
+                . "   - Ở CUỐI CÙNG của mỗi câu trả lời (sau khi giải đáp hoặc thực hiện xong), BẮT BUỘC đính kèm thẻ gợi ý `<<<NEXT_BEST_ACTIONS: [\"Gợi ý 1\", \"Gợi ý 2\", \"Gợi ý 3\"]>>>` (2 đến 3 câu lệnh ngắn gọn 3-8 từ, có tính tiếp nối logic với việc vừa làm) để người dùng có thể click 1 chạm tiếp tục luồng công việc mà không cần gõ phím!\n"
+                . "3. CẢNH BÁO ÁCH TẮC & CƠ HỘI CHỦ ĐỘNG (PROACTIVE INSIGHTS):\n"
+                . "   - Khi phát hiện rủi ro (đơn tồn quá lâu, task quá hạn, lead bỏ quên > 24h, ticket SLA): Đính kèm thẻ `<<<PROACTIVE_INSIGHT: {\"type\": \"warning|urgent|opportunity\", \"title\": \"Tiêu đề cảnh báo\", \"description\": \"Mô tả ngắn gọn\", \"actionPrompt\": \"Câu lệnh xử lý ngay\", \"actionLabel\": \"Nút bấm hành động\"}>>>`.\n"
+                . "4. BIỂU ĐỒ TRỰC QUAN MICRO-BI (DYNAMIC CHARTS):\n"
+                . "   - Khi so sánh số liệu, thống kê phễu CRM, phân bố chi phí: Đính kèm thẻ `<<<DYNAMIC_CHART: {\"type\": \"bar|line|pie\", \"title\": \"Tiêu đề\", \"xAxisKey\": \"name\", \"data\": [{\"name\": \"Nhóm A\", \"value\": 10}], \"series\": [{\"dataKey\": \"value\", \"name\": \"Số lượng\"}]}>>>`.\n\n"
                 . "QUY TẮC ANTI-HALLUCINATION & AN TOÀN PHÁP LÝ:\n"
                 . "1. Tuyệt đối KHÔNG bịa đặt thông tin, chính sách hay học phí ngoài tài liệu huấn luyện.\n"
                 . "2. Nếu vấn đề chưa có thông tin chính xác: Trả lời mềm mại: 'Dạ vấn đề này hiện em chưa có thông tin chính xác nhất. Nhờ {$userName} để lại thông tin hoặc em sẽ báo chuyên viên kiểm tra và báo lại ngay cho mình nhé!'\n"
@@ -5080,10 +5090,10 @@ class ChatController {
             }
 
             // ==========================================
-            // AUTONOMOUS MULTI-TURN TOOL LOOP (UP TO 3 TURNS)
-            // Supports Chained Multi-Agent Execution: Lookup Tool -> Draft Action Proposal -> Natural Synthesis
+            // AUTONOMOUS MULTI-TURN TOOL LOOP (UP TO 4 TURNS)
+            // Supports Chained Multi-Agent Execution: Lookup Tool -> Second Inspection -> Action Proposal -> Natural Synthesis
             // ==========================================
-            $maxToolTurns = 3;
+            $maxToolTurns = 4;
             $toolTurn = 0;
             $generateUrl = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key=" . urlencode($apiKey);
 
