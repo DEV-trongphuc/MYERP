@@ -722,6 +722,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               headers,
               body: JSON.stringify({
                 conversation_id: activeConversationId,
+                content,
                 message_type,
                 metadata: {
                   ...(typeof metadata === 'object' && metadata ? metadata : {}),
