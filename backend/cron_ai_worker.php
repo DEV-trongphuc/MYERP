@@ -541,32 +541,40 @@ function runProactiveAgentBriefingWorker($conn) {
         }
 
         // Create new direct conversation
-        $conn->begin_transaction();
-        $cStmt = $conn->prepare("
-            INSERT INTO chat_conversations (tenant_id, type, title, avatar_url, created_by, last_message_at, created_at, updated_at)
-            VALUES (?, 'direct', 'SI IDEAS', '/stickers/ideas/ideas_3.webp', 9000001, NOW(), NOW(), NOW())
-        ");
-        $cStmt->bind_param("i", $tenantId);
-        $cStmt->execute();
-        $convId = $conn->insert_id;
-        $cStmt->close();
+        try {
+            $conn->begin_transaction();
+            $cStmt = $conn->prepare("
+                INSERT INTO chat_conversations (tenant_id, type, title, avatar_url, created_by, last_message_at, created_at, updated_at)
+                VALUES (?, 'direct', 'SI IDEAS', '/stickers/ideas/ideas_3.webp', 9000001, NOW(), NOW(), NOW())
+            ");
+            $cStmt->bind_param("i", $tenantId);
+            $cStmt->execute();
+            $convId = $conn->insert_id;
+            $cStmt->close();
 
-        $p1 = $conn->prepare("INSERT INTO chat_participants (tenant_id, conversation_id, user_id, role, is_pinned, joined_at) VALUES (?, ?, ?, 'member', 1, NOW())");
-        $p1->bind_param("iii", $tenantId, $convId, $userId);
-        $p1->execute();
-        $p1->close();
+            $p1 = $conn->prepare("INSERT INTO chat_participants (tenant_id, conversation_id, user_id, role, is_pinned, joined_at) VALUES (?, ?, ?, 'member', 1, NOW())");
+            $p1->bind_param("iii", $tenantId, $convId, $userId);
+            $p1->execute();
+            $p1->close();
 
-        $p2 = $conn->prepare("INSERT INTO chat_participants (tenant_id, conversation_id, user_id, role, is_pinned, joined_at) VALUES (?, ?, 9000001, 'owner', 0, NOW())");
-        $p2->bind_param("ii", $tenantId, $convId);
-        $p2->execute();
-        $p2->close();
+            $p2 = $conn->prepare("INSERT INTO chat_participants (tenant_id, conversation_id, user_id, role, is_pinned, joined_at) VALUES (?, ?, 9000001, 'owner', 0, NOW())");
+            $p2->bind_param("ii", $tenantId, $convId);
+            $p2->execute();
+            $p2->close();
 
-        $conn->commit();
-        return (int)$convId;
+            $conn->commit();
+            return (int)$convId;
+        } catch (\Throwable $e) {
+            $conn->rollback();
+            error_log("Error in getOrCreateBotConv: " . $e->getMessage());
+            return 0;
+        }
     };
 
     // Helper: Send briefing message to conversation if not already sent today
     $sendBriefingIfNotSent = function($convId, $userId, $tenantId, $slotName, $text) use ($conn) {
+        if ($convId <= 0) return false;
+
         $slotTag = "\"briefing_slot\":\"{$slotName}\"";
         $checkStmt = $conn->prepare("
             SELECT COUNT(1) FROM chat_messages 
@@ -605,7 +613,9 @@ function runProactiveAgentBriefingWorker($conn) {
     if ($slot === 'morning') {
         $uRes = $conn->query("SELECT id, full_name, tenant_id FROM users WHERE is_active = 1 AND role IN ('sale', 'sales', 'consultant', 'admin', 'manager')");
         if ($uRes) {
-            while ($u = $uRes->fetch_assoc()) {
+            $users = $uRes->fetch_all(MYSQLI_ASSOC);
+            $uRes->close();
+            foreach ($users as $u) {
                 $uId = (int)$u['id'];
                 $tId = (int)($u['tenant_id'] ?: 1);
                 $uName = $u['full_name'] ?: 'bạn';
@@ -654,7 +664,9 @@ function runProactiveAgentBriefingWorker($conn) {
     elseif ($slot === 'midday') {
         $mRes = $conn->query("SELECT id, full_name, tenant_id FROM users WHERE is_active = 1 AND role IN ('admin', 'superadmin', 'director', 'manager', 'accountant')");
         if ($mRes) {
-            while ($m = $mRes->fetch_assoc()) {
+            $managers = $mRes->fetch_all(MYSQLI_ASSOC);
+            $mRes->close();
+            foreach ($managers as $m) {
                 $mId = (int)$m['id'];
                 $tId = (int)($m['tenant_id'] ?: 1);
                 $mName = $m['full_name'] ?: 'Sếp';
@@ -700,7 +712,9 @@ function runProactiveAgentBriefingWorker($conn) {
     elseif ($slot === 'evening') {
         $uRes = $conn->query("SELECT id, full_name, tenant_id FROM users WHERE is_active = 1");
         if ($uRes) {
-            while ($u = $uRes->fetch_assoc()) {
+            $staffList = $uRes->fetch_all(MYSQLI_ASSOC);
+            $uRes->close();
+            foreach ($staffList as $u) {
                 $uId = (int)$u['id'];
                 $tId = (int)($u['tenant_id'] ?: 1);
                 $uName = $u['full_name'] ?: 'bạn';

@@ -3402,9 +3402,9 @@ class AgentToolRegistry {
                         WHERE {$staleWhere}
                           AND DATEDIFF(NOW(), COALESCE(last_n.last_note_at, c.created_at)) >= ?
                         ORDER BY days_neglected DESC, c.id DESC
-                        LIMIT ?
+                        LIMIT " . (int)$limit . "
                     ";
-                    $staleParams = array_merge($baseParams, [$daysThreshold, $limit]);
+                    $staleParams = array_merge($baseParams, [$daysThreshold]);
                     $stmtStale = $db->prepare($staleSql);
                     $stmtStale->execute($staleParams);
                     $staleRows = $stmtStale->fetchAll(PDO::FETCH_ASSOC);
@@ -3478,7 +3478,8 @@ class AgentToolRegistry {
                     if ($contactId > 0) {
                         $where .= " AND so.contact_id = ?";
                         $params[] = $contactId;
-                    } elseif (!$isGlobalAdmin && !$isManager && !$isAccountant) {
+                    }
+                    if (!$isGlobalAdmin && !$isManager && !$isAccountant) {
                         // Regular user can only see SOs created by self or contacts owned
                         $where .= " AND (so.created_by = ? OR c.owner_id = ? OR FIND_IN_SET(?, IFNULL(c.collaborator_ids, '')))";
                         $params[] = $uid;
@@ -3520,11 +3521,10 @@ class AgentToolRegistry {
                         LEFT JOIN users u ON c.owner_id = u.id
                         WHERE {$where}
                         ORDER BY remaining_debt DESC, so.id DESC
-                        LIMIT ?
+                        LIMIT " . (int)$limit . "
                     ";
-                    $listParams = array_merge($params, [$limit]);
                     $listStmt = $db->prepare($listSql);
-                    $listStmt->execute($listParams);
+                    $listStmt->execute($params);
                     $rows = $listStmt->fetchAll(PDO::FETCH_ASSOC);
 
                     $receivables = [];
@@ -3583,7 +3583,8 @@ class AgentToolRegistry {
                         if ($itemId > 0) {
                             $eWhere .= " AND e.id = ?";
                             $eParams[] = $itemId;
-                        } elseif (!$isGlobalAdmin && !$isManager && !$isAccountant) {
+                        }
+                        if (!$isGlobalAdmin && !$isManager && !$isAccountant) {
                             $eWhere .= " AND (e.created_by = ? OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ?)";
                             $eParams = array_merge($eParams, [$uid, $uid, $uid, $uid]);
                         }
@@ -3603,11 +3604,10 @@ class AgentToolRegistry {
                             LEFT JOIN users u_app2 ON e.approver_id_2 = u_app2.id
                             WHERE {$eWhere}
                             ORDER BY e.created_at ASC
-                            LIMIT ?
+                            LIMIT " . (int)$limit . "
                         ";
-                        $eParamsWithLimit = array_merge($eParams, [$limit]);
                         $eStmt = $db->prepare($eSql);
-                        $eStmt->execute($eParamsWithLimit);
+                        $eStmt->execute($eParams);
 
                         foreach ($eStmt->fetchAll(PDO::FETCH_ASSOC) as $er) {
                             $hours = (int)$er['hours_pending'];
@@ -3655,7 +3655,8 @@ class AgentToolRegistry {
                         if ($itemId > 0) {
                             $lWhere .= " AND l.id = ?";
                             $lParams[] = $itemId;
-                        } elseif (!$isGlobalAdmin && !$isManager && !$isHR) {
+                        }
+                        if (!$isGlobalAdmin && !$isManager && !$isHR) {
                             $lWhere .= " AND (l.user_id = ? OR l.approver_id = ? OR l.approver_id_2 = ?)";
                             $lParams = array_merge($lParams, [$uid, $uid, $uid]);
                         }
@@ -3672,11 +3673,10 @@ class AgentToolRegistry {
                             LEFT JOIN users u_app ON l.approver_id = u_app.id
                             WHERE {$lWhere}
                             ORDER BY l.created_at ASC
-                            LIMIT ?
+                            LIMIT " . (int)$rem . "
                         ";
-                        $lParamsWithLimit = array_merge($lParams, [$rem]);
                         $lStmt = $db->prepare($lSql);
-                        $lStmt->execute($lParamsWithLimit);
+                        $lStmt->execute($lParams);
 
                         foreach ($lStmt->fetchAll(PDO::FETCH_ASSOC) as $lr) {
                             $hours = (int)$lr['hours_pending'];
@@ -3758,11 +3758,10 @@ class AgentToolRegistry {
                         LEFT JOIN users uc ON t.created_by = uc.id
                         WHERE {$where}
                         ORDER BY hours_open DESC, t.id DESC
-                        LIMIT ?
+                        LIMIT " . (int)$limit . "
                     ";
-                    $listParams = array_merge($params, [$limit]);
                     $stmt = $db->prepare($sql);
-                    $stmt->execute($listParams);
+                    $stmt->execute($params);
                     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
                     $ticketList = [];
@@ -3839,11 +3838,10 @@ class AgentToolRegistry {
                         LEFT JOIN users u ON c.owner_id = u.id
                         WHERE {$where}
                         ORDER BY c.id DESC
-                        LIMIT ?
+                        LIMIT " . (int)$limit . "
                     ";
-                    $paramsWithLimit = array_merge($params, [$limit]);
                     $stmt = $db->prepare($sql);
-                    $stmt->execute($paramsWithLimit);
+                    $stmt->execute($params);
                     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
                     $companies = [];
