@@ -1694,19 +1694,100 @@ class AgentToolRegistry {
                 case 'get_program_details': {
                     return [
                         'success' => true,
-                        'institute' => 'Viện Quản trị & Công nghệ IDEAS (15 năm kinh nghiệm, 2.500+ Thạc sĩ/Tiến sĩ tốt nghiệp)',
+                        'institute' => 'Viện Quản trị & Công nghệ IDEAS (Hơn 15 năm kết nối giáo dục toàn cầu từ 2011, 2.500+ Thạc sĩ/Tiến sĩ tốt nghiệp, 74 khóa đào tạo)',
+                        'slogan' => 'Tri thức Nguyên bản - Đồng hành Bản địa (Original Knowledge - Localized Mentorship)',
+                        'role' => 'Đối tác hỗ trợ học thuật toàn diện (Academic Support Partner) cho các trường đại học quốc tế hàng đầu Thụy Sĩ, Pháp, Anh, Mỹ.',
                         'partners' => [
-                            'Swiss UMEF' => 'Geneva, Thụy Sĩ (1984), Kiểm định liên bang SAC cao nhất, Swiss ENIC, ACBSP, CHEA, EDUQUA, QS Stars 5 Stars.',
-                            'ISTEC Paris' => 'Paris, Pháp (1961), Hệ thống Grande École danh giá, Top 8 Le Parisien, RNCP Level 7 & 8 (EQF Level 8 cao nhất), WES Earned Doctorate.'
+                            'Swiss UMEF' => 'Geneva, Thụy Sĩ (thành lập 1984), Kiểm định liên bang SAC cao nhất, Swiss ENIC, VN-NARIC (Bộ GD&ĐT), ACBSP, CHEA, EDUQUA, IACBE, QS Stars 5 Stars Overall.',
+                            'ISTEC Paris' => 'Paris, Pháp (thành lập 1961), Hệ thống Grande École danh giá, Top 8 Le Parisien, RNCP Level 7 & 8 (EQF Level 8 cao nhất), WES Earned Doctorate tại Mỹ & Canada.',
+                            'ESTIAM & RB College' => 'Chương trình song bằng Dual DBA Pháp & Anh quốc.'
+                        ],
+                        'lms_learning_ecosystem' => [
+                            'url' => 'https://ideas.edu.vn/he-thong-ho-tro-hoc-tap-lms-ideas',
+                            'highlights' => '24/7 học tập chủ động; 1.000+ tài liệu Cengage toàn cầu; 100% bổ trợ tiếng Việt chuyên sâu cuối tuần.',
+                            'four_pillars' => [
+                                '1. LMS Powered by Moodle' => 'Quản lý học tập trực tuyến 24/7, lưu trữ video bài giảng chất lượng cao, tải giáo trình/slide bài giảng, nộp bài tập & theo dõi deadline tự động, nhận feedback trực tiếp từ giảng viên, diễn đàn lớp học.',
+                                '2. IDEAS AI Platform' => 'Trợ lý học thuật 4.0 độc quyền tại IDEAS, tích hợp LLM tinh chỉnh cho sau đại học, giải đáp thuật ngữ kinh tế/tài chính tức thì bằng tiếng Việt, tóm tắt tài liệu nghiên cứu hàng trăm trang, gợi ý cấu trúc đề án luận văn (Capstone/Thesis scaffolding), đóng vai trò gia sư công nghệ 24/7. Trải nghiệm tại /dang-ky-tai-khoan-ai.',
+                                '3. Global Digital Library (Cengage)' => 'Miễn phí truy cập 1.000+ đầu sách học thuật nguyên bản tiếng Anh chuyên ngành Kinh tế, Quản trị, Marketing, Tài chính cập nhật mới nhất, đọc trực tuyến trên PC, Tablet, Mobile.',
+                                '4. Weekend Workshops' => 'Lớp chuyên đề bổ trợ cuối tuần cùng giảng viên & chuyên gia đầu ngành, phân tích cấu trúc bài thi, hướng dẫn làm bài luận chuẩn Châu Âu tránh rủi ro lạc đề/trượt môn, kết nối kiến thức quốc tế với thực tiễn doanh nghiệp Việt.'
+                            ],
+                            'six_barrier_solutions' => [
+                                'Rào cản ngoại ngữ' => 'IDEAS AI dịch & giải nghĩa thuật ngữ tức thì + Lớp Chủ Nhật tiếng Việt.',
+                                'Rào cản thời gian' => 'LMS Moodle học 24/7 linh hoạt mọi lúc mọi nơi + EMBA 10 môn không luận văn.',
+                                'Rào cản phương pháp' => 'Cố vấn học thuật 1-1 + Hội đồng chuyên môn Final Draft Review.',
+                                'Rào cản tài liệu' => 'Thư viện số Cengage Learning 1.000+ đầu sách bản quyền miễn phí.',
+                                'Rào cản động lực' => 'Quản lý lớp đôn đốc nhắc nhở deadline + Diễn đàn kết nối học viên.',
+                                'Rào cản thực tế' => 'Workshop chuyên đề cùng CEO và chuyên gia đầu ngành phân tích case study tại Việt Nam.'
+                            ]
                         ],
                         'programs' => [
-                            'EMBA' => 'Executive MBA, 60 ECTS, 10 môn, 12-14 tháng, KHÔNG LÀM LUẬN VĂN, tối ưu cho Giám đốc/Quản lý bận rộn.',
-                            'MBA' => 'Master of Business Administration, 90 ECTS, 12 môn + Luận văn tốt nghiệp (MBA Thesis), 16-18 tháng.',
-                            'MSc Applied AI' => 'Thạc sĩ Ứng dụng AI vào Quản trị Doanh nghiệp, 90 ECTS, 16-18 tháng, KHÔNG CẦN BIẾT LẬP TRÌNH.',
-                            'DBA' => 'Tiến sĩ Quản trị Kinh doanh, 180 ECTS, 3 năm chính quy, WES Earned Doctorate, hỗ trợ Final Draft Review độc quyền bởi IDEAS.',
-                            'Top-up BBA' => 'Cử nhân Thụy Sĩ trong 1 năm cho người tốt nghiệp CĐ hoặc SV năm 2-3.'
+                            'Swiss UMEF MBA' => [
+                                'name' => 'Online MBA (Thạc sĩ Quản trị Kinh doanh Trực tuyến)',
+                                'tuition_fee' => '12.900 CHF',
+                                'url' => 'https://ideas.edu.vn/mba',
+                                'credits' => '90 ECTS (12 modules + MBA Thesis)',
+                                'duration' => '16-18 tháng',
+                                'target' => 'Quản lý, chuyên viên, định hướng nghiên cứu, giảng dạy hoặc định cư quốc tế.'
+                            ],
+                            'Swiss UMEF EMBA' => [
+                                'name' => 'Executive MBA (Thạc sĩ Điều hành QTKD)',
+                                'tuition_fee' => '12.900 CHF',
+                                'url' => 'https://ideas.edu.vn/emba',
+                                'credits' => '60 ECTS (10 modules, KHÔNG LÀM LUẬN VĂN)',
+                                'duration' => '12-14 tháng',
+                                'target' => 'Giám đốc, Founder, Quản lý cấp cao bận rộn; học nhanh nhất, áp dụng ngay vào quản trị; đủ điều kiện học tiếp lên Tiến sĩ (DBA).'
+                            ],
+                            'Swiss UMEF MSc Applied AI' => [
+                                'name' => 'Master AI - MSc Applied AI (Thạc sĩ AI Ứng dụng)',
+                                'tuition_fee' => '12.900 CHF',
+                                'url' => 'https://ideas.edu.vn/mscai',
+                                'credits' => '90 ECTS (12 modules + Capstone Project)',
+                                'duration' => '16-18 tháng',
+                                'target' => 'Lãnh đạo ứng dụng AI vào quản trị & tự động hóa doanh nghiệp, KHÔNG YÊU CẦU BIẾT VIẾT CODE.'
+                            ],
+                            'Swiss UMEF MBA in AI' => [
+                                'name' => 'MBA in AI (Thạc sĩ QTKD Ứng dụng AI)',
+                                'tuition_fee' => '10.970 CHF',
+                                'url' => 'https://ideas.edu.vn/mbainai',
+                                'duration' => '14-16 tháng'
+                            ],
+                            'Swiss UMEF BBA' => [
+                                'name' => 'Global Online BBA (Cử nhân QTKD Quốc tế)',
+                                'tuition_fee' => '13.500 CHF',
+                                'url' => 'https://ideas.edu.vn/bba',
+                                'target' => 'Đầu tư thông minh cho Cử nhân Quốc tế Thụy Sĩ.'
+                            ],
+                            'Swiss UMEF Top-up BBA' => [
+                                'name' => 'Top-up BBA (Liên thông Cử nhân Quốc tế 12 tháng)',
+                                'duration' => '12 tháng',
+                                'target' => 'Người tốt nghiệp Cao đẳng hoặc sinh viên đã hoàn thành năm 2-3 Đại học.'
+                            ],
+                            'MBA ISTEC Paris' => [
+                                'name' => 'MBA ISTEC Paris (Leadership & Business Transformation)',
+                                'tuition_fee' => '6.500 EUR + 200 EUR lệ phí hồ sơ (Học phí gốc 8.500 EUR)',
+                                'credits' => '60 ECTS, chuẩn Pháp RNCP Level 7 (Bac+5)',
+                                'duration' => '14-16 tháng',
+                                'target' => 'Thạc sĩ chuẩn Pháp Grande École, định hướng Chiến lược & Chuyển đổi số.'
+                            ],
+                            'DBA ISTEC Paris' => [
+                                'name' => 'DBA ISTEC Paris (Tiến sĩ Quản trị Kinh doanh)',
+                                'tuition_fee' => '13.000 EUR trọn gói 3 năm',
+                                'credits' => '180 ECTS, RNCP Level 8 / EQF Level 8 cao nhất Châu Âu, WES Earned Doctorate tại Mỹ/Canada',
+                                'duration' => '03 năm chính quy',
+                                'mentorship' => 'Hướng dẫn 1:1 Giáo sư quốc tế + AI Copilot 24/7 + hỗ trợ độc quyền từ IDEAS.'
+                            ],
+                            'Dual DBA ESTIAM & RB College' => [
+                                'name' => 'Dual DBA (Tiến sĩ song bằng Pháp & Anh)',
+                                'tuition_fee' => '12.500 EUR (Giảm 3.000 EUR còn 9.500 EUR cho cựu học viên IDEAS)',
+                                'duration' => '2.5 - 4 năm',
+                                'support' => 'Hội đồng chuyên môn Viện IDEAS thẩm định Final Draft Review hỗ trợ hướng đi luận án.'
+                            ]
                         ],
-                        'notes' => 'Hệ thống HQ có 2 chuyến đi Thụy Sĩ (Study Trip + Tốt nghiệp). Bằng online 100% chưa công nhận VN-NARIC thi công chức nhưng uy tín tuyệt đối tại khối Doanh nghiệp và Tập đoàn nước ngoài.'
+                        'training_systems' => [
+                            'Standard' => 'Tự học qua LMS Moodle, Video bài giảng, Lớp bổ trợ Chủ Nhật tiếng Việt và IDEAS AI Platform.',
+                            'High Quality (HQ)' => 'Tương tác trực tiếp (Live) với giảng viên Thụy Sĩ, ĐẶC BIỆT bao gồm 2 chuyến đi Thụy Sĩ (Study Trip + Lễ tốt nghiệp).'
+                        ],
+                        'notes' => 'Bằng cấp nhận được giữa hệ HQ và Standard giống nhau 100%. Bằng online 100% chưa thuộc diện công nhận VN-NARIC cho thi công chức nhưng có uy tín và giá trị thực tiễn vượt trội tại khối Doanh nghiệp Tư nhân và Tập đoàn nước ngoài. Nếu cần công nhận tại VN, học viên chọn chương trình kết hợp 70% trực tiếp Thụy Sĩ - 30% online.'
                     ];
                 }
 

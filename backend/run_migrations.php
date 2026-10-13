@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 316;
+$targetVersion = 317;
 $currentVersion = 186;
 
 // Query current DB version
@@ -4571,10 +4571,22 @@ try {
         $logMsg("Nâng cấp lên phiên bản 316 hoàn tất.", "success");
     }
 
-    // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '316') ON DUPLICATE KEY UPDATE setting_value = '316'");
+    // --- PHIÊN BẢN 317: HUẤN LUYỆN KHO TRI THỨC RAG IDEAS & LMS 4.0 ---
+    if ($currentVersion < 317) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 317: Huấn luyện kho tri thức RAG IDEAS & LMS 4.0...", "info");
+        try {
+            require_once __DIR__ . '/migrations/317_seed_and_train_rag_ideas_knowledge.php';
+            $logMsg("Huấn luyện kho tri thức RAG IDEAS & LMS 4.0 phiên bản 317 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi chạy migration 317: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 317 hoàn tất.", "success");
+    }
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 316", "success");
+    // Update DB version in system_settings
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '317') ON DUPLICATE KEY UPDATE setting_value = '317'");
+
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 317", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");
