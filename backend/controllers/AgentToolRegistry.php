@@ -276,6 +276,149 @@ class AgentToolRegistry {
                         ]
                     ],
                     [
+                        'name' => 'approve_or_reject_erp_ticket',
+                        'description' => 'Duyệt hoặc từ chối trực tiếp phiếu duyệt ERP (đơn nghỉ phép/WFH/công tác, tạm ứng lương, đề xuất chi phí PO, giải trình chấm công) nếu người dùng có thẩm quyền duyệt.',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'ticket_type' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['leave', 'salary_advance', 'expense', 'check_in'],
+                                    'description' => 'Loại phiếu duyệt: leave (nghỉ phép), salary_advance (tạm ứng lương), expense (chi phí/PO), check_in (giải trình công)'
+                                ],
+                                'ticket_id' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Mã định danh ID của phiếu duyệt cần phê duyệt hoặc từ chối'
+                                ],
+                                'decision' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['approved', 'rejected'],
+                                    'description' => 'Quyết định phê duyệt: approved (duyệt), rejected (từ chối)'
+                                ],
+                                'reason' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Lý do phê duyệt hoặc lý do từ chối (tùy chọn)'
+                                ]
+                            ],
+                            'required' => ['ticket_type', 'ticket_id', 'decision']
+                        ]
+                    ],
+                    [
+                        'name' => 'update_task_progress_and_status',
+                        'description' => 'Cập nhật trực tiếp tiến độ (%), trạng thái (hoàn thành/đang làm/hủy), hạn chót (deadline) hoặc ghi chú comment cho công việc/task trên Workspace.',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'task_id' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Mã định danh ID công việc/task cần cập nhật'
+                                ],
+                                'status' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['planned', 'in_progress', 'done', 'cancelled'],
+                                    'description' => 'Trạng thái mới của task: planned (chưa làm), in_progress (đang làm), done (đã hoàn thành), cancelled (đã hủy)'
+                                ],
+                                'progress' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Tiến độ hoàn thành từ 0 đến 100%'
+                                ],
+                                'note' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Ghi chú, báo cáo kết quả hoặc lý do cập nhật (sẽ được ghi vào bình luận công việc)'
+                                ],
+                                'due_date' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Hạn chót mới (định dạng YYYY-MM-DD hoặc YYYY-MM-DD HH:MM:SS) nếu gia hạn task'
+                                ]
+                            ],
+                            'required' => ['task_id']
+                        ]
+                    ],
+                    [
+                        'name' => 'complete_task_checklist_item',
+                        'description' => 'Đánh dấu hoàn thành hoặc bỏ tích một mục trong checklist công việc (hạng mục con) của task và tự động tính lại % tiến độ tổng thể của task.',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'task_id' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Mã ID công việc/task có checklist'
+                                ],
+                                'item_index_or_keyword' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Thứ tự mục (1, 2, 3...) hoặc từ khóa tên hạng mục checklist cần đánh dấu'
+                                ],
+                                'completed' => [
+                                    'type' => 'BOOLEAN',
+                                    'description' => 'Trạng thái hoàn thành: true (đã xong - mặc định), false (chưa xong)'
+                                ]
+                            ],
+                            'required' => ['task_id', 'item_index_or_keyword']
+                        ]
+                    ],
+                    [
+                        'name' => 'quick_log_crm_activity',
+                        'description' => 'Ghi nhận trực tiếp tương tác CRM với học viên/khách hàng (cuộc gọi đã gọi, cuộc họp tư vấn, ghi chú chăm sóc) và tự động cập nhật thời gian liên hệ gần nhất.',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'contact_id' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Mã ID của học viên/khách hàng trong CRM'
+                                ],
+                                'activity_type' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['call', 'meeting', 'note', 'chat'],
+                                    'description' => 'Loại tương tác: call (gọi điện thoại), meeting (hẹn gặp tư vấn), note (ghi chú chăm sóc), chat (nhắn tin)'
+                                ],
+                                'title' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tiêu đề ngắn gọn của tương tác'
+                                ],
+                                'notes' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Nội dung chi tiết kết quả cuộc gọi/tư vấn/chăm sóc'
+                                ],
+                                'duration_minutes' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Thời lượng cuộc gọi hoặc tư vấn (phút)'
+                                ],
+                                'outcome' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['connected', 'no_answer', 'busy', 'callback_requested', 'qualified', 'lost'],
+                                    'description' => 'Kết quả tương tác: connected (đã nghe máy/tư vấn tốt), no_answer (không nghe máy), busy (máy bận), callback_requested (yêu cầu gọi lại sau), qualified (tiềm năng cao), lost (không có nhu cầu)'
+                                ]
+                            ],
+                            'required' => ['contact_id', 'activity_type', 'title', 'notes']
+                        ]
+                    ],
+                    [
+                        'name' => 'reassign_lead_owner',
+                        'description' => 'Bàn giao quyền phụ trách học viên/khách hàng (chuyển Lead Owner) cho chuyên viên tư vấn khác dành cho Quản lý / Sale Admin hoặc nhân sự bàn giao.',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'contact_id' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Mã ID học viên/khách hàng cần bàn giao'
+                                ],
+                                'new_owner_id' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Mã ID nhân viên tiếp nhận mới (nếu biết rõ ID)'
+                                ],
+                                'new_owner_name' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Họ tên nhân viên tiếp nhận mới để hệ thống tự tra cứu'
+                                ],
+                                'reassign_reason' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Lý do bàn giao (vd: Chuyển cơ sở, chuyên viên nghỉ phép, tái phân bổ nguồn lead)'
+                                ]
+                            ],
+                            'required' => ['contact_id']
+                        ]
+                    ],
+                    [
                         'name' => 'get_company_staff_directory',
                         'description' => 'Tra cứu danh bạ tổ chức và nhân sự toàn công ty: Công ty có những ai, ai thuộc phòng ban/team nào, ai là quản lý/trưởng phòng/leader, và danh sách nhân sự đã nghỉ việc/nghỉ hẳn (inactive/resigned) nếu người dùng có quyền.',
                         'parameters' => [
@@ -2063,6 +2206,547 @@ class AgentToolRegistry {
                         'card_rendered' => $cardStr,
                         'instruction' => $instruction,
                         'ambiguous_assignees' => $params['ambiguous_assignees'] ?? null
+                    ];
+                }
+
+                // ==========================================
+                // 15B. DIRECT TOOL 1: APPROVE OR REJECT ERP TICKET
+                // ==========================================
+                case 'approve_or_reject_erp_ticket': {
+                    $ticketType = strtolower(trim($args['ticket_type'] ?? ''));
+                    $ticketId = (int)($args['ticket_id'] ?? 0);
+                    $decision = strtolower(trim($args['decision'] ?? 'approved'));
+                    $decision = in_array($decision, ['approved', 'rejected'], true) ? $decision : 'approved';
+                    $reason = trim($args['reason'] ?? '');
+
+                    if ($ticketId <= 0) {
+                        return ['success' => false, 'message' => 'Vui lòng cung cấp mã ID hợp lệ của phiếu duyệt cần xử lý.'];
+                    }
+
+                    if (!in_array($ticketType, ['leave', 'salary_advance', 'expense', 'check_in'], true)) {
+                        return ['success' => false, 'message' => "Loại phiếu '{$ticketType}' không hợp lệ. Hỗ trợ: leave, salary_advance, expense, check_in."];
+                    }
+
+                    $actionVerb = ($decision === 'approved') ? 'phê duyệt' : 'từ chối';
+
+                    if ($ticketType === 'leave') {
+                        $q = $db->prepare("SELECT l.*, u.full_name as employee_name FROM hrm_leave_requests l LEFT JOIN users u ON l.user_id = u.id WHERE l.id = ?");
+                        $q->execute([$ticketId]);
+                        $ticket = $q->fetch(PDO::FETCH_ASSOC);
+                        if (!$ticket) {
+                            return ['success' => false, 'message' => "Không tìm thấy đơn nghỉ phép ID #{$ticketId}."];
+                        }
+
+                        $canApprove = $isGlobalAdmin || $isHR || $isManager || (int)($ticket['approver_id'] ?? 0) === $uid || (int)($ticket['approver_id_2'] ?? 0) === $uid;
+                        if (!$canApprove) {
+                            return ['success' => false, 'message' => "Bạn không có quyền {$actionVerb} đơn nghỉ phép này."];
+                        }
+
+                        $targetStatus = ($decision === 'approved') ? 'approved' : 'rejected';
+                        $up = $db->prepare("UPDATE hrm_leave_requests SET status = ?, approved_by = ?, approver_id = COALESCE(approver_id, ?), updated_at = NOW() WHERE id = ?");
+                        $up->execute([$targetStatus, $uid, $uid, $ticketId]);
+
+                        $empName = $ticket['employee_name'] ?: 'Nhân sự';
+                        return [
+                            'success' => true,
+                            'ticket_type' => 'leave',
+                            'ticket_id' => $ticketId,
+                            'decision' => $decision,
+                            'employee_name' => $empName,
+                            'summary' => "Đã {$actionVerb} thành công đơn xin nghỉ phép #{$ticketId} của {$empName}. Trạng thái cập nhật: {$targetStatus}."
+                        ];
+                    } elseif ($ticketType === 'salary_advance') {
+                        $q = $db->prepare("SELECT a.*, u.full_name as employee_name FROM hrm_salary_advances a LEFT JOIN users u ON a.user_id = u.id WHERE a.id = ?");
+                        $q->execute([$ticketId]);
+                        $ticket = $q->fetch(PDO::FETCH_ASSOC);
+                        if (!$ticket) {
+                            return ['success' => false, 'message' => "Không tìm thấy đơn tạm ứng lương ID #{$ticketId}."];
+                        }
+
+                        $canApprove = $isGlobalAdmin || $isAccountant || $isHR || $isManager || (int)($ticket['approver_id'] ?? 0) === $uid;
+                        if (!$canApprove) {
+                            return ['success' => false, 'message' => "Bạn không có quyền {$actionVerb} đơn tạm ứng lương này."];
+                        }
+
+                        $targetStatus = ($decision === 'approved') ? 'approved' : 'rejected';
+                        $up = $db->prepare("UPDATE hrm_salary_advances SET status = ?, approver_id = COALESCE(approver_id, ?), updated_at = NOW() WHERE id = ?");
+                        $up->execute([$targetStatus, $uid, $ticketId]);
+
+                        $empName = $ticket['employee_name'] ?: 'Nhân sự';
+                        $amountFmt = number_format((float)($ticket['amount'] ?? 0), 0, ',', '.') . ' VND';
+                        return [
+                            'success' => true,
+                            'ticket_type' => 'salary_advance',
+                            'ticket_id' => $ticketId,
+                            'decision' => $decision,
+                            'amount' => $amountFmt,
+                            'employee_name' => $empName,
+                            'summary' => "Đã {$actionVerb} thành công đơn tạm ứng {$amountFmt} (#{$ticketId}) của {$empName}."
+                        ];
+                    } elseif ($ticketType === 'expense') {
+                        $q = $db->prepare("SELECT e.*, u.full_name as creator_name FROM expenses e LEFT JOIN users u ON e.created_by = u.id WHERE e.id = ? AND e.tenant_id = ? AND e.deleted_at IS NULL");
+                        $q->execute([$ticketId, $tid]);
+                        $ticket = $q->fetch(PDO::FETCH_ASSOC);
+                        if (!$ticket) {
+                            return ['success' => false, 'message' => "Không tìm thấy phiếu chi/đề xuất chi phí ID #{$ticketId}."];
+                        }
+
+                        $canApprove = $isGlobalAdmin || $isAccountant || $isManager || (int)($ticket['approver_id'] ?? 0) === $uid || (int)($ticket['approver_id_2'] ?? 0) === $uid || (int)($ticket['approver_id_3'] ?? 0) === $uid;
+                        if (!$canApprove) {
+                            return ['success' => false, 'message' => "Bạn không có quyền {$actionVerb} phiếu chi/PO này."];
+                        }
+
+                        $targetStatus = ($decision === 'approved') ? 'approved' : 'rejected';
+                        $up = $db->prepare("UPDATE expenses SET status = ?, approver_id = COALESCE(approver_id, ?), approved_at = NOW(), updated_at = NOW() WHERE id = ? AND tenant_id = ?");
+                        $up->execute([$targetStatus, $uid, $ticketId, $tid]);
+
+                        $amountFmt = number_format((float)($ticket['amount'] ?? 0), 0, ',', '.') . ' ' . ($ticket['currency'] ?: 'VND');
+                        return [
+                            'success' => true,
+                            'ticket_type' => 'expense',
+                            'ticket_id' => $ticketId,
+                            'decision' => $decision,
+                            'title' => $ticket['title'],
+                            'amount' => $amountFmt,
+                            'summary' => "Đã {$actionVerb} thành công phiếu đề xuất chi phí #{$ticketId} ('{$ticket['title']}') trị giá {$amountFmt}."
+                        ];
+                    } elseif ($ticketType === 'check_in') {
+                        $q = $db->prepare("SELECT c.*, u.full_name as employee_name FROM check_ins c LEFT JOIN users u ON c.user_id = u.id WHERE c.id = ?");
+                        $q->execute([$ticketId]);
+                        $ticket = $q->fetch(PDO::FETCH_ASSOC);
+                        if (!$ticket) {
+                            return ['success' => false, 'message' => "Không tìm thấy bản ghi chấm công/giải trình ID #{$ticketId}."];
+                        }
+
+                        $canApprove = $isGlobalAdmin || $isHR || $isManager;
+                        if (!$canApprove) {
+                            return ['success' => false, 'message' => "Bạn không có quyền {$actionVerb} bản ghi chấm công này (yêu cầu quyền HR, Quản lý hoặc Giám đốc)."];
+                        }
+
+                        $targetStatus = ($decision === 'approved') ? 'approved' : 'rejected';
+                        $noteAppend = "[{$targetStatus} bởi {$userName} ({$uid}) lúc " . date('d/m/Y H:i') . ($reason ? ": {$reason}" : "") . "]";
+                        $adminNote = trim(($ticket['admin_note'] ?? '') . " " . $noteAppend);
+
+                        $up = $db->prepare("UPDATE check_ins SET status = ?, admin_note = ? WHERE id = ?");
+                        $up->execute([$targetStatus, $adminNote, $ticketId]);
+
+                        $empName = $ticket['employee_name'] ?: 'Nhân sự';
+                        return [
+                            'success' => true,
+                            'ticket_type' => 'check_in',
+                            'ticket_id' => $ticketId,
+                            'decision' => $decision,
+                            'employee_name' => $empName,
+                            'summary' => "Đã {$actionVerb} giải trình chấm công ngày {$ticket['check_in_date']} (#{$ticketId}) của {$empName}."
+                        ];
+                    }
+                }
+
+                // ==========================================
+                // 15C. DIRECT TOOL 2: UPDATE TASK PROGRESS & STATUS
+                // ==========================================
+                case 'update_task_progress_and_status': {
+                    $taskId = (int)($args['task_id'] ?? 0);
+                    if ($taskId <= 0) {
+                        return ['success' => false, 'message' => 'Vui lòng cung cấp mã ID công việc/task cần cập nhật.'];
+                    }
+
+                    $stmt = $db->prepare("SELECT a.*, u.full_name as assignee_name FROM activities a LEFT JOIN users u ON a.user_id = u.id WHERE a.id = ? AND a.tenant_id = ? AND a.deleted_at IS NULL AND a.type IN ('task', 'meeting')");
+                    $stmt->execute([$taskId, $tid]);
+                    $task = $stmt->fetch(PDO::FETCH_ASSOC);
+                    if (!$task) {
+                        return ['success' => false, 'message' => "Không tìm thấy công việc ID #{$taskId} trên Workspace."];
+                    }
+
+                    $participantList = explode(',', (string)($task['participant_ids'] ?? ''));
+                    $isAllowed = $isGlobalAdmin || $isManager || (int)$task['user_id'] === $uid || (int)$task['created_by'] === $uid || (int)$task['approver_id'] === $uid || in_array((string)$uid, $participantList, true);
+                    if (!$isAllowed) {
+                        return ['success' => false, 'message' => "Bạn không có quyền chỉnh sửa công việc #{$taskId} (chỉ người phụ trách, người tạo hoặc quản lý mới có quyền)."];
+                    }
+
+                    $updates = [];
+                    $params = [];
+
+                    $newStatus = isset($args['status']) ? strtolower(trim((string)$args['status'])) : null;
+                    if ($newStatus && in_array($newStatus, ['planned', 'in_progress', 'done', 'cancelled'], true)) {
+                        $updates[] = "status = ?";
+                        $params[] = $newStatus;
+                        if ($newStatus === 'done') {
+                            $updates[] = "progress = 100";
+                            $updates[] = "done_at = NOW()";
+                        } elseif ($newStatus === 'in_progress' || $newStatus === 'planned') {
+                            $updates[] = "done_at = NULL";
+                        }
+                    }
+
+                    if (isset($args['progress']) && is_numeric($args['progress'])) {
+                        $prog = min(100, max(0, (int)$args['progress']));
+                        $updates[] = "progress = ?";
+                        $params[] = $prog;
+                        if ($prog >= 100 && $newStatus !== 'done') {
+                            $updates[] = "status = 'done'";
+                            $updates[] = "done_at = NOW()";
+                        }
+                    }
+
+                    $dueDateRaw = trim((string)($args['due_date'] ?? ''));
+                    if (!empty($dueDateRaw)) {
+                        $ts = strtotime($dueDateRaw);
+                        if ($ts !== false) {
+                            $updates[] = "due_date = ?";
+                            $params[] = date('Y-m-d H:i:s', $ts);
+                        }
+                    }
+
+                    if (!empty($updates)) {
+                        $updates[] = "updated_at = NOW()";
+                        $sql = "UPDATE activities SET " . implode(', ', $updates) . " WHERE id = ? AND tenant_id = ?";
+                        $params[] = $taskId;
+                        $params[] = $tid;
+                        $upStmt = $db->prepare($sql);
+                        $upStmt->execute($params);
+                    }
+
+                    $note = trim((string)($args['note'] ?? ''));
+                    if (!empty($note)) {
+                        $cmtStmt = $db->prepare("INSERT INTO activity_comments (tenant_id, activity_id, user_id, content, created_at) VALUES (?, ?, ?, ?, NOW())");
+                        $cmtStmt->execute([$tid, $taskId, $uid, $note]);
+                    }
+
+                    // Refetch updated task
+                    $reStmt = $db->prepare("SELECT status, progress, due_date FROM activities WHERE id = ? AND tenant_id = ?");
+                    $reStmt->execute([$taskId, $tid]);
+                    $fresh = $reStmt->fetch(PDO::FETCH_ASSOC);
+
+                    $statusMap = ['planned' => 'Chưa bắt đầu', 'in_progress' => 'Đang thực hiện', 'done' => 'Đã hoàn thành', 'cancelled' => 'Đã hủy'];
+                    $statusText = $statusMap[$fresh['status'] ?? ''] ?? ($fresh['status'] ?? 'Cập nhật');
+
+                    return [
+                        'success' => true,
+                        'task_id' => $taskId,
+                        'subject' => $task['subject'],
+                        'status' => $fresh['status'],
+                        'status_text' => $statusText,
+                        'progress' => (int)($fresh['progress'] ?? 0),
+                        'due_date' => $fresh['due_date'],
+                        'summary' => "Đã cập nhật công việc #{$taskId} ('{$task['subject']}'): Trạng thái [{$statusText}], Tiến độ [{$fresh['progress']}%]" . ($note ? " kèm bình luận." : ".")
+                    ];
+                }
+
+                // ==========================================
+                // 15D. DIRECT TOOL 3: COMPLETE TASK CHECKLIST ITEM
+                // ==========================================
+                case 'complete_task_checklist_item': {
+                    $taskId = (int)($args['task_id'] ?? 0);
+                    $itemTarget = trim((string)($args['item_index_or_keyword'] ?? ''));
+                    $isCompleted = isset($args['completed']) ? (bool)$args['completed'] : true;
+
+                    if ($taskId <= 0 || empty($itemTarget)) {
+                        return ['success' => false, 'message' => 'Vui lòng cung cấp mã task_id và thứ tự mục/tên mục checklist cần đánh dấu.'];
+                    }
+
+                    $stmt = $db->prepare("SELECT a.* FROM activities a WHERE a.id = ? AND a.tenant_id = ? AND a.deleted_at IS NULL");
+                    $stmt->execute([$taskId, $tid]);
+                    $task = $stmt->fetch(PDO::FETCH_ASSOC);
+                    if (!$task) {
+                        return ['success' => false, 'message' => "Không tìm thấy công việc ID #{$taskId}."];
+                    }
+
+                    $participantList = explode(',', (string)($task['participant_ids'] ?? ''));
+                    $isAllowed = $isGlobalAdmin || $isManager || (int)$task['user_id'] === $uid || (int)$task['created_by'] === $uid || (int)$task['approver_id'] === $uid || in_array((string)$uid, $participantList, true);
+                    if (!$isAllowed) {
+                        return ['success' => false, 'message' => "Bạn không có quyền chỉnh sửa checklist của công việc #{$taskId}."];
+                    }
+
+                    $rawBody = $task['body'] ?? '';
+                    $targetMatchedText = '';
+                    $newProgress = (int)($task['progress'] ?? 0);
+                    $newBody = $rawBody;
+
+                    // Case A: JSON ERP Task format
+                    $isJson = false;
+                    $jsonData = null;
+                    $trimmed = trim($rawBody);
+                    if ((str_starts_with($trimmed, '{') && str_ends_with($trimmed, '}')) || str_contains($trimmed, '"erp_task"')) {
+                        try {
+                            $decoded = json_decode($trimmed, true);
+                            if (is_array($decoded)) {
+                                $jsonData = $decoded;
+                                $isJson = true;
+                            }
+                        } catch (\Throwable $e) {}
+                    }
+
+                    if ($isJson && $jsonData) {
+                        $erp = &$jsonData;
+                        if (isset($jsonData['erp_task']) && is_array($jsonData['erp_task'])) {
+                            $erp = &$jsonData['erp_task'];
+                        }
+
+                        $checklist = &$erp['checklist'];
+                        if (is_array($checklist) && count($checklist) > 0) {
+                            $matched = false;
+                            $targetIdx = is_numeric($itemTarget) ? (int)$itemTarget - 1 : -1;
+
+                            foreach ($checklist as $idx => &$item) {
+                                $text = trim((string)($item['text'] ?? ($item['title'] ?? '')));
+                                if ($targetIdx >= 0 && $idx === $targetIdx) {
+                                    $item['checked'] = $isCompleted;
+                                    $item['done'] = $isCompleted;
+                                    $targetMatchedText = $text;
+                                    $matched = true;
+                                    break;
+                                } elseif ($targetIdx < 0 && stripos($text, $itemTarget) !== false) {
+                                    $item['checked'] = $isCompleted;
+                                    $item['done'] = $isCompleted;
+                                    $targetMatchedText = $text;
+                                    $matched = true;
+                                    break;
+                                }
+                            }
+                            unset($item);
+
+                            if ($matched) {
+                                $doneCount = count(array_filter($checklist, fn($it) => !empty($it['checked']) || !empty($it['done'])));
+                                $newProgress = (int)round(($doneCount / count($checklist)) * 100);
+                                $newBody = json_encode($jsonData, JSON_UNESCAPED_UNICODE);
+                            } else {
+                                return ['success' => false, 'message' => "Không tìm thấy mục checklist nào khớp với '{$itemTarget}' trong task #{$taskId}."];
+                            }
+                        } else {
+                            return ['success' => false, 'message' => "Công việc #{$taskId} không có danh sách checklist dạng JSON."];
+                        }
+                    } else {
+                        // Case B: Markdown format with - [ ] or - [x]
+                        $lines = explode("\n", $rawBody);
+                        $matched = false;
+                        $chkCount = 0;
+                        $doneCount = 0;
+                        $targetIdx = is_numeric($itemTarget) ? (int)$itemTarget - 1 : -1;
+                        $chkIndex = 0;
+
+                        foreach ($lines as &$line) {
+                            if (preg_match('/^\s*[-*]\s*\[([ xX])\]\s*(.*)$/u', $line, $m)) {
+                                $isItemDone = (strtolower($m[1]) === 'x');
+                                $itemText = trim($m[2]);
+
+                                $isThisOne = false;
+                                if ($targetIdx >= 0 && $chkIndex === $targetIdx) {
+                                    $isThisOne = true;
+                                } elseif ($targetIdx < 0 && stripos($itemText, $itemTarget) !== false) {
+                                    $isThisOne = true;
+                                }
+
+                                if ($isThisOne) {
+                                    $matched = true;
+                                    $targetMatchedText = $itemText;
+                                    $isItemDone = $isCompleted;
+                                    $symbol = $isCompleted ? 'x' : ' ';
+                                    $line = preg_replace('/^(\s*[-*]\s*\[)[ xX](\]\s*.*)$/u', '${1}' . $symbol . '${2}', $line);
+                                }
+
+                                if ($isItemDone) $doneCount++;
+                                $chkCount++;
+                                $chkIndex++;
+                            }
+                        }
+                        unset($line);
+
+                        if ($matched && $chkCount > 0) {
+                            $newProgress = (int)round(($doneCount / $chkCount) * 100);
+                            $newBody = implode("\n", $lines);
+                        } else {
+                            return ['success' => false, 'message' => "Không tìm thấy mục checklist nào khớp với '{$itemTarget}' trong mô tả công việc."];
+                        }
+                    }
+
+                    // Update DB
+                    $statusUpdate = "";
+                    $params = [$newBody, $newProgress];
+                    if ($newProgress >= 100) {
+                        $statusUpdate = ", status = 'done', done_at = NOW()";
+                    } elseif ($task['status'] === 'done' && $newProgress < 100) {
+                        $statusUpdate = ", status = 'in_progress', done_at = NULL";
+                    }
+
+                    $params[] = $taskId;
+                    $params[] = $tid;
+                    $upStmt = $db->prepare("UPDATE activities SET body = ?, progress = ? {$statusUpdate}, updated_at = NOW() WHERE id = ? AND tenant_id = ?");
+                    $upStmt->execute($params);
+
+                    $actionVerb = $isCompleted ? 'hoàn thành' : 'bỏ chọn';
+                    return [
+                        'success' => true,
+                        'task_id' => $taskId,
+                        'item' => $targetMatchedText ?: $itemTarget,
+                        'is_completed' => $isCompleted,
+                        'new_progress' => $newProgress,
+                        'summary' => "Đã đánh dấu {$actionVerb} mục '{$targetMatchedText}' trong task #{$taskId}. Tiến độ công việc hiện tại đạt {$newProgress}%." . ($newProgress >= 100 ? " Toàn bộ task đã hoàn tất 100%!" : "")
+                    ];
+                }
+
+                // ==========================================
+                // 15E. DIRECT TOOL 4: QUICK LOG CRM ACTIVITY
+                // ==========================================
+                case 'quick_log_crm_activity': {
+                    $contactId = (int)($args['contact_id'] ?? 0);
+                    $actType = strtolower(trim((string)($args['activity_type'] ?? 'call')));
+                    $actType = in_array($actType, ['call', 'meeting', 'note', 'chat'], true) ? $actType : 'call';
+                    $title = trim((string)($args['title'] ?? ''));
+                    $notes = trim((string)($args['notes'] ?? ''));
+                    $duration = (int)($args['duration_minutes'] ?? 0);
+                    $outcome = trim((string)($args['outcome'] ?? ''));
+
+                    if ($contactId <= 0 || empty($title) || empty($notes)) {
+                        return ['success' => false, 'message' => 'Vui lòng cung cấp contact_id, tiêu đề và nội dung ghi chú tương tác.'];
+                    }
+
+                    // Zero-Trust RBAC Check
+                    $cStmt = $db->prepare("SELECT id, full_name, phone, owner_id FROM contacts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
+                    $cStmt->execute([$contactId, $tid]);
+                    $contact = $cStmt->fetch(PDO::FETCH_ASSOC);
+                    if (!$contact) {
+                        return ['success' => false, 'message' => "Không tìm thấy học viên/khách hàng ID #{$contactId}."];
+                    }
+
+                    if (!$canAccessAllContacts && (int)$contact['owner_id'] !== $uid) {
+                        $collabStmt = $db->prepare("SELECT 1 FROM contacts WHERE id = ? AND FIND_IN_SET(?, IFNULL(collaborator_ids, ''))");
+                        $collabStmt->execute([$contactId, (string)$uid]);
+                        if (!$collabStmt->fetchColumn()) {
+                            return ['success' => false, 'message' => "Bạn không có quyền ghi nhận tương tác trên học viên này (thuộc quyền nhân sự khác)."];
+                        }
+                    }
+
+                    // Build formatted body
+                    $extraMeta = [];
+                    if ($duration > 0) $extraMeta[] = "Thời lượng: {$duration} phút";
+                    if ($outcome) {
+                        $outcomeMap = [
+                            'connected' => 'Đã nghe máy / Tư vấn tốt',
+                            'no_answer' => 'Không nghe máy',
+                            'busy' => 'Máy bận',
+                            'callback_requested' => 'Yêu cầu gọi lại sau',
+                            'qualified' => 'Rất tiềm năng',
+                            'lost' => 'Không có nhu cầu'
+                        ];
+                        $extraMeta[] = "Kết quả: " . ($outcomeMap[$outcome] ?? $outcome);
+                    }
+                    $fullBody = $notes;
+                    if (!empty($extraMeta)) {
+                        $fullBody .= "\n\n[" . implode(' | ', $extraMeta) . "]";
+                    }
+
+                    $actStmt = $db->prepare("
+                        INSERT INTO activities (
+                            tenant_id, user_id, created_by, type, subject, body,
+                            status, progress, related_type, related_id, contact_id,
+                            done_at, created_at, updated_at
+                        ) VALUES (
+                            ?, ?, ?, ?, ?, ?,
+                            'completed', 100, 'contact', ?, ?,
+                            NOW(), NOW(), NOW()
+                        )
+                    ");
+                    $actStmt->execute([$tid, $uid, $uid, $actType, $title, $fullBody, $contactId, $contactId]);
+                    $actId = (int)$db->lastInsertId();
+
+                    // Update last contact timestamp on contact
+                    $upC = $db->prepare("UPDATE contacts SET last_contact = NOW(), updated_at = NOW() WHERE id = ? AND tenant_id = ?");
+                    $upC->execute([$contactId, $tid]);
+
+                    $typeText = ['call' => 'cuộc gọi', 'meeting' => 'cuộc hẹn', 'note' => 'ghi chú', 'chat' => 'tin nhắn'][$actType] ?? 'tương tác';
+                    return [
+                        'success' => true,
+                        'activity_id' => $actId,
+                        'contact_id' => $contactId,
+                        'contact_name' => $contact['full_name'],
+                        'summary' => "Đã ghi nhận trực tiếp {$typeText} ('{$title}') cho học viên {$contact['full_name']} (#{$contactId}). Thời gian liên hệ gần nhất của học viên đã được tự động làm mới."
+                    ];
+                }
+
+                // ==========================================
+                // 15F. DIRECT TOOL 5: REASSIGN LEAD OWNER
+                // ==========================================
+                case 'reassign_lead_owner': {
+                    $contactId = (int)($args['contact_id'] ?? 0);
+                    $newOwnerId = (int)($args['new_owner_id'] ?? 0);
+                    $newOwnerName = trim((string)($args['new_owner_name'] ?? ''));
+                    $reason = trim((string)($args['reassign_reason'] ?? 'Điều phối nguồn khách hàng'));
+
+                    if ($contactId <= 0) {
+                        return ['success' => false, 'message' => 'Vui lòng cung cấp mã contact_id của học viên cần bàn giao.'];
+                    }
+
+                    $cStmt = $db->prepare("SELECT c.id, c.full_name, c.phone, c.owner_id, u.full_name as current_owner_name FROM contacts c LEFT JOIN users u ON c.owner_id = u.id WHERE c.id = ? AND c.tenant_id = ? AND c.deleted_at IS NULL");
+                    $cStmt->execute([$contactId, $tid]);
+                    $contact = $cStmt->fetch(PDO::FETCH_ASSOC);
+                    if (!$contact) {
+                        return ['success' => false, 'message' => "Không tìm thấy học viên ID #{$contactId}."];
+                    }
+
+                    $canReassign = $isGlobalAdmin || $isManager || (int)$contact['owner_id'] === $uid;
+                    if (!$canReassign) {
+                        return ['success' => false, 'message' => "Bạn không có quyền bàn giao học viên này (chỉ Trưởng phòng, Quản lý hoặc chính người đang phụ trách mới có quyền bàn giao)."];
+                    }
+
+                    // Resolve new owner
+                    if ($newOwnerId <= 0 && !empty($newOwnerName)) {
+                        $uStmt = $db->prepare("SELECT id, full_name, email FROM users WHERE tenant_id = ? AND is_active = 1 AND (full_name LIKE ? OR email LIKE ?)");
+                        $uStmt->execute([$tid, '%' . $newOwnerName . '%', '%' . $newOwnerName . '%']);
+                        $candidates = $uStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                        if (count($candidates) === 0) {
+                            return ['success' => false, 'message' => "Không tìm thấy nhân viên đang hoạt động nào có tên '{$newOwnerName}'. Vui lòng kiểm tra lại danh bạ."];
+                        } elseif (count($candidates) > 1) {
+                            $candidateList = array_map(fn($c) => "#{$c['id']} - {$c['full_name']} ({$c['email']})", $candidates);
+                            return [
+                                'success' => false,
+                                'ambiguous' => true,
+                                'message' => "Tìm thấy " . count($candidates) . " nhân sự trùng tên '{$newOwnerName}': " . implode(', ', $candidateList) . ". Bạn muốn bàn giao cho ai? Vui lòng cung cấp mã ID chính xác."
+                            ];
+                        }
+                        $newOwnerId = (int)$candidates[0]['id'];
+                        $resolvedName = $candidates[0]['full_name'];
+                    } else {
+                        $uStmt = $db->prepare("SELECT id, full_name FROM users WHERE id = ? AND tenant_id = ? AND is_active = 1");
+                        $uStmt->execute([$newOwnerId, $tid]);
+                        $found = $uStmt->fetch(PDO::FETCH_ASSOC);
+                        if (!$found) {
+                            return ['success' => false, 'message' => "Nhân viên tiếp nhận mới (ID #{$newOwnerId}) không tồn tại hoặc đã ngừng hoạt động."];
+                        }
+                        $resolvedName = $found['full_name'];
+                    }
+
+                    $oldOwnerName = $contact['current_owner_name'] ?: 'Chưa phân công';
+
+                    // Update contact owner
+                    $upStmt = $db->prepare("UPDATE contacts SET owner_id = ?, updated_at = NOW() WHERE id = ? AND tenant_id = ?");
+                    $upStmt->execute([$newOwnerId, $contactId, $tid]);
+
+                    // Audit trail activity
+                    $auditStmt = $db->prepare("
+                        INSERT INTO activities (
+                            tenant_id, user_id, created_by, type, subject, body,
+                            status, progress, related_type, related_id, contact_id,
+                            done_at, created_at, updated_at
+                        ) VALUES (
+                            ?, ?, ?, 'task', ?, ?,
+                            'completed', 100, 'contact', ?, ?,
+                            NOW(), NOW(), NOW()
+                        )
+                    ");
+                    $auditSubject = "Bàn giao học viên: {$contact['full_name']}";
+                    $auditBody = "Chuyển giao quyền phụ trách từ [{$oldOwnerName}] sang [{$resolvedName}].\nNgười thực hiện: {$userName} ({$uid})\nLý do: {$reason}";
+                    $auditStmt->execute([$tid, $newOwnerId, $uid, $auditSubject, $auditBody, $contactId, $contactId]);
+
+                    return [
+                        'success' => true,
+                        'contact_id' => $contactId,
+                        'contact_name' => $contact['full_name'],
+                        'old_owner' => $oldOwnerName,
+                        'new_owner' => $resolvedName,
+                        'new_owner_id' => $newOwnerId,
+                        'summary' => "Đã bàn giao học viên {$contact['full_name']} (#{$contactId}) từ [{$oldOwnerName}] sang cho [{$resolvedName}] thành công."
                     ];
                 }
 
