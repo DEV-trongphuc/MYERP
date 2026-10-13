@@ -159,6 +159,7 @@ export interface ChatComposerRef {
   queueFiles: (files: File[], defaultCategory?: 'image' | 'file') => void;
   focus: () => void;
   insertEmoji: (emoji: string) => void;
+  setText: (text: string) => void;
 }
 
 export interface ChatComposerProps {
@@ -300,6 +301,12 @@ export const ChatComposer = forwardRef<ChatComposerRef, ChatComposerProps>(({
     },
     insertEmoji: (emoji: string) => {
       setInputText((prev) => prev + emoji);
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 30);
+    },
+    setText: (text: string) => {
+      setInputText(text);
       setTimeout(() => {
         textareaRef.current?.focus();
       }, 30);
@@ -975,7 +982,7 @@ export const ChatComposer = forwardRef<ChatComposerRef, ChatComposerProps>(({
             className="chat-input-textarea"
             placeholder={
               activeConversation.type === 'direct'
-                ? (isMobile ? 'Nhập tin nhắn...' : `Nhập tin nhắn tới ${activeConversation.other_user?.full_name || 'đồng nghiệp'}...`)
+                ? (isMobile ? 'Nhập tin nhắn...' : `Nhập tin nhắn tới ${(activeConversation.other_user?.id === 9000001 || activeConversation.other_user?.role === 'bot' || activeConversation.other_user?.full_name?.includes('IDEAS')) ? 'SI IDEAS' : (activeConversation.other_user?.full_name || 'đồng nghiệp')}...`)
                 : (isMobile ? 'Nhập tin nhắn tới nhóm...' : 'Nhập @, tin nhắn tới nhóm (Enter để gửi, Shift+Enter xuống dòng, Ctrl+V dán ảnh)...')
             }
             value={inputText}

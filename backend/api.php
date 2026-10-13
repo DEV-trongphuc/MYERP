@@ -141,7 +141,8 @@ if (in_array($baseAction, [
     'system',
     'test-benchmark',
     'hrm',
-    'chat'
+    'chat',
+    'customer-journey-summary'
 ], true)) {
     $_SERVER['REQUEST_URI'] = '/backend/' . $action . (!empty($_GET) ? '?' . http_build_query($_GET) : '');
     require_once __DIR__ . '/index.php';
@@ -838,7 +839,9 @@ if (!in_array($action, $publicActions)) {
         'get_all_pending_counts',
         'save_workspace_settings',
         'get_workspace_settings',
-        'preview_routing'
+        'preview_routing',
+        'get_fair_share_stats',
+        'get_consultant_compensation_details'
     ], true)) {
         $resolvedScope = 'all';
     }
@@ -1438,7 +1441,7 @@ function processManualLead($conn, $leadData, $override_round_id, $override_consu
         // 2. Đã ở bước Hồ sơ trở đi (chỉ thay đổi từ trước bước Hồ sơ thì mới đổi thôi)
         $keepForOldSale = false;
         if (!$override_consultant_id && $crmCheckResult['isDuplicate'] && !empty($crmCheckResult['assignedTo'])) {
-            if ($crmCheckResult['monthsSinceLastInteraction'] < $dupCheckMonths) {
+            if (!empty($crmCheckResult['hasRealInteraction']) && $crmCheckResult['monthsSinceLastInteraction'] < $dupCheckMonths) {
                 $keepForOldSale = true;
             } else if (isset($crmCheckResult['isBeforeHoSo']) && !$crmCheckResult['isBeforeHoSo']) {
                 $keepForOldSale = true;
@@ -3867,13 +3870,31 @@ switch ($action) {
                     )";
             } else if (strpos($statusInput, ',') !== false) {
                 $statuses = explode(',', $statusInput);
-                $escapedStatuses = array_map(function ($s) use ($conn) {
-                    return "'" . $conn->real_escape_string(trim($s)) . "'";
-                }, $statuses);
-                $extraCondition .= " AND dl.status IN (" . implode(',', $escapedStatuses) . ")";
+                $condParts = [];
+                foreach ($statuses as $s) {
+                    $sTrim = trim($s);
+                    if ($sTrim === 'reallocated') {
+                        $condParts[] = "(dl.status = 'reallocated' OR dl.message LIKE '%phân bổ lại%' OR dl.message LIKE '%thu hồi%')";
+                    } else if ($sTrim === 'compensation') {
+                        $condParts[] = "(dl.status = 'compensation' OR dl.message LIKE '%bù lượt%' OR dl.message LIKE '%đền bù%' OR dl.message LIKE '%bù chủ động%')";
+                    } else if ($sTrim === 'reminder') {
+                        $condParts[] = "(dl.status = 'reminder' OR dl.message LIKE '%khách cũ đăng ký lại%' OR dl.message LIKE '%nhắc trùng%' OR dl.message LIKE '%nhắc lại%')";
+                    } else {
+                        $condParts[] = "dl.status = '" . $conn->real_escape_string($sTrim) . "'";
+                    }
+                }
+                $extraCondition .= " AND (" . implode(' OR ', $condParts) . ")";
             } else {
                 $status = $conn->real_escape_string($statusInput);
-                $extraCondition .= " AND dl.status = '$status'";
+                if ($status === 'reallocated') {
+                    $extraCondition .= " AND (dl.status = 'reallocated' OR dl.message LIKE '%phân bổ lại%' OR dl.message LIKE '%thu hồi%')";
+                } else if ($status === 'compensation') {
+                    $extraCondition .= " AND (dl.status = 'compensation' OR dl.message LIKE '%bù lượt%' OR dl.message LIKE '%đền bù%' OR dl.message LIKE '%bù chủ động%')";
+                } else if ($status === 'reminder') {
+                    $extraCondition .= " AND (dl.status = 'reminder' OR dl.message LIKE '%khách cũ đăng ký lại%' OR dl.message LIKE '%nhắc trùng%' OR dl.message LIKE '%nhắc lại%')";
+                } else {
+                    $extraCondition .= " AND dl.status = '$status'";
+                }
             }
             $isFilteringActive = true;
         }
@@ -4002,6 +4023,7 @@ switch ($action) {
                 l.ai_screener_status,
                 l.ai_evaluation,
                 dl.status, 
+                dl.message, 
                 c.name as assigned_to_name, 
                 c.avatar as assigned_to_avatar, 
                 dr.round_name, 
@@ -11595,11 +11617,17 @@ switch ($action) {
             }
 
             $isDuplicate = false;
-            if ($crmCheckResult['isDuplicate'] && $crmCheckResult['monthsSinceLastInteraction'] < $dupCheckMonths && !empty($crmCheckResult['assignedTo'])) {
+            if ($crmCheckResult['isDuplicate'] && !empty($crmCheckResult['assignedTo'])) {
+                if (!empty($crmCheckResult['hasRealInteraction']) && $crmCheckResult['monthsSinceLastInteraction'] < $dupCheckMonths) {
+                    $isDuplicate = true;
+                } else if (isset($crmCheckResult['isBeforeHoSo']) && !$crmCheckResult['isBeforeHoSo']) {
+                    $isDuplicate = true;
+                }
+            }
+            if ($isDuplicate) {
                 $assignedConsultantId = $crmCheckResult['assignedTo'];
                 $status = 'reminder';
                 $message = 'Khách cũ đăng ký lại < ' . $dupCheckMonths . ' tháng.';
-                $isDuplicate = true;
             }
 
             $dupSuffix = '';
@@ -18503,7 +18531,16 @@ switch ($action) {
         }
 
         // Regular duplicate checking
-        if ($crmCheckResult['isDuplicate'] && $crmCheckResult['monthsSinceLastInteraction'] < $dupCheckMonths && !empty($crmCheckResult['assignedTo'])) {
+        $isSimDuplicate = false;
+        if ($crmCheckResult['isDuplicate'] && !empty($crmCheckResult['assignedTo'])) {
+            if (!empty($crmCheckResult['hasRealInteraction']) && $crmCheckResult['monthsSinceLastInteraction'] < $dupCheckMonths) {
+                $isSimDuplicate = true;
+            } else if (isset($crmCheckResult['isBeforeHoSo']) && !$crmCheckResult['isBeforeHoSo']) {
+                $isSimDuplicate = true;
+            }
+        }
+
+        if ($isSimDuplicate) {
             $assignedTo = $crmCheckResult['assignedTo'];
             $stmtC = $conn->prepare("SELECT name, email, avatar FROM consultants WHERE id = ?");
             $stmtC->bind_param("i", $assignedTo);
@@ -20045,7 +20082,7 @@ switch ($action) {
         }
     case 'download-file':
         require_once __DIR__ . '/controllers/UploadController.php';
-        $ctrl = new UploadController(null);
+        $ctrl = new UploadController($pdo ?? (isset($db) ? $db : (isset($conn) ? $conn : null)));
         $ctrl->downloadFile();
         break;
 

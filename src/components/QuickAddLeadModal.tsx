@@ -972,9 +972,20 @@ export const QuickAddLeadModal = () => {
 
   // Listen to open event
   useEffect(() => {
-    const handleOpen = () => {
+    const handleOpen = (e?: Event) => {
+      const custom = e as CustomEvent;
+      const detail = custom?.detail;
       setIsOpen(true);
-      if (isSale) {
+      if (detail) {
+        setManualData({
+          name: detail.full_name || detail.name || '',
+          phone: detail.phone || '',
+          email: detail.email || '',
+          source: detail.source || (isSale ? 'ca_nhan' : ''),
+          type: detail.type || '',
+          note: detail.note || detail.notes || ''
+        });
+      } else if (isSale) {
         setManualData(prev => ({ ...prev, source: 'ca_nhan' }));
       }
     };

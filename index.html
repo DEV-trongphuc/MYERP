@@ -844,22 +844,31 @@
     <script>
       // Register PWA Service Worker for Browser Omnibox Install Button & Desktop Notifications
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', function() {
-          navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(function(reg) {
-            console.log('[PWA] ServiceWorker registered with scope:', reg.scope);
-            // Actively check for updates whenever the user returns to the tab/app
-            window.addEventListener('focus', function() { reg.update(); });
-            document.addEventListener('visibilitychange', function() {
-              if (document.visibilityState === 'visible') reg.update();
-            });
-            // Periodically check for service worker updates
-            setInterval(function() {
-              reg.update();
-            }, 30 * 60 * 1000);
-          }).catch(function(err) {
-            console.warn('[PWA] ServiceWorker registration failed:', err);
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+          // In local dev, unregister any active service worker to prevent proxy deadlock and socket exhaustion
+          navigator.serviceWorker.getRegistrations().then(function(registrations) {
+            for (let registration of registrations) {
+              registration.unregister();
+            }
           });
-        });
+        } else {
+          window.addEventListener('load', function() {
+            navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(function(reg) {
+              console.log('[PWA] ServiceWorker registered with scope:', reg.scope);
+              // Actively check for updates whenever the user returns to the tab/app
+              window.addEventListener('focus', function() { reg.update(); });
+              document.addEventListener('visibilitychange', function() {
+                if (document.visibilityState === 'visible') reg.update();
+              });
+              // Periodically check for service worker updates
+              setInterval(function() {
+                reg.update();
+              }, 30 * 60 * 1000);
+            }).catch(function(err) {
+              console.warn('[PWA] ServiceWorker registration failed:', err);
+            });
+          });
+        }
       }
 
       // Capture beforeinstallprompt event to enable 1-click install button across the app

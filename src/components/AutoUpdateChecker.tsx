@@ -18,7 +18,6 @@ export const AutoUpdateChecker: React.FC = () => {
 
   const [hasNewVersion, setHasNewVersion] = useState(false);
   const [newVersion, setNewVersion] = useState<string>('');
-  const [countdown, setCountdown] = useState<number>(10);
   const [isSnoozed, setIsSnoozed] = useState(false);
 
   // Store loaded client version
@@ -27,7 +26,7 @@ export const AutoUpdateChecker: React.FC = () => {
   );
   const isCheckingRef = useRef(false);
 
-  // Trigger update modal with strong loop prevention
+  // Trigger update modal with strong loop prevention (NO auto-reload)
   const triggerUpdate = (serverVer: string) => {
     if (!serverVer || serverVer === initialVersionRef.current) return;
 
@@ -52,15 +51,7 @@ export const AutoUpdateChecker: React.FC = () => {
       // Ignore storage errors in restricted mode
     }
 
-    // If tab is currently hidden/background, reload silently once
-    if (document.hidden) {
-      try {
-        localStorage.setItem(`myerp_reload_${serverVer}`, String(Date.now()));
-      } catch {}
-      window.location.reload();
-      return;
-    }
-
+    // Only set state to show prompt; NEVER auto reload the page (even on hidden tab)
     setNewVersion(serverVer);
     setHasNewVersion(true);
   };
@@ -154,22 +145,6 @@ export const AutoUpdateChecker: React.FC = () => {
     };
   }, [isDevOrLocalhost]);
 
-  // 2. Countdown timer when update dialog is visible
-  useEffect(() => {
-    if (!hasNewVersion || isSnoozed || isDevOrLocalhost) return;
-
-    if (countdown <= 0) {
-      handleReload();
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      setCountdown((prev) => prev - 1);
-    }, 1000);
-
-    return () => clearTimeout(timer);
-  }, [hasNewVersion, isSnoozed, countdown, isDevOrLocalhost]);
-
   const handleReload = async () => {
     if (newVersion) {
       try {
@@ -200,7 +175,7 @@ export const AutoUpdateChecker: React.FC = () => {
     }
   };
 
-  const handleSnooze = (durationMinutes = 60) => {
+  const handleSnooze = (durationMinutes = 240) => {
     setIsSnoozed(true);
     setHasNewVersion(false);
     try {
@@ -235,19 +210,6 @@ export const AutoUpdateChecker: React.FC = () => {
           overflow: 'hidden'
         }}
       >
-        {/* Animated Progress Bar at bottom */}
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            height: '3px',
-            background: 'linear-gradient(90deg, var(--color-primary, #BD1D2D), #f59e0b)',
-            width: `${(countdown / 10) * 100}%`,
-            transition: 'width 1s linear'
-          }}
-        />
-
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
           {/* Brand Icon Box */}
           <div
@@ -285,7 +247,7 @@ export const AutoUpdateChecker: React.FC = () => {
                   letterSpacing: '-0.2px'
                 }}
               >
-                Cập nhật hệ thống mới
+                Phiên bản mới khả dụng
               </h4>
             </div>
 
@@ -297,19 +259,7 @@ export const AutoUpdateChecker: React.FC = () => {
                 margin: '0 0 12px 0'
               }}
             >
-              Hệ thống đã nâng cấp phiên bản mới. Tự động làm mới sau{' '}
-              <span
-                style={{
-                  fontWeight: 700,
-                  color: 'var(--color-primary, #BD1D2D)',
-                  background: 'rgba(189, 29, 45, 0.08)',
-                  padding: '1px 6px',
-                  borderRadius: '6px',
-                  display: 'inline-block'
-                }}
-              >
-                {countdown}s
-              </span>
+              Hệ thống MYERP đã có bản cập nhật mới. Bạn có thể cập nhật ngay để áp dụng tính năng mới hoặc để sau.
             </p>
 
             {/* Action Buttons */}
@@ -342,12 +292,12 @@ export const AutoUpdateChecker: React.FC = () => {
                 }}
               >
                 <RefreshCw size={13} />
-                Làm mới ngay
+                Cập nhật ngay
               </button>
 
               <button
                 type="button"
-                onClick={() => handleSnooze(60)}
+                onClick={() => handleSnooze(240)}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -380,7 +330,7 @@ export const AutoUpdateChecker: React.FC = () => {
           {/* Close Button */}
           <button
             type="button"
-            onClick={() => handleSnooze(60)}
+            onClick={() => handleSnooze(240)}
             title="Đóng thông báo"
             style={{
               background: 'transparent',

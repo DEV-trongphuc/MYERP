@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 311;
+$targetVersion = 313;
 $currentVersion = 186;
 
 // Query current DB version
@@ -4523,10 +4523,22 @@ try {
         $logMsg("Nâng cấp lên phiên bản 312 hoàn tất.", "success");
     }
 
-    // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '312') ON DUPLICATE KEY UPDATE setting_value = '312'");
+    // --- PHIÊN BẢN 313: AUTO ACCEPT VÀ CLEAR CÁC BẢN GHI ĐI TRỄ / NGOÀI BÁN KÍNH TRONG CHECK_INS ---
+    if ($currentVersion < 313) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 313: Auto-accept và clear các bản ghi đi trễ / ngoài bán kính...", "info");
+        try {
+            require_once __DIR__ . '/migrations/313_auto_accept_late_checkins.php';
+            $logMsg("Auto-accept và clear các bản ghi đi trễ phiên bản 313 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi chạy migration 313: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 313 hoàn tất.", "success");
+    }
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 312", "success");
+    // Update DB version in system_settings
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '313') ON DUPLICATE KEY UPDATE setting_value = '313'");
+
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 313", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");

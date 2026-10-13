@@ -5,7 +5,7 @@ import { fetchAPI } from '../utils/api';
 import api from '../api/axios';
 import { useAuth } from '../contexts/AuthContext';
 import { useUIStore } from '../store/uiStore';
-import { Building2, Users, FileText, Plus, Trash2, Edit, X, Upload, Download, Check, AlertCircle, Layers, FileSpreadsheet, Link2, Globe, Search, Folder, ExternalLink, MessageSquare, Paperclip, RefreshCw, Calendar, CheckSquare, HardDrive, Info, MapPin, Briefcase, AlignLeft, Filter, History, Megaphone, Eye, Settings, ShieldAlert, Zap, Send, GraduationCap, BookOpen, PenTool, Award } from 'lucide-react';
+import { Building2, Users, FileText, Plus, Trash2, Edit, X, Upload, Download, Check, AlertCircle, Layers, FileSpreadsheet, Link2, Globe, Search, Folder, ExternalLink, MessageSquare, Paperclip, RefreshCw, Calendar, CheckSquare, HardDrive, Info, MapPin, Briefcase, AlignLeft, Filter, History, Megaphone, Eye, Settings, ShieldAlert, Zap, Send, GraduationCap, BookOpen, PenTool, Award, Clock } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { EmptyCard } from '../components/ui/EmptyCard';
 import { compressToWebP } from '../utils/imageCompress';
@@ -321,6 +321,7 @@ export default function ProjectsPage() {
   const [totalProjects, setTotalProjects] = useState(0);
   const [totalCampaigns, setTotalCampaigns] = useState(0);
   const [rosterSearch, setRosterSearch] = useState('');
+  const [mainSearchTerm, setMainSearchTerm] = useState('');
 
   // Modals state
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -599,10 +600,41 @@ export default function ProjectsPage() {
   const [campaignPage, setCampaignPage] = useState(1);
   const [campaignPageSize, setCampaignPageSize] = useState(12);
 
+  const filteredProjects = React.useMemo(() => {
+    if (!mainSearchTerm.trim()) return projects;
+    const q = mainSearchTerm.toLowerCase();
+    return projects.filter(p => 
+      (p.name && p.name.toLowerCase().includes(q)) ||
+      (p.code && p.code.toLowerCase().includes(q)) ||
+      (p.developer && p.developer.toLowerCase().includes(q)) ||
+      (p.location && p.location.toLowerCase().includes(q))
+    );
+  }, [projects, mainSearchTerm]);
+
+  const paginatedProjects = React.useMemo(() => {
+    const start = (projectPage - 1) * projectPageSize;
+    return filteredProjects.slice(start, start + projectPageSize);
+  }, [filteredProjects, projectPage, projectPageSize]);
+
+  useEffect(() => {
+    setProjectPage(1);
+  }, [mainSearchTerm]);
+
   const filteredCampaigns = React.useMemo(() => {
-    if (!campaignProjectFilter) return campaigns;
-    return campaigns.filter(c => String(c.project_id) === String(campaignProjectFilter));
-  }, [campaigns, campaignProjectFilter]);
+    let list = campaigns;
+    if (campaignProjectFilter) {
+      list = list.filter(c => String(c.project_id) === String(campaignProjectFilter));
+    }
+    if (mainSearchTerm.trim()) {
+      const q = mainSearchTerm.toLowerCase();
+      list = list.filter(c => 
+        (c.name && c.name.toLowerCase().includes(q)) ||
+        (String(c.id).includes(q)) ||
+        (c.description && c.description.toLowerCase().includes(q))
+      );
+    }
+    return list;
+  }, [campaigns, campaignProjectFilter, mainSearchTerm]);
 
   const paginatedCampaigns = React.useMemo(() => {
     const start = (campaignPage - 1) * campaignPageSize;
@@ -5894,61 +5926,65 @@ export default function ProjectsPage() {
         justifyContent: 'space-between',
         alignItems: 'center',
         flexWrap: 'wrap',
-        gap: '0.75rem',
-        background: isMobile ? 'transparent' : '#ffffff',
+        gap: '0.875rem',
+        background: isMobile ? 'transparent' : 'var(--color-surface)',
         border: isMobile ? 'none' : '1px solid var(--color-border-light)',
-        borderRadius: '12px',
-        padding: isMobile ? '0' : '0.625rem 1.25rem',
+        borderRadius: '16px',
+        padding: isMobile ? '0' : '0.625rem 1rem',
         marginBottom: '1.25rem',
-        boxShadow: isMobile ? 'none' : 'var(--shadow-sm)',
+        boxShadow: isMobile ? 'none' : '0 2px 8px -2px rgba(15, 23, 42, 0.04)',
         width: '100%'
       }}>
-        {/* Left: Tab selector (Underline style) */}
+        {/* Left: Capsule Segmented Tabs */}
         <div style={{
-          display: 'flex',
-          gap: '1.5rem',
-          alignItems: 'center',
-          boxSizing: 'border-box'
+          display: 'inline-flex',
+          padding: '3px',
+          background: 'var(--color-bg-light)',
+          borderRadius: '12px',
+          border: '1px solid var(--color-border-light)',
+          gap: '3px',
+          alignItems: 'center'
         }}>
           {[
-            { id: 'projects', label: 'Chương trình', count: totalProjects, icon: <GraduationCap size={15} /> },
-            { id: 'campaigns', label: 'Khóa học', count: totalCampaigns, icon: <BookOpen size={15} /> }
+            { id: 'projects', label: 'Chương trình', count: filteredProjects.length, icon: <GraduationCap size={15} /> },
+            { id: 'campaigns', label: 'Khóa học', count: filteredCampaigns.length, icon: <BookOpen size={15} /> }
           ].map(tab => {
             const isSelected = activeSubTab === tab.id;
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveSubTab(tab.id as any)}
+                onClick={() => {
+                  setActiveSubTab(tab.id as any);
+                  setProjectPage(1);
+                  setCampaignPage(1);
+                }}
                 style={{
-                  height: '38px',
+                  height: '34px',
                   border: 'none',
-                  borderBottom: isSelected ? '2px solid var(--color-primary)' : '2px solid transparent',
-                  fontSize: '0.85rem',
-                  fontWeight: 700,
+                  borderRadius: '9px',
+                  fontSize: '0.825rem',
+                  fontWeight: isSelected ? 800 : 600,
                   cursor: 'pointer',
-                  background: 'transparent',
+                  background: isSelected ? 'var(--color-surface)' : 'transparent',
                   color: isSelected ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                  boxShadow: isSelected ? '0 2px 6px -1px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04)' : 'none',
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '8px',
-                  padding: '0 4px',
-                  outline: 'none',
-                  boxShadow: 'none',
-                  transition: 'all 0.2s ease',
-                  marginTop: '2px'
+                  gap: '7px',
+                  padding: '0 12px',
+                  transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)'
                 }}
               >
                 {tab.icon}
                 <span>{tab.label}</span>
                 <span style={{
-                  fontSize: '0.72rem',
+                  fontSize: '0.7rem',
                   padding: '1px 6px',
-                  borderRadius: '10px',
-                  background: isSelected ? 'rgba(163, 20, 34, 0.08)' : 'rgba(0, 0, 0, 0.04)',
+                  borderRadius: '6px',
+                  background: isSelected ? 'rgba(225, 29, 72, 0.09)' : 'rgba(100, 116, 139, 0.08)',
                   color: isSelected ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                  fontWeight: 800,
-                  transition: 'background 0.2s ease, color 0.2s ease'
+                  fontWeight: 800
                 }}>
                   {tab.count}
                 </span>
@@ -5957,49 +5993,115 @@ export default function ProjectsPage() {
           })}
         </div>
 
-        {/* Middle/Right: Filter & Stats consolidated */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', width: isMobile ? '100%' : 'auto' }}>
+        {/* Middle: Real-time Search Box */}
+        <div style={{
+          position: 'relative',
+          minWidth: screenWidth <= 768 ? '100%' : '240px',
+          flex: screenWidth <= 768 ? '1 1 100%' : '0 1 300px'
+        }}>
+          <Search size={14} style={{
+            position: 'absolute',
+            left: '11px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            color: 'var(--color-text-light)',
+            pointerEvents: 'none'
+          }} />
+          <input
+            type="text"
+            value={mainSearchTerm}
+            onChange={e => {
+              setMainSearchTerm(e.target.value);
+              setProjectPage(1);
+              setCampaignPage(1);
+            }}
+            placeholder={activeSubTab === 'projects' ? 'Tìm tên, mã hoặc đơn vị cấp bằng...' : 'Tìm khóa học...'}
+            style={{
+              width: '100%',
+              height: '36px',
+              paddingLeft: '32px',
+              paddingRight: mainSearchTerm ? '30px' : '10px',
+              fontSize: '0.8rem',
+              borderRadius: '9px',
+              border: '1px solid var(--color-border-light)',
+              background: 'var(--color-bg-light)',
+              color: 'var(--color-text)',
+              outline: 'none',
+              boxSizing: 'border-box',
+              transition: 'all 0.15s ease'
+            }}
+            onFocus={e => {
+              e.currentTarget.style.borderColor = 'var(--color-primary)';
+              e.currentTarget.style.background = 'var(--color-surface)';
+              e.currentTarget.style.boxShadow = '0 0 0 3px rgba(225, 29, 72, 0.08)';
+            }}
+            onBlur={e => {
+              e.currentTarget.style.borderColor = 'var(--color-border-light)';
+              e.currentTarget.style.background = 'var(--color-bg-light)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          />
+          {mainSearchTerm && (
+            <button
+              onClick={() => setMainSearchTerm('')}
+              style={{
+                position: 'absolute',
+                right: '7px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--color-text-muted)',
+                cursor: 'pointer',
+                padding: '3px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+              title="Xóa tìm kiếm"
+            >
+              <X size={13} />
+            </button>
+          )}
+        </div>
+
+        {/* Right: Filter & Stats consolidated */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', flexWrap: 'wrap', width: isMobile ? '100%' : 'auto' }}>
           {activeSubTab === 'campaigns' && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              height: '38px',
-              width: isMobile ? '100%' : 'auto'
-            }}>
-              {!isMobile && <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>Chương trình:</span>}
-              <div style={{ width: isMobile ? '100%' : '180px' }}>
-                <CustomSelect
-                  options={[
-                    { value: '', label: 'Tất cả chương trình' },
-                    ...projects.map(p => ({ value: String(p.id), label: p.name }))
-                  ]}
-                  value={campaignProjectFilter}
-                  onChange={val => {
-                    setCampaignProjectFilter(String(val));
-                    setCampaignPage(1);
-                  }}
-                  placeholder="Chọn chương trình..."
-                />
-              </div>
+            <div style={{ width: isMobile ? '100%' : '170px' }}>
+              <CustomSelect
+                options={[
+                  { value: '', label: 'Tất cả chương trình' },
+                  ...projects.map(p => ({ value: String(p.id), label: p.name }))
+                ]}
+                value={campaignProjectFilter}
+                onChange={val => {
+                  setCampaignProjectFilter(String(val));
+                  setCampaignPage(1);
+                }}
+                placeholder="Chọn chương trình..."
+              />
             </div>
           )}
 
           <div style={{
-            display: isMobile ? 'none' : 'flex',
-            fontSize: '0.8rem',
+            display: isMobile ? 'none' : 'inline-flex',
+            fontSize: '0.78rem',
             color: 'var(--color-text-muted)',
             fontWeight: 700,
             background: 'var(--color-bg-light)',
             padding: '0 12px',
-            borderRadius: '8px',
+            borderRadius: '9px',
             border: '1px solid var(--color-border-light)',
-            height: '38px',
+            height: '36px',
             alignItems: 'center',
-            boxSizing: 'border-box'
+            gap: '6px',
+            boxSizing: 'border-box',
+            whiteSpace: 'nowrap'
           }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-primary)' }} />
             {activeSubTab === 'projects'
-              ? `Hiển thị ${projects.length} / ${totalProjects} chương trình`
+              ? `Hiển thị ${paginatedProjects.length} / ${filteredProjects.length} chương trình`
               : `Hiển thị ${paginatedCampaigns.length} / ${filteredCampaigns.length} khóa học`
             }
           </div>
@@ -6016,44 +6118,44 @@ export default function ProjectsPage() {
                 <ProjectCardSkeleton key={i} />
               ))}
             </div>
-          ) : projects.length === 0 ? (
+          ) : filteredProjects.length === 0 ? (
             <EmptyCard
               icon={<Building2 size={48} />}
-              title="Chưa có chương trình nào"
-              description="Bắt đầu đăng ký các chương trình đào tạo, dự án hợp tác để phân phối và quản lý tài liệu."
-              actionText={isAdmin ? "Thêm ngay" : undefined}
-              onAction={isAdmin ? () => {
+              title={mainSearchTerm ? "Không tìm thấy chương trình" : "Chưa có chương trình nào"}
+              description={mainSearchTerm ? `Không có chương trình nào khớp với từ khóa "${mainSearchTerm}". Vui lòng thử từ khóa khác.` : "Bắt đầu đăng ký các chương trình đào tạo, dự án hợp tác để phân phối và quản lý tài liệu."}
+              actionText={mainSearchTerm ? "Xóa bộ lọc" : (isAdmin ? "Thêm ngay" : undefined)}
+              onAction={mainSearchTerm ? () => setMainSearchTerm('') : (isAdmin ? () => {
                 setEditingProject({ status: 'active', campaign_sharing_mode: 'independent' });
                 setAutoCode(true);
                 setIsEditModalOpen(true);
-              } : undefined}
+              } : undefined)}
             />
           ) : (
             <>
-              <div style={{ display: 'grid', gridTemplateColumns: screenWidth <= 640 ? '1fr' : (screenWidth <= 1024 ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)'), gap: screenWidth <= 640 ? '1rem' : '1.5rem' }}>
-                {projects.map(proj => (
+              <div style={{ display: 'grid', gridTemplateColumns: screenWidth <= 640 ? '1fr' : (screenWidth <= 1024 ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)'), gap: screenWidth <= 640 ? '0.875rem' : '1.125rem' }}>
+                {paginatedProjects.map(proj => (
                   <div
                     key={proj.id}
-                    className="card flex flex-col justify-between transition-all duration-300"
+                    className="card flex flex-col justify-between transition-all duration-200"
                     style={{
                       cursor: 'pointer',
                       background: 'var(--color-surface)',
                       border: '1px solid var(--color-border-light)',
-                      borderRadius: '24px',
-                      padding: screenWidth <= 640 ? '1.15rem' : '1.5rem',
-                      boxShadow: '0 10px 30px -10px rgba(0,0,0,0.06)',
+                      borderRadius: '16px',
+                      padding: screenWidth <= 640 ? '1rem' : '1.25rem',
+                      boxShadow: '0 2px 8px -2px rgba(15, 23, 42, 0.04)',
                       position: 'relative',
                       overflow: 'hidden'
                     }}
                     onMouseEnter={e => {
-                      e.currentTarget.style.transform = 'translateY(-4px)';
-                      e.currentTarget.style.borderColor = 'var(--color-primary-light)';
-                      e.currentTarget.style.boxShadow = '0 20px 40px -15px rgba(0,0,0,0.1)';
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.borderColor = 'rgba(225, 29, 72, 0.3)';
+                      e.currentTarget.style.boxShadow = '0 12px 24px -8px rgba(15, 23, 42, 0.09)';
                     }}
                     onMouseLeave={e => {
                       e.currentTarget.style.transform = 'none';
                       e.currentTarget.style.borderColor = 'var(--color-border-light)';
-                      e.currentTarget.style.boxShadow = '0 10px 30px -10px rgba(0,0,0,0.06)';
+                      e.currentTarget.style.boxShadow = '0 2px 8px -2px rgba(15, 23, 42, 0.04)';
                     }}
                     onClick={() => {
                       setEditingProject(proj);
@@ -6061,72 +6163,91 @@ export default function ProjectsPage() {
                       setIsEditModalOpen(true);
                     }}
                   >
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
                       {/* Header Row */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem' }}>
-                        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.625rem' }}>
+                        <div style={{ display: 'flex', gap: '0.625rem', alignItems: 'flex-start', minWidth: 0 }}>
                           <div style={{
-                            padding: '12px',
-                            background: 'linear-gradient(135deg, rgba(244, 63, 94, 0.1), rgba(225, 29, 72, 0.1))',
-                            borderRadius: '16px',
+                            width: '38px',
+                            height: '38px',
+                            borderRadius: '10px',
+                            background: 'rgba(225, 29, 72, 0.08)',
                             color: 'var(--color-primary)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            boxShadow: 'inset 0 0 0 1px rgba(225, 29, 72, 0.15)'
+                            flexShrink: 0
                           }}>
-                            <GraduationCap size={22} style={{ color: 'var(--color-primary)' }} />
+                            <GraduationCap size={20} />
                           </div>
-                          <div>
-                            <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--color-text)', margin: 0, lineHeight: 1.35, letterSpacing: '-0.01em' }}>{proj.name}</h3>
-                            <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontFamily: 'monospace', fontWeight: 600, display: 'inline-block', marginTop: '2px' }}>
+                          <div style={{ minWidth: 0 }}>
+                            <h3 style={{
+                              fontSize: '0.95rem',
+                              fontWeight: 700,
+                              color: 'var(--color-text)',
+                              margin: 0,
+                              lineHeight: 1.35,
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis'
+                            }} title={proj.name}>
+                              {proj.name}
+                            </h3>
+                            <span style={{
+                              fontSize: '0.7rem',
+                              color: 'var(--color-text-muted)',
+                              fontFamily: 'monospace',
+                              fontWeight: 600,
+                              display: 'inline-block',
+                              marginTop: '2px'
+                            }}>
                               Mã: {proj.code}
                             </span>
                           </div>
                         </div>
                         <span
                           style={{
-                            fontSize: '0.72rem',
-                            padding: '4px 10px',
-                            borderRadius: '100px',
+                            fontSize: '0.7rem',
+                            padding: '3px 8px',
+                            borderRadius: '8px',
                             fontWeight: 700,
-                            background: proj.status === 'active' ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)',
-                            color: proj.status === 'active' ? '#10b981' : '#ef4444',
-                            border: proj.status === 'active' ? '1px solid rgba(16, 185, 129, 0.15)' : '1px solid rgba(239, 68, 68, 0.15)',
+                            background: proj.status === 'active' ? 'rgba(16, 185, 129, 0.08)' : 'rgba(100, 116, 139, 0.08)',
+                            color: proj.status === 'active' ? '#10b981' : '#64748b',
+                            border: proj.status === 'active' ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid rgba(100, 116, 139, 0.15)',
                             whiteSpace: 'nowrap',
                             flexShrink: 0
                           }}
                         >
-                          {proj.status === 'active' ? 'Hoạt động' : 'Tạm dừng'}
+                          {proj.status === 'active' ? '● Hoạt động' : '○ Tạm dừng'}
                         </span>
                       </div>
 
-                      {/* Developer and Location with Icons */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                      {/* Developer and Location */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
                         {proj.developer && (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ color: 'var(--color-text-light)', display: 'inline-flex' }}><Briefcase size={13} /></span>
-                            <span>Cấp bằng: <strong style={{ color: 'var(--color-text)' }}>{proj.developer}</strong></span>
+                            <span style={{ color: 'var(--color-text-light)', display: 'inline-flex' }}><Briefcase size={12} /></span>
+                            <span>Cấp bằng: <strong style={{ color: 'var(--color-text)', fontWeight: 600 }}>{proj.developer}</strong></span>
                           </div>
                         )}
                         {proj.location && (
                           <div style={{ display: 'flex', alignItems: 'start', gap: '6px' }}>
-                            <span style={{ color: 'var(--color-text-light)', display: 'inline-flex', marginTop: '2px' }}><MapPin size={13} /></span>
-                            <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.4 }}>
+                            <span style={{ color: 'var(--color-text-light)', display: 'inline-flex', marginTop: '2px' }}><MapPin size={12} /></span>
+                            <span style={{ display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.35 }}>
                               {proj.location}
                             </span>
                           </div>
                         )}
                       </div>
 
-                      {/* Roster, Docs, Campaigns Info Badges */}
+                      {/* Info Badges */}
                       <div
                         style={{
                           display: 'flex',
                           flexDirection: 'row',
                           flexWrap: 'wrap',
-                          gap: '8px',
-                          fontSize: screenWidth <= 640 ? '0.68rem' : '0.72rem',
+                          gap: '6px',
+                          fontSize: '0.72rem',
                           color: 'var(--color-text-muted)'
                         }}
                       >
@@ -6135,17 +6256,29 @@ export default function ProjectsPage() {
                             e.stopPropagation();
                             handleOpenDocs(proj.id);
                           }}
-                          style={{ display: 'inline-flex', width: 'fit-content', alignItems: 'center', gap: '4px', background: 'rgba(100, 116, 139, 0.06)', border: '1px solid rgba(100, 116, 139, 0.12)', padding: screenWidth <= 640 ? '4px 8px' : '6px 10px', borderRadius: '100px', fontWeight: 700, color: '#64748b', cursor: 'pointer', transition: 'all 0.2s ease', flexShrink: 0, whiteSpace: 'nowrap' }}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            background: 'var(--color-bg-light)',
+                            border: '1px solid var(--color-border-light)',
+                            padding: '3px 8px',
+                            borderRadius: '8px',
+                            fontWeight: 600,
+                            color: 'var(--color-text-muted)',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease'
+                          }}
                           onMouseEnter={e => {
-                            e.currentTarget.style.background = 'rgba(100, 116, 139, 0.12)';
-                            e.currentTarget.style.transform = 'scale(1.03)';
+                            e.currentTarget.style.borderColor = 'var(--color-primary)';
+                            e.currentTarget.style.color = 'var(--color-primary)';
                           }}
                           onMouseLeave={e => {
-                            e.currentTarget.style.background = 'rgba(100, 116, 139, 0.06)';
-                            e.currentTarget.style.transform = 'none';
+                            e.currentTarget.style.borderColor = 'var(--color-border-light)';
+                            e.currentTarget.style.color = 'var(--color-text-muted)';
                           }}
                         >
-                          <FileText size={12} /> {(proj.doc_count || 0) + parseIds(proj.document_ids).length} tài liệu
+                          <FileText size={11} /> {(proj.doc_count || 0) + parseIds(proj.document_ids).length} tài liệu
                         </span>
                         {(() => {
                           const linkedCamps = campaigns.filter(c => c.project_id === proj.id || (proj.campaign_ids && proj.campaign_ids.split(',').map((name: string) => name.trim()).includes(c.name)));
@@ -6155,56 +6288,85 @@ export default function ProjectsPage() {
                                 e.stopPropagation();
                                 handleOpenQuickCampaigns(proj, linkedCamps);
                               }}
-                              style={{ display: 'inline-flex', width: 'fit-content', alignItems: 'center', gap: '4px', background: 'rgba(100, 116, 139, 0.06)', border: '1px solid rgba(100, 116, 139, 0.12)', padding: screenWidth <= 640 ? '4px 8px' : '6px 10px', borderRadius: '100px', fontWeight: 700, color: '#64748b', cursor: 'pointer', transition: 'all 0.2s ease', flexShrink: 0, whiteSpace: 'nowrap' }}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                background: 'var(--color-bg-light)',
+                                border: '1px solid var(--color-border-light)',
+                                padding: '3px 8px',
+                                borderRadius: '8px',
+                                fontWeight: 600,
+                                color: 'var(--color-text-muted)',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease'
+                              }}
                               onMouseEnter={e => {
-                                e.currentTarget.style.background = 'rgba(100, 116, 139, 0.12)';
-                                e.currentTarget.style.transform = 'scale(1.03)';
+                                e.currentTarget.style.borderColor = 'var(--color-primary)';
+                                e.currentTarget.style.color = 'var(--color-primary)';
                               }}
                               onMouseLeave={e => {
-                                e.currentTarget.style.background = 'rgba(100, 116, 139, 0.06)';
-                                e.currentTarget.style.transform = 'none';
+                                e.currentTarget.style.borderColor = 'var(--color-border-light)';
+                                e.currentTarget.style.color = 'var(--color-text-muted)';
                               }}
                             >
-                              <Layers size={12} /> {linkedCamps.length} khóa học
+                              <Layers size={11} /> {linkedCamps.length} khóa học
                             </span>
                           );
                         })()}
                       </div>
-                      {/* Project Managers Row with Overlapping Avatars and Text */}
+                      {/* Project Managers Row */}
                       {(() => {
                         const projManagers = parseIds(proj.manager_ids).map(id => users.find(u => Number(u.id) === Number(id))).filter(Boolean);
                         if (projManagers.length === 0) return null;
                         return (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '12px', padding: '6px 12px', background: 'rgba(100, 116, 139, 0.05)', border: '1px solid rgba(100, 116, 139, 0.12)', borderRadius: '100px', width: 'fit-content' }}>
-                            <span style={{ color: 'var(--color-text-light)', display: 'inline-flex' }}><Users size={12} /></span>
-                            <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Quản lý:</span>
-                            <div style={{ display: 'inline-flex', alignItems: 'center' }}>
-                              {projManagers.map((m: any, idx) => (
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '4px 8px',
+                            background: 'var(--color-bg-light)',
+                            border: '1px solid var(--color-border-light)',
+                            borderRadius: '8px',
+                            width: 'fit-content',
+                            maxWidth: '100%'
+                          }}>
+                            <Users size={11} style={{ color: 'var(--color-text-light)', flexShrink: 0 }} />
+                            <div style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}>
+                              {projManagers.slice(0, 3).map((m: any, idx) => (
                                 <div
                                   key={m.id}
                                   style={{
-                                    marginLeft: idx > 0 ? '-6px' : '0',
+                                    marginLeft: idx > 0 ? '-5px' : '0',
                                     zIndex: 10 - idx,
                                     position: 'relative'
                                   }}
                                 >
-                                  <Avatar src={m.avatar_url || m.avatar} name={m.full_name || m.username} size={18} />
+                                  <Avatar src={m.avatar_url || m.avatar} name={m.full_name || m.username} size={16} />
                                 </div>
                               ))}
                             </div>
-                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                            <span style={{
+                              fontSize: '0.7rem',
+                              fontWeight: 600,
+                              color: 'var(--color-text)',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis'
+                            }}>
                               {projManagers.length === 1 ? (
                                 projManagers[0].full_name || projManagers[0].username
                               ) : (
-                                `${projManagers[0].full_name || projManagers[0].username} và +${projManagers.length - 1} người khác`
+                                `${projManagers[0].full_name || projManagers[0].username} +${projManagers.length - 1}`
                               )}
                             </span>
                           </div>
                         );
                       })()}
+
                       {/* Last updated timestamp */}
-                      <div style={{ fontSize: '0.7rem', color: 'var(--color-text-light)', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <span style={{ display: 'inline-flex', opacity: 0.6 }}><RefreshCw size={10} /></span>
+                      <div style={{ fontSize: '0.68rem', color: 'var(--color-text-light)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <RefreshCw size={9} style={{ opacity: 0.6 }} />
                         <span>{formatLastUpdated(proj.updated_at, proj.created_at)}</span>
                       </div>
                     </div>
@@ -6215,8 +6377,8 @@ export default function ProjectsPage() {
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       borderTop: '1px solid var(--color-border-light)',
-                      marginTop: '1.25rem',
-                      paddingTop: '0.75rem'
+                      marginTop: '0.875rem',
+                      paddingTop: '0.625rem'
                     }} onClick={e => e.stopPropagation()}>
                       <button
                         onClick={(e) => {
@@ -6226,32 +6388,24 @@ export default function ProjectsPage() {
                         className="btn secondary sm"
                         style={{
                           borderRadius: '8px',
-                          fontWeight: 700,
+                          fontWeight: 600,
                           fontSize: '0.75rem',
-                          height: '32px',
-                          padding: '0 12px',
+                          height: '30px',
+                          padding: '0 10px',
                           background: 'var(--color-bg)',
                           border: '1px solid var(--color-border-light)',
                           color: 'var(--color-text)',
-                          display: 'flex',
+                          display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '6px',
-                          transition: 'all 0.2s ease'
-                        }}
-                        onMouseEnter={e => {
-                          e.currentTarget.style.background = 'var(--color-border-light)';
-                          e.currentTarget.style.borderColor = 'var(--color-border)';
-                        }}
-                        onMouseLeave={e => {
-                          e.currentTarget.style.background = 'var(--color-bg)';
-                          e.currentTarget.style.borderColor = 'var(--color-border-light)';
+                          gap: '5px',
+                          transition: 'all 0.15s ease'
                         }}
                       >
-                        <FileText size={13} />
+                        <FileText size={12} />
                         Tài liệu
                       </button>
                       {isManagerOrLeader && (
-                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                           {canEditProject(proj) && (
                             <button
                               onClick={(e) => {
@@ -6264,8 +6418,8 @@ export default function ProjectsPage() {
                               className="btn secondary sm"
                               style={{
                                 borderRadius: '8px',
-                                width: '32px',
-                                height: '32px',
+                                width: '30px',
+                                height: '30px',
                                 padding: 0,
                                 display: 'flex',
                                 alignItems: 'center',
@@ -6273,19 +6427,11 @@ export default function ProjectsPage() {
                                 background: 'var(--color-bg)',
                                 border: '1px solid var(--color-border-light)',
                                 color: 'var(--color-text)',
-                                transition: 'all 0.2s ease'
+                                transition: 'all 0.15s ease'
                               }}
-                              onMouseEnter={e => {
-                                e.currentTarget.style.background = 'var(--color-border-light)';
-                                e.currentTarget.style.borderColor = 'var(--color-border)';
-                              }}
-                              onMouseLeave={e => {
-                                e.currentTarget.style.background = 'var(--color-bg)';
-                                e.currentTarget.style.borderColor = 'var(--color-border-light)';
-                              }}
-                              title="Sửa"
+                              title="Sửa chương trình"
                             >
-                              <Edit size={13} />
+                              <Edit size={12} />
                             </button>
                           )}
                           {canDeleteProject(proj) && (
@@ -6297,28 +6443,20 @@ export default function ProjectsPage() {
                               className="btn secondary sm"
                               style={{
                                 borderRadius: '8px',
-                                width: '32px',
-                                height: '32px',
+                                width: '30px',
+                                height: '30px',
                                 padding: 0,
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                background: '#fee2e2',
-                                border: '1px solid #fca5a5',
-                                color: '#ef4444',
-                                transition: 'all 0.2s ease'
+                                background: 'rgba(239, 68, 68, 0.08)',
+                                border: '1px solid rgba(239, 68, 68, 0.2)',
+                                color: 'var(--color-danger)',
+                                transition: 'all 0.15s ease'
                               }}
-                              onMouseEnter={e => {
-                                e.currentTarget.style.background = '#fca5a5';
-                                e.currentTarget.style.borderColor = '#ef4444';
-                              }}
-                              onMouseLeave={e => {
-                                e.currentTarget.style.background = '#fee2e2';
-                                e.currentTarget.style.borderColor = '#fca5a5';
-                              }}
-                              title="Xóa"
+                              title="Xóa chương trình"
                             >
-                              <Trash2 size={13} />
+                              <Trash2 size={12} />
                             </button>
                           )}
                         </div>
@@ -6329,7 +6467,7 @@ export default function ProjectsPage() {
               </div>
               <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'center', paddingBottom: '2.5rem' }}>
                 <Pagination
-                  total={totalProjects}
+                  total={filteredProjects.length}
                   page={projectPage}
                   pageSize={projectPageSize}
                   onChange={setProjectPage}

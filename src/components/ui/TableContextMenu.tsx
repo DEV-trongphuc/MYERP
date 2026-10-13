@@ -78,7 +78,11 @@ export const TableContextMenu: React.FC<TableContextMenuProps> = ({
     if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        onClose();
+      }
     };
 
     const handleClickOutside = (e: MouseEvent) => {
@@ -93,11 +97,11 @@ export const TableContextMenu: React.FC<TableContextMenuProps> = ({
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('keydown', handleKeyDown, true);
     document.addEventListener('mousedown', handleClickOutside);
     document.addEventListener('contextmenu', handleContextMenuOutside);
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('keydown', handleKeyDown, true);
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('contextmenu', handleContextMenuOutside);
     };

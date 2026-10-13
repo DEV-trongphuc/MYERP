@@ -11,6 +11,7 @@ import type { ChatWallpaperConfig } from '../../types/chat';
 import { compressImageFile } from '../../utils/imageCompressor';
 import api from '../../api/axios';
 import toast from 'react-hot-toast';
+import { pushOverlay } from '../../utils/overlayStack';
 
 interface Props {
   isOpen: boolean;
@@ -60,8 +61,10 @@ export const ChatWallpaperModal: React.FC<Props> = ({
       setOverlayOpacity(
         typeof currentWallpaper?.overlay_opacity === 'number' ? currentWallpaper.overlay_opacity : 1
       );
+      const unregister = pushOverlay('chat-wallpaper-modal', onClose, 2200);
+      return () => unregister();
     }
-  }, [isOpen, currentWallpaper]);
+  }, [isOpen, currentWallpaper, onClose]);
 
   const resolvedCustomUrl = useMemo(() => resolveChatFileUrl(customUrl), [customUrl]);
 

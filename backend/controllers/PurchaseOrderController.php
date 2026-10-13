@@ -188,7 +188,40 @@ class PurchaseOrderController {
             }
         }
 
-        $total = (float)($b['total'] ?? 0);
+        // Server-Side Recalculation of Items Subtotal and Total to prevent Parameter Tampering (SEC-FIN-03)
+        $validatedItems = [];
+        $calculatedSubtotal = 0.0;
+        foreach ($b['items'] as $item) {
+            $qty = (float)($item['quantity'] ?? 1.0);
+            $unit_cost = (float)($item['unit_cost'] ?? 0);
+            if ($qty <= 0 || $unit_cost < 0) {
+                respond(422, null, 'Số lượng sản phẩm phải lớn hơn 0 và đơn giá không được âm', false);
+            }
+            if (!empty($item['product_id'])) {
+                $prodCheck = $this->db->prepare("SELECT id FROM products WHERE id=? AND tenant_id=?");
+                $prodCheck->execute([(int)$item['product_id'], $auth['tenant_id']]);
+                if (!$prodCheck->fetch()) {
+                    respond(422, null, "Sản phẩm ID {$item['product_id']} không hợp lệ hoặc không thuộc cửa hàng của bạn", false);
+                }
+            }
+            $itemSubtotal = round($qty * $unit_cost, 2);
+            $calculatedSubtotal += $itemSubtotal;
+            $validatedItems[] = [
+                'product_id' => !empty($item['product_id']) ? (int)$item['product_id'] : null,
+                'name' => trim($item['name'] ?? ''),
+                'quantity' => $qty,
+                'unit_cost' => $unit_cost,
+                'subtotal' => $itemSubtotal
+            ];
+        }
+
+        $tax = max(0, (float)($b['tax'] ?? 0));
+        $calculatedTotal = $calculatedSubtotal + $tax;
+        if ($calculatedTotal <= 0) {
+            respond(422, null, 'Tổng giá trị đơn mua hàng phải lớn hơn 0', false);
+        }
+
+        $total = $calculatedTotal;
         $approver_id = !empty($b['approver_id']) ? (int)$b['approver_id'] : null;
         $approver_id_2 = !empty($b['approver_id_2']) ? (int)$b['approver_id_2'] : null;
         $approver_id_3 = !empty($b['approver_id_3']) ? (int)$b['approver_id_3'] : null;
@@ -226,7 +259,7 @@ class PurchaseOrderController {
             $stmt->execute([
                 $auth['tenant_id'], $supplier_id, $auth['user_id'], $po_number,
                 empty($b['order_date']) ? date('Y-m-d') : $b['order_date'], $status,
-                $b['subtotal'] ?? 0, $b['tax'] ?? 0, $b['total'] ?? 0, $b['notes'] ?? null,
+                $calculatedSubtotal, $tax, $calculatedTotal, $b['notes'] ?? null,
                 $approver_id, $approver_id_2, $approver_id_3,
                 $status_level_1, $status_level_2, $status_level_3, $approval_status,
                 $related_user_ids
@@ -237,24 +270,10 @@ class PurchaseOrderController {
                 INSERT INTO purchase_order_items (po_id, product_id, name, quantity, unit_cost, subtotal)
                 VALUES (?, ?, ?, ?, ?, ?)
             ");
-            foreach ($b['items'] as $item) {
-                $qty = (float)($item['quantity'] ?? 1.0);
-                $unit_cost = (float)($item['unit_cost'] ?? 0);
-                if ($qty <= 0 || $unit_cost < 0) {
-                    throw new Exception('Số lượng sản phẩm phải lớn hơn 0 và đơn giá không được âm');
-                }
-
-                if (!empty($item['product_id'])) {
-                    $prodCheck = $this->db->prepare("SELECT id FROM products WHERE id=? AND tenant_id=?");
-                    $prodCheck->execute([(int)$item['product_id'], $auth['tenant_id']]);
-                    if (!$prodCheck->fetch()) {
-                        throw new Exception("Sản phẩm ID {$item['product_id']} không hợp lệ hoặc không thuộc cửa hàng của bạn");
-                    }
-                }
-
+            foreach ($validatedItems as $vItem) {
                 $itemStmt->execute([
-                    $poId, $item['product_id'] ?? null, $item['name'],
-                    $qty, $unit_cost, $item['subtotal']
+                    $poId, $vItem['product_id'], $vItem['name'],
+                    $vItem['quantity'], $vItem['unit_cost'], $vItem['subtotal']
                 ]);
             }
 
@@ -636,10 +655,48 @@ class PurchaseOrderController {
     }
 
     public function destroy(array $auth, int $id): void {
-        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true)) respond(403, null, 'Bạn không có quyền xóa đơn nhập hàng', false);
-        $stmt = $this->db->prepare("DELETE FROM purchase_orders WHERE id = ? AND tenant_id = ? AND status = 'draft'");
-        $stmt->execute([$id, $auth['tenant_id']]);
-        if (!$stmt->rowCount()) respond(403, null, 'Chỉ có thể xóa đơn hàng nháp', false);
-        respond(200, null, 'Đã xóa đơn hàng');
+        $role = $auth['role'] ?? '';
+        $uid = (int)($auth['user_id'] ?? 0);
+        $tid = (int)($auth['tenant_id'] ?? 0);
+        $isManagementOrAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true);
+
+        $stmt = $this->db->prepare("SELECT id, status, payment_status, created_by FROM purchase_orders WHERE id = ? AND tenant_id = ?");
+        $stmt->execute([$id, $tid]);
+        $po = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$po) {
+            respond(404, null, 'Không tìm thấy đơn hàng cần xóa', false);
+        }
+
+        $isCreator = ((int)$po['created_by'] === $uid);
+        if (!$isManagementOrAdmin && !$isCreator) {
+            respond(403, null, 'Bạn không có quyền xóa hoặc thu hồi đơn hàng này', false);
+        }
+
+        $allowedStatuses = ['draft', 'pending', 'pending_approval'];
+        if (!in_array($po['status'], $allowedStatuses, true)) {
+            respond(400, null, 'Chỉ có thể xóa hoặc thu hồi đơn hàng đang ở trạng thái nháp hoặc chờ duyệt', false);
+        }
+
+        if (($po['payment_status'] ?? '') === 'paid') {
+            respond(400, null, 'Không thể xóa đơn hàng đã thanh toán', false);
+        }
+
+        try {
+            $this->db->beginTransaction();
+            $stmtItems = $this->db->prepare("DELETE FROM purchase_order_items WHERE po_id = ?");
+            $stmtItems->execute([$id]);
+
+            $stmtDel = $this->db->prepare("DELETE FROM purchase_orders WHERE id = ? AND tenant_id = ?");
+            $stmtDel->execute([$id, $tid]);
+
+            $this->db->commit();
+            respond(200, null, 'Đã xóa hoặc thu hồi đơn hàng thành công');
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            respond(500, null, 'Lỗi khi xóa đơn hàng: ' . $e->getMessage(), false);
+        }
     }
 }

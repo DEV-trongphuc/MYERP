@@ -216,26 +216,30 @@ export const Header = ({
   useEffect(() => {
     const handleOpenIntro = () => setShowFeatureIntro(true);
     window.addEventListener('open-workchat-intro', handleOpenIntro);
+    window.addEventListener('open-ideas-si-intro', handleOpenIntro);
     (window as any).openWorkChatIntro = handleOpenIntro;
+    (window as any).openIdeasSiIntro = handleOpenIntro;
 
     if (user) {
-      const hasSeen = localStorage.getItem('has_seen_workchat_intro_v3');
-      const shownCount = parseInt(localStorage.getItem('workchat_intro_shown_count_v3') || '0', 10);
-      if (!hasSeen && shownCount < 2) {
+      const hasSeen = localStorage.getItem('has_seen_ideas_si_intro_v1');
+      if (!hasSeen) {
         const timer = setTimeout(() => {
           setShowFeatureIntro(true);
           try {
-            const currentCount = parseInt(localStorage.getItem('workchat_intro_shown_count_v3') || '0', 10);
-            localStorage.setItem('workchat_intro_shown_count_v3', String(currentCount + 1));
+            localStorage.setItem('has_seen_ideas_si_intro_v1', 'true');
           } catch (e) {}
         }, 1200);
         return () => {
           clearTimeout(timer);
           window.removeEventListener('open-workchat-intro', handleOpenIntro);
+          window.removeEventListener('open-ideas-si-intro', handleOpenIntro);
         };
       }
     }
-    return () => window.removeEventListener('open-workchat-intro', handleOpenIntro);
+    return () => {
+      window.removeEventListener('open-workchat-intro', handleOpenIntro);
+      window.removeEventListener('open-ideas-si-intro', handleOpenIntro);
+    };
   }, [user]);
 
   // Compute shift schedule and work hours for today
@@ -504,7 +508,17 @@ export const Header = ({
     email_info: 0
   });
 
-  const fetchNotifications = async () => {
+  const isFetchingNotifsRef = useRef(false);
+  const lastFetchNotifsTimeRef = useRef(0);
+
+  const fetchNotifications = async (force = false) => {
+    const now = Date.now();
+    if (!force && now - lastFetchNotifsTimeRef.current < 2500) {
+      return;
+    }
+    if (isFetchingNotifsRef.current) return;
+    isFetchingNotifsRef.current = true;
+    lastFetchNotifsTimeRef.current = now;
     try {
       const res = await fetchAPI('notifications');
       if (res.success && res.data) {
@@ -581,6 +595,8 @@ export const Header = ({
       }
     } catch (err) {
       console.error("Error fetching notifications:", err);
+    } finally {
+      isFetchingNotifsRef.current = false;
     }
   };
 
@@ -620,15 +636,15 @@ export const Header = ({
   };
 
   useEffect(() => {
-    fetchNotifications();
+    fetchNotifications(true);
     fetchNotifPrefs();
     const interval = setInterval(() => {
       if (!document.hidden) {
         fetchNotifications();
       }
-    }, 8000); // Polling every 8s only when tab is active
+    }, 30000); // Polling every 30s only when tab is active (SSE handles real-time)
     
-    const handleRealtimeUpdate = () => {
+    const handleNotificationTrigger = () => {
       fetchNotifications();
     };
 
@@ -644,17 +660,13 @@ export const Header = ({
       }
     };
 
-    window.addEventListener('notification-trigger', fetchNotifications);
-    window.addEventListener('realtime-update-received', handleRealtimeUpdate);
-    window.addEventListener('new-notification-received', handleRealtimeUpdate);
+    window.addEventListener('notification-trigger', handleNotificationTrigger);
     window.addEventListener('test-notification-toast', handleManualToastTest);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     
     return () => {
       clearInterval(interval);
-      window.removeEventListener('notification-trigger', fetchNotifications);
-      window.removeEventListener('realtime-update-received', handleRealtimeUpdate);
-      window.removeEventListener('new-notification-received', handleRealtimeUpdate);
+      window.removeEventListener('notification-trigger', handleNotificationTrigger);
       window.removeEventListener('test-notification-toast', handleManualToastTest);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };

@@ -20,6 +20,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { CurrencyInput } from '../components/ui/CurrencyInput';
 import { CopyButton } from '../components/ui/CopyButton';
 import { canEditPartnerOrSupplier, isSales } from '../utils/roleUtils';
+import { pushOverlay } from '../utils/overlayStack';
 
 interface CompanyDrawerProps {
   isOpen: boolean;
@@ -174,16 +175,21 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
+      const unregisterOverlay = pushOverlay('company-drawer', onClose, 2147483640);
       fetchUsers();
       fetchAllCompanies();
       fetchCampaigns();
+      return () => {
+        document.body.style.overflow = '';
+        unregisterOverlay();
+      };
     } else {
       document.body.style.overflow = '';
     }
     return () => {
       document.body.style.overflow = '';
     };
-  }, [isOpen]);
+  }, [isOpen, onClose]);
 
   const [baseData, setBaseData] = useState<any>(entity || {});
   const [baseTags, setBaseTags] = useState<string[]>(entity?.tags || []);

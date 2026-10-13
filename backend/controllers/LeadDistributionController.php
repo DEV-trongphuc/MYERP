@@ -41,6 +41,12 @@ class LeadDistributionController {
     }
 
     public function assignLead(array $auth): void {
+        $role = strtolower($auth['role'] ?? '');
+        $canAssign = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'lead_admin', 'sale_admin', 'saleadmin', 'team_lead', 'teamlead', 'leader'], true);
+        if (!$canAssign) {
+            respond(403, null, 'Bạn không có quyền phân bổ hoặc bàn giao lead cho nhân sự khác', false);
+        }
+
         $tid = $auth['tenant_id'];
         $body = getBody();
         $contactId = (int)($body['contact_id'] ?? $body['lead_id'] ?? 0);
@@ -50,21 +56,85 @@ class LeadDistributionController {
             respond(422, null, 'Vui lòng cung cấp contact_id và consultant_id', false);
         }
 
+        // Validate consultant exists and is active
+        $stmtUser = $this->db->prepare("SELECT id, full_name, email, is_active FROM users WHERE id = ? AND tenant_id = ?");
+        $stmtUser->execute([$consultantId, $tid]);
+        $consultant = $stmtUser->fetch();
+        if (!$consultant) {
+            respond(404, null, 'Không tìm thấy tư vấn viên được chỉ định', false);
+        }
+        if (isset($consultant['is_active']) && (int)$consultant['is_active'] === 0) {
+            respond(422, null, 'Không thể phân bổ lead cho nhân sự đã bị vô hiệu hóa hoặc nghỉ việc', false);
+        }
+
+        $stmtLead = $this->db->prepare("SELECT id, full_name, phone FROM contacts WHERE id = ? AND tenant_id = ?");
+        $stmtLead->execute([$contactId, $tid]);
+        $lead = $stmtLead->fetch();
+        if (!$lead) {
+            respond(404, null, 'Không tìm thấy thông tin khách hàng / lead', false);
+        }
+
         $stmt = $this->db->prepare("
             UPDATE contacts 
-            SET owner_id = ?, updated_at = NOW() 
+            SET owner_id = ?, pipeline_status = 'assigned', assigned_at = NOW(), updated_at = NOW() 
             WHERE id = ? AND tenant_id = ?
         ");
         $stmt->execute([$consultantId, $contactId, $tid]);
 
+        // Audit Trail
+        logInteraction($this->db, $tid, $auth['user_id'], 'system', 'Phân bổ Lead thủ công', "Bàn giao lead '{$lead['full_name']}' cho tư vấn viên {$consultant['full_name']}.", 'contact', $contactId);
+        logActivity($this->db, $tid, $auth['user_id'], 'ASSIGN_LEAD', 'contact', $contactId, json_encode([
+            'consultant_id' => $consultantId,
+            'consultant_name' => $consultant['full_name']
+        ]));
+
+        // Insert into distribution_logs for rotation / assignment tracking (DEF-CRM-03)
+        try {
+            $logDist = $this->db->prepare("
+                INSERT INTO distribution_logs (lead_id, assigned_to, round_id, status, message, received_at)
+                VALUES (?, ?, 0, 'assigned', ?, NOW())
+            ");
+            $assignerName = $auth['name'] ?? $auth['full_name'] ?? 'Quản trị viên';
+            $msg = "Phân bổ thủ công cho {$consultant['full_name']} bởi {$assignerName}";
+            $logDist->execute([$contactId, $consultantId, $msg]);
+        } catch (\Throwable $eDist) {
+            try {
+                $logDistFallback = $this->db->prepare("
+                    INSERT INTO distribution_logs (lead_id, assigned_to, status, message)
+                    VALUES (?, ?, 'assigned', ?)
+                ");
+                $logDistFallback->execute([$contactId, $consultantId, "Phân bổ thủ công cho {$consultant['full_name']}"]);
+            } catch (\Throwable $ex) {}
+        }
+
+        // Dispatch Notification to consultant
+        try {
+            require_once __DIR__ . '/../NotificationService.php';
+            NotificationService::send($this->db, $tid, 'LEAD_HANDOVER_NEW_SALE', [
+                'contact_id' => $contactId,
+                'lead_name' => $lead['full_name'] ?? 'Khách hàng',
+                'lead_phone' => $lead['phone'] ?? '',
+                'target_user_id' => $consultantId
+            ]);
+        } catch (\Throwable $notifEx) {
+            error_log("AssignLead Notification Error: " . $notifEx->getMessage());
+        }
+
         respond(200, [
             'contact_id' => $contactId,
             'owner_id' => $consultantId,
+            'consultant_name' => $consultant['full_name'],
             'assigned_at' => date('Y-m-d H:i:s')
         ], 'Phân bổ lead thành công');
     }
 
     public function releaseHeldLeads(array $auth): void {
+        $role = strtolower($auth['role'] ?? '');
+        $canRelease = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'lead_admin'], true);
+        if (!$canRelease) {
+            respond(403, null, 'Bạn không có quyền thu hồi lead về kho chung', false);
+        }
+
         $tid = $auth['tenant_id'];
         $body = getBody();
         $leadIds = $body['lead_ids'] ?? [];
@@ -74,7 +144,7 @@ class LeadDistributionController {
             $this->db->prepare("UPDATE contacts SET pipeline_status = 'new', owner_id = NULL, updated_at = NOW() WHERE id IN ($inClause) AND tenant_id = ?")
                 ->execute([$tid]);
         } else {
-            // Release all expired holding leads
+            // Release holding leads
             $this->db->prepare("UPDATE contacts SET pipeline_status = 'new', owner_id = NULL, updated_at = NOW() WHERE pipeline_status = 'held' AND tenant_id = ?")
                 ->execute([$tid]);
         }
@@ -83,6 +153,12 @@ class LeadDistributionController {
     }
 
     public function updateConfig(array $auth): void {
+        $role = strtolower($auth['role'] ?? '');
+        $canConfig = in_array($role, ['admin', 'superadmin', 'super_admin', 'director'], true);
+        if (!$canConfig) {
+            respond(403, null, 'Chỉ Ban Giám đốc hoặc Quản trị viên cấp cao mới có quyền thay đổi cấu hình phân bổ lead', false);
+        }
+
         $tid = $auth['tenant_id'];
         $body = getBody();
 
@@ -100,6 +176,12 @@ class LeadDistributionController {
     }
 
     public function deleteQueueItem(array $auth, int $id): void {
+        $role = strtolower($auth['role'] ?? '');
+        $canDelete = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'lead_admin'], true);
+        if (!$canDelete) {
+            respond(403, null, 'Bạn không có quyền xóa lead khỏi hàng đợi phân bổ', false);
+        }
+
         $tid = $auth['tenant_id'];
         // Remove from holding queue or reset lead
         $stmt = $this->db->prepare("UPDATE contacts SET pipeline_status = 'new', owner_id = NULL WHERE id = ? AND tenant_id = ?");

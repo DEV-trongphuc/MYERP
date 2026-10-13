@@ -466,6 +466,174 @@ function findConsultantByEmailOrName($conn, $value)
     return null;
 }
 
+/**
+ * Lấy ngày tương tác thực tế mới nhất của khách hàng theo SĐT / Email
+ * NGUYÊN TẮC BẤT KHẢ XÂM PHẠM: TUYỆT ĐỐI KHÔNG TÍNH THEO NGÀY TẠO (created_at / received_at)
+ * Chỉ tính mốc tương tác thực tế từ:
+ *  1. contacts.last_contact (lần liên hệ/chạm gần nhất)
+ *  2. activities (cuộc gọi, lịch hẹn, tư vấn)
+ *  3. notes (ghi chú của Sale, loại trừ ghi chú tự động hệ thống)
+ *  4. leads.last_interaction_date (chỉ khi có tương tác thực tế sau khi tạo)
+ */
+function getActualCustomerLastInteraction($conn, $phone, $email, $excludeLeadId = null)
+{
+    $phone = sanitizePhoneNumber($phone);
+    $email = sanitizeEmailAddress($email);
+
+    $phones = [];
+    if (!empty($phone)) {
+        $pClean = normalizePhone($phone);
+        if ($pClean) {
+            $phones[] = $pClean;
+            $phones[] = '0' . ltrim($pClean, '0');
+            $phones[] = ltrim($pClean, '0');
+            $phones[] = '84' . ltrim($pClean, '0');
+        }
+    }
+    $phones = array_values(array_unique(array_filter($phones)));
+
+    $emails = [];
+    if (!empty($email) && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $emails[] = strtolower($email);
+    }
+
+    if (empty($phones) && empty($emails)) {
+        return [
+            'hasRealInteraction' => false,
+            'lastInteractionDate' => null,
+            'monthsSinceLastInteraction' => 9999,
+            'ownerId' => null,
+            'contactId' => null
+        ];
+    }
+
+    // 1. Quét bảng contacts, activities, notes để lấy mốc tương tác thực tế
+    $contactWhere = [];
+    $contactParams = [];
+    $contactTypes = '';
+
+    if (!empty($phones)) {
+        $phIn = implode(',', array_fill(0, count($phones), '?'));
+        $contactWhere[] = "(c.phone IN ($phIn) OR c.mobile IN ($phIn) OR c.phone2 IN ($phIn))";
+        foreach ($phones as $p) { $contactParams[] = $p; $contactTypes .= 's'; }
+        foreach ($phones as $p) { $contactParams[] = $p; $contactTypes .= 's'; }
+        foreach ($phones as $p) { $contactParams[] = $p; $contactTypes .= 's'; }
+    }
+    if (!empty($emails)) {
+        $emIn = implode(',', array_fill(0, count($emails), '?'));
+        $contactWhere[] = "c.email IN ($emIn)";
+        foreach ($emails as $e) { $contactParams[] = $e; $contactTypes .= 's'; }
+    }
+
+    $cWhereClause = implode(' OR ', $contactWhere);
+    $cSql = "
+        SELECT c.id, c.owner_id, c.last_contact, c.created_at,
+               (SELECT MAX(a.created_at) FROM activities a 
+                WHERE a.deleted_at IS NULL AND ((a.related_type = 'contact' AND a.related_id = c.id) OR a.contact_id = c.id)) as max_activity_at,
+               (SELECT MAX(n.created_at) FROM notes n 
+                WHERE n.entity_type = 'contact' AND n.entity_id = c.id 
+                  AND n.body NOT LIKE '[Tự động]%' 
+                  AND n.body NOT LIKE '[Auto]%' 
+                  AND n.body NOT LIKE '[Phân bổ]%' 
+                  AND n.body NOT LIKE '[Giao data]%' 
+                  AND n.body NOT LIKE '[Import]%') as max_note_at
+        FROM contacts c
+        WHERE ($cWhereClause) AND c.deleted_at IS NULL
+        ORDER BY c.id DESC LIMIT 1
+    ";
+
+    $stmtC = $conn->prepare($cSql);
+    $realDates = [];
+    $contactOwnerId = null;
+    $contactId = null;
+
+    if ($stmtC) {
+        $stmtC->bind_param($contactTypes, ...$contactParams);
+        $stmtC->execute();
+        $cRes = $stmtC->get_result();
+        if ($cRes && $cRow = $cRes->fetch_assoc()) {
+            $contactId = (int)$cRow['id'];
+            $contactOwnerId = !empty($cRow['owner_id']) ? (int)$cRow['owner_id'] : null;
+            if (!empty($cRow['last_contact'])) {
+                $realDates[] = $cRow['last_contact'];
+            }
+            if (!empty($cRow['max_activity_at'])) {
+                $realDates[] = $cRow['max_activity_at'];
+            }
+            if (!empty($cRow['max_note_at'])) {
+                $realDates[] = $cRow['max_note_at'];
+            }
+        }
+        $stmtC->close();
+    }
+
+    // 2. Quét thêm bảng leads (nếu có cập nhật tương tác thực tế sau khi tạo)
+    $leadWhere = [];
+    $leadParams = [];
+    $leadTypes = '';
+    if (!empty($phones)) {
+        $phIn = implode(',', array_fill(0, count($phones), '?'));
+        $leadWhere[] = "l.phone IN ($phIn)";
+        foreach ($phones as $p) { $leadParams[] = $p; $leadTypes .= 's'; }
+    }
+    if (!empty($emails)) {
+        $emIn = implode(',', array_fill(0, count($emails), '?'));
+        $leadWhere[] = "l.email IN ($emIn)";
+        foreach ($emails as $e) { $leadParams[] = $e; $leadTypes .= 's'; }
+    }
+    $lWhereClause = implode(' OR ', $leadWhere);
+    $lExClause = $excludeLeadId ? " AND l.id != " . (int)$excludeLeadId : "";
+    $lSql = "
+        SELECT l.id, l.assigned_to, l.created_at, l.last_interaction_date 
+        FROM leads l 
+        WHERE ($lWhereClause) $lExClause 
+        ORDER BY l.id DESC LIMIT 1
+    ";
+    $stmtL = $conn->prepare($lSql);
+    $leadOwnerId = null;
+    if ($stmtL) {
+        $stmtL->bind_param($leadTypes, ...$leadParams);
+        $stmtL->execute();
+        $lRes = $stmtL->get_result();
+        if ($lRes && $lRow = $lRes->fetch_assoc()) {
+            $leadOwnerId = !empty($lRow['assigned_to']) ? (int)$lRow['assigned_to'] : null;
+            // Chỉ tính nếu last_interaction_date lớn hơn created_at tối thiểu 1 phút (tức có tương tác thực tế sau khi tạo)
+            if (!empty($lRow['last_interaction_date']) && !empty($lRow['created_at'])) {
+                $createdTs = strtotime($lRow['created_at']);
+                $interactTs = strtotime($lRow['last_interaction_date']);
+                if (($interactTs - $createdTs) > 60) {
+                    $realDates[] = $lRow['last_interaction_date'];
+                }
+            }
+        }
+        $stmtL->close();
+    }
+
+    if (empty($realDates)) {
+        return [
+            'hasRealInteraction' => false,
+            'lastInteractionDate' => null,
+            'monthsSinceLastInteraction' => 9999,
+            'ownerId' => $contactOwnerId ?: $leadOwnerId,
+            'contactId' => $contactId
+        ];
+    }
+
+    $latestDate = max($realDates);
+    $latestDt = new DateTime($latestDate);
+    $now = new DateTime();
+    $diff = $now->diff($latestDt);
+    $months = ($diff->format('%y') * 12) + $diff->format('%m');
+
+    return [
+        'hasRealInteraction' => true,
+        'lastInteractionDate' => $latestDate,
+        'monthsSinceLastInteraction' => $months,
+        'ownerId' => $contactOwnerId ?: $leadOwnerId,
+        'contactId' => $contactId
+    ];
+}
+
 function checkCRMInteraction($conn, $phone, $email, $ignoreReassignIfOwnerInactive = false, $excludeLeadId = null)
 {
     $phone = sanitizePhoneNumber($phone);
@@ -710,22 +878,43 @@ function checkCRMInteraction($conn, $phone, $email, $ignoreReassignIfOwnerInacti
         }
     }
 
-    if ($leadExists && $leadRow) {
-        $lastInteractionDate = !empty($leadRow['last_interaction_date']) ? $leadRow['last_interaction_date'] : date('Y-m-d H:i:s');
-        $lastInteraction = new DateTime($lastInteractionDate);
-        $now = new DateTime();
-        $diff = $now->diff($lastInteraction);
-        $months = ($diff->format('%y') * 12) + $diff->format('%m');
+    // -------------------------------------------------------------
+    // LẤY NGÀY TƯƠNG TÁC THỰC TẾ (TUYỆT ĐỐI KHÔNG TÍNH THEO NGÀY TẠO)
+    // -------------------------------------------------------------
+    $actualInteraction = getActualCustomerLastInteraction($conn, $phone, $email, $excludeLeadId);
+    $existingContactId = $actualInteraction['contactId'] ?: getContactIdByPhoneOrEmail($conn, $phone, $email);
+    $isBeforeHoSo = isContactBeforeHoSoStep($conn, $existingContactId);
 
-        $reassignIfOwnerInactive = get_system_setting($conn, 'reassign_if_owner_inactive');
-        if ($reassignIfOwnerInactive === '') {
-            $reassignIfOwnerInactive = '1'; // Default to ON (mặc định bật)
-        }
+    if (($leadExists && $leadRow) || $existingContactId) {
+        $hasRealInteraction = $actualInteraction['hasRealInteraction'];
+        $lastInteractionDate = $actualInteraction['lastInteractionDate'];
+        $months = $actualInteraction['monthsSinceLastInteraction'];
 
+        // Ưu tiên owner từ lead, nếu trống lấy owner từ contact
+        $assignedOwner = !empty($leadRow['assigned_to']) ? $leadRow['assigned_to'] : ($actualInteraction['ownerId'] ?? null);
         $consultantStatus = $leadRow['consultant_status'] ?? null;
         $leaveStart = $leadRow['leave_start'] ?? null;
         $leaveEnd = $leadRow['leave_end'] ?? null;
+        $consultantName = $leadRow['consultant_name'] ?? null;
         $today = date('Y-m-d');
+
+        if ($assignedOwner && (empty($consultantStatus) || empty($consultantName))) {
+            $stmtC = $conn->prepare("SELECT name, status, leave_start, leave_end, vacation_mode FROM consultants WHERE id = ?");
+            if ($stmtC) {
+                $stmtC->bind_param("i", $assignedOwner);
+                $stmtC->execute();
+                if ($cRow = $stmtC->get_result()->fetch_assoc()) {
+                    if (empty($consultantStatus)) $consultantStatus = $cRow['status'];
+                    if (empty($leaveStart)) $leaveStart = $cRow['leave_start'];
+                    if (empty($leaveEnd)) $leaveEnd = $cRow['leave_end'];
+                    if (empty($consultantName)) $consultantName = $cRow['name'];
+                    if (isset($cRow['vacation_mode']) && !isset($leadRow['vacation_mode'])) {
+                        $leadRow['vacation_mode'] = $cRow['vacation_mode'];
+                    }
+                }
+                $stmtC->close();
+            }
+        }
 
         $isActuallyOnLeave = false;
         if ($consultantStatus === 'leave' || (isset($leadRow['vacation_mode']) && $leadRow['vacation_mode'] == 1)) {
@@ -737,30 +926,44 @@ function checkCRMInteraction($conn, $phone, $email, $ignoreReassignIfOwnerInacti
         }
 
         $effectiveStatus = $isActuallyOnLeave ? 'leave' : $consultantStatus;
-
-        // Đánh giá xem có phải ngừng hoạt động hẳn hay không (chỉ status = 'inactive' mới tính là ngừng hoạt động)
-        // Nếu nghỉ phép (status = 'leave' hoặc có lịch nghỉ, vacation_mode), vẫn được coi là hoạt động/giữ khách cũ.
         $isInactive = ($consultantStatus === 'inactive');
 
-        if (!empty($leadRow['assigned_to'])) {
-            if ($reassignIfOwnerInactive === '1' && !$ignoreReassignIfOwnerInactive) {
-                // Chỉ chuyển giao cho Sale khác nếu Sale cũ đã NGỪNG HOẠT ĐỘNG (status = inactive)
-                // Nếu chỉ nghỉ phép (status = leave, vacation_mode = 1, hoặc lịch nghỉ), vẫn giữ lại khách cũ (isDuplicate = true)
-                $isDuplicate = !$isInactive;
-                $assignedTo = $isDuplicate ? $leadRow['assigned_to'] : null;
-            } else {
-                // OFF hoặc bỏ qua: Luôn coi là trùng và giữ nguyên Sale cũ
-                $isDuplicate = true;
-                $assignedTo = $leadRow['assigned_to'];
-            }
-        } else {
-            // No owner assigned yet (e.g. pending_approval)
-            $isDuplicate = true;
-            $assignedTo = null;
+        $reassignIfOwnerInactive = get_system_setting($conn, 'reassign_if_owner_inactive');
+        if ($reassignIfOwnerInactive === '') {
+            $reassignIfOwnerInactive = '1'; // Default to ON (mặc định bật)
         }
 
-        $existingContactId = getContactIdByPhoneOrEmail($conn, $phone, $email);
-        $isBeforeHoSo = isContactBeforeHoSoStep($conn, $existingContactId);
+        // QUY TẮC BẢO HỘ 6 THÁNG THEO NGÀY TƯƠNG TÁC (Tuyệt đối không tính theo ngày tạo):
+        // 1. Khách đã ở bước Hồ sơ trở đi: Luôn bảo hộ giữ cho Sale cũ.
+        // 2. Chưa từng có tương tác thực tế (hasRealInteraction = false): Tuyệt đối KHÔNG tính trùng 6 tháng (cho phép chia mới).
+        // 3. Có tương tác thực tế: Nếu khoảng cách tương tác < 6 tháng (hoặc cấu hình duplicate_check_months) thì tính là Trùng bảo hộ; nếu >= 6 tháng thì hết hạn bảo hộ, chia mới.
+        $dupCheckMonths = (int)get_system_setting($conn, 'duplicate_check_months');
+        if ($dupCheckMonths <= 0) $dupCheckMonths = 6;
+
+        $isWithinInteractionThreshold = $hasRealInteraction && ($months < $dupCheckMonths);
+
+        if (!$isBeforeHoSo) {
+            $isDuplicate = true;
+            $assignedTo = $assignedOwner;
+        } elseif ($isWithinInteractionThreshold) {
+            if (!empty($assignedOwner)) {
+                if ($reassignIfOwnerInactive === '1' && !$ignoreReassignIfOwnerInactive) {
+                    $isDuplicate = !$isInactive;
+                    $assignedTo = $isDuplicate ? $assignedOwner : null;
+                } else {
+                    $isDuplicate = true;
+                    $assignedTo = $assignedOwner;
+                }
+            } else {
+                $isDuplicate = true;
+                $assignedTo = null;
+            }
+        } else {
+            // Không có tương tác thực tế HOẶC ngày tương tác cuối đã >= 6 tháng:
+            // Không tính là trùng theo ngày tạo -> Cho phép coi là lead mới và chia lại vòng
+            $isDuplicate = false;
+            $assignedTo = null;
+        }
 
         return [
             'isDuplicate' => $isDuplicate,
@@ -768,12 +971,13 @@ function checkCRMInteraction($conn, $phone, $email, $ignoreReassignIfOwnerInacti
             'leadStatus' => $leadStatus,
             'monthsSinceLastInteraction' => $months,
             'assignedTo' => $assignedTo,
-            'assignedName' => $leadRow['consultant_name'] ?? 'Không rõ',
-            'lastInteractionDate' => $leadRow['last_interaction_date'] ?? null,
-            'originalAssignedTo' => $leadRow['assigned_to'] ?? null,
+            'assignedName' => $consultantName ?? 'Không rõ',
+            'lastInteractionDate' => $lastInteractionDate,
+            'originalAssignedTo' => $assignedOwner,
             'consultantStatus' => $effectiveStatus,
             'contactId' => $existingContactId,
-            'isBeforeHoSo' => $isBeforeHoSo
+            'isBeforeHoSo' => $isBeforeHoSo,
+            'hasRealInteraction' => $hasRealInteraction
         ];
     }
 
@@ -791,7 +995,8 @@ function checkCRMInteraction($conn, $phone, $email, $ignoreReassignIfOwnerInacti
         'originalAssignedTo' => null,
         'consultantStatus' => null,
         'contactId' => $existingContactId,
-        'isBeforeHoSo' => $isBeforeHoSo
+        'isBeforeHoSo' => $isBeforeHoSo,
+        'hasRealInteraction' => false
     ];
 }
 

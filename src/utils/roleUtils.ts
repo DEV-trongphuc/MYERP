@@ -393,7 +393,11 @@ export function canEditPartnerOrSupplier(input: RoleInput): boolean {
 export function canManageSystemSettings(input: RoleInput): boolean {
   if (!input) return false;
   const role = normalizeRole(input);
-  return isSystemAdmin(input) || ['assistant', 'tro_ly'].includes(role);
+  return (
+    isSystemAdmin(input) ||
+    isExecutive(input) ||
+    ['assistant', 'tro_ly', 'manager', 'sale_admin', 'saleadmin'].includes(role)
+  );
 }
 
 /**

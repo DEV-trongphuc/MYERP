@@ -589,10 +589,14 @@ class FinanceController
             $check->execute($cp);
             $inv = $check->fetch();
 
-            if (!$inv)
+            if (!$inv) {
+                if ($this->db->inTransaction()) $this->db->rollBack();
                 respond(404, null, 'Không tìm thấy hoặc không có quyền', false);
-            if ($inv['status'] === 'paid')
+            }
+            if ($inv['status'] === 'paid') {
+                if ($this->db->inTransaction()) $this->db->rollBack();
                 respond(400, null, 'Hóa đơn đã được thanh toán', false);
+            }
 
             $sql = "UPDATE invoices SET status='paid', paid_at=NOW(), is_inventory_deducted=1 WHERE id=? AND tenant_id=?";
             $p = [$id, $auth['tenant_id']];
@@ -998,17 +1002,17 @@ class FinanceController
     {
         if ($auth['role'] === 'viewer') respond(403, null, 'Bạn không có quyền tạo chi phí', false);
         $data = getBody();
-        if (empty($data['title']) || (!isset($data['amount']) || $data['amount'] === ''))
-            respond(400, null, 'Thiếu tiêu đề hoặc số tiền', false);
+        if (empty($data['title']))
+            respond(400, null, 'Thiếu tiêu đề', false);
 
-        $totalAmount = (float) $data['amount'];
+        $totalAmount = isset($data['amount']) && $data['amount'] !== '' ? (float) $data['amount'] : 0.0;
         if ($totalAmount < 0) respond(422, null, 'Số tiền chi phí không được âm', false);
         $entities = $data['entities'] ?? [];
 
         // Validate split amounts
         if (!empty($entities)) {
             $splitSum = array_reduce($entities, fn($s, $e) => $s + (float) ($e['amount'] ?? 0), 0);
-            if ($splitSum > $totalAmount) {
+            if ($totalAmount > 0 && $splitSum > $totalAmount) {
                 respond(422, null, 'Tổng số tiền phân bổ không được lớn hơn tổng số tiền chi phí', false);
             }
         }
@@ -1023,6 +1027,15 @@ class FinanceController
         $approver_id = !empty($data['approver_id']) ? (int)$data['approver_id'] : null;
         $approver_id_2 = !empty($data['approver_id_2']) ? (int)$data['approver_id_2'] : null;
         $approver_id_3 = !empty($data['approver_id_3']) ? (int)$data['approver_id_3'] : null;
+
+        $isExecutive = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true);
+        if (!$isExecutive) {
+            foreach (['approver_id', 'approver_id_2', 'approver_id_3'] as $af) {
+                if (!empty($data[$af]) && (int)$data[$af] === (int)$auth['user_id']) {
+                    respond(422, null, 'Người tạo đề xuất không được tự chỉ định mình làm người duyệt chi phí', false);
+                }
+            }
+        }
 
         // Fetch threshold for 3-level approval
         $threshold = 5000000;
@@ -1257,6 +1270,23 @@ class FinanceController
         if ($canUpdateRefund) {
             $fields[] = 'refund_image_url';
         }
+
+        $isExecutive = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true);
+        if (!$isExecutive) {
+            foreach (['approver_id', 'approver_id_2', 'approver_id_3'] as $af) {
+                if (array_key_exists($af, $data) && !empty($data[$af]) && (int)$data[$af] === (int)$auth['user_id']) {
+                    respond(422, null, 'Người tạo đề xuất không được tự chỉ định mình làm người duyệt chi phí', false);
+                }
+            }
+        }
+
+        if (array_key_exists('amount', $data)) {
+            $updateAmount = (float)$data['amount'];
+            if ($updateAmount < 0) {
+                respond(422, null, 'Số tiền chi phí không được âm', false);
+            }
+        }
+
         $sets = [];
         $params = [];
         foreach ($fields as $f) {
@@ -1316,7 +1346,7 @@ class FinanceController
                 respond(403, null, 'Chỉ người tạo phiếu, cấp duyệt hoặc ban quản trị/kế toán mới có quyền chỉnh sửa chi phí', false);
             }
 
-            $currentTotal = (float) ($data['amount'] ?? $row['amount']);
+            $currentTotal = (float) ($data['amount'] ?? $row['amount'] ?? 0);
             if ($currentTotal < 0) respond(422, null, 'Số tiền chi phí không được âm', false);
 
             if ($sets) {
@@ -1544,7 +1574,7 @@ class FinanceController
                             stripos($expenseRow['notes'] ?? '', 'hoa hồng') !== false;
 
             $isExecutive = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true);
-            if ($isCreator && !$isCommission && !$isExecutive && !$isAssigned) {
+            if ($isCreator && !$isCommission && !$isExecutive) {
                 $this->db->rollBack();
                 respond(403, null, 'Người tạo đề xuất không được tự phê duyệt chi phí của chính mình', false);
             }

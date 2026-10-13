@@ -331,7 +331,10 @@ class DealController {
             $stmt = $this->db->prepare($permissionSql . " FOR UPDATE");
             $stmt->execute($cp);
             $old = $stmt->fetchColumn();
-            if ($old === false) respond(404, null, 'Không tìm thấy hoặc không có quyền', false);
+            if ($old === false) {
+                if ($this->db->inTransaction()) $this->db->rollBack();
+                respond(404, null, 'Không tìm thấy hoặc không có quyền', false);
+            }
 
             $stageParam = trim((string)$b['stage_id']);
             $sStage = $this->db->prepare("SELECT id, is_won, is_lost FROM pipeline_stages WHERE (CAST(id AS CHAR)=? OR system_slug=?) AND tenant_id=? LIMIT 1");

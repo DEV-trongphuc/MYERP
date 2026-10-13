@@ -126,7 +126,7 @@ if (!function_exists('getActionModuleAndType')) {
             'reassign_lead', 'force_sync', 'save_ticket_settings', 'unlink_zalo',
             'test_email', 'block_lead', 'rollback_admin_action', 'update_lead_fields',
             'send_lead_reminder', 'register_night_shift', 'add_consultant_leave', 'delete_consultant_leave',
-            'save_workspace_settings'
+            'save_workspace_settings', 'update_compensations'
         ];
         
         $actionType = in_array($action, $writeActions) ? 'write' : 'read';
@@ -140,6 +140,10 @@ if (!function_exists('getActionModuleAndType')) {
             $module = 'hrm';
         } else if (strpos($action, 'attendance') !== false || strpos($action, 'checkin') !== false || strpos($action, 'check_in') !== false || strpos($action, 'shift') !== false) {
             $module = 'attendance';
+        } else if (in_array($action, [
+            'get_fair_share_stats', 'get_consultant_compensation_details', 'update_compensations'
+        ], true) || strpos($action, 'compensat') !== false) {
+            $module = 'leads';
         } else if (strpos($action, 'consultant') !== false || strpos($action, 'team') !== false) {
             $module = 'users';
         } else if (strpos($action, 'account') !== false) {

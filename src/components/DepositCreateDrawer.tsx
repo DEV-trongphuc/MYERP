@@ -14,6 +14,7 @@ import { DraftExitConfirmModal } from './ui/DraftExitConfirmModal';
 import { VietnameseDateInput } from './ui/VietnameseDateInput';
 import { AIContractImportModal } from './ui/AIContractImportModal';
 import type { ExtractedContractData } from '../utils/aiContractParser';
+import { pushOverlay } from '../utils/overlayStack';
 import api from '../api/axios';
 
 interface DepositCreateDrawerProps {
@@ -169,6 +170,14 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
       handleCloseAnimated();
     }
   };
+
+  useEffect(() => {
+    if (isOpen) {
+      return pushOverlay('deposit-create-drawer', () => {
+        handleRequestClose();
+      }, 120);
+    }
+  }, [isOpen, isClosing]);
 
   const handleRestoreDraft = () => {
     if (!existingDraft) return;
@@ -432,28 +441,85 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
       }
 
       setShowParticipantDropdown(false);
-      setNotes('');
-      setPrice('');
       setExpectedCommission('');
-      setSelectedProjectId('');
-      setSelectedContactId('');
       setUnitCode('');
-      setCurrency('VND');
       setExchangeRate('1');
 
       if (defaultContact) {
+        setNotes(defaultContact.notes ? String(defaultContact.notes) : '');
+        setPrice(defaultContact.price || defaultContact.total || defaultContact.amount || defaultContact.total_amount_VND ? String(defaultContact.price || defaultContact.total || defaultContact.amount || defaultContact.total_amount_VND) : '');
+        setSelectedProjectId(defaultContact.projectId || defaultContact.project_id ? String(defaultContact.projectId || defaultContact.project_id) : '');
+        setCurrency(defaultContact.currency ? String(defaultContact.currency) : 'VND');
+
         if (defaultContact.id) {
           setEntitySubtab('contact');
-          setSelectedContactId(String(defaultContact.id));
+          const cId = String(defaultContact.id);
+          setSelectedContactId(cId);
+          // Ensure contact is in contacts list so CustomSelect can display its label immediately
+          setContacts(prev => {
+            if (!prev.some(c => String(c.id) === cId)) {
+              return [
+                {
+                  id: Number(defaultContact.id),
+                  full_name: defaultContact.full_name || defaultContact.name || 'Khách hàng',
+                  phone: defaultContact.phone || '',
+                  email: defaultContact.email || ''
+                },
+                ...prev
+              ];
+            }
+            return prev;
+          });
         } else if (defaultContact.entity_type === 'company' || defaultContact.company_id) {
           setEntitySubtab('partner');
           setSelectedContactId(`comp_${defaultContact.company_id || defaultContact.entity_id}`);
         } else if (defaultContact.entity_type === 'supplier' || defaultContact.supplier_id) {
           setEntitySubtab('partner');
           setSelectedContactId(`sup_${defaultContact.supplier_id || defaultContact.entity_id}`);
+        } else {
+          // If no ID yet, but has phone/email/name, match against existing contacts
+          setSelectedContactId('');
+          const searchPhone = (defaultContact.phone || defaultContact.contact_phone || defaultContact['SĐT'] || '').replace(/\D/g, '');
+          const searchEmail = (defaultContact.email || defaultContact.contact_email || '').toLowerCase().trim();
+          const searchName = (defaultContact.full_name || defaultContact.name || defaultContact.customer_name || '').toLowerCase().trim();
+
+          const matched = contacts.find((c: any) => {
+            const cPhone = (c.phone || '').replace(/\D/g, '');
+            const cEmail = (c.email || '').toLowerCase().trim();
+            const cName = (c.full_name || c.name || '').toLowerCase().trim();
+            if (searchPhone && cPhone && (searchPhone.includes(cPhone) || cPhone.includes(searchPhone))) return true;
+            if (searchEmail && cEmail && searchEmail === cEmail) return true;
+            if (searchName && cName && (searchName.includes(cName) || cName.includes(searchName))) return true;
+            return false;
+          });
+
+          if (matched) {
+            setEntitySubtab('contact');
+            setSelectedContactId(String(matched.id));
+          }
         }
 
-        if (defaultContact._targetPipelineStatus === 'dong_le_phi_ho_so') {
+        // Prefill milestones / installments
+        const prefilledMilestones = defaultContact.milestones || defaultContact.installments || defaultContact.items;
+        if (Array.isArray(prefilledMilestones) && prefilledMilestones.length > 0) {
+          setMilestonesInput(
+            prefilledMilestones.map((m: any, idx: number) => {
+              let pDate = m.expected_pay_date || m.date || m.pay_date || '';
+              if (pDate && /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(pDate)) {
+                const parts = pDate.split('/');
+                pDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+              }
+              if (!pDate || isNaN(new Date(pDate).getTime())) {
+                pDate = new Date().toLocaleDateString('sv-SE');
+              }
+              return {
+                name: m.name || m.title || `Đợt ${idx + 1}`,
+                amount: String(m.amount || m.price || m.unit_price || ''),
+                expected_pay_date: pDate
+              };
+            })
+          );
+        } else if (defaultContact._targetPipelineStatus === 'dong_le_phi_ho_so') {
           setMilestonesInput([
             { name: 'Lệ phí hồ sơ', amount: '', expected_pay_date: new Date().toLocaleDateString('sv-SE') }
           ]);
@@ -467,12 +533,41 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
           setShowAIImportModal(true);
         }
       } else {
+        setNotes('');
+        setPrice('');
+        setSelectedProjectId('');
+        setSelectedContactId('');
+        setCurrency('VND');
         setMilestonesInput([
           { name: 'Đợt 1 - Thanh toán cọc', amount: '', expected_pay_date: new Date().toLocaleDateString('sv-SE') }
         ]);
       }
     }
   }, [isOpen, defaultContact]);
+
+  // Auto-match defaultContact against freshly loaded contacts if selectedContactId is still empty
+  useEffect(() => {
+    if (isOpen && defaultContact && !selectedContactId && contacts.length > 0) {
+      const searchPhone = (defaultContact.phone || defaultContact.contact_phone || defaultContact['SĐT'] || '').replace(/\D/g, '');
+      const searchEmail = (defaultContact.email || defaultContact.contact_email || '').toLowerCase().trim();
+      const searchName = (defaultContact.full_name || defaultContact.name || defaultContact.customer_name || '').toLowerCase().trim();
+
+      const matched = contacts.find((c: any) => {
+        const cPhone = (c.phone || '').replace(/\D/g, '');
+        const cEmail = (c.email || '').toLowerCase().trim();
+        const cName = (c.full_name || c.name || '').toLowerCase().trim();
+        if (searchPhone && cPhone && (searchPhone.includes(cPhone) || cPhone.includes(searchPhone))) return true;
+        if (searchEmail && cEmail && searchEmail === cEmail) return true;
+        if (searchName && cName && (searchName.includes(cName) || cName.includes(searchName))) return true;
+        return false;
+      });
+
+      if (matched) {
+        setEntitySubtab('contact');
+        setSelectedContactId(String(matched.id));
+      }
+    }
+  }, [isOpen, defaultContact, contacts, selectedContactId]);
 
   // Auto-recalculate expected commission from percentage
   useEffect(() => {
@@ -757,7 +852,7 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
     }
   };
 
-  const baseZIndex = zIndex || 2000000;
+  const baseZIndex = zIndex || 2147483641;
 
   const content = (
     <AnimatePresence>

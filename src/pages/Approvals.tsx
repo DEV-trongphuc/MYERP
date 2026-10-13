@@ -3940,6 +3940,8 @@ export default function Approvals() {
         await api.put(`/check-ins/${item.id}`, { status: 'approved' });
       } else if (item.type === 'attendance_bulk') {
         await api.post(`/check-ins/${item.id}/bulk-approve`, { status: 'approved' });
+      } else {
+        throw new Error(t('Loại đề xuất này chưa được hỗ trợ phê duyệt tự động. Vui lòng mở chi tiết để duyệt.'));
       }
       toast.success(t('Đã phê duyệt yêu cầu thành công!'));
       window.dispatchEvent(new CustomEvent('approval-updated'));
@@ -3992,6 +3994,8 @@ export default function Approvals() {
         await api.put(`/check-ins/${selectedItem.id}`, { status: 'rejected', reason: rejectReason });
       } else if (selectedItem.type === 'attendance_bulk') {
         await api.post(`/check-ins/${selectedItem.id}/bulk-approve`, { status: 'rejected', admin_note: rejectReason });
+      } else {
+        throw new Error(t('Loại đề xuất này chưa được hỗ trợ từ chối tự động. Vui lòng mở chi tiết để xử lý.'));
       }
       toast.success(t('Đã từ chối yêu cầu thành công!'));
       window.dispatchEvent(new CustomEvent('approval-updated'));
@@ -4022,6 +4026,8 @@ export default function Approvals() {
         try {
           if (item.type === 'expense') {
             await api.delete(`/expenses/${item.id}`);
+          } else if (item.type === 'po' || item.type === 'purchase_order') {
+            await api.delete(`/purchase-orders/${item.id}`);
           } else if (item.type === 'checkin') {
             await api.delete(`/check-ins/${item.id}`);
           } else if (item.type === 'leave') {
@@ -4030,11 +4036,14 @@ export default function Approvals() {
             await fetchAPI(`hrm/advances/${item.id}`, { method: 'DELETE' });
           } else if (item.type === 'attendance_bulk') {
             await api.delete(`/check-ins/bulk-requests/${item.id}`);
+          } else {
+            toast.error(t('Không hỗ trợ xóa loại yêu cầu này'));
+            return;
           }
           toast.success(t('Đã xóa yêu cầu thành công'));
           loadData();
         } catch (err: any) {
-          toast.error(err.response?.data?.message || t('Lỗi khi xóa yêu cầu'));
+          toast.error(err.response?.data?.message || err.message || t('Lỗi khi xóa yêu cầu'));
         }
       }
     });
@@ -5225,9 +5234,21 @@ export default function Approvals() {
 
     if (!approverUser) {
       if (item.type === 'checkin' || item.type === 'attendance_bulk') {
-        approverUser = usersByNameMap.get('phuongntd') || usersByNameMap.get('nguyễn thị duy phương');
+        const creatorId = Number(item.user_id || item.created_by || 0);
+        const creator = creatorId > 0 ? usersMap.get(creatorId) : null;
+        let directMgr = null;
+        if (creator?.team_id) {
+          directMgr = Array.from(usersMap.values()).find(u => 
+            Number(u.team_id) === Number(creator.team_id) && 
+            ['manager', 'leader', 'truongphong'].includes(String(u.role).toLowerCase()) && 
+            Number(u.id) !== Number(creator.id)
+          );
+        }
+        approverUser = directMgr || usersByNameMap.get('phuongntd') || usersByNameMap.get('nguyễn thị duy phương') ||
+          Array.from(usersMap.values()).find(u => (u.full_name || u.name || '').toLowerCase().includes('duy phương') || u.username === 'phuongntd');
       } else if (item.type === 'expense' && (item as any).title?.toLowerCase().includes('văn phòng phẩm')) {
-        approverUser = usersByNameMap.get('phuongntd') || usersByNameMap.get('nguyễn thị duy phương');
+        approverUser = usersByNameMap.get('phuongntd') || usersByNameMap.get('nguyễn thị duy phương') ||
+          Array.from(usersMap.values()).find(u => (u.full_name || u.name || '').toLowerCase().includes('duy phương') || u.username === 'phuongntd');
       }
     }
 
@@ -5276,6 +5297,22 @@ export default function Approvals() {
     // Step 1
     let app1Id = Number((item as any).approver_id || (item as any).manager_id || 0);
     let app1Name = (item as any).approver_name || '';
+
+    if (!app1Id && !app1Name && (item.type === 'checkin' || item.type === 'attendance_bulk')) {
+      const creatorId = Number(item.user_id || item.created_by || 0);
+      const creator = creatorId > 0 ? usersMap.get(creatorId) : null;
+      if (creator?.team_id) {
+        const directMgr = Array.from(usersMap.values()).find(u => 
+          Number(u.team_id) === Number(creator.team_id) && 
+          ['manager', 'leader', 'truongphong'].includes(String(u.role).toLowerCase()) && 
+          Number(u.id) !== Number(creator.id)
+        );
+        if (directMgr) {
+          app1Id = Number(directMgr.id);
+          app1Name = directMgr.full_name || directMgr.name;
+        }
+      }
+    }
 
     if (isPrintStampSendItem) {
       const mExec = rawRowNotes.match(/Người thực hiện:\s*([^\n]+)/i);
@@ -5383,6 +5420,15 @@ export default function Approvals() {
         }
       } else {
         relIds = trimmed.split(',').map((id: string) => Number(id.trim())).filter((id: number) => id > 0);
+      }
+    }
+
+    // Tự động thêm Trưởng phòng HCNS (Phương) vào Người theo dõi cho các đề xuất Chấm công / HR
+    if (item.type === 'checkin' || item.type === 'attendance_bulk' || item.type === 'leave') {
+      const phuongUser = usersByNameMap.get('phuongntd') || usersByNameMap.get('nguyễn thị duy phương') ||
+        Array.from(usersMap.values()).find(u => (u.full_name || u.name || '').toLowerCase().includes('duy phương') || u.username === 'phuongntd');
+      if (phuongUser && !relIds.includes(Number(phuongUser.id))) {
+        relIds.push(Number(phuongUser.id));
       }
     }
 
@@ -14940,9 +14986,26 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       return null;
     };
 
+    // Default HR Leader helper (Nguyễn Thị Duy Phương - HCNS)
+    const defaultHrLeader = effectiveUsers.find(u => 
+      (u.username && u.username.toLowerCase() === 'phuongntd') ||
+      (u.full_name && (u.full_name.toLowerCase().includes('duy phương') || u.full_name.toLowerCase().includes('nguyễn thị duy phương'))) ||
+      (u.name && (u.name.toLowerCase().includes('duy phương') || u.name.toLowerCase().includes('nguyễn thị duy phương'))) ||
+      ((u.role === 'hr' || (u.department && u.department.toLowerCase().includes('nhân sự'))) && ['manager', 'leader', 'admin', 'director'].includes(String(u.role).toLowerCase()))
+    );
+
+    // Direct team leader of creator (if exists, belongs to same team, and different from creator)
+    const directTeamLeader = creatorUser?.team_id ? effectiveUsers.find(u => 
+      Number(u.team_id) === Number(creatorUser.team_id) && 
+      ['manager', 'leader', 'truongphong'].includes(String(u.role).toLowerCase()) && 
+      Number(u.id) !== Number(creatorUser.id)
+    ) : null;
+
     const managerUser = findUserByIdOrName(app1Id, app1Name, t('Người duyệt Cấp 1'), app1Avatar)
-      || effectiveUsers.find(u => ['manager', 'director', 'admin'].includes(String(u.role).toLowerCase()))
-      || effectiveUsers.find(u => u.full_name?.includes('Nguyễn Thị Duy Phương'))
+      || directTeamLeader
+      || (isHrItem ? defaultHrLeader : null)
+      || (!isHrItem ? effectiveUsers.find(u => ['manager', 'director', 'admin'].includes(String(u.role).toLowerCase())) : null)
+      || defaultHrLeader
       || (app1Name || app1Id ? { id: app1Id || 1, full_name: app1Name || (app1Id ? `Người duyệt #${app1Id}` : 'Người duyệt Cấp 1'), name: app1Name || (app1Id ? `Người duyệt #${app1Id}` : 'Người duyệt Cấp 1'), avatar_url: app1Avatar } : null);
 
     const accountantUser = findUserByIdOrName(app2Id, app2Name, t('Người duyệt Cấp 2'), app2Avatar)
@@ -19383,6 +19446,23 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                   !relIds.includes(Number(u.id)) &&
                   (u.full_name || u.name || '').toLowerCase().includes(watcherSearch.toLowerCase())
                 );
+
+                const rawDesc = detail?.notes || detail?.description || detail?.reason || item.description || '';
+                const isHrWorkflow = item.type === 'leave' || item.type === 'checkin' || item.type === 'attendance_bulk' || rawDesc.includes('[Đăng ký làm việc từ xa]') || rawDesc.includes('[Đi muộn/Về sớm]') || rawDesc.includes('[Tăng ca]') || rawDesc.includes('[Nghỉ phép]');
+                const hrLeaderUser = effectiveUsers.find(u => 
+                  (u.username && u.username.toLowerCase() === 'phuongntd') ||
+                  (u.full_name && (u.full_name.toLowerCase().includes('duy phương') || u.full_name.toLowerCase().includes('nguyễn thị duy phương'))) ||
+                  (u.name && (u.name.toLowerCase().includes('duy phương') || u.name.toLowerCase().includes('nguyễn thị duy phương'))) ||
+                  ((u.role === 'hr' || (u.department && u.department.toLowerCase().includes('nhân sự'))) && ['manager', 'leader', 'admin', 'director'].includes(String(u.role).toLowerCase()))
+                );
+
+                // Tự động thêm Trưởng phòng HCNS (Phương) vào Người theo dõi cho các đề xuất HR nếu chưa có
+                if (isHrWorkflow && hrLeaderUser && !relUsers.some(u => Number(u.id) === Number(hrLeaderUser.id))) {
+                  relUsers.push({
+                    ...hrLeaderUser,
+                    role_title: hrLeaderUser.role_title || t('Phòng Hành chính - Nhân sự')
+                  });
+                }
 
                 return (
                   <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--color-border-light)' }}>

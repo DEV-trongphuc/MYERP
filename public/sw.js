@@ -1,5 +1,5 @@
 ﻿// MYERP Service Worker for PWA Omnibox Install & Desktop Push Notifications
-const SW_VERSION = 'myerp-sw-v1791692530476';
+const SW_VERSION = 'myerp-sw-v1791889450673';
 
 self.addEventListener('install', (event) => {
   // Force new service worker to activate immediately without waiting
@@ -24,9 +24,44 @@ self.addEventListener('message', (event) => {
 
 // Pass-through fetch handler for Chrome/Edge PWA installability requirements
 self.addEventListener('fetch', (event) => {
-  // Never cache API calls, version probes, or mutations
+  // 1. Only handle GET requests
   if (event.request.method !== 'GET') return;
-  
+
+  const url = new URL(event.request.url);
+
+  // 2. Completely bypass Service Worker in local dev environment (localhost / 127.0.0.1)
+  if (
+    url.hostname === 'localhost' ||
+    url.hostname === '127.0.0.1' ||
+    self.location.hostname === 'localhost' ||
+    self.location.hostname === '127.0.0.1'
+  ) {
+    return;
+  }
+
+  // 3. Never intercept backend API calls, action params, auth tokens, or chat streaming
+  if (
+    url.pathname.includes('/backend') ||
+    url.pathname.includes('api.php') ||
+    url.pathname.startsWith('/api') ||
+    url.pathname.includes('/chat/') ||
+    url.searchParams.has('action') ||
+    url.searchParams.has('token')
+  ) {
+    return;
+  }
+
+  // 4. Never intercept Server-Sent Events (SSE) or long-lived streams
+  const acceptHeader = event.request.headers.get('accept') || '';
+  if (acceptHeader.includes('text/event-stream')) {
+    return;
+  }
+
+  // 5. Never intercept version manifests, audio/video assets
+  if (url.pathname.endsWith('version.json') || url.pathname.endsWith('.mp3')) {
+    return;
+  }
+
   // Directly fetch from live network - no stale offline cache
   event.respondWith(fetch(event.request));
 });
@@ -36,9 +71,9 @@ self.addEventListener('push', (event) => {
   if (!event.data) return;
   try {
     const data = event.data.json();
-    const title = data.title || 'MYERP ThÃ´ng BÃ¡o';
+    const title = data.title || 'MYERP ThÃƒÂ´ng BÃƒÂ¡o';
     const options = {
-      body: data.body || 'Báº¡n cÃ³ thÃ´ng bÃ¡o má»›i tá»« há»‡ thá»‘ng.',
+      body: data.body || 'BÃ¡ÂºÂ¡n cÃƒÂ³ thÃƒÂ´ng bÃƒÂ¡o mÃ¡Â»â€ºi tÃ¡Â»Â« hÃ¡Â»â€¡ thÃ¡Â»â€˜ng.',
       icon: '/LOGO.jpg',
       badge: '/LOGO.jpg',
       vibrate: [100, 50, 100],
@@ -50,7 +85,7 @@ self.addEventListener('push', (event) => {
   } catch (err) {
     const text = event.data.text();
     event.waitUntil(
-      self.registration.showNotification('MYERP ThÃ´ng BÃ¡o', {
+      self.registration.showNotification('MYERP ThÃƒÂ´ng BÃƒÂ¡o', {
         body: text,
         icon: '/LOGO.jpg'
       })

@@ -1,9 +1,9 @@
-﻿import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { withRouterFreezer } from '../components/RouterFreezer';
 import {
   Scale, Users, AlertTriangle, BarChart2, Info,
   TrendingUp, Sparkles, CheckCircle, Layers,
-  RotateCcw, Settings, Copy, ChevronDown, ChevronUp
+  RotateCcw, Settings, Copy, ChevronDown, ChevronUp, Zap
 } from 'lucide-react';
 import {
   Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -46,6 +46,12 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [copyReportText, setCopyReportText] = useState('');
+
+  // Quick Active Compensation Modal State
+  const [quickCompModalOpen, setQuickCompModalOpen] = useState(false);
+  const [quickCompData, setQuickCompData] = useState<Record<number, number>>({});
+  const [quickCompReasons, setQuickCompReasons] = useState<Record<number, string>>({});
+  const [isSavingQuickComp, setIsSavingQuickComp] = useState(false);
 
   // Compensation Details Modal State
   const [showDetailsModal, setShowDetailsModal] = useState(false);
@@ -299,7 +305,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
     if (!roundFilter) return; // Guard to prevent fetching before round filter is initialized
     setLoading(true);
     try {
-      const url = `get_fair_share_stats&date=${encodeURIComponent(dateFilter)}&round_id=${roundFilter}`;
+      const url = `get_fair_share_stats?date=${encodeURIComponent(dateFilter)}&round_id=${roundFilter}`;
       const res = await fetchAPI(url);
       if (signal?.aborted) return;
 
@@ -312,6 +318,53 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
       console.error('Error fetching fair share stats:', e);
     }
     setLoading(false);
+  };
+
+  const handleOpenQuickCompModal = (targetConsultantId?: number) => {
+    const list = activeData?.consultants || data?.consultants;
+    if (!list || list.length === 0) {
+      toast.error(t("Chưa có danh sách tư vấn viên trong vòng này"));
+      return;
+    }
+    const initialComp: Record<number, number> = {};
+    const initialReasons: Record<number, string> = {};
+    list.forEach((c: any) => {
+      initialComp[c.id] = c.pending_compensation || 0;
+      initialReasons[c.id] = '';
+    });
+    if (targetConsultantId && initialComp[targetConsultantId] !== undefined) {
+      initialComp[targetConsultantId] = (initialComp[targetConsultantId] || 0) + 1;
+    }
+    setQuickCompData(initialComp);
+    setQuickCompReasons(initialReasons);
+    setQuickCompModalOpen(true);
+  };
+
+  const handleSaveQuickComp = async () => {
+    if (!roundFilter || isSavingQuickComp) return;
+    setIsSavingQuickComp(true);
+    try {
+      const payload = {
+        round_id: parseInt(roundFilter, 10),
+        compensations: quickCompData,
+        reasons: quickCompReasons
+      };
+      const res = await fetchAPI('update_compensations', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      if (res.success) {
+        toast.success(t('Đã cập nhật Bù Data thành công!'));
+        setQuickCompModalOpen(false);
+        fetchStats();
+      } else {
+        toast.error(res.message || t('Có lỗi xảy ra khi lưu bù data'));
+      }
+    } catch (e: any) {
+      toast.error(t('Lỗi: ') + (e?.message || e));
+    } finally {
+      setIsSavingQuickComp(false);
+    }
   };
 
   useEffect(() => {
@@ -661,7 +714,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
     setCompensationDetails(null);
     try {
       const activeDateFilter = overrideDateFilter || dateFilter;
-      const url = `get_consultant_compensation_details&consultant_id=${consultantId}&date=${encodeURIComponent(activeDateFilter)}&round_id=${roundFilter}`;
+      const url = `get_consultant_compensation_details?consultant_id=${consultantId}&date=${encodeURIComponent(activeDateFilter)}&round_id=${roundFilter}`;
       const res = await fetchAPI(url);
       if (res.success) {
         setCompensationDetails(res.data);
@@ -961,6 +1014,24 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
             <Settings size={16} className={isSimulating ? 'spin' : ''} />
             <span>{isSimulating ? t('Tắt Giả lập') : t('Giả Lập Live')}</span>
           </button>
+          {roundFilter && (
+            <button
+              className="btn secondary"
+              onClick={() => handleOpenQuickCompModal()}
+              style={{
+                height: 40,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '0 14px',
+                fontWeight: 600
+              }}
+              title={t("Bù Data chủ động cho các TVV trong vòng")}
+            >
+              <Zap size={16} />
+              <span>{t("Bù Chủ Động")}</span>
+            </button>
+          )}
           <button
             className="btn outline"
             onClick={handleCopyReport}
@@ -1515,6 +1586,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                   <th style={{ padding: '14px 18px', fontSize: '0.72rem', color: 'var(--color-text-light)', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.04em', textAlign: 'center' }}>{t("Duyệt Ticket")}</th>
                   <th style={{ padding: '14px 18px', fontSize: '0.72rem', color: 'var(--color-text-light)', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.04em', textAlign: 'center' }}>{t("Data bù")}</th>
                   <th style={{ padding: '14px 18px', fontSize: '0.72rem', color: 'var(--color-text-light)', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.04em', textAlign: 'right' }}>{t("Độ Lệch")}</th>
+                  <th style={{ padding: '14px 18px', fontSize: '0.72rem', color: 'var(--color-text-light)', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.04em', textAlign: 'center', width: '110px' }}>{t("Hành động")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1742,6 +1814,17 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                           {deviationLabel}
                         </span>
                       </td>
+                      <td style={{ padding: '14px 18px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          className="btn secondary sm"
+                          onClick={() => handleOpenQuickCompModal(c.id)}
+                          title={t("Bù Data chủ động cho TVV này")}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', fontSize: '0.75rem', fontWeight: 600, borderRadius: 6 }}
+                        >
+                          <Zap size={12} /> {t("Bù Data")}
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}
@@ -1755,6 +1838,115 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
           )}
         </div>
       </div>
+
+      {/* Quick Active Compensation Modal */}
+      {quickCompModalOpen && (
+        <CustomModal
+          isOpen={quickCompModalOpen}
+          onClose={() => setQuickCompModalOpen(false)}
+          title={t("Quản lý Bù Data Chủ Động")}
+          width="560px"
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '0.5rem 0' }}>
+            <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>
+              {t("Vòng:")} <strong>{rounds.find(r => String(r.id) === String(roundFilter))?.round_name || `ID ${roundFilter}`}</strong>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '55vh', overflowY: 'auto' }} className="custom-scrollbar">
+              {(activeData?.consultants || data?.consultants || []).map((c: any) => {
+                const currentVal = quickCompData[c.id] ?? (c.pending_compensation || 0);
+                const hasChanged = currentVal !== (c.pending_compensation || 0);
+                return (
+                  <div
+                    key={c.id}
+                    style={{
+                      padding: '12px 14px',
+                      borderRadius: 10,
+                      border: `1px solid ${hasChanged ? 'var(--color-primary)' : 'var(--color-border-light)'}`,
+                      background: hasChanged ? 'rgba(189, 29, 45, 0.03)' : 'var(--color-bg)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8,
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <Avatar src={c.avatar} name={c.name} size={34} />
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--color-text)' }}>{c.name}</div>
+                          <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>ID: {c.id} • Ratio: {c.receive_ratio} • Hiện có: {c.pending_compensation || 0} suất bù</div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <button
+                          type="button"
+                          className="btn outline sm"
+                          style={{ width: 30, height: 30, padding: 0, justifyContent: 'center', fontSize: '1rem', fontWeight: 700 }}
+                          onClick={() => setQuickCompData(prev => ({ ...prev, [c.id]: Math.max(0, (prev[c.id] || 0) - 1) }))}
+                        >
+                          -
+                        </button>
+                        <span style={{ minWidth: 32, textAlign: 'center', fontWeight: 800, fontSize: '1.05rem', color: currentVal > 0 ? 'var(--color-primary)' : 'var(--color-text)' }}>
+                          {currentVal}
+                        </span>
+                        <button
+                          type="button"
+                          className="btn outline sm"
+                          style={{ width: 30, height: 30, padding: 0, justifyContent: 'center', fontSize: '1rem', fontWeight: 700 }}
+                          onClick={() => setQuickCompData(prev => ({ ...prev, [c.id]: (prev[c.id] || 0) + 1 }))}
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+
+                    {currentVal > (c.pending_compensation || 0) && (
+                      <input
+                        type="text"
+                        placeholder={t("Nhập lý do bù chủ động (tùy chọn)...")}
+                        value={quickCompReasons[c.id] || ''}
+                        onChange={(e) => setQuickCompReasons(prev => ({ ...prev, [c.id]: e.target.value }))}
+                        style={{
+                          width: '100%',
+                          padding: '6px 10px',
+                          fontSize: '0.75rem',
+                          borderRadius: 6,
+                          border: '1px solid var(--color-border)',
+                          background: 'var(--color-surface)',
+                          color: 'var(--color-text)'
+                        }}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid var(--color-border)' }}>
+              <button
+                type="button"
+                className="btn outline"
+                onClick={() => setQuickCompModalOpen(false)}
+                disabled={isSavingQuickComp}
+              >
+                {t("Đóng")}
+              </button>
+              <button
+                type="button"
+                className="btn primary"
+                onClick={handleSaveQuickComp}
+                disabled={isSavingQuickComp}
+                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                <Zap size={14} />
+                <span>{isSavingQuickComp ? t("Đang lưu...") : t("Lưu Bù Data")}</span>
+              </button>
+            </div>
+          </div>
+        </CustomModal>
+      )}
 
       {/* Custom Date Modal (from Dashboard.tsx) */}
       <CustomModal

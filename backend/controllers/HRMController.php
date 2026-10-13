@@ -1104,24 +1104,45 @@ class HRMController {
             respond(400, null, 'Số tiền tạm ứng phải lớn hơn 0', false);
         }
 
+        $tid = (int)($auth['tenant_id'] ?? 0);
+        $uid = (int)($auth['user_id'] ?? 0);
         $approverId = !empty($b['approver_id']) ? (int)$b['approver_id'] : null;
         if (empty($approverId)) {
-            $stmtLeader = $this->db->prepare("SELECT t.leader_id FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ?");
-            $stmtLeader->execute([$auth['user_id']]);
+            $stmtLeader = $this->db->prepare("SELECT t.leader_id FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ? AND u.tenant_id = ?");
+            $stmtLeader->execute([$uid, $tid]);
             $leadId = $stmtLeader->fetchColumn();
-            if (!empty($leadId) && (int)$leadId !== (int)$auth['user_id']) {
+            if (!empty($leadId) && (int)$leadId !== $uid) {
                 $approverId = (int)$leadId;
             } else {
-                $stmtDir = $this->db->query("SELECT id FROM users WHERE LOWER(role) IN ('director', 'superadmin', 'super_admin') AND id != " . (int)$auth['user_id'] . " LIMIT 1");
-                $approverId = (int)($stmtDir->fetchColumn() ?: 1003);
+                $stmtDir = $this->db->prepare("SELECT id FROM users WHERE LOWER(role) IN ('director', 'superadmin', 'super_admin') AND tenant_id = ? AND id != ? AND is_active = 1 ORDER BY id ASC LIMIT 1");
+                $stmtDir->execute([$tid, $uid]);
+                $dirId = $stmtDir->fetchColumn();
+                if (!$dirId) {
+                    $stmtAdmin = $this->db->prepare("SELECT id FROM users WHERE LOWER(role) = 'admin' AND tenant_id = ? AND is_active = 1 ORDER BY id ASC LIMIT 1");
+                    $stmtAdmin->execute([$tid]);
+                    $dirId = $stmtAdmin->fetchColumn();
+                }
+                $approverId = $dirId ? (int)$dirId : null;
             }
         }
         $approverId2 = !empty($b['approver_id_2']) ? (int)$b['approver_id_2'] : null;
         $relatedUserIds = !empty($b['related_user_ids']) ? (is_array($b['related_user_ids']) ? json_encode($b['related_user_ids']) : $b['related_user_ids']) : null;
 
-        // Cấp Quản lý trở lên toàn quyền tự duyệt tạm ứng của chính mình; nhân viên cấp dưới bắt buộc chờ cấp trên duyệt
-        $isManagerOrAbove = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager'], true);
-        $isSelfApproved = $isManagerOrAbove && ($approverId > 0 && $approverId === (int)$auth['user_id'] && (empty($approverId2) || $approverId2 === (int)$auth['user_id']));
+        // Chỉ Ban Giám đốc / Superadmin mới có quyền tự duyệt tạm ứng của chính mình; Quản lý và nhân sự cấp dưới bắt buộc chờ Ban Giám đốc duyệt
+        $isExecutive = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true);
+        if (!$isExecutive && ($approverId === $uid || $approverId2 === $uid)) {
+            $stmtDir = $this->db->prepare("SELECT id FROM users WHERE LOWER(role) IN ('director', 'superadmin', 'super_admin') AND tenant_id = ? AND id != ? AND is_active = 1 ORDER BY id ASC LIMIT 1");
+            $stmtDir->execute([$tid, $uid]);
+            $dirId = $stmtDir->fetchColumn();
+            if (!$dirId) {
+                $stmtAdmin = $this->db->prepare("SELECT id FROM users WHERE LOWER(role) = 'admin' AND tenant_id = ? AND is_active = 1 ORDER BY id ASC LIMIT 1");
+                $stmtAdmin->execute([$tid]);
+                $dirId = $stmtAdmin->fetchColumn();
+            }
+            $approverId = $dirId ? (int)$dirId : null;
+            if ($approverId2 === $uid) $approverId2 = null;
+        }
+        $isSelfApproved = $isExecutive && ($approverId > 0 && $approverId === (int)$auth['user_id'] && (empty($approverId2) || $approverId2 === (int)$auth['user_id']));
         $initialStatus = $isSelfApproved ? 'approved' : 'pending';
         $statusL1 = $isSelfApproved ? 'approved' : 'pending';
         $statusL2 = $isSelfApproved ? (!empty($approverId2) ? 'approved' : 'none') : ($approverId2 ? 'pending' : 'none');
@@ -1199,8 +1220,8 @@ class HRMController {
 
         $this->db->beginTransaction();
         try {
-            $stmtA = $this->db->prepare("SELECT a.*, u.full_name FROM hrm_salary_advances a JOIN users u ON a.user_id = u.id WHERE a.id = ? AND a.tenant_id = ? FOR UPDATE");
-            $stmtA->execute([$id, $auth['tenant_id']]);
+            $stmtA = $this->db->prepare("SELECT a.*, u.full_name FROM hrm_salary_advances a JOIN users u ON a.user_id = u.id WHERE a.id = ? FOR UPDATE");
+            $stmtA->execute([$id]);
             $advRow = $stmtA->fetch(PDO::FETCH_ASSOC);
 
             if (!$advRow) {
@@ -1213,11 +1234,11 @@ class HRMController {
             $isSuperAdmin = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true);
             $isPrivileged = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr', 'leader', 'team_lead', 'teamlead', 'marketing_lead'], true);
 
-            $isManagerOrAbove = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager'], true);
+            $isExecutive = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true);
             $isCreator = ((int)$auth['user_id'] === (int)$advRow['user_id']);
-            if ($isCreator && !$isManagerOrAbove) {
+            if ($isCreator && !$isExecutive) {
                 $this->db->rollBack();
-                respond(403, null, 'Chỉ cấp Quản lý trở lên mới có thẩm quyền tự phê duyệt đề xuất tạm ứng của chính mình', false);
+                respond(403, null, 'Chỉ Ban Giám đốc mới có thẩm quyền phê duyệt đề xuất tạm ứng của cấp Quản lý', false);
             }
 
             if (!$isApprover1 && !$isApprover2 && !$isPrivileged) {
@@ -1254,8 +1275,8 @@ class HRMController {
                 if (!empty($approverNote) && $approverNote !== 'Không có ghi chú thêm') {
                     $reasonAppend = "\n[Từ chối: " . $approverNote . "]";
                     try {
-                        $stmtReason = $this->db->prepare("UPDATE hrm_salary_advances SET reason = CONCAT(COALESCE(reason, ''), ?) WHERE id = ? AND tenant_id = ?");
-                        $stmtReason->execute([$reasonAppend, $id, $auth['tenant_id']]);
+                        $stmtReason = $this->db->prepare("UPDATE hrm_salary_advances SET reason = CONCAT(COALESCE(reason, ''), ?) WHERE id = ?");
+                        $stmtReason->execute([$reasonAppend, $id]);
                     } catch (\Throwable $e) {}
                 }
             } else {
@@ -1286,9 +1307,8 @@ class HRMController {
             $updateFields[] = "status = ?";
             $params[] = $nextStatus;
             $params[] = $id;
-            $params[] = $auth['tenant_id'];
 
-            $updateSql = "UPDATE hrm_salary_advances SET " . implode(", ", $updateFields) . " WHERE id = ? AND tenant_id = ?";
+            $updateSql = "UPDATE hrm_salary_advances SET " . implode(", ", $updateFields) . " WHERE id = ?";
             $stmtUpdate = $this->db->prepare($updateSql);
             $stmtUpdate->execute($params);
 
@@ -2517,28 +2537,34 @@ class HRMController {
         }
 
         // 3. Quét ca trực & OT đã được duyệt
-        $stmtShifts = $db->prepare("
-            SELECT shift_type, ot_hours, approved
-            FROM shift_registrations
-            WHERE user_id = ? 
-              AND shift_date >= ? AND shift_date <= ?
-              AND (approved = 1 OR status = 'approved')
-        ");
-        $stmtShifts->execute([$userId, $fromDate, $toDate]);
-        $shifts = $stmtShifts->fetchAll(PDO::FETCH_ASSOC) ?: [];
-
         $otHours = 0.0;
         $nightShifts = 0;
         $weekendShifts = 0;
 
-        foreach ($shifts as $s) {
-            if ($s['shift_type'] === 'overtime') {
-                $otHours += (float)($s['ot_hours'] ?? 0);
-            } elseif ($s['shift_type'] === 'night') {
-                $nightShifts++;
-            } elseif ($s['shift_type'] === 'weekend') {
-                $weekendShifts++;
-            }
+        try {
+            $stmtNight = $db->prepare("
+                SELECT COUNT(*) FROM night_shift_registrations 
+                WHERE user_id = ? AND shift_date >= ? AND shift_date <= ? AND approved = 1
+            ");
+            $stmtNight->execute([$userId, $fromDate, $toDate]);
+            $nightShifts = (int)$stmtNight->fetchColumn();
+
+            $stmtWeekend = $db->prepare("
+                SELECT COUNT(*) FROM weekend_shift_registrations 
+                WHERE user_id = ? AND shift_date >= ? AND shift_date <= ? AND approved = 1
+            ");
+            $stmtWeekend->execute([$userId, $fromDate, $toDate]);
+            $weekendShifts = (int)$stmtWeekend->fetchColumn();
+
+            $stmtOt = $db->prepare("
+                SELECT COALESCE(SUM(total_days * 8), 0.0) FROM hrm_leave_requests 
+                WHERE user_id = ? AND leave_type = 'overtime' AND status = 'approved'
+                  AND DATE(start_date) >= ? AND DATE(start_date) <= ?
+            ");
+            $stmtOt->execute([$userId, $fromDate, $toDate]);
+            $otHours = (float)($stmtOt->fetchColumn() ?: 0.0);
+        } catch (\Throwable $eShifts) {
+            error_log('Error querying shifts in getAttendanceConfirmationOverview: ' . $eShifts->getMessage());
         }
 
         // 4. Tổng công tính lương
@@ -3123,13 +3149,31 @@ class HRMController {
             }
         }
 
-        // 4. Pending Checkins (Loại trừ check-in của chính mình)
+        // 4. Pending Checkins - CHỈ LẤY ĐƠN BỔ SUNG CHẤM CÔNG (Bỏ giải trình đi trễ vì đi trễ auto-accept)
         if (in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'hr'], true) || !empty($managedUserIds)) {
-            $sqlCheck = "SELECT c.id, u.full_name as employee_name, c.check_in_date, c.check_in_time, c.late_minutes, c.reason, c.status, 
-                                CONCAT(c.check_in_date, ' ', c.check_in_time) as created_at
+            // Lấy ID của Trưởng phòng HCNS (Phương) để tự động gắn vào người theo dõi
+            $phuongId = 0;
+            try {
+                $stmtHrP = $this->db->prepare("SELECT id FROM users WHERE (username = 'phuongntd' OR full_name LIKE '%Duy Phương%' OR role = 'hr') LIMIT 1");
+                $stmtHrP->execute();
+                $phuongId = (int)$stmtHrP->fetchColumn();
+            } catch (\Throwable $eP) {}
+
+            $sqlCheck = "SELECT c.id, c.user_id, c.manager_id, u.full_name as employee_name, u.avatar_url as employee_avatar, u.team_id,
+                                c.check_in_date, c.check_in_time, c.late_minutes, c.reason, c.status, 
+                                CONCAT(c.check_in_date, ' ', c.check_in_time) as created_at,
+                                m.full_name as approver_name, m.avatar_url as approver_avatar,
+                                t_lead.id as team_leader_id, t_lead.full_name as team_leader_name, t_lead.avatar_url as team_leader_avatar
                          FROM check_ins c
                          JOIN users u ON c.user_id = u.id
-                         WHERE u.tenant_id = ? AND c.status = 'pending_approval' AND c.user_id != ?";
+                         LEFT JOIN users m ON c.manager_id = m.id
+                         LEFT JOIN teams t ON u.team_id = t.id
+                         LEFT JOIN users t_lead ON t.leader_id = t_lead.id
+                         WHERE u.tenant_id = ? 
+                           AND c.status = 'pending_approval' 
+                           AND c.user_id != ?
+                           AND (c.reason IS NULL OR (c.reason NOT LIKE '%Ngoài bán kính%' AND c.reason NOT LIKE '%Không có tọa độ GPS%'))
+                           AND (c.late_minutes = 0 OR c.reason LIKE '%Bổ sung%' OR c.reason LIKE '%Quên%')";
             $pCheck = [$auth['tenant_id'], $userId];
             if (!in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'hr'], true)) {
                 $placeholders = implode(',', array_fill(0, count($managedUserIds), '?'));
@@ -3141,17 +3185,26 @@ class HRMController {
             $stmtCheckins->execute($pCheck);
             $checkins = $stmtCheckins->fetchAll(PDO::FETCH_ASSOC);
             foreach ($checkins as $c) {
-                $isLate = (int)($c['late_minutes'] ?? 0) > 0;
-                $title = $isLate ? ('Giải trình đi trễ ngày ' . $c['check_in_date']) : ('Bổ sung chấm công ngày ' . $c['check_in_date']);
-                $desc = $isLate 
-                    ? ('Đi trễ ' . $c['late_minutes'] . ' phút (Check-in lúc ' . $c['check_in_time'] . '). Lý do: "' . $c['reason'] . '"')
-                    : ('Bổ sung chấm công (Check-in lúc ' . $c['check_in_time'] . '). Lý do: "' . ($c['reason'] ?: 'Quên chấm công') . '"');
+                $title = 'Bổ sung chấm công ngày ' . $c['check_in_date'];
+                $desc = 'Bổ sung chấm công (Check-in lúc ' . $c['check_in_time'] . '). Lý do: "' . ($c['reason'] ?: 'Quên chấm công') . '"';
+                $mgrId = (int)($c['manager_id'] ?: $c['team_leader_id'] ?: 0);
+                $mgrName = $c['approver_name'] ?: $c['team_leader_name'] ?: 'Quản lý trực tiếp';
+                $mgrAvatar = $c['approver_avatar'] ?: $c['team_leader_avatar'] ?: null;
+
                 $pending[] = [
                     'id' => (int)$c['id'],
                     'type' => 'checkin',
+                    'user_id' => (int)$c['user_id'],
                     'employee_name' => $c['employee_name'],
+                    'employee_avatar' => $c['employee_avatar'] ?? null,
+                    'manager_id' => $mgrId ?: null,
+                    'approver_id' => $mgrId ?: null,
+                    'approver_name' => $mgrName,
+                    'approver_avatar' => $mgrAvatar,
+                    'related_user_ids' => $phuongId > 0 ? [$phuongId] : [],
                     'title' => $title,
                     'description' => $desc,
+                    'status' => $c['status'],
                     'created_at' => $c['created_at']
                 ];
             }
@@ -4096,14 +4149,32 @@ class HRMController {
             ];
         }
 
-        // 4. All Checkins (Chỉ lấy khi là đơn đề xuất chờ duyệt hoặc có lý do giải trình thực sự từ nhân viên)
-        $condCheckin = "(c.status = 'pending_approval' OR (c.reason IS NOT NULL AND TRIM(c.reason) != '' AND c.reason NOT LIKE 'Duyệt%' AND c.reason NOT LIKE 'Tự động%'))";
+        // 4. All Checkins - CHỈ LẤY ĐƠN BỔ SUNG CHẤM CÔNG (Loại bỏ giải trình đi trễ)
+        $condCheckin = "c.status = 'pending_approval' 
+            AND (c.reason IS NULL OR (c.reason NOT LIKE '%Ngoài bán kính%' AND c.reason NOT LIKE '%Không có tọa độ GPS%'))
+            AND (c.late_minutes = 0 OR c.reason LIKE '%Bổ sung%' OR c.reason LIKE '%Quên%')";
+        
+        $phuongAllId = 0;
+        try {
+            $stmtHrAllP = $this->db->prepare("SELECT id FROM users WHERE (username = 'phuongntd' OR full_name LIKE '%Duy Phương%' OR role = 'hr') LIMIT 1");
+            $stmtHrAllP->execute();
+            $phuongAllId = (int)$stmtHrAllP->fetchColumn();
+        } catch (\Throwable $eAllP) {}
+
         if ($isHrAdmin) {
             $stmtCheckins = $this->db->prepare("
                 SELECT c.id, c.check_in_date, c.check_in_time, c.late_minutes, c.reason, c.status, 
-                       CONCAT(c.check_in_date, ' ', c.check_in_time) as created_at, c.user_id, u.full_name as employee_name
+                       CONCAT(c.check_in_date, ' ', c.check_in_time) as created_at, c.user_id, c.manager_id, c.approved_by,
+                       u.full_name as employee_name, u.avatar_url as employee_avatar, u.team_id,
+                       m.full_name as approver_name, m.avatar_url as approver_avatar,
+                       t_lead.id as team_leader_id, t_lead.full_name as team_leader_name, t_lead.avatar_url as team_leader_avatar,
+                       ap.full_name as approved_by_name, ap.avatar_url as approved_by_avatar
                 FROM check_ins c
                 JOIN users u ON c.user_id = u.id
+                LEFT JOIN users m ON c.manager_id = m.id
+                LEFT JOIN teams t ON u.team_id = t.id
+                LEFT JOIN users t_lead ON t.leader_id = t_lead.id
+                LEFT JOIN users ap ON c.approved_by = ap.id
                 WHERE u.tenant_id = ? AND $condCheckin
                 ORDER BY c.id DESC
                 LIMIT 500
@@ -4119,9 +4190,17 @@ class HRMController {
             }
             $sqlC = "
                 SELECT c.id, c.check_in_date, c.check_in_time, c.late_minutes, c.reason, c.status, 
-                       CONCAT(c.check_in_date, ' ', c.check_in_time) as created_at, c.user_id, u.full_name as employee_name
+                       CONCAT(c.check_in_date, ' ', c.check_in_time) as created_at, c.user_id, c.manager_id, c.approved_by,
+                       u.full_name as employee_name, u.avatar_url as employee_avatar, u.team_id,
+                       m.full_name as approver_name, m.avatar_url as approver_avatar,
+                       t_lead.id as team_leader_id, t_lead.full_name as team_leader_name, t_lead.avatar_url as team_leader_avatar,
+                       ap.full_name as approved_by_name, ap.avatar_url as approved_by_avatar
                 FROM check_ins c
                 JOIN users u ON c.user_id = u.id
+                LEFT JOIN users m ON c.manager_id = m.id
+                LEFT JOIN teams t ON u.team_id = t.id
+                LEFT JOIN users t_lead ON t.leader_id = t_lead.id
+                LEFT JOIN users ap ON c.approved_by = ap.id
                 WHERE u.tenant_id = ? AND $condCheckin AND (" . implode(' OR ', $conds) . ")
                 ORDER BY c.id DESC LIMIT 500";
             $stmtCheckins = $this->db->prepare($sqlC);
@@ -4129,16 +4208,26 @@ class HRMController {
         }
         $checkins = $stmtCheckins->fetchAll(PDO::FETCH_ASSOC);
         foreach ($checkins as $c) {
-            $isLate = (int)($c['late_minutes'] ?? 0) > 0;
-            $title = $isLate ? ('Giải trình đi trễ ngày ' . $c['check_in_date']) : ('Bổ sung chấm công ngày ' . $c['check_in_date']);
-            $desc = $isLate 
-                ? ('Đi trễ ' . $c['late_minutes'] . ' phút (Check-in lúc ' . $c['check_in_time'] . '). Lý do: "' . $c['reason'] . '"')
-                : ('Bổ sung chấm công (Check-in lúc ' . $c['check_in_time'] . '). Lý do: "' . ($c['reason'] ?: 'Quên chấm công') . '"');
+            $title = 'Bổ sung chấm công ngày ' . $c['check_in_date'];
+            $desc = 'Bổ sung chấm công (Check-in lúc ' . $c['check_in_time'] . '). Lý do: "' . ($c['reason'] ?: 'Quên chấm công') . '"';
+            $mgrId = (int)($c['manager_id'] ?: $c['team_leader_id'] ?: 0);
+            $mgrName = $c['approver_name'] ?: $c['team_leader_name'] ?: 'Quản lý trực tiếp';
+            $mgrAvatar = $c['approver_avatar'] ?: $c['team_leader_avatar'] ?: null;
+
             $all[] = [
                 'id' => (int)$c['id'],
                 'type' => 'checkin',
                 'employee_name' => $c['employee_name'],
+                'employee_avatar' => $c['employee_avatar'] ?? null,
                 'user_id' => (int)$c['user_id'],
+                'manager_id' => $mgrId ?: null,
+                'approver_id' => $mgrId ?: null,
+                'approver_name' => $mgrName,
+                'approver_avatar' => $mgrAvatar,
+                'related_user_ids' => $phuongAllId > 0 ? [$phuongAllId] : [],
+                'approved_by' => $c['approved_by'] ? (int)$c['approved_by'] : null,
+                'approved_by_name' => $c['approved_by_name'] ?? null,
+                'approved_by_avatar' => $c['approved_by_avatar'] ?? null,
                 'title' => $title,
                 'description' => $desc,
                 'status' => $c['status'],
@@ -4293,6 +4382,22 @@ class HRMController {
         $payslips = $data['payslips'] ?? [];
         
         if (!is_array($payslips)) respond(400, null, 'Dữ liệu không hợp lệ', false);
+
+        // Pre-check: Ensure no locked payslips are being modified (State Machine SEC-HRM-02)
+        $ids = array_filter(array_map(fn($p) => (int)($p['id'] ?? 0), $payslips));
+        if (!empty($ids)) {
+            $inClause = implode(',', array_fill(0, count($ids), '?'));
+            $checkLocked = $this->db->prepare("
+                SELECT COUNT(*) FROM monthly_payslips mp 
+                JOIN users u ON mp.user_id = u.id 
+                WHERE mp.id IN ($inClause) AND u.tenant_id = ? AND mp.status = 'locked'
+            ");
+            $checkParams = array_merge($ids, [$auth['tenant_id']]);
+            $checkLocked->execute($checkParams);
+            if ((int)$checkLocked->fetchColumn() > 0) {
+                respond(422, null, 'Bảng lương đã bị khóa, không thể chỉnh sửa số liệu', false);
+            }
+        }
         
         $this->db->beginTransaction();
         try {
@@ -4319,7 +4424,7 @@ class HRMController {
                     mp.overtime_salary = ?,
                     mp.diligence_bonus = ?,
                     mp.note = ?
-                WHERE mp.id = ? AND u.tenant_id = ?
+                WHERE mp.id = ? AND u.tenant_id = ? AND mp.status != 'locked'
             ");
             
             foreach ($payslips as $ps) {
@@ -4357,8 +4462,8 @@ class HRMController {
     }
 
     public function deleteLeave(array $auth, int $id): void {
-        $stmt = $this->db->prepare("SELECT * FROM hrm_leave_requests WHERE id = ? AND tenant_id = ?");
-        $stmt->execute([$id, $auth['tenant_id']]);
+        $stmt = $this->db->prepare("SELECT * FROM hrm_leave_requests WHERE id = ?");
+        $stmt->execute([$id]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$row) {
             respond(404, null, 'Không tìm thấy yêu cầu nghỉ phép', false);
@@ -4372,13 +4477,13 @@ class HRMController {
             respond(403, null, 'Bạn không có quyền xóa yêu cầu này', false);
         }
         
-        $this->db->prepare("DELETE FROM hrm_leave_requests WHERE id = ? AND tenant_id = ?")->execute([$id, $auth['tenant_id']]);
+        $this->db->prepare("DELETE FROM hrm_leave_requests WHERE id = ?")->execute([$id]);
         respond(200, null, 'Đã xóa yêu cầu nghỉ phép');
     }
 
     public function deleteAdvance(array $auth, int $id): void {
-        $stmt = $this->db->prepare("SELECT * FROM hrm_salary_advances WHERE id = ? AND tenant_id = ?");
-        $stmt->execute([$id, $auth['tenant_id']]);
+        $stmt = $this->db->prepare("SELECT * FROM hrm_salary_advances WHERE id = ?");
+        $stmt->execute([$id]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$row) {
             respond(404, null, 'Không tìm thấy yêu cầu tạm ứng', false);
@@ -4392,7 +4497,7 @@ class HRMController {
             respond(403, null, 'Bạn không có quyền xóa yêu cầu này', false);
         }
         
-        $this->db->prepare("DELETE FROM hrm_salary_advances WHERE id = ? AND tenant_id = ?")->execute([$id, $auth['tenant_id']]);
+        $this->db->prepare("DELETE FROM hrm_salary_advances WHERE id = ?")->execute([$id]);
         respond(200, null, 'Đã xóa yêu cầu tạm ứng');
     }
 

@@ -819,7 +819,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
     }
   }, [isOpen, isClosing]);
 
-  const baseZIndex = Math.min(zIndex || 2000000, 2147483630);
+  const baseZIndex = Math.min(zIndex || 2147483635, 2147483645);
 
   return createPortal(
     <>

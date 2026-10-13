@@ -29,9 +29,19 @@ dist-ssr
 
 # Scratch directory
 scratch/
+scripts/scratch/
+backend/scratch/
 backend/uploads/*
 !backend/uploads/.gitkeep
+
+# Environment & Secret files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
 
 # Database backups
 backups/
 *.sql
+

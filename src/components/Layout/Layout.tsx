@@ -276,8 +276,6 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
             if (typeof detail.latest_contact_id === 'number') lastMaxContactId = detail.latest_contact_id;
             if (typeof detail.latest_lead_id === 'number') lastMaxLeadId = detail.latest_lead_id;
           }
-
-          window.dispatchEvent(new CustomEvent('new-notification-received', { detail }));
         });
 
         eventSource.onerror = (err) => {

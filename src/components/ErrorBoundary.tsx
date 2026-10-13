@@ -3,38 +3,34 @@ import type { ErrorInfo, ReactNode } from 'react';
 import { RefreshCw } from 'lucide-react';
 
 if (typeof window !== 'undefined') {
-  const reloadOnChunkError = async (msg: string) => {
+  const handleChunkErrorBackground = async (msg: string) => {
     if (msg && (msg.includes('Failed to fetch dynamically imported module') || msg.includes('ChunkLoadError') || msg.includes('error loading dynamically imported module'))) {
-      const lastReload = sessionStorage.getItem('last_chunk_reload');
-      const now = Date.now();
-      if (!lastReload || now - Number(lastReload) > 15000) {
-        sessionStorage.setItem('last_chunk_reload', String(now));
-        // Clear all CacheStorage to remove any stale/corrupted chunks
-        if ('caches' in window) {
-          try {
-            const keys = await caches.keys();
-            await Promise.all(keys.map(k => caches.delete(k)));
-          } catch {}
-        }
-        // Notify Service Worker
-        if ('serviceWorker' in navigator) {
-          try {
-            const reg = await navigator.serviceWorker.getRegistration();
-            if (reg) await reg.update();
-          } catch {}
-        }
-        window.location.reload();
+      console.warn('[ErrorBoundary] Detected dynamic chunk fetch error in background (auto-reload suppressed):', msg);
+      // Purge CacheStorage so future retries can fetch latest assets
+      if ('caches' in window) {
+        try {
+          const keys = await caches.keys();
+          await Promise.all(keys.map(k => caches.delete(k)));
+        } catch {}
       }
+      // Notify Service Worker to fetch fresh resources
+      if ('serviceWorker' in navigator) {
+        try {
+          const reg = await navigator.serviceWorker.getRegistration();
+          if (reg) await reg.update();
+        } catch {}
+      }
+      // NEVER call window.location.reload() automatically
     }
   };
 
   window.addEventListener('error', (e) => {
-    reloadOnChunkError(e.message || '');
+    handleChunkErrorBackground(e.message || '');
   }, true);
 
   window.addEventListener('unhandledrejection', (e) => {
     const msg = e.reason?.message || String(e.reason || '');
-    reloadOnChunkError(msg);
+    handleChunkErrorBackground(msg);
   });
 }
 
@@ -72,13 +68,13 @@ export class ErrorBoundary extends Component<Props, State> {
       errorStack.includes('ChunkLoadError');
 
     if (isChunkError) {
-      const lastReload = sessionStorage.getItem('last_chunk_reload');
-      const now = Date.now();
-      if (!lastReload || now - Number(lastReload) > 15000) {
-        sessionStorage.setItem('last_chunk_reload', String(now));
-        window.location.reload();
-        return;
+      console.warn('[ErrorBoundary] Caught chunk error in component lifecycle, purged stale caches (auto-reload suppressed).');
+      if ('caches' in window) {
+        try {
+          caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))));
+        } catch {}
       }
+      // Do NOT trigger window.location.reload(); let user decide via UI buttons
     }
   }
 

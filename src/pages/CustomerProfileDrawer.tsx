@@ -26,6 +26,7 @@ const WorkspaceTaskDrawer = lazy(() => import('./WorkspaceTaskDrawer').then(modu
 const ExpenseCreateDrawer = lazy(() => import('../components/ExpenseCreateDrawer').then(module => ({ default: module.ExpenseCreateDrawer })));
 const DepositDetailDrawer = lazy(() => import('../components/DepositDetailDrawer').then(module => ({ default: module.DepositDetailDrawer })));
 const TicketDrawer = lazy(() => import('./TicketDrawer').then(module => ({ default: module.TicketDrawer })));
+import { CustomerJourneyAIPanel } from '../components/CustomerJourneyAIPanel';
 import { ReportDataModal } from '../components/ui/ReportDataModal';
 import { Skeleton, StatRowSkeleton } from '../components/ui/Skeleton';
 import { EmptyCard } from '../components/ui/EmptyCard';
@@ -5453,6 +5454,82 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     }
   }, [isOpen, applySettingsData, currentUser?.role]);
 
+  // Register LIFO overlay for all CustomerProfileDrawer submodals (Priority 150 > Drawer 100)
+  // Ensures Escape closes ONLY the topmost child modal without closing the parent drawer or discarding data
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const isAnySubModalOpen = Boolean(
+      showNoteModal ||
+      showActivityModal ||
+      showTaskModal ||
+      showTicketModal ||
+      showQuickTaskModal ||
+      showQuoteEditor ||
+      showExpenseModal ||
+      showDriveLinkModal ||
+      showExtractIdModal ||
+      showAcademicEmailModal ||
+      showCloneModal ||
+      showManageModal ||
+      showAvatarModal ||
+      showScoringSystemModal ||
+      previewDocImage ||
+      editingDealId ||
+      reschedulingMeeting ||
+      cancellingMeeting ||
+      editingNote ||
+      editingActivity
+    );
+
+    if (isAnySubModalOpen) {
+      return pushOverlay('customer-profile-submodal', () => {
+        if (previewDocImage) { setPreviewDocImage(null); return; }
+        if (showQuoteEditor) { setShowQuoteEditor(false); return; }
+        if (showExpenseModal) { setShowExpenseModal(false); return; }
+        if (showExtractIdModal) { setShowExtractIdModal(false); return; }
+        if (showDriveLinkModal) { setShowDriveLinkModal(false); return; }
+        if (showAcademicEmailModal) { setShowAcademicEmailModal(false); return; }
+        if (showCloneModal) { setShowCloneModal(false); return; }
+        if (showManageModal) { setShowManageModal(false); return; }
+        if (showAvatarModal) { setShowAvatarModal(false); return; }
+        if (showScoringSystemModal) { setShowScoringSystemModal(false); return; }
+        if (showNoteModal) { setShowNoteModal(false); return; }
+        if (showActivityModal) { setShowActivityModal(false); return; }
+        if (showTaskModal) { setShowTaskModal(false); return; }
+        if (showTicketModal) { setShowTicketModal(false); return; }
+        if (showQuickTaskModal) { setShowQuickTaskModal(false); return; }
+        if (editingDealId) { setEditingDealId(null); return; }
+        if (reschedulingMeeting) { setReschedulingMeeting(null); return; }
+        if (cancellingMeeting) { setCancellingMeeting(null); return; }
+        if (editingNote) { setEditingNote(null); return; }
+        if (editingActivity) { setEditingActivity(null); return; }
+      }, 150);
+    }
+  }, [
+    isOpen,
+    showNoteModal,
+    showActivityModal,
+    showTaskModal,
+    showTicketModal,
+    showQuickTaskModal,
+    showQuoteEditor,
+    showExpenseModal,
+    showDriveLinkModal,
+    showExtractIdModal,
+    showAcademicEmailModal,
+    showCloneModal,
+    showManageModal,
+    showAvatarModal,
+    showScoringSystemModal,
+    previewDocImage,
+    editingDealId,
+    reschedulingMeeting,
+    cancellingMeeting,
+    editingNote,
+    editingActivity
+  ]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!isOpen) return;
@@ -5466,17 +5543,10 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         }
         return;
       }
-
-      // Handle Escape to close drawer if no sub-modal is open
-      if (e.key === 'Escape') {
-        if (!showNoteModal && !showActivityModal && !showTaskModal && !showTicketModal && !showQuickTaskModal && !showReportDataModal) {
-          handleClose();
-        }
-      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, handleClose, handleSave, isSubmitting, showNoteModal, showActivityModal, showTaskModal, showTicketModal, showQuickTaskModal, showReportDataModal]);
+  }, [isOpen, handleSave, isSubmitting]);
 
 
 
@@ -9397,6 +9467,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           {/* INFO TAB */}
                           {activeTab === 'info' && (
                     <div className="animate-fade" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                      {/* AI Customer Journey Insights Panel */}
+                      {contact?.id && (
+                        <CustomerJourneyAIPanel
+                          contactId={contact.id}
+                          contactName={formData?.full_name || contact?.full_name}
+                          onNavigateTab={(tab) => setActiveTab(tab)}
+                          onOpenQuickTask={() => setShowActivityModal(true)}
+                        />
+                      )}
+
                       {/* Quick Stats Dashboard */}
                       <div style={{ display: 'grid', gridTemplateColumns: isMobileOrTablet ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: '0.75rem' }}>
                         <div className="card-panel stat-card hover-lift" style={{ 
@@ -12745,6 +12825,18 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                   {/* TIMELINE TAB */}
                   {activeTab === 'timeline' && (
                     <div className="animate-fade">
+                      {/* AI Customer Journey Insights Panel */}
+                      {contact?.id && (
+                        <div style={{ marginBottom: '1rem' }}>
+                          <CustomerJourneyAIPanel
+                            contactId={contact.id}
+                            contactName={formData?.full_name || contact?.full_name}
+                            onNavigateTab={(tab) => setActiveTab(tab)}
+                            onOpenQuickTask={() => setShowActivityModal(true)}
+                          />
+                        </div>
+                      )}
+
                       <div style={{ 
                         display: 'flex', 
                         justifyContent: 'space-between', 
@@ -17103,7 +17195,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                   if (coopLoading) return;
                   if (signatureMethod === 'upload') {
                     if (!uploadedSignatureImg) {
-                      alert('Vui lòng tải file ảnh chữ ký của bạn lên trước khi bấm xác nhận.');
+                      addToast('Vui lòng tải file ảnh chữ ký của bạn lên trước khi bấm xác nhận.', 'warning');
                       return;
                     }
                     handleSignCoopSlip(uploadedSignatureImg);
@@ -17117,7 +17209,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                     const buffer = new Uint32Array(ctx.getImageData(0, 0, canvas.width, canvas.height).data.buffer);
                     const isBlank = !buffer.some(color => color !== 0);
                     if (isBlank) {
-                      alert('Vui lòng vẽ chữ ký của bạn trước khi bấm xác nhận.');
+                      addToast('Vui lòng vẽ chữ ký của bạn trước khi bấm xác nhận.', 'warning');
                       return;
                     }
 

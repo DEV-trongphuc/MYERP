@@ -2157,7 +2157,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     });
 
     if (focusList.length === 0) {
-      alert(t('Tuyệt vời! Bạn không có công việc nào tồn đọng hoặc quá hạn hôm nay.'));
+      toast.success(t('Tuyệt vời! Bạn không có công việc nào tồn đọng hoặc quá hạn hôm nay.'));
       return;
     }
 
@@ -2184,7 +2184,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     } else {
       setIsFocusSessionActive(false);
       setSelectedTaskForDetails(null);
-      alert(t('Chúc mừng! Bạn đã hoàn thành tất cả công việc trong phiên làm việc tập trung.'));
+      toast.success(t('Chúc mừng! Bạn đã hoàn thành tất cả công việc trong phiên làm việc tập trung.'));
     }
   };
 
@@ -4860,6 +4860,9 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         if (!isSilent) toast.error(json.message || t('Không thể tải dữ liệu'));
       }
     } catch (err: any) {
+      if (err?.name === 'AbortError' || err?.code === 'ERR_CANCELED' || (api as any)?.isCancel?.(err)) {
+        return;
+      }
       if (!isSilent && err.message !== 'Unauthorized') {
         toast.error(t('Lỗi tải dữ liệu: ') + err.message);
       }
@@ -5501,19 +5504,23 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       let addressStr = '';
       if (coords && coords.latitude && coords.longitude) {
         try {
+          const geoCtrl = new AbortController();
+          const geoTimer = setTimeout(() => geoCtrl.abort(), 1200);
           const geoUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${coords.latitude}&lon=${coords.longitude}&accept-language=vi`;
           const geoRes = await fetch(geoUrl, {
+            signal: geoCtrl.signal,
             headers: {
               'Accept-Language': 'vi',
               'User-Agent': 'IdeasCRM/1.0'
             }
           });
+          clearTimeout(geoTimer);
           if (geoRes.ok) {
             const geoData = await geoRes.json();
             addressStr = geoData.display_name || '';
           }
         } catch (addrErr) {
-          console.warn("Failed to reverse-geocode coordinates:", addrErr);
+          // Fallback gracefully without blocking the check-in request
         }
       }
 

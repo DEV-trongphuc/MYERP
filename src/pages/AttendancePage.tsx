@@ -872,6 +872,40 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   };
 
   useEffect(() => {
+    const handleOpenLeaveModal = (e: Event) => {
+      const custom = e as CustomEvent;
+      const detail = custom?.detail || {};
+      const targetType = detail.createLeaveType || (detail.action_type === 'supplementary' ? 'supplementary' : 'leave');
+      setCreateLeaveType(targetType);
+      if (targetType === 'supplementary') {
+        if (detail.date) setSupplementaryDateField(detail.date);
+        if (detail.in_time) setSupplementaryInTimeField(detail.in_time);
+        if (detail.out_time) setSupplementaryOutTimeField(detail.out_time);
+        if (detail.reason) setLeaveReasonField(detail.reason);
+      } else {
+        if (detail.leave_type) setLeaveTypeField(detail.leave_type);
+        if (detail.start_date || detail.from_date) setLeaveFromField(detail.start_date || detail.from_date);
+        if (detail.end_date || detail.to_date) setLeaveToField(detail.end_date || detail.to_date);
+        if (detail.reason) setLeaveReasonField(detail.reason);
+      }
+      setShowCreateLeaveModal(true);
+    };
+
+    window.addEventListener('open-create-leave-modal', handleOpenLeaveModal);
+
+    try {
+      const draft = sessionStorage.getItem('pending_leave_draft');
+      if (draft) {
+        sessionStorage.removeItem('pending_leave_draft');
+        const parsed = JSON.parse(draft);
+        handleOpenLeaveModal({ detail: parsed } as any);
+      }
+    } catch {}
+
+    return () => window.removeEventListener('open-create-leave-modal', handleOpenLeaveModal);
+  }, [t]);
+
+  useEffect(() => {
     if (showCreateLeaveModal) {
       fetchLeaveBalance();
       Promise.all([
@@ -3710,7 +3744,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                                     src={resolveAttachmentUrl(c.user_avatar)} 
                                     name={c.user_name} 
                                     size={isMobile ? 18 : 24} 
-                                    style={{ border: '2px solid var(--color-surface)', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}
+                                    style={{ border: '2px solid var(--color-surface)', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', borderRadius: '50%' }}
                                   />
                                   <span style={{
                                     position: 'absolute',
@@ -3726,22 +3760,26 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                               );
                             })}
                             {dayCheckIns.length > (isMobile ? 3 : 5) && (
-                              <div style={{
-                                width: isMobile ? '18px' : '24px',
-                                height: isMobile ? '18px' : '24px',
-                                borderRadius: '50%',
-                                backgroundColor: '#BD1D2D',
-                                border: '2px solid var(--color-surface)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: isMobile ? '0.55rem' : '0.65rem',
-                                fontWeight: 800,
-                                color: '#ffffff',
-                                marginLeft: isMobile ? '-6px' : '-8px',
-                                zIndex: 6,
-                                boxShadow: '0 2px 4px rgba(189, 29, 45, 0.3)'
-                              }}>
+                              <div 
+                                className="calendar-avatar-more-badge"
+                                style={{
+                                  width: isMobile ? '18px' : '24px',
+                                  height: isMobile ? '18px' : '24px',
+                                  borderRadius: '50%',
+                                  backgroundColor: '#BD1D2D',
+                                  border: '2px solid var(--color-surface)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontSize: isMobile ? '0.55rem' : '0.65rem',
+                                  fontWeight: 800,
+                                  color: '#ffffff',
+                                  marginLeft: isMobile ? '-6px' : '-8px',
+                                  zIndex: 6,
+                                  boxShadow: '0 2px 4px rgba(189, 29, 45, 0.3)',
+                                  flexShrink: 0
+                                }}
+                              >
                                 +{dayCheckIns.length - (isMobile ? 3 : 5)}
                               </div>
                             )}
@@ -4247,7 +4285,15 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
           .calendar-avatar-item {
             transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
           }
-          .calendar-avatar-item:hover {
+          .calendar-avatar-item,
+          .calendar-avatar-item .avatar,
+          .calendar-avatar-item .avatar-img,
+          .calendar-avatar-item img,
+          .calendar-avatar-more-badge {
+            border-radius: 50% !important;
+          }
+          .calendar-avatar-item:hover,
+          .calendar-avatar-more-badge:hover {
             transform: scale(1.25) translateY(-3px);
             z-index: 20 !important;
           }
@@ -5295,6 +5341,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         onClose={() => setShowCreateLeaveModal(false)}
         title={modalTitle}
         width="750px"
+        zIndex={2147483642}
       >
         <style>{`
           .leave-modal-input {

@@ -10,6 +10,7 @@ interface AvatarProps {
   title?: string;
   color?: string;
   aiScreened?: boolean;
+  isAi?: boolean;
 }
 
 const cleanNameForAvatar = (name: string) => {
@@ -59,7 +60,7 @@ export const getColorFromName = (name: string) => {
 
 export const IDEAS_SYSTEM_LOGO = 'https://ideas.edu.vn/wp-content/uploads/2023/04/cropped-logofavicon-1.webp';
 
-export const Avatar: React.FC<AvatarProps> = ({ src, name, size = 'md', className = '', style, title, color, aiScreened }) => {
+export const Avatar: React.FC<AvatarProps> = ({ src, name, size = 'md', className = '', style, title, color, aiScreened, isAi }) => {
   const [hasError, setHasError] = React.useState(false);
   const sizeMap = {
     sm: 24,
@@ -79,9 +80,11 @@ export const Avatar: React.FC<AvatarProps> = ({ src, name, size = 'md', classNam
       src.startsWith('/LOGO.') ||
       src.startsWith('/favicon.') ||
       src.startsWith('/icons.') ||
-      src.startsWith('/imgs/')
+      src.startsWith('/imgs/') ||
+      src.startsWith('/stickers/') ||
+      src.startsWith('stickers/')
     ) {
-      resolvedSrc = src;
+      resolvedSrc = src.startsWith('/') ? src : `/${src}`;
     } else {
       let cleanPath = src.replace(/^\/+/, '');
       if (cleanPath.includes('storage/uploads/')) {
@@ -102,20 +105,33 @@ export const Avatar: React.FC<AvatarProps> = ({ src, name, size = 'md', classNam
     }
   }
 
-  // Nếu name là "Hệ thống" / "System" / "HT" / "Hệ thống quy trình IDEAS" và không có ảnh avatar cụ thể, gán ảnh LOGO mặc định
-  if (!resolvedSrc && name) {
-    const trimmedName = name.trim().toLowerCase();
+  // Force brand sticker for AI IDEAS / IDEAS AI
+  if (name) {
+    const trimmedLower = name.trim().toLowerCase();
     if (
-      trimmedName === 'hệ thống' ||
-      trimmedName === 'system' ||
-      trimmedName === 'ht' ||
-      trimmedName === 'hệ thống quy trình ideas' ||
-      trimmedName.includes('hệ thống quy trình') ||
-      trimmedName.includes('quy trình ideas') ||
-      trimmedName.includes('hệ thống ideas') ||
-      trimmedName.includes('ideas system')
+      trimmedLower === 'si ideas' ||
+      trimmedLower === 'ideas si' ||
+      trimmedLower.includes('si ideas') ||
+      trimmedLower.includes('ideas si') ||
+      trimmedLower === 'ai ideas' ||
+      trimmedLower === 'ideas ai' ||
+      trimmedLower.includes('ideas ai') ||
+      trimmedLower.includes('ai ideas')
     ) {
-      resolvedSrc = IDEAS_SYSTEM_LOGO;
+      resolvedSrc = '/stickers/ideas/ideas_3.webp';
+    } else if (!resolvedSrc) {
+      if (
+        trimmedLower === 'hệ thống' ||
+        trimmedLower === 'system' ||
+        trimmedLower === 'ht' ||
+        trimmedLower === 'hệ thống quy trình ideas' ||
+        trimmedLower.includes('hệ thống quy trình') ||
+        trimmedLower.includes('quy trình ideas') ||
+        trimmedLower.includes('hệ thống ideas') ||
+        trimmedLower.includes('ideas system')
+      ) {
+        resolvedSrc = IDEAS_SYSTEM_LOGO;
+      }
     }
   }
 
@@ -141,6 +157,22 @@ export const Avatar: React.FC<AvatarProps> = ({ src, name, size = 'md', classNam
     return Math.floor(finalSize * 0.38);
   }, [finalSize, initials.length]);
 
+  const isAiAvatar = Boolean(
+    isAi ||
+    (resolvedSrc && (
+      resolvedSrc === '/stickers/ideas/ideas_3.webp' ||
+      resolvedSrc.includes('ideas_3.webp') ||
+      resolvedSrc.includes('ideas_bot') ||
+      resolvedSrc.includes('ai-avatar')
+    )) ||
+    (typeof name === 'string' && (
+      name.toLowerCase().includes('si ideas') ||
+      name.toLowerCase().includes('ai ideas') ||
+      name.toLowerCase().includes('ideas ai') ||
+      name.toLowerCase().includes('ideas si')
+    ))
+  );
+
   const avatarEl = (
     <div 
       data-avatar="true"
@@ -152,9 +184,12 @@ export const Avatar: React.FC<AvatarProps> = ({ src, name, size = 'md', classNam
         minWidth: finalSize,
         minHeight: finalSize,
         flexShrink: 0,
-        backgroundColor: resolvedSrc && !hasError ? 'transparent' : bgColor,
-        boxShadow: finalSize <= 18 ? 'none' : undefined,
-        border: finalSize <= 18 ? 'none' : undefined,
+        backgroundColor: isAiAvatar ? '#ffffff' : (resolvedSrc && !hasError ? 'transparent' : bgColor),
+        boxShadow: isAiAvatar ? '0 0 0 1.5px rgba(220, 38, 38, 0.25), 0 2px 6px rgba(220, 38, 38, 0.25)' : (finalSize <= 18 ? 'none' : undefined),
+        border: isAiAvatar ? '2px solid #dc2626' : (finalSize <= 18 ? 'none' : undefined),
+        borderRadius: '50%',
+        boxSizing: 'border-box',
+        padding: isAiAvatar ? '1px' : undefined,
         ...style 
       }}
     >
@@ -167,6 +202,13 @@ export const Avatar: React.FC<AvatarProps> = ({ src, name, size = 'md', classNam
           loading="lazy"
           decoding="async"
           className={`${styles.image} avatar-img`} 
+          style={{ 
+            borderRadius: '50%',
+            boxSizing: 'border-box',
+            objectFit: 'cover',
+            width: '100%',
+            height: '100%'
+          }}
           onError={() => setHasError(true)} 
         />
       ) : (

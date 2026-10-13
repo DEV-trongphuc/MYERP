@@ -260,11 +260,17 @@ function distributeLeadAfterAI($conn, $leadId, $targetRoundId, $aiScreenerResult
     }
 
     $isDuplicate = false;
-    if ($crmCheckResult['isDuplicate'] && $crmCheckResult['monthsSinceLastInteraction'] < $dupCheckMonths && !empty($crmCheckResult['assignedTo'])) {
+    if ($crmCheckResult['isDuplicate'] && !empty($crmCheckResult['assignedTo'])) {
+        if (!empty($crmCheckResult['hasRealInteraction']) && $crmCheckResult['monthsSinceLastInteraction'] < $dupCheckMonths) {
+            $isDuplicate = true;
+        } else if (isset($crmCheckResult['isBeforeHoSo']) && !$crmCheckResult['isBeforeHoSo']) {
+            $isDuplicate = true;
+        }
+    }
+    if ($isDuplicate) {
         $assignedConsultantId = $crmCheckResult['assignedTo'];
         $status = 'reminder';
         $message = 'Khách cũ đăng ký lại < ' . $dupCheckMonths . ' tháng (Chạy ngầm).';
-        $isDuplicate = true;
     }
 
     $dupSuffix = '';

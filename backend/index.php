@@ -122,6 +122,16 @@ if (isset($_GET['action']) && $_GET['action'] === 'version') {
 
 // ── Helper functions ──────────────────────────────────────────
 function respond(int $code, $data = null, string $message = '', bool $success = true): void {
+    // Anti-Deadlock / Anti-Row-Lock Hang: Automatically roll back uncommitted transactions on error
+    global $db;
+    try {
+        if ($code >= 400 && isset($db) && $db instanceof PDO && $db->inTransaction()) {
+            $db->rollBack();
+        }
+    } catch (\Throwable $rbEx) {
+        error_log("Auto-Rollback Error in respond(): " . $rbEx->getMessage());
+    }
+
     $payload = ['success' => $success, 'data' => $data, 'message' => $message];
     $json = json_encode($payload, JSON_UNESCAPED_UNICODE);
 
@@ -981,6 +991,7 @@ switch ($resource) {
         elseif ($resourceId === 'conversations' && $subResource && !$subId && $method === 'GET') $ctrl->getConversationDetails($auth, (int)$subResource);
         elseif ($resourceId === 'conversations' && $subResource && !$subId && in_array($method, ['PUT', 'PATCH'], true)) $ctrl->updateConversation($auth, (int)$subResource);
         elseif ($resourceId === 'conversations' && $subResource && !$subId && $method === 'DELETE') $ctrl->deleteConversation($auth, (int)$subResource);
+        elseif ($resourceId === 'conversations' && $subResource && $subId === 'clear' && $method === 'POST') $ctrl->clearConversationHistory($auth, (int)$subResource);
         elseif ($resourceId === 'conversations' && $subResource && $subId === 'messages' && $method === 'GET') $ctrl->getMessages($auth, (int)$subResource);
         elseif ($resourceId === 'conversations' && $subResource && $subId === 'read' && in_array($method, ['POST', 'PUT'], true)) $ctrl->markAsRead($auth, (int)$subResource);
         elseif ($resourceId === 'conversations' && $subResource && $subId === 'participants' && in_array($method, ['POST', 'PUT', 'DELETE'], true)) $ctrl->manageParticipants($auth, (int)$subResource, $method);
@@ -999,6 +1010,7 @@ switch ($resource) {
         elseif ($resourceId === 'typing' && $method === 'POST') $ctrl->typingPing($auth);
         elseif ($resourceId === 'vault' && $method === 'GET') $ctrl->getVaultItems($auth);
         elseif ($resourceId === 'link-preview' && $method === 'GET') $ctrl->getLinkPreview($auth);
+        elseif ($resourceId === 'ai-audit-logs' && $method === 'GET') $ctrl->getAiAuditLogs($auth);
         else respond(404, null, 'Chat route không tồn tại', false);
         break;
 
@@ -1155,9 +1167,10 @@ switch ($resource) {
 
     // DOWNLOAD FILE
     case 'download-file':
+        $auth = requireAuth();
         require_once __DIR__ . '/controllers/UploadController.php';
         $ctrl = new UploadController($db);
-        $ctrl->downloadFile();
+        $ctrl->downloadFile($auth);
         break;
 
     // PRODUCTS
@@ -1910,6 +1923,7 @@ switch ($resource) {
         $auth = requireAuth();
         $ctrl = new AIController($db);
         if ($resourceId === 'chat' && $method === 'POST') $ctrl->chat($auth);
+        elseif (($resourceId === 'customer-journey-summary' || $resourceId === 'journey-summary') && $method === 'GET') $ctrl->getCustomerJourneySummary($auth);
         elseif ($resourceId === 'knowledge' && !$subResource && $method === 'GET') $ctrl->getKnowledge($auth);
         elseif ($resourceId === 'knowledge' && !$subResource && $method === 'POST') $ctrl->storeKnowledge($auth);
         elseif ($resourceId === 'knowledge' && $subResource && $method === 'GET') $ctrl->getKnowledgeDetail($auth, (int)$subResource);
@@ -1917,6 +1931,14 @@ switch ($resource) {
         elseif ($resourceId === 'analytics' && $subResource === 'predictions' && $method === 'GET') $ctrl->getPredictions($auth);
         else respond(404, null, 'Route không tồn tại', false);
         break;
+
+    // CUSTOMER JOURNEY SUMMARY (AI INSIGHTS)
+    case 'customer-journey-summary':
+        $auth = requireAuth();
+        $ctrl = new AIController($db);
+        $ctrl->getCustomerJourneySummary($auth);
+        break;
+
 
     // CRONS
     case 'crons':

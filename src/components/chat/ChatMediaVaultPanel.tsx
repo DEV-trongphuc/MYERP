@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import { 
   X, Image as ImageIcon, FileText, Link2, Users, Download, 
   ExternalLink, ChevronDown, ChevronUp, ChevronLeft, Check,
   FileArchive, FileSpreadsheet, Film, Globe, Search, Trash2,
   CheckSquare, Plus, Clock, AlertCircle, Shield, Crown, LogOut,
-  MoreVertical, UserMinus, Loader2, Info, Share2, Camera, Palette
+  MoreVertical, UserMinus, Loader2, Info, Share2, Camera, Palette,
+  Bot, Sparkles
 } from 'lucide-react';
 import api from '../../api/axios';
 import { useChatStore } from '../../store/chatStore';
@@ -18,6 +20,8 @@ import { CreateTaskFromChatModal } from './CreateTaskFromChatModal';
 import { getFileFormatConfig, formatFileSize, formatStaffCleanTitle } from '../../utils/chatFileUtils';
 import { compressImageFile } from '../../utils/imageCompressor';
 import { chatBroadcaster } from '../../utils/chatBroadcast';
+import { SPECIALIZED_AGENTS, detectActiveAgent, type SpecializedAgent } from '../../constants/aiAgents';
+import { parseActionProposal } from './ActionProposalCard';
 
 interface Props {
   onClose: () => void;
@@ -26,6 +30,7 @@ interface Props {
   isMaximized?: boolean;
   onCloseChat?: () => void;
   initialCategory?: 'all' | 'image' | 'document' | 'link' | 'task';
+  onSelectAgent?: (agent: SpecializedAgent) => void;
 }
 
 export const ChatMediaVaultPanel: React.FC<Props> = ({ 
@@ -34,7 +39,8 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({
   onOpenWallpaper,
   isMaximized, 
   onCloseChat,
-  initialCategory = 'image'
+  initialCategory = 'image',
+  onSelectAgent
 }) => {
   const { openTaskDrawer } = useUIStore();
   const { user } = useAuth();
@@ -47,7 +53,11 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({
     fetchConversations,
     deleteConversation,
     updateGroupInfo,
-    messagesByConvId
+    messagesByConvId,
+    isAiThinkingByConvId,
+    isAiTypingByConvId,
+    activeAgentByConvId,
+    sendMessage
   } = useChatStore();
 
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -94,9 +104,9 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({
   };
 
   const [expandedSections, setExpandedSections] = useState<{ media: boolean; file: boolean; link: boolean; task: boolean }>({
-    media: true,
-    file: true,
-    link: true,
+    media: false,
+    file: false,
+    link: false,
     task: true
   });
   const [drilldownCategory, setDrilldownCategory] = useState<'all' | 'image' | 'document' | 'link' | 'task'>(initialCategory);
@@ -332,15 +342,88 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({
   };
 
   const isDirect = activeConversation.type === 'direct';
-  const titleText = (isDirect && activeConversation.other_user?.full_name)
-    ? activeConversation.other_user.full_name
-    : (activeConversation.title || activeConversation.other_user?.full_name || 'Đồng nghiệp');
-  const avatarUrl = (isDirect && activeConversation.other_user)
-    ? activeConversation.other_user.avatar_url
-    : (activeConversation.avatar_url || activeConversation.other_user?.avatar_url);
-  const subtitleText = isGroup 
-    ? `${activeConversation.participants?.length || activeConversation.participant_count || 0} thành viên`
-    : formatStaffCleanTitle(activeConversation.other_user);
+  const isIdeasAi = Boolean(
+    activeConversation.id === 9000001 ||
+    activeConversation.id === -9000001 ||
+    activeConversation.other_user?.id === 9000001 ||
+    activeConversation.created_by === 9000001 ||
+    activeConversation.other_user?.role === 'bot' ||
+    activeConversation.title === 'AI IDEAS' ||
+    activeConversation.title === 'SI IDEAS' ||
+    activeConversation.title === 'IDEAS AI' ||
+    activeConversation.title === 'IDEAS SI' ||
+    activeConversation.title?.includes('IDEAS') ||
+    activeConversation.other_user?.full_name === 'AI IDEAS' ||
+    activeConversation.other_user?.full_name === 'SI IDEAS' ||
+    activeConversation.other_user?.full_name === 'IDEAS AI' ||
+    activeConversation.other_user?.full_name?.includes('IDEAS')
+  );
+
+  const titleText = isIdeasAi
+    ? 'SI IDEAS'
+    : (isDirect && activeConversation.other_user?.full_name)
+      ? activeConversation.other_user.full_name
+      : (activeConversation.title || activeConversation.other_user?.full_name || 'Đồng nghiệp');
+  const avatarUrl = isIdeasAi
+    ? '/stickers/ideas/ideas_3.webp'
+    : (isDirect && activeConversation.other_user)
+      ? activeConversation.other_user.avatar_url
+      : (activeConversation.avatar_url || activeConversation.other_user?.avatar_url);
+  const subtitleText = isIdeasAi
+    ? 'Smart Multi Agent • Viện IDEAS'
+    : isGroup 
+      ? `${activeConversation.participants?.length || activeConversation.participant_count || 0} thành viên`
+      : formatStaffCleanTitle(activeConversation.other_user);
+
+  const isWorking = Boolean(
+    activeConversation?.id && (
+      isAiThinkingByConvId?.[activeConversation.id] ||
+      isAiTypingByConvId?.[activeConversation.id]
+    )
+  );
+
+  // Intelligently identify which agent is active (during thinking/streaming or based on the latest AI interaction)
+  const currentActiveAgent = useMemo(() => {
+    if (activeConversation?.id && activeAgentByConvId?.[activeConversation.id]) {
+      return activeAgentByConvId[activeConversation.id];
+    }
+    // Inspect recent messages in reverse order to identify the active specialized agent
+    for (let i = convMessages.length - 1; i >= 0; i--) {
+      const m = convMessages[i];
+      if (typeof m.content === 'string') {
+        const { proposal } = parseActionProposal(m.content);
+        if (proposal?.action_type) {
+          return detectActiveAgent('', 'draft_action_proposal', proposal.action_type);
+        }
+        if (m.is_mine) {
+          const detected = detectActiveAgent(m.content);
+          if (detected && detected.id !== 'master') {
+            return detected;
+          }
+        }
+      }
+    }
+    return SPECIALIZED_AGENTS[0];
+  }, [activeConversation?.id, activeAgentByConvId, convMessages]);
+
+  const sortedAgents = useMemo(() => {
+    if (!currentActiveAgent) return SPECIALIZED_AGENTS;
+    const activeIdx = SPECIALIZED_AGENTS.findIndex(a => a.id === currentActiveAgent.id);
+    if (activeIdx <= 0) return SPECIALIZED_AGENTS;
+    const copy = [...SPECIALIZED_AGENTS];
+    const [activeItem] = copy.splice(activeIdx, 1);
+    return [activeItem, ...copy];
+  }, [currentActiveAgent]);
+
+  // Keep media, file, link collapsed by default for clean view
+  useEffect(() => {
+    setExpandedSections({
+      media: false,
+      file: false,
+      link: false,
+      task: true
+    });
+  }, [activeConversation?.id]);
 
   // Toggle selection for bulk actions
   const toggleItemSelection = (id: number) => {
@@ -1198,20 +1281,51 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({
           ) : (
             <Avatar src={avatarUrl} name={titleText} size={64} />
           )}
-          <h4 style={{ margin: '10px 0 2px', fontSize: '0.975rem', fontWeight: 800, color: '#0f172a' }}>
-            {titleText}
-          </h4>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', margin: '10px 0 3px' }}>
+            <h4 style={{ margin: 0, fontSize: '0.975rem', fontWeight: 800, color: '#0f172a' }}>
+              {titleText}
+            </h4>
+            {isIdeasAi && (
+              <span style={{
+                fontSize: '0.62rem',
+                fontWeight: 800,
+                color: '#BD1D2D',
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                padding: '1px 5px',
+                borderRadius: '4px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '3px'
+              }}>
+                <Sparkles size={10} style={{ color: '#BD1D2D' }} />
+                Super Intelligent
+              </span>
+            )}
+          </div>
           <span style={{
             fontSize: '0.75rem',
-            color: '#64748b',
-            fontWeight: 550
+            color: isIdeasAi ? '#059669' : '#64748b',
+            fontWeight: 650,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '5px'
           }}>
+            {isIdeasAi && (
+              <span style={{
+                width: 7,
+                height: 7,
+                borderRadius: '50%',
+                background: '#10b981',
+                display: 'inline-block'
+              }} />
+            )}
             {subtitleText}
           </span>
         </div>
 
-        {/* Chat Wallpaper Customization Button */}
-        {onOpenWallpaper && (
+        {/* Chat Wallpaper Customization Button (Only for regular human direct/group chats) */}
+        {!isIdeasAi && onOpenWallpaper && (
           <div style={{ padding: '0 14px 4px' }}>
             <button
               type="button"
@@ -1253,8 +1367,9 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({
           </div>
         )}
 
-        {/* Mutual Groups / Participants Bar */}
-        <div style={{ padding: '8px 14px 6px' }}>
+        {/* Mutual Groups / Participants Bar (Only for actual multi-user groups) */}
+        {!isIdeasAi && isGroup && (
+          <div style={{ padding: '8px 14px 6px' }}>
           <div 
             onClick={() => isGroup && setShowMembersList(!showMembersList)}
             style={{
@@ -1531,6 +1646,168 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({
             </div>
           )}
         </div>
+      )}
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            AGENT NGHIỆP VỤ (Cho SI IDEAS - Hiển thị ngay trên đầu)
+           ══════════════════════════════════════════════════════════════════════ */}
+        {isIdeasAi && (
+          <div style={{ borderBottom: '1px solid #f1f5f9', padding: '12px 14px' }}>
+            <div
+              onClick={() => toggleSection('task')}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', marginBottom: '10px' }}
+            >
+              <div style={{ fontSize: '0.85rem', fontWeight: 750, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Bot size={16} color="#475569" />
+                <span>Agent Nghiệp vụ</span>
+                <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700 }}>({SPECIALIZED_AGENTS.length})</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{
+                  fontSize: '0.62rem',
+                  fontWeight: 700,
+                  padding: '1px 6px',
+                  borderRadius: '4px',
+                  background: '#f1f5f9',
+                  color: '#475569',
+                  border: '1px solid #e2e8f0'
+                }}>
+                  Điều phối
+                </span>
+                {expandedSections.task ? <ChevronUp size={16} color="#64748b" /> : <ChevronDown size={16} color="#64748b" />}
+              </div>
+            </div>
+
+            {expandedSections.task && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {sortedAgents.map((agent) => {
+                  const isActive = currentActiveAgent.id === agent.id;
+
+                  return (
+                    <motion.div
+                      key={agent.id}
+                      layout
+                      initial={false}
+                      transition={{
+                        type: 'spring',
+                        stiffness: 350,
+                        damping: 25
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        padding: '9px 12px',
+                        borderRadius: '10px',
+                        background: isActive ? '#fff1f2' : '#ffffff',
+                        border: isActive ? '1.5px solid #BD1D2D' : '1px solid #e2e8f0',
+                        boxShadow: isActive ? '0 3px 12px rgba(189, 29, 45, 0.12)' : 'none',
+                        cursor: onSelectAgent ? 'pointer' : 'default',
+                        position: 'relative',
+                        userSelect: 'none',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onClick={() => onSelectAgent?.(agent)}
+                      onMouseEnter={(e) => {
+                        if (onSelectAgent) {
+                          e.currentTarget.style.transform = 'translateY(-1px)';
+                          e.currentTarget.style.borderColor = '#BD1D2D';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (onSelectAgent) {
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.borderColor = isActive ? '#BD1D2D' : '#e2e8f0';
+                        }
+                      }}
+                      title="Bấm để xem quyền hạn chi tiết của Agent này"
+                    >
+                      <div style={{
+                        position: 'relative',
+                        width: 38,
+                        height: 38,
+                        borderRadius: '50%',
+                        background: '#ffffff',
+                        border: isActive ? '2px solid #BD1D2D' : '1.5px solid #e2e8f0',
+                        padding: '2px',
+                        flexShrink: 0,
+                        overflow: 'hidden'
+                      }}>
+                        <img
+                          src={agent.avatar}
+                          alt={agent.name}
+                          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                        />
+                        {isActive && (
+                          <span style={{
+                            position: 'absolute',
+                            bottom: -1,
+                            right: -1,
+                            width: 9,
+                            height: 9,
+                            borderRadius: '50%',
+                            background: '#10b981',
+                            border: '2px solid #ffffff'
+                          }} />
+                        )}
+                      </div>
+
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px', marginBottom: '2px' }}>
+                          <span style={{ fontSize: '0.82rem', fontWeight: 800, color: isActive ? '#BD1D2D' : '#334155', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {agent.name}
+                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                            {isActive && (
+                              <span style={{
+                                fontSize: '0.62rem',
+                                fontWeight: 800,
+                                padding: '1px 5px',
+                                borderRadius: '4px',
+                                background: isWorking ? '#dcfce7' : '#ecfdf5',
+                                color: '#059669',
+                                border: '1px solid #a7f3d0',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px'
+                              }}>
+                                <span style={{
+                                  width: 5,
+                                  height: 5,
+                                  borderRadius: '50%',
+                                  background: '#10b981',
+                                  display: 'inline-block',
+                                  animation: isWorking ? 'pulse 1.2s infinite' : 'none'
+                                }} />
+                                {isWorking ? 'Đang điều phối' : 'Đang xử lý'}
+                              </span>
+                            )}
+                            {/* Badge màu xám bình thường theo yêu cầu người dùng */}
+                            <span style={{
+                              fontSize: '0.64rem',
+                              fontWeight: 650,
+                              padding: '1px 6px',
+                              borderRadius: '4px',
+                              background: isActive ? '#fee2e2' : '#f1f5f9',
+                              color: isActive ? '#991b1b' : '#64748b',
+                              border: isActive ? '1px solid #fca5a5' : '1px solid #cbd5e1',
+                              flexShrink: 0
+                            }}>
+                              {agent.badge}
+                            </span>
+                          </div>
+                        </div>
+                        <div style={{ fontSize: '0.68rem', color: isActive ? '#991b1b' : '#64748b', fontWeight: isActive ? 650 : 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {isActive ? (isWorking ? agent.statusText : `● Đang phụ trách • ${agent.roleTitle}`) : agent.roleTitle}
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ══════════════════════════════════════════════════════════════════════
             SECTION 1: ẢNH / VIDEO (4-column grid + "Xem tất cả")
@@ -1834,138 +2111,140 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({
               )}
             </>
           )}
+        </div>
 
-          {/* ══════════════════════════════════════════════════════════════════════
-              SECTION 4: TASK (Công việc liên kết với hội thoại)
-             ══════════════════════════════════════════════════════════════════════ */}
+        {/* ══════════════════════════════════════════════════════════════════════
+            SECTION 4: TASK LIÊN KẾT (Chỉ cho hội thoại giữa các nhân sự thông thường)
+           ══════════════════════════════════════════════════════════════════════ */}
+        {!isIdeasAi && (
           <div style={{ borderTop: '1px solid #f1f5f9', padding: '12px 14px' }}>
-            <div
-              onClick={() => toggleSection('task')}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', marginBottom: '10px' }}
-            >
-              <div style={{ fontSize: '0.85rem', fontWeight: 750, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <CheckSquare size={16} color="#059669" />
-                <span>Task liên kết</span>
-                <span style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 700 }}>({tasks.length})</span>
+              <div
+                onClick={() => toggleSection('task')}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', marginBottom: '10px' }}
+              >
+                <div style={{ fontSize: '0.85rem', fontWeight: 750, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <CheckSquare size={16} color="#059669" />
+                  <span>Task liên kết</span>
+                  <span style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 700 }}>({tasks.length})</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowCreateTaskModal(true);
+                    }}
+                    style={{
+                      background: '#ecfdf5',
+                      border: '1px solid #a7f3d0',
+                      color: '#059669',
+                      borderRadius: '6px',
+                      padding: '2px 8px',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                    title="Tạo công việc mới từ cuộc trò chuyện này"
+                  >
+                    + Tạo việc
+                  </button>
+                  {expandedSections.task ? <ChevronUp size={16} color="#64748b" /> : <ChevronDown size={16} color="#64748b" />}
+                </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowCreateTaskModal(true);
-                  }}
-                  style={{
-                    background: '#ecfdf5',
-                    border: '1px solid #a7f3d0',
-                    color: '#059669',
-                    borderRadius: '6px',
-                    padding: '2px 8px',
-                    fontSize: '0.72rem',
-                    fontWeight: 700,
-                    cursor: 'pointer'
-                  }}
-                  title="Tạo công việc mới từ cuộc trò chuyện này"
-                >
-                  + Tạo việc
-                </button>
-                {expandedSections.task ? <ChevronUp size={16} color="#64748b" /> : <ChevronDown size={16} color="#64748b" />}
-              </div>
-            </div>
 
-            {expandedSections.task && (
-              <>
-                {tasks.length === 0 ? (
-                  <div style={{ fontSize: '0.78rem', color: '#94a3b8', padding: '8px 0', textAlign: 'center' }}>
-                    Chưa có công việc nào được liên kết
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {tasks.slice(0, 4).map((t) => {
-                      const statBadge = t.status === 'done'
-                        ? { label: 'Hoàn thành', bg: '#ecfdf5', text: '#047857' }
-                        : t.status === 'in_progress'
-                        ? { label: 'Đang làm', bg: '#eff6ff', text: '#1d4ed8' }
-                        : { label: 'Chưa xong', bg: '#fffbeb', text: '#b45309' };
+              {expandedSections.task && (
+                <>
+                  {tasks.length === 0 ? (
+                    <div style={{ fontSize: '0.78rem', color: '#94a3b8', padding: '8px 0', textAlign: 'center' }}>
+                      Chưa có công việc nào được liên kết
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {tasks.slice(0, 4).map((t) => {
+                        const statBadge = t.status === 'done'
+                          ? { label: 'Hoàn thành', bg: '#ecfdf5', text: '#047857' }
+                          : t.status === 'in_progress'
+                          ? { label: 'Đang làm', bg: '#eff6ff', text: '#1d4ed8' }
+                          : { label: 'Chưa xong', bg: '#fffbeb', text: '#b45309' };
 
-                      return (
-                        <div
-                          key={t.id}
-                          onClick={() => openTaskDrawer(t.id)}
+                        return (
+                          <div
+                            key={t.id}
+                            onClick={() => openTaskDrawer(t.id)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'flex-start',
+                              gap: '10px',
+                              padding: '8px 10px',
+                              borderRadius: '8px',
+                              background: '#f8fafc',
+                              border: '1px solid #e2e8f0',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
+                          >
+                            <div style={{
+                              width: 28,
+                              height: 28,
+                              borderRadius: '7px',
+                              background: '#ecfdf5',
+                              color: '#059669',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0
+                            }}>
+                              <CheckSquare size={14} />
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '2px' }}>
+                                <span style={{ fontSize: '0.62rem', fontWeight: 800, padding: '1px 5px', borderRadius: '4px', background: statBadge.bg, color: statBadge.text }}>
+                                  {statBadge.label}
+                                </span>
+                              </div>
+                              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {t.subject}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.68rem', color: '#64748b', marginTop: '2px' }}>
+                                <Avatar src={t.assignee_avatar} name={t.assignee_name || 'U'} size={14} />
+                                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.assignee_name || 'Chưa giao'}</span>
+                                {t.due_date && (
+                                  <span style={{ flexShrink: 0 }}>• {new Date(t.due_date).toLocaleDateString('vi-VN')}</span>
+                                )}
+                              </div>
+                            </div>
+                            <ExternalLink size={13} color="#94a3b8" style={{ marginTop: '2px', flexShrink: 0 }} />
+                          </div>
+                        );
+                      })}
+
+                      {tasks.length > 4 && (
+                        <button
+                          type="button"
+                          onClick={() => setDrilldownCategory('task')}
                           style={{
-                            display: 'flex',
-                            alignItems: 'flex-start',
-                            gap: '10px',
-                            padding: '8px 10px',
+                            width: '100%',
+                            padding: '7px 0',
+                            background: '#f1f5f9',
+                            border: 'none',
                             borderRadius: '8px',
-                            background: '#f8fafc',
-                            border: '1px solid #e2e8f0',
-                            cursor: 'pointer',
-                            transition: 'all 0.15s ease'
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
-                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
-                        >
-                          <div style={{
-                            width: 28,
-                            height: 28,
-                            borderRadius: '7px',
-                            background: '#ecfdf5',
                             color: '#059669',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            flexShrink: 0
-                          }}>
-                            <CheckSquare size={14} />
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '2px' }}>
-                              <span style={{ fontSize: '0.62rem', fontWeight: 800, padding: '1px 5px', borderRadius: '4px', background: statBadge.bg, color: statBadge.text }}>
-                                {statBadge.label}
-                              </span>
-                            </div>
-                            <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {t.subject}
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.68rem', color: '#64748b', marginTop: '2px' }}>
-                              <Avatar src={t.assignee_avatar} name={t.assignee_name || 'U'} size={14} />
-                              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.assignee_name || 'Chưa giao'}</span>
-                              {t.due_date && (
-                                <span style={{ flexShrink: 0 }}>• {new Date(t.due_date).toLocaleDateString('vi-VN')}</span>
-                              )}
-                            </div>
-                          </div>
-                          <ExternalLink size={13} color="#94a3b8" style={{ marginTop: '2px', flexShrink: 0 }} />
-                        </div>
-                      );
-                    })}
-
-                    {tasks.length > 4 && (
-                      <button
-                        type="button"
-                        onClick={() => setDrilldownCategory('task')}
-                        style={{
-                          width: '100%',
-                          padding: '7px 0',
-                          background: '#f1f5f9',
-                          border: 'none',
-                          borderRadius: '8px',
-                          color: '#059669',
-                          fontSize: '0.75rem',
-                          fontWeight: 700,
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Xem tất cả ({tasks.length})
-                      </button>
-                    )}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-          </div>
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Xem tất cả ({tasks.length})
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </div>
 
       {/* Delete Conversation Confirmation Modal */}

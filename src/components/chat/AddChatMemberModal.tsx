@@ -1,9 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { X, UserPlus, Search, Check, Loader2 } from 'lucide-react';
 import { useChatStore } from '../../store/chatStore';
 import { useAuth } from '../../contexts/AuthContext';
 import { Avatar } from '../ui/Avatar';
 import toast from 'react-hot-toast';
+import { pushOverlay } from '../../utils/overlayStack';
 
 interface Props {
   isOpen: boolean;
@@ -68,6 +69,13 @@ export const AddChatMemberModal: React.FC<Props> = ({ isOpen, onClose, conversat
       u.team_name?.toLowerCase().includes(q)
     );
   }, [candidateStaff, searchStaff]);
+
+  useEffect(() => {
+    if (isOpen && conversation) {
+      const unregister = pushOverlay('add-chat-member-modal', onClose, 2200);
+      return () => unregister();
+    }
+  }, [isOpen, conversation, onClose]);
 
   if (!isOpen || !conversation) return null;
 

@@ -41,6 +41,7 @@ import { BankSelect } from './ui/BankSelect';
 import { getVietQrUrl, findBank } from '../utils/vietnamBanks';
 import { getSystemTitle } from '../config/env';
 import { VietnameseDateInput } from './ui/VietnameseDateInput';
+import { pushOverlay } from '../utils/overlayStack';
 
 const CATEGORIES = [
   { value: 'travel', label: 'Vận Chuyển', icon: Truck, color: '#3b82f6' },
@@ -255,7 +256,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
   users: propUsers,
   zIndex
 }) => {
-  const baseZIndex = zIndex || 2000000000;
+  const baseZIndex = zIndex || 2147483641;
   const { addToast } = useUIStore();
   const saveInFlightRef = useRef(false);
   const [form, setForm] = useState<any>({ ...EMPTY_FORM });
@@ -478,6 +479,14 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
       onClose();
     }
   };
+
+  useEffect(() => {
+    if (isOpen) {
+      return pushOverlay('expense-create-drawer', () => {
+        handleRequestClose();
+      }, 120);
+    }
+  }, [isOpen, showExitConfirm]);
 
   const handleRestoreDraft = () => {
     if (!existingDraft) return;

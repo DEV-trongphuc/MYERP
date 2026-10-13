@@ -15,8 +15,11 @@ import type {
   MessageType,
   ParticipantRole 
 } from '../types/chat';
+import { type SpecializedAgent, SPECIALIZED_AGENTS, detectActiveAgent } from '../constants/aiAgents';
 
 let lastSyncTimestamp = Math.floor(Date.now() / 1000) - 30;
+let isSyncDeltaInProgress = false;
+let lastSyncDeltaTime = 0;
 const markReadDebounceTimers: Record<number, any> = {};
 
 const isMediaOrLinkMsg = (msg: any): boolean => {
@@ -83,6 +86,12 @@ interface ChatStore {
   hideMessageLocally: (convId: number, messageId: number) => void;
   forwardMessage: (sourceMsg: ChatMessage, targetConversationIds: number[]) => Promise<boolean>;
   deleteConversation: (convId: number) => Promise<boolean>;
+  clearConversationHistory: (convId: number) => Promise<{ success: boolean; freedBytes: number; deletedFiles: number }>;
+  isAiThinkingByConvId: Record<number, boolean>;
+  isAiTypingByConvId: Record<number, boolean>;
+  activeAgentByConvId: Record<number, SpecializedAgent>;
+  collaboratingAgentsByConvId: Record<number, SpecializedAgent[]>;
+  orchestratorPhaseByConvId: Record<number, 'reasoning' | 'handover' | 'collaborating' | 'active'>;
   isRealtimeConnected: boolean;
   initRealtimeSSE: (token: string) => void;
   disconnectRealtimeSSE: () => void;
@@ -178,6 +187,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   messagesByConvId: loadInitialCachedMessages(),
   hasMoreByConvId: {},
   typingByConvId: {},
+  isAiThinkingByConvId: {},
+  isAiTypingByConvId: {},
+  activeAgentByConvId: {},
+  collaboratingAgentsByConvId: {},
+  orchestratorPhaseByConvId: {},
   unreadTotal: 0,
   staffDirectory: [],
   loadingConversations: false,
@@ -631,8 +645,23 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       reactions: []
     };
 
+    const activeConv = get().conversations.find((c) => c.id === activeConversationId);
+    const isAiTarget = activeConv?.other_user?.id === 9000001 || activeConv?.created_by === 9000001 || Boolean(activeConv?.title?.includes('IDEAS'));
+    const isAiMentioned = typeof content === 'string' && (
+      content.toLowerCase().includes('@ideas') ||
+      content.toLowerCase().includes('@ideas ai') ||
+      content.toLowerCase().includes('@si ideas') ||
+      content.toLowerCase().includes('@si')
+    );
+    const isAiInteraction = isAiTarget || isAiMentioned;
+    const initialMatchedAgent = isAiInteraction ? detectActiveAgent(content) : null;
+
     set((state) => ({
       replyingTo: null,
+      isAiThinkingByConvId: isAiInteraction ? { ...state.isAiThinkingByConvId, [activeConversationId]: true } : state.isAiThinkingByConvId,
+      isAiTypingByConvId: isAiInteraction ? { ...state.isAiTypingByConvId, [activeConversationId]: false } : state.isAiTypingByConvId,
+      activeAgentByConvId: initialMatchedAgent ? { ...state.activeAgentByConvId, [activeConversationId]: initialMatchedAgent } : state.activeAgentByConvId,
+      orchestratorPhaseByConvId: isAiInteraction ? { ...state.orchestratorPhaseByConvId, [activeConversationId]: 'reasoning' } : state.orchestratorPhaseByConvId,
       messagesByConvId: {
         ...state.messagesByConvId,
         [activeConversationId]: [...(state.messagesByConvId[activeConversationId] || []), optimisticMsg]
@@ -661,20 +690,222 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     return new Promise<ChatMessage | null>((resolve) => {
       sendQueueChain = sendQueueChain.then(async () => {
         try {
-          const res = await api.post('/chat/messages', {
-            conversation_id: activeConversationId,
-            message_type,
-            content,
-            metadata,
-            reply_to_id: actualReplyId
-          });
-          const serverMsg: ChatMessage = res.data?.data || res.data;
+          if (isAiInteraction) {
+            // Streaming AI Path (SSE)
+            const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            const baseUrl = isLocal ? '/backend' : (import.meta.env.VITE_API_URL || `${window.location.origin}/backend`);
+            const endpoint = `${baseUrl}/api.php?action=chat/messages`;
 
-          // Replace optimistic message with server message
-          set((state) => ({
-            messagesByConvId: {
-              ...state.messagesByConvId,
-              [activeConversationId]: (state.messagesByConvId[activeConversationId] || []).map((m) =>
+            let token = null;
+            const storedUserStr = localStorage.getItem('Ideas_user');
+            if (storedUserStr) {
+              try {
+                const u = JSON.parse(storedUserStr);
+                if (u && (u.role === 'sale' || u.role === 'sales')) {
+                  token = localStorage.getItem('Ideas_token');
+                }
+              } catch (e) {}
+            }
+            if (!token) {
+              token = localStorage.getItem('access_token') || localStorage.getItem('Ideas_token');
+            }
+
+            const headers: Record<string, string> = {
+              'Content-Type': 'application/json'
+            };
+            if (token) {
+              headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const response = await fetch(endpoint, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({
+                conversation_id: activeConversationId,
+                message_type,
+                content,
+                metadata,
+                reply_to_id: actualReplyId,
+                stream: true
+              })
+            });
+
+            const contentType = response.headers.get('content-type') || '';
+
+            if (contentType.includes('text/event-stream') && response.body) {
+              const reader = response.body.getReader();
+              const decoder = new TextDecoder('utf-8');
+              let buffer = '';
+              let serverUserMsg: ChatMessage | null = null;
+              const aiTempId = -(Date.now() * 1000 + (++tempIdCounter % 1000) + 1);
+              let accumulatedAiText = '';
+              let finalizedAiMsg: ChatMessage | null = null;
+
+              while (true) {
+                const { done, value } = await reader.read();
+                if (value) {
+                  buffer += decoder.decode(value, { stream: !done });
+                  const parts = buffer.split('\n\n');
+                  buffer = parts.pop() || '';
+
+                  for (const part of parts) {
+                    const lines = part.split('\n');
+                    for (const line of lines) {
+                      const trimmed = line.trim();
+                      if (trimmed.startsWith('data: ')) {
+                        const dataStr = trimmed.slice(6);
+                        try {
+                          const event = JSON.parse(dataStr);
+                          if (event.type === 'user_message' && event.message) {
+                            serverUserMsg = event.message;
+                            set((state) => {
+                              const list = (state.messagesByConvId[activeConversationId] || []).map((m) =>
+                                m.id === tempId ? {
+                                  ...serverUserMsg!,
+                                  is_mine: true,
+                                  reply_to_id: serverUserMsg!.reply_to_id ?? optimisticMsg.reply_to_id,
+                                  reply_content: serverUserMsg!.reply_content ?? optimisticMsg.reply_content,
+                                  reply_type: serverUserMsg!.reply_type ?? optimisticMsg.reply_type,
+                                  reply_metadata: serverUserMsg!.reply_metadata ?? optimisticMsg.reply_metadata,
+                                  reply_sender_name: serverUserMsg!.reply_sender_name ?? optimisticMsg.reply_sender_name,
+                                } : m
+                              );
+                              return {
+                                messagesByConvId: {
+                                  ...state.messagesByConvId,
+                                  [activeConversationId]: list
+                                }
+                              };
+                            });
+                          } else if (event.type === 'orchestrator_reasoning') {
+                            set((state) => ({
+                              orchestratorPhaseByConvId: {
+                                ...state.orchestratorPhaseByConvId,
+                                [activeConversationId]: 'reasoning'
+                              }
+                            }));
+                          } else if (event.type === 'agent_active' && event.agent) {
+                            const foundAgent = SPECIALIZED_AGENTS.find(a => a.id === event.agent.id) || event.agent;
+                            const rawCollabs = Array.isArray(event.collaborators) && event.collaborators.length > 0
+                              ? event.collaborators
+                              : [foundAgent];
+                            const collabs = rawCollabs.map((c: any) => SPECIALIZED_AGENTS.find(a => a.id === c.id) || c);
+                            const isMulti = Boolean(event.is_multi_agent || collabs.length > 1);
+                            set((state) => ({
+                              activeAgentByConvId: {
+                                ...state.activeAgentByConvId,
+                                [activeConversationId]: foundAgent
+                              },
+                              collaboratingAgentsByConvId: {
+                                ...(state.collaboratingAgentsByConvId || {}),
+                                [activeConversationId]: collabs
+                              },
+                              orchestratorPhaseByConvId: {
+                                ...state.orchestratorPhaseByConvId,
+                                [activeConversationId]: isMulti ? 'collaborating' : 'handover'
+                              }
+                            }));
+                          } else if (event.type === 'chunk' && event.delta) {
+                            accumulatedAiText += event.delta;
+                            // Buffering text silently without updating message list on every token
+                            // Transition indicator: "Đang suy nghĩ..." -> "Đang soạn tin nhắn..."
+                            set((state) => {
+                              return {
+                                isAiThinkingByConvId: { ...state.isAiThinkingByConvId, [activeConversationId]: false },
+                                isAiTypingByConvId: { ...state.isAiTypingByConvId, [activeConversationId]: true },
+                                orchestratorPhaseByConvId: { ...state.orchestratorPhaseByConvId, [activeConversationId]: 'active' }
+                              };
+                            });
+                          } else if (event.type === 'done' && event.ai_message) {
+                            finalizedAiMsg = event.ai_message;
+                          }
+                        } catch (eJson) {
+                          // Ignore partial json chunk
+                        }
+                      }
+                    }
+                  }
+                }
+
+                if (done) break;
+              }
+
+              // Finalize streaming
+              set((state) => {
+                const currentAgent = state.activeAgentByConvId[activeConversationId] || SPECIALIZED_AGENTS[0];
+                const targetAiMsg = finalizedAiMsg ? {
+                  ...finalizedAiMsg,
+                  sender_name: finalizedAiMsg.sender_name || currentAgent.name,
+                  sender_avatar: finalizedAiMsg.sender_avatar || currentAgent.avatar,
+                  sender_title: finalizedAiMsg.sender_title || currentAgent.roleTitle,
+                } : (accumulatedAiText ? {
+                  id: aiTempId,
+                  conversation_id: activeConversationId,
+                  sender_id: 9000001,
+                  message_type: 'text' as const,
+                  content: accumulatedAiText,
+                  created_at: new Date().toISOString(),
+                  sender_name: currentAgent.name,
+                  sender_avatar: currentAgent.avatar,
+                  sender_title: currentAgent.roleTitle,
+                  is_mine: false,
+                  reactions: []
+                } : null);
+
+                let list = [...(state.messagesByConvId[activeConversationId] || [])];
+                if (targetAiMsg) {
+                  const hasTemp = list.some((m) => m.id === aiTempId);
+                  if (hasTemp) {
+                    list = list.map((m) => m.id === aiTempId ? { ...targetAiMsg, is_mine: false, is_streaming: false } : m);
+                  } else if (!list.some((m) => m.id === targetAiMsg.id)) {
+                    list.push({ ...targetAiMsg, is_mine: false, is_streaming: false });
+                  }
+                }
+
+                const latestMsg = targetAiMsg || serverUserMsg || optimisticMsg;
+
+                return {
+                  isAiThinkingByConvId: { ...state.isAiThinkingByConvId, [activeConversationId]: false },
+                  isAiTypingByConvId: { ...state.isAiTypingByConvId, [activeConversationId]: false },
+                  orchestratorPhaseByConvId: { ...state.orchestratorPhaseByConvId, [activeConversationId]: 'active' },
+                  messagesByConvId: {
+                    ...state.messagesByConvId,
+                    [activeConversationId]: list
+                  },
+                  conversations: state.conversations.map((c) =>
+                    c.id === activeConversationId
+                      ? {
+                          ...c,
+                          last_msg_id: latestMsg.id,
+                          last_msg_content: latestMsg.content,
+                          last_msg_type: latestMsg.message_type,
+                          last_msg_created_at: latestMsg.created_at,
+                          last_message_at: latestMsg.created_at
+                        }
+                      : c
+                  )
+                };
+              });
+
+              if (serverUserMsg) chatBroadcaster.post({ type: 'NEW_MESSAGE', message: serverUserMsg });
+              if (finalizedAiMsg) chatBroadcaster.post({ type: 'NEW_MESSAGE', message: finalizedAiMsg });
+
+              get().sendTyping(activeConversationId, false);
+              persistMessagesToCache(get().messagesByConvId);
+              resolve(serverUserMsg || optimisticMsg);
+              return;
+            }
+
+            // Fallback non-SSE response
+            const resJson = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              throw new Error(resJson.message || 'Không thể gửi tin nhắn đến AI');
+            }
+            const serverMsg: ChatMessage & { ai_reply?: ChatMessage } = resJson.data || resJson;
+            const aiReply = serverMsg.ai_reply;
+
+            set((state) => {
+              const list = (state.messagesByConvId[activeConversationId] || []).map((m) =>
                 m.id === tempId ? {
                   ...serverMsg,
                   is_mine: true,
@@ -684,24 +915,97 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                   reply_metadata: serverMsg.reply_metadata ?? optimisticMsg.reply_metadata,
                   reply_sender_name: serverMsg.reply_sender_name ?? optimisticMsg.reply_sender_name,
                 } : m
+              );
+              if (aiReply && !list.some((m) => m.id === aiReply.id)) {
+                list.push({ ...aiReply, is_mine: false });
+              }
+              const latestMsg = aiReply || serverMsg;
+              return {
+                isAiThinkingByConvId: { ...state.isAiThinkingByConvId, [activeConversationId]: false },
+                isAiTypingByConvId: { ...state.isAiTypingByConvId, [activeConversationId]: false },
+                messagesByConvId: { ...state.messagesByConvId, [activeConversationId]: list },
+                conversations: state.conversations.map((c) =>
+                  c.id === activeConversationId
+                    ? {
+                        ...c,
+                        last_msg_id: latestMsg.id,
+                        last_msg_content: latestMsg.content,
+                        last_msg_type: latestMsg.message_type,
+                        last_msg_created_at: latestMsg.created_at,
+                        last_message_at: latestMsg.created_at
+                      }
+                    : c
+                )
+              };
+            });
+
+            chatBroadcaster.post({ type: 'NEW_MESSAGE', message: serverMsg });
+            if (aiReply) chatBroadcaster.post({ type: 'NEW_MESSAGE', message: aiReply });
+            get().sendTyping(activeConversationId, false);
+            persistMessagesToCache(get().messagesByConvId);
+            resolve(serverMsg);
+            return;
+          }
+
+          // Standard Non-AI Path (Human-to-Human chat)
+          const res = await api.post('/chat/messages', {
+            conversation_id: activeConversationId,
+            message_type,
+            content,
+            metadata,
+            reply_to_id: actualReplyId
+          });
+          const serverMsg: ChatMessage & { ai_reply?: ChatMessage } = res.data?.data || res.data;
+          const aiReply = serverMsg.ai_reply;
+
+          // Replace optimistic message with server message and append AI reply if present
+          set((state) => {
+            const list = (state.messagesByConvId[activeConversationId] || []).map((m) =>
+              m.id === tempId ? {
+                ...serverMsg,
+                is_mine: true,
+                reply_to_id: serverMsg.reply_to_id ?? optimisticMsg.reply_to_id,
+                reply_content: serverMsg.reply_content ?? optimisticMsg.reply_content,
+                reply_type: serverMsg.reply_type ?? optimisticMsg.reply_type,
+                reply_metadata: serverMsg.reply_metadata ?? optimisticMsg.reply_metadata,
+                reply_sender_name: serverMsg.reply_sender_name ?? optimisticMsg.reply_sender_name,
+              } : m
+            );
+
+            if (aiReply && !list.some((m) => m.id === aiReply.id)) {
+              list.push({
+                ...aiReply,
+                is_mine: false
+              });
+            }
+
+            const latestMsg = aiReply || serverMsg;
+
+            return {
+              messagesByConvId: {
+                ...state.messagesByConvId,
+                [activeConversationId]: list
+              },
+              conversations: state.conversations.map((c) =>
+                c.id === activeConversationId
+                  ? {
+                      ...c,
+                      last_msg_id: latestMsg.id,
+                      last_msg_content: latestMsg.content,
+                      last_msg_type: latestMsg.message_type,
+                      last_msg_created_at: latestMsg.created_at,
+                      last_message_at: latestMsg.created_at
+                    }
+                  : c
               )
-            },
-            conversations: state.conversations.map((c) =>
-              c.id === activeConversationId
-                ? {
-                    ...c,
-                    last_msg_id: serverMsg.id,
-                    last_msg_content: serverMsg.content,
-                    last_msg_type: serverMsg.message_type,
-                    last_msg_created_at: serverMsg.created_at,
-                    last_message_at: serverMsg.created_at
-                  }
-                : c
-            )
-          }));
+            };
+          });
 
           // Broadcast new message to other open tabs
           chatBroadcaster.post({ type: 'NEW_MESSAGE', message: serverMsg });
+          if (aiReply) {
+            chatBroadcaster.post({ type: 'NEW_MESSAGE', message: aiReply });
+          }
 
           // If message is image, file, or has link, refresh media vault
           if (isMediaOrLinkMsg(serverMsg)) {
@@ -740,6 +1044,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               }
             }));
             resolve(null);
+          }
+        } finally {
+          if (isAiInteraction) {
+            set((state) => ({
+              isAiThinkingByConvId: { ...state.isAiThinkingByConvId, [activeConversationId]: false },
+              isAiTypingByConvId: { ...state.isAiTypingByConvId, [activeConversationId]: false }
+            }));
           }
         }
       }).catch((e) => {
@@ -970,6 +1281,46 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
   },
 
+  clearConversationHistory: async (convId: number) => {
+    try {
+      const res = await api.post(`/chat/conversations/${convId}/clear`);
+      const data = res.data?.data || res.data;
+      const freshGreeting = data?.fresh_greeting;
+
+      set((state) => {
+        const nextMessages = { ...state.messagesByConvId };
+        nextMessages[convId] = freshGreeting ? [freshGreeting] : [];
+
+        const nextConversations = state.conversations.map((c) => {
+          if (c.id === convId) {
+            return {
+              ...c,
+              last_msg_id: freshGreeting?.id || null,
+              last_msg_content: freshGreeting?.content || 'Đã làm mới cuộc trò chuyện',
+              last_msg_type: 'text' as MessageType,
+              last_msg_created_at: new Date().toISOString(),
+              last_message_at: new Date().toISOString()
+            };
+          }
+          return c;
+        });
+
+        return {
+          messagesByConvId: nextMessages,
+          conversations: nextConversations,
+          vaultItems: state.activeConversationId === convId ? [] : state.vaultItems
+        };
+      });
+
+      const freedMb = data?.freed_bytes ? (data.freed_bytes / (1024 * 1024)).toFixed(2) : '0';
+      toast.success(`Đã làm mới trò chuyện! Giải phóng ${data?.deleted_files_count || 0} tệp (${freedMb} MB).`);
+      return { success: true, freedBytes: data?.freed_bytes || 0, deletedFiles: data?.deleted_files_count || 0 };
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Không thể xóa lịch sử cuộc trò chuyện');
+      return { success: false, freedBytes: 0, deletedFiles: 0 };
+    }
+  },
+
   togglePinMessage: async (convId: number, msgId: number) => {
     try {
       const res = await api.post(`/chat/conversations/${convId}/pin`, { message_id: msgId });
@@ -1139,6 +1490,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   syncDelta: async () => {
+    if (isSyncDeltaInProgress) return;
+    const now = Date.now();
+    if (now - lastSyncDeltaTime < 2000) return;
+    isSyncDeltaInProgress = true;
+    lastSyncDeltaTime = now;
+
     const { activeConversationId, messagesByConvId, isOpen } = get();
     const currentMsgs = activeConversationId ? (messagesByConvId[activeConversationId] || []) : [];
     const lastMsgId = currentMsgs.length > 0 ? currentMsgs[currentMsgs.length - 1].id : 0;
@@ -1385,7 +1742,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           };
         });
       }
-    } catch (e) {}
+    } catch (e) {
+    } finally {
+      isSyncDeltaInProgress = false;
+    }
   },
 
   initRealtimeSSE: (token: string) => {
@@ -1409,7 +1769,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     const connectSSE = () => {
       try {
-        const url = `${baseUrl}/chat/stream?token=${encodeURIComponent(token)}${sseLastMsgId > 0 ? `&last_message_id=${sseLastMsgId}` : ''}`;
+        const url = `${baseUrl}/api.php?action=chat/stream&token=${encodeURIComponent(token)}${sseLastMsgId > 0 ? `&last_message_id=${sseLastMsgId}` : ''}`;
         const es = new EventSource(url);
         sseSource = es;
 

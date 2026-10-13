@@ -922,6 +922,14 @@ class DepositController {
         } else {
             if ($actualAmount === null || $actualAmount <= 0) {
                 $actualAmount = (float)$mileData['expected_amount'];
+            } else {
+                $expected = (float)$mileData['expected_amount'];
+                $isAdmin = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true);
+                if ($actualAmount < $expected && !$isAdmin) {
+                    $this->db->rollBack();
+                    respond(422, null, 'Số tiền thực nhận VND không được nhỏ hơn giá trị dự kiến của đợt thanh toán (' . number_format($expected, 0, ',', '.') . ' VND) khi chưa có phê duyệt từ Ban Giám đốc', false);
+                    return;
+                }
             }
         }
         try {

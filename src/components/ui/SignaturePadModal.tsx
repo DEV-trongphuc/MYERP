@@ -4,6 +4,7 @@ import { X, RefreshCw, Upload, Edit3, Trash2, Check, FileText } from 'lucide-rea
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '../../contexts/LanguageContext';
 import toast from 'react-hot-toast';
+import { pushOverlay } from '../../utils/overlayStack';
 
 interface SignaturePadModalProps {
   isOpen: boolean;
@@ -44,8 +45,10 @@ export const SignaturePadModal: React.FC<SignaturePadModalProps> = ({
       setUploadedImg(initialSignatureUrl || null);
       setSignMethod(initialSignatureUrl ? 'saved' : 'draw');
       setHasDrawn(false);
+      const unregister = pushOverlay('signature-pad-modal', onClose, 2147483645);
+      return () => unregister();
     }
-  }, [isOpen, initialSignatureUrl]);
+  }, [isOpen, initialSignatureUrl, onClose]);
 
   // Auto remove white background from uploaded image
   const removeWhiteBackground = (imageSrc: string): Promise<string> => {

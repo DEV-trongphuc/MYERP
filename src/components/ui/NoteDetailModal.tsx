@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ExternalLink, Copy, Check, Globe, FileText, X, Link2 } from 'lucide-react';
+import { pushOverlay } from '../../utils/overlayStack';
 
 interface NoteDetailModalProps {
   isOpen: boolean;
@@ -155,6 +156,13 @@ export const NoteDetailModal: React.FC<NoteDetailModalProps> = ({
 }) => {
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
   const [copiedAll, setCopiedAll] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      const unregister = pushOverlay('note-detail-modal', onClose, 99999);
+      return () => unregister();
+    }
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 

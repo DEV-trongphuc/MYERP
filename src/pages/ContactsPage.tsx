@@ -1051,7 +1051,22 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     }
   };
 
+  const prevFilterSignatureRef = useRef('');
+  const currentFilterSignature = JSON.stringify([debouncedSearch, sortBy, activeFilters, segment, studentSubTab, showLost, quickLeadStatus, quickPipelineStage, filterUncontacted]);
+
   useEffect(() => {
+    const filtersChanged = prevFilterSignatureRef.current !== '' && prevFilterSignatureRef.current !== currentFilterSignature;
+    prevFilterSignatureRef.current = currentFilterSignature;
+
+    // Clear stale bulk selection when search or filters or page changes to prevent accidental cross-page operations (DEF-UX-07)
+    setSelected(new Set());
+
+    // If filters changed and we are on a page > 1, skip this fetch and let setPage(1) trigger the clean single fetch (DEF-UX-04)
+    if (filtersChanged && page > 1) {
+      setPage(1);
+      return;
+    }
+
     fetchData();
   }, [page, pageSize, debouncedSearch, sortBy, activeFilters, segment, studentSubTab, showLost, quickLeadStatus, quickPipelineStage, filterUncontacted]);
 
@@ -1061,11 +1076,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       setContacts(prev => prev.map(c => ({ ...c, score: calcScore(c, scoringRules, decayDays) })));
     }
   }, [scoringRules, decayDays]);
-
-  // Reset page to 1 whenever any filter or search query changes
-  useEffect(() => {
-    setPage(1);
-  }, [debouncedSearch, sortBy, activeFilters, segment, studentSubTab, showLost, quickLeadStatus, quickPipelineStage, filterUncontacted]);
 
   // Auto fallback to last available page if current page becomes empty after deletions
   useEffect(() => {
@@ -4797,13 +4807,14 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                   <div style={{ fontWeight: 600 }}>{dateStr}</div>
                                   <div style={{ fontSize: '0.725rem', opacity: 0.85 }}>{timeStr}</div>
                                   {(() => {
-                                    if (!c.distributed_at) return null;
-                                    const distDate = new Date(c.distributed_at).toLocaleDateString('vi-VN');
+                                    const latestActivityAt = c.distributed_at || c.updated_at;
+                                    if (!latestActivityAt) return null;
+                                    const distDate = new Date(latestActivityAt).toLocaleDateString('vi-VN');
                                     const createDate = c.created_at ? new Date(c.created_at).toLocaleDateString('vi-VN') : '';
                                     if (createDate && distDate !== createDate) {
                                       return (
                                         <div style={{ fontSize: '0.675rem', color: '#d97706', fontWeight: 600, marginTop: '2px', whiteSpace: 'nowrap' }}>
-                                          Giao lại: {distDate}
+                                          {c.distributed_at ? 'Giao lại: ' : 'Cập nhật: '}{distDate}
                                         </div>
                                       );
                                     }

@@ -1615,7 +1615,34 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
     return `${t('Chờ đến')} ${nextTimeStr}`;
   };
 
-  const getStatusBadge = (status: string, reportStatus?: string, aiScreenerStatus?: string, createdAt?: string, takers?: any[]) => {
+  const getStatusBadge = (status: string, reportStatus?: string, aiScreenerStatus?: string, createdAt?: string, takers?: any[], message?: string) => {
+    const msg = (message || '').toLowerCase();
+
+    // Heuristic override from distribution log message
+    if (status === 'compensation' || msg.includes('đền bù') || msg.includes('bù lượt') || msg.includes('bù chủ động') || msg.includes('bù data')) {
+      return (
+        <span className="badge" style={{ background: 'rgba(139, 92, 246, 0.12)', color: '#8b5cf6', border: '1px solid rgba(139, 92, 246, 0.25)', fontWeight: 600 }}>
+          {t('Đã bù')}
+        </span>
+      );
+    }
+
+    if (status === 'reallocated' || msg.includes('phân bổ lại') || msg.includes('thu hồi')) {
+      return (
+        <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.12)', color: '#d97706', border: '1px solid rgba(245, 158, 11, 0.25)', fontWeight: 600 }}>
+          {t('Phân bổ lại')}
+        </span>
+      );
+    }
+
+    if (status === 'reminder' || msg.includes('khách cũ đăng ký lại') || msg.includes('nhắc trùng') || msg.includes('nhắc lại')) {
+      return (
+        <span className="badge" style={{ background: 'rgba(236, 72, 153, 0.12)', color: '#ec4899', border: '1px solid rgba(236, 72, 153, 0.25)', fontWeight: 600 }}>
+          {t('Nhắc lại')}
+        </span>
+      );
+    }
+
     if (status === 'assigned' && reportStatus === 'pending') {
       return <span className="badge" style={{ background: 'var(--color-primary-light)', color: 'var(--color-primary)', border: '1px solid var(--color-border-light)' }}>{t('Ticket Review')}</span>;
     }
@@ -1632,11 +1659,12 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
     }
     switch (status) {
       case 'assigned': return <span className="badge success">{t('Đã chia')}</span>;
-      case 'compensation': return <span className="badge purple">{t('Data Bù')}</span>;
+      case 'compensation': return <span className="badge purple">{t('Đã bù')}</span>;
+      case 'reallocated': return <span className="badge warning" style={{ background: 'rgba(245, 158, 11, 0.12)', color: '#d97706', border: '1px solid rgba(245, 158, 11, 0.25)', fontWeight: 600 }}>{t('Phân bổ lại')}</span>;
       case 'pending_work_hours': return <span className="badge warm">{t('Chờ giờ làm')}</span>;
       case 'error': return <span className="badge danger">{t('Ticket')}</span>;
       case 'pending': return <span className="badge warning">{t('Chờ chia')}</span>;
-      case 'reminder': return <span className="badge" style={{ background: 'rgba(236, 72, 153, 0.12)', color: '#ec4899' }}>{t('Nhắc lại')}</span>;
+      case 'reminder': return <span className="badge" style={{ background: 'rgba(236, 72, 153, 0.12)', color: '#ec4899', border: '1px solid rgba(236, 72, 153, 0.25)' }}>{t('Nhắc lại')}</span>;
       case 'duplicate': return <span className="badge danger">{t('Trùng lặp')}</span>;
       case 'rule_6_month': return <span className="badge cold">{t('Quy định 6 tháng')}</span>;
       case 'silent': return <span className="badge cold">{t('Chỉ đồng bộ')}</span>;
@@ -1728,7 +1756,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
           {isToday && <span style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--color-primary)' }}>{t('Hôm nay')}</span>}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '4px', alignContent: 'end' }}>
+        <div className="datalist-calendar-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '4px', alignContent: 'end' }}>
           {String(user?.role).toLowerCase() !== 'accountant' && dayData.distributed > 0 && (
             <div style={{
               display: 'flex',
@@ -2161,11 +2189,12 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                   { value: 'all', label: t('Tất cả trạng thái'), icon: <Filter size={16} /> },
                   { value: 'not_contacted', label: t('Chưa liên hệ') },
                   { value: 'assigned', label: t('Đã chia') },
-                  { value: 'compensation', label: t('Data Bù') },
+                  { value: 'compensation', label: t('Đã bù') },
+                  { value: 'reallocated', label: t('Phân bổ lại') },
+                  { value: 'reminder', label: t('Nhắc lại') },
                   { value: 'pending_work_hours', label: t('Chờ giờ làm') },
                   { value: 'databank_claim', label: 'Databank Claim' },
                   { value: 'pending', label: t('Chờ chia') },
-                  { value: 'reminder', label: t('Nhắc lại') },
                   { value: 'silent', label: t('Chỉ đồng bộ') },
                   { value: 'error', label: t('Ticket') },
                   { value: 'blacklisted', label: t('Blacklist') },
@@ -2906,7 +2935,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
 
                         {/* Status badge */}
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                          {getStatusBadge((lead.is_public === 1 || Number(lead.is_public) === 1 || lead.status === 'released_to_kho' || lead.status === 'databank_claim') ? 'databank' : lead.status, lead.report_status, lead.ai_screener_status, lead.created_at, lead.takers)}
+                          {getStatusBadge((lead.is_public === 1 || Number(lead.is_public) === 1 || lead.status === 'released_to_kho' || lead.status === 'databank_claim') ? 'databank' : lead.status, lead.report_status, lead.ai_screener_status, lead.created_at, lead.takers, (lead as any).message)}
                           {lead.status !== 'assigned' && lead.report_status === 'pending' && (
                             <span style={{ padding: '2px 6px', borderRadius: 4, fontSize: '0.65rem', fontWeight: 700, background: '#fef3c7', color: '#d97706', border: '1px solid #fcd34d' }}>
                               {t('Chờ duyệt')}
@@ -3177,8 +3206,23 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                         </td>
                         <td style={{ padding: '1rem' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
-                            {getStatusBadge((lead.is_public === 1 || Number(lead.is_public) === 1 || lead.status === 'released_to_kho' || lead.status === 'databank_claim') ? 'databank' : lead.status, lead.report_status, lead.ai_screener_status, lead.created_at, lead.takers)}
+                            {getStatusBadge((lead.is_public === 1 || Number(lead.is_public) === 1 || lead.status === 'released_to_kho' || lead.status === 'databank_claim') ? 'databank' : lead.status, lead.report_status, lead.ai_screener_status, lead.created_at, lead.takers, (lead as any).message)}
                             {lead.status !== 'assigned' && lead.report_status === 'pending' && <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: '0.65rem', fontWeight: 700, background: '#fef3c7', color: '#d97706', border: '1px solid #fcd34d' }}>{t('Đang chờ duyệt')}</span>}
+                            {Boolean((lead as any).message) && (
+                              <span
+                                style={{
+                                  fontSize: '0.7rem',
+                                  color: 'var(--color-text-muted)',
+                                  maxWidth: 200,
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap'
+                                }}
+                                title={(lead as any).message}
+                              >
+                                {(lead as any).message}
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td style={{ padding: '1rem', whiteSpace: 'nowrap' }}>
@@ -3835,7 +3879,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                   <div style={{ background: 'var(--color-bg)', padding: '0.625rem 0.75rem', borderRadius: 10, border: '1px solid var(--color-border-light)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-text-muted)', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: 4 }}><Tag size={12} /> {t('Trạng thái')}</div>
                     <div>
-                      {getStatusBadge((selectedLead.is_public === 1 || Number(selectedLead.is_public) === 1 || selectedLead.status === 'released_to_kho' || selectedLead.status === 'databank_claim') ? 'databank' : selectedLead.status, selectedLead.report_status, selectedLead.ai_screener_status, selectedLead.created_at, selectedLead.takers)}
+                      {getStatusBadge((selectedLead.is_public === 1 || Number(selectedLead.is_public) === 1 || selectedLead.status === 'released_to_kho' || selectedLead.status === 'databank_claim') ? 'databank' : selectedLead.status, selectedLead.report_status, selectedLead.ai_screener_status, selectedLead.created_at, selectedLead.takers, (selectedLead as any).message)}
                     </div>
                   </div>
                 </div>
@@ -7445,11 +7489,13 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
         .fade-in-view {
           opacity: 1;
         }
-        .calendar-day-cell div > div {
+        .datalist-calendar-stat-grid > div,
+        .datalist-stat-badge {
           transition: all 0.15s ease-in-out;
-          border-radius: 6px !important;
+          border-radius: 6px;
         }
-        .calendar-day-cell div > div:hover {
+        .datalist-calendar-stat-grid > div:hover,
+        .datalist-stat-badge:hover {
           transform: scale(1.05);
           filter: brightness(0.96);
           box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);

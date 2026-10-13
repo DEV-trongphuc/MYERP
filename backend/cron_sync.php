@@ -1928,7 +1928,7 @@ foreach ($connections as $connItem) {
                 // 2. Đã ở bước Hồ sơ trở đi (chỉ thay đổi từ trước bước Hồ sơ thì mới đổi thôi)
                 $keepForOldSale = false;
                 if ($crmCheckResult['isDuplicate'] && !empty($crmCheckResult['assignedTo'])) {
-                    if ($crmCheckResult['monthsSinceLastInteraction'] < $dupCheckMonths) {
+                    if (!empty($crmCheckResult['hasRealInteraction']) && $crmCheckResult['monthsSinceLastInteraction'] < $dupCheckMonths) {
                         $keepForOldSale = true;
                     } else if (isset($crmCheckResult['isBeforeHoSo']) && !$crmCheckResult['isBeforeHoSo']) {
                         $keepForOldSale = true;

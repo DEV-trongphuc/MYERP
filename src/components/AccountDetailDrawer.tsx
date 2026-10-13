@@ -23,6 +23,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useUIStore } from '../store/uiStore';
 import styles from '../pages/EntityDrawer.module.css';
 import { numberToVietnameseText } from '../utils/numberToText';
+import { pushOverlay } from '../utils/overlayStack';
 
 interface Props {
   isOpen: boolean;
@@ -190,6 +191,13 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      const unregister = pushOverlay('account-detail-drawer', onClose, 2147483640);
+      return () => unregister();
+    }
+  }, [isOpen, onClose]);
 
   const [activeTab, setActiveTab] = useState<'personal' | 'erp' | 'assets' | 'account' | 'bank' | 'emergency' | 'schedule' | 'documents' | 'certificates' | 'hr_records' | 'salary' | ''>(() => window.innerWidth <= 1024 ? '' : 'personal');
   const [addressTemporary, setAddressTemporary] = useState('');

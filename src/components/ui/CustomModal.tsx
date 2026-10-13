@@ -70,7 +70,7 @@ export const CustomModal: React.FC<CustomModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       lockBodyScroll();
-      const resolvedZ = zIndex ? Math.min(zIndex, 2147483647) : 2000000000;
+      const resolvedZ = zIndex ? Math.min(zIndex, 2147483647) : 2147483642;
       const unregister = pushOverlay(modalId, () => {
         if (!disableClose) {
           onClose();
@@ -159,7 +159,7 @@ export const CustomModal: React.FC<CustomModalProps> = ({
   const overlayClass = `${styles.overlay} ${fullScreenOnMobile ? styles.fullscreenOverlay : ''} ${centeredOnMobile ? styles.centeredMobileOverlay : ''}`;
   const modalClass = `${styles.modal} ${fullScreenOnMobile ? styles.fullScreenMobile : ''} ${centeredOnMobile ? styles.centeredMobileModal : ''} ${modalClassName || ''}`;
 
-  const resolvedZIndex = zIndex ? Math.min(zIndex, 2147483647) : 2000000000;
+  const resolvedZIndex = zIndex ? Math.min(zIndex, 2147483647) : 2147483642;
 
   const modalContent = (
     <AnimatePresence>

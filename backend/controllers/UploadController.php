@@ -1,7 +1,7 @@
 <?php
 class UploadController {
-    private PDO $db;
-    public function __construct(PDO $db) { $this->db = $db; }
+    private ?PDO $db;
+    public function __construct(?PDO $db = null) { $this->db = $db; }
 
     public function handle(array $auth): void {
         $tid = $auth['tenant_id'];
@@ -117,7 +117,38 @@ class UploadController {
         }
     }
 
-    public function downloadFile(): void {
+    public function downloadFile(?array $auth = null): void {
+        // Enforce Authentication: Token from header, query, or active session
+        if (!$auth) {
+            $token = $_GET['token'] ?? null;
+            if (!$token) {
+                $h = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+                if (preg_match('/Bearer\s+(.+)/i', $h, $m)) $token = $m[1];
+            }
+            if ($token) {
+                try {
+                    require_once __DIR__ . '/../utils/JWT.php';
+                    $payload = JWT::decode($token);
+                    if ($payload && !empty($payload['user_id'] ?? $payload['id'])) {
+                        $auth = $payload;
+                    }
+                } catch (\Throwable $eJwt) {}
+            }
+            if (!$auth && !empty($_SESSION['user_id'])) {
+                $auth = ['user_id' => $_SESSION['user_id'], 'tenant_id' => $_SESSION['tenant_id'] ?? 1];
+            }
+            if (!$auth && function_exists('requireAuth')) {
+                try {
+                    $auth = requireAuth();
+                } catch (\Throwable $eAuth) {}
+            }
+        }
+
+        if (!$auth) {
+            respond(401, null, 'Vui lòng đăng nhập hoặc cung cấp mã xác thực hợp lệ để tải tệp tin', false);
+            return;
+        }
+
         $fileUrl = $_GET['url'] ?? $_GET['path'] ?? '';
         $fileName = $_GET['name'] ?? $_GET['filename'] ?? '';
         if (!$fileUrl) {
@@ -140,9 +171,16 @@ class UploadController {
         }
 
         $uploadDirBase = defined('UPLOAD_DIR') ? UPLOAD_DIR : (__DIR__ . '/../uploads');
-        $fullPath = realpath(__DIR__ . '/../' . $cleanPath);
+        $baseAllowed = realpath($uploadDirBase);
+        if (!$baseAllowed || !is_dir($baseAllowed)) {
+            $baseAllowed = realpath(__DIR__ . '/../uploads');
+        }
+
+        // Strip any leading uploads/ prefix for uniform resolution
+        $relPath = preg_replace('#^uploads/#i', '', $cleanPath);
+        $fullPath = realpath($baseAllowed . '/' . $relPath);
         if (!$fullPath || !file_exists($fullPath) || is_dir($fullPath)) {
-            $testPath = realpath($uploadDirBase . '/' . basename($cleanPath));
+            $testPath = realpath($baseAllowed . '/' . basename($cleanPath));
             if ($testPath && file_exists($testPath) && !is_dir($testPath)) {
                 $fullPath = $testPath;
             } else {
@@ -150,9 +188,16 @@ class UploadController {
             }
         }
 
-        $baseAllowed = realpath(__DIR__ . '/..');
+        // Strict boundary check: fullPath MUST be located inside the uploads directory
         if (!$fullPath || strpos($fullPath, $baseAllowed) !== 0) {
-            respond(403, null, 'Đường dẫn không hợp lệ', false);
+            respond(403, null, 'Đường dẫn không hợp lệ hoặc nằm ngoài phạm vi cho phép', false);
+        }
+
+        // Block dangerous file extensions from download
+        $ext = strtolower(pathinfo($fullPath, PATHINFO_EXTENSION));
+        $blockedExts = ['php', 'phtml', 'php3', 'php4', 'php5', 'env', 'sql', 'htaccess', 'sh', 'py', 'config', 'log'];
+        if (in_array($ext, $blockedExts, true) || basename($fullPath) === '.env') {
+            respond(403, null, 'Không được phép tải xuống định dạng tệp tin này', false);
         }
 
         if (!$fileName) {

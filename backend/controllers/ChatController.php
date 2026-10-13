@@ -169,6 +169,26 @@ class ChatController {
             try {
                 $this->db->exec("ALTER TABLE chat_user_presence ADD INDEX idx_presence_lookup (tenant_id, last_ping_at, user_id)");
             } catch (\Throwable $e) {}
+
+            // Safe migration: ensure user 9000001 (SI IDEAS) exists with title 'Smart Multi Agent'
+            try {
+                $this->db->exec("
+                    INSERT INTO users (id, username, email, full_name, role, job_title, avatar_url, is_active, status)
+                    VALUES (9000001, 'si_ideas', 'ai@ideas.edu.vn', 'SI IDEAS', 'bot', 'Smart Multi Agent', '/stickers/ideas/ideas_3.webp', 1, 'active')
+                    ON DUPLICATE KEY UPDATE 
+                        full_name = 'SI IDEAS',
+                        job_title = 'Smart Multi Agent',
+                        avatar_url = '/stickers/ideas/ideas_3.webp',
+                        role = 'bot',
+                        is_active = 1,
+                        status = 'active'
+                ");
+                $this->db->exec("
+                    UPDATE chat_conversations 
+                    SET title = 'SI IDEAS' 
+                    WHERE created_by = 9000001 OR title IN ('AI IDEAS', 'IDEAS AI', 'IDEAS SI')
+                ");
+            } catch (\Throwable $e) {}
         } catch (\Throwable $e) {
             error_log("Ensure Chat Tables Error: " . $e->getMessage());
         }
@@ -183,6 +203,8 @@ class ChatController {
         $uid = (int)($auth['user_id'] ?? 0);
 
         try {
+            $this->ensureIdeasAiConversation($uid, $tid);
+
             $stmt = $this->db->prepare("
                 SELECT c.id, c.type, c.title, c.avatar_url, c.created_by, c.last_message_at,
                        c.pinned_message_id, c.settings,
@@ -214,7 +236,7 @@ class ChatController {
                 LEFT JOIN chat_messages m ON c.last_message_id = m.id
                 LEFT JOIN users u ON m.sender_id = u.id
                 WHERE (cp.tenant_id = ? OR cp.tenant_id IS NULL OR cp.tenant_id = 0) AND cp.user_id = ?
-                ORDER BY cp.is_pinned DESC, COALESCE(c.last_message_at, c.created_at) DESC
+                ORDER BY cp.is_pinned DESC, (c.created_by = 9000001 OR EXISTS(SELECT 1 FROM chat_participants cp_ai WHERE cp_ai.conversation_id = c.id AND cp_ai.user_id = 9000001)) DESC, COALESCE(c.last_message_at, c.created_at) DESC
             ");
             $stmt->execute([$uid, $tid, $uid]);
             $convs = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
@@ -256,12 +278,19 @@ class ChatController {
                 $otherMap = [];
                 while ($other = $pStmt->fetch(PDO::FETCH_ASSOC)) {
                     $other['id'] = (int)$other['id'];
-                    $other['is_online'] = !empty($other['last_ping_at']) && (int)($other['seconds_ago'] ?? 999) < 180;
-                    $isUserActive = ((int)($other['is_active'] ?? 1) === 1) && !in_array($other['user_status'] ?? '', ['inactive', 'resigned', 'terminated'], true);
-                    $other['is_active'] = $isUserActive;
-                    if (!$isUserActive) {
-                        $other['is_online'] = false;
-                        $other['online_status'] = 'offline';
+                    if ($other['id'] === 9000001) {
+                        $other['is_active'] = true;
+                        $other['is_online'] = true;
+                        $other['online_status'] = 'online';
+                        $other['role'] = 'bot';
+                    } else {
+                        $other['is_online'] = !empty($other['last_ping_at']) && (int)($other['seconds_ago'] ?? 999) < 180;
+                        $isUserActive = ((int)($other['is_active'] ?? 1) === 1) && !in_array($other['user_status'] ?? '', ['inactive', 'resigned', 'terminated'], true);
+                        $other['is_active'] = $isUserActive;
+                        if (!$isUserActive) {
+                            $other['is_online'] = false;
+                            $other['online_status'] = 'offline';
+                        }
                     }
                     $otherMap[(int)$other['conversation_id']] = $other;
                 }
@@ -351,6 +380,12 @@ class ChatController {
 
             if ($targetUserId === $uid) {
                 respond(400, null, 'Bạn không thể tạo cuộc trò chuyện với chính mình', false);
+                return;
+            }
+
+            if ($targetUserId === 9000001) {
+                $aiConvId = $this->ensureIdeasAiConversation($uid, $tid);
+                respond(200, ['id' => $aiConvId, 'already_existed' => true]);
                 return;
             }
 
@@ -763,8 +798,10 @@ class ChatController {
                 $stmtOther->execute([$conversationId, $uid]);
                 $otherPart = $stmtOther->fetch(PDO::FETCH_ASSOC);
                 if ($otherPart && (((int)($otherPart['is_active'] ?? 1) === 0) || (($otherPart['status'] ?? '') === 'inactive'))) {
-                    respond(400, null, 'Nhân sự này đã ngừng hoạt động (Inactive), không thể gửi thêm tin nhắn.', false);
-                    return;
+                    if ((int)($otherPart['id'] ?? 0) !== 9000001) {
+                        respond(400, null, 'Nhân sự này đã ngừng hoạt động (Inactive), không thể gửi thêm tin nhắn.', false);
+                        return;
+                    }
                 }
             }
 
@@ -859,6 +896,67 @@ class ChatController {
 
             // Optional: send notifications for @mentions or @all
             $this->handleMentions($conversationId, $uid, $content, $membership['title'] ?? 'Nhóm');
+
+            // Check if IDEAS AI should respond (direct chat with bot or mentioned in group)
+            $isIdeasAiDirect = false;
+            if ($membership['type'] === 'direct') {
+                $stmtCheckAi = $this->db->prepare("SELECT 1 FROM chat_participants WHERE conversation_id = ? AND user_id = 9000001 LIMIT 1");
+                $stmtCheckAi->execute([$conversationId]);
+                $isIdeasAiDirect = (bool)$stmtCheckAi->fetchColumn();
+            }
+            $isIdeasAiMentioned = stripos($content, '@IDEAS AI') !== false || stripos($content, '@ideas') !== false;
+
+            $isStreamRequested = !empty($body['stream']);
+            if ($isIdeasAiDirect || $isIdeasAiMentioned) {
+                if ($isStreamRequested) {
+                    header('Content-Type: text/event-stream; charset=UTF-8');
+                    header('Cache-Control: no-cache, no-transform');
+                    header('Connection: keep-alive');
+                    header('X-Accel-Buffering: no');
+                    if (function_exists('apache_setenv')) {
+                        @apache_setenv('no-gzip', '1');
+                    }
+                    @ini_set('output_buffering', 'off');
+                    @ini_set('zlib.output_compression', false);
+                    @ini_set('implicit_flush', '1');
+                    while (ob_get_level()) @ob_end_flush();
+                    @ob_implicit_flush(1);
+
+                    echo "data: " . json_encode(['type' => 'user_message', 'message' => $newMsg], JSON_UNESCAPED_UNICODE) . "\n\n";
+                    echo "data: " . json_encode(['type' => 'orchestrator_reasoning', 'text' => 'Agent Điều Phối SI IDEAS đang suy luận & phân tích yêu cầu...'], JSON_UNESCAPED_UNICODE) . "\n\n";
+                    @flush();
+
+                    $swarm = $this->resolveCollaboratingAgents($content);
+                    $activeAgent = $swarm['primaryAgent'];
+                    echo "data: " . json_encode([
+                        'type' => 'agent_active',
+                        'agent' => $activeAgent,
+                        'collaborators' => $swarm['collaborators'],
+                        'is_multi_agent' => $swarm['is_multi_agent'],
+                        'reason' => $swarm['is_multi_agent'] 
+                            ? 'Kích hoạt Swarm Đa Agent: ' . $swarm['synergySummary']
+                            : 'Đã xác định nghiệp vụ: ' . $activeAgent['roleTitle'] . '. Chuyển giao cho ' . $activeAgent['name']
+                    ], JSON_UNESCAPED_UNICODE) . "\n\n";
+                    @flush();
+
+                    $aiReply = $this->processIdeasAiChatReply(
+                        $conversationId, $uid, $tid, $content, $metadata, $msgId,
+                        function($delta) {
+                            echo "data: " . json_encode(['type' => 'chunk', 'delta' => $delta], JSON_UNESCAPED_UNICODE) . "\n\n";
+                            @flush();
+                        }
+                    );
+
+                    echo "data: " . json_encode(['type' => 'done', 'ai_message' => $aiReply], JSON_UNESCAPED_UNICODE) . "\n\n";
+                    @flush();
+                    exit;
+                } else {
+                    $aiReply = $this->processIdeasAiChatReply($conversationId, $uid, $tid, $content, $metadata, $msgId);
+                    if ($aiReply) {
+                        $newMsg['ai_reply'] = $aiReply;
+                    }
+                }
+            }
 
             respond(201, $newMsg);
         } catch (\Throwable $e) {
@@ -1544,6 +1642,144 @@ class ChatController {
     }
 
     /**
+     * POST /chat/conversations/{id}/clear
+     * Clear all message history, remove associated media files on disk to free up space, and re-seed AI welcome greeting
+     */
+    public function clearConversationHistory(array $auth, int $convId): void {
+        $tid = (int)($auth['tenant_id'] ?? 1);
+        $uid = (int)($auth['user_id'] ?? 0);
+        $userRole = $auth['role'] ?? '';
+
+        try {
+            // Verify conversation and participant
+            $stmt = $this->db->prepare("
+                SELECT c.id, c.type, c.created_by, cp.role as participant_role
+                FROM chat_conversations c
+                LEFT JOIN chat_participants cp ON c.id = cp.conversation_id AND cp.user_id = ?
+                WHERE c.id = ? AND c.tenant_id = ?
+            ");
+            $stmt->execute([$uid, $convId, $tid]);
+            $conv = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$conv) {
+                respond(404, null, 'Không tìm thấy cuộc trò chuyện', false);
+                return;
+            }
+
+            // 1. Gather all file paths in this conversation to delete from disk
+            $filesToDelete = [];
+            try {
+                $stmtAtt = $this->db->prepare("SELECT file_url FROM chat_attachments_vault WHERE conversation_id = ?");
+                $stmtAtt->execute([$convId]);
+                foreach ($stmtAtt->fetchAll(PDO::FETCH_ASSOC) as $a) {
+                    if (!empty($a['file_url'])) $filesToDelete[] = $a['file_url'];
+                }
+            } catch (\Throwable $eAtt) {}
+
+            $stmtMsg = $this->db->prepare("SELECT content, message_type, metadata FROM chat_messages WHERE conversation_id = ? AND message_type IN ('image', 'file')");
+            $stmtMsg->execute([$convId]);
+            foreach ($stmtMsg->fetchAll(PDO::FETCH_ASSOC) as $m) {
+                if (!empty($m['content']) && strpos($m['content'], 'uploads/') !== false) {
+                    $filesToDelete[] = $m['content'];
+                }
+                if (!empty($m['metadata'])) {
+                    $meta = is_string($m['metadata']) ? json_decode($m['metadata'], true) : $m['metadata'];
+                    if (is_array($meta)) {
+                        if (!empty($meta['url'])) $filesToDelete[] = $meta['url'];
+                        if (!empty($meta['file_url'])) $filesToDelete[] = $meta['file_url'];
+                    }
+                }
+            }
+
+            // 2. Physical file deletion on disk (strictly scoped to uploads directory)
+            $baseUploads = realpath(__DIR__ . '/../uploads');
+            $deletedFilesCount = 0;
+            $freedBytes = 0;
+            if ($baseUploads) {
+                foreach (array_unique($filesToDelete) as $relUrl) {
+                    $cleanRel = preg_replace('#^/?(uploads/)?#', '', $relUrl);
+                    $fullPath = $baseUploads . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $cleanRel);
+                    if (file_exists($fullPath) && is_file($fullPath)) {
+                        $realPath = realpath($fullPath);
+                        if ($realPath && strpos($realPath, $baseUploads) === 0) {
+                            $freedBytes += filesize($realPath);
+                            @unlink($realPath);
+                            $deletedFilesCount++;
+                        }
+                    }
+                }
+            }
+
+            // 3. Delete database records (reactions, vault items, and messages)
+            $this->db->beginTransaction();
+            try {
+                $this->db->prepare("DELETE r FROM chat_message_reactions r INNER JOIN chat_messages m ON r.message_id = m.id WHERE m.conversation_id = ?")->execute([$convId]);
+            } catch (\Throwable $eR) {}
+            try {
+                $this->db->prepare("DELETE FROM chat_attachments_vault WHERE conversation_id = ?")->execute([$convId]);
+            } catch (\Throwable $eV) {}
+            $this->db->prepare("DELETE FROM chat_messages WHERE conversation_id = ?")->execute([$convId]);
+
+            // 4. If conversation has bot (9000001), insert the fresh IDEAS SI greeting
+            $stmtCheckBot = $this->db->prepare("SELECT 1 FROM chat_participants WHERE conversation_id = ? AND user_id = 9000001 LIMIT 1");
+            $stmtCheckBot->execute([$convId]);
+            $hasBot = (bool)$stmtCheckBot->fetchColumn();
+
+            $freshGreetingMsg = null;
+            if ($hasBot) {
+                $ideasGreeting = "Chào bạn! Tôi là **SI IDEAS (Smart Multi Agent)** — Trí tuệ Doanh nghiệp & Đồng hành Học thuật Toàn diện tại IDEAS ERP 🧠⚡\n\n"
+                               . "Tôi sẵn sàng hỗ trợ bạn tức thì:\n"
+                               . "• 🎓 **Chuyên gia Tuyển sinh & Học thuật**: Nắm rõ 100% chương trình Thạc sĩ MBA ISTEC Paris (6.500 EUR), Tiến sĩ DBA ISTEC Paris (13.000 EUR, Bac+8, WES Earned Doctorate), Paris ESG, Franklin Uni...\n"
+                               . "• 💼 **Tư vấn Bán hàng & Sales Consultant**: Hỗ trợ giải đáp các case tuyển sinh phức tạp, điều kiện miễn giảm môn, thủ tục công nhận bằng cấp quốc tế.\n"
+                               . "• ⚡ **Khởi tạo & Điền trước Phiếu ERP**: Tự động dự thảo Đề xuất chi (PO), Đơn hàng (SO), Đơn nghỉ phép, Giao việc/Task.\n"
+                               . "• 📊 **Tra cứu Thông minh**: Lead, học viên, công nợ, quy trình nội bộ theo thời gian thực.\n\n"
+                               . "Bạn hãy đặt câu hỏi thử hoặc nhập yêu cầu tác vụ để bắt đầu ngay nhé! 🚀";
+
+                $stmtIns = $this->db->prepare("
+                    INSERT INTO chat_messages (tenant_id, conversation_id, sender_id, message_type, content, created_at)
+                    VALUES (?, ?, 9000001, 'text', ?, NOW())
+                ");
+                $stmtIns->execute([$tid, $convId, $ideasGreeting]);
+                $msgId = (int)$this->db->lastInsertId();
+
+                $this->db->prepare("
+                    UPDATE chat_conversations 
+                    SET last_message_id = ?, last_message_at = NOW(), updated_at = NOW() 
+                    WHERE id = ?
+                ")->execute([$msgId, $convId]);
+
+                $freshGreetingMsg = [
+                    'id' => $msgId,
+                    'conversation_id' => $convId,
+                    'sender_id' => 9000001,
+                    'message_type' => 'text',
+                    'content' => $ideasGreeting,
+                    'created_at' => date('c'),
+                    'is_mine' => false,
+                    'reactions' => []
+                ];
+            } else {
+                $this->db->prepare("UPDATE chat_conversations SET last_message_id = NULL, last_message_at = NOW(), updated_at = NOW() WHERE id = ?")->execute([$convId]);
+            }
+
+            $this->db->commit();
+
+            respond(200, [
+                'success' => true,
+                'conversation_id' => $convId,
+                'deleted_files_count' => $deletedFilesCount,
+                'freed_bytes' => $freedBytes,
+                'fresh_greeting' => $freshGreetingMsg,
+                'message' => 'Đã xóa toàn bộ lịch sử trò chuyện và giải phóng dung lượng tệp tin thành công!'
+            ]);
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) $this->db->rollBack();
+            error_log("Clear Conversation History Error: " . $e->getMessage());
+            respond(500, null, 'Lỗi khi xóa lịch sử trò chuyện: ' . $e->getMessage(), false);
+        }
+    }
+
+    /**
      * POST/PUT/DELETE /chat/conversations/{id}/participants
      * Manage group participants
      */
@@ -1720,7 +1956,7 @@ class ChatController {
                 LEFT JOIN chat_user_presence pr ON (pr.user_id = a.id)
                 WHERE a.is_active = 1
                 GROUP BY a.id
-                ORDER BY full_name ASC
+                ORDER BY (a.id = 9000001) DESC, full_name ASC
             ");
             $stmt->execute();
             $users = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
@@ -1728,6 +1964,12 @@ class ChatController {
             foreach ($users as &$u) {
                 $u['id'] = (int)$u['id'];
                 $u['is_active'] = true;
+                if ($u['id'] === 9000001) {
+                    $u['status'] = 'online';
+                    $u['is_online'] = true;
+                    $u['role'] = 'bot';
+                    continue;
+                }
                 $sec = isset($u['seconds_ago']) && $u['seconds_ago'] !== null ? (int)$u['seconds_ago'] : 999999;
                 if (!empty($u['last_ping_at']) && $sec < 180) {
                     $u['status'] = 'online';
@@ -2198,11 +2440,11 @@ class ChatController {
                 ")->execute([$convId, $tid]);
             } catch (\Throwable $e) {}
 
-            $where = ["conversation_id = ?", "tenant_id = ?"];
+            $where = ["v.conversation_id = ?", "v.tenant_id = ?"];
             $params = [$convId, $tid];
 
             if (in_array($category, ['image', 'video', 'document', 'link'], true)) {
-                $where[] = "category = ?";
+                $where[] = "v.category = ?";
                 $params[] = $category;
             }
 
@@ -2241,10 +2483,10 @@ class ChatController {
         $origName = basename($file['name']);
         $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
 
-        // Security check on extension
-        $blockedExts = ['php', 'phtml', 'phar', 'exe', 'bat', 'sh', 'cmd', 'js', 'vbs'];
+        // Security check on extension: block scripts, server-side executables, and HTML/SVG vectors for XSS
+        $blockedExts = ['php', 'phtml', 'phar', 'exe', 'bat', 'sh', 'cmd', 'js', 'vbs', 'svg', 'html', 'htm', 'xhtml', 'xml', 'shtml', 'cgi', 'pl', 'py'];
         if (in_array($ext, $blockedExts, true)) {
-            respond(400, null, 'Định dạng tệp tin không được phép tải lên', false);
+            respond(400, null, 'Định dạng tệp tin không được phép tải lên vì lý do an toàn bảo mật', false);
         }
 
         $uploadDir = __DIR__ . "/../uploads/chat/{$tid}/" . date('Ym') . "/";
@@ -2927,4 +3169,1734 @@ class ChatController {
             respond(500, null, 'Lỗi khi lấy danh sách công việc: ' . $e->getMessage(), false);
         }
     }
+
+    /**
+     * Ensure IDEAS AI bot conversation is initialized for a user
+     */
+    private function ensureIdeasAiConversation(int $uid, int $tid): int {
+        if ($uid <= 0) return 0;
+
+        try {
+            $stmt = $this->db->prepare("
+                SELECT c.id 
+                FROM chat_conversations c
+                JOIN chat_participants p1 ON c.id = p1.conversation_id AND p1.user_id = ?
+                JOIN chat_participants p2 ON c.id = p2.conversation_id AND p2.user_id = 9000001
+                WHERE (c.tenant_id = ? OR c.tenant_id = 1) AND c.type = 'direct'
+                LIMIT 1
+            ");
+            $stmt->execute([$uid, $tid]);
+            $convId = (int)$stmt->fetchColumn();
+
+            $ideasGreeting = "Chào bạn! Tôi là **SI IDEAS (Smart Multi Agent)** — Trí tuệ Doanh nghiệp & Đồng hành Học thuật Toàn diện tại IDEAS ERP 🧠⚡\n\n"
+                           . "Tôi sẵn sàng hỗ trợ bạn tức thì:\n"
+                           . "• 🎓 **Chuyên gia Tuyển sinh & Học thuật**: Nắm rõ 100% chương trình Thạc sĩ MBA ISTEC Paris (6.500 EUR), Tiến sĩ DBA ISTEC Paris (13.000 EUR, Bac+8, WES Earned Doctorate), Paris ESG, Franklin Uni...\n"
+                           . "• 💼 **Tư vấn Bán hàng & Sales Consultant**: Hỗ trợ giải đáp các case tuyển sinh phức tạp, điều kiện miễn giảm môn, thủ tục công nhận bằng cấp quốc tế.\n"
+                           . "• ⚡ **Khởi tạo & Điền trước Phiếu ERP**: Tự động dự thảo Đề xuất chi (PO), Đơn hàng (SO), Đơn nghỉ phép, Giao việc/Task.\n"
+                           . "• 📊 **Tra cứu Thông minh**: Lead, học viên, công nợ, quy trình nội bộ theo thời gian thực.\n\n"
+                           . "Bạn hãy đặt câu hỏi thử hoặc nhập yêu cầu tác vụ để bắt đầu ngay nhé! 🚀";
+
+            if ($convId > 0) {
+                // Ensure greeting exists if AI hasn't sent any message yet
+                $stmtCheckBot = $this->db->prepare("SELECT COUNT(*) FROM chat_messages WHERE conversation_id = ? AND sender_id = 9000001");
+                $stmtCheckBot->execute([$convId]);
+                if ((int)$stmtCheckBot->fetchColumn() === 0) {
+                    $stmtMsg = $this->db->prepare("
+                        INSERT INTO chat_messages (tenant_id, conversation_id, sender_id, message_type, content, created_at)
+                        VALUES (?, ?, 9000001, 'text', ?, NOW())
+                    ");
+                    $stmtMsg->execute([$tid, $convId, $ideasGreeting]);
+                    $msgId = (int)$this->db->lastInsertId();
+
+                    $this->db->prepare("
+                        UPDATE chat_conversations 
+                        SET last_message_id = ?, last_message_at = NOW() 
+                        WHERE id = ?
+                    ")->execute([$msgId, $convId]);
+                }
+                return $convId;
+            }
+
+            // Create new direct conversation with IDEAS AI
+            $this->db->beginTransaction();
+
+            $stmtConv = $this->db->prepare("
+                INSERT INTO chat_conversations (tenant_id, type, title, avatar_url, created_by, last_message_at, created_at, updated_at)
+                VALUES (?, 'direct', 'SI IDEAS', '/stickers/ideas/ideas_3.webp', 9000001, NOW(), NOW(), NOW())
+            ");
+            $stmtConv->execute([$tid]);
+            $convId = (int)$this->db->lastInsertId();
+
+            // Add user participant with is_pinned = 1 so it's always at the top
+            $stmtP1 = $this->db->prepare("
+                INSERT INTO chat_participants (tenant_id, conversation_id, user_id, role, is_pinned, joined_at)
+                VALUES (?, ?, ?, 'member', 1, NOW())
+            ");
+            $stmtP1->execute([$tid, $convId, $uid]);
+
+            // Add AI IDEAS participant
+            $stmtP2 = $this->db->prepare("
+                INSERT INTO chat_participants (tenant_id, conversation_id, user_id, role, is_pinned, joined_at)
+                VALUES (?, ?, 9000001, 'owner', 0, NOW())
+            ");
+            $stmtP2->execute([$tid, $convId]);
+
+            // Add initial welcome greeting
+            $stmtMsg = $this->db->prepare("
+                INSERT INTO chat_messages (tenant_id, conversation_id, sender_id, message_type, content, created_at)
+                VALUES (?, ?, 9000001, 'text', ?, NOW())
+            ");
+            $stmtMsg->execute([$tid, $convId, $ideasGreeting]);
+            $msgId = (int)$this->db->lastInsertId();
+
+            $this->db->prepare("
+                UPDATE chat_conversations 
+                SET last_message_id = ?, last_message_at = NOW() 
+                WHERE id = ?
+            ")->execute([$msgId, $convId]);
+
+            $this->db->commit();
+            return $convId;
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) $this->db->rollBack();
+            error_log("Ensure IDEAS AI Conv Error: " . $e->getMessage());
+            return 0;
+        }
+    }
+
+    /**
+     * Process IDEAS AI Reply with RAG and Multi-format Attachment Parsing
+     */
+    private function processIdeasAiChatReply(int $conversationId, int $senderId, int $tid, string $userMessage, ?array $metadata, int $userMsgId, ?callable $onChunk = null): ?array {
+        try {
+            // 0. Fetch user details & clean friendly call name
+            $stmtUser = $this->db->prepare("SELECT id, full_name, email, role, job_title, department, team_id FROM users WHERE id = ?");
+            $stmtUser->execute([$senderId]);
+            $userInfo = $stmtUser->fetch(PDO::FETCH_ASSOC) ?: [];
+            $rawFullName = trim($userInfo['full_name'] ?? '');
+            $nameParts = preg_split('/\s+/', $rawFullName);
+            $cleanCallName = !empty($nameParts) ? end($nameParts) : 'bạn';
+            if (strtoupper($cleanCallName) === 'DEV' && count($nameParts) > 1) {
+                $cleanCallName = $nameParts[0];
+            }
+            if (empty($cleanCallName)) $cleanCallName = 'bạn';
+            $userName = $rawFullName ?: 'Bạn';
+            $userRole = strtolower($userInfo['role'] ?? 'nhân sự');
+            $userTitle = $userInfo['job_title'] ?? '';
+
+            // FAST-PATH: Instant Social Greetings / Small-talk / Reaction / Sticker / Pure Emojis (Zero Token / 0 LLM Cost)
+            $cleanMsg = trim(mb_strtolower($userMessage));
+            $isSticker = (!empty($metadata) && !empty($metadata['is_sticker'])) || ($cleanMsg === '[sticker]');
+            $cleanMsgStripped = trim(preg_replace('/[^\p{L}\p{N}\s]/u', '', $cleanMsg));
+
+            $isGreeting = in_array($cleanMsgStripped, ['hi', 'hello', 'chao', 'chào', 'alo', 'alo bạn ơi', 'chào bạn', 'ai ơi', 'ơi', 'helo', 'hey', 'yo', 'bạn ơi', 'ad ơi', 'admin ơi'], true)
+                || preg_match('/^(hi|hello|chào|alo)\b/iu', $cleanMsg);
+
+            $isGratitude = in_array($cleanMsgStripped, ['cảm ơn', 'cam on', 'thank', 'thanks', 'cảm ơn bạn', 'cảm ơn em', 'cảm ơn nhé', 'tks', 'thank kiu'], true);
+
+            $isConfirm = in_array($cleanMsgStripped, ['ok', 'oke', 'ok bạn', 'ok em', 'được rồi', 'rồi nhé', 'tuyệt', 'hay quá', 'good', 'nice', 'chuẩn', 'chuẩn luôn'], true);
+
+            $isEmojiOnly = !empty($cleanMsg) && preg_match('/^[\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}\s]+$/u', $cleanMsg);
+
+            $instantReply = null;
+            if ($isSticker || $isEmojiOnly) {
+                $stickerReplies = [
+                    "Dạ em nhận được rồi ạ! 🥰 Chúc {$cleanCallName} một ngày làm việc ngập tràn niềm vui và may mắn nhé! ✨🎉",
+                    "Yêu thương quá ạ! ❤️ Em luôn ở đây trực chiến 24/7 để đồng hành cùng {$cleanCallName} và IDEAS! 🚀🌟",
+                    "Dạ em cảm ơn {$cleanCallName} nhiều ạ! ✨ Chúc {$cleanCallName} một ngày tràn đầy năng lượng và chốt thật nhiều hợp đồng nhé! 💪🎯"
+                ];
+                $instantReply = $stickerReplies[array_rand($stickerReplies)];
+            } elseif ($isGreeting) {
+                $greetingReplies = [
+                    "Dạ em chào {$cleanCallName} ạ! 🌟 Hôm nay {$cleanCallName} cần em hỗ trợ gì về thông tin đào tạo (MBA, DBA ISTEC Paris) hay thao tác phiếu ERP không ạ? 😊🚀",
+                    "Dạ em đây ạ! 👋 Chúc {$cleanCallName} một ngày làm việc tràn đầy năng lượng! {$cleanCallName} có cần tra cứu hoặc tạo phiếu gì cứ nhắn em ngay nhé! ✨",
+                    "Chào {$cleanCallName}! 🧠⚡ Em đã sẵn sàng đồng hành cùng {$cleanCallName}. Hãy nhắn cho em câu hỏi hoặc tác vụ cần xử lý ngay nhé! 🚀"
+                ];
+                $instantReply = $greetingReplies[array_rand($greetingReplies)];
+            } elseif ($isGratitude) {
+                $gratitudeReplies = [
+                    "Dạ không có gì ạ! Rất vui được đồng hành cùng {$cleanCallName}. Nếu cần gì thêm, {$cleanCallName} cứ nhắn em nhé! ❤️✨",
+                    "Dạ luôn sẵn sàng vì {$cleanCallName} ạ! Chúc {$cleanCallName} một ngày làm việc thật hiệu quả và ngập tràn niềm vui nhé! 🎯💪"
+                ];
+                $instantReply = $gratitudeReplies[array_rand($gratitudeReplies)];
+            } elseif ($isConfirm) {
+                $confirmReplies = [
+                    "Dạ vâng ạ! 👌 Chúc {$cleanCallName} làm việc thuận lợi, khi nào cần hỗ trợ cứ gọi em nhé! 🚀",
+                    "Dạ nhất trí ạ! Em luôn sẵn sàng trực chiến cùng {$cleanCallName} bất cứ lúc nào! ✨"
+                ];
+                $instantReply = $confirmReplies[array_rand($confirmReplies)];
+            }
+
+            if ($instantReply !== null) {
+                if (is_callable($onChunk)) {
+                    $onChunk($instantReply);
+                }
+                $this->db->beginTransaction();
+                $stmtIns = $this->db->prepare("
+                    INSERT INTO chat_messages (tenant_id, conversation_id, sender_id, message_type, content, reply_to_id, created_at)
+                    VALUES (?, ?, 9000001, 'text', ?, ?, NOW())
+                ");
+                $stmtIns->execute([$tid, $conversationId, $instantReply, $userMsgId]);
+                $aiMsgId = (int)$this->db->lastInsertId();
+
+                $this->db->prepare("
+                    UPDATE chat_conversations 
+                    SET last_message_id = ?, last_message_at = NOW(), updated_at = NOW() 
+                    WHERE id = ?
+                ")->execute([$aiMsgId, $conversationId]);
+
+                $this->db->commit();
+
+                // Log audit log
+                try {
+                    $stmtAudit = $this->db->prepare("
+                        INSERT INTO ai_query_audit_logs 
+                        (tenant_id, user_id, user_role, query_text, rag_chunks_found, erp_records_found, has_action_proposal, fallback_triggered, needs_training, gap_category, created_at)
+                        VALUES (?, ?, ?, ?, 0, 0, 0, 0, 0, 'social_greeting', NOW())
+                    ");
+                    $stmtAudit->execute([$tid, $senderId, $userRole, $userMessage]);
+                } catch (\Throwable $eAudit) {}
+
+                return [
+                    'id' => $aiMsgId,
+                    'conversation_id' => $conversationId,
+                    'sender_id' => 9000001,
+                    'message_type' => 'text',
+                    'content' => $instantReply,
+                    'reply_to_id' => $userMsgId,
+                    'sender_name' => 'SI IDEAS',
+                    'sender_avatar' => '/stickers/ideas/ideas_3.webp',
+                    'sender_title' => 'Smart Multi Agent',
+                    'created_at' => date('c'),
+                    'is_mine' => false,
+                    'reactions' => []
+                ];
+            }
+
+            // 1. Resolve attached file if any
+            $attachedFile = null;
+            if (!empty($metadata) && !empty($metadata['url'])) {
+                $rawUrl = $metadata['url'];
+                $path = parse_url($rawUrl, PHP_URL_PATH) ?: $rawUrl;
+                $cleanPath = ltrim($path, '/');
+                $localFilePath = __DIR__ . '/../' . $cleanPath;
+                $fileName = $metadata['file_name'] ?? basename($cleanPath);
+                $mime = $metadata['mime_type'] ?? '';
+                $ext = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+
+                if (file_exists($localFilePath) && is_readable($localFilePath)) {
+                    $fileSize = filesize($localFilePath);
+                    // Image handling: inlineData base64 (if <= 10MB)
+                    if (str_starts_with($mime, 'image/') || in_array($ext, ['png', 'jpg', 'jpeg', 'webp', 'gif'], true)) {
+                        if ($fileSize <= 10 * 1024 * 1024) {
+                            $imgMime = !empty($mime) && str_starts_with($mime, 'image/') ? $mime : ('image/' . ($ext === 'jpg' ? 'jpeg' : $ext));
+                            $attachedFile = [
+                                'fileName' => $fileName,
+                                'inlineData' => [
+                                    'mimeType' => $imgMime,
+                                    'data' => base64_encode(file_get_contents($localFilePath))
+                                ]
+                            ];
+                        }
+                    }
+                    // PDF handling: inlineData base64 (if <= 15MB)
+                    elseif ($ext === 'pdf' || $mime === 'application/pdf') {
+                        if ($fileSize <= 15 * 1024 * 1024) {
+                            $attachedFile = [
+                                'fileName' => $fileName,
+                                'inlineData' => [
+                                    'mimeType' => 'application/pdf',
+                                    'data' => base64_encode(file_get_contents($localFilePath))
+                                ]
+                            ];
+                        }
+                    }
+                    // Word (.docx) handling: ZipArchive XML extraction
+                    elseif ($ext === 'docx') {
+                        $docxText = $this->extractDocxText($localFilePath);
+                        if (!empty($docxText)) {
+                            $attachedFile = [
+                                'fileName' => $fileName,
+                                'extractedText' => mb_substr($docxText, 0, 40000, 'UTF-8')
+                            ];
+                        }
+                    }
+                    // Excel (.xlsx) handling: ZipArchive Sheet + SharedStrings
+                    elseif ($ext === 'xlsx') {
+                        $xlsxTable = $this->extractXlsxText($localFilePath);
+                        if (!empty($xlsxTable)) {
+                            $attachedFile = [
+                                'fileName' => $fileName,
+                                'extractedText' => mb_substr($xlsxTable, 0, 40000, 'UTF-8')
+                            ];
+                        }
+                    }
+                    // CSV / TXT / JSON / MD handling
+                    elseif (in_array($ext, ['csv', 'txt', 'json', 'md'], true) || str_starts_with($mime, 'text/')) {
+                        $txt = file_get_contents($localFilePath);
+                        if ($txt !== false) {
+                            $attachedFile = [
+                                'fileName' => $fileName,
+                                'extractedText' => mb_substr($txt, 0, 30000, 'UTF-8')
+                            ];
+                        }
+                    }
+                }
+            }
+
+            // 2. Retrieve RAG context from Huấn luyện AI
+            $ragChunks = $this->retrieveRagContext($userMessage, $tid);
+            $ragContextStr = "";
+            if (!empty($ragChunks)) {
+                $ragContextStr = "\n\n--- [KIẾN THỨC TỪ HUẤN LUYỆN AI DOANH NGHIỆP] ---\n";
+                foreach ($ragChunks as $chk) {
+                    $docName = $chk['doc_name'] ?? 'Tài liệu đào tạo';
+                    $ragContextStr .= "• Nguồn [{$docName}]: " . trim($chk['content']) . "\n\n";
+                }
+                $ragContextStr .= "--- [HẾT KIẾN THỨC HUẤN LUYỆN] ---\n";
+            }
+
+            // 3. Dynamic Ambient Context Snapshot (Instant 360-degree awareness without hardcoded keywords)
+            $ambientSnapshotStr = $this->getAmbientUserStateSnapshot($senderId, $tid, $userRole);
+            $erpLookupStr = $this->executeSmartErpLookup($userMessage, $senderId, $tid, $userRole);
+
+            // 4. Construct Expert System Prompt with Academic Persona, Salutation & RBAC
+            $currentDateStr = date('Y-m-d');
+            $systemPrompt = "Bạn là SI IDEAS — Smart Multi Agent thông minh tại hệ thống MYERP của Viện IDEAS.\n"
+                . "Hôm nay là: {$currentDateStr}.\n"
+                . "Bạn đang trò chuyện trực tiếp và đồng hành cùng: {$userName} (Chức danh: {$userTitle}, Quyền: {$userRole}).\n\n"
+                . "QUY CHUẨN XƯNG HÔ BẮT BUỘC (TUÂN THỦ 100%):\n"
+                . "1. BẮT BUỘC xưng 'em' và gọi đúng TÊN ĐƠN THÂN MẬT của người đang chat là '{$cleanCallName}' (ví dụ: 'Dạ {$cleanCallName} ơi', 'Chào {$cleanCallName}!').\n"
+                . "2. TUYỆT ĐỐI KHÔNG GỌI 'anh/chị [Họ và tên]' (CẤM các kiểu gọi như: 'anh/chị {$userName}', 'anh/chị Tunrio DEV'). Vì hệ thống chưa rõ giới tính, BẮT BUỘC chỉ xưng đúng tên đơn hoặc 'bạn' (ví dụ: 'Dạ {$cleanCallName} ơi', 'Dạ bạn ơi'). Tuyệt đối không xưng hô chung chung, vô cảm.\n"
+                . "3. Tone giọng: Chuyên nghiệp, ấm áp, tinh tế, đồng hành thực thụ cùng đội ngũ nhân sự IDEAS. Không dùng các câu máy móc như 'theo cơ sở dữ liệu' hay 'hệ thống ghi nhận'.\n"
+                . "4. PHONG CÁCH TRẢ LỜI TỰ NHIÊN, LINH HOẠT & THÔNG MINH (TRÁNH RẬP KHUÔN CỨNG NHẮC):\n"
+                . "   - Đi thẳng vào câu trả lời cụ thể, trò chuyện tự nhiên, ngắn gọn và linh hoạt như một người trợ lý đắc lực ngoài đời thực.\n"
+                . "   - TUYỆT ĐỐI KHÔNG ép buộc định dạng cố định (CẤM rập khuôn máy móc mẫu '2 gạch đầu dòng' hay các đoạn mẫu công thức).\n"
+                . "   - Khi người dùng hỏi về công việc, tiến độ, hoặc dữ liệu: Dựa trên số liệu thực tế được cung cấp trong ngữ cảnh, trả lời thẳng luôn thông tin (có việc gì, hạn chót ngày nào, tiến độ ra sao).\n"
+                . "   - Nếu số lượng công việc/dữ liệu nhiều (ví dụ có hàng trăm task hoặc hàng chục quy trình): Hãy thống kê tổng số và chỉ trích xuất TOP 3-5 việc quan trọng/gấp nhất trước, rồi hỏi nhẹ nhàng xem người dùng có muốn xem tiếp nhóm nào không ('hỏi tới đâu trả lời tới đó').\n"
+                . "   - Văn phong ấm áp, chủ động, tinh tế, không trả lời đẩy việc như 'bạn tự vào menu X mà xem' hay máy móc vô cảm.\n\n"
+                . "TRI THỨC CỐT LÕI DOANH NGHIỆP & CÁC CHƯƠNG TRÌNH ĐÀO TẠO IDEAS:\n"
+                . "• Viện IDEAS: Đơn vị hỗ trợ giáo dục với hơn 15 năm kinh nghiệm, đồng hành cùng hơn 2.500 Thạc sĩ/Tiến sĩ tốt nghiệp qua 74 khóa tuyển sinh. IDEAS KHÔNG trực tiếp giảng dạy hay cấp bằng mà là đối tác học thuật hỗ trợ học viên từ hồ sơ, học tập đến khi tốt nghiệp.\n"
+                . "• Trường đối tác Swiss UMEF (Geneva, Thụy Sĩ - thành lập 1984): Đạt kiểm định liên bang cao nhất Thụy Sĩ Swiss Accreditation Council (SAC), Swiss ENIC, VN-NARIC (Bộ GD&ĐT VN), ACBSP, CHEA, EDUQUA, IACBE, và xếp hạng QS Stars 5 Stars Overall.\n"
+                . "• Pháp lý & Công nhận văn bằng tại Việt Nam: Chương trình Online 100% chưa thuộc diện công nhận văn bằng cho thi công chức/viên chức nhà nước, nhưng có giá trị thực tế cực lớn tại khối Doanh nghiệp Tư nhân & Tập đoàn đa quốc gia. Nếu bắt buộc cần công nhận tại VN: học viên tham gia học kết hợp 70% trực tiếp tại Thụy Sĩ – 30% online.\n"
+                . "• Các chương trình đào tạo:\n"
+                . "  - EMBA (Executive MBA): 60 ECTS, 10 môn, 12-14 tháng, KHÔNG LÀM LUẬN VĂN, học nhanh nhất, áp dụng ngay vào quản trị. Đủ điều kiện học tiếp lên Tiến sĩ (DBA).\n"
+                . "  - MBA: 90 ECTS, 12 môn + Luận văn tốt nghiệp (MBA Thesis) bắt buộc, 16-18 tháng, phù hợp nghiên cứu, giảng viên, định cư.\n"
+                . "  - MSc Applied AI: 90 ECTS, 12 môn + Capstone Project, 16-18 tháng, dành cho lãnh đạo ứng dụng AI vào quản trị doanh nghiệp, KHÔNG YÊU CẦU BIẾT VIẾT CODE.\n"
+                . "  - Top-up BBA & Pre Top-up: Lấy bằng Cử nhân quốc tế trong 1 năm cho người tốt nghiệp Cao đẳng hoặc năm 2-3 Đại học.\n"
+                . "  - DBA (Tiến sĩ Quản trị Kinh doanh): 2.5 - 4 năm, cấp bằng bởi ESTIAM (Pháp) hoặc RB College (UK), học phí 12,500 EUR (giảm 3,000 EUR cho cựu học viên IDEAS), có Hội đồng chuyên môn Viện IDEAS thực hiện Final Draft Review hỗ trợ hướng đi luận án.\n"
+                . "• Trường đối tác ISTEC Business School Paris (Cộng hòa Pháp - thành lập 1961): Hơn 60 năm lịch sử, thuộc hệ thống Grande École danh giá, Bộ GDĐH Pháp công nhận, CGE, EFMD, AACSB, Top 8 Le Parisien, RNCP Level 7 (Bac+5 Thạc sĩ) & RNCP Level 8 (Bac+8 Tiến sĩ / EQF Level 8). WES (Mỹ & Canada) đánh giá tương đương văn bằng Mỹ/Canada và bằng Tiến sĩ đạt học vị cao nhất 'Earned Doctorate'.\n"
+                . "  - MBA ISTEC Paris (Leadership & Business Transformation): 14-16 tháng, 60 ECTS, chuẩn Thạc sĩ Pháp Bac+5 (RNCP Level 7), định hướng Chiến lược & Chuyển đổi số cùng AI. Học phí công bố 8.500 EUR, ưu đãi qua IDEAS chỉ còn 6.500 EUR + 200 EUR lệ phí hồ sơ.\n"
+                . "  - DBA ISTEC Paris (Tiến sĩ Quản trị Kinh doanh): 03 năm chính quy, 180 ECTS, chuẩn Pro - Bac+8 / EQF Level 8 cao nhất Châu Âu, WES Earned Doctorate (Mỹ & Canada). Học phí trọn gói 13.000 EUR (đã bao gồm học phí 3 năm, hướng dẫn 1:1 Giáo sư quốc tế, AI Copilot 24/7 và hỗ trợ độc quyền từ IDEAS).\n"
+                . "• Hệ đào tạo: Bằng cấp nhận được giống nhau 100%. Hệ High Quality (HQ) có tương tác trực tiếp (Live) với giảng viên Thụy Sĩ và ĐẶC BIỆT gồm 2 chuyến đi Thụy Sĩ (Study Trip + Lễ tốt nghiệp). Hệ Standard tối ưu chi phí, tự học qua LMS Moodle, Video và lớp Chủ Nhật tiếng Việt, hỗ trợ bởi AI Pro Platform (GPT, Claude, Gemini, Grok đã fine-tune).\n"
+                . "• Đầu vào & Tiếng Anh: Bằng Cử nhân trở lên; Tiếng Anh tương đương IELTS 6.0 hoặc phỏng vấn tiếng Anh với đại diện trường Swiss UMEF (không đặt nặng chứng chỉ học thuật).\n\n"
+                . "CẨM NANG 12 TÌNH HUỐNG TƯ VẤN THỰC CHIẾN CHO SALE (SALE CASES REPERTOIRE):\n"
+                . "1. Khách CĐ 3 năm + >=5 năm quản lý: Đủ điều kiện xét đặc cách học EMBA (không làm luận văn, 12-14 tháng), IDEAS hỗ trợ làm hồ sơ xin trường duyệt.\n"
+                . "2. Khách CĐ 2 năm: Tư vấn Top-up BBA 1 năm lấy bằng Cử nhân Thụy Sĩ trước khi lên Thạc sĩ (nếu trái ngành cần 3 năm kinh nghiệm).\n"
+                . "3. Khách thi công chức nhà nước: Bằng Online 100% chưa công nhận VN-NARIC; giải pháp chọn hệ kết hợp 70% trực tiếp Thụy Sĩ - 30% Online.\n"
+                . "4. Giám đốc bận rộn sợ luận văn: Hướng sang EMBA 10 môn thực chiến, hoàn toàn không luận văn, học buổi tối.\n"
+                . "5. Học AI không biết lập trình: Khẳng định MSc Applied AI học tư duy chiến lược ứng dụng AI vào quản trị doanh nghiệp, KHÔNG CẦN BIẾT CODE.\n"
+                . "6. Tiếng Anh yếu: An tâm học hệ Standard có LMS + AI Platform dịch hỗ trợ + Lớp Chủ Nhật tiếng Việt, phỏng vấn đầu vào thân thiện.\n"
+                . "7. Dẫn người nhà sang Thụy Sĩ dự lễ: Hệ HQ có 2 chuyến đi (bao gồm khách sạn, di chuyển Thụy Sĩ), IDEAS cấp thư mời xin Visa Châu Âu cho người thân (tự túc vé bay & ăn ở cá nhân).\n"
+                . "8. Cựu học viên học tiếp Tiến sĩ DBA: 12.500 EUR, ưu đãi giảm 3.000 EUR còn 9.500 EUR, hỗ trợ Final Draft Review chống rớt.\n"
+                . "9. Học viên bận trễ hạn nộp bài: Báo Trợ lý chương trình làm đơn xin gia hạn có lý do chính đáng.\n"
+                . "10. Chuyển điểm trường khác: Hỗ trợ chuyển đổi tối đa 50% tín chỉ sau khi Hội đồng thẩm định.\n"
+                . "11. Chia đợt đóng học phí: Cho phép chia 2-3 đợt theo kỳ học, tạo đơn SO mốc thanh toán cụ thể.\n"
+                . "12. Nộp hồ sơ gấp: Bổ sung Bằng + CV + CCCD trước để giữ chỉ tiêu, các giấy tờ khác bổ sung sau.\n\n"
+                . "NGUYÊN TẮC BẢO MẬT & PHÂN QUYỀN ZERO-TRUST THEO TOKEN & NGƯỜI DÙNG HIỆN TẠI:\n"
+                . "1. Bạn đang phục vụ người dùng có ID {$senderId}, Họ tên: {$userName}, Quyền hạn: '{$userRole}'.\n"
+                . "2. BẢO MẬT DỮ LIỆU & QUY TRÌNH QUYỀN HẠN KHÔNG CHỒNG CHÉO, KHÔNG LỘ LẪN:\n"
+                . "   - Nhân viên kinh doanh (Sale) và nhân sự chỉ được tra cứu, xem thông tin và thao tác trên các học viên/khách hàng/công việc do chính người này phụ trách (hoặc được phân công cộng tác / chia sẻ hợp tác).\n"
+                . "   - TUYỆT ĐỐI KHÔNG tiết lộ thông tin khách hàng, số điện thoại, hợp đồng, lịch sử tư vấn, số tiền đóng cọc của khách hàng thuộc về Sale khác hoặc nhân sự khác!\n"
+                . "   - Nếu người dùng yêu cầu xem dữ liệu vượt quá quyền hạn (hỏi tổng chi phí công ty, hỏi quỹ tiền, hỏi lương người khác, hỏi danh sách khách của Sale khác): BẮT BUỘC từ chối lịch sự: 'Dạ {$cleanCallName} ơi, tài khoản của mình mang vai trò [{$userRole}] nên dữ liệu này nằm ngoài phạm vi quyền hạn được phân công ạ. {$cleanCallName} vui lòng liên hệ Ban Giám đốc hoặc Quản lý trực tiếp nếu cần cấp quyền nhé!'\n"
+                . "   - Khi người dùng yêu cầu tạo giúp, thêm, sửa phiếu/đơn/hồ sơ: Quyền hạn của bạn là hỗ trợ chuẩn bị, tính toán, format và điền sẵn (prefill) vào Drawer/Modal qua thẻ hành động `<<<ACTION_PROPOSAL: {...}>>>`. QUYỀN HẠN CUỐI CÙNG LÀ CỦA NGƯỜI DÙNG: Người dùng sẽ kiểm tra và tự tay bấm nút 'Lưu' hoặc 'Xác nhận' để lưu vào hệ thống, đảm bảo tính pháp lý và trách nhiệm cá nhân!\n\n"
+                . "CƠ CHẾ ĐA AGENT TỰ LÀM VIỆC VỚI NHAU ĐỂ GIẢI QUYẾT TOÀN DIỆN VẤN ĐỀ (11-AGENT SWARM SYNERGY):\n"
+                . "Bạn là hạt nhân của mạng lưới 11 Agent chuyên trách thuộc Viện IDEAS, phối hợp tự động nhiều cấp để giải quyết trọn gói yêu cầu của người dùng:\n"
+                . "1. Agent Tổng Điều Phối (orchestrator): Tiếp nhận ý định, phân bổ task, tổng hợp giải pháp liên phòng ban.\n"
+                . "2. Agent Sales & CRM (sales_crm): Tra cứu lead/học viên, kiểm tra giai đoạn pipeline, cập nhật hồ sơ, ghi chú chăm sóc.\n"
+                . "3. Agent Tài Chính & Kế Toán (finance_accounting): Báo cáo thu chi SO/PO, tính toán đợt thanh toán (installments), đối soát công nợ.\n"
+                . "4. Agent Học Vụ & Đào Tạo (academic_training): Rà soát điều kiện tuyển sinh, chương trình liên kết Swiss UMEF/ISTEC Paris, quy đổi tín chỉ.\n"
+                . "5. Agent Kế Hoạch & Tiến Độ (tasks_planning): Quản lý công việc workspace, nhắc việc quá hạn/khẩn cấp, đôn đốc KPI.\n"
+                . "6. Agent Nhân Sự & Chấm Công (hr_operations): Quản lý phép năm, giải trình công, danh bạ nhân sự, lịch nghỉ vắng mặt.\n"
+                . "7. Agent Hồ Sơ & Pháp Lý (records_legal): Thẩm định giấy tờ nhập học trong cloud_files, rà soát hợp đồng pháp lý, kiểm tra hồ sơ còn thiếu.\n"
+                . "8. Agent Tài Sản & Kho (assets_inventory): Tra cứu thiết bị hrm_assets, theo dõi bàn giao laptop/vật tư, nhập xuất giáo trình.\n"
+                . "9. Agent Chiến Dịch Marketing (marketing_campaigns): Đo lường hiệu quả kênh tuyển sinh, tỷ lệ chốt cọc lead, đề xuất chiến dịch ads.\n"
+                . "10. Agent Trợ Lý Ban Giám Đốc (executive_bi): Phân tích mạch tài chính P&L, dòng tiền ròng thực thu - thực chi, cảnh báo rủi ro (dành cho Admin/Director/Accountant).\n"
+                . "11. Agent Kỹ Thuật IT & Hệ Thống (system_it): Kiểm tra sức khỏe hệ thống, audit log AI, trạng thái nhân sự trực tuyến.\n\n"
+                . "• NGUYÊN TẮC PHỐI HỢP LIÊN AGENT (CHAINED COLLABORATION):\n"
+                . "  Khi giải quyết một yêu cầu phức tạp (ví dụ: 'Kiểm tra hồ sơ học viên Tuấn rồi soạn hợp đồng đào tạo và thu cọc'):\n"
+                . "  - Bước 1: Tra cứu hồ sơ/giấy tờ học viên bằng công cụ chuyên trách (`check_student_admission_records` hoặc `search_contacts_or_leads`).\n"
+                . "  - Bước 2: Từ dữ liệu thực tế thu được, tự động kích hoạt công cụ `draft_action_proposal` để soạn sẵn Thẻ Hành Động điền trước 100% dữ liệu.\n"
+                . "  - Bước 3: Tổng hợp phản hồi tự nhiên, giải thích rõ ràng và hiển thị Thẻ Hành Động để người dùng kiểm tra và tự tay bấm xác nhận/lưu!\n\n"
+                . "QUY TẮC ANTI-HALLUCINATION & AN TOÀN PHÁP LÝ:\n"
+                . "1. Tuyệt đối KHÔNG bịa đặt thông tin, chính sách hay học phí ngoài tài liệu huấn luyện.\n"
+                . "2. Nếu vấn đề chưa có thông tin chính xác: Trả lời mềm mại: 'Dạ vấn đề này hiện em chưa có thông tin chính xác nhất. Nhờ {$userName} để lại thông tin hoặc em sẽ báo chuyên viên kiểm tra và báo lại ngay cho mình nhé!'\n"
+                . "3. Với nội dung chưa rõ hoặc phụ thuộc từng hồ sơ, trả lời theo hướng 'tùy hồ sơ', 'cần xét duyệt thêm', 'sẽ được tư vấn cụ thể'.\n\n"
+                . "NĂNG LỰC PHÂN TÍCH ĐA PHƯƠNG TIỆN, TÀI LIỆU, BROCHURE & HỢP ĐỒNG (MULTIMODAL INTELLIGENCE):\n"
+                . "Bạn sở hữu năng lực đa phương tiện toàn diện (xử lý hình ảnh, PDF, Word, Excel, Slide) và trò chuyện, phân tích tài liệu tự nhiên như một chuyên gia tư vấn cấp cao:\n"
+                . "1. ĐÁNH GIÁ & RÀ SOÁT HỢP ĐỒNG (CONTRACT REVIEW & LEGAL RISK AUDIT):\n"
+                . "   - Khi người dùng gửi file hoặc nội dung hợp đồng (hợp đồng đào tạo, hợp đồng dịch vụ, biên bản thỏa thuận):\n"
+                . "   - Phân tích chi tiết từng điều khoản: Quyền & nghĩa vụ hai bên, điều khoản học phí/thanh toán, cam kết đầu ra/văn bằng, điều khoản bảo mật, phạt vi phạm & chấm dứt hợp đồng.\n"
+                . "   - Cảnh báo các điểm rủi ro pháp lý tiềm ẩn hoặc các điều khoản chưa rõ ràng cần đàm phán lại.\n"
+                . "   - Nếu là hợp đồng chốt sale học viên: Tự động bóc tách Tên, SĐT, Email, Khóa học, Học phí, Lịch thanh toán; trò chuyện đối chiếu với dữ liệu CRM trên hệ thống; và xuất thẻ hành động `<<<ACTION_PROPOSAL: {\"action_type\": \"sales_order\", ...}>>>` để người dùng xác nhận tạo đơn SO ngay.\n"
+                . "2. PHÂN TÍCH BROCHURE, TỜ RƠI, HỒ SƠ NĂNG LỰC (BROCHURE & COLLATERAL ANALYSIS):\n"
+                . "   - Khi người dùng tải lên brochure, flyer, portfolio, slide giới thiệu chương trình (ảnh, PDF):\n"
+                . "   - Đánh giá bố cục thị giác (layout, visual hierarchy, màu sắc thương hiệu IDEAS, tính chuyên nghiệp quốc tế).\n"
+                . "   - Phân tích nội dung: Thông điệp cốt lõi (Key Message), Đề xuất giá trị độc nhất (USP của chương trình UMEF / ISTEC), cấu trúc chương trình, điều kiện đầu vào.\n"
+                . "   - Đánh giá lời kêu gọi hành động (Call To Action - CTA) và chỉ ra các điểm cần hoàn thiện để tăng tỷ lệ chuyển đổi học viên.\n"
+                . "   - Đề xuất câu chữ (copywriting) thay thế sắc bén, hấp dẫn hơn cho đội ngũ Marketing/Design.\n"
+                . "3. PHÂN TÍCH DIGITAL MARKETING, KẾ HOẠCH TRUYỀN THÔNG & ADS CREATIVE:\n"
+                . "   - Khi người dùng gửi bài viết fanpage, kịch bản video, kế hoạch chạy ads (Facebook/Google/TikTok/LinkedIn):\n"
+                . "   - Đánh giá góc độ tiếp thị: Tiêu đề thu hút (Hook), Insight học viên mục tiêu (Pain point & Desire), Thông điệp chính và CTA.\n"
+                . "   - Đề xuất các góc tiếp cận sáng tạo mới, phân khúc khách hàng tiềm năng, từ khóa/hashtag hiệu quả, gợi ý A/B testing ad copy cho các khóa học EMBA, MBA, MSc AI, DBA.\n"
+                . "4. TRÒ CHUYỆN & GIẢI ĐÁP ĐA NĂNG:\n"
+                . "   - Bạn sẵn sàng hỗ trợ giải đáp mọi câu hỏi thông thường, thắc mắc công việc, dịch thuật văn bản, tóm tắt báo cáo tài chính hoặc bảng tính Excel một cách thông minh, tự nhiên và ân cần như một người đồng nghiệp xuất sắc.\n\n"
+                . "QUY TRÌNH TẠO ĐƠN & THẺ HÀNH ĐỘNG ERP (SMART DRAFTER -> FINAL HUMAN COMMITTER):\n"
+                . "Khi người dùng yêu cầu tạo phiếu/đơn/thủ tục, kiểm tra đủ các trường dữ kiện bắt buộc; nếu thiếu thì hỏi {$userName} bổ sung chu đáo.\n"
+                . "Khi đã đủ dữ kiện, xuất thẻ hành động `<<<ACTION_PROPOSAL: {...}>>>` ở cuối tin nhắn (người dùng bấm sẽ mở drawer/modal điền sẵn để tự bấm lưu):\n"
+                . "1. Đơn nghỉ phép: action_type: 'leave', params: {leave_type, start_date, end_date, total_days, reason}\n"
+                . "2. Giải trình quên chấm công: action_type: 'supplementary', params: {date, in_time, out_time, reason}\n"
+                . "3. Đề xuất đổi ca trực: action_type: 'shift_swap', params: {date, shift_type, reason}\n"
+                . "4. Đề xuất thanh toán chi phí: action_type: 'expense', params: {title, amount, vendor_name, reason} (Khoản chi >= 5.000.000đ phải nhắc cần 2 cấp duyệt)\n"
+                . "5. Đề xuất tạm ứng công tác: action_type: 'advance_payment', params: {title, amount, reason}\n"
+                . "6. Phiếu nhập kho vật tư / giáo trình: action_type: 'inventory_receipt', params: {notes, supplier_name, items: [{name, quantity, unit_price}]}\n"
+                . "7. Giao việc / Task: action_type: 'task', params: {subject, due_date, priority, body}\n"
+                . "8. Thêm học viên / Lead CRM: action_type: 'lead', params: {name, phone, email, source, notes}\n"
+                . "9. Tạo phiếu thu / Đơn hàng SO (Lịch trình học phí): action_type: 'sales_order', params: {contact_id, customer_name, phone, email, total_amount, currency, notes, installments: [{name, amount, expected_pay_date}]}\n"
+                . "   - LƯU Ý VỚI SALES_ORDER: BẮT BUỘC truyền contact_id (nếu đã tìm thấy học viên trong CRM) cùng customer_name, phone, email; total_amount bằng số nguyên; và installments là mảng toàn bộ các đợt thanh toán (mỗi đợt gồm name, amount bằng số nguyên, expected_pay_date dạng YYYY-MM-DD).\n"
+                . "   - KIỂM TRA BƯỚC TẠO SO / PIPELINE TRANSITION: Khi người dùng yêu cầu tạo SO hoặc chia đợt học phí cho học viên, hãy kiểm tra giai đoạn Pipeline hiện tại của học viên (qua tool search_contacts hoặc dữ liệu tra cứu ERP). Nếu học viên chưa đạt đến giai đoạn tạo SO (giai đoạn < 13, tức là chưa đến '13 – Deposit / Tuition Payment'):\n"
+                . "     + Bạn BẮT BUỘC chủ động nhắc người dùng một cách tinh tế: 'Dạ [Tên bạn] ơi, học viên [Tên KH] hiện đang ở giai đoạn \"[Tên giai đoạn hiện tại]\", chưa đến bước Tạo đơn SO / Đóng cọc (Giai đoạn 13 – Deposit / Tuition Payment). Bạn có muốn em hỗ trợ chuyển Pipeline sang \"13 – Deposit / Tuition Payment\" kèm ghi chú (note) gì không để em thực hiện luôn giúp mình nhé?'\n"
+                . "     + Đồng thời vẫn xuất thẻ hành động `<<<ACTION_PROPOSAL: {\"action_type\": \"sales_order\", ...}>>>` để người dùng có thể mở phiếu điền sẵn khi đã sẵn sàng.\n"
+                . "     + Khi người dùng đồng ý chuyển pipeline hoặc cập nhật ghi chú: Gọi ngay công cụ `update_contact_pipeline` hoặc `add_contact_consultation_note`!\n"
+                . "10. Yêu cầu bổ sung hồ sơ tuyển sinh: action_type: 'admission_document_request', params: {contact_id, student_name, program_code, missing_documents: ['Bằng ĐH', 'Bảng điểm', 'CCCD', 'CV', 'Ảnh 3x4'], deadline, notes}\n"
+                . "11. Đề xuất ký kết hợp đồng pháp lý: action_type: 'legal_contract', params: {contact_id, student_name, contract_type: 'Hợp đồng đào tạo EMBA', tuition_amount, payment_schedule, notes}\n"
+                . "12. Biên bản bàn giao tài sản thiết bị: action_type: 'asset_handover', params: {user_id, recipient_name, asset_name, asset_code, handover_date, condition: 'Mới 100%', notes}\n"
+                . "13. Khởi tạo chiến dịch Marketing: action_type: 'marketing_campaign', params: {campaign_name, channel: 'Facebook Ads', target_leads, estimated_budget, start_date, notes}\n\n"
+                . "HỖ TRỢ ĐÍNH KÈM / LƯU FILE VÀO HỒ SƠ KHÁCH HÀNG CRM:\n"
+                . "• Khi người dùng gửi tệp tin, hình ảnh, tài liệu và nhắn yêu cầu như 'upload 2 file này lên hồ sơ cho khách hàng sđt ...', 'lưu file này vào hồ sơ học viên ...':\n"
+                . "  Gọi ngay công cụ `attach_files_to_contact` với số điện thoại hoặc tên của khách hàng trong tham số `contact_query`, chọn `category` phù hợp (mặc định: 'Hồ sơ học viên'). Công cụ sẽ tự động lưu các tệp đính kèm vừa gửi vào kho tài liệu `cloud_files` của khách hàng và thêm ghi chú lịch sử hồ sơ!\n\n"
+                . "HỖ TRỢ CẬP NHẬT HỒ SƠ KHÁCH HÀNG (PROFILE & NOTES):\n"
+                . "• Để cập nhật thông tin học viên (chức danh, công ty, địa chỉ, email, sđt...): Dùng công cụ `update_contact_profile`.\n"
+                . "• Để thêm ghi chú tư vấn/chăm sóc: Dùng công cụ `add_contact_consultation_note`.\n\n"
+                . "HỖ TRỢ ĐÀO SÂU & HỎI TỚI HỎI TỚI VỀ KHÁCH HÀNG 360° (CUSTOMER 360 DEEP-DIVE):\n"
+                . "• Khi người dùng hỏi đào sâu, hỏi tới hỏi tới về bất kỳ khách hàng/học viên nào (ví dụ: 'khách này từ lúc nào?', 'ai chăm sóc?', 'note cái gì?', 'hồ sơ có gì?', 'chuẩn hết chưa?', 'tổng quan tình trạng bạn này ra sao?'):\n"
+                . "  BẮT BUỘC gọi ngay công cụ `get_contact_360_profile` với số điện thoại, email hoặc tên khách hàng trong tham số `contact_query`.\n"
+                . "  Dữ liệu trả về sẽ tổng hợp đầy đủ 5 trụ cột:\n"
+                . "  (1) Thời điểm vào CRM & Nguồn tiếp thị (từ lúc nào, chiến dịch nào).\n"
+                . "  (2) Chuyên viên tư vấn phụ trách & Chi nhánh (ai chăm sóc, cộng tác viên nào).\n"
+                . "  (3) Toàn bộ lịch sử ghi chú tư vấn chi tiết (note cái gì, các lần tương tác).\n"
+                . "  (4) Danh mục tài liệu/hồ sơ đã tải lên kho cloud_files (hồ sơ có những gì, loại file).\n"
+                . "  (5) Thẩm định pháp lý & điều kiện nhập học (chuẩn hết chưa, thiếu CCCD/Bằng cấp/Bảng điểm/CV tiếng Anh, tình trạng đặt cọc & hợp đồng).\n"
+                . "  Hãy tổng hợp câu trả lời mạch lạc, chuyên nghiệp, chính xác 100% theo dữ liệu thực tế từ database MySQL, không bịa đặt hoặc phỏng đoán!\n\n"
+                . $ragContextStr
+                . $ambientSnapshotStr
+                . $erpLookupStr;
+
+            // 5. Fetch last 6 messages from this conversation for context
+            $stmtHistory = $this->db->prepare("
+                SELECT id, sender_id, message_type, content, metadata, created_at
+                FROM chat_messages
+                WHERE conversation_id = ? AND deleted_at IS NULL
+                ORDER BY id DESC
+                LIMIT 6
+            ");
+            $stmtHistory->execute([$conversationId]);
+            $history = array_reverse($stmtHistory->fetchAll(PDO::FETCH_ASSOC) ?: []);
+
+            // 6. Call Gemini 3.5 Flash Lite with Autonomous Tool Calling & Dynamic State
+            $authContext = [
+                'user_id' => $senderId,
+                'tenant_id' => $tid,
+                'role' => $userRole,
+                'full_name' => $userName,
+                'name' => $cleanCallName,
+                'job_title' => $userTitle,
+                'department' => $userInfo['department'] ?? '',
+                'team_id' => (int)($userInfo['team_id'] ?? 0),
+                'conversation_id' => $conversationId,
+                'user_msg_id' => $userMsgId,
+                'metadata' => $metadata,
+                'attached_file' => $attachedFile
+            ];
+            $aiReplyText = $this->callGeminiFlashLite($history, $systemPrompt, $attachedFile, $onChunk, $authContext);
+            if (empty($aiReplyText)) {
+                $aiReplyText = "Tôi đã ghi nhận thông tin của bạn. Hiện tại hệ thống đang xử lý tác vụ, vui lòng gửi lại câu hỏi hoặc cung cấp thêm thông tin chi tiết.";
+            }
+
+            // 7. Insert AI Reply into chat_messages
+            $this->db->beginTransaction();
+
+            $stmtIns = $this->db->prepare("
+                INSERT INTO chat_messages (tenant_id, conversation_id, sender_id, message_type, content, reply_to_id, created_at)
+                VALUES (?, ?, 9000001, 'text', ?, ?, NOW())
+            ");
+            $stmtIns->execute([$tid, $conversationId, $aiReplyText, $userMsgId]);
+            $aiMsgId = (int)$this->db->lastInsertId();
+
+            // Update conversation last message
+            $this->db->prepare("
+                UPDATE chat_conversations 
+                SET last_message_id = ?, last_message_at = NOW(), updated_at = NOW() 
+                WHERE id = ?
+            ")->execute([$aiMsgId, $conversationId]);
+
+            $this->db->commit();
+
+            // 8. Log Query Audit & Detect Intent Gaps for Continuous AI Training
+            try {
+                $hasActionProposal = (strpos($aiReplyText, '<<<ACTION_PROPOSAL:') !== false) ? 1 : 0;
+                $fallbackKeywords = [
+                    'chưa có thông tin chính xác nhất',
+                    'để lại thông tin',
+                    'chuyên viên bên em sẽ kiểm tra',
+                    'chưa có thông tin'
+                ];
+                $fallbackTriggered = 0;
+                foreach ($fallbackKeywords as $fKw) {
+                    if (mb_stripos($aiReplyText, $fKw) !== false) {
+                        $fallbackTriggered = 1;
+                        break;
+                    }
+                }
+
+                $needsTraining = 0;
+                $gapCategory = null;
+                if ($fallbackTriggered) {
+                    $needsTraining = 1;
+                    $gapCategory = 'unanswered_knowledge';
+                } elseif (empty($ragChunks) && empty($erpLookupStr)) {
+                    $needsTraining = 1;
+                    $gapCategory = 'missing_rag_or_data';
+                }
+
+                $stmtAudit = $this->db->prepare("
+                    INSERT INTO ai_query_audit_logs 
+                    (tenant_id, user_id, user_role, query_text, rag_chunks_found, erp_records_found, has_action_proposal, fallback_triggered, needs_training, gap_category, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+                ");
+                $stmtAudit->execute([
+                    $tid,
+                    $senderId,
+                    $userRole,
+                    $userMessage,
+                    count($ragChunks),
+                    empty($erpLookupStr) ? 0 : 1,
+                    $hasActionProposal,
+                    $fallbackTriggered,
+                    $needsTraining,
+                    $gapCategory
+                ]);
+            } catch (\Throwable $eAudit) {
+                error_log("Failed to insert ai_query_audit_logs: " . $eAudit->getMessage());
+            }
+
+            $activeAgent = $this->resolveActiveSpecializedAgent($userMessage);
+
+            return [
+                'id' => $aiMsgId,
+                'conversation_id' => $conversationId,
+                'sender_id' => 9000001,
+                'message_type' => 'text',
+                'content' => $aiReplyText,
+                'reply_to_id' => $userMsgId,
+                'sender_name' => $activeAgent['name'],
+                'sender_avatar' => $activeAgent['avatar'],
+                'sender_title' => $activeAgent['roleTitle'],
+                'created_at' => date('c'),
+                'is_mine' => false,
+                'reactions' => []
+            ];
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) $this->db->rollBack();
+            error_log("Process IDEAS AI Chat Reply Error: " . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Resolve Multi-Agent Swarm Collaboration based on prompt keywords and cross-domain intent
+     */
+    private function resolveCollaboratingAgents(string $query): array {
+        $q = mb_strtolower(trim($query));
+        
+        $agentsMap = [
+            'tasks' => [
+                'id' => 'tasks',
+                'name' => 'Agent Task',
+                'roleTitle' => 'Kế hoạch & Việc con',
+                'category' => 'tasks',
+                'avatar' => '/stickers/ideas/ideas_16.webp',
+                'badge' => 'Kế hoạch',
+                'badgeColor' => '#2563eb',
+                'badgeBg' => '#dbeafe',
+                'description' => 'Phân rã việc con (WBS), checklist, phân bổ phòng ban, theo dõi deadline.',
+                'statusText' => 'Đang lập kế hoạch & phân rã việc con...'
+            ],
+            'finance' => [
+                'id' => 'finance',
+                'name' => 'Agent Thu Chi',
+                'roleTitle' => 'Kế toán & PO / SO',
+                'category' => 'finance',
+                'avatar' => '/stickers/ideas/ideas_25.webp',
+                'badge' => 'Tài chính',
+                'badgeColor' => '#059669',
+                'badgeBg' => '#d1fae5',
+                'description' => 'Phiếu chi PO, phiếu thu SO, tiền cọc học phí, tạm ứng và dòng tiền.',
+                'statusText' => 'Đang đối soát số liệu PO / SO & thu chi...'
+            ],
+            'hrm' => [
+                'id' => 'hrm',
+                'name' => 'Agent Nhân Sự',
+                'roleTitle' => 'Chấm công & Nhân sự',
+                'category' => 'hrm',
+                'avatar' => '/stickers/ideas/ideas_15.webp',
+                'badge' => 'Nhân sự',
+                'badgeColor' => '#7c3aed',
+                'badgeBg' => '#ede9fe',
+                'description' => 'Sơ đồ phòng ban, ai quản lý, nhân sự nghỉ việc, chấm công, nay ai nghỉ & phép.',
+                'statusText' => 'Đang tra cứu sơ đồ phòng ban, nhân sự & lịch nghỉ...'
+            ],
+            'sales' => [
+                'id' => 'sales',
+                'name' => 'Agent Sales',
+                'roleTitle' => 'Tư vấn & CRM',
+                'category' => 'sales',
+                'avatar' => '/stickers/ideas/ideas_10.webp',
+                'badge' => 'Tư vấn CRM',
+                'badgeColor' => '#d97706',
+                'badgeBg' => '#fef3c7',
+                'description' => 'Tiềm năng Lead, kịch bản tư vấn, 12 tình huống chốt sale & chăm sóc khách hàng.',
+                'statusText' => 'Đang phân tích kịch bản tư vấn CRM...'
+            ],
+            'academic' => [
+                'id' => 'academic',
+                'name' => 'Agent Đào Tạo',
+                'roleTitle' => 'Học vụ & Tuyển sinh',
+                'category' => 'academic',
+                'avatar' => '/stickers/ideas/ideas_12.webp',
+                'badge' => 'Học vụ',
+                'badgeColor' => '#0891b2',
+                'badgeBg' => '#cffafe',
+                'description' => 'Chương trình quốc tế: EMBA, MBA, MSc AI, DBA ISTEC Paris, tín chỉ và luận văn.',
+                'statusText' => 'Đang tra cứu khung chương trình & điều kiện...'
+            ],
+            'master' => [
+                'id' => 'master',
+                'name' => 'SI IDEAS',
+                'roleTitle' => 'Chỉ huy & Tri thức',
+                'category' => 'master',
+                'avatar' => '/stickers/ideas/ideas_3.webp',
+                'badge' => 'Chỉ huy',
+                'badgeColor' => '#BD1D2D',
+                'badgeBg' => '#fee2e2',
+                'description' => 'Điều phối chung, tri thức kiểm định quốc tế Swiss UMEF & ISTEC Paris.',
+                'statusText' => 'Đang tổng hợp câu trả lời...'
+            ],
+            'records_legal' => [
+                'id' => 'records_legal',
+                'name' => 'Agent Hồ Sơ & Pháp Lý',
+                'roleTitle' => 'Thẩm định & Hồ sơ',
+                'category' => 'records_legal',
+                'avatar' => '/stickers/ideas/ideas_18.webp',
+                'badge' => 'Thẩm định',
+                'badgeColor' => '#7c2d12',
+                'badgeBg' => '#ffedd5',
+                'description' => 'Thẩm định CCCD, bằng Đại học, bảng điểm, dịch thuật công chứng, hợp đồng đào tạo & cam kết.',
+                'statusText' => 'Đang thẩm định danh mục hồ sơ & hợp đồng...'
+            ],
+            'assets_inventory' => [
+                'id' => 'assets_inventory',
+                'name' => 'Agent Tài Sản & Kho',
+                'roleTitle' => 'Kho & Cấp phát TS',
+                'category' => 'assets_inventory',
+                'avatar' => '/stickers/ideas/ideas_32.webp',
+                'badge' => 'Vật tư & TS',
+                'badgeColor' => '#ea580c',
+                'badgeBg' => '#ffedd5',
+                'description' => 'Quản lý kho ấn phẩm, balo, áo polo, quà tặng tuyển sinh, giáo trình và tài sản công ty.',
+                'statusText' => 'Đang tra cứu tồn kho ấn phẩm & cấp phát tài sản...'
+            ],
+            'marketing_campaigns' => [
+                'id' => 'marketing_campaigns',
+                'name' => 'Agent Marketing',
+                'roleTitle' => 'Chiến dịch & Tăng trưởng',
+                'category' => 'marketing_campaigns',
+                'avatar' => '/stickers/ideas/ideas_20.webp',
+                'badge' => 'Marketing',
+                'badgeColor' => '#db2777',
+                'badgeBg' => '#fce7f3',
+                'description' => 'Chiến dịch tuyển sinh, nguồn Lead, CPL, CAC, broadcast Zalo ZNS / SMS / Email và sự kiện.',
+                'statusText' => 'Đang phân tích hiệu quả chiến dịch & nguồn Lead...'
+            ],
+            'executive_bi' => [
+                'id' => 'executive_bi',
+                'name' => 'Agent Trợ Lý Giám Đốc',
+                'roleTitle' => 'Điều hành & Báo cáo BI',
+                'category' => 'executive_bi',
+                'avatar' => '/stickers/ideas/ideas_31.webp',
+                'badge' => 'Điều hành BI',
+                'badgeColor' => '#b45309',
+                'badgeBg' => '#fef3c7',
+                'description' => 'Báo cáo P&L thời gian thực, dòng tiền ròng, phát hiện bất thường thu chi dành cho Ban Giám đốc.',
+                'statusText' => 'Đang tổng hợp báo cáo điều hành & phân tích P&L...'
+            ],
+            'system_it' => [
+                'id' => 'system_it',
+                'name' => 'Agent Kỹ Thuật & Vận Hành',
+                'roleTitle' => 'Hỗ trợ IT & Hệ thống',
+                'category' => 'system_it',
+                'avatar' => '/stickers/ideas/ideas_11.webp',
+                'badge' => 'Kỹ thuật IT',
+                'badgeColor' => '#0284c7',
+                'badgeBg' => '#e0f2fe',
+                'description' => 'Giám sát đồng bộ Google Sheets, webhook, cronjob, tra cứu audit log và hỗ trợ lỗi hệ thống.',
+                'statusText' => 'Đang kiểm tra trạng thái hệ thống & nhật ký vận hành...'
+            ]
+        ];
+
+        $matchedKeys = [];
+
+        // 1. Executive BI domain
+        if (preg_match('/(p&l|doanh thu tổng|dòng tiền ròng|báo cáo ban giám đốc|báo cáo giám đốc|sức khỏe tài chính|bất thường thu chi)/iu', $q)) {
+            $matchedKeys[] = 'executive_bi';
+        }
+        // 2. Records & Legal domain
+        if (preg_match('/(hồ sơ|bằng cấp|bằng đại học|bảng điểm|dịch thuật|công chứng|cccd|hộ chiếu|cv tiếng anh|chứng chỉ ngoại ngữ|hợp đồng đào tạo|phụ lục hợp đồng|cam kết chuẩn)/iu', $q)) {
+            $matchedKeys[] = 'records_legal';
+        }
+        // 3. Asset & Inventory domain
+        if (preg_match('/(tồn kho|ấn phẩm|quà tặng|túi quà|balo|áo polo|sổ tay|bút ký|giáo trình|tài sản|cấp phát|bàn giao laptop|thu hồi tài sản|thiết bị văn phòng|hrm_assets)/iu', $q)) {
+            $matchedKeys[] = 'assets_inventory';
+        }
+        // 4. Marketing domain
+        if (preg_match('/(marketing|chiến dịch|nguồn lead|\bcpl\b|\bcac\b|facebook ads|google ads|tiktok|edufair|workshop|hội thảo tuyển sinh|sự kiện tuyển sinh|broadcast|zalo zns|email marketing)/iu', $q)) {
+            $matchedKeys[] = 'marketing_campaigns';
+        }
+        // 5. IT System domain
+        if (preg_match('/(lỗi app|webhook|sync sheet|đồng bộ sheet|cronjob|audit log|ai_query_audit_logs|kỹ thuật|sự cố hệ thống|kết nối csdl)/iu', $q)) {
+            $matchedKeys[] = 'system_it';
+        }
+        // 6. Task domain
+        if (preg_match('/(task|công việc|kế hoạch|việc con|subtask|deadline|giao việc|phân bổ|checklist|tiến độ)/iu', $q)) {
+            $matchedKeys[] = 'tasks';
+        }
+        // 7. Finance domain
+        if (preg_match('/(chi phí|phiếu chi|\bpo\b|phiếu thu|\bso\b|cọc|đặt cọc|học phí|tiền|tạm ứng|ngân sách|hóa đơn)/iu', $q)) {
+            $matchedKeys[] = 'finance';
+        }
+        // 8. HRM domain
+        if (preg_match('/(chấm công|nghỉ phép|phép năm|giải trình|quên chấm|đi trễ|bổ sung công|đổi ca|duyệt đơn|lương|phiếu lương|bảng lương|công ty có ai|phòng ban|quản lý|trưởng phòng|trưởng nhóm|leader|nhân sự|nhân viên|nghỉ việc|nay ai nghỉ|hôm nay ai nghỉ|sắp tới ai nghỉ|ai nghỉ|ai off|vắng mặt|wfh|công tác)/iu', $q)) {
+            $matchedKeys[] = 'hrm';
+        }
+        // 9. Sales domain
+        if (preg_match('/(lead|tiềm năng|khách hàng|crm|tư vấn|chốt sale|từ chối|học viên|chăm sóc)/iu', $q)) {
+            $matchedKeys[] = 'sales';
+        }
+        // 10. Academic domain
+        if (preg_match('/(emba|mba|msc ai|dba|topup|istec|umef|thụy sĩ|pháp|tín chỉ|luận văn|đào tạo|tuyển sinh)/iu', $q)) {
+            $matchedKeys[] = 'academic';
+        }
+
+        // De-duplicate matched keys
+        $matchedKeys = array_unique($matchedKeys);
+
+        if (empty($matchedKeys)) {
+            return [
+                'primaryAgent' => $agentsMap['master'],
+                'collaborators' => [$agentsMap['master']],
+                'is_multi_agent' => false,
+                'synergySummary' => 'SI IDEAS điều phối trực tiếp.'
+            ];
+        }
+
+        // Primary agent is first matched
+        $primaryKey = $matchedKeys[0];
+        $primaryAgent = $agentsMap[$primaryKey];
+
+        $collaboratingList = [];
+        foreach ($matchedKeys as $k) {
+            $collaboratingList[] = $agentsMap[$k];
+        }
+
+        $isMultiAgent = count($collaboratingList) > 1;
+        $agentNames = implode(' ➔ ', array_column($collaboratingList, 'name'));
+        $synergySummary = $isMultiAgent 
+            ? "Phối hợp liên chuyên môn giữa {$agentNames} để giải quyết toàn diện vấn đề." 
+            : "Chuyên môn phụ trách: {$primaryAgent['roleTitle']}";
+
+        return [
+            'primaryAgent' => $primaryAgent,
+            'collaborators' => $collaboratingList,
+            'is_multi_agent' => $isMultiAgent,
+            'synergySummary' => $synergySummary
+        ];
+    }
+
+    /**
+     * Resolve Active Specialized Agent (Backwards compatible proxy)
+     */
+    private function resolveActiveSpecializedAgent(string $query): array {
+        return $this->resolveCollaboratingAgents($query)['primaryAgent'];
+    }
+
+    /**
+     * Lightweight Ambient State Snapshot: Injects live stats (~2ms) into prompt
+     * Informs Gemini about total pending tasks (e.g. 127) and pending approvals (e.g. 25)
+     * so Gemini has immediate awareness without any hardcoded keywords!
+     */
+    private function getAmbientUserStateSnapshot(int $uid, int $tid, string $role): string {
+        try {
+            // 1. Task stats (Workspace defense)
+            $stmtT = $this->db->prepare("
+                SELECT COUNT(1) as total_undone,
+                       SUM(CASE WHEN a.due_date IS NOT NULL AND a.due_date < NOW() THEN 1 ELSE 0 END) as overdue_count,
+                       SUM(CASE WHEN a.priority IN ('urgent', 'high') THEN 1 ELSE 0 END) as urgent_count,
+                       SUM(CASE WHEN a.due_date IS NOT NULL AND DATE(a.due_date) = CURDATE() THEN 1 ELSE 0 END) as today_count
+                FROM activities a
+                WHERE a.tenant_id = ? AND a.deleted_at IS NULL
+                  AND (a.user_id = ? OR a.created_by = ? OR a.approver_id = ? OR FIND_IN_SET(?, IFNULL(a.participant_ids, '')))
+                  AND (a.status IS NULL OR a.status NOT IN ('completed', 'cancelled', 'done', 'hoan_thanh', 'da_xong'))
+            ");
+            $stmtT->execute([$tid, $uid, $uid, $uid, (string)$uid]);
+            $tStats = $stmtT->fetch(PDO::FETCH_ASSOC) ?: [];
+            $totalTasks = (int)($tStats['total_undone'] ?? 0);
+            $overdueTasks = (int)($tStats['overdue_count'] ?? 0);
+            $urgentTasks = (int)($tStats['urgent_count'] ?? 0);
+            $todayTasks = (int)($tStats['today_count'] ?? 0);
+
+            // 2. Approvals stats
+            $isGlobalAdmin = in_array(strtolower($role), ['admin', 'superadmin', 'super_admin', 'director'], true);
+            $stmtLv = $this->db->prepare("SELECT COUNT(1) FROM hrm_leave_requests WHERE status = 'pending' AND (user_id = ? OR approver_id = ? OR approver_id_2 = ? " . ($isGlobalAdmin ? "OR (approver_id IS NULL OR approver_id = 0)" : "") . ")");
+            $stmtLv->execute([$uid, $uid, $uid]);
+            $pendingLeaves = (int)$stmtLv->fetchColumn();
+
+            $stmtExp = $this->db->prepare("SELECT COUNT(1) FROM expenses WHERE tenant_id = ? AND deleted_at IS NULL AND status = 'pending' AND (created_by = ? OR approver_id = ? OR approver_id_2 = ? OR approver_id_3 = ? " . ($isGlobalAdmin ? "OR (approver_id IS NULL OR approver_id = 0)" : "") . ")");
+            $stmtExp->execute([$tid, $uid, $uid, $uid, $uid]);
+            $pendingExpenses = (int)$stmtExp->fetchColumn();
+
+            $totalApprovals = $pendingLeaves + $pendingExpenses;
+
+            return "\n\n--- [TRẠNG THÁI TỔNG QUAN THỰC TẾ TRÊN HỆ THỐNG CỦA NGƯỜI DÙNG] ---\n"
+                 . "• Bàn làm việc (Workspace): Đang có tổng cộng {$totalTasks} công việc chưa hoàn thành "
+                 . "({$overdueTasks} việc quá hạn, {$urgentTasks} việc khẩn cấp/ưu tiên cao, {$todayTasks} việc đến hạn hôm nay).\n"
+                 . "• Quy trình & Phê duyệt (Approvals): Đang có {$totalApprovals} phiếu đang chờ bạn duyệt ({$pendingExpenses} phiếu chi/PO, {$pendingLeaves} đơn nghỉ phép).\n"
+                 . "• NGUYÊN TẮC TRẢ LỜI: Khi người dùng hỏi về công việc, tiến độ, phê duyệt, tài chính học viên, hãy dùng công cụ (Tool Calling) để trích xuất dữ liệu chi tiết. Vì số lượng việc/phiếu có thể rất nhiều (ví dụ 127 việc, 25 phiếu), HÃY THỐNG KÊ TỔNG SỐ VÀ CHỈ ĐƯA RA TOP 3-5 VIỆC QUAN TRỌNG/GẤP NHẤT TRƯỚC, rồi hỏi nhẹ nhàng người dùng có muốn xem tiếp nhóm nào không ('hỏi tới đâu trả lời tới đó')!\n"
+                 . "--- [HẾT TRẠNG THÁI TỔNG QUAN] ---\n";
+        } catch (\Throwable $e) {
+            return "";
+        }
+    }
+
+    /**
+     * Smart Real-time Lookup across ERP Database (Fallback Entity Extractor for Phone, Email, #ID)
+     * Anti-hallucination & Token Optimization: Returns max 3-5 ground-truth records
+     */
+    private function executeSmartErpLookup(string $query, int $uid, int $tid, string $role): string {
+        try {
+            $cleanQ = trim($query);
+            if (mb_strlen($cleanQ) < 2) return '';
+
+            // Detect patterns
+            $isSearchIntent = false;
+            $searchKeywords = ['tìm', 'tra cứu', 'kiểm tra', 'xem đơn', 'thông tin', 'khách hàng', 'học viên', 'sđt', 'email', 'task', 'công việc', 'đề xuất', 'chi phí', 'po', 'so', 'đơn', 'đóng tiền', 'tiền', 'học phí', 'cọc', 'đóng cọc', 'nộp tiền', 'công ty', 'nhân sự', 'nhân viên', 'phòng ban', 'quản lý', 'trưởng phòng', 'leader', 'nghỉ việc', 'nghỉ', 'vắng mặt', 'wfh', 'công tác', 'lịch nghỉ', 'ai nghỉ'];
+            foreach ($searchKeywords as $kw) {
+                if (mb_stripos($cleanQ, $kw) !== false) {
+                    $isSearchIntent = true;
+                    break;
+                }
+            }
+
+            // Extract phone number (e.g. 0901234567)
+            $phoneMatch = [];
+            if (preg_match('/(0[3|5|7|8|9][0-9]{8})/u', $cleanQ, $phoneMatch)) {
+                $isSearchIntent = true;
+            }
+
+            // Extract email
+            $emailMatch = [];
+            if (preg_match('/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/u', $cleanQ, $emailMatch)) {
+                $isSearchIntent = true;
+            }
+
+            // Extract numeric ID (#123 or task 123 or đơn 123)
+            $idMatch = [];
+            $searchId = 0;
+            if (preg_match('/(?:#|task|đơn|công việc|po|so|id)\s*([0-9]{1,8})/iu', $cleanQ, $idMatch)) {
+                $searchId = (int)$idMatch[1];
+                $isSearchIntent = true;
+            }
+
+            if (!$isSearchIntent) {
+                return '';
+            }
+
+            $extractedPhone = $phoneMatch[1] ?? '';
+            $extractedEmail = $emailMatch[1] ?? '';
+
+            // Extract clean search term (strip intent prefixes and payment question suffixes)
+            $cleanTerm = trim(preg_replace('/^(?:tìm|tra\s*cứu|kiểm\s*tra|xem|cho\s*tôi\s*biết\s*thông\s*tin\s*về|hãy\s*tìm|học\s*viên|khách\s*hàng)\s+/iu', '', $cleanQ));
+            $cleanTerm = trim(preg_replace('/(?:\s*(?:đã\s*)?(?:đóng\s*tiền|nộp\s*tiền|đóng\s*cọc|nộp\s*học\s*phí|chưa|đóng\s*chưa))\??$/iu', '', $cleanTerm));
+            $like = '%' . $cleanTerm . '%';
+
+            $cleanRole = strtolower($role);
+            $isGlobalAdmin = in_array($cleanRole, ['admin', 'superadmin', 'super_admin', 'director'], true);
+            $isAccountant = in_array($cleanRole, ['accountant', 'ke_toan'], true);
+            $isManager = in_array($cleanRole, ['manager', 'truong_phong'], true);
+            $isHR = in_array($cleanRole, ['hr', 'nhan_su'], true);
+            $isSale = in_array($cleanRole, ['sales', 'sale', 'kinh_doanh'], true);
+
+            $results = [];
+
+            // 1. Lookup Contacts / Leads & Tuition Deposits (Enforce Sales RBAC Isolation)
+            if (!empty($extractedPhone) || !empty($extractedEmail) || $searchId > 0 || mb_stripos($cleanQ, 'khách') !== false || mb_stripos($cleanQ, 'học viên') !== false || mb_stripos($cleanQ, 'lead') !== false || mb_stripos($cleanQ, 'hợp đồng') !== false || mb_stripos($cleanQ, 'đóng tiền') !== false || mb_stripos($cleanQ, 'học phí') !== false || mb_stripos($cleanQ, 'cọc') !== false) {
+                $cWhere = [];
+                $cParams = [$tid];
+                if (!empty($extractedPhone)) {
+                    $cWhere[] = "c.phone LIKE ?";
+                    $cParams[] = '%' . $extractedPhone . '%';
+                }
+                if (!empty($extractedEmail)) {
+                    $cWhere[] = "c.email LIKE ?";
+                    $cParams[] = '%' . $extractedEmail . '%';
+                }
+                if ($searchId > 0) {
+                    $cWhere[] = "c.id = ?";
+                    $cParams[] = $searchId;
+                }
+                if (empty($cWhere) && mb_strlen($cleanTerm) >= 2) {
+                    $cWhere[] = "(c.full_name LIKE ? OR c.phone LIKE ? OR c.email LIKE ?)";
+                    $cParams[] = $like;
+                    $cParams[] = $like;
+                    $cParams[] = $like;
+                }
+
+                if (!empty($cWhere)) {
+                    $sqlC = "SELECT c.id, c.full_name, c.phone, c.email, c.status, c.stage_id, ps.name as stage_name, ps.order_index as stage_order, u.full_name as owner_name
+                             FROM contacts c
+                             LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
+                             LEFT JOIN users u ON c.owner_id = u.id
+                             WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND (" . implode(" OR ", $cWhere) . ")";
+                    
+                    // Sales & Staff Zero-Trust Isolation: non-admins only see own assigned or collaborated contacts
+                    if (!$isGlobalAdmin && !$isManager) {
+                        $sqlC .= " AND (c.owner_id = ? OR FIND_IN_SET(?, IFNULL(c.collaborator_ids, '')) OR c.id IN (
+                            SELECT contact_id FROM cooperation_slips 
+                            WHERE JSON_CONTAINS(JSON_KEYS(CASE WHEN (shares_json IS NOT NULL AND JSON_VALID(shares_json)) THEN shares_json ELSE '{}' END), JSON_QUOTE(CAST(? AS CHAR)))
+                        ))";
+                        $cParams[] = $uid;
+                        $cParams[] = (string)$uid;
+                        $cParams[] = (string)$uid;
+                    }
+
+                    $sqlC .= " ORDER BY c.id DESC LIMIT 3";
+                    $stmtC = $this->db->prepare($sqlC);
+                    $stmtC->execute($cParams);
+                    $contacts = $stmtC->fetchAll(PDO::FETCH_ASSOC);
+                    foreach ($contacts as $c) {
+                        $stage = $c['stage_name'] ?: ($c['status'] ?: 'Mới');
+                        $stageOrder = !empty($c['stage_order']) ? (int)$c['stage_order'] : 1;
+                        $soReadiness = ($stageOrder >= 13) 
+                            ? "✅ Đã đến bước Tạo SO / Đóng cọc (Giai đoạn {$stageOrder}/14)" 
+                            : "⚠️ CHƯA đến bước Tạo SO / Đóng cọc (Hiện tại bước {$stageOrder}/14 - Cần đề xuất chuyển sang Giai đoạn 13 – Deposit / Tuition Payment)";
+                        $owner = $c['owner_name'] ? " | Phụ trách: {$c['owner_name']}" : "";
+                        $results[] = "👤 [Khách hàng/Học viên #{$c['id']}]: {$c['full_name']} | SĐT: {$c['phone']} | Email: {$c['email']} | Giai đoạn: {$stage} [{$soReadiness}]{$owner}";
+                    }
+
+                    // Query Deposits / Tuition Fees linked to these contacts
+                    $cIds = array_column($contacts, 'id');
+                    if (!empty($cIds)) {
+                        $inCids = implode(',', array_fill(0, count($cIds), '?'));
+                        $stmtDep = $this->db->prepare("
+                            SELECT d.id, d.unit_code, d.price as amount, d.status, d.contact_id, d.created_at,
+                                   c.full_name as contact_name
+                            FROM deposits d
+                            JOIN contacts c ON d.contact_id = c.id
+                            WHERE d.contact_id IN ($inCids)
+                            ORDER BY d.id DESC LIMIT 4
+                        ");
+                        $stmtDep->execute($cIds);
+                        $depList = $stmtDep->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                        if (!empty($depList)) {
+                            foreach ($depList as $dep) {
+                                $depAmt = number_format((float)$dep['amount'], 0, ',', '.') . ' VND';
+                                $depDate = $dep['created_at'] ? date('d/m/Y', strtotime($dep['created_at'])) : '';
+                                $unit = $dep['unit_code'] ? " (Mã: {$dep['unit_code']})" : "";
+                                $depStatus = $dep['status'] === 'approved' ? 'ĐÃ DUYỆT (ĐÃ THU)' : ($dep['status'] === 'pending' ? 'CHỜ KẾ TOÁN DUYỆT' : $dep['status']);
+                                $results[] = "💵 [Phiếu thu/cọc #{$dep['id']}]: Thu: {$depAmt} | Trạng thái: {$depStatus}{$unit} | Ngày: {$depDate} | Học viên: {$dep['contact_name']} (#{$dep['contact_id']})";
+                            }
+                        } elseif (mb_stripos($cleanQ, 'tiền') !== false || mb_stripos($cleanQ, 'cọc') !== false || mb_stripos($cleanQ, 'học phí') !== false) {
+                            $results[] = "ℹ️ [Thông tin tài chính]: Học viên này hiện CHƯA có bất kỳ phiếu đặt cọc hoặc đóng tiền nào trên hệ thống ERP.";
+                        }
+                    }
+                }
+            }
+
+            // 2. Specific Task by ID
+            if ($searchId > 0) {
+                $sqlT = "SELECT a.id, a.subject, a.status, a.priority, a.due_date, u.full_name as assignee_name
+                         FROM activities a
+                         LEFT JOIN users u ON a.user_id = u.id
+                         WHERE a.tenant_id = ? AND a.deleted_at IS NULL AND a.id = ?";
+                $tParams = [$tid, $searchId];
+                if (!$isGlobalAdmin && !$isManager) {
+                    $sqlT .= " AND (a.user_id = ? OR a.created_by = ? OR a.approver_id = ?)";
+                    $tParams[] = $uid;
+                    $tParams[] = $uid;
+                    $tParams[] = $uid;
+                }
+                $stmtT = $this->db->prepare($sqlT);
+                $stmtT->execute($tParams);
+                $taskRow = $stmtT->fetch(PDO::FETCH_ASSOC);
+                if ($taskRow) {
+                    $due = $taskRow['due_date'] ? date('d/m/Y', strtotime($taskRow['due_date'])) : 'Không đặt hạn';
+                    $results[] = "📋 [Chi tiết Công việc #{$taskRow['id']}]: {$taskRow['subject']} | Trạng thái: {$taskRow['status']} | Ưu tiên: {$taskRow['priority']} | Hạn: {$due}";
+                }
+            }
+
+            // 3. Lookup Expenses / Payment Proposals (Enforce Finance RBAC Isolation)
+            if ($searchId > 0 || mb_stripos($cleanQ, 'chi') !== false || mb_stripos($cleanQ, 'thanh toán') !== false || mb_stripos($cleanQ, 'expense') !== false) {
+                $eWhere = [];
+                $eParams = [$tid];
+                if ($searchId > 0) {
+                    $eWhere[] = "e.id = ?";
+                    $eParams[] = $searchId;
+                }
+                if (mb_strlen($cleanTerm) >= 2) {
+                    $eWhere[] = "(e.title LIKE ? OR e.vendor_name LIKE ?)";
+                    $eParams[] = $like;
+                    $eParams[] = $like;
+                }
+
+                if (!empty($eWhere)) {
+                    $sqlE = "SELECT e.id, e.title, e.amount, e.currency, e.vendor_name, e.status, u.full_name as creator_name
+                             FROM expenses e
+                             LEFT JOIN users u ON e.created_by = u.id
+                             WHERE e.tenant_id = ? AND e.deleted_at IS NULL AND (" . implode(" OR ", $eWhere) . ")";
+
+                    if (!$isGlobalAdmin && !$isAccountant) {
+                        $sqlE .= " AND (e.created_by = ? OR e.approver_id = ? OR e.approver_id_2 = ?)";
+                        $eParams[] = $uid;
+                        $eParams[] = $uid;
+                        $eParams[] = $uid;
+                    }
+
+                    $sqlE .= " ORDER BY e.id DESC LIMIT 3";
+                    $stmtE = $this->db->prepare($sqlE);
+                    $stmtE->execute($eParams);
+                    $expenses = $stmtE->fetchAll(PDO::FETCH_ASSOC);
+                    foreach ($expenses as $e) {
+                        $amt = number_format((float)$e['amount'], 0, ',', '.') . ' ' . ($e['currency'] ?: 'VND');
+                        $vendor = $e['vendor_name'] ? " | Đơn vị thụ hưởng: {$e['vendor_name']}" : "";
+                        $creator = $e['creator_name'] ? " | Người tạo: {$e['creator_name']}" : "";
+                        $results[] = "💰 [Đề xuất chi #{$e['id']}]: {$e['title']} | Số tiền: {$amt} | Trạng thái: {$e['status']}{$vendor}{$creator}";
+                    }
+                }
+            }
+
+            // 4. Lookup Leave Requests (Enforce HR RBAC Isolation)
+            if ($searchId > 0 || mb_stripos($cleanQ, 'nghỉ') !== false || mb_stripos($cleanQ, 'phép') !== false || mb_stripos($cleanQ, 'wfh') !== false || mb_stripos($cleanQ, 'ot') !== false) {
+                $lWhere = [];
+                $lParams = [$tid];
+                if ($searchId > 0) {
+                    $lWhere[] = "l.id = ?";
+                    $lParams[] = $searchId;
+                }
+                if (mb_strlen($cleanTerm) >= 2) {
+                    $lWhere[] = "(l.reason LIKE ? OR u.full_name LIKE ?)";
+                    $lParams[] = $like;
+                    $lParams[] = $like;
+                }
+
+                if (!empty($lWhere)) {
+                    $sqlL = "SELECT l.id, l.leave_type, l.start_date, l.end_date, l.total_days, l.status, l.reason, u.full_name as emp_name
+                             FROM hrm_leave_requests l
+                             LEFT JOIN users u ON l.user_id = u.id
+                             WHERE u.tenant_id = ? AND (" . implode(" OR ", $lWhere) . ")";
+
+                    if (!$isGlobalAdmin && !$isHR && !$isManager) {
+                        $sqlL .= " AND (l.user_id = ? OR l.approver_id = ? OR l.approver_id_2 = ?)";
+                        $lParams[] = $uid;
+                        $lParams[] = $uid;
+                        $lParams[] = $uid;
+                    }
+
+                    $sqlL .= " ORDER BY l.id DESC LIMIT 3";
+                    $stmtL = $this->db->prepare($sqlL);
+                    $stmtL->execute($lParams);
+                    $leaves = $stmtL->fetchAll(PDO::FETCH_ASSOC);
+                    foreach ($leaves as $l) {
+                        $reason = $l['reason'] ? " | Lý do: {$l['reason']}" : "";
+                        $emp = $l['emp_name'] ? " | Nhân sự: {$l['emp_name']}" : "";
+                        $results[] = "🏖️ [Đơn nghỉ #{$l['id']}]: Loại: {$l['leave_type']} ({$l['total_days']} ngày: {$l['start_date']} đến {$l['end_date']}) | Trạng thái: {$l['status']}{$emp}{$reason}";
+                    }
+                }
+            }
+
+            // 5. Lookup Purchase Orders (PO) & Sales Orders (SO)
+            if ($searchId > 0 || mb_stripos($cleanQ, 'po') !== false || mb_stripos($cleanQ, 'so') !== false || mb_stripos($cleanQ, 'đơn mua') !== false || mb_stripos($cleanQ, 'đơn bán') !== false || mb_stripos($cleanQ, 'hợp đồng') !== false) {
+                // PO
+                if ($isGlobalAdmin || $isAccountant || $isManager) {
+                    $stmtPo = $this->db->prepare("
+                        SELECT po.id, po.po_number, po.total, po.status, s.name as supplier_name
+                        FROM purchase_orders po
+                        LEFT JOIN suppliers s ON po.supplier_id = s.id
+                        WHERE po.tenant_id = ? AND (po.id = ? OR po.po_number LIKE ? OR s.name LIKE ?)
+                        ORDER BY po.id DESC LIMIT 2
+                    ");
+                    $stmtPo->execute([$tid, $searchId, $like, $like]);
+                    foreach ($stmtPo->fetchAll(PDO::FETCH_ASSOC) as $po) {
+                        $sup = $po['supplier_name'] ? " | NCC: {$po['supplier_name']}" : "";
+                        $amt = number_format((float)$po['total'], 0, ',', '.') . ' VND';
+                        $results[] = "📦 [Đơn mua PO #{$po['id']} - {$po['po_number']}]: Tổng: {$amt} | Trạng thái: {$po['status']}{$sup}";
+                    }
+                }
+
+                // SO
+                $soSql = "
+                    SELECT so.id, so.so_number, so.total, so.status, so.terms, c.full_name as cust_name, c.phone as cust_phone
+                    FROM sales_orders so
+                    LEFT JOIN contacts c ON so.contact_id = c.id
+                    WHERE so.tenant_id = ? AND (so.id = ? OR so.so_number LIKE ? OR c.full_name LIKE ? OR c.phone LIKE ?)
+                ";
+                $soParams = [$tid, $searchId, $like, $like, $like];
+                if (!$isGlobalAdmin && !$isAccountant && !$isManager) {
+                    $soSql .= " AND (so.created_by = ? OR c.owner_id = ? OR FIND_IN_SET(?, IFNULL(c.collaborator_ids, '')))";
+                    $soParams[] = $uid;
+                    $soParams[] = $uid;
+                    $soParams[] = (string)$uid;
+                }
+                $soSql .= " ORDER BY so.id DESC LIMIT 2";
+                $stmtSo = $this->db->prepare($soSql);
+                $stmtSo->execute($soParams);
+                foreach ($stmtSo->fetchAll(PDO::FETCH_ASSOC) as $so) {
+                    $cust = $so['cust_name'] ? " | Khách hàng: {$so['cust_name']} ({$so['cust_phone']})" : "";
+                    $amt = number_format((float)$so['total'], 0, ',', '.') . ' VND';
+                    $terms = !empty($so['terms']) ? " | Điều khoản: " . mb_substr($so['terms'], 0, 40) . "..." : "";
+                    $results[] = "📑 [Đơn bán SO #{$so['id']} - {$so['so_number']}]: Tổng: {$amt} | Trạng thái: {$so['status']}{$cust}{$terms}";
+                }
+            }
+
+            // 6. Lookup Company Staff Directory & Org Leaders (When user asks about who is in company, dept leaders, or resignations)
+            if (mb_stripos($cleanQ, 'công ty có ai') !== false || mb_stripos($cleanQ, 'ai phòng ban') !== false || mb_stripos($cleanQ, 'ai quản lý') !== false || mb_stripos($cleanQ, 'nghỉ việc') !== false || mb_stripos($cleanQ, 'danh bạ') !== false || mb_stripos($cleanQ, 'sơ đồ') !== false || (mb_stripos($cleanQ, 'nhân sự') !== false && mb_stripos($cleanQ, 'ai') !== false) || (mb_stripos($cleanQ, 'nhân viên') !== false && (mb_stripos($cleanQ, 'ai') !== false || mb_stripos($cleanQ, 'danh sách') !== false))) {
+                // Total counts
+                $cntStmt = $this->db->prepare("SELECT 
+                                                    SUM(CASE WHEN (is_active = 1 OR is_active IS NULL) AND (status = 'active' OR status IS NULL) THEN 1 ELSE 0 END) as active_count,
+                                                    SUM(CASE WHEN is_active = 0 OR status IN ('inactive', 'leave') THEN 1 ELSE 0 END) as inactive_count
+                                               FROM users WHERE tenant_id = ?");
+                $cntStmt->execute([$tid]);
+                $userCounts = $cntStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+                $actCount = (int)($userCounts['active_count'] ?? 0);
+                $inactCount = (int)($userCounts['inactive_count'] ?? 0);
+
+                // Departments & leaders
+                $deptStmt = $this->db->prepare("SELECT t.name as team_name, u.full_name as leader_name, COUNT(u2.id) as member_count
+                                                FROM teams t
+                                                LEFT JOIN users u ON t.leader_id = u.id
+                                                LEFT JOIN users u2 ON (u2.team_id = t.id AND (u2.is_active = 1 OR u2.is_active IS NULL))
+                                                WHERE t.tenant_id = ?
+                                                GROUP BY t.id
+                                                ORDER BY t.name ASC");
+                $deptStmt->execute([$tid]);
+                $deptList = $deptStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                $deptSummaries = [];
+                foreach ($deptList as $d) {
+                    $lName = $d['leader_name'] ?: 'Chưa bổ nhiệm';
+                    $deptSummaries[] = "{$d['team_name']} ({$d['member_count']} người, Leader: {$lName})";
+                }
+
+                $results[] = "🏢 [Tổ chức Công ty]: Tổng số {$actCount} nhân sự đang hoạt động. Các phòng ban/nhóm: " . implode(' | ', $deptSummaries);
+
+                // If asked about resigned/off staff and has permission
+                if (($isGlobalAdmin || $isHR || $isManager) && (mb_stripos($cleanQ, 'nghỉ việc') !== false || mb_stripos($cleanQ, 'off') !== false)) {
+                    $offStmt = $this->db->prepare("SELECT u.full_name, u.job_title, u.role, u.department, u.status
+                                                   FROM users u
+                                                   WHERE u.tenant_id = ? AND (u.is_active = 0 OR u.status IN ('inactive', 'leave'))
+                                                   ORDER BY u.updated_at DESC LIMIT 5");
+                    $offStmt->execute([$tid]);
+                    $offUsers = $offStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                    if (!empty($offUsers)) {
+                        $offNames = array_map(function($o) {
+                            $title = !empty($o['job_title']) ? $o['job_title'] : ($o['role'] ?? 'Nhân sự');
+                            $st = $o['status'] ?? 'inactive';
+                            return "{$o['full_name']} ({$title} - {$st})";
+                        }, $offUsers);
+                        $results[] = "🛑 [Nhân sự đã nghỉ việc/Inactive]: Tổng {$inactCount} người. Gần đây gồm: " . implode(', ', $offNames);
+                    }
+                }
+            }
+
+            // 7. Lookup Company Absences & Leaves (Nay ai nghỉ, sắp tới ai nghỉ, ai WFH, ai công tác)
+            if (mb_stripos($cleanQ, 'nay ai nghỉ') !== false || mb_stripos($cleanQ, 'hôm nay ai nghỉ') !== false || mb_stripos($cleanQ, 'sắp tới ai nghỉ') !== false || mb_stripos($cleanQ, 'ai đang nghỉ') !== false || mb_stripos($cleanQ, 'ai vắng mặt') !== false || mb_stripos($cleanQ, 'ai wfh') !== false || (mb_stripos($cleanQ, 'ai') !== false && mb_stripos($cleanQ, 'nghỉ') !== false)) {
+                // Today off
+                $todayStmt = $this->db->prepare("SELECT l.leave_type, l.start_date, l.end_date, u.full_name, u.job_title, COALESCE(t.name, 'Phòng ban khác') as dept_name
+                                                 FROM hrm_leave_requests l
+                                                 JOIN users u ON l.user_id = u.id
+                                                 LEFT JOIN teams t ON u.team_id = t.id
+                                                 WHERE u.tenant_id = ? AND l.status = 'approved' AND CURDATE() BETWEEN DATE(l.start_date) AND DATE(l.end_date)");
+                $todayStmt->execute([$tid]);
+                $todayOff = $todayStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                // Check vacation mode in users
+                $vacStmt = $this->db->prepare("SELECT u.full_name, u.job_title, COALESCE(t.name, 'Phòng ban khác') as dept_name
+                                               FROM users u
+                                               LEFT JOIN teams t ON u.team_id = t.id
+                                               WHERE u.tenant_id = ? AND (u.is_active = 1 OR u.is_active IS NULL) AND u.vacation_mode = 1");
+                $vacStmt->execute([$tid]);
+                $vacOff = $vacStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                $allTodayOff = [];
+                foreach ($todayOff as $o) {
+                    $tLabel = ($o['leave_type'] === 'remote_work') ? 'WFH' : (($o['leave_type'] === 'business_trip') ? 'Công tác' : 'Nghỉ phép');
+                    $allTodayOff[] = "{$o['full_name']} ({$o['dept_name']} - {$tLabel})";
+                }
+                foreach ($vacOff as $v) {
+                    $allTodayOff[] = "{$v['full_name']} ({$v['dept_name']} - Vacation mode)";
+                }
+
+                if (!empty($allTodayOff)) {
+                    $results[] = "🏖️ [Hôm nay ai vắng mặt/nghỉ]: Có " . count($allTodayOff) . " người gồm: " . implode(', ', array_unique($allTodayOff));
+                } else {
+                    $results[] = "✅ [Hôm nay ai nghỉ]: Toàn bộ nhân sự công ty đi làm đầy đủ, không có ai vắng mặt hoặc đăng ký nghỉ phép/WFH hôm nay.";
+                }
+
+                // Upcoming approved leaves (next 14 days)
+                $upStmt = $this->db->prepare("SELECT l.leave_type, l.start_date, l.end_date, l.total_days, u.full_name, COALESCE(t.name, 'Phòng ban khác') as dept_name
+                                              FROM hrm_leave_requests l
+                                              JOIN users u ON l.user_id = u.id
+                                              LEFT JOIN teams t ON u.team_id = t.id
+                                              WHERE u.tenant_id = ? AND l.status = 'approved' AND DATE(l.start_date) > CURDATE() AND DATE(l.start_date) <= DATE_ADD(CURDATE(), INTERVAL 14 DAY)
+                                              ORDER BY l.start_date ASC LIMIT 5");
+                $upStmt->execute([$tid]);
+                $upOff = $upStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                if (!empty($upOff)) {
+                    $upList = [];
+                    foreach ($upOff as $uo) {
+                        $sDate = date('d/m', strtotime($uo['start_date']));
+                        $eDate = date('d/m', strtotime($uo['end_date']));
+                        $dStr = ($sDate === $eDate) ? $sDate : "{$sDate}-{$eDate}";
+                        $upList[] = "{$uo['full_name']} ({$uo['dept_name']}: nghỉ {$uo['total_days']} ngày từ {$dStr})";
+                    }
+                    $results[] = "📅 [Sắp tới ai nghỉ (14 ngày tới)]: " . implode('; ', $upList);
+                }
+            }
+
+            if (empty($results)) {
+                return '';
+            }
+
+            $output = "\n\n--- [DỮ LIỆU THỰC TẾ TRA CỨU TỪ HỆ THỐNG ERP (GROUND TRUTH)] ---\n";
+            $output .= implode("\n", array_slice($results, 0, 5)) . "\n";
+            $output .= "--- [HẾT DỮ LIỆU TRA CỨU (HÃY SỬ DỤNG SỐ LIỆU NÀY ĐỂ TRẢ LỜI CHUẨN XÁC)] ---\n";
+            return $output;
+        } catch (\Throwable $e) {
+            error_log("Smart ERP Lookup Error: " . $e->getMessage());
+            return '';
+        }
+    }
+
+    /**
+     * Retrieve RAG context from ai_training_chunks / ai_training_docs
+     */
+    private function retrieveRagContext(string $query, int $tid): array {
+        try {
+            $cleanQuery = trim($query);
+            if (mb_strlen($cleanQuery) < 3) return [];
+
+            // Boundary check: if 0 trained docs exist, return early without error
+            $count = (int)$this->db->query("SELECT COUNT(*) FROM ai_training_docs WHERE is_active = 1 AND status = 'trained'")->fetchColumn();
+            if ($count === 0) return [];
+
+            // 1. Natural Language Full-Text Search (up to 12 chunks)
+            $stmt = $this->db->prepare("
+                SELECT c.id, c.content, d.name AS doc_name, d.tags
+                FROM ai_training_chunks c
+                JOIN ai_training_docs d ON c.doc_id = d.id
+                WHERE d.is_active = 1 AND d.status = 'trained'
+                  AND MATCH(c.content) AGAINST(? IN NATURAL LANGUAGE MODE)
+                ORDER BY MATCH(c.content) AGAINST(? IN NATURAL LANGUAGE MODE) DESC
+                LIMIT 12
+            ");
+            $stmt->execute([$cleanQuery, $cleanQuery]);
+            $results = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+            // 2. Complement with Keyword LIKE search if fewer than 12 chunks found
+            $needed = 12 - count($results);
+            if ($needed > 0) {
+                $cleanTerms = preg_replace('/[^\p{L}\p{N}\s]/u', ' ', $cleanQuery);
+                $words = array_values(array_filter(explode(' ', mb_strtolower($cleanTerms)), function($w) {
+                    return mb_strlen($w) >= 2;
+                }));
+
+                if (!empty($words)) {
+                    $existingIds = array_column($results, 'id') ?: [0];
+                    $inPlaceholders = implode(',', array_fill(0, count($existingIds), '?'));
+                    $firstWord = '%' . $words[0] . '%';
+                    $stmtLike = $this->db->prepare("
+                        SELECT c.id, c.content, d.name AS doc_name, d.tags
+                        FROM ai_training_chunks c
+                        JOIN ai_training_docs d ON c.doc_id = d.id
+                        WHERE d.is_active = 1 AND d.status = 'trained'
+                          AND c.id NOT IN ($inPlaceholders)
+                          AND (c.content LIKE ? OR d.name LIKE ? OR d.tags LIKE ?)
+                        ORDER BY c.id DESC
+                        LIMIT " . (int)$needed
+                    );
+                    $params = array_merge($existingIds, [$firstWord, $firstWord, $firstWord]);
+                    $stmtLike->execute($params);
+                    $likeResults = $stmtLike->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                    $results = array_merge($results, $likeResults);
+                }
+            }
+
+            return $results;
+        } catch (\Throwable $e) {
+            error_log("RAG Retrieval Error: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Extract plain text from Word (.docx) file
+     */
+    private function extractDocxText(string $filePath): string {
+        if (!class_exists('ZipArchive')) return '';
+        $zip = new \ZipArchive();
+        if ($zip->open($filePath) !== true) return '';
+        $xml = $zip->getFromName('word/document.xml');
+        $zip->close();
+        if (!$xml) return '';
+        $xml = preg_replace('/<\/w:p>/', "\n", $xml);
+        $xml = preg_replace('/<w:br[^>]*\/>/', "\n", $xml);
+        $text = strip_tags($xml);
+        $text = html_entity_decode($text, ENT_QUOTES | ENT_XML1, 'UTF-8');
+        return trim(preg_replace("/\n{3,}/", "\n\n", $text));
+    }
+
+    /**
+     * Extract structured table from Excel (.xlsx) file
+     */
+    private function extractXlsxText(string $filePath): string {
+        if (!class_exists('ZipArchive')) return '';
+        $zip = new \ZipArchive();
+        if ($zip->open($filePath) !== true) return '';
+
+        $sharedStrings = [];
+        $stringsXml = $zip->getFromName('xl/sharedStrings.xml');
+        if ($stringsXml) {
+            $xmlObj = @simplexml_load_string($stringsXml);
+            if ($xmlObj && isset($xmlObj->si)) {
+                foreach ($xmlObj->si as $si) {
+                    $sharedStrings[] = (string)($si->t ?? (isset($si->r) ? implode('', (array)$si->r) : ''));
+                }
+            }
+        }
+
+        $sheetXml = $zip->getFromName('xl/worksheets/sheet1.xml');
+        $zip->close();
+        if (!$sheetXml) return '';
+
+        $xmlObj = @simplexml_load_string($sheetXml);
+        if (!$xmlObj || !isset($xmlObj->sheetData->row)) return '';
+
+        $rows = [];
+        $rowCount = 0;
+        foreach ($xmlObj->sheetData->row as $r) {
+            if ($rowCount >= 100) {
+                $rows[] = ['... (dữ liệu còn tiếp, đã giới hạn 100 dòng đầu) ...'];
+                break;
+            }
+            $rowCells = [];
+            foreach ($r->c as $c) {
+                $type = (string)($c['t'] ?? '');
+                $val = (string)($c->v ?? '');
+                if ($type === 's' && isset($sharedStrings[(int)$val])) {
+                    $val = $sharedStrings[(int)$val];
+                }
+                $rowCells[] = trim($val);
+            }
+            if (!empty(array_filter($rowCells))) {
+                $rows[] = $rowCells;
+                $rowCount++;
+            }
+        }
+
+        if (empty($rows)) return '';
+
+        $output = "";
+        foreach ($rows as $idx => $cells) {
+            $output .= "| " . implode(" | ", array_map(function($c) { return str_replace('|', '/', $c); }, $cells)) . " |\n";
+            if ($idx === 0) {
+                $output .= "| " . implode(" | ", array_fill(0, count($cells), '---')) . " |\n";
+            }
+        }
+        return $output;
+    }
+
+    /**
+     * Call Gemini 3.5 Flash Lite via Google Generative Language REST API
+     * Supports Autonomous Two-Way Tool Loop (Function Calling) with Zero-Trust RBAC
+     */
+    private function callGeminiFlashLite(array $conversationHistory, string $systemPrompt, ?array $attachedFile = null, ?callable $onChunk = null, ?array $authContext = null): ?string {
+        try {
+            $stmtKey = $this->db->prepare("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('gemini_api_key', 'gemini_model')");
+            $stmtKey->execute();
+            $settings = $stmtKey->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
+
+            $apiKey = trim($settings['gemini_api_key'] ?? '') ?: ($_ENV['GEMINI_API_KEY'] ?? getenv('GEMINI_API_KEY') ?: '');
+            $model = trim($settings['gemini_model'] ?? 'gemini-3.5-flash-lite');
+            if (empty($apiKey)) {
+                error_log("callGeminiFlashLite: gemini_api_key chưa được cấu hình trong system_settings hoặc biến môi trường.");
+                $errorMsg = "Hệ thống chưa được cấu hình Gemini API Key. Vui lòng liên hệ Quản trị viên để thiết lập API Key trong Cài đặt hệ thống.";
+                if (is_callable($onChunk)) {
+                    $onChunk($errorMsg);
+                }
+                return $errorMsg;
+            }
+            if (empty($model)) {
+                $model = 'gemini-3.5-flash-lite';
+            }
+
+            $isStream = is_callable($onChunk);
+
+            $contents = [];
+            $historyCount = count($conversationHistory);
+            foreach ($conversationHistory as $idx => $msg) {
+                $role = ((int)$msg['sender_id'] === 9000001) ? 'model' : 'user';
+                $parts = [];
+
+                if ($idx === $historyCount - 1 && !empty($attachedFile)) {
+                    if (!empty($attachedFile['inlineData'])) {
+                        $parts[] = ['inlineData' => $attachedFile['inlineData']];
+                    }
+                    if (!empty($attachedFile['extractedText'])) {
+                        $parts[] = ['text' => "--- [NỘI DUNG TÀI LIỆU ĐÍNH KÈM: " . ($attachedFile['fileName'] ?? 'Tài liệu') . "] ---\n" . $attachedFile['extractedText'] . "\n--- [HẾT TÀI LIỆU] ---"];
+                    }
+                }
+
+                $msgText = trim($msg['content'] ?? '');
+                if (!empty($msgText)) {
+                    $parts[] = ['text' => $msgText];
+                } elseif (empty($parts)) {
+                    $parts[] = ['text' => '(Tài liệu đính kèm)'];
+                }
+
+                $contents[] = [
+                    'role' => $role,
+                    'parts' => $parts
+                ];
+            }
+
+            if (empty($contents)) {
+                return null;
+            }
+
+            // Include Tools Schema from AgentToolRegistry
+            require_once __DIR__ . '/AgentToolRegistry.php';
+            $tools = AgentToolRegistry::getGeminiToolsDeclaration();
+
+            $payload = [
+                'systemInstruction' => [
+                    'parts' => [
+                        ['text' => $systemPrompt]
+                    ]
+                ],
+                'contents' => $contents,
+                'tools' => $tools,
+                'toolConfig' => [
+                    'functionCallingConfig' => [
+                        'mode' => 'AUTO'
+                    ]
+                ],
+                'generationConfig' => [
+                    'temperature' => 0.2,
+                    'maxOutputTokens' => 10000,
+                    'topP' => 0.95
+                ]
+            ];
+
+            // ==========================================
+            // AUTONOMOUS MULTI-TURN TOOL LOOP (UP TO 3 TURNS)
+            // Supports Chained Multi-Agent Execution: Lookup Tool -> Draft Action Proposal -> Natural Synthesis
+            // ==========================================
+            $maxToolTurns = 3;
+            $toolTurn = 0;
+            $generateUrl = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key=" . urlencode($apiKey);
+
+            while ($toolTurn < $maxToolTurns) {
+                $toolTurn++;
+
+                // 1. Non-streaming call to evaluate function calling
+                $ch = curl_init($generateUrl);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_POST, true);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload, JSON_UNESCAPED_UNICODE));
+                curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+                curl_setopt($ch, CURLOPT_TIMEOUT, 35);
+                curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+
+                $resp = curl_exec($ch);
+                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                $curlErr = curl_error($ch);
+                curl_close($ch);
+
+                if ($curlErr || $httpCode !== 200 || !$resp) {
+                    error_log("Gemini Turn {$toolTurn} Error: HTTP $httpCode, Curl: $curlErr, Resp: " . substr((string)$resp, 0, 500));
+                    // Fallback on Turn 1 if Bad Request
+                    if ($httpCode === 400 && $toolTurn === 1) {
+                        unset($payload['tools'], $payload['toolConfig']);
+                        $chRetry = curl_init($generateUrl);
+                        curl_setopt($chRetry, CURLOPT_RETURNTRANSFER, true);
+                        curl_setopt($chRetry, CURLOPT_POST, true);
+                        curl_setopt($chRetry, CURLOPT_POSTFIELDS, json_encode($payload, JSON_UNESCAPED_UNICODE));
+                        curl_setopt($chRetry, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+                        curl_setopt($chRetry, CURLOPT_TIMEOUT, 30);
+                        $respRetry = curl_exec($chRetry);
+                        curl_close($chRetry);
+                        if ($respRetry) {
+                            $jRet = json_decode($respRetry, true);
+                            $txt = $jRet['candidates'][0]['content']['parts'][0]['text'] ?? null;
+                            if ($txt) {
+                                if ($isStream && is_callable($onChunk)) $onChunk($txt);
+                                return trim($txt);
+                            }
+                        }
+                    }
+                    return "Tôi đã nhận được yêu cầu của bạn, tuy nhiên kết nối đến hệ thống AI đang bị gián đoạn (HTTP {$httpCode}). Vui lòng thử lại sau giây lát.";
+                }
+
+                $resJson = json_decode($resp, true);
+                $candidate = $resJson['candidates'][0] ?? null;
+                $parts = $candidate['content']['parts'] ?? [];
+
+                $functionCallPart = null;
+                $directText = '';
+                foreach ($parts as $p) {
+                    if (isset($p['functionCall'])) {
+                        $functionCallPart = $p['functionCall'];
+                        break;
+                    }
+                    if (isset($p['text'])) {
+                        $directText .= $p['text'];
+                    }
+                }
+
+                // If Gemini didn't call any tool, we have our final text answer!
+                if (!$functionCallPart) {
+                    $finalText = trim($directText);
+                    if ($isStream && is_callable($onChunk)) {
+                        $onChunk($finalText);
+                    }
+                    return $finalText;
+                }
+
+                // Function Call Detected: Execute via Safe RBAC Registry
+                $toolName = $functionCallPart['name'] ?? '';
+                $toolArgs = $functionCallPart['args'] ?? [];
+                $toolResult = AgentToolRegistry::executeTool($this->db, $toolName, $toolArgs, $authContext ?? []);
+
+                // Append Model Function Call Turn
+                $contents[] = $candidate['content'];
+
+                // Append User Function Response Turn
+                $functionResponseData = [
+                    'name' => $toolName,
+                    'response' => (object)$toolResult
+                ];
+                if (!empty($functionCallPart['id'])) {
+                    $functionResponseData['id'] = $functionCallPart['id'];
+                }
+
+                $contents[] = [
+                    'role' => 'user',
+                    'parts' => [
+                        [
+                            'functionResponse' => $functionResponseData
+                        ]
+                    ]
+                ];
+
+                $payload['contents'] = $contents;
+
+                // Check if this tool execution completes the chain:
+                // If draft_action_proposal was called OR we reached the max turns limit, force mode to NONE and stream the final synthesis!
+                if ($toolName === 'draft_action_proposal' || $toolTurn >= ($maxToolTurns - 1)) {
+                    $payload['toolConfig'] = [
+                        'functionCallingConfig' => [
+                            'mode' => 'NONE'
+                        ]
+                    ];
+
+                    // Final Turn: If streaming requested, use SSE Stream
+                    if ($isStream) {
+                        $streamUrl = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:streamGenerateContent?alt=sse&key=" . urlencode($apiKey);
+                        $streamBuffer = '';
+                        $accumulatedText = '';
+                        $chStream = curl_init($streamUrl);
+                        curl_setopt($chStream, CURLOPT_RETURNTRANSFER, false);
+                        curl_setopt($chStream, CURLOPT_POST, true);
+                        curl_setopt($chStream, CURLOPT_POSTFIELDS, json_encode($payload, JSON_UNESCAPED_UNICODE));
+                        curl_setopt($chStream, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+                        curl_setopt($chStream, CURLOPT_TIMEOUT, 60);
+                        curl_setopt($chStream, CURLOPT_CONNECTTIMEOUT, 10);
+                        curl_setopt($chStream, CURLOPT_SSL_VERIFYPEER, true);
+                        curl_setopt($chStream, CURLOPT_WRITEFUNCTION, function($ch, $data) use (&$streamBuffer, &$accumulatedText, $onChunk) {
+                            $streamBuffer .= $data;
+                            while (true) {
+                                $pos = false;
+                                $delimiterLen = 0;
+                                $posCrlf = strpos($streamBuffer, "\r\n\r\n");
+                                $posLf = strpos($streamBuffer, "\n\n");
+                                if ($posCrlf !== false && ($posLf === false || $posCrlf <= $posLf)) {
+                                    $pos = $posCrlf;
+                                    $delimiterLen = 4;
+                                } elseif ($posLf !== false) {
+                                    $pos = $posLf;
+                                    $delimiterLen = 2;
+                                }
+
+                                if ($pos === false) break;
+
+                                $event = substr($streamBuffer, 0, $pos);
+                                $streamBuffer = substr($streamBuffer, $pos + $delimiterLen);
+                                $lines = preg_split('/\r?\n/', $event);
+                                foreach ($lines as $line) {
+                                    $line = trim($line);
+                                    if (strpos($line, 'data: ') === 0) {
+                                        $jsonStr = substr($line, 6);
+                                        $json = json_decode($jsonStr, true);
+                                        $candParts = $json['candidates'][0]['content']['parts'] ?? [];
+                                        if (is_array($candParts)) {
+                                            foreach ($candParts as $part) {
+                                                if (!empty($part['text'])) {
+                                                    $delta = $part['text'];
+                                                    $accumulatedText .= $delta;
+                                                    $onChunk($delta);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            return strlen($data);
+                        });
+                        curl_exec($chStream);
+                        $streamHttpCode = curl_getinfo($chStream, CURLINFO_HTTP_CODE);
+                        $streamCurlErr = curl_error($chStream);
+                        curl_close($chStream);
+
+                        if (!empty($streamBuffer)) {
+                            $lines = preg_split('/\r?\n/', $streamBuffer);
+                            foreach ($lines as $line) {
+                                $line = trim($line);
+                                if (strpos($line, 'data: ') === 0) {
+                                    $jsonStr = substr($line, 6);
+                                    $json = json_decode($jsonStr, true);
+                                    $candParts = $json['candidates'][0]['content']['parts'] ?? [];
+                                    if (is_array($candParts)) {
+                                        foreach ($candParts as $part) {
+                                            if (!empty($part['text'])) {
+                                                $delta = $part['text'];
+                                                $accumulatedText .= $delta;
+                                                $onChunk($delta);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if ($streamCurlErr || $streamHttpCode !== 200 || empty($accumulatedText)) {
+                            error_log("Gemini Final Stream Error: HTTP $streamHttpCode, Curl: $streamCurlErr");
+                            if (empty($accumulatedText)) {
+                                $fallback = "Dạ em đã hoàn thành tra cứu và tạo đề xuất cho bạn, tuy nhiên kết nối hiển thị gặp trục trặc (HTTP {$streamHttpCode}). Vui lòng thử lại sau giây lát nhé.";
+                                $onChunk($fallback);
+                                return $fallback;
+                            }
+                        }
+                        return trim($accumulatedText);
+                    }
+
+                    // Non-stream final synthesis
+                    $chFinal = curl_init($generateUrl);
+                    curl_setopt($chFinal, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($chFinal, CURLOPT_POST, true);
+                    curl_setopt($chFinal, CURLOPT_POSTFIELDS, json_encode($payload, JSON_UNESCAPED_UNICODE));
+                    curl_setopt($chFinal, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+                    curl_setopt($chFinal, CURLOPT_TIMEOUT, 30);
+                    curl_setopt($chFinal, CURLOPT_CONNECTTIMEOUT, 10);
+                    curl_setopt($chFinal, CURLOPT_SSL_VERIFYPEER, true);
+
+                    $respFinal = curl_exec($chFinal);
+                    $httpFinal = curl_getinfo($chFinal, CURLINFO_HTTP_CODE);
+                    $errFinal = curl_error($chFinal);
+                    curl_close($chFinal);
+
+                    if ($errFinal || $httpFinal !== 200 || !$respFinal) {
+                        error_log("Gemini Final Non-stream Error: HTTP $httpFinal, Curl: $errFinal");
+                        return "Dạ em đã kiểm tra dữ liệu từ hệ thống, tuy nhiên kết nối trả lời đang bị gián đoạn (HTTP {$httpFinal}).";
+                    }
+
+                    $resFinalJson = json_decode($respFinal, true);
+                    $textFinal = $resFinalJson['candidates'][0]['content']['parts'][0]['text'] ?? null;
+                    return $textFinal ? trim($textFinal) : null;
+                }
+            }
+
+            return null;
+        } catch (\Throwable $e) {
+            error_log("Call Gemini Exception: " . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Get AI Query Audit Logs for QA/QC & Admin Intent Gap Review
+     */
+    public function getAiAuditLogs(array $auth): void {
+        try {
+            $userRole = strtolower($auth['role'] ?? '');
+            if (!in_array($userRole, ['admin', 'superadmin', 'director', 'manager'], true)) {
+                respond(403, null, 'Bạn không có quyền truy cập nhật ký kiểm định AI', false);
+                return;
+            }
+
+            $onlyGaps = isset($_GET['only_gaps']) && $_GET['only_gaps'] === '1';
+            $limit = min(100, max(10, (int)($_GET['limit'] ?? 50)));
+
+            $sql = "
+                SELECT l.*, u.full_name AS user_name
+                FROM ai_query_audit_logs l
+                LEFT JOIN users u ON l.user_id = u.id
+                WHERE 1=1
+            ";
+            if ($onlyGaps) {
+                $sql .= " AND l.needs_training = 1";
+            }
+            $sql .= " ORDER BY l.id DESC LIMIT " . (int)$limit;
+
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute();
+            $logs = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+            // Compute summary statistics
+            $stmtStats = $this->db->query("
+                SELECT 
+                    COUNT(*) AS total_queries,
+                    SUM(CASE WHEN needs_training = 1 THEN 1 ELSE 0 END) AS total_gaps,
+                    SUM(CASE WHEN has_action_proposal = 1 THEN 1 ELSE 0 END) AS total_action_proposals,
+                    SUM(CASE WHEN fallback_triggered = 1 THEN 1 ELSE 0 END) AS total_fallbacks
+                FROM ai_query_audit_logs
+            ");
+            $stats = $stmtStats->fetch(PDO::FETCH_ASSOC) ?: [];
+
+            respond(200, [
+                'logs' => $logs,
+                'stats' => $stats
+            ], 'Lấy nhật ký kiểm định AI thành công', true);
+        } catch (\Throwable $e) {
+            respond(500, null, 'Lỗi lấy nhật ký kiểm định: ' . $e->getMessage(), false);
+        }
+    }
 }
+

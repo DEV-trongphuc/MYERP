@@ -2049,14 +2049,45 @@ export const DealsPage: React.FC = () => {
                     })()}
                     
                     <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-                      <label className="form-label">Ghi chú Audit Trail <span style={{ color: 'var(--color-danger)' }}>*</span></label>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <label className="form-label" style={{ margin: 0 }}>Ghi chú Audit Trail <span style={{ color: 'var(--color-danger)' }}>*</span></label>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Gợi ý nhanh 1-chạm:</span>
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+                        {[
+                          'Đã gọi trao đổi nhu cầu',
+                          'Đã gửi báo giá & tài liệu',
+                          'Hẹn lịch tư vấn 1-1',
+                          'Khách hẹn chốt tuần này',
+                          'Chưa liên hệ được - Hẹn gọi lại'
+                        ].map((chip) => (
+                          <button
+                            key={chip}
+                            type="button"
+                            onClick={() => setTransitionModal({ ...transitionModal, note: chip })}
+                            style={{
+                              fontSize: '0.75rem',
+                              padding: '4px 10px',
+                              borderRadius: '16px',
+                              border: transitionModal.note === chip ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                              background: transitionModal.note === chip ? 'var(--color-primary-light, rgba(189,29,45,0.08))' : 'var(--color-bg-subtle, rgba(0,0,0,0.02))',
+                              color: transitionModal.note === chip ? 'var(--color-primary)' : 'var(--color-text)',
+                              cursor: 'pointer',
+                              fontWeight: transitionModal.note === chip ? 600 : 500,
+                              transition: 'all 0.15s ease'
+                            }}
+                          >
+                            + {chip}
+                          </button>
+                        ))}
+                      </div>
                       <textarea 
                         className="form-input" 
                         rows={3} 
                         placeholder="Ghi chú bắt buộc lý do chuyển..."
                         value={transitionModal.note}
                         onChange={e => setTransitionModal({ ...transitionModal, note: e.target.value })}
-                        style={{ minHeight: '120px', padding: '12px 16px', lineHeight: 1.5, resize: 'vertical' }}
+                        style={{ minHeight: '90px', padding: '12px 16px', lineHeight: 1.5, resize: 'vertical' }}
                         autoFocus
                       />
                     </div>

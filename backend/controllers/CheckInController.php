@@ -717,6 +717,38 @@ class CheckInController {
             }
         }
 
+        // Geofence Validation (SEC-HR-01)
+        $officeLat = isset($settingsMap['office_latitude']) && is_numeric($settingsMap['office_latitude']) ? (float)$settingsMap['office_latitude'] : null;
+        $officeLng = isset($settingsMap['office_longitude']) && is_numeric($settingsMap['office_longitude']) ? (float)$settingsMap['office_longitude'] : null;
+        $allowedRadius = isset($settingsMap['office_allowed_radius']) && is_numeric($settingsMap['office_allowed_radius']) ? (float)$settingsMap['office_allowed_radius'] : 0.0;
+
+        $isOutOfGeofence = false;
+        $distanceMeters = 0.0;
+        if ($officeLat !== null && $officeLng !== null && $allowedRadius > 0) {
+            if (empty($lat) || empty($lng) || !is_numeric($lat) || !is_numeric($lng)) {
+                $isOutOfGeofence = true;
+                $reason = trim(($reason ?? '') . " [Không có tọa độ GPS khi công ty yêu cầu định vị]");
+            } else {
+                // Haversine distance calculation in meters
+                $earthRadius = 6371000;
+                $dLat = deg2rad((float)$lat - $officeLat);
+                $dLng = deg2rad((float)$lng - $officeLng);
+                $a = sin($dLat / 2) * sin($dLat / 2) +
+                     cos(deg2rad($officeLat)) * cos(deg2rad((float)$lat)) *
+                     sin($dLng / 2) * sin($dLng / 2);
+                $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+                $distanceMeters = round($earthRadius * $c, 1);
+
+                if ($distanceMeters > $allowedRadius) {
+                    $isOutOfGeofence = true;
+                    $diffM = round($distanceMeters);
+                    $reason = trim(($reason ?? '') . " [Ngoài bán kính văn phòng: {$diffM}m (cho phép: {$allowedRadius}m)]");
+                }
+            }
+        }
+
+        // Đi trễ và ngoài bán kính văn phòng: Tự động ghi nhận (Auto-accept status = 'approved')
+        // Chỉ khi là yêu cầu Bổ sung chấm công (isSupplementary): Mới chuyển status = 'pending_approval' để Quản lý duyệt
         $status = ($isSupplementary && !$isLeaderOrManager) ? 'pending_approval' : 'approved';
         if ($isSupplementary && $isLeaderOrManager) {
             $lateMinutes = 0;
@@ -2189,6 +2221,62 @@ class CheckInController {
             respond(404, null, 'Không tìm thấy dữ liệu chấm công', false);
             return;
         }
+
+        // Single Source of Truth: Nếu chưa gán manager_id / approver_name, giải quyết người duyệt theo cấp quản lý / HCNS
+        if (empty($row['manager_id']) && empty($row['approver_name'])) {
+            $approverUser = null;
+            // 1. Kiểm tra Trưởng nhóm trực tiếp của nhân sự
+            $stmtLead = $this->db->prepare("SELECT t.leader_id FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ?");
+            $stmtLead->execute([$row['user_id']]);
+            $leadId = $stmtLead->fetchColumn();
+            if (!empty($leadId) && (int)$leadId !== (int)$row['user_id']) {
+                $stmtLeadUser = $this->db->prepare("SELECT id, full_name, avatar_url FROM users WHERE id = ?");
+                $stmtLeadUser->execute([$leadId]);
+                $approverUser = $stmtLeadUser->fetch(PDO::FETCH_ASSOC);
+            }
+            // 2. Mặc định: Trưởng phòng Hành chính - Nhân sự (Nguyễn Thị Duy Phương)
+            if (!$approverUser) {
+                $stmtHr = $this->db->prepare("SELECT id, full_name, avatar_url FROM users WHERE (full_name LIKE '%Duy Phương%' OR username = 'phuongntd' OR role = 'hr') AND id != ? LIMIT 1");
+                $stmtHr->execute([$row['user_id']]);
+                $approverUser = $stmtHr->fetch(PDO::FETCH_ASSOC);
+            }
+            if ($approverUser) {
+                $row['manager_id'] = (int)$approverUser['id'];
+                $row['approver_id'] = (int)$approverUser['id'];
+                $row['approver_name'] = $approverUser['full_name'];
+                $row['approver_avatar'] = $approverUser['avatar_url'];
+            }
+        }
+
+        // Tự động gắn Phương (HCNS) vào danh sách Người theo dõi / Người liên quan nếu chưa có
+        $stmtHrLead = $this->db->prepare("SELECT id, full_name, avatar_url, role FROM users WHERE (full_name LIKE '%Duy Phương%' OR username = 'phuongntd' OR role = 'hr') AND id != ? LIMIT 1");
+        $stmtHrLead->execute([$row['user_id']]);
+        $hrUser = $stmtHrLead->fetch(PDO::FETCH_ASSOC);
+
+        $currentRelated = !empty($row['related_users']) ? (is_string($row['related_users']) ? json_decode($row['related_users'], true) : $row['related_users']) : [];
+        if (!is_array($currentRelated)) $currentRelated = [];
+
+        if ($hrUser) {
+            $hasHr = false;
+            foreach ($currentRelated as $ru) {
+                $rId = is_array($ru) ? ($ru['id'] ?? $ru['user_id'] ?? 0) : $ru;
+                if ((int)$rId === (int)$hrUser['id']) {
+                    $hasHr = true;
+                    break;
+                }
+            }
+            if (!$hasHr) {
+                $currentRelated[] = [
+                    'id' => (int)$hrUser['id'],
+                    'full_name' => $hrUser['full_name'],
+                    'avatar_url' => $hrUser['avatar_url'],
+                    'role_title' => 'Phòng Hành chính - Nhân sự'
+                ];
+            }
+        }
+        $row['related_users'] = $currentRelated;
+        $row['related_user_ids'] = array_map(function($u) { return is_array($u) ? ($u['id'] ?? $u['user_id']) : $u; }, $currentRelated);
+
         respond(200, $row);
     }
 

@@ -15,6 +15,7 @@ import { createPortal } from 'react-dom';
 import { StatRowSkeleton } from '../components/ui/Skeleton';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import styles from './EntityDrawer.module.css'; 
+import { pushOverlay } from '../utils/overlayStack'; 
 
 interface Props {
   isOpen: boolean;
@@ -79,13 +80,10 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
   }, [isClosing, onClose]);
 
   useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        handleClose();
-      }
-    };
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
+    if (isOpen) {
+      const unregister = pushOverlay('ticket-drawer', handleClose, 2147483640);
+      return () => unregister();
+    }
   }, [isOpen, handleClose]);
   const [newComment, setNewComment] = useState('');
   const [commentAttachments, setCommentAttachments] = useState<{ name: string; url: string; size?: number; type?: string }[]>([]);

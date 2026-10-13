@@ -480,7 +480,7 @@ if ($isSilent == 1) {
 // 2. Đã ở bước Hồ sơ trở đi (chỉ thay đổi từ trước bước Hồ sơ thì mới đổi thôi)
 $keepForOldSale = false;
 if ($crmCheckResult['isDuplicate'] && !empty($crmCheckResult['assignedTo'])) {
-    if ($crmCheckResult['monthsSinceLastInteraction'] < $dupCheckMonths) {
+    if (!empty($crmCheckResult['hasRealInteraction']) && $crmCheckResult['monthsSinceLastInteraction'] < $dupCheckMonths) {
         $keepForOldSale = true;
     } else if (isset($crmCheckResult['isBeforeHoSo']) && !$crmCheckResult['isBeforeHoSo']) {
         $keepForOldSale = true;
@@ -713,11 +713,18 @@ try {
         $assignResult = getNextConsultantInRound($conn, $targetRoundId, $data);
         if ($assignResult) {
             $assignedConsultantId = $assignResult['id'];
-            $status = $assignResult['is_compensation'] ? 'compensation' : 'assigned';
-            $message = $assignResult['is_compensation'] 
-                ? (isset($assignResult['is_starvation']) ? 'Được phân bổ bù lượt ngoài giờ/nghỉ phép (Starvation Prevention).' : 'Được phân bổ đền bù lượt lỗi.') 
-                : 'Được phân bổ tự động qua vòng xoay.';
-            $message .= $dupSuffix;
+            $isDuplicateLead = !empty($crmCheckResult['isDuplicate']);
+            if ($isDuplicateLead) {
+                $status = $assignResult['is_compensation'] ? 'compensation' : 'reminder';
+                $message = ($assignResult['is_compensation'] 
+                    ? (isset($assignResult['is_starvation']) ? 'Được phân bổ bù lượt ngoài giờ/nghỉ phép (Starvation Prevention).' : 'Được phân bổ đền bù lượt lỗi.') 
+                    : 'Khách cũ đăng ký lại (Nhắc lại) - Phân bổ cho Sale mới qua vòng xoay.') . $dupSuffix;
+            } else {
+                $status = $assignResult['is_compensation'] ? 'compensation' : 'assigned';
+                $message = ($assignResult['is_compensation'] 
+                    ? (isset($assignResult['is_starvation']) ? 'Được phân bổ bù lượt ngoài giờ/nghỉ phép (Starvation Prevention).' : 'Được phân bổ đền bù lượt lỗi.') 
+                    : 'Được phân bổ tự động qua vòng xoay.') . $dupSuffix;
+            }
 
             // Check working hours
             $whStmt = $conn->prepare("SELECT work_start_time, work_end_time, work_schedule FROM consultants WHERE id = ?");

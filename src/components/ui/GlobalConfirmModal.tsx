@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, Info, X, RefreshCw } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
+import { numberToVietnameseText } from '../../utils/numberToText';
 
 export const GlobalConfirmModal: React.FC = () => {
   const { confirmModal, closeConfirm } = useUIStore();
@@ -48,6 +49,14 @@ export const GlobalConfirmModal: React.FC = () => {
       setIsSubmitting(false);
     }
   }, [isOpen, confirmModal.promptDefaultValue, confirmModal.promptPlaceholder]);
+
+  const numericPromptVal = React.useMemo(() => {
+    const digitsOnly = promptInput.replace(/[^0-9]/g, '');
+    if (!digitsOnly || digitsOnly.length < 4) return null;
+    const num = parseInt(digitsOnly, 10);
+    if (isNaN(num) || num <= 0) return null;
+    return num;
+  }, [promptInput]);
 
   const isLocked = !!(requireWordMatch && matchInput !== requireWordMatch) || !!(requirePromptInput && !promptInput.trim());
 
@@ -283,6 +292,30 @@ export const GlobalConfirmModal: React.FC = () => {
                         }
                       }}
                     />
+                    {numericPromptVal !== null && (
+                      <div style={{
+                        marginTop: '8px',
+                        padding: '8px 12px',
+                        background: 'rgba(16, 185, 129, 0.08)',
+                        border: '1px solid rgba(16, 185, 129, 0.25)',
+                        borderRadius: '8px',
+                        fontSize: '0.8125rem',
+                        color: 'var(--color-text)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '3px'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 600 }}>Quy đổi thành tiền:</span>
+                          <span style={{ fontWeight: 800, color: '#059669', fontSize: '0.9375rem' }}>
+                            {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(numericPromptVal)}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                          ({numberToVietnameseText(numericPromptVal)})
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

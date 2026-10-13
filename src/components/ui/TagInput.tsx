@@ -59,7 +59,11 @@ export const TagInput: React.FC<TagInputProps> = ({
     } else if (e.key === 'Backspace' && !input && tags.length) {
       removeTag(tags[tags.length - 1]);
     } else if (e.key === 'Escape') {
-      setShowSuggestions(false);
+      if (showSuggestions) {
+        e.stopPropagation();
+        e.preventDefault();
+        setShowSuggestions(false);
+      }
     }
   };
 

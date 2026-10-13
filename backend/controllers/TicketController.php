@@ -217,15 +217,11 @@ class TicketController {
 
         if ($data['subject'] === 'Báo lỗi data' && !empty($validContacts)) {
             $contactId = (int)$validContacts[0];
-            $stmtC = $this->db->prepare("SELECT source, round_id, owner_id, distributed_at, person_id FROM contacts WHERE id = ? AND tenant_id = ?");
+            $stmtC = $this->db->prepare("SELECT source, owner_id, person_id FROM contacts WHERE id = ? AND tenant_id = ?");
             $stmtC->execute([$contactId, $auth['tenant_id']]);
             $contactRow = $stmtC->fetch(PDO::FETCH_ASSOC);
             if ($contactRow) {
                 $src = $contactRow['source'];
-                // Self-entered sources
-                if (in_array($src, ['ca_nhan', 'cold_call'], true) && empty($contactRow['distributed_at']) && empty($contactRow['round_id'])) {
-                    respond(400, null, 'Chỉ duy nhất data được chia mới được báo bù. Khách tự khai thác / tự nhập không được báo bù.', false);
-                }
                 
                 // Retrieve correct lead_id associated with this contact
                 $leadId = null;
@@ -240,21 +236,27 @@ class TicketController {
                     $leadId = $stmtLeadDirect->fetchColumn();
                 }
                 
+                $lastLogRow = null;
                 if ($leadId) {
                     $resolvedLeadId = (int)$leadId;
                     // Databank claimed check: check latest distribution log
-                    $stmtLogs = $this->db->prepare("SELECT round_id, assigned_to, status FROM distribution_logs WHERE lead_id = ? ORDER BY id DESC LIMIT 1");
+                    $stmtLogs = $this->db->prepare("SELECT round_id, assigned_to, status, received_at FROM distribution_logs WHERE lead_id = ? ORDER BY id DESC LIMIT 1");
                     $stmtLogs->execute([$leadId]);
                     $lastLogRow = $stmtLogs->fetch(PDO::FETCH_ASSOC);
                     
                     if ($lastLogRow) {
-                        $resolvedRoundId = (int)($lastLogRow['round_id'] ?? $contactRow['round_id'] ?? 0);
+                        $resolvedRoundId = (int)($lastLogRow['round_id'] ?? 0);
                         $resolvedSaleId = (int)($lastLogRow['assigned_to'] ?? $contactRow['owner_id'] ?? $auth['user_id']);
                         $lastLogStatus = $lastLogRow['status'];
                         if ($lastLogStatus === 'databank_claim') {
                             respond(400, null, 'Khách hàng tự nhận từ Kho Data không được phép gửi ticket bù data.', false);
                         }
                     }
+                }
+
+                // Self-entered sources
+                if (in_array($src, ['ca_nhan', 'cold_call'], true) && empty($lastLogRow)) {
+                    respond(400, null, 'Chỉ duy nhất data được chia mới được báo bù. Khách tự khai thác / tự nhập không được báo bù.', false);
                 }
             }
         }
@@ -303,7 +305,7 @@ class TicketController {
                 }
                 $this->db->prepare("UPDATE contacts SET is_error_ticket = 1 WHERE id = ?")->execute([$contactId]);
 
-                if ($resolvedLeadId && $resolvedRoundId) {
+                if ($resolvedLeadId) {
                     $chkReports = $this->db->query("SHOW TABLES LIKE 'data_reports'");
                     if ($chkReports && $chkReports->fetch()) {
                         $sRep = $this->db->prepare("
@@ -311,7 +313,7 @@ class TicketController {
                             VALUES (?, ?, ?, ?, 'pending', NOW())
                             ON DUPLICATE KEY UPDATE reason = VALUES(reason), status = 'pending'
                         ");
-                        $sRep->execute([$resolvedLeadId, $resolvedSaleId ?: $auth['user_id'], $resolvedRoundId, $data['description'] ?? 'Báo lỗi data']);
+                        $sRep->execute([$resolvedLeadId, $resolvedSaleId ?: $auth['user_id'], $resolvedRoundId ?: 0, $data['description'] ?? 'Báo lỗi data']);
                     }
                 }
             } catch (\Throwable $e) {

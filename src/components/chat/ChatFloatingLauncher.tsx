@@ -59,28 +59,28 @@ export const ChatFloatingLauncher: React.FC = () => {
       const isHidden = document.hidden;
       const isIdle = Date.now() - lastActiveTime > 180000; // 3 minutes idle
 
-      let delay = 6000;
+      let delay = 8000;
       if (isHidden) {
         delay = 45000; // 45s when tab is backgrounded
       } else if (isRealtimeConnected) {
         // SSE delivers messages in real-time, so polling is relaxed to a lightweight heartbeat
-        delay = isOpen ? 8000 : 25000;
+        delay = isOpen ? 15000 : 30000;
       } else if (isIdle && !isOpen) {
-        delay = 20000; // 20s when user hasn't interacted in 3 mins
+        delay = 25000; // 25s when user hasn't interacted in 3 mins
       } else if (isOpen) {
-        delay = 3000;  // 3s snappy fallback when chat modal is open
+        delay = 6000;  // 6s fallback when SSE is offline and modal is open
       }
       timer = setTimeout(runPolling, delay);
     };
 
-    timer = setTimeout(runPolling, isRealtimeConnected ? 12000 : 5000);
+    timer = setTimeout(runPolling, isRealtimeConnected ? 15000 : 6000);
 
     const handleVisibilityChange = () => {
       if (!document.hidden) {
         if (timer) clearTimeout(timer);
         lastActiveTime = Date.now();
         syncDelta();
-        timer = setTimeout(runPolling, isOpen ? 4000 : 5000);
+        timer = setTimeout(runPolling, isOpen ? 8000 : 15000);
       }
     };
 
@@ -93,7 +93,7 @@ export const ChatFloatingLauncher: React.FC = () => {
       window.removeEventListener('keydown', onUserInteraction);
       window.removeEventListener('touchstart', onUserInteraction);
     };
-  }, [token, user, isOpen, isRealtimeConnected]);
+  }, [token, user?.id, isOpen, isRealtimeConnected]);
 
   const isPublicPage = 
     location.pathname === '/download' || 

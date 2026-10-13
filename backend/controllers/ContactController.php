@@ -61,7 +61,13 @@ class ContactController {
             }
         }
 
-        $isLookupMode = !empty($_GET['is_referrer_lookup']) || (!empty($_GET['mode']) && in_array($_GET['mode'], ['referrer', 'pos', 'deposit', 'so', 'lookup'], true)) || !empty($_GET['all_scope']);
+        $isAdminOrManager = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager'], true);
+        $cleanSearchDigits = preg_replace('/[^0-9]/', '', $search);
+        // Anti-Scraping Defense (SEC-CRM-01): Nhân viên thường bắt buộc phải tìm kiếm tối thiểu 4 chữ số điện thoại hoặc 4 ký tự tên/email để kích hoạt chế độ Lookup, chống cào trộm data của đồng nghiệp bằng prefix ngắn (như 09)
+        $hasTargetedSearch = strlen($cleanSearchDigits) >= 4 || mb_strlen(trim($search)) >= 4;
+        $isAllScopeRequested = !empty($_GET['all_scope']) && $isAdminOrManager;
+        $isLookupParam = !empty($_GET['is_referrer_lookup']) || (!empty($_GET['mode']) && in_array($_GET['mode'], ['referrer', 'pos', 'deposit', 'so', 'lookup'], true));
+        $isLookupMode = $isAllScopeRequested || ($isLookupParam && ($hasTargetedSearch || $isAdminOrManager));
 
         if (!$isLookupMode) {
             if ($isAcademicUser) {
@@ -119,7 +125,7 @@ class ContactController {
         if (!in_array(strtoupper($order), ['ASC', 'DESC'])) $order = 'DESC';
 
         if ($sortBy === 'created_at') {
-            $orderByClause = "c.created_at $order, c.id $order";
+            $orderByClause = "GREATEST(c.created_at, IFNULL(c.updated_at, c.created_at)) $order, c.id $order";
         } elseif ($sortBy === 'last_contact') {
             $orderByClause = "c.last_contact $order, c.id $order";
         } elseif ($sortBy === 'updated_at') {
@@ -771,7 +777,7 @@ class ContactController {
             )
             LEFT JOIN distribution_logs dl ON dl.id = (
                 SELECT MAX(id) FROM distribution_logs 
-                WHERE lead_id = l.id AND assigned_to = c.owner_id
+                WHERE lead_id = l.id AND (assigned_to = c.owner_id OR assigned_to IN (SELECT cons.id FROM consultants cons WHERE cons.email = u.email AND cons.email IS NOT NULL AND cons.email != ''))
             )
             LEFT JOIN distribution_rounds r ON dl.round_id = r.id
             LEFT JOIN data_reports dr ON dr.id = (
@@ -963,7 +969,14 @@ class ContactController {
             require_once __DIR__ . '/../webhook_logic.php';
             $phone = normalizePhone($phone);
             
-            $check = $this->db->prepare("SELECT id, source, created_at, pipeline_status FROM contacts WHERE tenant_id=? AND (phone=? OR mobile=?) AND deleted_at IS NULL LIMIT 1");
+            $check = $this->db->prepare("
+                SELECT c.id, c.source, c.last_contact, c.pipeline_status,
+                       (SELECT MAX(a.created_at) FROM activities a WHERE a.deleted_at IS NULL AND ((a.related_type = 'contact' AND a.related_id = c.id) OR a.contact_id = c.id)) as max_activity_at,
+                       (SELECT MAX(n.created_at) FROM notes n WHERE n.entity_type = 'contact' AND n.entity_id = c.id AND n.body NOT LIKE '[Tự động]%' AND n.body NOT LIKE '[Auto]%') as max_note_at
+                FROM contacts c
+                WHERE c.tenant_id=? AND (c.phone=? OR c.mobile=?) AND c.deleted_at IS NULL 
+                LIMIT 1
+            ");
             $check->execute([$auth['tenant_id'], $phone, $phone]);
             $existing = $check->fetch();
             if ($existing) {
@@ -971,10 +984,16 @@ class ContactController {
                 $isPersonal = in_array($newSource, ['ca_nhan', 'gioi_thieu'], true);
                 
                 $washingDays = 30; // default 30 days
-                $existingCreatedTime = strtotime($existing['created_at']);
-                $isActiveAndRecent = ($existing['pipeline_status'] !== 'rejected' && (time() - $existingCreatedTime) <= ($washingDays * 24 * 3600));
+                // Check strictly according to interaction date, absolutely NOT by created_at
+                $interactionDates = array_filter([$existing['last_contact'] ?? null, $existing['max_activity_at'] ?? null, $existing['max_note_at'] ?? null]);
+                $hasInteraction = !empty($interactionDates);
+                $latestInteractionTime = $hasInteraction ? strtotime(max($interactionDates)) : 0;
+                $isActiveAndRecent = ($existing['pipeline_status'] !== 'rejected' && $hasInteraction && (time() - $latestInteractionTime) <= ($washingDays * 24 * 3600));
 
                 if ($isPersonal && $isActiveAndRecent) {
+                    $duplicateFlag = 1;
+                    $duplicateWithId = (int)$existing['id'];
+                } else if ($isPersonal && !$isActiveAndRecent) {
                     $duplicateFlag = 1;
                     $duplicateWithId = (int)$existing['id'];
                 } else {
@@ -2296,7 +2315,7 @@ class ContactController {
     public function bulkDelete(array $auth): void {
         $scope = $this->getScope($auth, 'leads', 'delete');
         $b = getBody();
-        $ids = $b['ids'] ?? [];
+        $ids = is_array($b['ids'] ?? null) ? array_values(array_filter(array_map('intval', $b['ids']), fn($x) => $x > 0)) : [];
         if (empty($ids)) respond(400, null, 'Danh sách ID không hợp lệ', false);
         
         $placeholders = implode(',', array_fill(0, count($ids), '?'));

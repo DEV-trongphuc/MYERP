@@ -9,36 +9,58 @@ class AssetController {
     }
 
     public function index(array $auth): void {
+        $tid = (int)($auth['tenant_id'] ?? 0);
         $stmt = $this->db->prepare("
             SELECT a.id, a.user_id, a.asset_name, a.asset_code, a.given_date, a.returned_date, a.condition_note, a.status, a.created_at, a.updated_at,
                    a.asset_name as name, a.asset_code as code,
                    u.full_name as assigned_to_name, u.avatar_url as assigned_to_avatar
             FROM hrm_assets a
-            LEFT JOIN users u ON a.user_id = u.id
+            JOIN users u ON a.user_id = u.id
+            WHERE u.tenant_id = ?
             ORDER BY a.id DESC
         ");
-        $stmt->execute();
+        $stmt->execute([$tid]);
         $assets = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
         respond(200, $assets, 'Lấy danh mục tài sản thành công');
     }
 
     public function show(array $auth, int $id): void {
+        $tid = (int)($auth['tenant_id'] ?? 0);
         $stmt = $this->db->prepare("
             SELECT a.id, a.user_id, a.asset_name, a.asset_code, a.given_date, a.returned_date, a.condition_note, a.status, a.created_at, a.updated_at,
                    a.asset_name as name, a.asset_code as code,
                    u.full_name as assigned_to_name, u.avatar_url as assigned_to_avatar
             FROM hrm_assets a
-            LEFT JOIN users u ON a.user_id = u.id
-            WHERE a.id = ?
+            JOIN users u ON a.user_id = u.id
+            WHERE a.id = ? AND u.tenant_id = ?
             LIMIT 1
         ");
-        $stmt->execute([$id]);
+        $stmt->execute([$id, $tid]);
         $asset = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$asset) respond(404, null, 'Không tìm thấy tài sản', false);
         respond(200, $asset, 'Lấy chi tiết tài sản thành công');
     }
 
+    private function checkPermission(array $auth): void {
+        $allowed = ['admin', 'superadmin', 'super_admin', 'director', 'hr', 'manager'];
+        if (!in_array(strtolower($auth['role'] ?? ''), $allowed, true)) {
+            respond(403, null, 'Bạn không có quyền quản lý tài sản công ty', false);
+        }
+    }
+
+    private function findTenantAsset(int $id, int $tid): ?array {
+        $stmt = $this->db->prepare("
+            SELECT a.* FROM hrm_assets a 
+            JOIN users u ON a.user_id = u.id 
+            WHERE a.id = ? AND u.tenant_id = ?
+        ");
+        $stmt->execute([$id, $tid]);
+        return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
     public function store(array $auth): void {
+        $this->checkPermission($auth);
+        $tid = (int)($auth['tenant_id'] ?? 0);
         $body = getBody();
         $name = trim($body['asset_name'] ?? $body['name'] ?? 'Thiết bị làm việc');
         $code = trim($body['asset_code'] ?? $body['code'] ?? 'TS-' . time());
@@ -46,6 +68,13 @@ class AssetController {
         $givenDate = !empty($body['given_date']) ? $body['given_date'] : date('Y-m-d');
         $userId = (int)($body['user_id'] ?? $body['employee_id'] ?? $auth['user_id']);
         $note = trim($body['condition_note'] ?? $body['notes'] ?? '');
+
+        // Verify target employee belongs to current tenant
+        $stmtUser = $this->db->prepare("SELECT id FROM users WHERE id = ? AND tenant_id = ?");
+        $stmtUser->execute([$userId, $tid]);
+        if (!$stmtUser->fetch()) {
+            respond(422, null, 'Nhân sự tiếp nhận không thuộc chi nhánh của bạn', false);
+        }
 
         $stmt = $this->db->prepare("
             INSERT INTO hrm_assets (user_id, asset_name, asset_code, given_date, condition_note, status, created_at, updated_at)
@@ -58,6 +87,13 @@ class AssetController {
     }
 
     public function update(array $auth, int $id): void {
+        $this->checkPermission($auth);
+        $tid = (int)($auth['tenant_id'] ?? 0);
+        $asset = $this->findTenantAsset($id, $tid);
+        if (!$asset) {
+            respond(404, null, 'Không tìm thấy tài sản hoặc bạn không có quyền thao tác', false);
+        }
+
         $body = getBody();
         $updates = [];
         $params = [];
@@ -79,8 +115,14 @@ class AssetController {
             $params[] = trim($body['condition_note'] ?? $body['notes']);
         }
         if (isset($body['user_id']) || isset($body['employee_id'])) {
+            $newUid = (int)($body['user_id'] ?? $body['employee_id']);
+            $stmtUser = $this->db->prepare("SELECT id FROM users WHERE id = ? AND tenant_id = ?");
+            $stmtUser->execute([$newUid, $tid]);
+            if (!$stmtUser->fetch()) {
+                respond(422, null, 'Nhân sự tiếp nhận không thuộc chi nhánh của bạn', false);
+            }
             $updates[] = "user_id = ?";
-            $params[] = (int)($body['user_id'] ?? $body['employee_id']);
+            $params[] = $newUid;
         }
 
         if (empty($updates)) respond(422, null, 'Không có thông tin cần cập nhật', false);
@@ -93,15 +135,35 @@ class AssetController {
     }
 
     public function destroy(array $auth, int $id): void {
+        $this->checkPermission($auth);
+        $tid = (int)($auth['tenant_id'] ?? 0);
+        $asset = $this->findTenantAsset($id, $tid);
+        if (!$asset) {
+            respond(404, null, 'Không tìm thấy tài sản hoặc bạn không có quyền xóa', false);
+        }
+
         $stmt = $this->db->prepare("DELETE FROM hrm_assets WHERE id = ?");
         $stmt->execute([$id]);
         respond(200, null, 'Thanh lý tài sản thành công');
     }
 
     public function handover(array $auth, int $id): void {
+        $this->checkPermission($auth);
+        $tid = (int)($auth['tenant_id'] ?? 0);
+        $asset = $this->findTenantAsset($id, $tid);
+        if (!$asset) {
+            respond(404, null, 'Không tìm thấy tài sản hoặc bạn không có quyền bàn giao', false);
+        }
+
         $body = getBody();
         $userId = (int)($body['user_id'] ?? $body['employee_id'] ?? 0);
         if ($userId <= 0) respond(422, null, 'Vui lòng chỉ định nhân viên tiếp nhận', false);
+
+        $stmtUser = $this->db->prepare("SELECT id FROM users WHERE id = ? AND tenant_id = ?");
+        $stmtUser->execute([$userId, $tid]);
+        if (!$stmtUser->fetch()) {
+            respond(422, null, 'Nhân sự tiếp nhận không thuộc chi nhánh của bạn', false);
+        }
 
         $stmt = $this->db->prepare("UPDATE hrm_assets SET user_id = ?, status = 'assigned', updated_at = NOW() WHERE id = ?");
         $stmt->execute([$userId, $id]);
@@ -110,6 +172,13 @@ class AssetController {
     }
 
     public function recall(array $auth, int $id): void {
+        $this->checkPermission($auth);
+        $tid = (int)($auth['tenant_id'] ?? 0);
+        $asset = $this->findTenantAsset($id, $tid);
+        if (!$asset) {
+            respond(404, null, 'Không tìm thấy tài sản hoặc bạn không có quyền thu hồi', false);
+        }
+
         $stmt = $this->db->prepare("UPDATE hrm_assets SET status = 'returned', returned_date = CURDATE(), updated_at = NOW() WHERE id = ?");
         $stmt->execute([$id]);
 

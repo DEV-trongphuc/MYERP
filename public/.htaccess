@@ -1,3 +1,6 @@
+# LiteSpeed CloudLinux PHP 8.1 Handler (Fixes ea-php82 segfault / socket drop)
+AddHandler application/x-httpd-alt-php81 .php
+
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /

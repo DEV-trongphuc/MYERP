@@ -9,7 +9,9 @@ param(
     [Alias("fe")]
     [switch]$FrontendOnly = $false,
     [switch]$SkipBuild = $false,
-    [switch]$CloneDatabase = $false
+    [switch]$CloneDatabase = $false,
+    [Alias("sync-schema")]
+    [switch]$SyncSchemaOnly = $false
 )
 
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
@@ -19,10 +21,30 @@ Write-Host "   MYERP STAGING DEPLOYMENT -> https://myerp-stagging.ideas.edu.vn" 
 Write-Host "   Target Database: vhvxoigh_erpstagging (ISOLATED)" -ForegroundColor Yellow
 Write-Host "=========================================================" -ForegroundColor Cyan
 
+if ([string]::IsNullOrWhiteSpace($RemoteDir) -or $RemoteDir.StartsWith("-")) {
+    $RemoteDir = "myerp-stagging.ideas.edu.vn"
+}
+
 $sshKey = "C:\Users\LENOVO\.ssh\id_ed25519"
 $sshUser = "vhvxoigh"
 $sshHost = "103.110.87.26"
 $sshPort = "2210"
+
+# Fast-path: Sync Schema Only (No build, no archive upload)
+if ($SyncSchemaOnly) {
+    Write-Host "`n>>> [1-WAY SCHEMA SYNC] Uploading and executing audit_and_sync_schema.php on Staging..." -ForegroundColor Cyan
+    & scp -4 -i $sshKey -P $sshPort -o StrictHostKeyChecking=no -o ConnectTimeout=30 "scratch\staging\audit_and_sync_schema.php" "${sshUser}@${sshHost}:${RemoteDir}/"
+    $remoteCmd = "/usr/local/bin/ea-php81 ${RemoteDir}/audit_and_sync_schema.php --apply && /usr/local/bin/ea-php81 ${RemoteDir}/backend/run_migrations.php --apply"
+    & ssh -4 -tt -i $sshKey -p $sshPort -o StrictHostKeyChecking=no -o ConnectTimeout=30 "${sshUser}@${sshHost}" "$remoteCmd"
+    
+    $sw.Stop()
+    $elapsedSec = [Math]::Round($sw.Elapsed.TotalSeconds, 1)
+    Write-Host "`n=========================================================" -ForegroundColor Green
+    Write-Host "   1-WAY SCHEMA SYNC SUCCESSFUL in ${elapsedSec}s!" -ForegroundColor Green
+    Write-Host "   Staging DB: vhvxoigh_erpstagging (Production untouched)" -ForegroundColor Green
+    Write-Host "=========================================================" -ForegroundColor Green
+    exit 0
+}
 
 # 1. Frontend Build with Vite
 if (-not $BackendOnly) {
@@ -73,6 +95,7 @@ if (-not $BackendOnly -and (Test-Path "$distArchive")) {
 $filesToUpload += "scratch\staging\staging_env"
 $filesToUpload += "scratch\staging\staging_htaccess"
 $filesToUpload += "scratch\staging\staging_setup.sh"
+$filesToUpload += "scratch\staging\audit_and_sync_schema.php"
 
 Write-Host "  -> Uploading ($($filesToUpload -join ', '))..." -ForegroundColor Gray
 & scp -4 -i $sshKey -P $sshPort -o StrictHostKeyChecking=no -o ConnectTimeout=30 @filesToUpload "${sshUser}@${sshHost}:${RemoteDir}/"

@@ -8,6 +8,7 @@ import api from '../../api/axios';
 const CustomerProfileDrawer = lazy(() => import('../../pages/CustomerProfileDrawer').then(module => ({ default: module.CustomerProfileDrawer })));
 const WorkspaceTaskDrawer = lazy(() => import('../../pages/WorkspaceTaskDrawer').then(module => ({ default: module.WorkspaceTaskDrawer })));
 const ExpenseQuickViewDrawer = lazy(() => import('../ExpenseQuickViewDrawer').then(module => ({ default: module.ExpenseQuickViewDrawer })));
+const ExpenseCreateDrawer = lazy(() => import('../ExpenseCreateDrawer').then(module => ({ default: module.ExpenseCreateDrawer })));
 const ApprovalDetailDrawer = lazy(() => import('../../pages/Approvals').then(module => ({ default: module.ApprovalDetailDrawer })));
 const DepositDetailDrawer = lazy(() => import('../DepositDetailDrawer').then(module => ({ default: module.DepositDetailDrawer })));
 
@@ -23,6 +24,8 @@ export const GlobalEntityDrawers: React.FC = () => {
   const currentUser = useAuthStore(state => state.user);
   const [fullContact, setFullContact] = useState<any>(null);
   const [fullTask, setFullTask] = useState<any>(null);
+  const [expenseCreateOpen, setExpenseCreateOpen] = useState(false);
+  const [expenseCreateEditItem, setExpenseCreateEditItem] = useState<any>(null);
 
   // Sync / fetch full contact if only ID is provided
   useEffect(() => {
@@ -128,10 +131,19 @@ export const GlobalEntityDrawers: React.FC = () => {
       }
     };
 
+    const handleOpenExpenseCreate = (e: Event) => {
+      const custom = e as CustomEvent;
+      if (custom.detail) {
+        setExpenseCreateEditItem(custom.detail);
+        setExpenseCreateOpen(true);
+      }
+    };
+
     window.addEventListener('open-global-customer', handleOpenCustomer);
     window.addEventListener('open-global-task', handleOpenTask);
     window.addEventListener('open-expense-drawer', handleOpenExpense);
     window.addEventListener('open-global-expense', handleOpenExpense);
+    window.addEventListener('open-expense-create-drawer', handleOpenExpenseCreate);
     window.addEventListener('open-global-approval', handleOpenApproval);
     window.addEventListener('open-deposit-drawer', handleOpenDeposit);
 
@@ -179,6 +191,7 @@ export const GlobalEntityDrawers: React.FC = () => {
       window.removeEventListener('open-global-task', handleOpenTask);
       window.removeEventListener('open-expense-drawer', handleOpenExpense);
       window.removeEventListener('open-global-expense', handleOpenExpense);
+      window.removeEventListener('open-expense-create-drawer', handleOpenExpenseCreate);
       window.removeEventListener('open-global-approval', handleOpenApproval);
       window.removeEventListener('open-deposit-drawer', handleOpenDeposit);
     };
@@ -235,6 +248,26 @@ export const GlobalEntityDrawers: React.FC = () => {
             expenseId={expenseDrawer.expenseId}
             onClose={closeExpenseDrawer}
             user={currentUser}
+            zIndex={2147483645}
+          />
+        </Suspense>
+      )}
+
+      {expenseCreateOpen && (
+        <Suspense fallback={null}>
+          <ExpenseCreateDrawer
+            isOpen={expenseCreateOpen}
+            onClose={() => {
+              setExpenseCreateOpen(false);
+              setExpenseCreateEditItem(null);
+            }}
+            editItem={expenseCreateEditItem}
+            user={currentUser}
+            onSaveSuccess={() => {
+              setExpenseCreateOpen(false);
+              setExpenseCreateEditItem(null);
+              window.dispatchEvent(new CustomEvent('refresh-pending-counts'));
+            }}
             zIndex={2147483645}
           />
         </Suspense>

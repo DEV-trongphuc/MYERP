@@ -58,10 +58,12 @@ export interface ChatMessage {
   reply_content?: string;
   reply_type?: MessageType;
   reply_sender_name?: string;
+  reply_sender_avatar?: string;
   reply_metadata?: any;
   reactions?: ChatReaction[];
   is_mine?: boolean;
   is_sending?: boolean;
+  is_streaming?: boolean;
   delivery_status?: MessageDeliveryStatus;
   temp_id?: string;
   read_by?: MessageReadParticipant[];

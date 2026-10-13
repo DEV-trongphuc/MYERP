@@ -1143,8 +1143,8 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
                       <Info size={14} /> {isReadOnly ? t("Xem chi tiết") : t("Chi tiết")}
                     </button>
                     {!isReadOnly && (
-                      <button className="btn secondary sm" onClick={() => openCompModal(r)} title={t("Bù Data")} style={{ padding: '0.375rem', width: 34, height: 32, flexShrink: 0, justifyContent: 'center' }}>
-                        <Zap size={14} />
+                      <button className="btn secondary sm" onClick={() => openCompModal(r)} title={t("Bù Data chủ động")} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '0.375rem 0.65rem', flexShrink: 0, justifyContent: 'center', fontWeight: 600 }}>
+                        <Zap size={14} /> <span>{t("Bù Data")}</span>
                       </button>
                     )}
                     {!isReadOnly && (
@@ -1374,8 +1374,8 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
                     <Info size={16} /> {isReadOnly ? t("Xem chi tiết") : t("Chi tiết")}
                   </button>
                   {!isReadOnly && (
-                    <button onClick={() => openCompModal(r)} className="btn secondary" title={t("Bù Data")} style={{ padding: '0.625rem', width: 42, height: 40, flexShrink: 0, justifyContent: 'center' }}>
-                      <Zap size={16} />
+                    <button onClick={() => openCompModal(r)} className="btn secondary" title={t("Bù Data chủ động")} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '0.625rem 1rem', flexShrink: 0, justifyContent: 'center', fontWeight: 600 }}>
+                      <Zap size={16} /> <span>{t("Bù Data")}</span>
                     </button>
                   )}
                   {!isReadOnly && (

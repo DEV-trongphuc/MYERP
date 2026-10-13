@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Users, Search, Check, Loader2 } from 'lucide-react';
 import { useChatStore } from '../../store/chatStore';
 import { Avatar } from '../ui/Avatar';
 import toast from 'react-hot-toast';
+import { pushOverlay } from '../../utils/overlayStack';
 
 interface Props {
   isOpen: boolean;
@@ -34,6 +35,13 @@ export const CreateChatGroupModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
   const [searchStaff, setSearchStaff] = useState('');
   const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      const unregister = pushOverlay('create-chat-group-modal', onClose, 2200);
+      return () => unregister();
+    }
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 

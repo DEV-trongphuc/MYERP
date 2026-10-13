@@ -38,6 +38,9 @@ import { pushOverlay } from '../../utils/overlayStack';
 
 import { getFileFormatConfig, formatFileSize, extractFirstUrl } from '../../utils/chatFileUtils';
 import { compressImageFile } from '../../utils/imageCompressor';
+import { SPECIALIZED_AGENTS, type SpecializedAgent } from '../../constants/aiAgents';
+import { AgentDetailModal } from './AgentDetailModal';
+import { ActionProposalCard, parseActionProposal } from './ActionProposalCard';
 
 const EMOJI_MAP: Record<string, string> = {
   like: '👍', love: '❤️', fire: '🔥', haha: '😂',
@@ -307,8 +310,8 @@ const renderFormattedText = (text: string, isMine?: boolean) => {
   // Chuẩn hóa ký tự xuống dòng CRLF \r\n hoặc \r về LF \n tiêu chuẩn
   const cleanText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-  // Mention pattern: dùng khoảng trắng ngang [^\S\r\n] để mention KHÔNG BAO GIỜ ăn lan qua dấu xuống dòng \n!
-  const parts = cleanText.split(/(@[\w\u00C0-\u1EF9]+(?:[^\S\r\n]+[\w\u00C0-\u1EF9]+){0,4}(?=[^\S\r\n]|$|\n)|https?:\/\/[^\s()<>]+)/g);
+  // Mention, link, and markdown bold pattern
+  const parts = cleanText.split(/(@[\w\u00C0-\u1EF9]+(?:[^\S\r\n]+[\w\u00C0-\u1EF9]+){0,4}(?=[^\S\r\n]|$|\n)|https?:\/\/[^\s()<>]+|\*\*[^*]+\*\*)/g);
   const result = (
     <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
       {parts.map((part, idx) => {
@@ -347,6 +350,19 @@ const renderFormattedText = (text: string, isMine?: boolean) => {
             >
               {part}
             </span>
+          );
+        }
+        if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
+          return (
+            <strong
+              key={idx}
+              style={{
+                fontWeight: 750,
+                color: isMine ? '#ffffff' : '#0f172a'
+              }}
+            >
+              {part.slice(2, -2)}
+            </strong>
           );
         }
         return <span key={idx}>{part}</span>;
@@ -465,15 +481,40 @@ export const WorkChatModal: React.FC = () => {
     hasMoreByConvId,
     activeSidebarTab,
     setActiveSidebarTab,
-    updateGroupInfo
+    updateGroupInfo,
+    isAiThinkingByConvId,
+    isAiTypingByConvId,
+    activeAgentByConvId,
+    collaboratingAgentsByConvId,
+    orchestratorPhaseByConvId,
+    clearConversationHistory
   } = useChatStore();
 
   const { openCustomerDrawer, openTaskDrawer, openExpenseDrawer, openApprovalDrawer } = useUIStore();
 
   // Active conversation & wallpaper state with multi-source fallback
   const [showWallpaperModal, setShowWallpaperModal] = useState(false);
+  const [selectedAgentForModal, setSelectedAgentForModal] = useState<SpecializedAgent | null>(null);
   const currentConv = activeConversation || (activeConversationId ? conversations.find((c) => c.id === activeConversationId) : null);
   const displayConv = currentConv || activeConversation;
+
+  const isIdeasBot = useMemo(() => {
+    if (!displayConv) return false;
+    return displayConv.type === 'direct' && (
+      displayConv.other_user?.id === 9000001 ||
+      displayConv.other_user?.role === 'bot' ||
+      displayConv.created_by === 9000001 ||
+      displayConv.title === 'AI IDEAS' ||
+      displayConv.title === 'SI IDEAS' ||
+      displayConv.title === 'IDEAS SI' ||
+      Boolean(displayConv.other_user?.full_name?.includes('IDEAS'))
+    );
+  }, [displayConv]);
+
+  const [confirmClearConvId, setConfirmClearConvId] = useState<number | null>(null);
+  const [isClearingHistory, setIsClearingHistory] = useState(false);
+  const isPromptSendingRef = useRef(false);
+
   const parsedSettings = useMemo(() => {
     const raw = displayConv?.settings;
     if (!raw) return {};
@@ -781,6 +822,14 @@ export const WorkChatModal: React.FC = () => {
     prevMessagesCountRef.current = currentMessages.length;
   }, [currentMessages.length, activeConversationId, user?.id]);
 
+  // Tự động cuộn theo luồng chữ khi AI đang streaming phản hồi
+  const lastStreamingMsg = currentMessages[currentMessages.length - 1];
+  useEffect(() => {
+    if (lastStreamingMsg?.is_streaming && isUserAtBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+    }
+  }, [lastStreamingMsg?.content, lastStreamingMsg?.is_streaming]);
+
   // Cuộn lên đỉnh để nạp thêm tin nhắn cũ hơn
   const handleMessagesScroll = useCallback(async () => {
     const el = messagesContainerRef.current;
@@ -838,30 +887,6 @@ export const WorkChatModal: React.FC = () => {
     }
   };
 
-  // Polling loop: 2.8s when open, adaptive when tab is hidden
-  useEffect(() => {
-    if (!isOpen) return;
-    let timer: any = null;
-    const runModalPolling = () => {
-      syncDelta();
-      const delay = document.hidden ? 15000 : 2800;
-      timer = setTimeout(runModalPolling, delay);
-    };
-    timer = setTimeout(runModalPolling, 2800);
-
-    const handleVisChange = () => {
-      if (!document.hidden) {
-        if (timer) clearTimeout(timer);
-        syncDelta();
-        timer = setTimeout(runModalPolling, 2800);
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisChange);
-    return () => {
-      if (timer) clearTimeout(timer);
-      document.removeEventListener('visibilitychange', handleVisChange);
-    };
-  }, [isOpen, activeConversationId]);
 
   // Normalize vietnamese string for accent-insensitive search
   const removeVietnameseAccents = (str: string) => {
@@ -1156,26 +1181,97 @@ export const WorkChatModal: React.FC = () => {
     return text.replace(/[\r\n]+/g, ' ').trim();
   };
 
-  // Memoized filtered conversations
+  // Memoized filtered conversations - always ensure AI IDEAS is pinned at the top
   const filteredConversations = useMemo(() => {
-    if (!searchFilter.trim()) return conversations;
-    const q = searchFilter.toLowerCase();
-    return conversations.filter((c) =>
-      c.title?.toLowerCase().includes(q) ||
-      c.other_user?.full_name?.toLowerCase().includes(q) ||
-      c.last_msg_content?.toLowerCase().includes(q)
+    let list = [...conversations];
+    if (searchFilter.trim()) {
+      const q = searchFilter.toLowerCase();
+      list = list.filter((c) =>
+        c.title?.toLowerCase().includes(q) ||
+        c.other_user?.full_name?.toLowerCase().includes(q) ||
+        c.last_msg_content?.toLowerCase().includes(q)
+      );
+    }
+
+    const aiIndex = list.findIndex((c) =>
+      c.other_user?.id === 9000001 ||
+      c.created_by === 9000001 ||
+      c.title === 'AI IDEAS' ||
+      c.title === 'SI IDEAS' ||
+      c.title === 'IDEAS AI' ||
+      c.title === 'IDEAS SI' ||
+      c.other_user?.full_name === 'AI IDEAS' ||
+      c.other_user?.full_name === 'SI IDEAS' ||
+      c.other_user?.full_name === 'IDEAS AI' ||
+      c.other_user?.full_name === 'IDEAS SI'
     );
+
+    if (aiIndex > -1) {
+      const [aiConv] = list.splice(aiIndex, 1);
+      list.unshift({
+        ...aiConv,
+        title: 'SI IDEAS',
+        avatar_url: '/stickers/ideas/ideas_3.webp',
+        is_pinned: true,
+        other_user: aiConv.other_user ? {
+          ...aiConv.other_user,
+          full_name: 'SI IDEAS',
+          avatar_url: '/stickers/ideas/ideas_3.webp',
+          job_title: 'Smart Multi Agent',
+          role: 'bot',
+          is_active: true,
+          is_online: true
+        } : undefined
+      });
+    } else if (!searchFilter.trim() || 'si ideas'.includes(searchFilter.toLowerCase()) || 'ai ideas'.includes(searchFilter.toLowerCase()) || 'ideas ai'.includes(searchFilter.toLowerCase())) {
+      const virtualAiConv: ChatConversation = {
+        id: -9000001,
+        type: 'direct',
+        title: 'SI IDEAS',
+        avatar_url: '/stickers/ideas/ideas_3.webp',
+        created_by: 9000001,
+        last_message_at: new Date().toISOString(),
+        participant_count: 2,
+        unread_count: 0,
+        is_pinned: true,
+        is_muted: false,
+        other_user: {
+          id: 9000001,
+          full_name: 'SI IDEAS',
+          avatar_url: '/stickers/ideas/ideas_3.webp',
+          job_title: 'Smart Multi Agent',
+          role: 'bot',
+          is_active: true,
+          is_online: true
+        } as any,
+        last_msg_content: 'Chào bạn! Tôi là SI IDEAS — Smart Multi Agent Viện IDEAS.',
+        last_msg_created_at: new Date().toISOString()
+      };
+      list.unshift(virtualAiConv);
+    }
+
+    return list;
   }, [conversations, searchFilter]);
 
-  // Memoized filtered staff directory
+  // Memoized filtered staff directory - always sort AI IDEAS to the very top (index 0)
   const filteredStaff = useMemo(() => {
-    if (!searchFilter.trim()) return staffDirectory;
-    const q = searchFilter.toLowerCase();
-    return staffDirectory.filter((s) =>
-      s.full_name?.toLowerCase().includes(q) ||
-      s.job_title?.toLowerCase().includes(q) ||
-      s.team_name?.toLowerCase().includes(q)
-    );
+    let list = [...staffDirectory];
+    if (searchFilter.trim()) {
+      const q = searchFilter.toLowerCase();
+      list = list.filter((s) =>
+        s.full_name?.toLowerCase().includes(q) ||
+        s.job_title?.toLowerCase().includes(q) ||
+        s.team_name?.toLowerCase().includes(q)
+      );
+    }
+    list.sort((a, b) => {
+      const aIsAi = a.id === 9000001 || a.role === 'bot' || a.full_name?.includes('IDEAS');
+      const bIsAi = b.id === 9000001 || b.role === 'bot' || b.full_name?.includes('IDEAS');
+      if (aIsAi && !bIsAi) return -1;
+      if (!aIsAi && bIsAi) return 1;
+      return 0;
+    });
+    return list;
   }, [staffDirectory, searchFilter]);
 
   // Memoized read avatars map (Messenger style)
@@ -1586,17 +1682,45 @@ export const WorkChatModal: React.FC = () => {
                       }
                     }
 
-                    const itemTitle = (isDirect && resolvedOther?.full_name)
-                      ? resolvedOther.full_name
-                      : ((c.title && c.title !== 'Hội thoại') ? c.title : (resolvedOther?.full_name || 'Cuộc trò chuyện'));
-                    const itemAvatar = (isDirect && resolvedOther)
-                      ? resolvedOther.avatar_url
-                      : (c.avatar_url || resolvedOther?.avatar_url);
+                    const isAiConv = isDirect && (
+                      resolvedOther?.id === 9000001 ||
+                      resolvedOther?.role === 'bot' ||
+                      c.created_by === 9000001 ||
+                      c.title === 'AI IDEAS' ||
+                      c.title === 'SI IDEAS' ||
+                      c.title === 'IDEAS AI' ||
+                      resolvedOther?.full_name === 'AI IDEAS' ||
+                      resolvedOther?.full_name === 'SI IDEAS' ||
+                      resolvedOther?.full_name === 'IDEAS AI'
+                    );
+
+                    const itemTitle = isAiConv
+                      ? 'SI IDEAS'
+                      : ((isDirect && resolvedOther?.full_name)
+                        ? resolvedOther.full_name
+                        : ((c.title && c.title !== 'Hội thoại') ? c.title : (resolvedOther?.full_name || 'Cuộc trò chuyện')));
+                    const itemAvatar = isAiConv
+                      ? '/stickers/ideas/ideas_3.webp'
+                      : ((isDirect && resolvedOther)
+                        ? resolvedOther.avatar_url
+                        : (c.avatar_url || resolvedOther?.avatar_url));
 
                     return (
                       <div
                         key={c.id}
-                        onClick={() => selectConversation(c.id)}
+                        role="button"
+                        tabIndex={0}
+                        onClick={async () => {
+                          if (c.id === -9000001) {
+                            const cid = await startDirectChat(9000001);
+                            if (cid) {
+                              selectConversation(cid);
+                              setActiveTab('chats');
+                            }
+                          } else {
+                            selectConversation(c.id);
+                          }
+                        }}
                         style={{
                           position: 'relative',
                           overflow: 'hidden',
@@ -1609,7 +1733,9 @@ export const WorkChatModal: React.FC = () => {
                           border: isSelected ? '1px solid #fecaca' : '1px solid transparent',
                           cursor: 'pointer',
                           marginBottom: '4px',
-                          transition: 'all 0.15s ease'
+                          transition: 'all 0.15s ease',
+                          touchAction: 'manipulation',
+                          WebkitTapHighlightColor: 'transparent'
                         }}
                         onMouseEnter={(e) => {
                           if (!isSelected) e.currentTarget.style.backgroundColor = '#f1f5f9';
@@ -1643,6 +1769,7 @@ export const WorkChatModal: React.FC = () => {
                               src={itemAvatar}
                               name={itemTitle}
                               size={38}
+                              isAi={isAiConv}
                             />
                           )}
                           {isDirect && c.other_user?.is_online && (
@@ -1672,7 +1799,25 @@ export const WorkChatModal: React.FC = () => {
                               }}>
                                 {itemTitle}
                               </span>
-                              {isDirect && c.other_user?.is_active === false && (
+                              {isAiConv && (
+                                <span style={{
+                                  fontSize: '0.62rem',
+                                  fontWeight: 800,
+                                  color: '#BD1D2D',
+                                  background: '#fef2f2',
+                                  border: '1px solid #fecaca',
+                                  padding: '1px 5px',
+                                  borderRadius: '4px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '3px',
+                                  flexShrink: 0
+                                }}>
+                                  <Sparkles size={10} style={{ color: '#BD1D2D' }} />
+                                  Super Intelligent
+                                </span>
+                              )}
+                              {isDirect && c.other_user?.is_active === false && !isAiConv && (
                                 <span style={{
                                   fontSize: '0.62rem',
                                   fontWeight: 750,
@@ -1748,8 +1893,13 @@ export const WorkChatModal: React.FC = () => {
                       key={st.id}
                       onClick={async () => {
                         const cid = await startDirectChat(st.id);
-                        if (cid) setActiveTab('chats');
+                        if (cid) {
+                          selectConversation(cid);
+                          setActiveTab('chats');
+                        }
                       }}
+                      role="button"
+                      tabIndex={0}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -1758,14 +1908,21 @@ export const WorkChatModal: React.FC = () => {
                         borderRadius: '8px',
                         background: '#ffffff',
                         cursor: 'pointer',
-                        transition: 'all 0.15s ease'
+                        transition: 'all 0.15s ease',
+                        touchAction: 'manipulation',
+                        WebkitTapHighlightColor: 'transparent'
                       }}
                       onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
                       onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
                         <div style={{ position: 'relative', flexShrink: 0 }}>
-                          <Avatar src={st.avatar_url} name={st.full_name} size={34} />
+                          <Avatar
+                            src={(st.id === 9000001 || st.role === 'bot' || st.full_name?.includes('IDEAS')) ? '/stickers/ideas/ideas_3.webp' : st.avatar_url}
+                            name={(st.id === 9000001 || st.role === 'bot' || st.full_name?.includes('IDEAS')) ? 'SI IDEAS' : st.full_name}
+                            size={34}
+                            isAi={Boolean(st.id === 9000001 || st.role === 'bot' || st.full_name?.includes('IDEAS'))}
+                          />
                           <span style={{
                             position: 'absolute',
                             bottom: 0,
@@ -1773,21 +1930,61 @@ export const WorkChatModal: React.FC = () => {
                             width: 8,
                             height: 8,
                             borderRadius: '50%',
-                            backgroundColor: st.status === 'online' ? '#10b981' : st.status === 'away' ? '#f59e0b' : '#94a3b8',
+                            backgroundColor: (st.id === 9000001 || st.role === 'bot') ? '#10b981' : (st.status === 'online' ? '#10b981' : st.status === 'away' ? '#f59e0b' : '#94a3b8'),
                             border: '1.5px solid #fff'
                           }} />
                         </div>
                         <div style={{ minWidth: 0 }}>
-                          <div style={{ fontSize: '0.825rem', fontWeight: 650, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {st.full_name}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <div style={{ fontSize: '0.825rem', fontWeight: 650, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {(st.id === 9000001 || st.role === 'bot' || st.full_name?.includes('IDEAS')) ? 'SI IDEAS' : st.full_name}
+                            </div>
+                            {(st.id === 9000001 || st.role === 'bot' || st.full_name?.includes('IDEAS')) && (
+                              <span style={{
+                                fontSize: '0.62rem',
+                                fontWeight: 800,
+                                color: '#BD1D2D',
+                                background: '#fef2f2',
+                                border: '1px solid #fecaca',
+                                padding: '1px 5px',
+                                borderRadius: '4px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                flexShrink: 0
+                              }}>
+                                <Sparkles size={10} style={{ color: '#BD1D2D' }} />
+                                Super Intelligent
+                              </span>
+                            )}
                           </div>
-                          <div style={{ fontSize: '0.72rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {formatStaffCleanTitle(st)}
+                          <div style={{
+                            fontSize: '0.72rem',
+                            color: (st.id === 9000001 || st.role === 'bot' || st.full_name?.includes('IDEAS')) ? '#BD1D2D' : '#64748b',
+                            fontWeight: (st.id === 9000001 || st.role === 'bot' || st.full_name?.includes('IDEAS')) ? 600 : 400,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
+                          }}>
+                            {(st.id === 9000001 || st.role === 'bot' || st.full_name?.includes('IDEAS')) ? 'Smart Multi Agent' : formatStaffCleanTitle(st)}
                           </div>
                         </div>
                       </div>
 
                       {(() => {
+                        if (st.id === 9000001 || st.role === 'bot') {
+                          return (
+                            <span style={{
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              color: '#10b981',
+                              whiteSpace: 'nowrap',
+                              flexShrink: 0
+                            }}>
+                              Online 24/7
+                            </span>
+                          );
+                        }
                         const act = formatStaffLastActive(st);
                         return (
                           <span style={{
@@ -1889,21 +2086,35 @@ export const WorkChatModal: React.FC = () => {
                         : (displayConv.avatar_url || displayConv.other_user?.avatar_url);
                       const isOtherOnline = Boolean(displayConv.other_user?.is_online) && !isOtherInactive;
 
+                      const isIdeasAi = isDirect && (
+                        displayConv.other_user?.id === 9000001 || 
+                        displayConv.other_user?.role === 'bot' || 
+                        headerTitle === 'AI IDEAS' ||
+                        headerTitle === 'SI IDEAS' ||
+                        headerTitle === 'IDEAS AI' ||
+                        headerTitle === 'IDEAS SI' ||
+                        displayConv.created_by === 9000001
+                      );
+
+                      const finalHeaderTitle = isIdeasAi ? 'SI IDEAS' : headerTitle;
+                      const finalHeaderAvatar = isIdeasAi ? '/stickers/ideas/ideas_3.webp' : headerAvatar;
+
                       return (
                         <>
                           <div style={{ position: 'relative', flexShrink: 0 }}>
                             {displayConv.type === 'group' ? (
                               <GroupClusterAvatar
                                 participants={displayConv.participants}
-                                avatarUrl={headerAvatar}
-                                name={headerTitle}
+                                avatarUrl={finalHeaderAvatar}
+                                name={finalHeaderTitle}
                                 size={isMobile ? 34 : 38}
                               />
                             ) : (
                               <Avatar
-                                src={headerAvatar}
-                                name={headerTitle}
+                                src={finalHeaderAvatar}
+                                name={finalHeaderTitle}
                                 size={isMobile ? 34 : 38}
+                                isAi={isIdeasAi}
                               />
                             )}
                             {isDirect && !isOtherInactive && (
@@ -1914,18 +2125,50 @@ export const WorkChatModal: React.FC = () => {
                                 width: 9,
                                 height: 9,
                                 borderRadius: '50%',
-                                backgroundColor: isOtherOnline ? '#10b981' : '#cbd5e1',
+                                backgroundColor: isIdeasAi || isOtherOnline ? '#10b981' : '#cbd5e1',
                                 border: '2px solid #ffffff'
-                              }} title={isOtherOnline ? 'Đang trực tuyến' : 'Ngoại tuyến'} />
+                              }} title={isIdeasAi || isOtherOnline ? 'Đang trực tuyến' : 'Ngoại tuyến'} />
                             )}
                           </div>
 
                           <div style={{ minWidth: 0, flex: 1 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                               <div style={{ fontSize: isMobile ? '0.9rem' : '0.96rem', fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {headerTitle}
+                                {finalHeaderTitle}
                               </div>
-                              {isOtherInactive && (
+                              {isIdeasAi && (
+                                <span 
+                                  onClick={() => setSelectedAgentForModal(activeAgentByConvId?.[displayConv.id] || SPECIALIZED_AGENTS[0])}
+                                  style={{
+                                    fontSize: '0.64rem',
+                                    background: '#fef2f2',
+                                    color: '#BD1D2D',
+                                    padding: '2px 8px',
+                                    borderRadius: '6px',
+                                    fontWeight: 800,
+                                    border: '1px solid #fecaca',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    flexShrink: 0,
+                                    cursor: 'pointer',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.backgroundColor = '#fee2e2';
+                                    e.currentTarget.style.borderColor = '#BD1D2D';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.backgroundColor = '#fef2f2';
+                                    e.currentTarget.style.borderColor = '#fecaca';
+                                  }}
+                                  title="Bấm để xem chi tiết & quyền hạn 11 Agent"
+                                >
+                                  <Sparkles size={11} style={{ color: '#BD1D2D' }} />
+                                  Super Intelligent (11 Agents)
+                                </span>
+                              )}
+                              {isOtherInactive && !isIdeasAi && (
                                 <span style={{
                                   fontSize: '0.64rem',
                                   background: '#f1f5f9',
@@ -1941,7 +2184,25 @@ export const WorkChatModal: React.FC = () => {
                               )}
                             </div>
                             <div style={{ fontSize: '0.72rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {currentTypingUsers.length > 0 ? (
+                              {isIdeasAi ? (
+                                <span 
+                                  onClick={() => setSelectedAgentForModal(activeAgentByConvId?.[displayConv.id] || SPECIALIZED_AGENTS[0])}
+                                  style={{
+                                    color: '#BD1D2D',
+                                    fontWeight: 650,
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    cursor: 'pointer',
+                                    textDecoration: 'underline',
+                                    textUnderlineOffset: '2px'
+                                  }}
+                                  title="Bấm để xem quyền hạn Agent này"
+                                >
+                                  <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#10b981' }} />
+                                  Smart Multi Agent (Xem quyền hạn)
+                                </span>
+                              ) : currentTypingUsers.length > 0 ? (
                                 <span style={{ color: '#dc2626', fontWeight: 700 }}>
                                   {currentTypingUsers.map((u) => u.full_name).join(', ')} đang soạn tin...
                                 </span>
@@ -2024,6 +2285,35 @@ export const WorkChatModal: React.FC = () => {
                               flexDirection: 'column',
                               gap: '2px'
                             }}>
+                              {isIdeasBot && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setShowMobileHeaderMenu(false);
+                                    setConfirmClearConvId(displayConv.id);
+                                  }}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    padding: '8px 10px',
+                                    borderRadius: '6px',
+                                    border: 'none',
+                                    background: 'transparent',
+                                    color: '#dc2626',
+                                    fontSize: '0.8rem',
+                                    fontWeight: 650,
+                                    cursor: 'pointer',
+                                    textAlign: 'left'
+                                  }}
+                                  onMouseEnter={(e) => e.currentTarget.style.background = '#fef2f2'}
+                                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                                >
+                                  <RotateCcw size={15} color="#dc2626" />
+                                  <span>Làm mới & Xóa lịch sử AI</span>
+                                </button>
+                              )}
+
                               {displayConv.type === 'group' && (
                                 <button
                                   type="button"
@@ -2262,6 +2552,36 @@ export const WorkChatModal: React.FC = () => {
                               flexDirection: 'column',
                               gap: '2px'
                             }}>
+                              {isIdeasBot && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setShowDesktopHeaderMenu(false);
+                                    setConfirmClearConvId(displayConv.id);
+                                  }}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '9px',
+                                    padding: '8px 12px',
+                                    borderRadius: '8px',
+                                    border: 'none',
+                                    background: 'transparent',
+                                    color: '#dc2626',
+                                    fontSize: '0.82rem',
+                                    fontWeight: 650,
+                                    cursor: 'pointer',
+                                    textAlign: 'left',
+                                    transition: 'background 0.15s ease'
+                                  }}
+                                  onMouseEnter={(e) => e.currentTarget.style.background = '#fee2e2'}
+                                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                                >
+                                  <RotateCcw size={15} color="#dc2626" />
+                                  <span>Làm mới cuộc trò chuyện SI IDEAS</span>
+                                </button>
+                              )}
+
                               {displayConv.type === 'group' && (
                                 <button
                                   type="button"
@@ -3018,7 +3338,12 @@ export const WorkChatModal: React.FC = () => {
                           <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', maxWidth: '85%' }}>
                             {!isMine && (
                               isLastInBurst ? (
-                                <Avatar src={msg.sender_avatar} name={msg.sender_name || 'U'} size={28} />
+                                <Avatar 
+                                  src={msg.sender_avatar} 
+                                  name={msg.sender_name || 'U'} 
+                                  size={28} 
+                                  isAi={Boolean(msg.sender_id === 9000001 || msg.sender_name?.includes('IDEAS') || msg.sender_avatar?.includes('ideas_3.webp'))}
+                                />
                               ) : (
                                 <div style={{ width: 28, height: 28, flexShrink: 0 }} />
                               )
@@ -3115,165 +3440,6 @@ export const WorkChatModal: React.FC = () => {
                                   </button>
                                 </div>
                               )}
-
-                              {/* Quoted message preview if any */}
-                              {(() => {
-                                if (!msg.reply_to_id && !msg.reply_content) return null;
-
-                                // Find original replied message if present in current active conversation
-                                const origMsg = (msg.reply_to_id && activeConversationId)
-                                  ? (messagesByConvId[activeConversationId] || []).find((m) => m.id === msg.reply_to_id)
-                                  : null;
-
-                                const replyType = msg.reply_type || origMsg?.message_type;
-                                const replyMeta = msg.reply_metadata || origMsg?.metadata;
-                                const replyContent = msg.reply_content || origMsg?.content || '';
-                                const senderName = msg.reply_sender_name || origMsg?.sender_name || (origMsg?.is_mine ? 'Bạn' : 'Đồng nghiệp');
-
-                                const isSticker = replyType === 'sticker' || replyContent.startsWith('/stickers/');
-                                const isImage = replyType === 'image' || (!isSticker && replyContent.match(/\.(png|jpe?g|webp|gif|svg)(\?.*)?$/i));
-                                const isVideo = replyType === 'video' || (!isSticker && !isImage && replyContent.match(/\.(mp4|mov|webm|mkv|avi|m4v)(\?.*)?$/i));
-                                const isFile = replyType === 'file';
-
-                                let thumbUrl = '';
-                                if (isImage || isSticker) {
-                                  if (replyMeta?.url) {
-                                    thumbUrl = replyMeta.url;
-                                  } else if (replyContent.startsWith('/') || replyContent.startsWith('http')) {
-                                    thumbUrl = replyContent;
-                                  }
-                                }
-
-                                let previewText = replyContent;
-                                if (isImage) {
-                                  previewText = (replyMeta?.file_name && !replyMeta.file_name.startsWith('image.')) ? replyMeta.file_name : '[Hình ảnh]';
-                                } else if (isSticker) {
-                                  previewText = '[Nhãn dán]';
-                                } else if (isVideo) {
-                                  previewText = replyMeta?.file_name || '[Video]';
-                                } else if (isFile) {
-                                  previewText = replyMeta?.file_name || replyContent || '[Tệp đính kèm]';
-                                }
-
-                                // If thumbnail exists (image/sticker): render with large thumbnail as requested
-                                if (thumbUrl) {
-                                  return (
-                                    <div
-                                      onClick={() => handleJumpToMessage(msg.reply_to_id)}
-                                      title="Bấm để cuộn đến tin nhắn gốc"
-                                      style={{
-                                        cursor: 'pointer',
-                                        marginBottom: '6px',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: isMine ? 'flex-end' : 'flex-start',
-                                        gap: '8px',
-                                        userSelect: 'none'
-                                      }}
-                                    >
-                                      {isMine ? (
-                                        <>
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.74rem' }}>
-                                            <span style={{ fontWeight: 650, color: '#64748b' }}>{senderName}</span>
-                                            <CornerDownRight size={13} style={{ color: '#94a3b8' }} />
-                                          </div>
-                                          <div
-                                            style={{
-                                              width: '56px',
-                                              height: '56px',
-                                              borderRadius: '10px',
-                                              overflow: 'hidden',
-                                              border: '1.5px solid rgba(0,0,0,0.12)',
-                                              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-                                              background: '#f8fafc',
-                                              flexShrink: 0,
-                                              display: 'flex',
-                                              alignItems: 'center',
-                                              justifyContent: 'center',
-                                              transition: 'transform 0.15s ease'
-                                            }}
-                                            onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; }}
-                                            onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
-                                          >
-                                            <img
-                                              src={thumbUrl}
-                                              alt="Reply thumbnail"
-                                              style={{
-                                                width: '100%',
-                                                height: '100%',
-                                                objectFit: isSticker ? 'contain' : 'cover'
-                                              }}
-                                            />
-                                          </div>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <div
-                                            style={{
-                                              width: '56px',
-                                              height: '56px',
-                                              borderRadius: '10px',
-                                              overflow: 'hidden',
-                                              border: '1.5px solid rgba(0,0,0,0.12)',
-                                              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-                                              background: '#f8fafc',
-                                              flexShrink: 0,
-                                              display: 'flex',
-                                              alignItems: 'center',
-                                              justifyContent: 'center',
-                                              transition: 'transform 0.15s ease'
-                                            }}
-                                            onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; }}
-                                            onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
-                                          >
-                                            <img
-                                              src={thumbUrl}
-                                              alt="Reply thumbnail"
-                                              style={{
-                                                width: '100%',
-                                                height: '100%',
-                                                objectFit: isSticker ? 'contain' : 'cover'
-                                              }}
-                                            />
-                                          </div>
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.74rem' }}>
-                                            <CornerDownRight size={13} style={{ color: '#94a3b8' }} />
-                                            <span style={{ fontWeight: 650, color: '#64748b' }}>{senderName}</span>
-                                          </div>
-                                        </>
-                                      )}
-                                    </div>
-                                  );
-                                }
-
-                                // For text / file quote
-                                return (
-                                  <div
-                                    onClick={() => handleJumpToMessage(msg.reply_to_id)}
-                                    style={{
-                                      cursor: 'pointer',
-                                      background: isMine ? 'rgba(0, 0, 0, 0.22)' : '#f1f5f9',
-                                      padding: '5px 10px',
-                                      borderRadius: '10px 10px 0 0',
-                                      fontSize: '0.74rem',
-                                      borderLeft: isMine ? '3px solid #ffffff' : '3px solid #2563eb',
-                                      color: isMine ? '#ffffff' : '#334155',
-                                      marginBottom: '-2px',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '6px',
-                                      transition: 'opacity 0.15s ease'
-                                    }}
-                                    title="Bấm để cuộn đến tin nhắn gốc"
-                                  >
-                                    <CornerDownRight size={12} style={{ flexShrink: 0, opacity: 0.8 }} />
-                                    <span style={{ fontWeight: 700, color: isMine ? '#ffffff' : '#1e293b' }}>{senderName}: </span>
-                                    <span style={{ opacity: isMine ? 0.95 : 0.85, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                      {previewText}
-                                    </span>
-                                  </div>
-                                );
-                              })()}
 
                               {/* BUBBLE CONTENT */}
                               {isRecalled ? (
@@ -3387,8 +3553,101 @@ export const WorkChatModal: React.FC = () => {
                                     : '0 1px 3px rgba(0, 0, 0, 0.05)',
                                   wordBreak: 'break-word',
                                   whiteSpace: 'pre-wrap',
-                                  fontSize: '0.875rem'
+                                                                    fontSize: '0.875rem',
+                                  overflow: 'hidden'
                                 }}>
+                                  {/* Seamless Top Reply Quote ("Tệp 2 đầu trên") */}
+                                  {Boolean(msg.reply_to_id || msg.reply_content) && (() => {
+                                    const origMsg = (msg.reply_to_id && activeConversationId)
+                                      ? (messagesByConvId[activeConversationId] || []).find((m) => m.id === msg.reply_to_id)
+                                      : null;
+                                    const replyType = msg.reply_type || origMsg?.message_type;
+                                    const replyMeta = msg.reply_metadata || origMsg?.metadata;
+                                    const replyContent = msg.reply_content || origMsg?.content || '';
+                                    const senderName = msg.reply_sender_name || origMsg?.sender_name || (origMsg?.is_mine ? 'Bạn' : 'Đồng nghiệp');
+                                    const senderAvatar = msg.reply_sender_avatar || origMsg?.sender_avatar || (origMsg?.sender_id ? (origMsg.sender_id === 9000001 ? '/stickers/ideas/ideas_3.webp' : (origMsg.sender_id === user?.id ? user?.avatar_url : staffDirectory.find(s => s.id === origMsg.sender_id)?.avatar_url)) : undefined);
+                                    const isAiSender = Boolean(origMsg?.sender_id === 9000001 || senderName?.includes('IDEAS') || senderAvatar?.includes('ideas_'));
+
+                                    const isSticker = replyType === 'sticker' || replyContent.startsWith('/stickers/');
+                                    const isImage = replyType === 'image' || (!isSticker && replyContent.match(/\.(png|jpe?g|webp|gif|svg)(\?.*)?$/i));
+                                    const isVideo = replyType === 'video' || (!isSticker && !isImage && replyContent.match(/\.(mp4|mov|webm|mkv|avi|m4v)(\?.*)?$/i));
+                                    const isFile = replyType === 'file';
+
+                                    let thumbUrl = '';
+                                    if (isImage || isSticker) {
+                                      if (replyMeta?.url) {
+                                        thumbUrl = replyMeta.url;
+                                      } else if (replyContent.startsWith('/') || replyContent.startsWith('http')) {
+                                        thumbUrl = replyContent;
+                                      }
+                                    }
+
+                                    let previewText = replyContent;
+                                    if (isImage) {
+                                      previewText = (replyMeta?.file_name && !replyMeta.file_name.startsWith('image.')) ? replyMeta.file_name : '[Hình ảnh]';
+                                    } else if (isSticker) {
+                                      previewText = '[Nhãn dán]';
+                                    } else if (isVideo) {
+                                      previewText = replyMeta?.file_name || '[Video]';
+                                    } else if (isFile) {
+                                      previewText = replyMeta?.file_name || replyContent || '[Tệp đính kèm]';
+                                    }
+
+                                    return (
+                                      <div
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleJumpToMessage(msg.reply_to_id);
+                                        }}
+                                        style={{
+                                          cursor: 'pointer',
+                                          margin: '-10px -14px 9px -14px',
+                                          padding: '7px 12px',
+                                          background: isMine ? 'rgba(0, 0, 0, 0.18)' : '#f8fafc',
+                                          borderBottom: isMine ? '1px solid rgba(255, 255, 255, 0.2)' : '1px solid #e2e8f0',
+                                          borderLeft: 'none',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'space-between',
+                                          gap: '8px',
+                                          fontSize: '0.74rem',
+                                          color: isMine ? '#ffffff' : '#334155',
+                                          transition: 'background 0.15s ease'
+                                        }}
+                                        title="Bấm để cuộn đến tin nhắn gốc"
+                                      >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flex: 1 }}>
+                                          <CornerDownRight size={12} style={{ flexShrink: 0, opacity: isMine ? 0.9 : 0.75 }} />
+                                          <Avatar 
+                                            src={senderAvatar} 
+                                            name={senderName} 
+                                            size={18} 
+                                            isAi={isAiSender} 
+                                          />
+                                          <span style={{ fontWeight: 750, color: isMine ? '#ffffff' : '#0f172a', flexShrink: 0 }}>
+                                            {senderName}:
+                                          </span>
+                                          <span style={{ opacity: isMine ? 0.92 : 0.85, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            {previewText}
+                                          </span>
+                                        </div>
+                                        {thumbUrl && (
+                                          <div style={{
+                                            width: 24,
+                                            height: 24,
+                                            borderRadius: '5px',
+                                            overflow: 'hidden',
+                                            border: isMine ? '1px solid rgba(255,255,255,0.4)' : '1px solid #cbd5e1',
+                                            flexShrink: 0,
+                                            background: '#ffffff'
+                                          }}>
+                                            <img src={thumbUrl} alt="Thumb" style={{ width: '100%', height: '100%', objectFit: isSticker ? 'contain' : 'cover' }} />
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
+
                                   {/* STICKER */}
                                   {msg.message_type === 'sticker' ? (
                                     (() => {
@@ -4196,10 +4455,33 @@ export const WorkChatModal: React.FC = () => {
                                       </div>
                                     </div>
                                   ) : (() => {
-                                    const extractedUrl = extractFirstUrl(msg.content);
+                                    const { cleanContent, proposal } = parseActionProposal(msg.content);
+                                    const extractedUrl = extractFirstUrl(cleanContent);
                                     return (
                                       <div style={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap', lineHeight: '1.45' }}>
-                                        <div>{renderFormattedText(msg.content, isMine)}</div>
+                                        <div>
+                                          {renderFormattedText(cleanContent, isMine)}
+                                          {msg.is_streaming && (
+                                            <span
+                                              style={{
+                                                display: 'inline-block',
+                                                width: '6px',
+                                                height: '14px',
+                                                backgroundColor: '#BD1D2D',
+                                                marginLeft: '4px',
+                                                verticalAlign: 'text-bottom',
+                                                borderRadius: '1px',
+                                                animation: 'pulse 0.8s infinite'
+                                              }}
+                                            />
+                                          )}
+                                        </div>
+                                        {proposal && (
+                                          <ActionProposalCard 
+                                            proposal={proposal} 
+                                            messageId={msg.id} 
+                                          />
+                                        )}
                                         {extractedUrl && <LinkPreviewCard url={extractedUrl} isMine={isMine} />}
                                       </div>
                                     );
@@ -4497,6 +4779,254 @@ export const WorkChatModal: React.FC = () => {
                     </motion.div>
                   )}
 
+                  {/* SI IDEAS Thinking / Typing Indicator */}
+                  {Boolean(
+                    displayConv && (
+                      isAiThinkingByConvId?.[displayConv.id] ||
+                      isAiTypingByConvId?.[displayConv.id] ||
+                      (activeConversationId && (isAiThinkingByConvId?.[activeConversationId] || isAiTypingByConvId?.[activeConversationId]))
+                    )
+                  ) && (() => {
+                    const convId = displayConv?.id || activeConversationId;
+                    const isTyping = Boolean(
+                      (displayConv && isAiTypingByConvId?.[displayConv.id]) ||
+                      (activeConversationId && isAiTypingByConvId?.[activeConversationId])
+                    );
+                    const phase = (convId && orchestratorPhaseByConvId?.[convId]) || (isTyping ? 'active' : 'reasoning');
+                    const activeAgent = (activeConversationId && activeAgentByConvId?.[activeConversationId]) ||
+                      (displayConv && activeAgentByConvId?.[displayConv.id]) ||
+                      SPECIALIZED_AGENTS[0];
+                    const collabs = (convId && collaboratingAgentsByConvId?.[convId]) || (activeAgent ? [activeAgent] : [SPECIALIZED_AGENTS[0]]);
+                    const isMultiCollaborating = phase === 'collaborating' || collabs.length > 1;
+
+                    return (
+                      <motion.div
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          padding: '6px 14px',
+                          borderRadius: '16px',
+                          background: phase === 'reasoning' ? '#fff1f2' : (isMultiCollaborating ? '#f0fdf4' : (phase === 'handover' ? '#f8fafc' : '#eff6ff')),
+                          border: phase === 'reasoning' ? '1px solid #fecdd3' : (isMultiCollaborating ? '1px solid #bbf7d0' : (phase === 'handover' ? '1px solid #cbd5e1' : '1px solid #bfdbfe')),
+                          width: 'fit-content',
+                          marginTop: '4px',
+                          marginBottom: '6px',
+                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)'
+                        }}
+                      >
+                        {/* Phase 1: Reasoning */}
+                        {phase === 'reasoning' && (
+                          <>
+                            <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
+                              {[0, 1, 2].map((i) => (
+                                <motion.span
+                                  key={i}
+                                  animate={{ y: [0, -5, 0] }}
+                                  transition={{ repeat: Infinity, duration: 0.6, delay: i * 0.15 }}
+                                  style={{
+                                    width: 6,
+                                    height: 6,
+                                    borderRadius: '50%',
+                                    backgroundColor: '#BD1D2D',
+                                    display: 'inline-block'
+                                  }}
+                                />
+                              ))}
+                            </div>
+                            <div style={{
+                              width: 22,
+                              height: 22,
+                              borderRadius: '50%',
+                              overflow: 'hidden',
+                              border: '1.5px solid #BD1D2D',
+                              flexShrink: 0,
+                              background: '#ffffff',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}>
+                              <img
+                                src="/stickers/ideas/ideas_3.webp"
+                                alt="SI IDEAS"
+                                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                              />
+                            </div>
+                            <span style={{ fontSize: '0.75rem', color: '#BD1D2D', fontWeight: 800 }}>
+                              SI IDEAS:
+                            </span>
+                            <span style={{ fontSize: '0.73rem', color: '#64748b', fontWeight: 600 }}>
+                              Đang suy luận & điều phối tác vụ...
+                            </span>
+                          </>
+                        )}
+
+                        {/* Phase 2: Handover / Multi-Agent Collaboration */}
+                        {(phase === 'handover' || phase === 'collaborating') && (
+                          <>
+                            <div style={{
+                              width: 20,
+                              height: 20,
+                              borderRadius: '50%',
+                              overflow: 'hidden',
+                              border: '1px solid #BD1D2D',
+                              flexShrink: 0
+                            }}>
+                              <img
+                                src="/stickers/ideas/ideas_3.webp"
+                                alt="SI IDEAS"
+                                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                              />
+                            </div>
+                            {collabs.length > 1 ? (
+                              <>
+                                <span style={{ fontSize: '0.74rem', color: '#059669', fontWeight: 800 }}>
+                                  Hội đồng Multi-Agent:
+                                </span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+                                  {collabs.map((ag: any, idx: number) => (
+                                    <React.Fragment key={ag.id || idx}>
+                                      {idx > 0 && <ChevronRight size={11} color="#94a3b8" />}
+                                      <div 
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedAgentForModal(ag);
+                                        }}
+                                        style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '4px',
+                                          padding: '2px 8px',
+                                          borderRadius: '12px',
+                                          background: ag.badgeBg || '#f1f5f9',
+                                          border: `1px solid ${ag.badgeColor || '#cbd5e1'}55`,
+                                          cursor: 'pointer',
+                                          transition: 'all 0.15s ease'
+                                        }}
+                                        onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                                        onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                                        title={`Bấm để xem chi tiết quyền hạn của ${ag.name}`}
+                                      >
+                                        <img
+                                          src={ag.avatar}
+                                          alt={ag.name}
+                                          style={{ width: 14, height: 14, objectFit: 'contain' }}
+                                        />
+                                        <span style={{ fontSize: '0.67rem', color: ag.badgeColor || '#334155', fontWeight: 750 }}>
+                                          {ag.name}
+                                        </span>
+                                      </div>
+                                    </React.Fragment>
+                                  ))}
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <ChevronRight size={13} color="#94a3b8" />
+                                <div 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedAgentForModal(activeAgent);
+                                  }}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    cursor: 'pointer',
+                                    padding: '2px 6px',
+                                    borderRadius: '8px',
+                                    transition: 'background-color 0.15s ease'
+                                  }}
+                                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                  title={`Bấm để xem chi tiết quyền hạn của ${activeAgent.name}`}
+                                >
+                                  <div style={{
+                                    width: 22,
+                                    height: 22,
+                                    borderRadius: '50%',
+                                    overflow: 'hidden',
+                                    border: '1.5px solid #94a3b8',
+                                    flexShrink: 0,
+                                    background: '#ffffff'
+                                  }}>
+                                    <img
+                                      src={activeAgent.avatar}
+                                      alt={activeAgent.name}
+                                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                                    />
+                                  </div>
+                                  <span style={{ fontSize: '0.75rem', color: '#0f172a', fontWeight: 800 }}>
+                                    Giao quyền cho {activeAgent.name}
+                                  </span>
+                                  <span style={{
+                                    fontSize: '0.64rem',
+                                    fontWeight: 650,
+                                    padding: '1px 6px',
+                                    borderRadius: '4px',
+                                    background: activeAgent.badgeBg || '#f1f5f9',
+                                    color: activeAgent.badgeColor || '#475569',
+                                    border: `1px solid ${activeAgent.badgeColor || '#cbd5e1'}33`
+                                  }}>
+                                    {activeAgent.badge}
+                                  </span>
+                                </div>
+                              </>
+                            )}
+                          </>
+                        )}
+
+                        {/* Phase 3: Active / Typing */}
+                        {phase === 'active' && (
+                          <>
+                            <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
+                              {[0, 1, 2].map((i) => (
+                                <motion.span
+                                  key={i}
+                                  animate={{ y: [0, -5, 0] }}
+                                  transition={{ repeat: Infinity, duration: 0.6, delay: i * 0.15 }}
+                                  style={{
+                                    width: 6,
+                                    height: 6,
+                                    borderRadius: '50%',
+                                    backgroundColor: '#2563eb',
+                                    display: 'inline-block'
+                                  }}
+                                />
+                              ))}
+                            </div>
+                            <div style={{
+                              width: 22,
+                              height: 22,
+                              borderRadius: '50%',
+                              overflow: 'hidden',
+                              border: '1.5px solid #94a3b8',
+                              flexShrink: 0,
+                              background: '#ffffff',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}>
+                              <img
+                                src={activeAgent.avatar}
+                                alt={activeAgent.name}
+                                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                              />
+                            </div>
+                            <span style={{ fontSize: '0.75rem', color: '#0f172a', fontWeight: 800 }}>
+                              {activeAgent.name}:
+                            </span>
+                            <span style={{ fontSize: '0.73rem', color: '#2563eb', fontWeight: 650 }}>
+                              {activeAgent.statusText}
+                            </span>
+                          </>
+                        )}
+                      </motion.div>
+                    );
+                  })()}
+
                   <div ref={messagesEndRef} />
                 </div>
 
@@ -4543,6 +5073,8 @@ export const WorkChatModal: React.FC = () => {
                   const isImage = replyingTo.message_type === 'image' || (!isSticker && replyingTo.content.match(/\.(png|jpe?g|webp|gif|svg)(\?.*)?$/i));
                   const isVideo = replyingTo.message_type === 'video' || (!isSticker && !isImage && replyingTo.content.match(/\.(mp4|mov|webm|mkv|avi|m4v)(\?.*)?$/i));
                   const isFile = replyingTo.message_type === 'file';
+                  const replySenderAvatar = replyingTo.sender_avatar || (replyingTo.sender_id === 9000001 ? '/stickers/ideas/ideas_3.webp' : (replyingTo.sender_id === user?.id ? user?.avatar_url : staffDirectory.find(s => s.id === replyingTo.sender_id)?.avatar_url));
+                  const isAiReply = Boolean(replyingTo.sender_id === 9000001 || replyingTo.sender_name?.includes('IDEAS') || replySenderAvatar?.includes('ideas_'));
 
                   let thumbUrl = '';
                   if (isImage || isSticker) {
@@ -4571,7 +5103,13 @@ export const WorkChatModal: React.FC = () => {
                       fontSize: '0.78rem'
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, overflow: 'hidden' }}>
-                        <CornerDownRight size={15} color="#2563eb" style={{ flexShrink: 0 }} />
+                        <CornerDownRight size={15} color="#BD1D2D" style={{ flexShrink: 0 }} />
+                        <Avatar 
+                          src={replySenderAvatar} 
+                          name={replyingTo.sender_name || 'Đồng nghiệp'} 
+                          size={24} 
+                          isAi={isAiReply} 
+                        />
                         {thumbUrl && (
                           <div style={{
                             width: '42px',
@@ -4697,40 +5235,89 @@ export const WorkChatModal: React.FC = () => {
                     );
                   }
 
+                  const convMessages = (displayConv?.id && messagesByConvId[displayConv.id]) || [];
+                  const userMessagesCount = convMessages.filter(
+                    (m) => m.sender_id !== 9000001 && m.message_type !== 'system_event'
+                  ).length;
+                  const isAiBusy = Boolean(
+                    displayConv &&
+                    (isAiThinkingByConvId?.[displayConv.id] ||
+                      isAiTypingByConvId?.[displayConv.id] ||
+                      (activeConversationId && (isAiThinkingByConvId?.[activeConversationId] || isAiTypingByConvId?.[activeConversationId])))
+                  );
                   return (
-                    <ChatComposer
-                      ref={composerRef}
-                      activeConversation={displayConv}
-                      replyingTo={replyingTo}
-                      onClearReplyingTo={() => setReplyingTo(null)}
-                      onSendMessage={sendMessage}
-                      onSendTyping={sendTyping}
-                      staffDirectory={staffDirectory}
-                      isMobile={isMobile}
-                      onOpenErpModal={() => setShowErpModal(true)}
-                      onOpenStickerPicker={() => {
-                        setShowStickerPicker(prev => !prev);
-                        setShowPackStickerModal(false);
-                      }}
-                      onOpenPackStickerModal={(tab, anchorEl) => {
-                        setStickerAnchorEl(anchorEl);
-                        setPackStickerInitialTab(tab);
-                        setShowPackStickerModal(prev => !prev);
-                        setShowStickerPicker(false);
-                      }}
-                      showPackStickerModal={showPackStickerModal}
-                      packStickerInitialTab={packStickerInitialTab}
-                      showStickerPicker={showStickerPicker}
-                    />
+                    <>
+                      <ChatComposer
+                        ref={composerRef}
+                        activeConversation={displayConv}
+                        replyingTo={replyingTo}
+                        onClearReplyingTo={() => setReplyingTo(null)}
+                        onSendMessage={sendMessage}
+                        onSendTyping={sendTyping}
+                        staffDirectory={staffDirectory}
+                        isMobile={isMobile}
+                        onOpenErpModal={() => setShowErpModal(true)}
+                        onOpenStickerPicker={() => {
+                          setShowStickerPicker(prev => !prev);
+                          setShowPackStickerModal(false);
+                        }}
+                        onOpenPackStickerModal={(tab, anchorEl) => {
+                          setStickerAnchorEl(anchorEl);
+                          setPackStickerInitialTab(tab);
+                          setShowPackStickerModal(prev => !prev);
+                          setShowStickerPicker(false);
+                        }}
+                        showPackStickerModal={showPackStickerModal}
+                        packStickerInitialTab={packStickerInitialTab}
+                        showStickerPicker={showStickerPicker}
+                      />
+                    </>
                   );
               })()}
             </>
             ) : (
-              /* No active conversation placeholder */
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8' }}>
-                <Users size={48} color="#cbd5e1" style={{ marginBottom: '12px' }} />
-                <h4 style={{ margin: 0, color: '#475569' }}>Chọn một cuộc trò chuyện để bắt đầu</h4>
-                <p style={{ margin: '4px 0 0', fontSize: '0.8rem' }}>Hoặc chọn nhân sự từ Danh bạ để trò chuyện trực tiếp</p>
+              /* No active conversation placeholder or loading fallback with mobile back button */
+              <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#f8fafc' }}>
+                {!isMultiColumn && activeConversationId && (
+                  <div style={{
+                    padding: '10px 16px',
+                    borderBottom: '1px solid #e2e8f0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    background: '#ffffff'
+                  }}>
+                    <button
+                      type="button"
+                      onClick={() => selectConversation(0)}
+                      style={{
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        color: '#475569',
+                        cursor: 'pointer',
+                        padding: '6px 10px',
+                        borderRadius: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        fontSize: '0.82rem',
+                        fontWeight: 650,
+                        touchAction: 'manipulation'
+                      }}
+                    >
+                      <ChevronRight size={16} style={{ transform: 'rotate(180deg)' }} />
+                      <span>Quay lại</span>
+                    </button>
+                  </div>
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, color: '#94a3b8' }}>
+                  <Users size={48} color="#cbd5e1" style={{ marginBottom: '12px' }} />
+                  <h4 style={{ margin: 0, color: '#475569' }}>
+                    {activeConversationId ? 'Đang tải cuộc trò chuyện...' : 'Chọn một cuộc trò chuyện để bắt đầu'}
+                  </h4>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.8rem' }}>
+                    {activeConversationId ? 'Vui lòng chờ trong giây lát' : 'Hoặc chọn nhân sự từ Danh bạ để trò chuyện trực tiếp'}
+                  </p>
+                </div>
               </div>
             )}
           </motion.div>
@@ -4768,6 +5355,7 @@ export const WorkChatModal: React.FC = () => {
                   isMaximized={isMultiColumn}
                   onCloseChat={closeChat}
                   initialCategory="all"
+                  onSelectAgent={(ag) => setSelectedAgentForModal(ag)}
                 />
               </motion.div>
             )}
@@ -5387,6 +5975,123 @@ export const WorkChatModal: React.FC = () => {
         </div>
       )}
 
+      {/* Modal Xác nhận Làm mới & Xóa lịch sử AI */}
+      {confirmClearConvId && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2147483050,
+            backdropFilter: 'blur(4px)',
+            padding: '16px'
+          }}
+          onClick={() => !isClearingHistory && setConfirmClearConvId(null)}
+        >
+          <div
+            style={{
+              background: '#ffffff',
+              borderRadius: '20px',
+              padding: '24px',
+              width: '100%',
+              maxWidth: '400px',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              textAlign: 'center',
+              animation: 'featureIntroZoomIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                width: 54,
+                height: 54,
+                borderRadius: '50%',
+                background: '#fee2e2',
+                color: '#dc2626',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 16px',
+                boxShadow: '0 4px 12px rgba(220, 38, 38, 0.2)'
+              }}
+            >
+              <RotateCcw size={26} />
+            </div>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#1e293b', margin: '0 0 8px' }}>
+              Làm mới & Xóa lịch sử AI?
+            </h3>
+            <p style={{ fontSize: '0.84rem', color: '#64748b', margin: '0 0 20px', lineHeight: 1.5 }}>
+              Toàn bộ tin nhắn và các hình ảnh, tệp đính kèm trong cuộc trò chuyện này sẽ được xóa hoàn toàn khỏi máy chủ để <strong>giải phóng dung lượng bộ nhớ</strong>. SI IDEAS sẽ gửi lại lời chào và mở lại gợi ý câu hỏi ban đầu.
+            </p>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                type="button"
+                disabled={isClearingHistory}
+                onClick={() => setConfirmClearConvId(null)}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  borderRadius: '12px',
+                  border: '1px solid #e2e8f0',
+                  background: '#ffffff',
+                  color: '#475569',
+                  fontWeight: 700,
+                  fontSize: '0.85rem',
+                  cursor: isClearingHistory ? 'not-allowed' : 'pointer',
+                  opacity: isClearingHistory ? 0.6 : 1
+                }}
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                disabled={isClearingHistory}
+                onClick={async () => {
+                  if (!confirmClearConvId || isClearingHistory) return;
+                  setIsClearingHistory(true);
+                  try {
+                    await clearConversationHistory(confirmClearConvId);
+                    setConfirmClearConvId(null);
+                  } catch (err: any) {
+                    console.error('Clear conv history error:', err);
+                  } finally {
+                    setIsClearingHistory(false);
+                  }
+                }}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                  color: '#ffffff',
+                  fontWeight: 700,
+                  fontSize: '0.85rem',
+                  cursor: isClearingHistory ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 4px 12px rgba(220, 38, 38, 0.25)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                {isClearingHistory ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    <span>Đang giải phóng...</span>
+                  </>
+                ) : (
+                  <span>Xóa & Làm mới</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Floating Reaction Animation Particles */}
       <AnimatePresence>
         {floatingReactions.map((p) => (
@@ -5784,7 +6489,7 @@ export const WorkChatModal: React.FC = () => {
                       onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
                       onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                     >
-                      <CornerDownRight size={14} color="#2563eb" />
+                      <CornerDownRight size={14} color="#BD1D2D" />
                       <span>Trả lời tin nhắn</span>
                     </button>
 
@@ -5923,6 +6628,15 @@ export const WorkChatModal: React.FC = () => {
           avatarUrl={displayConv?.avatar_url || displayConv?.other_user?.avatar_url}
         />
       )}
+      {/* Specialized Agent Capability & Permissions Modal */}
+      <AgentDetailModal
+        isOpen={Boolean(selectedAgentForModal)}
+        agent={selectedAgentForModal}
+        onClose={() => setSelectedAgentForModal(null)}
+        onSelectPrompt={(p) => {
+          composerRef.current?.setText(p);
+        }}
+      />
     </>
   );
 };

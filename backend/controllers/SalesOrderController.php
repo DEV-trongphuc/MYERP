@@ -249,7 +249,13 @@ class SalesOrderController {
 
         $taxPct = min(100, max(0, (float)($data['tax_percent'] ?? 0)));
         $taxTotal = $subtotal * ($taxPct / 100);
-        $total = $subtotal + $taxTotal - $discountTotal;
+        if ($discountTotal > ($subtotal + $taxTotal)) {
+            respond(422, null, 'Chiết khấu không được lớn hơn tổng giá trị đơn hàng', false);
+        }
+        $total = round($subtotal + $taxTotal - $discountTotal, 2);
+        if ($total < 0) {
+            respond(422, null, 'Tổng giá trị đơn hàng không được âm', false);
+        }
 
         $this->db->beginTransaction();
         try {

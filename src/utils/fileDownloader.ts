@@ -185,7 +185,7 @@ export async function downloadFileWithName(url: string, originalFileName: string
   }
 
   // Approach 2: Server-side attachment endpoint with Content-Disposition header
-  const token = localStorage.getItem('token') || '';
+  const token = localStorage.getItem('Ideas_token') || localStorage.getItem('access_token') || localStorage.getItem('token') || '';
   const backendBase = (import.meta.env.VITE_API_URL || '/backend').replace(/\/$/, '');
   const downloadEndpoint = `${backendBase}/api.php?action=download-file&url=${encodeURIComponent(url)}&name=${encodeURIComponent(cleanName)}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
 

@@ -166,39 +166,100 @@ class QuoteController {
             if (!$d->fetch()) $b['deal_id'] = null;
         }
 
-        // Generate robust quote number
-        $qNum = 'QT-' . date('Ymd') . '-' . strtoupper(bin2hex(random_bytes(2)));
-        $validUntil = empty($b['valid_until']) ? null : $b['valid_until'];
-        $this->db->prepare("INSERT INTO quotes (tenant_id,deal_id,contact_id,created_by,quote_number,title,status,subtotal,discount,tax,total,valid_until,notes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
-            ->execute([$tid,$b['deal_id']??null,$b['contact_id']??null,$uid,$qNum,$b['title'],$b['status']??'draft',$b['subtotal']??0,$b['discount']??0,$b['tax']??0,$b['total']??0,$validUntil,$b['notes']??null]);
-        $qid=(int)$this->db->lastInsertId();
-        if(!empty($b['items'])) {
-            $ins=$this->db->prepare("INSERT INTO quote_items (quote_id,product_id,name,description,quantity,unit_price,discount,subtotal,sort_order) VALUES (?,?,?,?,?,?,?,?,?)");
-            foreach($b['items'] as $i=>$item) {
+        // ── Anti-Tampering Financial Calculation & Atomic Transaction ──
+        $items = $b['items'] ?? [];
+        $calculatedSubtotal = 0.0;
+        $validatedItems = [];
+        
+        if (!empty($items) && is_array($items)) {
+            foreach ($items as $i => $item) {
                 $qty = (float)($item['quantity'] ?? 1.0);
                 $price = (float)($item['unit_price'] ?? 0);
-                if ($qty <= 0 || $price < 0) {
-                    throw new Exception('Số lượng sản phẩm phải lớn hơn 0 và đơn giá không được âm');
+                $itemDiscount = (float)($item['discount'] ?? 0);
+                if ($qty <= 0 || $price < 0 || $itemDiscount < 0) {
+                    respond(422, null, 'Số lượng phải lớn hơn 0, đơn giá và chiết khấu dòng không được âm', false);
                 }
-
+                $lineSubtotal = round($qty * $price - $itemDiscount, 2);
+                if ($lineSubtotal < 0) {
+                    respond(422, null, 'Chiết khấu dòng sản phẩm không được lớn hơn thành tiền dòng', false);
+                }
+                $calculatedSubtotal += $lineSubtotal;
+                
                 if (!empty($item['product_id'])) {
                     $prodCheck = $this->db->prepare("SELECT id FROM products WHERE id=? AND tenant_id=?");
                     $prodCheck->execute([(int)$item['product_id'], $tid]);
                     if (!$prodCheck->fetch()) {
-                        throw new Exception("Sản phẩm ID {$item['product_id']} không hợp lệ hoặc không thuộc cửa hàng của bạn");
+                        respond(422, null, "Sản phẩm ID {$item['product_id']} không hợp lệ hoặc không thuộc cửa hàng của bạn", false);
                     }
                 }
-
-                $ins->execute([$qid,$item['product_id']??null,$item['name'],$item['description']??null,$qty,$price,$item['discount']??0,$item['subtotal']??0,$i]);
+                $validatedItems[] = [
+                    'product_id' => $item['product_id'] ?? null,
+                    'name' => trim($item['name'] ?? 'Sản phẩm / Dịch vụ'),
+                    'description' => $item['description'] ?? null,
+                    'quantity' => $qty,
+                    'unit_price' => $price,
+                    'discount' => $itemDiscount,
+                    'subtotal' => $lineSubtotal,
+                    'sort_order' => $i
+                ];
             }
+        } else {
+            $calculatedSubtotal = max(0, (float)($b['subtotal'] ?? ($b['total'] ?? 0)));
+        }
+        
+        $quoteDiscount = max(0, (float)($b['discount'] ?? 0));
+        if ($quoteDiscount > $calculatedSubtotal) {
+            respond(422, null, 'Tổng chiết khấu không được vượt quá tổng thành tiền báo giá', false);
+        }
+        $quoteTax = max(0, (float)($b['tax'] ?? 0));
+        $calculatedTotal = round($calculatedSubtotal - $quoteDiscount + $quoteTax, 2);
+        if ($calculatedTotal < 0) {
+            respond(422, null, 'Tổng tiền báo giá không được âm', false);
         }
 
-        // Log interaction if sent
-        if (($b['status'] ?? 'draft') === 'sent' && !empty($b['contact_id'])) {
-            logInteraction($this->db, $tid, $uid, 'email', "Gửi Báo giá #$qNum", "Báo giá \"{$b['title']}\" đã được gửi cho khách hàng.", 'quote', $qid);
-        }
+        // Generate robust quote number
+        $qNum = 'QT-' . date('Ymd') . '-' . strtoupper(bin2hex(random_bytes(2)));
+        $validUntil = empty($b['valid_until']) ? null : $b['valid_until'];
 
-        $this->show($auth,$qid);
+        $this->db->beginTransaction();
+        try {
+            $stmtQ = $this->db->prepare("
+                INSERT INTO quotes (tenant_id, deal_id, contact_id, created_by, quote_number, title, status, subtotal, discount, tax, total, valid_until, notes) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ");
+            $stmtQ->execute([
+                $tid, $b['deal_id'] ?? null, $b['contact_id'] ?? null, $uid,
+                $qNum, $b['title'], $b['status'] ?? 'draft',
+                $calculatedSubtotal, $quoteDiscount, $quoteTax, $calculatedTotal,
+                $validUntil, $b['notes'] ?? null
+            ]);
+            $qid = (int)$this->db->lastInsertId();
+
+            if (!empty($validatedItems)) {
+                $ins = $this->db->prepare("
+                    INSERT INTO quote_items (quote_id, product_id, name, description, quantity, unit_price, discount, subtotal, sort_order) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ");
+                foreach ($validatedItems as $vItem) {
+                    $ins->execute([
+                        $qid, $vItem['product_id'], $vItem['name'], $vItem['description'],
+                        $vItem['quantity'], $vItem['unit_price'], $vItem['discount'],
+                        $vItem['subtotal'], $vItem['sort_order']
+                    ]);
+                }
+            }
+
+            // Log interaction if sent
+            if (($b['status'] ?? 'draft') === 'sent' && !empty($b['contact_id'])) {
+                logInteraction($this->db, $tid, $uid, 'email', "Gửi Báo giá #$qNum", "Báo giá \"{$b['title']}\" đã được gửi cho khách hàng.", 'quote', $qid);
+            }
+
+            $this->db->commit();
+            $this->show($auth, $qid);
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) $this->db->rollBack();
+            respond(500, null, 'Lỗi khi lưu báo giá: ' . $e->getMessage(), false);
+        }
     }
     public function show(array $auth,int $id): void {
         $role = $auth['role'] ?? '';
@@ -234,7 +295,8 @@ class QuoteController {
         $uid = (int)($auth['user_id'] ?? 0);
         $tid = (int)($auth['tenant_id'] ?? 0);
 
-        $b=getBody(); $fields=['title','status','subtotal','discount','tax','total','valid_until','notes','terms'];
+        $b=getBody(); 
+        $fields=['title','status','valid_until','notes','terms'];
         $sets=[];$params=[];
         foreach($fields as $f){
             if(array_key_exists($f,$b)){
@@ -244,6 +306,28 @@ class QuoteController {
                 } else {
                     $params[] = $b[$f];
                 }
+            }
+        }
+
+        // Recalculate totals if discount or tax is updated (Anti-Tampering SEC-FIN-05)
+        if (array_key_exists('discount', $b) || array_key_exists('tax', $b)) {
+            $curQuote = $this->db->prepare("SELECT subtotal, discount, tax FROM quotes WHERE id=? AND tenant_id=?");
+            $curQuote->execute([$id, $tid]);
+            $cq = $curQuote->fetch();
+            if ($cq) {
+                $sub = (float)$cq['subtotal'];
+                $disc = array_key_exists('discount', $b) ? max(0, (float)$b['discount']) : (float)$cq['discount'];
+                $tx = array_key_exists('tax', $b) ? max(0, (float)$b['tax']) : (float)$cq['tax'];
+                if ($disc > $sub) {
+                    respond(422, null, 'Chiết khấu không được lớn hơn tổng tiền hàng', false);
+                }
+                $tot = round(max(0, $sub - $disc + $tx), 2);
+                $sets[] = "discount=?";
+                $params[] = $disc;
+                $sets[] = "tax=?";
+                $params[] = $tx;
+                $sets[] = "total=?";
+                $params[] = $tot;
             }
         }
         if($sets){
@@ -353,6 +437,15 @@ class QuoteController {
             $itemsStmt->execute([$id]);
             $items = $itemsStmt->fetchAll();
 
+            // Recalculate subtotal and total directly from quote_items (Anti-Tampering SEC-FIN-05)
+            $realSubtotal = 0.0;
+            foreach ($items as $it) {
+                $realSubtotal += (float)$it['subtotal'];
+            }
+            $realDiscount = max(0, (float)($q['discount'] ?? 0));
+            $realTax = max(0, (float)($q['tax'] ?? 0));
+            $realTotal = round(max(0, $realSubtotal - $realDiscount + $realTax), 2);
+
             // 2. Create Invoice
             $invNum = 'INV-' . date('Ymd') . '-' . strtoupper(bin2hex(random_bytes(3)));
             $insInv = $this->db->prepare("
@@ -361,7 +454,7 @@ class QuoteController {
             ");
             $insInv->execute([
                 $tid, $q['contact_id'], $uid, $invNum, "Hóa đơn từ báo giá: " . $q['title'],
-                $q['subtotal'], $q['discount'], $q['tax'], $q['total'], $q['notes']
+                $realSubtotal, $realDiscount, $realTax, $realTotal, $q['notes']
             ]);
             $invId = $this->db->lastInsertId();
 

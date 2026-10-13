@@ -11,7 +11,8 @@ param(
     [switch]$SyncMedia = $false,
     [switch]$SkipBuild = $false,
     [switch]$CheckTypes = $false,
-    [switch]$CloneDatabase = $false
+    [switch]$CloneDatabase = $false,
+    [switch]$NoSyncStaging = $false
 )
 
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
@@ -184,3 +185,11 @@ Write-Host "`n=========================================================" -Foregr
 Write-Host "   DEPLOYMENT SUCCESSFUL in ${elapsedSec}s!" -ForegroundColor Green
 Write-Host "   Live URL: https://myerp.ideas.edu.vn/" -ForegroundColor Green
 Write-Host "=========================================================" -ForegroundColor Green
+
+if (-not $NoSyncStaging) {
+    Write-Host "`n>>> [1-WAY SYNC] Automatically propagating updates & schema 1-way to Staging..." -ForegroundColor Cyan
+    $stagingParams = @{ SkipBuild = $true }
+    if ($BackendOnly) { $stagingParams["BackendOnly"] = $true }
+    if ($FrontendOnly) { $stagingParams["FrontendOnly"] = $true }
+    & "$PSScriptRoot\deploy-staging.ps1" @stagingParams
+}

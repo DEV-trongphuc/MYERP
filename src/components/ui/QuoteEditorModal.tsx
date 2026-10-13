@@ -11,6 +11,7 @@ import { useUIStore } from '../../store/uiStore';
 import { numberToText } from '../../utils/numberToText';
 import { useAuth } from '../../contexts/AuthContext';
 import { VietnameseDateInput } from './VietnameseDateInput';
+import { pushOverlay } from '../../utils/overlayStack';
 
 interface Product {
   id: number;
@@ -83,6 +84,14 @@ export const QuoteEditorModal: React.FC<QuoteEditorProps> = ({
   const [selectedDeal, setSelectedDeal] = useState<any>(null);
   const [showDealPicker, setShowDealPicker] = useState(false);
   const [searchDeal, setSearchDeal] = useState('');
+  const inFlightRef = React.useRef(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      const unregister = pushOverlay('quote-editor-modal', onClose, zIndex || 2147483640);
+      return () => unregister();
+    }
+  }, [isOpen, onClose, zIndex]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -209,24 +218,35 @@ export const QuoteEditorModal: React.FC<QuoteEditorProps> = ({
   const updateItem = (index: number, fields: Partial<QuoteItem>) => {
     const newItems = [...items];
     const item = { ...newItems[index], ...fields };
-    const up = Number(item.unit_price) || 0;
-    const qty = Number(item.quantity) || 0;
-    const disc = Number(item.discount) || 0;
-    item.subtotal = (up * qty) * (1 - (disc / 100));
+    const up = Math.max(0, Number(item.unit_price) || 0);
+    const qty = Math.max(1, Number(item.quantity) || 1);
+    const disc = Math.min(100, Math.max(0, Number(item.discount) || 0));
+    item.quantity = qty;
+    item.unit_price = up;
+    item.discount = disc;
+    item.subtotal = Math.max(0, (up * qty) * (1 - (disc / 100)));
     newItems[index] = item;
     setItems(newItems);
   };
 
-  const subtotal = items.reduce((sum, i) => sum + (Number(i.subtotal) || 0), 0);
-  const taxAmount = (subtotal - (Number(form.discount) || 0)) * ((Number(form.tax_rate) || 0) / 100);
-  const total = subtotal - (Number(form.discount) || 0) + taxAmount;
+  const subtotal = Math.max(0, items.reduce((sum, i) => sum + (Number(i.subtotal) || 0), 0));
+  const rawDiscount = Math.max(0, Number(form.discount) || 0);
+  const effectiveDiscount = Math.min(subtotal, rawDiscount);
+  const taxRate = Math.max(0, Number(form.tax_rate) || 0);
+  const taxableAmount = Math.max(0, subtotal - effectiveDiscount);
+  const taxAmount = (taxableAmount * taxRate) / 100;
+  const total = Math.max(0, taxableAmount + taxAmount);
 
   const handleSave = async () => {
-    if (loading) return;
-    if (!form.title) return addToast('Vui lòng nhập tiêu đề báo giá', 'warning');
+    if (inFlightRef.current || loading) return;
+    if (!form.title.trim()) return addToast('Vui lòng nhập tiêu đề báo giá', 'warning');
     if (!selectedContact) return addToast('Vui lòng chọn khách hàng', 'warning');
     if (items.length === 0) return addToast('Báo giá phải có ít nhất 1 sản phẩm', 'warning');
+    if (Number(form.discount || 0) > subtotal) {
+      return addToast('Chiết khấu tổng đơn không được vượt quá tổng tiền hàng', 'warning');
+    }
 
+    inFlightRef.current = true;
     setLoading(true);
     const payload = { ...form, contact_id: selectedContact.id, deal_id: selectedDeal?.id || null, subtotal, tax: taxAmount, total, items };
 
@@ -242,6 +262,7 @@ export const QuoteEditorModal: React.FC<QuoteEditorProps> = ({
     } catch (err: any) {
       addToast(err.response?.data?.message || 'Lỗi khi lưu báo giá', 'error');
     } finally {
+      inFlightRef.current = false;
       setLoading(false);
     }
   };
