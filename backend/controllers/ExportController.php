@@ -317,12 +317,30 @@ class ExportController {
                 $params[] = $auth['tenant_id'];
             }
 
-            if ($dataType === 'error_ticket') {
-                $where[] = "EXISTS (
-                    SELECT 1 FROM distribution_logs dl2 
-                    INNER JOIN leads l2 ON dl2.lead_id = l2.id 
-                    WHERE l2.person_id = t.person_id AND dl2.status IN ('duplicate', 'error', 'blacklisted')
+            if ($dataType !== '') {
+                $errorCond = "(
+                    EXISTS (SELECT 1 FROM tickets tk WHERE tk.contact_id = t.id AND tk.status IN ('open', 'in_progress'))
+                    OR EXISTS (
+                        SELECT 1 FROM data_reports dr 
+                        JOIN leads l2 ON dr.lead_id = l2.id 
+                        WHERE t.phone IS NOT NULL AND t.phone != '' AND l2.phone = t.phone AND dr.status IN ('pending', 'approved')
+                    )
                 )";
+                $personalCond = "(
+                    t.source IN ('ca_nhan', 'gioi_thieu', 'databank', 'referral', 'ref')
+                    OR t.source LIKE 'ca_nhan%'
+                    OR t.source = 'Nhân viên kinh doanh tự tìm kiếm'
+                    OR (t.created_by = t.owner_id AND t.created_by NOT IN (1, 100009))
+                )";
+                if ($dataType === 'error_ticket') {
+                    $where[] = $errorCond;
+                } else if ($dataType === 'personal') {
+                    $where[] = "NOT $errorCond";
+                    $where[] = $personalCond;
+                } else if ($dataType === 'distributed') {
+                    $where[] = "NOT $errorCond";
+                    $where[] = "NOT $personalCond";
+                }
             }
 
             $whereStr = implode(' AND ', $where);

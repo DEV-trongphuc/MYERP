@@ -1028,8 +1028,11 @@ class FinanceController
         $approver_id_2 = !empty($data['approver_id_2']) ? (int)$data['approver_id_2'] : null;
         $approver_id_3 = !empty($data['approver_id_3']) ? (int)$data['approver_id_3'] : null;
 
-        $isExecutive = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true);
-        if (!$isExecutive) {
+        $canSelfApprove = in_array(strtolower($auth['role'] ?? ''), [
+            'admin', 'superadmin', 'super_admin', 'director',
+            'manager', 'accountant', 'ketoan', 'leader', 'truongphong', 'head_of_department'
+        ], true);
+        if (!$canSelfApprove) {
             foreach (['approver_id', 'approver_id_2', 'approver_id_3'] as $af) {
                 if (!empty($data[$af]) && (int)$data[$af] === (int)$auth['user_id']) {
                     respond(422, null, 'Người tạo đề xuất không được tự chỉ định mình làm người duyệt chi phí', false);
@@ -1088,14 +1091,15 @@ class FinanceController
         $itemsJson = !empty($data['items']) ? (is_string($data['items']) ? $data['items'] : json_encode($data['items'], JSON_UNESCAPED_UNICODE)) : null;
 
         $expenseDate = !empty($data['date']) ? trim($data['date']) : date('Y-m-d');
-        // Auto-detect deadline date from notes if user didn't specify custom date or left as today
-        if ((empty($data['date']) || $data['date'] === date('Y-m-d')) && !empty($data['notes'])) {
+        $dueDate = !empty($data['due_date']) ? trim($data['due_date']) : null;
+        // Auto-detect deadline date from notes if user didn't specify custom deadline
+        if (empty($dueDate) && !empty($data['notes'])) {
             if (preg_match('/(?:deadline|hạn)\s*(?:thanh\s*toán|chi)?\s*[:\s-]*(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/iu', $data['notes'], $dMatch)) {
                 $dDay = str_pad($dMatch[1], 2, '0', STR_PAD_LEFT);
                 $dMonth = str_pad($dMatch[2], 2, '0', STR_PAD_LEFT);
                 $dYear = $dMatch[3];
                 if (checkdate((int)$dMonth, (int)$dDay, (int)$dYear)) {
-                    $expenseDate = "$dYear-$dMonth-$dDay";
+                    $dueDate = "$dYear-$dMonth-$dDay";
                 }
             }
         }
@@ -1104,12 +1108,12 @@ class FinanceController
         try {
             $stmt = $this->db->prepare("
                 INSERT INTO expenses (
-                    tenant_id, created_by, title, category, amount, currency, vat_amount, date, status, notes,
+                    tenant_id, created_by, title, category, amount, currency, vat_amount, date, due_date, status, notes,
                     items, vendor_name, has_vat_invoice, is_vat_inclusive, image_url,
                     approver_id, approver_id_2, approver_id_3,
                     status_level_1, status_level_2, status_level_3, approval_status, related_user_ids
                 )
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ");
             $stmt->execute([
                 $auth['tenant_id'],
@@ -1120,6 +1124,7 @@ class FinanceController
                 $currency,
                 $data['vat_amount'] ?? 0,
                 $expenseDate,
+                $dueDate,
                 $statusVal,
                 $data['notes'] ?? null,
                 $itemsJson,
@@ -1244,6 +1249,7 @@ class FinanceController
             'currency',
             'vat_amount',
             'date',
+            'due_date',
             'notes',
             'items',
             'vendor_name',
@@ -1271,8 +1277,11 @@ class FinanceController
             $fields[] = 'refund_image_url';
         }
 
-        $isExecutive = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true);
-        if (!$isExecutive) {
+        $canSelfApprove = in_array(strtolower($auth['role'] ?? ''), [
+            'admin', 'superadmin', 'super_admin', 'director',
+            'manager', 'accountant', 'ketoan', 'leader', 'truongphong', 'head_of_department'
+        ], true);
+        if (!$canSelfApprove) {
             foreach (['approver_id', 'approver_id_2', 'approver_id_3'] as $af) {
                 if (array_key_exists($af, $data) && !empty($data[$af]) && (int)$data[$af] === (int)$auth['user_id']) {
                     respond(422, null, 'Người tạo đề xuất không được tự chỉ định mình làm người duyệt chi phí', false);
@@ -1573,8 +1582,11 @@ class FinanceController
                             stripos($expenseRow['title'] ?? '', 'hoa hồng') !== false || 
                             stripos($expenseRow['notes'] ?? '', 'hoa hồng') !== false;
 
-            $isExecutive = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true);
-            if ($isCreator && !$isCommission && !$isExecutive) {
+            $canSelfApprove = in_array(strtolower($auth['role'] ?? ''), [
+                'admin', 'superadmin', 'super_admin', 'director',
+                'manager', 'accountant', 'ketoan', 'leader', 'truongphong', 'head_of_department'
+            ], true);
+            if ($isCreator && !$isCommission && !$canSelfApprove) {
                 $this->db->rollBack();
                 respond(403, null, 'Người tạo đề xuất không được tự phê duyệt chi phí của chính mình', false);
             }

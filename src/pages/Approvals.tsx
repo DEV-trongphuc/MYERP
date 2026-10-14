@@ -976,6 +976,7 @@ export default function Approvals() {
   const [paymentAccountName, setPaymentAccountName] = useState('');
   const [paymentPhone, setPaymentPhone] = useState('');
   const [paymentTaxCode, setPaymentTaxCode] = useState('');
+  const [paymentDueDate, setPaymentDueDate] = useState('');
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [companies, setCompanies] = useState<any[]>([]);
   const [contacts, setContacts] = useState<any[]>([]);
@@ -2089,7 +2090,8 @@ export default function Approvals() {
 
           const parts = [
             catMap[expenseCategory] ? `Danh mục: ${catMap[expenseCategory]}` : '',
-            chosenDocLabel ? `Chứng từ: ${chosenDocLabel}` : ''
+            chosenDocLabel ? `Chứng từ: ${chosenDocLabel}` : '',
+            paymentDueDate ? `Thời hạn thanh toán: ${paymentDueDate}` : ''
           ].filter(Boolean);
           if (parts.length > 0) {
             invoiceStr = `[Hồ sơ chi phí]: ${parts.join(' - ')}`;
@@ -2261,7 +2263,8 @@ export default function Approvals() {
             bank_account_number: paymentBankAccount || null,
             bank_account_name: paymentAccountName || null,
             bank_branch: paymentBankBranch || null,
-            vendor_name: paymentBeneficiaryName || null
+            vendor_name: paymentBeneficiaryName || null,
+            due_date: paymentDueDate || null
           });
         } else {
           await api.post('/expenses', {
@@ -2283,7 +2286,8 @@ export default function Approvals() {
             bank_account_number: paymentBankAccount || null,
             bank_account_name: paymentAccountName || null,
             bank_branch: paymentBankBranch || null,
-            vendor_name: paymentBeneficiaryName || null
+            vendor_name: paymentBeneficiaryName || null,
+            due_date: paymentDueDate || null
           });
         }
       }
@@ -2328,6 +2332,7 @@ export default function Approvals() {
       setMeetingInternalAttendees([]);
       setAdvanceType('business_trip');
       setAdvanceSettlementDate('');
+      setPaymentDueDate('');
       setExpenseCategory('general');
       setInvoiceType('vat_10');
       handleTabChange('my_requests');
@@ -2432,8 +2437,9 @@ export default function Approvals() {
     // Cho phép tự tạo và tự phê duyệt (Bước duyệt mặc định có thể là chính người tạo)
     const isAttendance = workflowDef?.id === 'attendance_bulk' || formType === 'attendance_bulk';
     const isCommissionWf = workflowDef?.id === 'commission_payout' || selectedWorkflowDef?.id === 'commission_payout';
-    const isProposerManagerOrLeader = ['manager', 'director', 'admin', 'superadmin', 'super_admin', 'leader', 'truongphong', 'head_of_department'].includes(String(p?.role || user?.role).toLowerCase()) || Boolean(p?.is_team_leader || (user as any)?.is_team_leader);
-    if ((isAttendance && isProposerManagerOrLeader) || isCommissionWf) {
+    const isExpenseOrPayment = workflowDef?.id === 'expense_claim' || workflowDef?.id === 'payment' || formType === 'expense' || selectedWorkflowDef?.id === 'expense_claim' || selectedWorkflowDef?.id === 'payment';
+    const isProposerManagerOrLeader = ['manager', 'director', 'admin', 'superadmin', 'super_admin', 'leader', 'truongphong', 'head_of_department', 'accountant', 'ketoan'].includes(String(p?.role || user?.role).toLowerCase()) || Boolean(p?.is_team_leader || (user as any)?.is_team_leader);
+    if ((isAttendance && isProposerManagerOrLeader) || isCommissionWf || (isExpenseOrPayment && isProposerManagerOrLeader)) {
       return proposerInUsers || p;
     }
 
@@ -2758,6 +2764,7 @@ export default function Approvals() {
       pssRecipientPhone: pssRecipientPhone || '',
       advanceType: advanceType || '',
       advanceSettlementDate: advanceSettlementDate || '',
+      paymentDueDate: paymentDueDate || '',
       expenseCategory: expenseCategory || '',
       invoiceType: invoiceType || '',
       customApprover1Id: customApprover1?.id || defaultApp1?.id || null,
@@ -2952,6 +2959,7 @@ export default function Approvals() {
         pssRequiredSendDate,
         advanceType,
         advanceSettlementDate,
+        paymentDueDate,
         expenseCategory,
         invoiceType,
         customApprover1: resolvedApp1,
@@ -3125,6 +3133,7 @@ export default function Approvals() {
     if (fd.pssRequiredSendDate) setPssRequiredSendDate(fd.pssRequiredSendDate);
     if (fd.advanceType) setAdvanceType(fd.advanceType);
     if (fd.advanceSettlementDate) setAdvanceSettlementDate(fd.advanceSettlementDate);
+    if (fd.paymentDueDate) setPaymentDueDate(fd.paymentDueDate);
     if (fd.expenseCategory) setExpenseCategory(fd.expenseCategory);
     if (fd.invoiceType) setInvoiceType(fd.invoiceType);
     if (fd.recruitmentJobTitle !== undefined) setRecruitmentJobTitle(fd.recruitmentJobTitle);
@@ -3216,6 +3225,7 @@ export default function Approvals() {
       pssRecipientPhone: pssRecipientPhone || '',
       advanceType: advanceType || '',
       advanceSettlementDate: advanceSettlementDate || '',
+      paymentDueDate: paymentDueDate || '',
       expenseCategory: expenseCategory || '',
       invoiceType: invoiceType || '',
       customApprover1Id: fd.customApprover1?.id || defaultApp1?.id || null,
@@ -4789,6 +4799,14 @@ export default function Approvals() {
         else if (notes.includes('Hóa đơn bán lẻ')) setInvoiceType('retail');
         else if (notes.includes('Không có hóa đơn')) setInvoiceType('none');
         else setInvoiceType('vat_10');
+
+        if (expData.due_date) {
+          setPaymentDueDate(expData.due_date);
+        } else {
+          const dueMatch = notes.match(/Thời hạn thanh toán:\s*([0-9\/\-]+)/i);
+          if (dueMatch) setPaymentDueDate(dueMatch[1].trim());
+          else setPaymentDueDate('');
+        }
 
         // 7. BẢNG CHI TIẾT THANH TOÁN (expenseItems)
         const parsedItemsFromNotes = parseExpenseLineItems(notes, expData.items);
@@ -11292,29 +11310,43 @@ export default function Approvals() {
                                     </div>
                                   )}
 
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-                                      {t('Loại chứng từ hóa đơn')}
-                                    </label>
-                                    <CustomSelect
-                                      value={invoiceType}
-                                      onChange={val => {
-                                        setInvoiceType(val as any);
-                                        const vatNum = val === 'vat_10' ? 10 : val === 'vat_8' ? 8 : val === 'vat_5' ? 5 : val === 'vat_0' ? 0 : null;
-                                        if (vatNum !== null) {
-                                          setExpenseItems(prev => prev.map(it => ({ ...it, vat: vatNum })));
-                                        }
-                                      }}
-                                      options={[
-                                        { value: 'vat_10', label: t('Hóa đơn điện tử VAT 10%') },
-                                        { value: 'vat_8', label: t('Hóa đơn điện tử VAT 8%') },
-                                        { value: 'vat_5', label: t('Hóa đơn điện tử VAT 5%') },
-                                        { value: 'vat_0', label: t('Hóa đơn điện tử VAT 0% / Không chịu thuế') },
-                                        { value: 'retail', label: t('Hóa đơn bán lẻ / Biên lai thu tiền') },
-                                        { value: 'none', label: t('Không có hóa đơn (Giải trình nội bộ)') }
-                                      ]}
-                                      width="100%"
-                                    />
+                                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                      <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                        {t('Loại chứng từ hóa đơn')}
+                                      </label>
+                                      <CustomSelect
+                                        value={invoiceType}
+                                        onChange={val => {
+                                          setInvoiceType(val as any);
+                                          const vatNum = val === 'vat_10' ? 10 : val === 'vat_8' ? 8 : val === 'vat_5' ? 5 : val === 'vat_0' ? 0 : null;
+                                          if (vatNum !== null) {
+                                            setExpenseItems(prev => prev.map(it => ({ ...it, vat: vatNum })));
+                                          }
+                                        }}
+                                        options={[
+                                          { value: 'vat_10', label: t('Hóa đơn điện tử VAT 10%') },
+                                          { value: 'vat_8', label: t('Hóa đơn điện tử VAT 8%') },
+                                          { value: 'vat_5', label: t('Hóa đơn điện tử VAT 5%') },
+                                          { value: 'vat_0', label: t('Hóa đơn điện tử VAT 0% / Không chịu thuế') },
+                                          { value: 'retail', label: t('Hóa đơn bán lẻ / Biên lai thu tiền') },
+                                          { value: 'none', label: t('Không có hóa đơn (Giải trình nội bộ)') }
+                                        ]}
+                                        width="100%"
+                                      />
+                                    </div>
+
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                      <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                        {t('Thời hạn thanh toán')}
+                                      </label>
+                                      <VietnameseDateInput
+                                        value={paymentDueDate}
+                                        onChange={val => setPaymentDueDate(val)}
+                                        placeholder={t('Chọn thời hạn thanh toán')}
+                                        inputStyle={{ height: '36px', fontSize: '0.8rem' }}
+                                      />
+                                    </div>
                                   </div>
                                 </div>
                               </div>
@@ -15704,8 +15736,11 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       const profileInfo = profileMatch ? profileMatch[1].trim() : '';
       const paymentDetails = detailsMatch ? detailsMatch[1].trim() : '';
 
-      if (!beneficiaryName && !bankInfo && !otherMethodInfo && !dept && !profileInfo) return null;
-      return { beneficiaryTarget, beneficiaryName, beneficiaryPhone, taxCode, dept, profileInfo, paymentDetails, bankInfo, otherMethodInfo };
+      const dueMatch = text.match(/Thời hạn thanh toán:\s*([0-9\/\-]+)/i);
+      const dueDate = dueMatch ? dueMatch[1].trim() : '';
+
+      if (!beneficiaryName && !bankInfo && !otherMethodInfo && !dept && !profileInfo && !dueDate) return null;
+      return { beneficiaryTarget, beneficiaryName, beneficiaryPhone, taxCode, dept, profileInfo, paymentDetails, bankInfo, otherMethodInfo, dueDate };
     };
 
     const parseRecruitmentInfo = (text: string) => {
@@ -15882,6 +15917,15 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
             <span>
               {t('Mã')}: <strong style={{ color: 'var(--color-text)' }}>#{item.id}</strong>
             </span>
+            {(detail?.due_date || (item as any)?.due_date || (paymentData as any)?.dueDate) && (
+              <>
+                <span style={{ color: 'var(--color-border-light)' }}>|</span>
+                <span style={{ color: '#b91c1c', fontWeight: 750, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <Calendar size={13} style={{ color: '#ef4444' }} />
+                  {t('Hạn thanh toán')}: <strong>{new Date(detail?.due_date || (item as any)?.due_date || (paymentData as any)?.dueDate).toLocaleDateString('vi-VN')}</strong>
+                </span>
+              </>
+            )}
           </div>
         </div>
 
@@ -18291,6 +18335,23 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                         fontFamily: 'monospace'
                       }}>
                         MST: {paymentData.taxCode}
+                      </span>
+                    )}
+                    {(detail?.due_date || (item as any)?.due_date || paymentData.dueDate) && (
+                      <span style={{
+                        fontSize: '0.75rem',
+                        padding: '4px 10px',
+                        borderRadius: '8px',
+                        background: 'rgba(239, 68, 68, 0.08)',
+                        border: '1px solid rgba(239, 68, 68, 0.2)',
+                        color: '#b91c1c',
+                        fontWeight: 750,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px'
+                      }}>
+                        <Calendar size={13} style={{ color: '#ef4444' }} />
+                        {t('Hạn thanh toán')}: {new Date(detail?.due_date || (item as any)?.due_date || paymentData.dueDate).toLocaleDateString('vi-VN')}
                       </span>
                     )}
                   </div>

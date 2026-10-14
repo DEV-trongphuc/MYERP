@@ -222,43 +222,27 @@ class ContactController {
         
         if ($dataType !== '') {
             $errorCond = "(
-                (c.report_status IS NOT NULL AND c.report_status != '')
-                OR (c.ticket_status IS NOT NULL AND c.ticket_status != '')
+                EXISTS (SELECT 1 FROM tickets tk WHERE tk.contact_id = c.id AND tk.status IN ('open', 'in_progress'))
                 OR EXISTS (
-                    SELECT 1 FROM leads l2 
-                    JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
-                    WHERE l2.person_id = c.person_id AND dl2.status IN ('duplicate', 'error', 'blacklisted')
+                    SELECT 1 FROM data_reports dr 
+                    JOIN leads l2 ON dr.lead_id = l2.id 
+                    WHERE c.phone IS NOT NULL AND c.phone != '' AND l2.phone = c.phone AND dr.status IN ('pending', 'approved')
                 )
+            )";
+            $personalCond = "(
+                c.source IN ('ca_nhan', 'gioi_thieu', 'databank', 'referral', 'ref')
+                OR c.source LIKE 'ca_nhan%'
+                OR c.source = 'Nhân viên kinh doanh tự tìm kiếm'
+                OR (c.created_by = c.owner_id AND c.created_by NOT IN (1, 100009))
             )";
             if ($dataType === 'error_ticket') {
                 $where[] = $errorCond;
-            } else {
+            } else if ($dataType === 'personal') {
                 $where[] = "NOT $errorCond";
-                if ($dataType === 'distributed') {
-                    $where[] = "(
-                        (c.collaborator_ids IS NOT NULL AND c.collaborator_ids != '')
-                        OR
-                        (EXISTS (
-                            SELECT 1 FROM distribution_logs dl
-                            INNER JOIN leads l ON dl.lead_id = l.id
-                            WHERE l.person_id = c.person_id AND dl.status IN ('assigned', 'compensation', 'rule_6_month', 'pending_work_hours', 'fallback', 'success', 'reminder')
-                        ) AND c.source != 'databank' AND (c.collaborator_ids IS NULL OR c.collaborator_ids = ''))
-                    )";
-                } else if ($dataType === 'personal') {
-                    $where[] = "(
-                        (c.source = 'databank' OR EXISTS (
-                            SELECT 1 FROM distribution_logs dl
-                            INNER JOIN leads l ON dl.lead_id = l.id
-                            WHERE l.person_id = c.person_id AND dl.status = 'databank_claim'
-                        ))
-                        OR
-                        (NOT EXISTS (
-                            SELECT 1 FROM distribution_logs dl
-                            INNER JOIN leads l ON dl.lead_id = l.id
-                            WHERE l.person_id = c.person_id AND dl.status != 'databank_claim'
-                        ) AND c.source != 'databank' AND (c.collaborator_ids IS NULL OR c.collaborator_ids = ''))
-                    )";
-                }
+                $where[] = $personalCond;
+            } else if ($dataType === 'distributed') {
+                $where[] = "NOT $errorCond";
+                $where[] = "NOT $personalCond";
             }
         }
         

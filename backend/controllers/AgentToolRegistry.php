@@ -2689,7 +2689,7 @@ class AgentToolRegistry {
                             }
 
                             $isCreator = ((int)$ticket['created_by'] === $uid);
-                            if ($isCreator && !$isGlobalAdmin) {
+                            if ($isCreator && !$isGlobalAdmin && !$isAccountant && !$isManager) {
                                 $db->rollBack();
                                 return ['success' => false, 'message' => 'Người tạo đề xuất không được tự phê duyệt chi phí của chính mình.'];
                             }

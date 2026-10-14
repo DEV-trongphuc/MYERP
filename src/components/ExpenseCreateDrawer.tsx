@@ -59,6 +59,7 @@ const EMPTY_FORM = {
   currency: 'VND',
   vat_amount: '',
   date: '',
+  due_date: '',
   notes: '',
   approver_id: null as number | null,
   approver_id_2: null as number | null,
@@ -802,6 +803,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
             currency: editItem.currency || 'VND',
             vat_amount: editItem.vat_amount ? String(editItem.vat_amount) : '',
             date: editItem.date || new Date().toISOString().split('T')[0],
+            due_date: editItem.due_date || '',
             notes: cleanNotes,
             approver_id: editItem.approver_id ? Number(editItem.approver_id) : null,
             approver_id_2: editItem.approver_id_2 ? Number(editItem.approver_id_2) : null,
@@ -892,6 +894,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
             ...EMPTY_FORM,
             title: '',
             date: initialDate || new Date().toISOString().split('T')[0],
+            due_date: '',
             approver_id: defaultApproverId
           });
         }
@@ -967,7 +970,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
     }
   }, [isOpen, editItem, users, teams, user, form.approver_id]);
 
-  const isManagerOrAbove = Boolean(user && ['admin', 'superadmin', 'super_admin', 'director', 'manager'].includes(String(user.role).toLowerCase()));
+  const isManagerOrAbove = Boolean(user && ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'accountant', 'ketoan', 'leader', 'truongphong', 'head_of_department'].includes(String(user.role).toLowerCase()));
   const isAutoApprove = Boolean(isManagerOrAbove && form.approver_id !== null && user?.id !== undefined && Number(form.approver_id) === Number(user.id));
 
   // Handle Save
@@ -2466,17 +2469,30 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                     </div>
                   )}
 
-                  {/* Ngày chi */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-                      Ngày đề xuất chi *
-                    </label>
-                    <VietnameseDateInput
-                      value={form.date}
-                      onChange={val => setForm({ ...form, date: val })}
-                      inputStyle={{ height: '38px', borderRadius: '8px', fontSize: '0.85rem' }}
-                      required
-                    />
+                  {/* Ngày đề xuất chi & Thời hạn thanh toán */}
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                        Ngày đề xuất chi *
+                      </label>
+                      <VietnameseDateInput
+                        value={form.date}
+                        onChange={val => setForm({ ...form, date: val })}
+                        inputStyle={{ height: '38px', borderRadius: '8px', fontSize: '0.85rem' }}
+                        required
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                        Thời hạn thanh toán
+                      </label>
+                      <VietnameseDateInput
+                        value={form.due_date || ''}
+                        onChange={val => setForm({ ...form, due_date: val })}
+                        placeholder="Chọn hạn thanh toán..."
+                        inputStyle={{ height: '38px', borderRadius: '8px', fontSize: '0.85rem' }}
+                      />
+                    </div>
                   </div>
                 </div>
 

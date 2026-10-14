@@ -123,8 +123,10 @@ export function isItemAtMyStepToApprove(item: any, user: any, usersByNameMap?: M
                         item.type === 'commission_payout' || 
                         (item.title && typeof item.title === 'string' && item.title.toLowerCase().includes('hoa hồng')) || 
                         (item.notes && typeof item.notes === 'string' && item.notes.toLowerCase().includes('hoa hồng')));
+  const isAccountantUser = ['accountant', 'ketoan'].includes(currentRole);
+  const canSelfApproveUser = isExecutiveUser || isManagerOrLeader || isAccountantUser;
   if ((currentUid > 0 && itemUid === currentUid) || (currentUserName && itEmpName === currentUserName)) {
-    if (!isCommission && (!isAttendance || !isManagerOrLeader) && !isExecutiveUser) {
+    if (!isCommission && (!isAttendance || !isManagerOrLeader) && !canSelfApproveUser) {
       const lvl1 = (item.status_level_1 || 'pending').toLowerCase();
       const lvl2 = (item.status_level_2 || 'none').toLowerCase();
       const lvl3 = (item.status_level_3 || 'none').toLowerCase();
