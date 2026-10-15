@@ -395,6 +395,35 @@ class AgentToolRegistry {
                                 'search' => [
                                     'type' => 'STRING',
                                     'description' => 'Từ khóa tìm kiếm theo tên hoặc SĐT'
+                                ],
+                                'limit' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Số lượng lead cần lấy/xuất (ví dụ: 100, 50, 200). Mặc định để trống để xuất toàn bộ theo bộ lọc.'
+                                ]
+                            ]
+                        ]
+                    ],
+                    [
+                        'name' => 'analyze_leads_demographics_and_job_titles',
+                        'description' => 'Phân tích chuyên sâu cơ cấu chức vụ, nhóm ngành nghề kinh doanh, cấp bậc quản lý (C-Level/Lãnh đạo, Quản lý cấp trung, Chuyên viên), và tỷ lệ hoàn thiện dữ liệu chức vụ/công ty của tập khách hàng/lead CRM (hoặc 100/500 lead gần nhất). Tự động phân nhóm và cung cấp biểu đồ trực quan cho Marketing và Ban Giám đốc.',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'limit' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Số lượng lead gần nhất cần phân tích (ví dụ: 100, 500, 1000). Mặc định để trống để phân tích toàn bộ dataset theo bộ lọc.'
+                                ],
+                                'program' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Lọc theo chương trình đào tạo nếu có (ví dụ: MBA, EMBA, DBA, BBA, MSCAI)'
+                                ],
+                                'stages' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Lọc theo các giai đoạn pipeline (ví dụ: "1-4", "1,2,3,4,13", "all")'
+                                ],
+                                'has_job_title_only' => [
+                                    'type' => 'BOOLEAN',
+                                    'description' => 'Chỉ phân tích các lead đã cập nhật chức vụ (mặc định false: phân tích toàn bộ và báo cáo tỷ lệ)'
                                 ]
                             ]
                         ]
@@ -2466,9 +2495,14 @@ class AgentToolRegistry {
                         $stmtDate->execute($params);
                         $dateRows = $stmtDate->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-                        // Leaves / WFH on target date
-                        $whereLeaves = ["u.tenant_id = ?", "l.status = 'approved'", "? BETWEEN l.start_date AND l.end_date"];
-                        $leaveParams = [$tid, $targetDate];
+                        // Leaves / WFH on target date (Fixed: table hrm_leave_requests & datetime comparison)
+                        $whereLeaves = [
+                            "u.tenant_id = ?",
+                            "l.status = 'approved'",
+                            "DATE(l.start_date) <= ?",
+                            "DATE(l.end_date) >= ?"
+                        ];
+                        $leaveParams = [$tid, $targetDate, $targetDate];
 
                         if (!$canViewAll && $isManager) {
                             $whereLeaves[] = "(u.id = ? OR u.team_id IN (SELECT id FROM teams WHERE leader_id = ? OR FIND_IN_SET(?, COALESCE(co_leader_ids, ''))))";
@@ -2488,7 +2522,7 @@ class AgentToolRegistry {
                                         COALESCE(t.name, 'Chung') as team_name,
                                         l.leave_type,
                                         l.reason
-                                      FROM hrm_leaves l
+                                      FROM hrm_leave_requests l
                                       JOIN users u ON l.user_id = u.id
                                       LEFT JOIN teams t ON u.team_id = t.id
                                       WHERE " . implode(' AND ', $whereLeaves);
@@ -2507,18 +2541,86 @@ class AgentToolRegistry {
                             }
                         }
 
+                        // Query all active personnel in company (excluding bots and inactive/dormant)
+                        $whereActiveStaff = [
+                            "u.tenant_id = ?",
+                            "(u.is_active = 1 OR u.is_active IS NULL)",
+                            "(u.status = 'active' OR u.status IS NULL)",
+                            "u.role NOT IN ('bot', 'system')"
+                        ];
+                        $activeStaffParams = [$tid];
+                        if (!$canViewAll && $isManager) {
+                            $whereActiveStaff[] = "(u.id = ? OR u.team_id IN (SELECT id FROM teams WHERE leader_id = ? OR FIND_IN_SET(?, COALESCE(co_leader_ids, ''))))";
+                            $activeStaffParams[] = $uid;
+                            $activeStaffParams[] = $uid;
+                            $activeStaffParams[] = $uid;
+                        } elseif (!$canViewAll) {
+                            $whereActiveStaff[] = "u.id = ?";
+                            $activeStaffParams[] = $uid;
+                        }
+                        $sqlActiveStaff = "SELECT u.id, u.full_name, COALESCE(u.job_title, u.role) as job_title, COALESCE(t.name, 'Chung') as team_name, u.role,
+                                                  (SELECT MAX(check_in_date) FROM check_ins WHERE user_id = u.id) as last_checkin,
+                                                  (SELECT COUNT(1) FROM check_ins WHERE user_id = u.id) as total_checkins
+                                           FROM users u
+                                           LEFT JOIN teams t ON u.team_id = t.id
+                                           WHERE " . implode(' AND ', $whereActiveStaff) . "
+                                           ORDER BY t.name ASC, u.full_name ASC";
+                        $stmtActive = $db->prepare($sqlActiveStaff);
+                        $stmtActive->execute($activeStaffParams);
+                        $activeStaffList = $stmtActive->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                        $checkedInUserIds = array_map(fn($r) => (int)$r['user_id'], $dateRows);
+                        $wfhUserIds = array_map(fn($r) => (int)$r['user_id'], $wfhStaff);
+                        $leaveUserIds = array_map(fn($r) => (int)$r['user_id'], $leaveStaff);
+
+                        $notCheckedInStaff = [];
+                        $dormantStaff = [];
+
+                        foreach ($activeStaffList as $staff) {
+                            $sId = (int)$staff['id'];
+                            if (in_array($sId, $checkedInUserIds, true) || in_array($sId, $wfhUserIds, true) || in_array($sId, $leaveUserIds, true)) {
+                                continue;
+                            }
+                            $isLeadership = in_array(strtolower($staff['role'] ?? ''), ['admin', 'superadmin', 'director'], true);
+                            $lastCi = $staff['last_checkin'];
+                            $totalCi = (int)$staff['total_checkins'];
+
+                            if (!$isLeadership && ($totalCi === 0 || empty($lastCi) || strtotime($lastCi) < strtotime('-30 days'))) {
+                                $dormantStaff[] = [
+                                    'user_id' => $sId,
+                                    'full_name' => $staff['full_name'],
+                                    'job_title' => $staff['job_title'],
+                                    'team_name' => $staff['team_name'],
+                                    'last_checkin' => $lastCi ? date('d/m/Y', strtotime($lastCi)) : 'Chưa từng quẹt thẻ',
+                                    'status_note' => 'Không hoạt động (>30 ngày không chấm công)'
+                                ];
+                            } else {
+                                $notCheckedInStaff[] = [
+                                    'user_id' => $sId,
+                                    'full_name' => $staff['full_name'],
+                                    'job_title' => $staff['job_title'],
+                                    'team_name' => $staff['team_name'],
+                                    'status_note' => 'Chưa quẹt thẻ hôm nay'
+                                ];
+                            }
+                        }
+
                         return [
                             'success' => true,
                             'scope' => 'date_detail',
                             'date' => $targetDate,
-                            'total_checked_in' => count($dateRows),
+                            'total_checked_in_office' => count($dateRows),
                             'total_wfh' => count($wfhStaff),
                             'total_on_leave' => count($leaveStaff),
+                            'total_not_checked_in' => count($notCheckedInStaff),
+                            'total_inactive_or_dormant' => count($dormantStaff),
                             'company_work_hours' => $workPolicy,
-                            'check_in_records' => $dateRows,
+                            'present_office_records' => $dateRows,
                             'wfh_records' => $wfhStaff,
                             'leave_records' => $leaveStaff,
-                            'instruction' => 'BẮT BUỘC định dạng BẢNG MARKDOWN thể hiện chi tiết giờ quẹt thẻ ngày ' . $targetDate . '. Nêu rõ ai đi đúng giờ, ai đi trễ bao nhiêu phút, ai làm việc WFH và ai nghỉ phép. TUYỆT ĐỐI KHÔNG sinh thẻ Lead. TUYỆT ĐỐI KHÔNG dùng từ "(Zero-Trust)".'
+                            'not_checked_in_records' => $notCheckedInStaff,
+                            'inactive_dormant_staff' => $dormantStaff,
+                            'instruction' => 'BẮT BUỘC phân định rạch ròi 3 nhóm: (1) CÓ MẶT TẠI VĂN PHÒNG ĐÃ QUẸT THẺ (kèm giờ check-in), (2) ĐANG LÀM VIỆC TỪ XA WFH ĐÃ ĐƯỢC DUYỆT (ghi rõ tên và lý do), (3) CHƯA QUẸT THẺ / VẮNG MẶT. Đối với nhân sự không hoạt động/inactive đã tách riêng để nhận biết. TUYỆT ĐỐI KHÔNG gộp chung toàn bộ nhân viên công ty thành "đang đi làm". Định dạng bảng Markdown rõ ràng từng nhóm.'
                         ];
                     }
 
@@ -2597,9 +2699,9 @@ class AgentToolRegistry {
                     $stmtEmpCi->execute([$targetUid, $rangeStart, $rangeEnd]);
                     $empCiRows = $stmtEmpCi->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-                    // Query leaves / WFH of target employee
-                    $stmtEmpL = $db->prepare("SELECT id, leave_type, start_date, end_date, days_count, status, reason FROM hrm_leaves WHERE user_id = ? AND status = 'approved' AND ((start_date BETWEEN ? AND ?) OR (end_date BETWEEN ? AND ?))");
-                    $stmtEmpL->execute([$targetUid, $rangeStart, $rangeEnd, $rangeStart, $rangeEnd]);
+                    // Query leaves / WFH of target employee (Fixed: table hrm_leave_requests & total_days)
+                    $stmtEmpL = $db->prepare("SELECT id, leave_type, start_date, end_date, COALESCE(total_days, 1.0) as days_count, status, reason FROM hrm_leave_requests WHERE user_id = ? AND status = 'approved' AND DATE(start_date) <= ? AND DATE(end_date) >= ?");
+                    $stmtEmpL->execute([$targetUid, $rangeEnd, $rangeStart]);
                     $empLRows = $stmtEmpL->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
                     // Query leave balances from hrm_profiles
@@ -2700,6 +2802,7 @@ class AgentToolRegistry {
                     $toDate = trim((string)($args['to_date'] ?? ''));
                     $program = trim((string)($args['program'] ?? ''));
                     $search = trim((string)($args['search'] ?? ''));
+                    $limit = isset($args['limit']) && is_numeric($args['limit']) ? max(1, (int)$args['limit']) : 0;
 
                     // Build query
                     $where = ["t.tenant_id = ?", "t.deleted_at IS NULL"];
@@ -2855,22 +2958,25 @@ class AgentToolRegistry {
                     $stmtCount->execute($params);
                     $totalCount = (int)$stmtCount->fetchColumn();
 
-                    // Fetch 5 sample leads for preview
+                    // Fetch 5 sample leads for preview (with job_title and company included)
                     $sqlSample = "SELECT 
                                     t.id, 
                                     t.full_name, 
                                     t.phone, 
+                                    COALESCE(NULLIF(TRIM(t.job_title), ''), 'Chưa cập nhật') as job_title,
+                                    COALESCE(NULLIF(TRIM(t.company), ''), COALESCE(co.name, '—')) as company_name,
                                     COALESCE(t.gender, 'Chưa rõ') as gender,
                                     COALESCE(t.program, 'Chưa rõ') as program,
                                     COALESCE(ps.name, t.pipeline_status, 'Chưa xác định') as stage_name,
                                     COALESCE(u.full_name, 'Chưa gán') as owner_name,
                                     DATE_FORMAT(t.created_at, '%d/%m/%Y') as formatted_date
                                   FROM contacts t
+                                  LEFT JOIN companies co ON t.company_id = co.id
                                   LEFT JOIN pipeline_stages ps ON t.stage_id = ps.id
                                   LEFT JOIN users u ON t.owner_id = u.id
                                   WHERE $whereSql
                                   ORDER BY t.id DESC
-                                  LIMIT 5";
+                                  LIMIT " . ($limit > 0 ? min(5, $limit) : 5);
                     $stmtSample = $db->prepare($sqlSample);
                     $stmtSample->execute($params);
                     $samples = $stmtSample->fetchAll(PDO::FETCH_ASSOC) ?: [];
@@ -2882,6 +2988,8 @@ class AgentToolRegistry {
                         $maskedSamples[] = [
                             'id' => (int)$s['id'],
                             'name' => $s['full_name'],
+                            'job_title' => $s['job_title'],
+                            'company' => $s['company_name'],
                             'contact_link' => "/contact/{$s['id']}",
                             'phone' => $maskedPhone,
                             'gender' => $s['gender'],
@@ -2894,6 +3002,7 @@ class AgentToolRegistry {
 
                     // Build export URL
                     $queryParams = ['type' => 'contact', 'export_mode' => 'full'];
+                    if ($limit > 0) $queryParams['limit'] = $limit;
                     if (!empty($exportStagesParam)) $queryParams['stages'] = $exportStagesParam;
                     if (!empty($gender) && $gender !== 'all') $queryParams['gender'] = $gender;
                     if (!empty($fromDate)) $queryParams['from'] = $fromDate;
@@ -2902,9 +3011,14 @@ class AgentToolRegistry {
 
                     $exportUrl = "/api/export?" . http_build_query($queryParams);
 
+                    $totalReported = ($limit > 0) ? min($limit, $totalCount) : $totalCount;
+                    $scopeDesc = ($limit > 0) ? "{$totalReported} lead gần đây nhất (trên tổng số " . number_format($totalCount, 0, ',', '.') . " lead)" : number_format($totalCount, 0, ',', '.') . " lead";
+
                     return [
                         'success' => true,
-                        'total_matching_leads' => $totalCount,
+                        'total_matching_leads' => $totalReported,
+                        'total_database_leads' => $totalCount,
+                        'limit_applied' => $limit > 0 ? $limit : null,
                         'criteria' => [
                             'stages' => $stageFullDesc,
                             'gender' => $genderLabel,
@@ -2914,7 +3028,229 @@ class AgentToolRegistry {
                         'preview_samples' => $maskedSamples,
                         'download_url' => $exportUrl,
                         'direct_download_link' => "https://myerp.ideas.edu.vn{$exportUrl}",
-                        'instruction' => 'BẮT BUỘC: 1. Thông báo rõ ràng và trung thực tổng số lượng lead tìm thấy (ví dụ: "Dạ Tunrio ơi, hệ thống đã lọc và ghi nhận tổng cộng **' . number_format($totalCount, 0, ',', '.') . '** lead đang nằm trong ' . $stageFullDesc . '."). TUYỆT ĐỐI KHÔNG tự bịa đặt tên giai đoạn như "Gửi báo giá/Đề xuất" (Giai đoạn 04 là Needed). 2. Liệt kê bảng xem trước 5 khách hàng mẫu dạng Markdown (| ID | HỌ VÀ TÊN | SĐT | GIAI ĐOẠN | SALE PHỤ TRÁCH | NGÀY TẠO |). Cột HỌ VÀ TÊN BẮT BUỘC dùng link markdown dạng `[Tên Khách Hàng](/contact/' . 'ID' . ')`. 3. Đính kèm nút hoặc link tải file nổi bật: `[Bấm vào đây để tải toàn bộ danh sách Lead ' . ($rawStages ? 'Pipeline ' . $rawStages : '') . ' (File Excel/CSV)](' . $exportUrl . ')`. TUYỆT ĐỐI KHÔNG dùng từ "(Zero-Trust)".'
+                        'instruction' => 'BẮT BUỘC: 1. Thông báo rõ ràng: Hệ thống đã lọc và ghi nhận **' . $scopeDesc . '** trong ' . $stageFullDesc . '. 2. BẢNG XEM TRƯỚC (Preview) BẮT BUỘC ĐẦY ĐỦ CÁC CỘT: (| ID | HỌ VÀ TÊN | CHỨC VỤ | CÔNG TY | SĐT | GIAI ĐOẠN | SALE PHỤ TRÁCH | NGÀY TẠO |). Cột HỌ VÀ TÊN BẮT BUỘC dùng link `[Tên](/contact/ID)`. BẮT BUỘC hiển thị rõ cột CHỨC VỤ của từng lead. 3. Đính kèm nút hoặc link tải file: `[📥 Bấm vào đây để tải ' . ($limit > 0 ? "danh sách {$limit} Lead gần đây" : "danh sách Lead") . ' kèm chức vụ (File Excel/CSV)](' . $exportUrl . ')`. TUYỆT ĐỐI KHÔNG dùng từ "(Zero-Trust)".'
+                    ];
+                }
+
+                // ==========================================
+                // 7c. ANALYZE LEADS DEMOGRAPHICS, JOB TITLES & INDUSTRIES
+                // ==========================================
+                case 'analyze_leads_demographics_and_job_titles': {
+                    $tid = (int)($auth['tenant_id'] ?? 1);
+                    $uid = (int)($auth['user_id'] ?? 0);
+                    $role = strtolower($auth['role'] ?? 'user');
+                    $isGlobalAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'sale_admin', 'saleadmin'], true);
+                    $isManager = in_array($role, ['manager', 'truong_phong', 'leader'], true);
+
+                    $limit = isset($args['limit']) && is_numeric($args['limit']) ? max(1, min(5000, (int)$args['limit'])) : 0;
+                    $program = trim((string)($args['program'] ?? ''));
+                    $rawStages = trim((string)($args['stages'] ?? ''));
+                    $hasJobTitleOnly = (bool)($args['has_job_title_only'] ?? false);
+
+                    $where = ["t.tenant_id = ?", "t.deleted_at IS NULL"];
+                    $params = [$tid];
+
+                    // Active sales pipeline filter
+                    $where[] = "(t.lead_status NOT IN ('lost', 'nurture') OR t.lead_status IS NULL)";
+                    $where[] = "(t.status != 'customer' OR t.status IS NULL)";
+
+                    // RBAC Data Isolation
+                    if (!$isGlobalAdmin) {
+                        if ($isManager) {
+                            $where[] = "(t.owner_id = ? OR t.owner_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))))";
+                            $params[] = $uid;
+                            $params[] = $uid;
+                        } else {
+                            $where[] = "(t.owner_id = ? OR FIND_IN_SET(?, COALESCE(t.collaborator_ids, '')))";
+                            $params[] = $uid;
+                            $params[] = $uid;
+                        }
+                    }
+
+                    if (!empty($program)) {
+                        $where[] = "t.program LIKE ?";
+                        $params[] = "%$program%";
+                    }
+
+                    if ($hasJobTitleOnly) {
+                        $where[] = "t.job_title IS NOT NULL AND TRIM(t.job_title) != ''";
+                    }
+
+                    $whereSql = implode(' AND ', $where);
+
+                    // If limit specified, fetch the exact $limit most recent leads
+                    if ($limit > 0) {
+                        $sqlFetch = "SELECT t.id, t.full_name, t.phone, t.job_title, t.company, t.industry, t.program, ps.name as stage_name, u.full_name as owner_name, DATE_FORMAT(t.created_at, '%d/%m/%Y') as created_date
+                                     FROM contacts t
+                                     LEFT JOIN pipeline_stages ps ON t.stage_id = ps.id
+                                     LEFT JOIN users u ON t.owner_id = u.id
+                                     WHERE $whereSql
+                                     ORDER BY t.id DESC
+                                     LIMIT $limit";
+                        $stmtFetch = $db->prepare($sqlFetch);
+                        $stmtFetch->execute($params);
+                        $leadRows = $stmtFetch->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                        $totalAnalyzed = count($leadRows);
+                    } else {
+                        // Entire filtered dataset
+                        $stmtCount = $db->prepare("SELECT COUNT(*) FROM contacts t WHERE $whereSql");
+                        $stmtCount->execute($params);
+                        $totalAnalyzed = (int)$stmtCount->fetchColumn();
+
+                        // Fetch leads with job titles for deep classification
+                        $sqlWithJob = "SELECT t.id, t.full_name, t.job_title, t.company, t.industry, t.program 
+                                       FROM contacts t 
+                                       WHERE $whereSql AND t.job_title IS NOT NULL AND TRIM(t.job_title) != ''";
+                        $stmtWj = $db->prepare($sqlWithJob);
+                        $stmtWj->execute($params);
+                        $leadRows = $stmtWj->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                    }
+
+                    // Demographic & Seniority Counters
+                    $hasJobCount = 0;
+                    $hasCompanyCount = 0;
+                    $jobFrequency = [];
+                    $industryFrequency = [];
+                    $levelCounts = [
+                        'c_level' => ['label' => '👑 C-Level & Ban Lãnh Đạo (CEO, Giám đốc, Chủ tịch, Founder)', 'count' => 0, 'examples' => []],
+                        'manager' => ['label' => '💼 Quản Lý Cấp Trung (Trưởng phòng, Trưởng bộ phận, Manager, Lead)', 'count' => 0, 'examples' => []],
+                        'specialist' => ['label' => '🔬 Chuyên Gia & Chuyên Viên (Kỹ sư, Bác sĩ, Dược sĩ, Kế toán, Analyst)', 'count' => 0, 'examples' => []],
+                        'owner' => ['label' => '🏢 Khởi Nghiệp & Chủ Doanh Nghiệp (Chủ DN, Kinh doanh tự do)', 'count' => 0, 'examples' => []],
+                        'other' => ['label' => '👥 Chức Danh Khác / Nhân sự', 'count' => 0, 'examples' => []],
+                        'unspecified' => ['label' => '❓ Chưa Cập Nhật Chức Vụ (Cần khai thác trong tư vấn)', 'count' => 0, 'examples' => []]
+                    ];
+
+                    // Process records
+                    foreach ($leadRows as $r) {
+                        $jt = trim($r['job_title'] ?? '');
+                        $co = trim($r['company'] ?? '');
+                        $ind = trim($r['industry'] ?? '');
+
+                        if ($co !== '') $hasCompanyCount++;
+                        if ($ind !== '') {
+                            $industryFrequency[$ind] = ($industryFrequency[$ind] ?? 0) + 1;
+                        }
+
+                        if ($jt === '') {
+                            $levelCounts['unspecified']['count']++;
+                            continue;
+                        }
+
+                        $hasJobCount++;
+                        $jobFrequency[$jt] = ($jobFrequency[$jt] ?? 0) + 1;
+                        $lower = mb_strtolower($jt);
+
+                        if (preg_match('/(ceo|founder|co-founder|director|giám đốc|giam doc|chủ tịch|chu tich|tổng giám đốc|tong giam doc|managing director|cfo|cmo|cto|coo|president|general manager|viện trưởng|hội đồng)/i', $lower)) {
+                            $levelCounts['c_level']['count']++;
+                            if (count($levelCounts['c_level']['examples']) < 4 && !in_array($jt, $levelCounts['c_level']['examples'], true)) {
+                                $levelCounts['c_level']['examples'][] = $jt;
+                            }
+                        } elseif (preg_match('/(trưởng phòng|phó phòng|truong phong|pho phong|trưởng bộ phận|truong bo phan|manager|lead|leader|trưởng ban|truong ban|head of|quản lý|quan ly|supervisor)/i', $lower)) {
+                            $levelCounts['manager']['count']++;
+                            if (count($levelCounts['manager']['examples']) < 4 && !in_array($jt, $levelCounts['manager']['examples'], true)) {
+                                $levelCounts['manager']['examples'][] = $jt;
+                            }
+                        } elseif (preg_match('/(chuyên viên|chuyen vien|kỹ sư|ky su|bác sĩ|bac si|dược sĩ|duoc si|kế toán|ke toan|chuyên gia|chuyen gia|analyst|engineer|doctor|pharmacist|accountant|giảng viên|giang vien|lecturer|consultant)/i', $lower)) {
+                            $levelCounts['specialist']['count']++;
+                            if (count($levelCounts['specialist']['examples']) < 4 && !in_array($jt, $levelCounts['specialist']['examples'], true)) {
+                                $levelCounts['specialist']['examples'][] = $jt;
+                            }
+                        } elseif (preg_match('/(chủ dn|chủ doanh nghiệp|chu doanh nghiep|kinh doanh tự do|kinh doanh tu do|owner|entrepreneur|hộ kinh doanh)/i', $lower)) {
+                            $levelCounts['owner']['count']++;
+                            if (count($levelCounts['owner']['examples']) < 4 && !in_array($jt, $levelCounts['owner']['examples'], true)) {
+                                $levelCounts['owner']['examples'][] = $jt;
+                            }
+                        } else {
+                            $levelCounts['other']['count']++;
+                            if (count($levelCounts['other']['examples']) < 4 && !in_array($jt, $levelCounts['other']['examples'], true)) {
+                                $levelCounts['other']['examples'][] = $jt;
+                            }
+                        }
+                    }
+
+                    // If totalAnalyzed was from count (limit=0), calculate unspecified
+                    if ($limit === 0) {
+                        $levelCounts['unspecified']['count'] = max(0, $totalAnalyzed - $hasJobCount);
+                        // Also fetch industry counts across dataset
+                        $stInd = $db->prepare("SELECT TRIM(industry) as ind, COUNT(1) as cnt FROM contacts t WHERE $whereSql AND industry IS NOT NULL AND TRIM(industry) != '' GROUP BY TRIM(industry) ORDER BY cnt DESC LIMIT 10");
+                        $stInd->execute($params);
+                        $indRows = $stInd->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                        $industryFrequency = [];
+                        foreach ($indRows as $ir) {
+                            $industryFrequency[$ir['ind']] = (int)$ir['cnt'];
+                        }
+                    }
+
+                    arsort($jobFrequency);
+                    arsort($industryFrequency);
+
+                    $topJobs = [];
+                    foreach (array_slice($jobFrequency, 0, 10, true) as $title => $cnt) {
+                        $topJobs[] = ['job_title' => $title, 'count' => $cnt];
+                    }
+
+                    $topIndustries = [];
+                    foreach (array_slice($industryFrequency, 0, 10, true) as $indName => $cnt) {
+                        $topIndustries[] = ['industry' => $indName, 'count' => $cnt];
+                    }
+
+                    $fillRateJobPercent = ($totalAnalyzed > 0) ? round(($hasJobCount / $totalAnalyzed) * 100, 1) : 0;
+                    $fillRateCoPercent = ($totalAnalyzed > 0) ? round(($hasCompanyCount / $totalAnalyzed) * 100, 1) : 0;
+                    $leadershipFitCount = $levelCounts['c_level']['count'] + $levelCounts['manager']['count'];
+                    $leadershipFitPercent = ($hasJobCount > 0) ? round(($leadershipFitCount / $hasJobCount) * 100, 1) : 0;
+
+                    $exportUrl = "/api/export?type=contact&export_mode=full" . ($limit > 0 ? "&limit={$limit}" : "") . (!empty($program) ? "&program=" . urlencode($program) : "");
+
+                    return [
+                        'success' => true,
+                        'scope_description' => $limit > 0 ? "Phân tích {$limit} lead gần đây nhất" : "Phân tích toàn bộ tập lead CRM trong hệ thống",
+                        'total_leads_analyzed' => $totalAnalyzed,
+                        'data_hygiene' => [
+                            'has_job_title_count' => $hasJobCount,
+                            'missing_job_title_count' => $totalAnalyzed - $hasJobCount,
+                            'job_title_fill_rate' => "{$fillRateJobPercent}%",
+                            'has_company_count' => $hasCompanyCount,
+                            'company_fill_rate' => "{$fillRateCoPercent}%"
+                        ],
+                        'seniority_pyramid' => [
+                            'c_level' => [
+                                'label' => 'C-Level & Ban Lãnh Đạo (CEO, Giám đốc, Founder)',
+                                'count' => $levelCounts['c_level']['count'],
+                                'percent_of_known' => $hasJobCount > 0 ? round($levelCounts['c_level']['count'] / $hasJobCount * 100, 1) . '%' : '0%',
+                                'examples' => implode(', ', $levelCounts['c_level']['examples']) ?: 'CEO, Director, Founder'
+                            ],
+                            'middle_management' => [
+                                'label' => 'Quản Lý Cấp Trung (Trưởng phòng, Manager, Lead)',
+                                'count' => $levelCounts['manager']['count'],
+                                'percent_of_known' => $hasJobCount > 0 ? round($levelCounts['manager']['count'] / $hasJobCount * 100, 1) . '%' : '0%',
+                                'examples' => implode(', ', $levelCounts['manager']['examples']) ?: 'Manager, Trưởng phòng, Lead'
+                            ],
+                            'specialists' => [
+                                'label' => 'Chuyên Gia / Kỹ Sư / Bác Sĩ / Kế Toán',
+                                'count' => $levelCounts['specialist']['count'],
+                                'percent_of_known' => $hasJobCount > 0 ? round($levelCounts['specialist']['count'] / $hasJobCount * 100, 1) . '%' : '0%',
+                                'examples' => implode(', ', $levelCounts['specialist']['examples']) ?: 'Engineer, Bác sĩ, Chuyên viên'
+                            ],
+                            'business_owners' => [
+                                'label' => 'Chủ Doanh Nghiệp / Khởi Nghiệp',
+                                'count' => $levelCounts['owner']['count'],
+                                'percent_of_known' => $hasJobCount > 0 ? round($levelCounts['owner']['count'] / $hasJobCount * 100, 1) . '%' : '0%',
+                                'examples' => implode(', ', $levelCounts['owner']['examples']) ?: 'Chủ DN'
+                            ],
+                            'unspecified' => [
+                                'label' => 'Chưa Cập Nhật Chức Vụ',
+                                'count' => $levelCounts['unspecified']['count'],
+                                'percent_of_total' => $totalAnalyzed > 0 ? round($levelCounts['unspecified']['count'] / $totalAnalyzed * 100, 1) . '%' : '0%'
+                            ]
+                        ],
+                        'top_job_titles' => $topJobs,
+                        'top_industries' => $topIndustries,
+                        'executive_takeaways' => [
+                            'leadership_fit' => "Trong số các lead đã có thông tin chức vụ, có {$leadershipFitPercent}% thuộc nhóm C-Level và Quản lý cấp trung (rất phù hợp tuyển sinh EMBA và DBA).",
+                            'actionable_advice' => $fillRateJobPercent < 20 ? "Tỷ lệ điền chức vụ còn thấp ({$fillRateJobPercent}%). Kiến nghị Marketing bổ sung trường 'Chức vụ' và 'Công ty' trên Landing Page/Facebook Ads, và Sale cần ưu tiên cập nhật chức danh trong cuộc gọi đầu tiên (TTL1)." : "Dữ liệu chức vụ ổn định, khuyến nghị phân bổ lead C-Level ưu tiên cho tư vấn chương trình Tiến sĩ DBA / EMBA."
+                        ],
+                        'download_export_url' => $exportUrl,
+                        'instruction' => 'BẮT BUỘC TRÌNH BÀY ĐẦY ĐỦ 4 PHẦN CHUYÊN NGHIỆP:\n1. BẢNG TỔNG QUAN ĐỘ ĐẦY ĐỦ DỮ LIỆU (Tổng lead phân tích | Có chức vụ | Chưa có chức vụ | Tỷ lệ %).\n2. BẢNG PHÂN BỔ THÁP CẤP BẬC QUẢN LÝ (C-Level, Quản lý cấp trung, Chuyên gia, Khác kèm số lượng, % và ví dụ chức danh).\n3. BẢNG TOP NGÀNH NGHỀ PHỔ BIẾN.\n4. ĐÍNH KÈM THẺ BIỂU ĐỒ TRỰC QUAN: `<<<DYNAMIC_CHART: {"type": "bar", "title": "Cơ Cấu Cấp Bậc Quản Lý Lead CRM", "xAxisKey": "name", "data": [{"name": "C-Level/Lãnh đạo", "value": ' . $levelCounts['c_level']['count'] . '}, {"name": "Quản lý cấp trung", "value": ' . $levelCounts['manager']['count'] . '}, {"name": "Chuyên gia/Kỹ sư", "value": ' . $levelCounts['specialist']['count'] . '}, {"name": "Chưa cập nhật", "value": ' . $levelCounts['unspecified']['count'] . '}], "series": [{"dataKey": "value", "label": "Số lượng", "color": "#3b82f6"}]}>>>`.\n5. Đính kèm link tải file: `[📥 Bấm vào đây để tải tệp dữ liệu chi tiết kèm chức vụ](' . $exportUrl . ')`.'
                     ];
                 }
 
@@ -4766,15 +5102,15 @@ class AgentToolRegistry {
                         ];
                     }
 
-                    // 2. Fetch Staff Roster
-                    $whereClauses = ["u.tenant_id = ?"];
+                    // 2. Fetch Staff Roster (Excluding bot accounts and filtering inactive)
+                    $whereClauses = ["u.tenant_id = ?", "u.role NOT IN ('bot', 'system')"];
                     $params = [$tid];
 
                     // Status filter
                     if ($requestedStatus === 'active') {
                         $whereClauses[] = "(u.is_active = 1 OR u.is_active IS NULL) AND (u.status = 'active' OR u.status IS NULL)";
                     } elseif ($requestedStatus === 'inactive_resigned') {
-                        $whereClauses[] = "(u.is_active = 0 OR u.status IN ('inactive', 'leave'))";
+                        $whereClauses[] = "(u.is_active = 0 OR u.status IN ('inactive', 'leave', 'resigned'))";
                     }
 
                     // Name search
@@ -4801,7 +5137,10 @@ class AgentToolRegistry {
                                     ) as department,
                                     t.name as team_name,
                                     t.leader_id,
-                                    leader.full_name as leader_name
+                                    leader.full_name as leader_name,
+                                    (SELECT MAX(check_in_date) FROM check_ins WHERE user_id = u.id) as last_checkin,
+                                    (SELECT COUNT(1) FROM check_ins WHERE user_id = u.id) as total_checkins,
+                                    (SELECT COUNT(1) FROM activities WHERE user_id = u.id) as total_activities
                                  FROM users u
                                  LEFT JOIN teams t ON u.team_id = t.id
                                  LEFT JOIN users leader ON t.leader_id = leader.id
@@ -4818,17 +5157,11 @@ class AgentToolRegistry {
                         }));
                     }
 
-                    // Count total active vs inactive across company
-                    $countStmt = $db->prepare("SELECT 
-                                                    COUNT(1) as total_users,
-                                                    SUM(CASE WHEN (is_active = 1 OR is_active IS NULL) AND (status = 'active' OR status IS NULL) THEN 1 ELSE 0 END) as active_count,
-                                                    SUM(CASE WHEN is_active = 0 OR status IN ('inactive', 'leave') THEN 1 ELSE 0 END) as inactive_count
-                                               FROM users WHERE tenant_id = ?");
-                    $countStmt->execute([$tid]);
-                    $counts = $countStmt->fetch(PDO::FETCH_ASSOC) ?: [];
-
-                    // Group by department
+                    // Group by department & evaluate real active vs dormant/inactive
                     $groupedByDept = [];
+                    $totalTrulyActive = 0;
+                    $totalDormantInactive = 0;
+
                     foreach ($allUsers as $u) {
                         $dName = $u['department'];
                         if (!isset($groupedByDept[$dName])) {
@@ -4836,27 +5169,53 @@ class AgentToolRegistry {
                                 'department' => $dName,
                                 'leader' => $u['leader_name'] ?: ($deptLeaders[$dName]['leader_name'] ?? 'Chưa chỉ định'),
                                 'member_count' => 0,
+                                'active_working_count' => 0,
+                                'dormant_inactive_count' => 0,
                                 'members' => []
                             ];
                         }
-                        $groupedByDept[$dName]['member_count']++;
-                        if (count($groupedByDept[$dName]['members']) < 15) {
-                            $groupedByDept[$dName]['members'][] = [
-                                'id' => (int)$u['id'],
-                                'name' => $u['full_name'],
-                                'job_title' => $u['job_title'] ?: $u['role'],
-                                'role' => $u['role'],
-                                'status' => ((int)$u['is_active'] === 0 || in_array($u['status'], ['inactive', 'leave'], true)) ? 'Đã nghỉ việc / Inactive' : 'Đang hoạt động',
-                                'email' => $u['email'],
-                                'phone' => $u['phone']
-                            ];
+
+                        $isLeadership = in_array(strtolower($u['role'] ?? ''), ['admin', 'superadmin', 'director'], true);
+                        $isResigned = ((int)$u['is_active'] === 0 || in_array($u['status'], ['inactive', 'leave', 'resigned'], true));
+                        $isDormant = (!$isLeadership && !$isResigned && ((int)$u['total_checkins'] === 0 && (int)$u['total_activities'] === 0));
+                        $isNoRecentCheckin = (!$isLeadership && !$isResigned && !$isDormant && (!empty($u['last_checkin']) && strtotime($u['last_checkin']) < strtotime('-30 days')));
+
+                        if ($isResigned) {
+                            $memberStatus = 'Đã thôi việc / Inactive';
+                            $totalDormantInactive++;
+                            $groupedByDept[$dName]['dormant_inactive_count']++;
+                        } elseif ($isDormant) {
+                            $memberStatus = 'Tài khoản không hoạt động (0 chấm công)';
+                            $totalDormantInactive++;
+                            $groupedByDept[$dName]['dormant_inactive_count']++;
+                        } elseif ($isNoRecentCheckin) {
+                            $memberStatus = 'Vắng mặt dài hạn (>30 ngày không quẹt thẻ)';
+                            $totalDormantInactive++;
+                            $groupedByDept[$dName]['dormant_inactive_count']++;
+                        } else {
+                            $memberStatus = 'Đang làm việc';
+                            $totalTrulyActive++;
+                            $groupedByDept[$dName]['active_working_count']++;
                         }
+
+                        $groupedByDept[$dName]['member_count']++;
+                        $groupedByDept[$dName]['members'][] = [
+                            'id' => (int)$u['id'],
+                            'name' => $u['full_name'],
+                            'job_title' => $u['job_title'] ?: $u['role'],
+                            'role' => $u['role'],
+                            'status' => $memberStatus,
+                            'is_dormant_or_inactive' => ($memberStatus !== 'Đang làm việc'),
+                            'last_checkin' => $u['last_checkin'] ? date('d/m/Y', strtotime($u['last_checkin'])) : 'Chưa từng quẹt thẻ',
+                            'email' => $u['email'],
+                            'phone' => $u['phone']
+                        ];
                     }
 
                     return [
                         'success' => true,
-                        'total_company_active_staff' => (int)($counts['active_count'] ?? 0),
-                        'total_company_inactive_staff' => $canViewInactive ? (int)($counts['inactive_count'] ?? 0) : null,
+                        'total_company_active_staff' => $totalTrulyActive,
+                        'total_dormant_or_inactive_staff' => $totalDormantInactive,
                         'department_count' => count($groupedByDept),
                         'filter_applied' => [
                             'department' => $deptFilter ?: 'Tất cả phòng ban',
@@ -4864,7 +5223,7 @@ class AgentToolRegistry {
                             'search' => $searchName ?: null
                         ],
                         'departments' => array_values($groupedByDept),
-                        'instruction' => 'Hãy tóm lược ngắn gọn số lượng nhân sự, danh sách phòng ban và người quản lý/leader từng phòng ban cho người dùng nắm bắt dễ dàng. Nếu người dùng hỏi nhân sự đã nghỉ việc, hãy chỉ ra rõ ràng dựa trên danh sách này.'
+                        'instruction' => 'BẮT BUỘC nhận biết và chỉ ra rõ các nhân sự không hoạt động / chưa từng quẹt thẻ / nghi ngờ đã nghỉ việc. TUYỆT ĐỐI KHÔNG liệt kê tài khoản Bot SI IDEAS vào danh sách nhân sự. Không gộp nhân sự inactive vào tổng số nhân sự đang làm việc thực tế.'
                     ];
                 }
 
@@ -8123,7 +8482,7 @@ class AgentToolRegistry {
                     $keyword = trim((string)($args['keyword'] ?? ''));
                     $limit = max(1, min(30, (int)($args['limit'] ?? 10)));
 
-                    $where = ["u.tenant_id = ?"];
+                    $where = ["u.tenant_id = ?", "u.role NOT IN ('bot', 'system')"];
                     $params = [$tid];
 
                     // Zero-Trust RBAC: Only Admin, Director, HR, or Manager can query inactive/resigned personnel
@@ -8167,6 +8526,9 @@ class AgentToolRegistry {
                     $sql = "SELECT u.id, u.full_name, u.email, u.phone, u.role, u.job_title, u.dob, u.gender, u.status, u.is_active,
                                    t.name as team_name,
                                    p.joined_date,
+                                   (SELECT MAX(check_in_date) FROM check_ins WHERE user_id = u.id) as last_checkin,
+                                   (SELECT COUNT(1) FROM check_ins WHERE user_id = u.id) as total_checkins,
+                                   (SELECT COUNT(1) FROM activities WHERE user_id = u.id) as total_activities,
                                    COALESCE(NULLIF(TRIM(u.department), ''), NULLIF(TRIM(t.name), ''), 
                                        CASE 
                                            WHEN u.role IN ('admin', 'superadmin', 'super_admin', 'director') THEN 'Ban Giám đốc'
@@ -8189,6 +8551,21 @@ class AgentToolRegistry {
                     $staff = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
                     $formatted = array_map(function($s) {
+                        $isLeadership = in_array(strtolower($s['role'] ?? ''), ['admin', 'superadmin', 'director'], true);
+                        $isResigned = ((int)$s['is_active'] === 0 || in_array($s['status'], ['inactive', 'leave', 'resigned'], true));
+                        $isDormant = (!$isLeadership && !$isResigned && ((int)$s['total_checkins'] === 0 && (int)$s['total_activities'] === 0));
+                        $isNoRecent = (!$isLeadership && !$isResigned && !$isDormant && (!empty($s['last_checkin']) && strtotime($s['last_checkin']) < strtotime('-30 days')));
+
+                        if ($isResigned) {
+                            $statusLabel = 'Đã nghỉ việc / Inactive';
+                        } elseif ($isDormant) {
+                            $statusLabel = 'Chưa kích hoạt / Không hoạt động';
+                        } elseif ($isNoRecent) {
+                            $statusLabel = 'Vắng mặt dài hạn (>30 ngày không quẹt thẻ)';
+                        } else {
+                            $statusLabel = 'Đang làm việc';
+                        }
+
                         return [
                             'id' => (int)$s['id'],
                             'name' => $s['full_name'],
@@ -8199,7 +8576,9 @@ class AgentToolRegistry {
                             'birthday' => $s['dob'] ? date('d/m/Y', strtotime($s['dob'])) : 'Chưa cập nhật',
                             'gender' => $s['gender'] ?: 'Chưa cập nhật',
                             'joined_date' => $s['joined_date'] ? date('d/m/Y', strtotime($s['joined_date'])) : 'Chưa cập nhật',
-                            'status' => ($s['is_active'] == 1 && $s['status'] !== 'inactive') ? 'Đang làm việc' : 'Đã nghỉ việc / Tạm hoãn'
+                            'status' => $statusLabel,
+                            'is_dormant_or_inactive' => ($statusLabel !== 'Đang làm việc'),
+                            'last_checkin' => $s['last_checkin'] ? date('d/m/Y', strtotime($s['last_checkin'])) : 'Chưa từng quẹt thẻ'
                         ];
                     }, $staff);
 
@@ -8207,7 +8586,7 @@ class AgentToolRegistry {
                         'success' => true,
                         'count' => count($formatted),
                         'staff' => $formatted,
-                        'summary' => count($formatted) > 0 ? "Tìm thấy " . count($formatted) . " nhân sự phù hợp." : "Không có nhân sự nào phù hợp với điều kiện tra cứu."
+                        'summary' => count($formatted) > 0 ? "Tìm thấy " . count($formatted) . " nhân sự phù hợp (đã phân loại trạng thái hoạt động thực tế)." : "Không có nhân sự nào phù hợp với điều kiện tra cứu."
                     ];
                 }
 

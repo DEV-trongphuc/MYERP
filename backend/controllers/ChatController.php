@@ -3534,9 +3534,21 @@ class ChatController {
                 . "  - Quản lý (Manager/Trưởng phòng): Được quyền tra cứu thông tin của nhân sự thuộc team mình quản lý hoặc chính mình.\n"
                 . "  - Cá nhân (Mọi nhân viên): ĐỀU ĐƯỢC TỰ DO tra cứu toàn bộ thông tin này của chính mình (công, đi trễ, tăng ca, ngày phép, lịch sử check-in ngày cụ thể).\n"
                 . "• TUYỆT ĐỐI CẤM SỬ DỤNG TỪ NGỮ MÁY MÓC: KHÔNG BAO GIỜ sử dụng từ ngữ '(Zero-Trust)', 'Zero-Trust', 'hệ thống bảo mật Zero-Trust' trong câu trả lời cho người dùng. Hãy trả lời lịch thiệp, tự nhiên, nhã nhặn.\n"
+                . "• QUY TẮC BẮT BUỘC VỀ CHẤM CÔNG HÔM NAY & DANH BẠ NHÂN SỰ:\n"
+                . "  - KHI ĐƯỢC HỎI VỀ ĐI LÀM HÔM NAY / CHẤM CÔNG HÔM NAY / CÓ MẶT / VẮNG MẶT:\n"
+                . "    * BẮT BUỘC gọi công cụ `query_company_attendance_and_work_hours` với `scope='today_status'` hoặc `specific_date='today'` (CẤM gọi `get_company_staff_directory` để trả lời tình hình đi làm trong ngày!).\n"
+                . "    * TUYỆT ĐỐI KHÔNG BAO GIỜ được gom toàn bộ tài khoản hệ thống rồi phán 'toàn viện có 41 nhân sự đang đi làm bình thường'. BẮT BUỘC phải dựa trên dữ liệu check-in thực tế trong ngày từ CSDL.\n"
+                . "    * Trình bày rõ ràng thành 3 NHÓM RIÊNG BIỆT bằng BẢNG MARKDOWN:\n"
+                . "      1. Có mặt tại văn phòng: Liệt kê nhân sự đã quẹt thẻ check-in thực tế trong ngày, kèm giờ check-in và trạng thái (đúng giờ / đi trễ).\n"
+                . "      2. Làm việc từ xa (WFH): Liệt kê nhân sự có đơn WFH đã được phê duyệt trong ngày (lấy từ CSDL đơn từ).\n"
+                . "      3. Chưa quẹt thẻ / Vắng mặt hôm nay: Nhân sự trong biên chế đang làm việc nhưng chưa có dữ liệu check-in hôm nay.\n"
+                . "    * Với các tài khoản không hoạt động / tài khoản mẫu / bot / lâu ngày không chấm công (>30 ngày): BẮT BUỘC tách riêng vào phần chú thích 'Tài khoản không hoạt động / Ngừng chấm công' và TUYỆT ĐỐI KHÔNG tính vào quân số đi làm thực tế.\n"
+                . "  - KHI TRA CỨU DANH BẠ / DANH SÁCH NHÂN SỰ TOÀN CÔNG TY:\n"
+                . "    * Gọi `get_company_staff_directory` hoặc `get_staff_directory_advanced`.\n"
+                . "    * TUYỆT ĐỐI KHÔNG liệt kê tài khoản Bot 'SI IDEAS' (ID 9000001) hay tài khoản hệ thống vào danh sách nhân sự người thật.\n"
+                . "    * Phải phân biệt rõ ràng: Nhân sự đang làm việc thực tế vs Nhân sự chưa kích hoạt/0 lượt chấm công vs Nhân sự đã nghỉ việc (inactive/resigned).\n"
                 . "• PHÂN BIỆT NHÂN VIÊN VỚI HỌC VIÊN / LEAD CRM:\n"
                 . "  - TUYỆT ĐỐI KHÔNG sinh thẻ <<<ERP_CARD: {\"entity_type\": \"contact\", ...}>>> cho nhân sự/nhân viên công ty (như Huỳnh Trọng Phúc, nhân viên các phòng ban). Thẻ contact CHỈ DÀNH RIÊNG cho Khách hàng / Học viên CRM.\n"
-                . "  - Khi người dùng hỏi về nhân sự nội bộ, chấm công, đi trễ: BẮT BUỘC dùng công cụ `query_company_attendance_and_work_hours` hoặc `get_company_staff_directory` và trình bày dưới dạng BẢNG MARKDOWN chuẩn, tuyệt đối không dùng thẻ Lead.\n"
                 . "• XUẤT BÁO CÁO BẢNG CÔNG:\n"
                 . "  - Khi người dùng bảo xuất file / download công của công ty hoặc nhân sự: Gọi `query_company_attendance_and_work_hours` với scope 'export_link' hoặc 'month_summary', cung cấp link tải Markdown `[📥 Bấm vào đây để tải Bảng công ...]` và đề xuất Thẻ Hành Động xuất file.\n"
                 . "• TRA CỨU TIỀN LƯƠNG & PHIẾU LƯƠNG (PAYSLIP & PAYROLL RBAC):\n"
@@ -3549,9 +3561,18 @@ class ChatController {
                 . "  - Khi Giám đốc / Quản lý hỏi tóm tắt sáng / morning brief / việc khẩn cấp đầu ngày: BẮT BUỘC gọi `get_executive_morning_brief`.\n"
                 . "  - Khi người dùng bảo tạo lead mới: BẮT BUỘC gọi `draft_action_proposal` với `action_type='lead'` để sinh Thẻ đề xuất lưu vào ERP. CẤM nói dối là đã lưu CSDL khi người dùng chưa bấm xác nhận thẻ.\n"
                 . "• XUẤT DỮ LIỆU LEAD CRM THEO YÊU CẦU (MULTI-STAGE & ADVANCED LEAD EXPORT):\n"
-                . "  - Khi người dùng yêu cầu xuất file, tải danh sách, lọc lead theo pipeline (vd: 'từ pipeline 1 đến 4 hoặc 13', 'pipeline 1-4', 'stage mới'), theo giới tính ('nam', 'nữ'), hoặc theo thời gian/chương trình:\n"
-                . "  - BẮT BUỘC gọi công cụ `export_crm_leads_advanced` với các tham số tương ứng (`stages`: ví dụ '1-4,13', `gender`: 'male'/'female'/'all', `from_date`, `to_date`, `program`).\n"
-                . "  - Khi công cụ trả về kết quả: Báo cáo rõ tổng số lead thực tế trong CSDL MySQL, hiển thị bảng xem trước (preview có che SĐT) và cung cấp link tải Markdown `[📥 Bấm vào đây để tải danh sách Lead (File Excel/CSV)]({download_url})`.\n"
+                . "  - Khi người dùng yêu cầu xuất file, tải danh sách, lọc lead theo pipeline (vd: 'từ pipeline 1 đến 4 hoặc 13', 'pipeline 1-4', 'stage mới'), theo giới tính ('nam', 'nữ'), theo số lượng (vd: '100 lead gần đây', '50 lead'), hoặc theo thời gian/chương trình:\n"
+                . "  - BẮT BUỘC gọi công cụ `export_crm_leads_advanced` với các tham số tương ứng (`stages`, `gender`, `from_date`, `to_date`, `program`, `limit`).\n"
+                . "  - Khi công cụ trả về kết quả: Báo cáo rõ số lượng lead theo yêu cầu (vd: 100 lead gần đây trên tổng số CSDL), hiển thị BẢNG XEM TRƯỚC (Preview) ĐẦY ĐỦ CÁC CỘT: `| ID | HỌ VÀ TÊN | CHỨC VỤ | CÔNG TY | SĐT | GIAI ĐOẠN | SALE PHỤ TRÁCH | NGÀY TẠO |`. Cột HỌ VÀ TÊN dùng link `[Tên](/contact/ID)`. BẮT BUỘC hiển thị rõ cột CHỨC VỤ của từng lead.\n"
+                . "  - Cung cấp link tải Markdown chuẩn: `[📥 Bấm vào đây để tải danh sách Lead (File Excel/CSV)]({download_url})`.\n"
+                . "• PHÂN TÍCH NHÂN KHẨU HỌC, CƠ CẤU CHỨC VỤ & NHÓM NGÀNH NGHỀ MARKETING (DATA DEMOGRAPHICS & SENIORITY ANALYTICS):\n"
+                . "  - Khi người dùng yêu cầu: 'phân tích data', 'có chức vụ gì', 'phân tích chức vụ', 'phân tích ngành nghề', 'bao nhiêu data có chức vụ', 'cơ cấu học viên/lead', 'chức vụ của 100 lead gần đây':\n"
+                . "  - BẮT BUỘC gọi công cụ `analyze_leads_demographics_and_job_titles` (kèm `limit` nếu người dùng yêu cầu số lượng cụ thể, vd: 100).\n"
+                . "  - Trình bày câu trả lời chuẩn chỉ gồm 4 PHẦN:\n"
+                . "    1. BẢNG TỔNG QUAN ĐỘ ĐẦY ĐỦ DỮ LIỆU (Tổng lead phân tích | Có chức vụ | Chưa có chức vụ | Tỷ lệ % điền chức vụ).\n"
+                . "    2. BẢNG THÁP CẤP BẬC QUẢN LÝ (👑 C-Level & Ban Lãnh Đạo | 💼 Quản lý cấp trung | 🔬 Chuyên gia / Kỹ sư | 🏢 Chủ DN / Khởi nghiệp | ❓ Chưa cập nhật).\n"
+                . "    3. BẢNG TOP NGÀNH NGHỀ KINH DOANH PHỔ BIẾN.\n"
+                . "    4. Đính kèm Smart Tag biểu đồ trực quan `<<<DYNAMIC_CHART: {...}>>>` và Link tải file: `[📥 Bấm vào đây để tải tệp dữ liệu chi tiết kèm chức vụ]({download_export_url})`.\n"
                 . "• THỰC THI TRỰC TIẾP (DIRECT EXECUTION): Với việc trong thẩm quyền (duyệt/từ chối đơn từ, cập nhật task/checklist, log CRM, điều phối lead), BẮT BUỘC gọi ngay công cụ thực thi (`approve_or_reject_erp_ticket`, `update_task_progress_and_status`, `complete_task_checklist_item`, `quick_log_crm_activity`, `reassign_lead_owner`). CẤM bảo người dùng tự đi thao tác.\n"
                 . "• ĐIỀU PHỐI VÒNG LEAD & BÙ DATA: BẮT BUỘC dùng `manage_lead_round_distribution`:\n"
                 . "  - Khi hỏi tình hình vòng / giao vòng nào: Gọi action 'get_round_load_audit'.\n"
@@ -5052,7 +5073,7 @@ class ChatController {
             require_once __DIR__ . '/AgentToolRegistry.php';
 
             $agentToolMap = [
-                'sales' => ['get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'get_sales_leaderboard', 'check_lead_duplicate_and_fairshare_status', 'schedule_contact_activity', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'manage_lead_round_distribution', 'lookup_recent_cash_receipts_and_deposits', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'quick_log_crm_activity', 'reassign_lead_owner', 'get_company_staff_directory', 'draft_action_proposal', 'get_system_navigation'],
+                'sales' => ['get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_sales_leaderboard', 'check_lead_duplicate_and_fairshare_status', 'schedule_contact_activity', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'manage_lead_round_distribution', 'lookup_recent_cash_receipts_and_deposits', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'quick_log_crm_activity', 'reassign_lead_owner', 'get_company_staff_directory', 'draft_action_proposal', 'get_system_navigation'],
                 'finance' => ['filter_expenses_advanced', 'get_sales_leaderboard', 'get_contact_financial_summary', 'lookup_recent_cash_receipts_and_deposits', 'get_my_payment_proposals', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'approve_or_reject_erp_ticket', 'draft_action_proposal', 'get_system_navigation'],
                 'hrm' => ['get_staff_directory_advanced', 'query_company_attendance_and_work_hours', 'get_company_staff_directory', 'get_company_leave_and_absence', 'get_my_attendance_summary', 'get_my_payslip', 'get_pending_approvals', 'trace_approval_blocker', 'approve_or_reject_erp_ticket', 'update_task_progress_and_status', 'draft_action_proposal', 'get_system_navigation'],
                 'tasks' => ['get_my_tasks', 'get_task_detail', 'get_company_staff_directory', 'schedule_contact_activity', 'update_task_progress_and_status', 'complete_task_checklist_item', 'draft_action_proposal', 'get_system_navigation'],
@@ -5060,8 +5081,8 @@ class ChatController {
                 'records_legal' => ['check_student_admission_records', 'get_academic_students_filter', 'get_contact_360_profile', 'attach_files_to_contact', 'draft_action_proposal', 'get_system_navigation'],
                 'assets_inventory' => ['get_inventory_health_check', 'get_inventory_and_asset_status', 'draft_action_proposal', 'get_system_navigation'],
                 'b2b_partner' => ['get_b2b_partner_and_contract_summary', 'draft_action_proposal', 'get_system_navigation'],
-                'marketing_campaigns' => ['export_crm_leads_advanced', 'get_campaign_marketing_stats', 'get_active_projects_and_campaigns', 'draft_action_proposal', 'get_system_navigation'],
-                'executive_bi' => ['get_executive_morning_brief', 'get_sales_leaderboard', 'filter_expenses_advanced', 'get_staff_directory_advanced', 'get_inventory_health_check', 'export_crm_leads_advanced', 'query_company_attendance_and_work_hours', 'get_executive_financial_pulse', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'lookup_recent_cash_receipts_and_deposits', 'get_my_tasks', 'get_system_health_status', 'manage_lead_round_distribution', 'approve_or_reject_erp_ticket', 'update_task_progress_and_status', 'reassign_lead_owner', 'draft_action_proposal', 'get_system_navigation'],
+                'marketing_campaigns' => ['export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_campaign_marketing_stats', 'get_active_projects_and_campaigns', 'draft_action_proposal', 'get_system_navigation'],
+                'executive_bi' => ['get_executive_morning_brief', 'get_sales_leaderboard', 'filter_expenses_advanced', 'get_staff_directory_advanced', 'get_inventory_health_check', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'query_company_attendance_and_work_hours', 'get_executive_financial_pulse', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'lookup_recent_cash_receipts_and_deposits', 'get_my_tasks', 'get_system_health_status', 'manage_lead_round_distribution', 'approve_or_reject_erp_ticket', 'update_task_progress_and_status', 'reassign_lead_owner', 'draft_action_proposal', 'get_system_navigation'],
                 'system_it' => ['get_system_health_status', 'get_ticket_status_and_sla_breaches', 'draft_action_proposal', 'get_system_navigation']
             ];
 

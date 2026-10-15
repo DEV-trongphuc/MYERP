@@ -549,6 +549,10 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
             if (p.student_sub_tab) paramsObj.student_sub_tab = p.student_sub_tab;
             if (p.multi_program) paramsObj.multi_program = String(p.multi_program);
             if (p.export_mode) paramsObj.export_mode = p.export_mode;
+            if (p.limit) paramsObj.limit = p.limit;
+            if (p.stages) paramsObj.stages = p.stages;
+            if (p.gender) paramsObj.gender = p.gender;
+            if (p.program) paramsObj.program = p.program;
           }
 
           // Ensure normalized type

@@ -123,7 +123,7 @@ class ExportController {
                     'city' => 'Tỉnh/Thành phố', 
                     'country' => 'Quốc gia', 
                     'company_name' => 'Công ty', 
-                    'job_title' => 'Chức danh', 
+                    'job_title' => 'Chức vụ / Chức danh', 
                     'department' => 'Phòng ban', 
                     'last_interaction' => 'Tương tác gần nhất',
                     'last_contact' => 'Thời gian tương tác cuối',
@@ -151,7 +151,7 @@ class ExportController {
                     'open_deal_value' => 'Doanh thu / Giá trị Deal', 
                     'major' => 'Ngành học', 
                     'company_name' => 'Công ty / Đơn vị', 
-                    'job_title' => 'Chức danh', 
+                    'job_title' => 'Chức vụ / Chức danh', 
                     'address' => 'Địa chỉ', 
                     'city' => 'Tỉnh/Thành phố', 
                     'last_interaction' => 'Tương tác gần nhất', 
@@ -185,7 +185,7 @@ class ExportController {
                     'project_name' => 'Dự án quan tâm', 
                     'campaign_name' => 'Chiến dịch', 
                     'company_name' => 'Công ty', 
-                    'job_title' => 'Chức danh', 
+                    'job_title' => 'Chức vụ / Chức danh', 
                     'city' => 'Tỉnh/Thành phố', 
                     'last_interaction' => 'Tương tác gần nhất', 
                     'last_contact' => 'Thời gian tương tác cuối', 
@@ -560,7 +560,6 @@ class ExportController {
                                WHEN t.pipeline_status IN ('enrolled', 'hoc_vien') OR t.status = 'customer' THEN
                                    COALESCE(
                                        t.admission_date,
-                                       t.closed_date,
                                        (
                                            SELECT MIN(dm.created_at)
                                            FROM deposit_milestones dm
@@ -749,6 +748,7 @@ class ExportController {
         $batchSize = 1000;
         $offset = 0;
         $totalExported = 0;
+        $maxLimit = (isset($_GET['limit']) && is_numeric($_GET['limit'])) ? max(1, (int)$_GET['limit']) : 0;
 
         $statusLabels = [
             'lead' => 'Lead mới',
@@ -768,7 +768,12 @@ class ExportController {
         }
 
         while (true) {
-            $batchSql = $sql . " LIMIT $batchSize OFFSET $offset";
+            $currentBatchSize = ($maxLimit > 0) ? min($batchSize, $maxLimit - $totalExported) : $batchSize;
+            if ($currentBatchSize <= 0) {
+                break;
+            }
+
+            $batchSql = $sql . " LIMIT $currentBatchSize OFFSET $offset";
             $stmt = $this->db->prepare($batchSql);
             $stmt->execute($params);
             $records = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -1024,7 +1029,11 @@ class ExportController {
             }
 
             $totalExported += count($records);
-            $offset += $batchSize;
+            $offset += count($records);
+
+            if ($maxLimit > 0 && $totalExported >= $maxLimit) {
+                break;
+            }
 
             // Clear batch memory
             unset($records, $entityIds, $groupedCfValues, $cfValues);
