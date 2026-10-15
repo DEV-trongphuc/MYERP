@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Download, ExternalLink, X, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
+import { pushOverlay } from '../../utils/overlayStack';
 
 export interface AttachmentItem {
   url: string;
@@ -14,13 +15,15 @@ export interface AttachmentLightboxModalProps {
   onClose: () => void;
   items: AttachmentItem[];
   initialIndex?: number;
+  zIndex?: number;
 }
 
 export const AttachmentLightboxModal: React.FC<AttachmentLightboxModalProps> = ({
   isOpen,
   onClose,
   items,
-  initialIndex = 0
+  initialIndex = 0,
+  zIndex = 2147483647
 }) => {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
 
@@ -61,6 +64,15 @@ export const AttachmentLightboxModal: React.FC<AttachmentLightboxModalProps> = (
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, handlePrev, handleNext, onClose]);
+
+  const effectiveZIndex = zIndex ? Math.min(zIndex, 2147483647) : 2147483647;
+
+  useEffect(() => {
+    if (isOpen) {
+      const unregister = pushOverlay('attachment-lightbox-modal', onClose, effectiveZIndex);
+      return () => unregister();
+    }
+  }, [isOpen, onClose, effectiveZIndex]);
 
   if (typeof document === 'undefined') return null;
 
@@ -104,6 +116,7 @@ export const AttachmentLightboxModal: React.FC<AttachmentLightboxModalProps> = (
       {isOpen && current && (
         <motion.div
           key="attachment-lightbox-backdrop"
+          className="attachment-lightbox-backdrop"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -111,7 +124,7 @@ export const AttachmentLightboxModal: React.FC<AttachmentLightboxModalProps> = (
           style={{
             position: 'fixed',
             inset: 0,
-            zIndex: 2147483640,
+            zIndex: effectiveZIndex,
             background: 'rgba(0, 0, 0, 0.94)',
             backdropFilter: 'blur(16px)',
             WebkitBackdropFilter: 'blur(16px)',

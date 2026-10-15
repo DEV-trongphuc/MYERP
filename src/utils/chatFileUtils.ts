@@ -179,8 +179,16 @@ export const formatFileSize = (bytes?: number): string => {
 
 export const extractFirstUrl = (text?: string): string | null => {
   if (!text) return null;
-  const match = text.match(/https?:\/\/[^\s()<>]+/i);
-  return match ? match[0] : null;
+  const matches = text.match(/https?:\/\/[^\s()<>]+/gi);
+  if (!matches) return null;
+  for (const url of matches) {
+    // Ignore internal system domain, localhost, and deep-link CRM URLs to avoid spamming preview cards
+    if (/myerp\.ideas\.edu\.vn|localhost|127\.0\.0\.1/i.test(url)) {
+      continue;
+    }
+    return url;
+  }
+  return null;
 };
 
 export const formatStaffCleanTitle = (user?: { job_title?: string; role?: string; team_name?: string } | null): string => {

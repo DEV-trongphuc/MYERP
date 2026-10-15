@@ -7210,7 +7210,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     </div>
   );
 
-  const effectiveZIndex = zIndex || 2147483620;
+  const effectiveZIndex = zIndex || 2147483645;
 
   return createPortal(
     <>
@@ -9066,82 +9066,101 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               });
                             })()}
 
-                            {/* ── Action: Clone Profile Button at bottom of Mobile Sidebar ── */}
-                            <div style={{ marginTop: '16px', marginBottom: '8px' }}>
+                            {/* ── Action toolbar (Clone, Report, Delete) in 1 row ── */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '14px', marginBottom: '8px' }}>
                               <button
                                 type="button"
                                 onClick={handleOpenCloneModal}
+                                title="Nhân bản hồ sơ khách hàng"
                                 style={{
-                                  width: '100%',
-                                  background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(99, 102, 241, 0.08) 100%)',
-                                  border: '1.5px dashed #3b82f6',
-                                  borderRadius: '8px',
-                                  color: '#2563eb',
-                                  display: 'flex',
+                                  flex: 1,
+                                  height: '38px',
+                                  display: 'inline-flex',
                                   alignItems: 'center',
                                   justifyContent: 'center',
-                                  gap: '8px',
-                                  padding: '11px 16px',
-                                  fontSize: '0.85rem',
-                                  fontWeight: 700,
+                                  borderRadius: '8px',
+                                  background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(99, 102, 241, 0.08) 100%)',
+                                  border: '1.5px dashed #3b82f6',
+                                  color: '#2563eb',
                                   cursor: 'pointer',
+                                  transition: 'all 0.15s ease',
                                   boxShadow: '0 1px 2px rgba(59, 130, 246, 0.06)'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background = '#2563eb';
+                                  e.currentTarget.style.color = '#ffffff';
+                                  e.currentTarget.style.borderStyle = 'solid';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = 'linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(99, 102, 241, 0.08) 100%)';
+                                  e.currentTarget.style.color = '#2563eb';
+                                  e.currentTarget.style.borderStyle = 'dashed';
                                 }}
                               >
                                 <Copy size={16} />
-                                <span>Nhân bản hồ sơ</span>
                               </button>
-                              {canDeleteContact && (
-                                <button
-                                  type="button"
-                                  onClick={handleDeleteContact}
-                                  title="Xóa khách hàng"
-                                  style={{
-                                    width: '100%',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: '6px',
-                                    marginTop: '8px',
-                                    padding: '8px 12px',
-                                    background: 'transparent',
-                                    border: 'none',
-                                    color: '#ef4444',
-                                    fontSize: '0.78rem',
-                                    fontWeight: 600,
-                                    cursor: 'pointer',
-                                    borderRadius: '6px'
-                                  }}
-                                >
-                                  <Trash2 size={14} />
-                                  <span>Xóa khách hàng</span>
-                                </button>
-                              )}
+
                               {canReportDataLead && (
                                 <button
                                   type="button"
                                   onClick={() => setShowReportDataModal(true)}
                                   title="Báo lỗi data này để nhận bù vòng"
                                   style={{
-                                    width: '100%',
-                                    display: 'flex',
+                                    flex: 1,
+                                    height: '38px',
+                                    display: 'inline-flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
-                                    gap: '6px',
-                                    marginTop: '8px',
-                                    padding: '8px 12px',
-                                    background: 'rgba(245, 158, 11, 0.06)',
-                                    border: '1px dashed rgba(245, 158, 11, 0.35)',
+                                    borderRadius: '8px',
+                                    background: 'rgba(245, 158, 11, 0.08)',
+                                    border: '1px dashed rgba(245, 158, 11, 0.45)',
                                     color: '#d97706',
-                                    fontSize: '0.78rem',
-                                    fontWeight: 650,
                                     cursor: 'pointer',
-                                    borderRadius: '6px',
                                     transition: 'all 0.15s ease'
                                   }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.background = '#f59e0b';
+                                    e.currentTarget.style.color = '#ffffff';
+                                    e.currentTarget.style.borderStyle = 'solid';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.background = 'rgba(245, 158, 11, 0.08)';
+                                    e.currentTarget.style.color = '#d97706';
+                                    e.currentTarget.style.borderStyle = 'dashed';
+                                  }}
                                 >
-                                  <AlertTriangle size={14} />
-                                  <span>Báo lỗi data</span>
+                                  <AlertTriangle size={16} />
+                                </button>
+                              )}
+
+                              {canDeleteContact && (
+                                <button
+                                  type="button"
+                                  onClick={handleDeleteContact}
+                                  title="Xóa khách hàng"
+                                  style={{
+                                    flex: 1,
+                                    height: '38px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    borderRadius: '8px',
+                                    background: 'rgba(239, 68, 68, 0.08)',
+                                    border: '1px solid rgba(239, 68, 68, 0.25)',
+                                    color: '#ef4444',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.background = '#ef4444';
+                                    e.currentTarget.style.color = '#ffffff';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)';
+                                    e.currentTarget.style.color = '#ef4444';
+                                  }}
+                                >
+                                  <Trash2 size={16} />
                                 </button>
                               )}
                             </div>
@@ -9269,25 +9288,22 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               });
                             })()}
 
-                            {/* ── Action: Clone Profile Button at bottom of Desktop Sidebar ── */}
-                            <div style={{ marginTop: 'auto', padding: '12px 4px 8px 4px' }}>
+                            {/* ── Action toolbar (Clone, Report, Delete) in 1 row at bottom of Desktop Sidebar ── */}
+                            <div style={{ marginTop: 'auto', padding: '12px 4px 8px 4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <button
                                 type="button"
                                 onClick={handleOpenCloneModal}
                                 title="Nhân bản hồ sơ khách hàng"
                                 style={{
-                                  width: '100%',
-                                  display: 'flex',
+                                  flex: 1,
+                                  height: '38px',
+                                  display: 'inline-flex',
                                   alignItems: 'center',
                                   justifyContent: 'center',
-                                  gap: '8px',
-                                  padding: '9px 12px',
                                   borderRadius: '8px',
                                   background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(99, 102, 241, 0.08) 100%)',
                                   border: '1.5px dashed #3b82f6',
                                   color: '#2563eb',
-                                  fontSize: '0.825rem',
-                                  fontWeight: 700,
                                   cursor: 'pointer',
                                   transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                                   boxShadow: '0 1px 2px rgba(59, 130, 246, 0.06)'
@@ -9304,81 +9320,69 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 }}
                               >
                                 <Copy size={16} />
-                                <span>Nhân bản hồ sơ</span>
                               </button>
 
-                              {canDeleteContact && (
-                                <button
-                                  type="button"
-                                  onClick={handleDeleteContact}
-                                  title="Xóa khách hàng này"
-                                  style={{
-                                    width: '100%',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: '6px',
-                                    marginTop: '8px',
-                                    padding: '6px 8px',
-                                    background: 'transparent',
-                                    border: 'none',
-                                    color: '#ef4444',
-                                    fontSize: '0.75rem',
-                                    fontWeight: 600,
-                                    cursor: 'pointer',
-                                    borderRadius: '6px',
-                                    transition: 'all 0.15s ease'
-                                  }}
-                                  onMouseEnter={(e) => {
-                                    e.currentTarget.style.color = '#dc2626';
-                                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)';
-                                    e.currentTarget.style.textDecoration = 'underline';
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    e.currentTarget.style.color = '#ef4444';
-                                    e.currentTarget.style.background = 'transparent';
-                                    e.currentTarget.style.textDecoration = 'none';
-                                  }}
-                                >
-                                  <Trash2 size={13} />
-                                  <span>Xóa khách hàng</span>
-                                </button>
-                              )}
                               {canReportDataLead && (
                                 <button
                                   type="button"
                                   onClick={() => setShowReportDataModal(true)}
                                   title="Báo lỗi data này để nhận bù vòng"
                                   style={{
-                                    width: '100%',
-                                    display: 'flex',
+                                    flex: 1,
+                                    height: '38px',
+                                    display: 'inline-flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
-                                    gap: '6px',
-                                    marginTop: '8px',
-                                    padding: '6px 8px',
-                                    background: 'rgba(245, 158, 11, 0.06)',
-                                    border: '1px dashed rgba(245, 158, 11, 0.35)',
+                                    borderRadius: '8px',
+                                    background: 'rgba(245, 158, 11, 0.08)',
+                                    border: '1px dashed rgba(245, 158, 11, 0.45)',
                                     color: '#d97706',
-                                    fontSize: '0.75rem',
-                                    fontWeight: 650,
                                     cursor: 'pointer',
-                                    borderRadius: '6px',
                                     transition: 'all 0.15s ease'
                                   }}
                                   onMouseEnter={(e) => {
-                                    e.currentTarget.style.color = '#b45309';
-                                    e.currentTarget.style.background = 'rgba(245, 158, 11, 0.14)';
-                                    e.currentTarget.style.borderColor = 'rgba(245, 158, 11, 0.6)';
+                                    e.currentTarget.style.background = '#f59e0b';
+                                    e.currentTarget.style.color = '#ffffff';
+                                    e.currentTarget.style.borderStyle = 'solid';
                                   }}
                                   onMouseLeave={(e) => {
+                                    e.currentTarget.style.background = 'rgba(245, 158, 11, 0.08)';
                                     e.currentTarget.style.color = '#d97706';
-                                    e.currentTarget.style.background = 'rgba(245, 158, 11, 0.06)';
-                                    e.currentTarget.style.borderColor = 'rgba(245, 158, 11, 0.35)';
+                                    e.currentTarget.style.borderStyle = 'dashed';
                                   }}
                                 >
-                                  <AlertTriangle size={13} />
-                                  <span>Báo lỗi data</span>
+                                  <AlertTriangle size={16} />
+                                </button>
+                              )}
+
+                              {canDeleteContact && (
+                                <button
+                                  type="button"
+                                  onClick={handleDeleteContact}
+                                  title="Xóa khách hàng"
+                                  style={{
+                                    flex: 1,
+                                    height: '38px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    borderRadius: '8px',
+                                    background: 'rgba(239, 68, 68, 0.08)',
+                                    border: '1px solid rgba(239, 68, 68, 0.25)',
+                                    color: '#ef4444',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.background = '#ef4444';
+                                    e.currentTarget.style.color = '#ffffff';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)';
+                                    e.currentTarget.style.color = '#ef4444';
+                                  }}
+                                >
+                                  <Trash2 size={16} />
                                 </button>
                               )}
                             </div>

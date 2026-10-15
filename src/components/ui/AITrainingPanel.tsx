@@ -4,13 +4,14 @@ import {
   Sparkles, Database, FileText, Globe, Upload, Trash2, Edit2, Play, 
   RefreshCw, Send, Sliders, MessageSquare, Plus, Info, X, 
   ChevronRight, ChevronDown, Folder, FolderPlus, CornerDownRight,
-  Bot, User, SlidersHorizontal, Settings
+  Bot, User, SlidersHorizontal, Settings, Eye
 } from 'lucide-react';
 import { fetchAPI } from '../../utils/api';
 import toast from 'react-hot-toast';
 import { EmptyCard } from './EmptyCard';
 import { CustomSelect } from './CustomSelect';
 import { useUIStore } from '../../store/uiStore';
+import { useAuthStore } from '../../store/authStore';
 
 interface AIDoc {
   id: string;
@@ -110,6 +111,7 @@ const RAGSlider = ({
   step, 
   unit, 
   description,
+  disabled,
   onChange 
 }: { 
   label: string; 
@@ -119,6 +121,7 @@ const RAGSlider = ({
   step: number; 
   unit: string; 
   description?: string;
+  disabled?: boolean;
   onChange: (val: number) => void;
 }) => {
   const pct = ((value - min) / (max - min)) * 100;
@@ -129,7 +132,7 @@ const RAGSlider = ({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '1.25rem' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '1.25rem', opacity: disabled ? 0.65 : 1 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <label style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text-light)' }}>
           {label}
@@ -160,8 +163,10 @@ const RAGSlider = ({
           step={step}
           className="rag-premium-slider"
           value={value}
+          disabled={disabled}
           onChange={e => onChange(Number(e.target.value))}
           style={{
+            cursor: disabled ? 'not-allowed' : 'pointer',
             background: `linear-gradient(to right, #BD1D2D 0%, #f97316 ${pct}%, #f1f5f9 ${pct}%, #f1f5f9 100%)`
           }}
         />
@@ -256,18 +261,27 @@ export const AITrainingPanel: React.FC = () => {
   const [isTrainingAll, setIsTrainingAll] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Authentication & Permissions: Everyone can view docs; only admin & superadmin can edit/toggle/train
+  const user = useAuthStore(state => state.user);
+  const userRole = (user?.role || '').toLowerCase();
+  const canManageAI = ['admin', 'superadmin', 'super_admin', 'director'].includes(userRole);
+
   // Search & Filter
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
 
-
-
   useEffect(() => {
     fetchDocs();
-    fetchRAGSettings();
-  }, []);
+    if (canManageAI) {
+      fetchRAGSettings();
+    }
+  }, [canManageAI]);
 
-
+  useEffect(() => {
+    if (!canManageAI && subtab !== 'docs') {
+      setSubtab('docs');
+    }
+  }, [canManageAI, subtab]);
 
   const fetchDocs = async () => {
     setLoadingDocs(true);
@@ -280,9 +294,13 @@ export const AITrainingPanel: React.FC = () => {
         setDocs(res.data || []);
       } else {
         setDocs([]);
+        if (res?.message) {
+          toast.error(res.message);
+        }
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to fetch training documents:', e);
+      toast.error('Lỗi khi tải dữ liệu tri thức: ' + (e?.message || 'Lỗi mạng'));
     } finally {
       setLoadingDocs(false);
     }
@@ -683,6 +701,9 @@ export const AITrainingPanel: React.FC = () => {
 
   const handleEditDoc = (doc: AIDoc) => {
     setEditingDoc(doc);
+    if (!canManageAI) {
+      setEditEditorMode('preview');
+    }
     setShowEditModal(true);
   };
 
@@ -909,31 +930,33 @@ export const AITrainingPanel: React.FC = () => {
             <Folder size={16} />
             Kho Tài Liệu RAG
           </button>
-          <button
-            type="button"
-            onClick={() => setSubtab('rag')}
-            style={{
-              background: 'none',
-              border: 'none',
-              padding: '8px 12px',
-              fontSize: '0.875rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              color: subtab === 'rag' ? '#BD1D2D' : 'var(--color-text-muted)',
-              borderBottom: subtab === 'rag' ? '2.5px solid #BD1D2D' : '2.5px solid transparent',
-              transition: 'all 0.2s',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6
-            }}
-          >
-            <Sliders size={16} />
-            Thông số RAG & Cấu hình
-          </button>
+          {canManageAI && (
+            <button
+              type="button"
+              onClick={() => setSubtab('rag')}
+              style={{
+                background: 'none',
+                border: 'none',
+                padding: '8px 12px',
+                fontSize: '0.875rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                color: subtab === 'rag' ? '#BD1D2D' : 'var(--color-text-muted)',
+                borderBottom: subtab === 'rag' ? '2.5px solid #BD1D2D' : '2.5px solid transparent',
+                transition: 'all 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6
+              }}
+            >
+              <Sliders size={16} />
+              Thông số RAG & Cấu hình
+            </button>
+          )}
         </div>
 
-        {/* Right Side: Quick Action Buttons (Only shown when active tab is docs) */}
-        {subtab === 'docs' && (
+        {/* Right Side: Quick Action Buttons (Only shown when active tab is docs and user is admin/super) */}
+        {subtab === 'docs' && canManageAI && (
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
             <button 
               type="button"
@@ -1008,7 +1031,7 @@ export const AITrainingPanel: React.FC = () => {
                 <RefreshCw size={14} className={loadingDocs ? 'spin' : ''} />
                 Làm mới
               </button>
-              {pendingDocsCount > 0 && (
+              {canManageAI && pendingDocsCount > 0 && (
                 <button 
                   type="button" 
                   className="btn primary" 
@@ -1072,11 +1095,28 @@ export const AITrainingPanel: React.FC = () => {
                               style={{ borderBottom: '1px solid var(--color-border-light)', background: 'rgba(245, 158, 11, 0.02)', cursor: 'pointer' }}
                             >
                               <td style={{ padding: '12px 8px', fontWeight: 700, color: 'var(--color-text)' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                  {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                                  <Folder size={18} color="#f59e0b" fill="#f59e0b" />
-                                  <span>{row.name}</span>
-                                  <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--color-text-muted)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, flexShrink: 0, color: 'var(--color-text-muted)' }}>
+                                    {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                                  </span>
+                                  <div style={{
+                                    width: 28,
+                                    height: 28,
+                                    borderRadius: 8,
+                                    background: 'rgba(245, 158, 11, 0.15)',
+                                    border: '1px solid rgba(245, 158, 11, 0.4)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0,
+                                    boxShadow: '0 1px 3px rgba(245, 158, 11, 0.15)'
+                                  }}>
+                                    <Folder size={18} color="#d97706" fill="#f59e0b" style={{ flexShrink: 0 }} />
+                                  </div>
+                                  <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', fontWeight: 700 }} title={row.name}>
+                                    {row.name}
+                                  </span>
+                                  <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--color-text-muted)', flexShrink: 0, marginLeft: 2 }}>
                                     ({activeCount}/{members.length} hoạt động)
                                   </span>
                                 </div>
@@ -1118,18 +1158,24 @@ export const AITrainingPanel: React.FC = () => {
                               <td style={{ padding: '12px 8px' }} onClick={e => e.stopPropagation()}>
                                 <ToggleSwitch 
                                   active={isFolderActive} 
-                                  onChange={() => handleToggleFolder(row.id, isFolderActive ? 1 : 0)} 
+                                  onChange={() => canManageAI && handleToggleFolder(row.id, isFolderActive ? 1 : 0)} 
+                                  disabled={!canManageAI}
                                 />
                               </td>
                               <td style={{ padding: '12px 8px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
-                                <button 
-                                  type="button"
-                                  className="btn outline sm text-danger" 
-                                  onClick={() => handleDeleteFolder(row.id)}
-                                  style={{ padding: '4px 8px', borderRadius: '6px', minWidth: 'unset', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.2)' }}
-                                >
-                                  <Trash2 size={12} />
-                                </button>
+                                {canManageAI ? (
+                                  <button 
+                                    type="button"
+                                    className="btn outline sm text-danger" 
+                                    onClick={() => handleDeleteFolder(row.id)}
+                                    style={{ padding: '4px 8px', borderRadius: '6px', minWidth: 'unset', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.2)' }}
+                                    title="Xóa thư mục"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                ) : (
+                                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>—</span>
+                                )}
                               </td>
                             </tr>
 
@@ -1192,13 +1238,13 @@ export const AITrainingPanel: React.FC = () => {
                                       <td style={{ padding: '10px 8px' }} onClick={e => e.stopPropagation()}>
                                         <ToggleSwitch 
                                           active={Number(member.is_active) === 1} 
-                                          onChange={() => handleToggleDoc(member.id, Number(member.is_active) || 0)} 
-                                          disabled={member.status !== 'trained'}
+                                          onChange={() => canManageAI && handleToggleDoc(member.id, Number(member.is_active) || 0)} 
+                                          disabled={!canManageAI || member.status !== 'trained'}
                                         />
                                       </td>
                                       <td style={{ padding: '10px 8px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
                                         <div style={{ display: 'inline-flex', gap: '6px' }}>
-                                          {member.status !== 'trained' && (
+                                          {canManageAI && member.status !== 'trained' && (
                                             <button 
                                               type="button"
                                               className="btn primary sm" 
@@ -1211,22 +1257,39 @@ export const AITrainingPanel: React.FC = () => {
                                               Train
                                             </button>
                                           )}
-                                          <button 
-                                            type="button"
-                                            className="btn outline sm" 
-                                            onClick={() => handleEditDoc(member)}
-                                            style={{ padding: '4px 8px', borderRadius: '6px', minWidth: 'unset' }}
-                                          >
-                                            <Edit2 size={12} />
-                                          </button>
-                                          <button 
-                                            type="button"
-                                            className="btn outline sm text-danger" 
-                                            onClick={() => handleDeleteDoc(member.id)}
-                                            style={{ padding: '4px 8px', borderRadius: '6px', minWidth: 'unset', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.2)' }}
-                                          >
-                                            <Trash2 size={12} />
-                                          </button>
+                                          {canManageAI ? (
+                                            <>
+                                              <button 
+                                                type="button" 
+                                                className="btn outline sm" 
+                                                onClick={() => handleEditDoc(member)}
+                                                style={{ padding: '4px 8px', borderRadius: '6px', minWidth: 'unset' }}
+                                                title="Chỉnh sửa tài liệu"
+                                              >
+                                                <Edit2 size={12} />
+                                              </button>
+                                              <button 
+                                                type="button" 
+                                                className="btn outline sm text-danger" 
+                                                onClick={() => handleDeleteDoc(member.id)}
+                                                style={{ padding: '4px 8px', borderRadius: '6px', minWidth: 'unset', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.2)' }}
+                                                title="Xóa tài liệu"
+                                              >
+                                                <Trash2 size={12} />
+                                              </button>
+                                            </>
+                                          ) : (
+                                            <button 
+                                              type="button" 
+                                              className="btn outline sm" 
+                                              onClick={() => handleEditDoc(member)}
+                                              style={{ padding: '4px 8px', borderRadius: '6px', minWidth: 'unset', display: 'flex', gap: 4, alignItems: 'center' }}
+                                              title="Xem chi tiết tài liệu"
+                                            >
+                                              <Eye size={12} />
+                                              Xem
+                                            </button>
+                                          )}
                                         </div>
                                       </td>
                                     </tr>
@@ -1289,13 +1352,13 @@ export const AITrainingPanel: React.FC = () => {
                           <td style={{ padding: '12px 8px' }} onClick={e => e.stopPropagation()}>
                             <ToggleSwitch 
                               active={Number(row.is_active) === 1} 
-                              onChange={() => handleToggleDoc(row.id, Number(row.is_active) || 0)} 
-                              disabled={row.status !== 'trained'}
+                              onChange={() => canManageAI && handleToggleDoc(row.id, Number(row.is_active) || 0)} 
+                              disabled={!canManageAI || row.status !== 'trained'}
                             />
                           </td>
                           <td style={{ padding: '12px 8px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
                             <div style={{ display: 'inline-flex', gap: '6px' }}>
-                              {row.status !== 'trained' && (
+                              {canManageAI && row.status !== 'trained' && (
                                 <button 
                                   type="button" 
                                   className="btn primary sm" 
@@ -1308,22 +1371,39 @@ export const AITrainingPanel: React.FC = () => {
                                   Train
                                 </button>
                               )}
-                              <button 
-                                type="button"
-                                className="btn outline sm" 
-                                onClick={() => handleEditDoc(row)}
-                                style={{ padding: '4px 8px', borderRadius: '6px', minWidth: 'unset' }}
-                              >
-                                <Edit2 size={12} />
-                              </button>
-                              <button 
-                                type="button"
-                                className="btn outline sm text-danger" 
-                                onClick={() => handleDeleteDoc(row.id)}
-                                style={{ padding: '4px 8px', borderRadius: '6px', minWidth: 'unset', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.2)' }}
-                              >
-                                <Trash2 size={12} />
-                              </button>
+                              {canManageAI ? (
+                                <>
+                                  <button 
+                                    type="button"
+                                    className="btn outline sm" 
+                                    onClick={() => handleEditDoc(row)}
+                                    style={{ padding: '4px 8px', borderRadius: '6px', minWidth: 'unset' }}
+                                    title="Chỉnh sửa tài liệu"
+                                  >
+                                    <Edit2 size={12} />
+                                  </button>
+                                  <button 
+                                    type="button"
+                                    className="btn outline sm text-danger" 
+                                    onClick={() => handleDeleteDoc(row.id)}
+                                    style={{ padding: '4px 8px', borderRadius: '6px', minWidth: 'unset', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.2)' }}
+                                    title="Xóa tài liệu"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                </>
+                              ) : (
+                                <button 
+                                  type="button"
+                                  className="btn outline sm" 
+                                  onClick={() => handleEditDoc(row)}
+                                  style={{ padding: '4px 8px', borderRadius: '6px', minWidth: 'unset', display: 'flex', gap: 4, alignItems: 'center' }}
+                                  title="Xem chi tiết tài liệu"
+                                >
+                                  <Eye size={12} />
+                                  Xem
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -1337,10 +1417,9 @@ export const AITrainingPanel: React.FC = () => {
         </div>
       )}
 
-      {/* Tab Content: THÔNG SỐ RAG & CẤU HÌNH */}
-      {subtab === 'rag' && (
+      {/* Tab Content: THÔNG SỐ RAG & CẤU HÌNH (Chỉ Quản trị viên) */}
+      {subtab === 'rag' && canManageAI && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          
           {/* Top Row: System instruction (Left - Wider) & General info (Right - Smaller) */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', alignItems: 'stretch' }}>
             
@@ -1374,6 +1453,7 @@ export const AITrainingPanel: React.FC = () => {
                     className="document-editor-textarea"
                     rows={12}
                     value={settings.persona_prompt}
+                    readOnly={!canManageAI}
                     onChange={e => setSettings({ ...settings, persona_prompt: e.target.value })}
                     placeholder="VD: Bạn là trợ lý AI chuyên nghiệp của Ideas..."
                     style={{ fontSize: '0.8125rem', lineHeight: 1.5 }}
@@ -1405,7 +1485,11 @@ export const AITrainingPanel: React.FC = () => {
                 <label style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text-light)' }}>Trạng thái hoạt động</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{settings.is_enabled ? 'Đang kích hoạt' : 'Tạm dừng'}</span>
-                  <ToggleSwitch active={settings.is_enabled === 1} onChange={() => setSettings({ ...settings, is_enabled: settings.is_enabled === 1 ? 0 : 1 })} />
+                  <ToggleSwitch 
+                    active={settings.is_enabled === 1} 
+                    disabled={!canManageAI} 
+                    onChange={() => canManageAI && setSettings({ ...settings, is_enabled: settings.is_enabled === 1 ? 0 : 1 })} 
+                  />
                 </div>
               </div>
 
@@ -1415,6 +1499,7 @@ export const AITrainingPanel: React.FC = () => {
                   type="text"
                   className="form-input"
                   value={settings.bot_name}
+                  readOnly={!canManageAI}
                   onChange={e => setSettings({ ...settings, bot_name: e.target.value })}
                   placeholder="VD: AI Ideas"
                 />
@@ -1426,6 +1511,7 @@ export const AITrainingPanel: React.FC = () => {
                   type="text"
                   className="form-input"
                   value={settings.welcome_msg}
+                  readOnly={!canManageAI}
                   onChange={e => setSettings({ ...settings, welcome_msg: e.target.value })}
                 />
               </div>
@@ -1437,10 +1523,11 @@ export const AITrainingPanel: React.FC = () => {
                     type="text"
                     className="form-input"
                     value={settings.brand_color}
+                    readOnly={!canManageAI}
                     onChange={e => setSettings({ ...settings, brand_color: e.target.value })}
                     style={{ flex: 1 }}
                   />
-                  <div style={{ width: 34, height: 34, borderRadius: '50%', background: settings.brand_color, border: '1px solid var(--color-border)', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}></div>
+                  <div style={{ width: 34, height: 34, borderRadius: '50%', background: settings.brand_color, border: '1px solid var(--color-border)', cursor: canManageAI ? 'pointer' : 'default', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}></div>
                 </div>
               </div>
             </div>
@@ -1472,7 +1559,8 @@ export const AITrainingPanel: React.FC = () => {
                   step={0.1}
                   unit=""
                   description="Giá trị thấp (e.g. 0.2) giúp câu trả lời cực kỳ chính xác theo tri thức đã nạp."
-                  onChange={val => setSettings({ ...settings, temperature: val })}
+                  disabled={!canManageAI}
+                  onChange={val => canManageAI && setSettings({ ...settings, temperature: val })}
                 />
                 <RAGSlider
                   label="Độ dài tối đa (Max Tokens)"
@@ -1481,7 +1569,8 @@ export const AITrainingPanel: React.FC = () => {
                   max={16384}
                   step={256}
                   unit=" tokens"
-                  onChange={val => setSettings({ ...settings, max_output_tokens: val })}
+                  disabled={!canManageAI}
+                  onChange={val => canManageAI && setSettings({ ...settings, max_output_tokens: val })}
                 />
 
                 <RAGSlider
@@ -1491,7 +1580,8 @@ export const AITrainingPanel: React.FC = () => {
                   max={20}
                   step={1}
                   unit=" câu"
-                  onChange={val => setSettings({ ...settings, history_limit: val })}
+                  disabled={!canManageAI}
+                  onChange={val => canManageAI && setSettings({ ...settings, history_limit: val })}
                 />
               </div>
 
@@ -1508,7 +1598,8 @@ export const AITrainingPanel: React.FC = () => {
                   max={0.85}
                   step={0.05}
                   unit=""
-                  onChange={val => setSettings({ ...settings, similarity_threshold: val })}
+                  disabled={!canManageAI}
+                  onChange={val => canManageAI && setSettings({ ...settings, similarity_threshold: val })}
                 />
 
                 <RAGSlider
@@ -1518,7 +1609,8 @@ export const AITrainingPanel: React.FC = () => {
                   max={15}
                   step={1}
                   unit=" đoạn"
-                  onChange={val => setSettings({ ...settings, top_k: val })}
+                  disabled={!canManageAI}
+                  onChange={val => canManageAI && setSettings({ ...settings, top_k: val })}
                 />
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginTop: '4px' }}>
@@ -1529,7 +1621,8 @@ export const AITrainingPanel: React.FC = () => {
                     max={1500}
                     step={50}
                     unit=" ký tự"
-                    onChange={val => setSettings({ ...settings, chunk_size: val })}
+                    disabled={!canManageAI}
+                    onChange={val => canManageAI && setSettings({ ...settings, chunk_size: val })}
                   />
                   <RAGSlider
                     label="Gối đầu (Chunk Overlap)"
@@ -1538,7 +1631,8 @@ export const AITrainingPanel: React.FC = () => {
                     max={300}
                     step={10}
                     unit=" ký tự"
-                    onChange={val => setSettings({ ...settings, chunk_overlap: val })}
+                    disabled={!canManageAI}
+                    onChange={val => canManageAI && setSettings({ ...settings, chunk_overlap: val })}
                   />
                 </div>
               </div>
@@ -1547,17 +1641,19 @@ export const AITrainingPanel: React.FC = () => {
           </div>
 
           {/* Action Footer */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid var(--color-border-light)', paddingTop: '1.25rem' }}>
-            <button 
-              type="button"
-              className="btn primary" 
-              onClick={handleSaveSettings}
-              disabled={savingSettings}
-              style={{ display: 'flex', gap: 6, alignItems: 'center', background: '#BD1D2D', borderColor: '#BD1D2D', padding: '10px 24px' }}>
-              {savingSettings ? <RefreshCw size={14} className="spin" /> : null}
-              Lưu cấu hình hệ thống
-            </button>
-          </div>
+          {canManageAI && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid var(--color-border-light)', paddingTop: '1.25rem' }}>
+              <button 
+                type="button"
+                className="btn primary" 
+                onClick={handleSaveSettings}
+                disabled={savingSettings}
+                style={{ display: 'flex', gap: 6, alignItems: 'center', background: '#BD1D2D', borderColor: '#BD1D2D', padding: '10px 24px' }}>
+                {savingSettings ? <RefreshCw size={14} className="spin" /> : null}
+                Lưu cấu hình hệ thống
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -1903,7 +1999,9 @@ export const AITrainingPanel: React.FC = () => {
                 <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(189, 29, 45, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <FileText size={18} color="#BD1D2D" />
                 </div>
-                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text)' }}>Chỉnh sửa dữ liệu huấn luyện</h3>
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                  {canManageAI ? 'Chỉnh sửa dữ liệu huấn luyện' : 'Chi tiết dữ liệu tri thức AI (Chế độ xem)'}
+                </h3>
               </div>
               <button 
                 type="button" 
@@ -1946,12 +2044,12 @@ export const AITrainingPanel: React.FC = () => {
               >
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <label style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>Tiêu đề khối tri thức</label>
-                  <input type="text" className="form-input" value={editingDoc.name} onChange={e => setEditingDoc({ ...editingDoc, name: e.target.value })} style={{ fontWeight: 600 }} />
+                  <input type="text" className="form-input" value={editingDoc.name} disabled={!canManageAI} onChange={e => setEditingDoc({ ...editingDoc, name: e.target.value })} style={{ fontWeight: 600 }} />
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <label style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>Tags phân loại</label>
-                  <input type="text" className="form-input" value={editingDoc.tags || ''} onChange={e => setEditingDoc({ ...editingDoc, tags: e.target.value })} placeholder="Ví dụ: chietkhau, canho" />
+                  <input type="text" className="form-input" value={editingDoc.tags || ''} disabled={!canManageAI} onChange={e => setEditingDoc({ ...editingDoc, tags: e.target.value })} placeholder="Ví dụ: chietkhau, canho" />
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -1962,7 +2060,8 @@ export const AITrainingPanel: React.FC = () => {
                       ...folderOptions.map(f => ({ value: String(f.id), label: f.name }))
                     ]}
                     value={editingDoc.parent_id || ''}
-                    onChange={val => setEditingDoc({ ...editingDoc, parent_id: val || '' })}
+                    disabled={!canManageAI}
+                    onChange={val => canManageAI && setEditingDoc({ ...editingDoc, parent_id: val || '' })}
                     searchable={true}
                     placeholder="Di chuyển vào thư mục..."
                     width="100%"
@@ -2066,6 +2165,7 @@ export const AITrainingPanel: React.FC = () => {
                     <textarea 
                       className="document-editor-textarea" 
                       value={editingDoc.content || ''} 
+                      readOnly={!canManageAI}
                       onChange={e => setEditingDoc({ ...editingDoc, content: e.target.value })} 
                     />
                   ) : (
@@ -2088,10 +2188,14 @@ export const AITrainingPanel: React.FC = () => {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem', borderTop: '1px solid var(--color-border-light)', paddingTop: '1rem' }}>
-              <button type="button" className="btn outline" onClick={() => { setShowEditModal(false); setEditingDoc(null); }} style={{ borderRadius: '10px', height: '40px' }}>Hủy</button>
-              <button type="button" className="btn primary" onClick={handleUpdateDoc} style={{ borderRadius: '10px', height: '40px', background: '#BD1D2D', borderColor: '#BD1D2D' }}>
-                Cập nhật tri thức
+              <button type="button" className="btn outline" onClick={() => { setShowEditModal(false); setEditingDoc(null); }} style={{ borderRadius: '10px', height: '40px' }}>
+                {canManageAI ? 'Hủy' : 'Đóng'}
               </button>
+              {canManageAI && (
+                <button type="button" className="btn primary" onClick={handleUpdateDoc} style={{ borderRadius: '10px', height: '40px', background: '#BD1D2D', borderColor: '#BD1D2D' }}>
+                  Cập nhật tri thức
+                </button>
+              )}
             </div>
           </div>
         </div>,

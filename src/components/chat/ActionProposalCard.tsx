@@ -292,6 +292,9 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
             }
           }
 
+          const targetContactId = p.contact_id || p.customer_id || p.student_id || p.lead_id || (p.related_type === 'contact' ? p.related_id : undefined);
+          const targetContactName = p.contact_name || p.customer_name || p.student_name || p.lead_name || '';
+
           useUIStore.getState().openTaskDrawer({
             id: 'new',
             subject: p.subject || p.title || 'Công việc mới từ AI IDEAS',
@@ -306,7 +309,12 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
             created_by_name: currentUser?.full_name || 'Tôi',
             created_by_avatar: currentUser?.avatar_url,
             collaborator_ids: Array.isArray(p.collaborator_ids) ? p.collaborator_ids : (p.collaborator_ids ? String(p.collaborator_ids).split(',') : []),
-            team_id: p.team_id ? Number(p.team_id) : undefined
+            team_id: p.team_id ? Number(p.team_id) : undefined,
+            contact_id: targetContactId ? Number(targetContactId) : undefined,
+            contact_name: targetContactName || undefined,
+            related_type: targetContactId ? 'contact' : (p.related_type || undefined),
+            related_id: targetContactId ? Number(targetContactId) : (p.related_id ? Number(p.related_id) : undefined),
+            from_customer_drawer: Boolean(targetContactId)
           });
           toast.success('Đã mở Công việc (Task) và điền sẵn thông tin!');
           break;
@@ -502,6 +510,10 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
             if (p.owner_id) paramsObj.owner_id = p.owner_id;
             if (p.team_id) paramsObj.team_id = p.team_id;
             if (p.tag) paramsObj.tag = p.tag;
+            if (p.data_type) paramsObj.data_type = p.data_type;
+            if (p.student_sub_tab) paramsObj.student_sub_tab = p.student_sub_tab;
+            if (p.multi_program) paramsObj.multi_program = String(p.multi_program);
+            if (p.export_mode) paramsObj.export_mode = p.export_mode;
             const qs = new URLSearchParams(paramsObj).toString();
             downloadUrl = `/export?${qs}`;
           }

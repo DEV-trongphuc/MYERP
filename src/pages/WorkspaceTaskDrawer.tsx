@@ -165,14 +165,10 @@ const TaskSubjectInput: React.FC<{
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const next = e.target.value;
     setVal(next);
-    if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
-    syncTimeoutRef.current = setTimeout(() => {
-      onSyncFormData(next);
-    }, 200);
+    onSyncFormData(next);
   };
 
   const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-    if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
     onSyncFormData(e.target.value);
     if (e.target.value !== initialValue) {
       onSave(e.target.value);
@@ -295,6 +291,27 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   }, []);
 
   const [formData, setFormData] = useState<any>({});
+  const [isClonedDraft, setIsClonedDraft] = useState<boolean>(false);
+  const isNew = Boolean(isClonedDraft || formData?.id === 'new' || task?.id === 'new' || !task?.id || task?.id === 0 || task?.id === '0');
+
+  const formatHeaderDate = (dateVal: any) => {
+    if (!dateVal) return null;
+    try {
+      const str = String(dateVal).trim();
+      if (!str) return null;
+      let parsed = new Date(str);
+      if (isNaN(parsed.getTime())) {
+        parsed = new Date(str.replace(' ', 'T'));
+      }
+      if (isNaN(parsed.getTime())) {
+        parsed = new Date(str.replace(/-/g, '/'));
+      }
+      if (isNaN(parsed.getTime())) return null;
+      return `${parsed.toLocaleDateString('vi-VN')} ${parsed.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
+    } catch {
+      return null;
+    }
+  };
   const [erpMeta, setErpMeta] = useState<any>({
     description: '',
     internal_type: 'task',
@@ -1317,7 +1334,13 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
   useEffect(() => {
     if (task) {
-      const isNew = task.id === 'new' || !task.id || task.id === 0 || task.id === '0';
+      if (isClonedDraft && prevTaskIdRef.current === task.id) {
+        return;
+      }
+      if (prevTaskIdRef.current !== task.id) {
+        setIsClonedDraft(false);
+      }
+      const isTaskNew = task.id === 'new' || !task.id || task.id === 0 || task.id === '0';
       const isSaleRole = ['sale', 'sales'].includes(String(currentUser?.role || '').toLowerCase());
       const defaultUserId = task.user_id || (isSaleRole ? currentUser.id : null);
       let initialDueDate = task.due_date || null;
@@ -1328,7 +1351,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       const normalizedParticipants = Array.isArray(rawParticipants) ? rawParticipants.join(',') : String(rawParticipants || '');
       const normalizedTask = {
         ...task,
-        id: isNew ? 'new' : task.id,
+        id: isTaskNew ? 'new' : task.id,
         due_date: initialDueDate,
         subject: task.subject || task.title || '',
         body: task.body || task.description || '',
@@ -1784,7 +1807,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         task_group_id: formData.task_group_id ? Number(formData.task_group_id) : null
       };
 
-      if (task.id === 'new' || formData.id === 'new') {
+      if (isClonedDraft || task.id === 'new' || formData.id === 'new') {
         const res = await api.post('/activities', {
           ...payload,
           type: 'task'
@@ -1802,6 +1825,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
           const taskName = formData.subject || t('Không có tiêu đề');
           toast.success(t('Đã tạo công việc "{subject}" thành công!').replace('{subject}', taskName));
           setOriginalHash(currentHash);
+          setIsClonedDraft(false);
           setIsSaving(false);
           onClose();
           setTimeout(() => onUpdate(), 50);
@@ -2587,6 +2611,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     };
 
     // 4. Update states
+    setIsClonedDraft(true);
     setFormData(clonedFormData);
     setErpMeta(clonedErpMeta);
     setComments([]);
@@ -2901,7 +2926,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         borderRadius: 0,
         overflow: 'hidden',
         boxShadow: isMobileOrTablet ? 'none' : '-10px 0 30px rgba(0,0,0,0.15)',
-        zIndex: zIndex || 2147483630,
+        zIndex: zIndex || 2147483645,
         display: 'flex',
         flexDirection: 'column',
         position: 'fixed',
@@ -2959,9 +2984,9 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                   textOverflow: 'ellipsis', 
                   whiteSpace: 'nowrap' 
                 }}>
-                  {task?.id === 'new' ? t('Tạo công việc mới') : (formData.subject || t('Chi tiết công việc'))}
+                  {isNew ? t('Tạo công việc mới') : (formData.subject || t('Chi tiết công việc'))}
                 </h3>
-                {formData.id && formData.id !== 'new' && (
+                {!isNew && formData.id && formData.id !== 'new' && (
                   <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>#{formData.id}</span>
                 )}
               </div>
@@ -3010,7 +3035,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     borderRadius: '4px',
                     textTransform: 'uppercase',
                     flexShrink: 0
-                  }}>#{formData.id === 'new' ? t('MỚI') : formData.id}</span>
+                  }}>#{isNew ? t('MỚI') : formData.id}</span>
                   <span className={`badge ${formData.priority === 'high' ? 'danger' : formData.priority === 'low' ? 'info' : 'warning'}`} style={{
                     fontSize: '0.6rem',
                     fontWeight: 800,
@@ -3029,22 +3054,22 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>{formData.created_by_name || currentUser?.name || (currentUser as any)?.full_name || t('Hệ thống / Admin')}</span>
                   </div>
 
-                  {formData.created_at && (
+                  {formatHeaderDate(formData.created_at) && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--color-bg)', padding: '2px 8px', borderRadius: '6px', border: '1px solid var(--color-border-light)' }}>
                       <Calendar size={12} style={{ color: 'var(--color-primary)' }} />
                       <span>{t('Ngày tạo:')}</span>
                       <strong style={{ color: 'var(--color-text)' }}>
-                        {new Date(formData.created_at.replace(/-/g, '/')).toLocaleDateString('vi-VN')} {new Date(formData.created_at.replace(/-/g, '/')).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                        {formatHeaderDate(formData.created_at)}
                       </strong>
                     </div>
                   )}
 
-                  {formData.due_date ? (
+                  {formatHeaderDate(formData.due_date) ? (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--color-bg)', padding: '2px 8px', borderRadius: '6px', border: '1px solid var(--color-border-light)' }}>
                       <Clock size={12} style={{ color: 'var(--color-danger, #ef4444)' }} />
                       <span>{t('Hạn hoàn thành:')}</span>
                       <strong style={{ color: 'var(--color-text)' }}>
-                        {new Date(formData.due_date.replace(/-/g, '/')).toLocaleDateString('vi-VN')} {new Date(formData.due_date.replace(/-/g, '/')).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                        {formatHeaderDate(formData.due_date)}
                       </strong>
                     </div>
                   ) : (
@@ -3083,7 +3108,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
           <div style={{ display: 'flex', gap: isMobileOrTablet ? '6px' : '10px', alignItems: 'center', flexShrink: 0, justifyContent: 'flex-end' }}>
             {/* Share Task Button */}
-            {Boolean(formData.id && formData.id !== 'new' && formData.id !== 0 && formData.id !== '0') && (
+            {Boolean(!isNew && formData.id && formData.id !== 'new' && formData.id !== 0 && formData.id !== '0') && (
               <button
                 type="button"
                 onClick={handleShareTask}
@@ -3110,7 +3135,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             )}
 
             {/* Delete task button - only for creator on PC */}
-            {Boolean(!isMobileOrTablet && isCreator && task?.id && task.id !== 'new' && task.id !== 0 && task.id !== '0') && (
+            {Boolean(!isNew && !isMobileOrTablet && isCreator && task?.id && task.id !== 'new' && task.id !== 0 && task.id !== '0') && (
               <button
                 type="button"
                 onClick={handleDeleteTask}
@@ -3137,7 +3162,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             )}
 
             {/* Hide task eye button */}
-            {Boolean(task?.id && task.id !== 'new' && task.id !== 0 && task.id !== '0') && (
+            {Boolean(!isNew && task?.id && task.id !== 'new' && task.id !== 0 && task.id !== '0') && (
               <button
                 type="button"
                 onClick={handleHideClick}
@@ -3192,7 +3217,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             )}
 
             {/* Duplicate Task Button */}
-            {Boolean(formData?.id && formData.id !== 'new' && formData.id !== 0 && formData.id !== '0') && (
+            {Boolean(!isNew && formData?.id && formData.id !== 'new' && formData.id !== 0 && formData.id !== '0') && (
               <button
                 type="button"
                 onClick={handleDuplicateTask}
@@ -3243,7 +3268,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
               }}
             >
               {isSaving ? <RefreshCw className="spin" size={14} /> : <Save size={isMobileOrTablet ? 14 : 16} />}
-              <span>{isSaving ? t('Đang lưu...') : ((formData?.id === 'new' || task?.id === 'new') ? t('Tạo việc') : (isMobileOrTablet ? t('Lưu') : t('Lưu thay đổi')))}</span>
+              <span>{isSaving ? t('Đang lưu...') : (isNew ? t('Tạo việc') : (isMobileOrTablet ? t('Lưu') : t('Lưu thay đổi')))}</span>
             </button>
 
             <button 
@@ -7690,7 +7715,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                 position: 'fixed',
                 inset: 0,
                 background: 'rgba(0,0,0,0.45)',
-                zIndex: zIndex ? zIndex - 1 : 2147483629,
+                zIndex: zIndex ? zIndex - 1 : 2147483640,
                 backdropFilter: 'blur(8px)',
                 WebkitBackdropFilter: 'blur(8px)'
               }}
@@ -8377,6 +8402,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             onClose={() => setLightboxState(prev => ({ ...prev, isOpen: false }))}
             items={lightboxState.items}
             initialIndex={lightboxState.initialIndex}
+            zIndex={2147483647}
           />
     </>,
     document.body

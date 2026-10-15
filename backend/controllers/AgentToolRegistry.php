@@ -23,6 +23,15 @@ class AgentToolRegistry {
                                     'enum' => ['all_pending', 'overdue', 'today', 'urgent', 'completed'],
                                     'description' => 'Bộ lọc trạng thái công việc (mặc định: all_pending)'
                                 ],
+                                'scope' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['mine', 'team', 'company'],
+                                    'description' => 'Phạm vi tra cứu công việc: mine (việc của tôi), team (việc của toàn nhóm do tôi làm Trưởng phòng/Quản lý), company (việc toàn viện dành cho Admin/Giám đốc). Mặc định: mine'
+                                ],
+                                'assignee_name' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Lọc công việc theo tên nhân viên phụ trách'
+                                ],
                                 'limit' => [
                                     'type' => 'INTEGER',
                                     'description' => 'Số lượng việc cần trích xuất (mặc định 5, tối đa 20)'
@@ -132,6 +141,86 @@ class AgentToolRegistry {
                         ]
                     ],
                     [
+                        'name' => 'query_company_attendance_and_work_hours',
+                        'description' => 'Tra cứu toàn diện dữ liệu chấm công, đi trễ, về sớm, tăng ca (OT), nghỉ phép, làm việc từ xa (WFH), và bảng công chi tiết theo ngày/tháng/khoảng thời gian của toàn công ty, theo team, hoặc của nhân sự cụ thể. Hỗ trợ trích xuất Top đi trễ nhiều nhất, Top tăng ca, và cung cấp link tải/export file bảng công Excel. Phân quyền: Ban Giám đốc/HR xem toàn công ty; Manager xem team; Cá nhân xem chính mình.',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'scope' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['top_late', 'top_overtime', 'employee_detail', 'month_summary', 'date_detail', 'today_status', 'export_link'],
+                                    'description' => 'Phạm vi tra cứu: top_late (Top nhân viên đi trễ nhiều nhất), top_overtime (Top tăng ca OT), employee_detail (Chi tiết bảng công của 1 nhân sự cụ thể), month_summary (Tổng hợp công tháng), date_detail (Chi tiết quẹt thẻ ngày cụ thể), today_status (Tình hình đi làm/WFH/vắng mặt hôm nay), export_link (Lấy link tải file bảng công).'
+                                ],
+                                'user_query' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tên hoặc mã ID của nhân sự cụ thể (ví dụ: "Huỳnh Trọng Phúc", "Phúc", 100067)'
+                                ],
+                                'month' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Tháng cần tra cứu (1-12, mặc định tháng hiện tại)'
+                                ],
+                                'year' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Năm cần tra cứu (mặc định năm hiện tại)'
+                                ],
+                                'specific_date' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Ngày cụ thể (định dạng YYYY-MM-DD, hoặc "today", "yesterday", "hôm nay", "hôm qua")'
+                                ],
+                                'from_date' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Ngày bắt đầu khoảng thời gian (YYYY-MM-DD)'
+                                ],
+                                'to_date' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Ngày kết thúc khoảng thời gian (YYYY-MM-DD)'
+                                ],
+                                'department' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Lọc theo phòng ban hoặc team nếu có'
+                                ],
+                                'limit' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Số lượng kết quả cần lấy (mặc định 10, tối đa 50)'
+                                ]
+                            ]
+                        ]
+                    ],
+                    [
+                        'name' => 'export_crm_leads_advanced',
+                        'description' => 'Xuất file / tải danh sách Lead, khách hàng tiềm năng CRM theo tổ hợp bộ lọc đa tầng: Giai đoạn Pipeline (ví dụ: "1-4", "1,2,3,4,13", "pipeline 1 đến 4 hoặc 13"), Giới tính (Nam / Nữ / Tất cả), Khoảng thời gian (từ ngày... đến ngày...), Chương trình học quan tâm. Tự động đếm số lượng thực tế trong CSDL, trích xuất 3-5 khách hàng mẫu xem trước và tạo link tải file CSV/Excel UTF-8 BOM chuẩn cho người dùng.',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'stages' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Các giai đoạn pipeline cần xuất (ví dụ: "1-4,13", "1,2,3,4,13", "new_lead,connected", hoặc "all").'
+                                ],
+                                'gender' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['male', 'female', 'all', 'nam', 'nu'],
+                                    'description' => 'Giới tính khách hàng cần lọc: "male" hoặc "nam" (Nam), "female" hoặc "nu" (Nữ), "all" (Tất cả).'
+                                ],
+                                'from_date' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Ngày bắt đầu lọc (định dạng YYYY-MM-DD)'
+                                ],
+                                'to_date' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Ngày kết thúc lọc (định dạng YYYY-MM-DD)'
+                                ],
+                                'program' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Lọc theo chương trình quan tâm (ví dụ: MBA, EMBA, DBA, BBA, MSCAI)'
+                                ],
+                                'search' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Từ khóa tìm kiếm theo tên hoặc SĐT'
+                                ]
+                            ]
+                        ]
+                    ],
+                    [
                         'name' => 'search_ideas_knowledge',
                         'description' => 'Tra cứu tri thức cốt lõi Viện IDEAS, 12 tình huống sale thực chiến, kiểm định Swiss UMEF & ISTEC Paris, công nhận văn bằng, cẩm nang xử lý từ chối.',
                         'parameters' => [
@@ -162,10 +251,14 @@ class AgentToolRegistry {
                     ],
                     [
                         'name' => 'get_my_payslip',
-                        'description' => 'Tra cứu phiếu lương cá nhân của người dùng hiện tại (lương cơ bản, phụ cấp, thưởng KPI, các khoản khấu trừ BHXH/đi trễ/tạm ứng, thực nhận net, ngày công thực tế, trạng thái phiếu lương). Tự động lấy tháng gần nhất nếu không chỉ định tháng.',
+                        'description' => 'Tra cứu phiếu lương cá nhân hoặc tra cứu tiền lương nhân viên/toàn viện theo phân quyền RBAC nghiêm ngặt: Giám đốc/Admin/HR được quyền tra cứu mọi nhân viên hoặc tổng quan quỹ lương toàn viện; Quản lý/Trưởng phòng được tra cứu nhân viên thuộc team mình; Nhân viên chỉ được tra cứu chính mình.',
                         'parameters' => [
                             'type' => 'OBJECT',
                             'properties' => [
+                                'employee_query' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tên hoặc mã nhân viên cần tra cứu phiếu lương (dành cho Giám đốc, HR, hoặc Trưởng phòng tra cứu nhân sự thuộc quyền). Để trống nếu người dùng tự tra cứu phiếu lương của chính mình, hoặc nhập "all" / "toan cong ty" nếu Giám đốc/HR muốn xem tổng quỹ lương.'
+                                ],
                                 'month' => [
                                     'type' => 'INTEGER',
                                     'description' => 'Tháng cần tra cứu (1-12, mặc định tháng hiện tại hoặc gần nhất có bảng lương)'
@@ -173,6 +266,10 @@ class AgentToolRegistry {
                                 'year' => [
                                     'type' => 'INTEGER',
                                     'description' => 'Năm cần tra cứu (mặc định năm hiện tại)'
+                                ],
+                                'summary_all' => [
+                                    'type' => 'BOOLEAN',
+                                    'description' => 'Đặt true nếu Giám đốc/HR muốn xem báo cáo tổng hợp quỹ lương toàn công ty'
                                 ]
                             ]
                         ]
@@ -233,13 +330,26 @@ class AgentToolRegistry {
                     ],
                     [
                         'name' => 'get_system_navigation',
-                        'description' => 'Chỉ đường, cung cấp link điều hướng trực tiếp và hướng dẫn truy cập nhanh đến bất kỳ phân hệ/chức năng nào trong hệ thống MYERP (Bàn làm việc, Phê duyệt, Phiếu chi PO, Phiếu thu SO, Chấm công, Phiếu lương, Học viên, Khách hàng tiềm năng, Dự báo dòng tiền, Cài đặt).',
+                        'description' => 'Chỉ đường, cung cấp link điều hướng trực tiếp và mở tab/modal hồ sơ của bất kỳ đối tượng nào trong MYERP (Học viên/Khách hàng cụ thể, Phiếu chi PO, Đơn cọc SO, Phiếu duyệt Quy trình, Task công việc, hoặc các phân hệ chính). Hỗ trợ tra cứu theo tên hoặc mã ID để mở đúng tab hồ sơ cá nhân.',
                         'parameters' => [
                             'type' => 'OBJECT',
                             'properties' => [
                                 'destination' => [
                                     'type' => 'STRING',
-                                    'description' => 'Tên hoặc từ khóa tính năng cần truy cập (ví dụ: duyet chi, bang luong, ban lam viec, cham cong, tiem nang, hoc vien, dong tien)'
+                                    'description' => 'Tên tính năng hoặc đối tượng cần mở tab (ví dụ: học viên, khách hàng, ngô quang hưng, phiếu chi, đơn cọc, chấm công, bàn làm việc)'
+                                ],
+                                'search_query' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tên người, mã ID hoặc từ khóa hồ sơ cụ thể cần mở tab (ví dụ: Ngô Quang Hưng, PO-2024, #1024960)'
+                                ],
+                                'target_id' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Mã ID cụ thể của hồ sơ cần mở (nếu biết)'
+                                ],
+                                'entity_type' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['contact', 'po', 'so', 'workflow', 'task', 'general'],
+                                    'description' => 'Loại thực thể cần mở: contact (học viên/khách), po (phiếu chi), so (đơn cọc), workflow (quy trình), task (công việc)'
                                 ]
                             ],
                             'required' => ['destination']
@@ -693,7 +803,7 @@ class AgentToolRegistry {
                     ],
                     [
                         'name' => 'get_contact_360_profile',
-                        'description' => 'Tra cứu lịch sử 360 độ toàn diện của khách hàng/học viên khi người dùng hỏi sâu hoặc hỏi tới hỏi tới: Khách vào CRM từ lúc nào (ngày tạo, nguồn marketing, chiến dịch), ai chăm sóc/tư vấn (chuyên viên phụ trách, người cộng tác, chi nhánh), lịch sử ghi chú tư vấn (note cái gì, các lần tương tác), danh mục hồ sơ giấy tờ trong cloud_files (hồ sơ có gì), và thẩm định điều kiện nhập học (chuẩn hết chưa, thiếu giấy tờ gì), kèm tình trạng tài chính đặt cọc/học phí.',
+                        'description' => 'Tra cứu lịch sử 360 độ toàn diện của khách hàng/học viên khi người dùng hỏi sâu hoặc hỏi tới: Khách vào CRM từ lúc nào (ngày tạo, nguồn marketing, chiến dịch), ai chăm sóc/tư vấn (chuyên viên phụ trách, người cộng tác, chi nhánh), lịch sử ghi chú tương tác tư vấn (mặc định lấy 3 cái gần nhất, hỗ trợ lấy 5, 10 hoặc lấy hết/tất cả qua tham số notes_limit), danh mục hồ sơ giấy tờ trong cloud_files (hồ sơ có gì), và thẩm định điều kiện nhập học (chuẩn hết chưa, thiếu giấy tờ gì), kèm tình trạng tài chính đặt cọc/học phí.',
                         'parameters' => [
                             'type' => 'OBJECT',
                             'properties' => [
@@ -709,6 +819,10 @@ class AgentToolRegistry {
                                     'type' => 'STRING',
                                     'enum' => ['EMBA', 'MBA', 'MSC_AI', 'DBA', 'TOPUP', 'ALL'],
                                     'description' => 'Mã chương trình để thẩm định chuẩn hồ sơ (mặc định EMBA)'
+                                ],
+                                'notes_limit' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Số lượng tương tác/ghi chú tư vấn cần lấy (mặc định 3 cái gần nhất. Nếu người dùng yêu cầu lấy 5, lấy 10 hoặc lấy hết/tất cả thì truyền số lượng tương ứng từ 3 đến 50).'
                                 ]
                             ]
                         ]
@@ -726,6 +840,10 @@ class AgentToolRegistry {
                                 'assigned_to' => [
                                     'type' => 'INTEGER',
                                     'description' => 'Mã user ID của nhân viên sale nếu quản lý muốn lọc riêng (để trống nếu xem cá nhân/toàn viện)'
+                                ],
+                                'include_revenue' => [
+                                    'type' => 'BOOLEAN',
+                                    'description' => 'Bao gồm tổng doanh số tiền cọc/học phí đã duyệt thu từ kế toán của tư vấn viên'
                                 ],
                                 'limit' => [
                                     'type' => 'INTEGER',
@@ -1164,10 +1282,41 @@ class AgentToolRegistry {
                     $filter = $args['filter'] ?? 'all_pending';
                     $limit = min(20, max(1, (int)($args['limit'] ?? 5)));
                     $searchKeyword = trim($args['search_keyword'] ?? '');
+                    $scope = trim((string)($args['scope'] ?? 'mine'));
+                    $assigneeQuery = trim((string)($args['assignee_name'] ?? ''));
 
-                    // Base Where Clause with Strict User Isolation and Workspace task type
-                    $where = "a.tenant_id = ? AND a.deleted_at IS NULL AND a.type IN ('task', 'meeting') AND (a.user_id = ? OR a.created_by = ? OR a.approver_id = ? OR FIND_IN_SET(?, IFNULL(a.participant_ids, '')))";
-                    $params = [$tid, $uid, $uid, $uid, (string)$uid];
+                    // RBAC Scope Evaluation
+                    $params = [$tid];
+                    if (($scope === 'company' || $scope === 'all') && $isGlobalAdmin) {
+                        $where = "a.tenant_id = ? AND a.deleted_at IS NULL AND a.type IN ('task', 'meeting')";
+                    } elseif (($scope === 'team' || $isManager) && ($isManager || $isGlobalAdmin)) {
+                        // Manager or Global Admin viewing Team tasks
+                        $where = "a.tenant_id = ? AND a.deleted_at IS NULL AND a.type IN ('task', 'meeting') AND (
+                            a.user_id = ? OR a.created_by = ? OR a.approver_id = ? OR FIND_IN_SET(?, IFNULL(a.participant_ids, ''))
+                            OR a.user_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ? OR FIND_IN_SET(?, COALESCE(co_leader_ids, ''))))
+                            OR a.created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ? OR FIND_IN_SET(?, COALESCE(co_leader_ids, ''))))
+                        )";
+                        $params[] = $uid;
+                        $params[] = $uid;
+                        $params[] = $uid;
+                        $params[] = (string)$uid;
+                        $params[] = $uid;
+                        $params[] = (string)$uid;
+                        $params[] = $uid;
+                        $params[] = (string)$uid;
+                    } else {
+                        // Personal tasks
+                        $where = "a.tenant_id = ? AND a.deleted_at IS NULL AND a.type IN ('task', 'meeting') AND (a.user_id = ? OR a.created_by = ? OR a.approver_id = ? OR FIND_IN_SET(?, IFNULL(a.participant_ids, '')))";
+                        $params[] = $uid;
+                        $params[] = $uid;
+                        $params[] = $uid;
+                        $params[] = (string)$uid;
+                    }
+
+                    if (!empty($assigneeQuery)) {
+                        $where .= " AND (a.user_id IN (SELECT id FROM users WHERE full_name LIKE ?))";
+                        $params[] = '%' . $assigneeQuery . '%';
+                    }
 
                     // 1. Calculate Aggregated Statistics (Defense against 100+ tasks)
                     $statSql = "SELECT 
@@ -1277,13 +1426,21 @@ class AgentToolRegistry {
                             }
                         }
 
+                        $tId = (int)$t['id'];
+                        $directUrl = "https://myerp.ideas.edu.vn/workspace?task_id={$tId}";
+                        $escSub = addslashes($t['subject']);
+                        $smartTag = "<<<ERP_CARD:{\"entity_type\":\"task\",\"entity_id\":{$tId},\"title\":\"{$escSub}\",\"status\":\"{$statusRaw}\",\"direct_url\":\"{$directUrl}\",\"action_label\":\"Mở công việc\"}>>>";
+
                         $formattedTasks[] = [
-                            'id' => (int)$t['id'],
+                            'id' => $tId,
                             'subject' => $t['subject'],
                             'description' => !empty($parsed['description']) ? mb_substr($parsed['description'], 0, 500) : '',
                             'status' => $statusText,
                             'priority' => $prioText,
                             'progress' => (int)($t['progress'] ?? 0) . '%',
+                            'direct_url' => $directUrl,
+                            'open_tab_markdown' => "[👉 Bấm để mở việc #{$tId}]({$directUrl})",
+                            'smart_tag' => $smartTag,
                             'group' => $t['task_group_name'] ?: 'Chưa phân nhóm',
                             'start_date' => $start,
                             'due_date' => $due . $isOverdue,
@@ -1593,14 +1750,22 @@ class AgentToolRegistry {
                             $stageOrder = !empty($c['stage_order']) ? (int)$c['stage_order'] : 1;
                             $isReadyForSo = ($stageOrder >= 13);
                             $stageName = $c['stage_name'] ?: ($c['status'] ?: 'Mới');
+                            $cId = (int)$c['id'];
+                            $directUrl = "https://myerp.ideas.edu.vn/contacts?id={$cId}";
+                            $escName = addslashes($c['full_name']);
+                            $cPhone = $c['phone'] ?: '';
+                            $smartTag = "<<<ERP_CARD:{\"entity_type\":\"contact\",\"entity_id\":{$cId},\"title\":\"{$escName}\",\"subtitle\":\"{$cPhone} • {$stageName}\",\"status\":\"in_progress\",\"direct_url\":\"{$directUrl}\",\"action_label\":\"Mở hồ sơ\"}>>>";
                             return [
-                                'id' => (int)$c['id'],
+                                'id' => $cId,
                                 'name' => $c['full_name'],
                                 'phone' => $c['phone'],
                                 'email' => $c['email'],
                                 'stage' => $stageName,
                                 'stage_id' => !empty($c['stage_id']) ? (int)$c['stage_id'] : null,
                                 'stage_order' => $stageOrder,
+                                'direct_url' => $directUrl,
+                                'open_tab_markdown' => "[👉 Bấm để mở hồ sơ {$c['full_name']}]({$directUrl})",
+                                'smart_tag' => $smartTag,
                                 'is_ready_for_so' => $isReadyForSo,
                                 'so_readiness_notice' => $isReadyForSo 
                                     ? 'Khách hàng đã ở bước Đóng cọc/Tạo đơn SO (Giai đoạn 13+).' 
@@ -1762,6 +1927,716 @@ class AgentToolRegistry {
                 }
 
                 // ==========================================
+                // 7.1. QUERY COMPANY ATTENDANCE & WORK HOURS (TOP LATE, OVERTIME, WFH & EMPLOYEE LEDGER)
+                // ==========================================
+                case 'query_company_attendance_and_work_hours': {
+                    $scope = trim($args['scope'] ?? 'month_summary');
+                    $userQuery = trim($args['user_query'] ?? '');
+                    $month = min(12, max(1, (int)($args['month'] ?? date('n'))));
+                    $year = (int)($args['year'] ?? date('Y'));
+                    $specificDate = trim($args['specific_date'] ?? '');
+                    $fromDate = trim($args['from_date'] ?? '');
+                    $toDate = trim($args['to_date'] ?? '');
+                    $deptFilter = trim($args['department'] ?? '');
+                    $limit = min(50, max(1, (int)($args['limit'] ?? 10)));
+
+                    // Normalize date shortcuts
+                    $todayDate = date('Y-m-d');
+                    $yesterdayDate = date('Y-m-d', strtotime('-1 day'));
+                    if (in_array(mb_strtolower($specificDate), ['today', 'hom nay', 'hôm nay'], true)) {
+                        $specificDate = $todayDate;
+                    } elseif (in_array(mb_strtolower($specificDate), ['yesterday', 'hom qua', 'hôm qua'], true)) {
+                        $specificDate = $yesterdayDate;
+                    }
+
+                    // Auto-adjust scope if specific_date is provided
+                    if (!empty($specificDate) && in_array($scope, ['month_summary', 'date_detail', 'today_status'], true)) {
+                        $scope = 'date_detail';
+                    } elseif (!empty($userQuery) && $scope === 'month_summary') {
+                        $scope = 'employee_detail';
+                    }
+
+                    $canViewAll = ($isGlobalAdmin || $isHR);
+
+                    // Period calculation
+                    if (!empty($fromDate) && !empty($toDate)) {
+                        $rangeStart = $fromDate;
+                        $rangeEnd = $toDate;
+                        $periodLabel = "Từ ngày {$fromDate} đến {$toDate}";
+                    } else {
+                        $rangeStart = sprintf('%04d-%02d-01', $year, $month);
+                        $rangeEnd = date('Y-m-t', strtotime($rangeStart));
+                        $periodLabel = "Tháng {$month}/{$year}";
+                    }
+
+                    // Standard Work Policy
+                    $workPolicy = [
+                        'morning' => '08:00 - 12:00 (4.0 giờ = 0.5 công)',
+                        'lunch_break' => '12:00 - 13:00',
+                        'afternoon' => '13:00 - 17:00 (4.0 giờ = 0.5 công)',
+                        'standard_day' => '8.0 giờ = 1.0 công chuẩn',
+                        'late_rule' => 'Check-in sau 08:00 (sáng) hoặc sau 13:00 (chiều)',
+                        'early_rule' => 'Check-out trước 12:00 (sáng) hoặc trước 17:00 (chiều)',
+                        'ot_rule' => 'Làm việc ngoài khung giờ hành chính (sau 17:00) hoặc đăng ký tăng ca được duyệt'
+                    ];
+
+                    // ----------------------------------------------------
+                    // SUB-CASE 1: TOP LATE COMERS (AI ĐI TRỄ NHIỀU NHẤT)
+                    // ----------------------------------------------------
+                    if ($scope === 'top_late') {
+                        // Regular staff can only see their own lateness
+                        if (!$canViewAll && !$isManager) {
+                            $stmtMyLate = $db->prepare("SELECT 
+                                COUNT(CASE WHEN c.late_minutes > 0 OR c.status = 'late' OR (TIME(c.check_in_time) > '08:00:00' AND TIME(c.check_in_time) < '12:00:00') THEN 1 END) as late_count,
+                                SUM(
+                                    CASE 
+                                        WHEN c.late_minutes > 0 THEN c.late_minutes 
+                                        WHEN TIME(c.check_in_time) > '08:00:00' AND TIME(c.check_in_time) < '12:00:00' 
+                                             THEN TIMESTAMPDIFF(MINUTE, '08:00:00', TIME(c.check_in_time))
+                                        ELSE 0 
+                                    END
+                                ) as total_late_minutes
+                            FROM check_ins c
+                            WHERE c.user_id = ? AND c.check_in_date BETWEEN ? AND ?");
+                            $stmtMyLate->execute([$uid, $rangeStart, $rangeEnd]);
+                            $myLate = $stmtMyLate->fetch(PDO::FETCH_ASSOC);
+
+                            return [
+                                'success' => true,
+                                'scope' => 'top_late_personal',
+                                'period' => $periodLabel,
+                                'company_work_hours' => $workPolicy,
+                                'role_notice' => 'Bạn đang tra cứu với quyền Nhân viên cá nhân. Hệ thống hiển thị chi tiết vi phạm đi trễ của chính bạn.',
+                                'my_lateness' => [
+                                    'name' => $userName,
+                                    'late_count' => (int)($myLate['late_count'] ?? 0),
+                                    'total_late_minutes' => (int)($myLate['total_late_minutes'] ?? 0),
+                                    'summary' => "Trong {$periodLabel}, bạn đi trễ " . (int)($myLate['late_count'] ?? 0) . " lần với tổng cộng " . (int)($myLate['total_late_minutes'] ?? 0) . " phút."
+                                ],
+                                'instruction' => 'Trình bày số liệu đi trễ cá nhân cho người dùng một cách thân thiện, nhã nhặn. TUYỆT ĐỐI KHÔNG dùng từ "(Zero-Trust)". TUYỆT ĐỐI KHÔNG sinh thẻ Lead.'
+                            ];
+                        }
+
+                        // Admin / HR / Manager query
+                        $whereClauses = ["u.tenant_id = ?", "c.check_in_date BETWEEN ? AND ?"];
+                        $params = [$tid, $rangeStart, $rangeEnd];
+
+                        if (!$canViewAll && $isManager) {
+                            $whereClauses[] = "(u.id = ? OR u.team_id IN (SELECT id FROM teams WHERE leader_id = ? OR FIND_IN_SET(?, COALESCE(co_leader_ids, ''))) OR (u.team_id IS NOT NULL AND u.team_id = (SELECT team_id FROM users WHERE id = ?)))";
+                            $params[] = $uid;
+                            $params[] = $uid;
+                            $params[] = $uid;
+                            $params[] = $uid;
+                        }
+
+                        if (!empty($deptFilter)) {
+                            $whereClauses[] = "(t.name LIKE ? OR u.job_title LIKE ?)";
+                            $params[] = "%$deptFilter%";
+                            $params[] = "%$deptFilter%";
+                        }
+
+                        $whereSql = implode(' AND ', $whereClauses);
+
+                        $sqlTop = "SELECT 
+                                        u.id as user_id, 
+                                        u.full_name, 
+                                        COALESCE(u.job_title, u.role) as job_title,
+                                        COALESCE(t.name, 'Chung') as team_name,
+                                        COUNT(CASE WHEN c.late_minutes > 0 OR c.status = 'late' OR (TIME(c.check_in_time) > '08:00:00' AND TIME(c.check_in_time) < '12:00:00') THEN 1 END) as late_count,
+                                        SUM(
+                                            CASE 
+                                                WHEN c.late_minutes > 0 THEN c.late_minutes 
+                                                WHEN TIME(c.check_in_time) > '08:00:00' AND TIME(c.check_in_time) < '12:00:00' 
+                                                     THEN TIMESTAMPDIFF(MINUTE, '08:00:00', TIME(c.check_in_time))
+                                                ELSE 0 
+                                            END
+                                        ) as total_late_minutes
+                                    FROM check_ins c
+                                    JOIN users u ON c.user_id = u.id
+                                    LEFT JOIN teams t ON u.team_id = t.id
+                                    WHERE $whereSql
+                                    GROUP BY u.id, u.full_name, u.job_title, t.name
+                                    HAVING total_late_minutes > 0
+                                    ORDER BY total_late_minutes DESC, late_count DESC
+                                    LIMIT {$limit}";
+
+                        $stmtTop = $db->prepare($sqlTop);
+                        $stmtTop->execute($params);
+                        $topList = $stmtTop->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                        $formattedList = [];
+                        $rank = 1;
+                        foreach ($topList as $item) {
+                            $formattedList[] = [
+                                'rank' => $rank++,
+                                'user_id' => (int)$item['user_id'],
+                                'name' => $item['full_name'],
+                                'team' => $item['team_name'],
+                                'job_title' => $item['job_title'],
+                                'total_late_minutes' => (int)$item['total_late_minutes'],
+                                'late_count' => (int)$item['late_count'],
+                                'direct_profile_url' => "https://myerp.ideas.edu.vn/hrm?user_id=" . $item['user_id']
+                            ];
+                        }
+
+                        return [
+                            'success' => true,
+                            'scope' => 'top_late',
+                            'period' => $periodLabel,
+                            'department' => $deptFilter ?: 'Toàn bộ công ty',
+                            'total_infractions_found' => count($formattedList),
+                            'company_work_hours' => $workPolicy,
+                            'top_late_staff' => $formattedList,
+                            'export_download_url' => "/api/export?type=attendance&month={$month}&year={$year}",
+                            'instruction' => 'BẮT BUỘC trình bày danh sách TOP NHÂN VIÊN ĐI TRỄ dưới dạng BẢNG MARKDOWN chuẩn (| Hạng | Họ và tên | Phòng ban / Chức vụ | Tổng phút trễ | Số lần trễ |). Liệt kê trung thực đúng số liệu MySQL ở trên. TUYỆT ĐỐI KHÔNG sinh thẻ ERP_CARD Contact/Lead. TUYỆT ĐỐI KHÔNG dùng từ "(Zero-Trust)". Cuối câu kèm gợi ý xem chi tiết hoặc tải bảng công.'
+                        ];
+                    }
+
+                    // ----------------------------------------------------
+                    // SUB-CASE 2: TOP OVERTIME (AI TĂNG CA NHIỀU NHẤT)
+                    // ----------------------------------------------------
+                    if ($scope === 'top_overtime') {
+                        $whereClauses = ["u.tenant_id = ?", "c.check_in_date BETWEEN ? AND ?", "c.check_out_time > '17:00:00'"];
+                        $params = [$tid, $rangeStart, $rangeEnd];
+
+                        if (!$canViewAll && $isManager) {
+                            $whereClauses[] = "(u.id = ? OR u.team_id IN (SELECT id FROM teams WHERE leader_id = ? OR FIND_IN_SET(?, COALESCE(co_leader_ids, ''))))";
+                            $params[] = $uid;
+                            $params[] = $uid;
+                            $params[] = $uid;
+                        } elseif (!$canViewAll) {
+                            $whereClauses[] = "u.id = ?";
+                            $params[] = $uid;
+                        }
+
+                        $whereSql = implode(' AND ', $whereClauses);
+                        $sqlOt = "SELECT 
+                                    u.id as user_id, 
+                                    u.full_name, 
+                                    COALESCE(u.job_title, u.role) as job_title,
+                                    COALESCE(t.name, 'Chung') as team_name,
+                                    COUNT(1) as ot_shifts_count,
+                                    ROUND(SUM(TIMESTAMPDIFF(MINUTE, '17:00:00', TIME(c.check_out_time))) / 60.0, 1) as total_ot_hours
+                                  FROM check_ins c
+                                  JOIN users u ON c.user_id = u.id
+                                  LEFT JOIN teams t ON u.team_id = t.id
+                                  WHERE $whereSql
+                                  GROUP BY u.id, u.full_name, u.job_title, t.name
+                                  HAVING total_ot_hours > 0
+                                  ORDER BY total_ot_hours DESC
+                                  LIMIT {$limit}";
+
+                        $stmtOt = $db->prepare($sqlOt);
+                        $stmtOt->execute($params);
+                        $otList = $stmtOt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                        return [
+                            'success' => true,
+                            'scope' => 'top_overtime',
+                            'period' => $periodLabel,
+                            'company_work_hours' => $workPolicy,
+                            'top_overtime_staff' => $otList,
+                            'instruction' => 'BẮT BUỘC định dạng BẢNG MARKDOWN danh sách tăng ca OT (Hạng | Nhân sự | Phòng ban | Số ca OT | Tổng giờ OT). TUYỆT ĐỐI KHÔNG sinh thẻ Lead. TUYỆT ĐỐI KHÔNG dùng từ "(Zero-Trust)".'
+                        ];
+                    }
+
+                    // ----------------------------------------------------
+                    // SUB-CASE 3: DATE DETAIL / TODAY STATUS (NGÀY CỤ THỂ, HÔM QUA, HÔM NAY)
+                    // ----------------------------------------------------
+                    if ($scope === 'date_detail' || $scope === 'today_status') {
+                        $targetDate = !empty($specificDate) ? $specificDate : $todayDate;
+
+                        // Check-ins for target date
+                        $whereClauses = ["u.tenant_id = ?", "c.check_in_date = ?"];
+                        $params = [$tid, $targetDate];
+
+                        if (!$canViewAll && $isManager) {
+                            $whereClauses[] = "(u.id = ? OR u.team_id IN (SELECT id FROM teams WHERE leader_id = ? OR FIND_IN_SET(?, COALESCE(co_leader_ids, ''))))";
+                            $params[] = $uid;
+                            $params[] = $uid;
+                            $params[] = $uid;
+                        } elseif (!$canViewAll) {
+                            $whereClauses[] = "u.id = ?";
+                            $params[] = $uid;
+                        }
+
+                        $whereSql = implode(' AND ', $whereClauses);
+                        $sqlDate = "SELECT 
+                                        c.id as check_in_id,
+                                        c.user_id,
+                                        u.full_name,
+                                        COALESCE(u.job_title, u.role) as job_title,
+                                        COALESCE(t.name, 'Chung') as team_name,
+                                        TIME_FORMAT(c.check_in_time, '%H:%i') as check_in_time,
+                                        TIME_FORMAT(c.check_out_time, '%H:%i') as check_out_time,
+                                        c.late_minutes,
+                                        c.early_minutes,
+                                        c.status,
+                                        c.reason,
+                                        c.admin_note
+                                    FROM check_ins c
+                                    JOIN users u ON c.user_id = u.id
+                                    LEFT JOIN teams t ON u.team_id = t.id
+                                    WHERE $whereSql
+                                    ORDER BY c.check_in_time ASC";
+
+                        $stmtDate = $db->prepare($sqlDate);
+                        $stmtDate->execute($params);
+                        $dateRows = $stmtDate->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                        // Leaves / WFH on target date
+                        $whereLeaves = ["u.tenant_id = ?", "l.status = 'approved'", "? BETWEEN l.start_date AND l.end_date"];
+                        $leaveParams = [$tid, $targetDate];
+
+                        if (!$canViewAll && $isManager) {
+                            $whereLeaves[] = "(u.id = ? OR u.team_id IN (SELECT id FROM teams WHERE leader_id = ? OR FIND_IN_SET(?, COALESCE(co_leader_ids, ''))))";
+                            $leaveParams[] = $uid;
+                            $leaveParams[] = $uid;
+                            $leaveParams[] = $uid;
+                        } elseif (!$canViewAll) {
+                            $whereLeaves[] = "u.id = ?";
+                            $leaveParams[] = $uid;
+                        }
+
+                        $sqlLeaves = "SELECT 
+                                        l.id as leave_id,
+                                        l.user_id,
+                                        u.full_name,
+                                        COALESCE(u.job_title, u.role) as job_title,
+                                        COALESCE(t.name, 'Chung') as team_name,
+                                        l.leave_type,
+                                        l.reason
+                                      FROM hrm_leaves l
+                                      JOIN users u ON l.user_id = u.id
+                                      LEFT JOIN teams t ON u.team_id = t.id
+                                      WHERE " . implode(' AND ', $whereLeaves);
+
+                        $stmtL = $db->prepare($sqlLeaves);
+                        $stmtL->execute($leaveParams);
+                        $leaveRows = $stmtL->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                        $wfhStaff = [];
+                        $leaveStaff = [];
+                        foreach ($leaveRows as $lr) {
+                            if ($lr['leave_type'] === 'remote_work') {
+                                $wfhStaff[] = $lr;
+                            } else {
+                                $leaveStaff[] = $lr;
+                            }
+                        }
+
+                        return [
+                            'success' => true,
+                            'scope' => 'date_detail',
+                            'date' => $targetDate,
+                            'total_checked_in' => count($dateRows),
+                            'total_wfh' => count($wfhStaff),
+                            'total_on_leave' => count($leaveStaff),
+                            'company_work_hours' => $workPolicy,
+                            'check_in_records' => $dateRows,
+                            'wfh_records' => $wfhStaff,
+                            'leave_records' => $leaveStaff,
+                            'instruction' => 'BẮT BUỘC định dạng BẢNG MARKDOWN thể hiện chi tiết giờ quẹt thẻ ngày ' . $targetDate . '. Nêu rõ ai đi đúng giờ, ai đi trễ bao nhiêu phút, ai làm việc WFH và ai nghỉ phép. TUYỆT ĐỐI KHÔNG sinh thẻ Lead. TUYỆT ĐỐI KHÔNG dùng từ "(Zero-Trust)".'
+                        ];
+                    }
+
+                    // ----------------------------------------------------
+                    // SUB-CASE 4: EMPLOYEE DETAIL / MONTH SUMMARY (BẢNG CÔNG CỤ THỂ 1 NHÂN SỰ)
+                    // ----------------------------------------------------
+                    // Resolve target user
+                    $targetUser = null;
+                    if (!empty($userQuery)) {
+                        if (is_numeric($userQuery)) {
+                            $stmtU = $db->prepare("SELECT u.id, u.full_name, u.email, u.phone, u.job_title, u.role, u.team_id, t.name as team_name FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.tenant_id = ? AND u.id = ? LIMIT 1");
+                            $stmtU->execute([$tid, (int)$userQuery]);
+                            $targetUser = $stmtU->fetch(PDO::FETCH_ASSOC);
+                        }
+                        if (!$targetUser) {
+                            $stmtU = $db->prepare("SELECT u.id, u.full_name, u.email, u.phone, u.job_title, u.role, u.team_id, t.name as team_name FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.tenant_id = ? AND (u.full_name LIKE ? OR u.username LIKE ? OR u.email LIKE ?) ORDER BY (u.full_name = ?) DESC, u.id ASC LIMIT 1");
+                            $pSearch = "%$userQuery%";
+                            $stmtU->execute([$tid, $pSearch, $pSearch, $pSearch, $userQuery]);
+                            $targetUser = $stmtU->fetch(PDO::FETCH_ASSOC);
+                        }
+                    }
+
+                    if (!$targetUser) {
+                        // Default to requesting user
+                        $stmtU = $db->prepare("SELECT u.id, u.full_name, u.email, u.phone, u.job_title, u.role, u.team_id, t.name as team_name FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ? LIMIT 1");
+                        $stmtU->execute([$uid]);
+                        $targetUser = $stmtU->fetch(PDO::FETCH_ASSOC);
+                    }
+
+                    if (!$targetUser) {
+                        return [
+                            'success' => false,
+                            'message' => 'Không tìm thấy thông tin nhân sự trong hệ thống để tra cứu bảng công.'
+                        ];
+                    }
+
+                    $targetUid = (int)$targetUser['id'];
+
+                    // RBAC Evaluation (Director/Admin/HR: all; Manager: own team; Staff: self only)
+                    if ($targetUid !== $uid && !$canViewAll) {
+                        if ($isManager) {
+                            $stmtMgr = $db->prepare("SELECT 1 FROM users target_u JOIN teams t ON target_u.team_id = t.id WHERE target_u.id = ? AND (t.leader_id = ? OR target_u.team_id = (SELECT team_id FROM users WHERE id = ?)) LIMIT 1");
+                            $stmtMgr->execute([$targetUid, $uid, $uid]);
+                            if (!$stmtMgr->fetchColumn()) {
+                                return [
+                                    'success' => false,
+                                    'restricted' => true,
+                                    'message' => "Theo phân cấp quản trị nội bộ, bạn có quyền quản lý thành viên thuộc team do bạn phụ trách. Bạn không có quyền truy cập dữ liệu bảng công của nhân sự {$targetUser['full_name']}. Vui lòng liên hệ Ban Giám đốc hoặc Phòng Nhân sự để được hỗ trợ."
+                                ];
+                            }
+                        } else {
+                            return [
+                                'success' => false,
+                                'restricted' => true,
+                                'message' => "Bạn chỉ có thể tra cứu thông tin bảng công của chính mình. Dữ liệu bảng công của nhân sự {$targetUser['full_name']} được bảo mật theo quy định nội bộ."
+                            ];
+                        }
+                    }
+
+                    // Query check-ins of target employee
+                    $stmtEmpCi = $db->prepare("SELECT 
+                                                    c.id as check_in_id,
+                                                    c.check_in_date,
+                                                    DATE_FORMAT(c.check_in_date, '%d/%m/%Y') as formatted_date,
+                                                    DAYNAME(c.check_in_date) as day_name,
+                                                    TIME_FORMAT(c.check_in_time, '%H:%i') as check_in_time,
+                                                    TIME_FORMAT(c.check_out_time, '%H:%i') as check_out_time,
+                                                    c.late_minutes,
+                                                    c.early_minutes,
+                                                    c.status,
+                                                    c.reason,
+                                                    c.admin_note
+                                                FROM check_ins c
+                                                WHERE c.user_id = ? AND c.check_in_date BETWEEN ? AND ?
+                                                ORDER BY c.check_in_date ASC");
+                    $stmtEmpCi->execute([$targetUid, $rangeStart, $rangeEnd]);
+                    $empCiRows = $stmtEmpCi->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                    // Query leaves / WFH of target employee
+                    $stmtEmpL = $db->prepare("SELECT id, leave_type, start_date, end_date, days_count, status, reason FROM hrm_leaves WHERE user_id = ? AND status = 'approved' AND ((start_date BETWEEN ? AND ?) OR (end_date BETWEEN ? AND ?))");
+                    $stmtEmpL->execute([$targetUid, $rangeStart, $rangeEnd, $rangeStart, $rangeEnd]);
+                    $empLRows = $stmtEmpL->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                    // Query leave balances from hrm_profiles
+                    $stmtP = $db->prepare("SELECT annual_leave_total, annual_leave_used, compensatory_leave_total, compensatory_leave_used FROM hrm_profiles WHERE user_id = ? LIMIT 1");
+                    $stmtP->execute([$targetUid]);
+                    $prof = $stmtP->fetch(PDO::FETCH_ASSOC);
+
+                    $annualTotal = (float)($prof['annual_leave_total'] ?? 12.0);
+                    $annualUsed = (float)($prof['annual_leave_used'] ?? 0.0);
+                    $annualRemain = max(0.0, $annualTotal - $annualUsed);
+
+                    // Compute aggregates
+                    $totalWorkDays = 0;
+                    $totalLateCount = 0;
+                    $totalLateMinutes = 0;
+                    $totalEarlyMinutes = 0;
+                    $totalOtHours = 0.0;
+
+                    foreach ($empCiRows as $r) {
+                        if ($r['status'] !== 'rejected') {
+                            $totalWorkDays += 1;
+                        }
+                        $lateM = (int)($r['late_minutes'] ?? 0);
+                        if ($lateM <= 0 && $r['check_in_time'] && $r['check_in_time'] > '08:00') {
+                            $inM = (int)substr($r['check_in_time'], 0, 2) * 60 + (int)substr($r['check_in_time'], 3, 2);
+                            $diff = $inM - (8 * 60);
+                            if ($diff > 0) $lateM = $diff;
+                        }
+                        if ($lateM > 0 || $r['status'] === 'late') {
+                            $totalLateCount += 1;
+                            $totalLateMinutes += ($lateM > 0 ? $lateM : 15);
+                        }
+                        $earlyM = (int)($r['early_minutes'] ?? 0);
+                        if ($earlyM > 0) {
+                            $totalEarlyMinutes += $earlyM;
+                        }
+                        if ($r['check_out_time'] && $r['check_out_time'] > '17:00') {
+                            $outM = (int)substr($r['check_out_time'], 0, 2) * 60 + (int)substr($r['check_out_time'], 3, 2);
+                            $otM = $outM - (17 * 60);
+                            if ($otM > 0) $totalOtHours += round($otM / 60.0, 1);
+                        }
+                    }
+
+                    $wfhCount = 0;
+                    $leaveDaysCount = 0;
+                    foreach ($empLRows as $l) {
+                        if ($l['leave_type'] === 'remote_work') {
+                            $wfhCount += (float)($l['days_count'] ?? 1.0);
+                        } else {
+                            $leaveDaysCount += (float)($l['days_count'] ?? 1.0);
+                        }
+                    }
+
+                    return [
+                        'success' => true,
+                        'scope' => 'employee_detail',
+                        'period' => $periodLabel,
+                        'employee' => [
+                            'id' => $targetUid,
+                            'name' => $targetUser['full_name'],
+                            'job_title' => $targetUser['job_title'] ?: $targetUser['role'],
+                            'team' => $targetUser['team_name'] ?: 'Chung',
+                            'email' => $targetUser['email']
+                        ],
+                        'company_work_hours' => $workPolicy,
+                        'statistics' => [
+                            'actual_worked_days' => $totalWorkDays,
+                            'late_count' => $totalLateCount,
+                            'total_late_minutes' => $totalLateMinutes,
+                            'early_leave_minutes' => $totalEarlyMinutes,
+                            'total_ot_hours' => $totalOtHours,
+                            'wfh_days' => $wfhCount,
+                            'leave_days_taken' => $leaveDaysCount,
+                            'annual_leave_remaining' => $annualRemain
+                        ],
+                        'daily_logs' => array_slice($empCiRows, 0, 31),
+                        'leave_requests' => $empLRows,
+                        'export_download_url' => "/api/export?type=attendance&user_id={$targetUid}&month={$month}&year={$year}",
+                        'instruction' => 'BẮT BUỘC: 1. Nêu tóm tắt bảng công nhân sự ' . $targetUser['full_name'] . ' (Số công thực tế, số lần trễ, tổng phút trễ, tăng ca OT, WFH, phép còn lại). 2. Trình bày chi tiết từng ngày dưới dạng BẢNG MARKDOWN chuẩn (| Ngày | Giờ vào | Giờ ra | Trễ/Sớm | Trạng thái |). 3. Đính kèm link tải file: `[📥 Bấm vào đây để tải Bảng công file Excel/CSV](/api/export?type=attendance&user_id=' . $targetUid . '&month=' . $month . '&year=' . $year . ')`. TUYỆT ĐỐI KHÔNG sinh thẻ Lead/Học viên CRM. TUYỆT ĐỐI KHÔNG dùng từ "(Zero-Trust)".'
+                    ];
+                }
+
+                // ==========================================
+                // 7b. ADVANCED CRM LEADS EXPORT & MULTI-FILTER
+                // ==========================================
+                case 'export_leads':
+                case 'export_leads_dataset':
+                case 'export_crm_leads_advanced': {
+                    $tid = (int)($auth['tenant_id'] ?? 1);
+                    $uid = (int)($auth['user_id'] ?? 0);
+                    $role = strtolower($auth['role'] ?? 'user');
+                    $isGlobalAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'sale_admin', 'saleadmin'], true);
+                    $isManager = in_array($role, ['manager', 'truong_phong', 'leader'], true);
+
+                    $rawStages = trim((string)($args['stages'] ?? ''));
+                    $gender = strtolower(trim((string)($args['gender'] ?? 'all')));
+                    $fromDate = trim((string)($args['from_date'] ?? ''));
+                    $toDate = trim((string)($args['to_date'] ?? ''));
+                    $program = trim((string)($args['program'] ?? ''));
+                    $search = trim((string)($args['search'] ?? ''));
+
+                    // Build query
+                    $where = ["t.tenant_id = ?", "t.deleted_at IS NULL"];
+                    $params = [$tid];
+
+                    // Filter by Lead Status (active vs lost vs nurture). Default for sales pipeline: active leads only (hide lost & nurture, hide customer)
+                    $leadStatusParam = strtolower(trim((string)($args['lead_status'] ?? '')));
+                    if ($leadStatusParam === 'lost') {
+                        $where[] = "t.lead_status = 'lost'";
+                    } elseif ($leadStatusParam === 'nurture') {
+                        $where[] = "t.lead_status = 'nurture'";
+                    } elseif ($leadStatusParam === 'all') {
+                        // Include all
+                    } else {
+                        // Default active pipeline: hide both lost and nurture (same as CRM Tiềm năng list)
+                        $where[] = "(t.lead_status NOT IN ('lost', 'nurture') OR t.lead_status IS NULL)";
+                        $where[] = "(t.status != 'customer' OR t.status IS NULL)";
+                    }
+
+                    // RBAC Data Isolation
+                    if (!$isGlobalAdmin) {
+                        if ($isManager) {
+                            $where[] = "(t.owner_id = ? OR t.owner_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))))";
+                            $params[] = $uid;
+                            $params[] = $uid;
+                        } else {
+                            $where[] = "(t.owner_id = ? OR FIND_IN_SET(?, COALESCE(t.collaborator_ids, '')))";
+                            $params[] = $uid;
+                            $params[] = $uid;
+                        }
+                    }
+
+                    // Multi-stage filtering
+                    $exportStagesParam = '';
+                    $matchingStageNames = [];
+                    if (!empty($rawStages) && $rawStages !== 'all') {
+                        $rawParts = explode(',', $rawStages);
+                        $stageIds = [];
+                        $orderIndexes = [];
+                        $stageSlugs = [];
+
+                        foreach ($rawParts as $part) {
+                            $part = trim($part);
+                            if (empty($part)) continue;
+                            if (strpos($part, '-') !== false) {
+                                $rangeParts = explode('-', $part, 2);
+                                $min = (int)trim($rangeParts[0]);
+                                $max = (int)trim($rangeParts[1]);
+                                if ($min > 0 && $max >= $min) {
+                                    for ($r = $min; $r <= $max; $r++) {
+                                        if ($r <= 14) $orderIndexes[] = $r - 1;
+                                    }
+                                }
+                            } elseif (is_numeric($part)) {
+                                $n = (int)$part;
+                                if ($n >= 1 && $n <= 14) {
+                                    $orderIndexes[] = $n - 1;
+                                }
+                                $stageIds[] = $n;
+                            } else {
+                                $stageSlugs[] = $part;
+                            }
+                        }
+
+                        $stageOrClauses = [];
+                        if (!empty($stageIds)) {
+                            $inIds = implode(',', array_unique(array_map('intval', $stageIds)));
+                            $stageOrClauses[] = "t.stage_id IN ($inIds)";
+                        }
+                        if (!empty($orderIndexes)) {
+                            $inOrders = implode(',', array_unique(array_map('intval', $orderIndexes)));
+                            $stageOrClauses[] = "t.stage_id IN (SELECT id FROM pipeline_stages WHERE order_index IN ($inOrders))";
+                            // Query exact stage names from database
+                            $stmtStageNames = $db->query("SELECT name FROM pipeline_stages WHERE order_index IN ($inOrders) ORDER BY order_index ASC");
+                            $matchingStageNames = $stmtStageNames ? ($stmtStageNames->fetchAll(PDO::FETCH_COLUMN) ?: []) : [];
+                        }
+                        if (!empty($stageSlugs)) {
+                            $placeholders = implode(',', array_fill(0, count($stageSlugs), '?'));
+                            $stageOrClauses[] = "t.pipeline_status IN ($placeholders)";
+                            foreach ($stageSlugs as $slug) { $params[] = $slug; }
+                        }
+
+                        if (!empty($stageOrClauses)) {
+                            $where[] = "(" . implode(' OR ', $stageOrClauses) . ")";
+                        } else {
+                            // Specified stages produced no valid matching pipeline stages
+                            $where[] = "1=0";
+                        }
+                        $exportStagesParam = $rawStages;
+                    }
+
+                    $stageNamesStr = !empty($matchingStageNames) ? implode(', ', $matchingStageNames) : ($rawStages ?: 'Tất cả giai đoạn');
+                    if (count($matchingStageNames) > 1) {
+                        $firstStg = reset($matchingStageNames);
+                        $lastStg = end($matchingStageNames);
+                        $stageFullDesc = "các giai đoạn từ {$firstStg} đến {$lastStg} ({$stageNamesStr})";
+                    } elseif (count($matchingStageNames) === 1) {
+                        $stageFullDesc = "giai đoạn " . reset($matchingStageNames);
+                    } else {
+                        $stageFullDesc = $rawStages ? "giai đoạn {$rawStages}" : "tất cả các giai đoạn";
+                    }
+
+                    // Gender filtering
+                    $genderLabel = 'Tất cả giới tính';
+                    if (!empty($gender) && $gender !== 'all') {
+                        if (in_array($gender, ['male', 'nam', 'trai', 'boy'], true)) {
+                            $where[] = "LOWER(TRIM(COALESCE(t.gender, ''))) IN ('male', 'nam')";
+                            $genderLabel = 'Nam (Male)';
+                            $gender = 'male';
+                        } elseif (in_array($gender, ['female', 'nu', 'nữ', 'gai', 'girl'], true)) {
+                            $where[] = "(LOWER(TRIM(COALESCE(t.gender, ''))) IN ('female', 'nu') OR t.gender = 'Nữ')";
+                            $genderLabel = 'Nữ (Female)';
+                            $gender = 'female';
+                        }
+                    }
+
+                    // Date range
+                    $dateLabel = 'Toàn bộ thời gian';
+                    if (!empty($fromDate) && !empty($toDate)) {
+                        $where[] = "t.created_at BETWEEN ? AND ?";
+                        $params[] = $fromDate . ' 00:00:00';
+                        $params[] = $toDate . ' 23:59:59';
+                        $dateLabel = "Từ {$fromDate} đến {$toDate}";
+                    } elseif (!empty($fromDate)) {
+                        $where[] = "t.created_at >= ?";
+                        $params[] = $fromDate . ' 00:00:00';
+                        $dateLabel = "Từ ngày {$fromDate} đến nay";
+                    } elseif (!empty($toDate)) {
+                        $where[] = "t.created_at <= ?";
+                        $params[] = $toDate . ' 23:59:59';
+                        $dateLabel = "Đến ngày {$toDate}";
+                    }
+
+                    // Program filter
+                    if (!empty($program)) {
+                        $where[] = "t.program LIKE ?";
+                        $params[] = "%$program%";
+                    }
+
+                    // Search filter
+                    if (!empty($search)) {
+                        $where[] = "(t.full_name LIKE ? OR t.phone LIKE ? OR t.email LIKE ?)";
+                        $params[] = "%$search%";
+                        $params[] = "%$search%";
+                        $params[] = "%$search%";
+                    }
+
+                    $whereSql = implode(' AND ', $where);
+
+                    // Count total leads
+                    $sqlCount = "SELECT COUNT(*) FROM contacts t WHERE $whereSql";
+                    $stmtCount = $db->prepare($sqlCount);
+                    $stmtCount->execute($params);
+                    $totalCount = (int)$stmtCount->fetchColumn();
+
+                    // Fetch 5 sample leads for preview
+                    $sqlSample = "SELECT 
+                                    t.id, 
+                                    t.full_name, 
+                                    t.phone, 
+                                    COALESCE(t.gender, 'Chưa rõ') as gender,
+                                    COALESCE(t.program, 'Chưa rõ') as program,
+                                    COALESCE(ps.name, t.pipeline_status, 'Chưa xác định') as stage_name,
+                                    COALESCE(u.full_name, 'Chưa gán') as owner_name,
+                                    DATE_FORMAT(t.created_at, '%d/%m/%Y') as formatted_date
+                                  FROM contacts t
+                                  LEFT JOIN pipeline_stages ps ON t.stage_id = ps.id
+                                  LEFT JOIN users u ON t.owner_id = u.id
+                                  WHERE $whereSql
+                                  ORDER BY t.id DESC
+                                  LIMIT 5";
+                    $stmtSample = $db->prepare($sqlSample);
+                    $stmtSample->execute($params);
+                    $samples = $stmtSample->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                    $maskedSamples = [];
+                    foreach ($samples as $s) {
+                        $rawPhone = trim($s['phone'] ?? '');
+                        $maskedPhone = (strlen($rawPhone) >= 7) ? substr($rawPhone, 0, 3) . '****' . substr($rawPhone, -3) : ($rawPhone !== '' ? $rawPhone : '—');
+                        $maskedSamples[] = [
+                            'id' => (int)$s['id'],
+                            'name' => $s['full_name'],
+                            'contact_link' => "/contact/{$s['id']}",
+                            'phone' => $maskedPhone,
+                            'gender' => $s['gender'],
+                            'program' => $s['program'],
+                            'stage' => $s['stage_name'],
+                            'owner' => $s['owner_name'],
+                            'created_at' => $s['formatted_date']
+                        ];
+                    }
+
+                    // Build export URL
+                    $queryParams = ['type' => 'contact', 'export_mode' => 'full'];
+                    if (!empty($exportStagesParam)) $queryParams['stages'] = $exportStagesParam;
+                    if (!empty($gender) && $gender !== 'all') $queryParams['gender'] = $gender;
+                    if (!empty($fromDate)) $queryParams['from'] = $fromDate;
+                    if (!empty($toDate)) $queryParams['to'] = $toDate;
+                    if (!empty($program)) $queryParams['program'] = $program;
+
+                    $exportUrl = "/api/export?" . http_build_query($queryParams);
+
+                    return [
+                        'success' => true,
+                        'total_matching_leads' => $totalCount,
+                        'criteria' => [
+                            'stages' => $stageFullDesc,
+                            'gender' => $genderLabel,
+                            'period' => $dateLabel,
+                            'program' => $program ?: 'Tất cả chương trình'
+                        ],
+                        'preview_samples' => $maskedSamples,
+                        'download_url' => $exportUrl,
+                        'direct_download_link' => "https://myerp.ideas.edu.vn{$exportUrl}",
+                        'instruction' => 'BẮT BUỘC: 1. Thông báo rõ ràng và trung thực tổng số lượng lead tìm thấy (ví dụ: "Dạ Tunrio ơi, hệ thống đã lọc và ghi nhận tổng cộng **' . number_format($totalCount, 0, ',', '.') . '** lead đang nằm trong ' . $stageFullDesc . '."). TUYỆT ĐỐI KHÔNG tự bịa đặt tên giai đoạn như "Gửi báo giá/Đề xuất" (Giai đoạn 04 là Needed). 2. Liệt kê bảng xem trước 5 khách hàng mẫu dạng Markdown (| ID | HỌ VÀ TÊN | SĐT | GIAI ĐOẠN | SALE PHỤ TRÁCH | NGÀY TẠO |). Cột HỌ VÀ TÊN BẮT BUỘC dùng link markdown dạng `[Tên Khách Hàng](/contact/' . 'ID' . ')`. 3. Đính kèm nút hoặc link tải file nổi bật: `[Bấm vào đây để tải toàn bộ danh sách Lead ' . ($rawStages ? 'Pipeline ' . $rawStages : '') . ' (File Excel/CSV)](' . $exportUrl . ')`. TUYỆT ĐỐI KHÔNG dùng từ "(Zero-Trust)".'
+                    ];
+                }
+
+                // ==========================================
                 // 8. SEARCH IDEAS KNOWLEDGE & PROGRAMS
                 // ==========================================
                 case 'search_ideas_knowledge':
@@ -1871,23 +2746,117 @@ class AgentToolRegistry {
                 case 'get_my_payslip': {
                     $month = isset($args['month']) ? (int)$args['month'] : null;
                     $year = isset($args['year']) ? (int)$args['year'] : (int)date('Y');
+                    $employeeQuery = trim((string)($args['employee_query'] ?? ''));
+                    $summaryAll = !empty($args['summary_all']) || in_array(mb_strtolower($employeeQuery), ['all', 'toan cong ty', 'toàn công ty', 'toan vien', 'toàn viện', 'tat ca', 'tất cả'], true);
 
+                    $targetUid = $uid;
+                    $targetUserName = $userName;
+
+                    // 1. Company-wide Payroll Overview (Director / Admin / HR only)
+                    if ($summaryAll) {
+                        if (!$isGlobalAdmin && !$isHR) {
+                            return [
+                                'success' => false,
+                                'restricted' => true,
+                                'message' => 'Bạn không có quyền truy cập dữ liệu bảng lương toàn công ty. Dữ liệu này chỉ dành riêng cho Ban Giám đốc và Phòng Nhân sự.'
+                            ];
+                        }
+
+                        $period = ($month !== null && $month >= 1 && $month <= 12) ? sprintf('%04d-%02d', $year, $month) : date('Y-m');
+                        $stmtSum = $db->prepare("SELECT 
+                            COUNT(1) as total_slips,
+                            COUNT(DISTINCT user_id) as total_employees,
+                            COALESCE(SUM(net_salary), 0) as total_net,
+                            COALESCE(SUM(salary_basic_calculated), 0) as total_basic,
+                            COALESCE(SUM(kpi_bonus), 0) as total_kpi_bonus,
+                            COALESCE(SUM(allowance_total), 0) as total_allowance,
+                            COALESCE(SUM(insurance_bhxh), 0) as total_bhxh,
+                            SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) as paid_count,
+                            SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved_count,
+                            SUM(CASE WHEN status IN ('draft', 'pending_approval') THEN 1 ELSE 0 END) as pending_count
+                        FROM monthly_payslips WHERE month_year = ?");
+                        $stmtSum->execute([$period]);
+                        $sumData = $stmtSum->fetch(PDO::FETCH_ASSOC) ?: [];
+
+                        return [
+                            'success' => true,
+                            'is_company_summary' => true,
+                            'month_year' => $period,
+                            'total_employees' => (int)($sumData['total_employees'] ?? 0),
+                            'total_net_payroll' => number_format((float)($sumData['total_net'] ?? 0), 0, ',', '.') . ' VND',
+                            'total_basic_payroll' => number_format((float)($sumData['total_basic'] ?? 0), 0, ',', '.') . ' VND',
+                            'total_kpi_bonus' => number_format((float)($sumData['total_kpi_bonus'] ?? 0), 0, ',', '.') . ' VND',
+                            'total_allowance' => number_format((float)($sumData['total_allowance'] ?? 0), 0, ',', '.') . ' VND',
+                            'status_counts' => [
+                                'paid' => (int)($sumData['paid_count'] ?? 0),
+                                'approved' => (int)($sumData['approved_count'] ?? 0),
+                                'pending' => (int)($sumData['pending_count'] ?? 0),
+                            ],
+                            'route_url' => '/hrm?tab=payroll',
+                            'summary' => "Tổng quỹ lương kỳ {$period}: " . number_format((float)($sumData['total_net'] ?? 0), 0, ',', '.') . " VND cho {$sumData['total_employees']} nhân sự ({$sumData['paid_count']} đã thanh toán, {$sumData['approved_count']} đã duyệt, {$sumData['pending_count']} chờ duyệt)."
+                        ];
+                    }
+
+                    // 2. Specific Employee Query (RBAC Isolation)
+                    if (!empty($employeeQuery)) {
+                        // Find target employee
+                        $stmtFind = $db->prepare("SELECT id, full_name, role, team_id FROM users WHERE (full_name LIKE ? OR id = ? OR email LIKE ?) AND status = 'active' ORDER BY (full_name = ?) DESC LIMIT 1");
+                        $stmtFind->execute(["%$employeeQuery%", (int)$employeeQuery, "%$employeeQuery%", $employeeQuery]);
+                        $foundUser = $stmtFind->fetch(PDO::FETCH_ASSOC);
+
+                        if (!$foundUser) {
+                            return [
+                                'success' => false,
+                                'message' => "Không tìm thấy thông tin nhân sự '{$employeeQuery}' trong hệ thống để tra cứu phiếu lương."
+                            ];
+                        }
+
+                        $queriedUid = (int)$foundUser['id'];
+                        if ($queriedUid !== $uid) {
+                            // Check permission
+                            if ($isGlobalAdmin || $isHR) {
+                                $targetUid = $queriedUid;
+                                $targetUserName = $foundUser['full_name'];
+                            } elseif ($isManager) {
+                                $stmtMgr = $db->prepare("SELECT 1 FROM users u JOIN teams t ON u.team_id = t.id WHERE u.id = ? AND (t.leader_id = ? OR u.team_id = (SELECT team_id FROM users WHERE id = ?)) LIMIT 1");
+                                $stmtMgr->execute([$queriedUid, $uid, $uid]);
+                                if ($stmtMgr->fetchColumn()) {
+                                    $targetUid = $queriedUid;
+                                    $targetUserName = $foundUser['full_name'];
+                                } else {
+                                    return [
+                                        'success' => false,
+                                        'restricted' => true,
+                                        'message' => "Theo quy định bảo mật tiền lương, bạn chỉ có quyền xem phiếu lương của nhân sự thuộc nhóm bạn quản lý. Bạn không có quyền truy cập phiếu lương của {$foundUser['full_name']}."
+                                    ];
+                                }
+                            } else {
+                                return [
+                                    'success' => false,
+                                    'restricted' => true,
+                                    'message' => "Theo quy định bảo mật tiền lương của Viện, bạn chỉ có quyền tra cứu phiếu lương của chính mình. Dữ liệu tiền lương của nhân sự khác được bảo mật tuyệt đối."
+                                ];
+                            }
+                        }
+                    }
+
+                    // Query payslip for $targetUid
                     if ($month !== null && $month >= 1 && $month <= 12) {
                         $period = sprintf('%04d-%02d', $year, $month);
                         $stmt = $db->prepare("SELECT * FROM monthly_payslips WHERE user_id = ? AND month_year = ? LIMIT 1");
-                        $stmt->execute([$uid, $period]);
+                        $stmt->execute([$targetUid, $period]);
                     } else {
-                        // Get the latest payslip for this user
                         $stmt = $db->prepare("SELECT * FROM monthly_payslips WHERE user_id = ? ORDER BY month_year DESC LIMIT 1");
-                        $stmt->execute([$uid]);
+                        $stmt->execute([$targetUid]);
                     }
 
                     $ps = $stmt->fetch(PDO::FETCH_ASSOC);
                     if (!$ps) {
+                        $whoText = ($targetUid === $uid) ? "cho bạn" : "cho nhân sự {$targetUserName}";
                         return [
                             'success' => true,
                             'has_record' => false,
-                            'message' => "Hiện tại hệ thống chưa có dữ liệu bảng lương được ghi nhận cho bạn" . ($month ? " trong tháng {$month}/{$year}." : ".") . " Bạn có thể kiểm tra lại tại mục Phiếu lương (/my-payslips) hoặc liên hệ phòng Nhân sự/Kế toán.",
+                            'message' => "Hiện tại hệ thống chưa có dữ liệu bảng lương {$whoText}" . ($month ? " trong tháng {$month}/{$year}." : ".") . " Bạn có thể kiểm tra lại tại mục Phiếu lương (/my-payslips) hoặc liên hệ phòng Nhân sự.",
                             'route_url' => '/my-payslips'
                         ];
                     }
@@ -1901,10 +2870,13 @@ class AgentToolRegistry {
                         'disputed' => 'Đang có khiếu nại'
                     ];
                     $stText = $stMap[$ps['status']] ?? ($ps['status'] ?: 'Đang xử lý');
+                    $subjectPrefix = ($targetUid === $uid) ? "của bạn" : "của nhân sự {$targetUserName}";
 
                     return [
                         'success' => true,
                         'has_record' => true,
+                        'employee_name' => $targetUserName,
+                        'is_self' => ($targetUid === $uid),
                         'month_year' => $ps['month_year'],
                         'net_salary' => number_format((float)$ps['net_salary'], 0, ',', '.') . ' VND',
                         'basic_salary' => number_format((float)$ps['salary_basic_calculated'], 0, ',', '.') . ' VND',
@@ -1921,7 +2893,7 @@ class AgentToolRegistry {
                         'status' => $stText,
                         'is_confirmed' => !empty($ps['confirmed_at']),
                         'route_url' => '/my-payslips',
-                        'summary' => "Phiếu lương kỳ {$ps['month_year']} của bạn: Thực nhận " . number_format((float)$ps['net_salary'], 0, ',', '.') . " VND. Số ngày công thực tế: {$ps['work_days_actual']}/{$ps['work_days_required']} ngày. Trạng thái: {$stText}."
+                        'summary' => "Phiếu lương kỳ {$ps['month_year']} {$subjectPrefix}: Thực nhận " . number_format((float)$ps['net_salary'], 0, ',', '.') . " VND. Số ngày công thực tế: {$ps['work_days_actual']}/{$ps['work_days_required']} ngày. Trạng thái: {$stText}."
                     ];
                 }
 
@@ -2198,7 +3170,223 @@ class AgentToolRegistry {
                 // ==========================================
                 case 'get_system_navigation': {
                     $dest = mb_strtolower(trim($args['destination'] ?? ''));
+                    $searchQuery = trim($args['search_query'] ?? '');
+                    $targetId = (int)($args['target_id'] ?? 0);
+                    $entityType = strtolower(trim($args['entity_type'] ?? ''));
+                    $baseUrl = 'https://myerp.ideas.edu.vn';
 
+                    // Context Auth & Roles
+                    $cRole = strtolower(trim($authContext['role'] ?? ''));
+                    $isGlobalAdmin = in_array($cRole, ['admin', 'superadmin', 'super_admin', 'director'], true);
+                    $isManager = in_array($cRole, ['manager', 'truong_phong'], true);
+                    $uid = (int)($authContext['user_id'] ?? 0);
+
+                    // Auto-detect specific entity intent and ID from destination
+                    $isExplicitPo = ($entityType === 'po') || preg_match('/(?:^|\b|\s)(?:po|phiếu chi|chi phí|đề nghị thanh toán)(?:\b|\s|[0-9]|$)/iu', $dest);
+                    $isExplicitSo = ($entityType === 'so') || preg_match('/(?:^|\b|\s)(?:so|đặt cọc|đơn cọc|phiếu thu)(?:\b|\s|[0-9]|$)/iu', $dest);
+                    $isExplicitTask = ($entityType === 'task') || preg_match('/(?:^|\b|\s)(?:task|nhiệm vụ|công việc)(?:\b|\s|[0-9]|$)/iu', $dest);
+                    $isExplicitContact = ($entityType === 'contact') || preg_match('/(?:^|\b|\s)(?:học viên|khách hàng|khách|lead|sinh viên|hồ sơ|contact|student)(?:\b|\s|[0-9]|$)/iu', $dest);
+
+                    // Extract numeric ID if present
+                    if ($targetId <= 0) {
+                        if (preg_match('/(?:#|id\s*[:=]?\s*|(?:po|so|task|việc|đơn|cọc|học viên|khách|lead)\s*)([0-9]{1,10})/iu', $dest, $idMatch)) {
+                            $targetId = (int)$idMatch[1];
+                        } elseif (preg_match('/\b([0-9]{3,10})\b/', $dest, $idMatch)) {
+                            $targetId = (int)$idMatch[1];
+                        }
+                    }
+
+                    // Auto-extract query if targetId is zero and searchQuery is empty but dest contains specific name/code
+                    if ($targetId <= 0 && empty($searchQuery)) {
+                        $cleanedDest = trim(preg_replace('/^(?:mở\s*tab|tab|xem\s*tab|mở|xem|tìm|hồ\s*sơ|học\s*viên|khách\s*hàng|khách|lead|đơn|phiếu|task|công\s*việc)\s+/iu', '', $dest));
+                        $cleanedDest = trim(preg_replace('/(?:\s*(?:đi|nhé|nè|giùm|hộ|cho\s*mình))\s*$/iu', '', $cleanedDest));
+                        $systemModules = ['workspace', 'bàn làm việc', 'cong viec', 'công việc', 'quy trình', 'phê duyệt', 'approvals', 'phiếu chi', 'chi phí', 'po', 'phiếu thu', 'đặt cọc', 'so', 'tiềm năng', 'lead', 'crm', 'pipeline', 'phễu', 'học viên', 'chấm công', 'phiếu lương', 'bảng lương', 'dòng tiền', 'nhân sự', 'dự án', 'cài đặt'];
+                        if (mb_strlen($cleanedDest) >= 2 && !in_array($cleanedDest, $systemModules, true)) {
+                            $searchQuery = $cleanedDest;
+                        }
+                    }
+
+                    // 1. SPECIFIC PURCHASE ORDER (PO) / EXPENSE LOOKUP (If explicit PO intent)
+                    if ($isExplicitPo && ($targetId > 0 || !empty($searchQuery))) {
+                        $expWhere = ["e.tenant_id = ?", "e.deleted_at IS NULL"];
+                        $expParams = [$tid];
+                        if ($targetId > 0) {
+                            $expWhere[] = "e.id = ?";
+                            $expParams[] = $targetId;
+                        } else {
+                            $cleanTitle = trim(preg_replace('/^(?:po|phiếu chi|chi phí)\s*/iu', '', $searchQuery));
+                            $expWhere[] = "(e.title LIKE ? OR CAST(e.id AS CHAR) = ?)";
+                            $expParams[] = '%' . $cleanTitle . '%';
+                            $expParams[] = $cleanTitle;
+                        }
+                        $stmtExp = $db->prepare("SELECT e.id, e.title, e.amount, e.status, e.created_by FROM expenses e WHERE " . implode(" AND ", $expWhere) . " ORDER BY e.id DESC LIMIT 1");
+                        $stmtExp->execute($expParams);
+                        $foundExp = $stmtExp->fetch(PDO::FETCH_ASSOC);
+                        if ($foundExp) {
+                            $poId = (int)$foundExp['id'];
+                            $poTitle = $foundExp['title'];
+                            $directUrl = "{$baseUrl}/expenses?id={$poId}";
+                            $escTitle = addslashes($poTitle);
+                            $smartTag = "<<<ERP_CARD:{\"entity_type\":\"po\",\"entity_id\":{$poId},\"title\":\"{$escTitle}\",\"amount\":{$foundExp['amount']},\"status\":\"{$foundExp['status']}\",\"direct_url\":\"{$directUrl}\",\"action_label\":\"Mở phiếu chi PO\"}>>>";
+                            return [
+                                'success' => true,
+                                'found_entity' => true,
+                                'entity_type' => 'po',
+                                'entity_id' => $poId,
+                                'title' => "Phiếu chi PO: {$poTitle}",
+                                'direct_url' => $directUrl,
+                                'relative_url' => "/expenses?id={$poId}",
+                                'open_tab_markdown' => "[👉 Bấm để mở phiếu chi #{$poId}]({$directUrl})",
+                                'smart_tag' => $smartTag,
+                                'description' => "Đã mở sẵn phiếu chi PO #{$poId} ({$poTitle}). Bấm đường dẫn trực tiếp hoặc thẻ ERP để mở modal chi tiết."
+                            ];
+                        }
+                    }
+
+                    // 2. SPECIFIC TASK LOOKUP (If explicit Task intent)
+                    if ($isExplicitTask && ($targetId > 0 || !empty($searchQuery))) {
+                        $tWhere = ["a.tenant_id = ?", "a.deleted_at IS NULL", "a.type = 'task'"];
+                        $tParams = [$tid];
+                        if ($targetId > 0) {
+                            $tWhere[] = "a.id = ?";
+                            $tParams[] = $targetId;
+                        } else {
+                            $cleanSub = trim(preg_replace('/^(?:task|công việc|nhiệm vụ)\s*/iu', '', $searchQuery));
+                            $tWhere[] = "(a.subject LIKE ? OR CAST(a.id AS CHAR) = ?)";
+                            $tParams[] = '%' . $cleanSub . '%';
+                            $tParams[] = $cleanSub;
+                        }
+                        $stmtT = $db->prepare("SELECT a.id, a.subject, a.status, a.priority, a.due_date FROM activities a WHERE " . implode(" AND ", $tWhere) . " ORDER BY a.id DESC LIMIT 1");
+                        $stmtT->execute($tParams);
+                        $foundT = $stmtT->fetch(PDO::FETCH_ASSOC);
+                        if ($foundT) {
+                            $tId = (int)$foundT['id'];
+                            $tSub = $foundT['subject'];
+                            $directUrl = "{$baseUrl}/workspace?task_id={$tId}";
+                            $escSub = addslashes($tSub);
+                            $smartTag = "<<<ERP_CARD:{\"entity_type\":\"task\",\"entity_id\":{$tId},\"title\":\"{$escSub}\",\"status\":\"{$foundT['status']}\",\"direct_url\":\"{$directUrl}\",\"action_label\":\"Mở công việc\"}>>>";
+                            return [
+                                'success' => true,
+                                'found_entity' => true,
+                                'entity_type' => 'task',
+                                'entity_id' => $tId,
+                                'title' => "Công việc: {$tSub}",
+                                'direct_url' => $directUrl,
+                                'relative_url' => "/workspace?task_id={$tId}",
+                                'open_tab_markdown' => "[👉 Bấm để mở công việc #{$tId}]({$directUrl})",
+                                'smart_tag' => $smartTag,
+                                'description' => "Đã mở sẵn công việc #{$tId} ({$tSub}). Bấm đường dẫn trực tiếp hoặc thẻ ERP để mở drawer."
+                            ];
+                        }
+                    }
+
+                    // 3. SPECIFIC CONTACT / STUDENT / LEAD LOOKUP
+                    if (!$isExplicitPo && !$isExplicitTask && !$isExplicitSo && ($targetId > 0 || !empty($searchQuery) || $entityType === 'contact')) {
+                        $isPersonIntent = ($entityType === 'contact') || !empty($searchQuery) || (preg_match('/(học viên|khách|lead|sinh viên|hồ sơ|contact|student)/iu', $dest) && !empty($searchQuery));
+                        
+                        if ($isPersonIntent || !empty($searchQuery)) {
+                            $cWhere = ["c.tenant_id = ?", "c.deleted_at IS NULL"];
+                            $cParams = [$tid];
+
+                            if ($targetId > 0) {
+                                $cWhere[] = "c.id = ?";
+                                $cParams[] = $targetId;
+                            } elseif (!empty($searchQuery)) {
+                                if (preg_match('/^[0-9]{8,12}$/', $searchQuery)) {
+                                    $cWhere[] = "c.phone LIKE ?";
+                                    $cParams[] = '%' . $searchQuery . '%';
+                                } else {
+                                    $cWhere[] = "(c.full_name LIKE ? OR c.phone LIKE ? OR c.email LIKE ? OR CAST(c.id AS CHAR) = ?)";
+                                    $cLike = '%' . $searchQuery . '%';
+                                    $cParams[] = $cLike;
+                                    $cParams[] = $cLike;
+                                    $cParams[] = $cLike;
+                                    $cParams[] = $searchQuery;
+                                }
+                            }
+
+                            // Enforce RBAC
+                            if (!$canAccessAllContacts) {
+                                $rbac = $getContactRbacClause('c');
+                                $cWhere[] = $rbac['clause'];
+                                $cParams = array_merge($cParams, $rbac['params']);
+                            }
+
+                            $sqlSearchContact = "SELECT c.id, c.full_name, c.phone, c.email, c.status, ps.name as stage_name, u.full_name as owner_name
+                                                FROM contacts c
+                                                LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
+                                                LEFT JOIN users u ON c.owner_id = u.id
+                                                WHERE " . implode(" AND ", $cWhere) . "
+                                                ORDER BY c.id DESC LIMIT 1";
+                            $stmtContact = $db->prepare($sqlSearchContact);
+                            $stmtContact->execute($cParams);
+                            $foundContact = $stmtContact->fetch(PDO::FETCH_ASSOC);
+
+                            if ($foundContact) {
+                                $cId = (int)$foundContact['id'];
+                                $cName = $foundContact['full_name'];
+                                $cPhone = $foundContact['phone'] ?: '';
+                                $cStage = $foundContact['stage_name'] ?: ($foundContact['status'] ?: 'Đang tư vấn');
+                                $directUrl = "{$baseUrl}/contacts?id={$cId}";
+                                $relativeUrl = "/contacts?id={$cId}";
+                                $escName = addslashes($cName);
+                                $smartTag = "<<<ERP_CARD:{\"entity_type\":\"contact\",\"entity_id\":{$cId},\"title\":\"{$escName}\",\"subtitle\":\"{$cPhone} • {$cStage}\",\"status\":\"in_progress\",\"direct_url\":\"{$directUrl}\",\"action_label\":\"Mở hồ sơ học viên\"}>>>";
+
+                                return [
+                                    'success' => true,
+                                    'found_entity' => true,
+                                    'entity_type' => 'contact',
+                                    'entity_id' => $cId,
+                                    'title' => "Hồ sơ học viên/khách hàng: {$cName}",
+                                    'direct_url' => $directUrl,
+                                    'relative_url' => $relativeUrl,
+                                    'open_tab_markdown' => "[👉 Bấm để mở hồ sơ {$cName}]({$directUrl})",
+                                    'smart_tag' => $smartTag,
+                                    'description' => "Đã mở sẵn hồ sơ của học viên {$cName} (SĐT: {$cPhone}, Trạng thái: {$cStage}). Bấm đường dẫn trực tiếp hoặc thẻ ERP bên dưới để xem chi tiết."
+                                ];
+                            }
+                        }
+                    }
+
+                    // 4. SPECIFIC SALES ORDER (SO) / DEPOSIT LOOKUP
+                    if ($targetId > 0 || !empty($searchQuery) || $entityType === 'so' || preg_match('/(so|đặt cọc|phiếu thu|học phí)/iu', $dest)) {
+                        if ($targetId > 0 || !empty($searchQuery)) {
+                            $depWhere = ["(c.tenant_id = ? OR c.tenant_id IS NULL)"];
+                            $depParams = [$tid];
+                            if ($targetId > 0) {
+                                $depWhere[] = "d.id = ?";
+                                $depParams[] = $targetId;
+                            } else {
+                                $depWhere[] = "(d.unit_code LIKE ? OR CAST(d.id AS CHAR) = ?)";
+                                $depParams[] = '%' . $searchQuery . '%';
+                                $depParams[] = $searchQuery;
+                            }
+                            $stmtDep = $db->prepare("SELECT d.id, d.unit_code, d.price, d.status, c.full_name as contact_name FROM deposits d LEFT JOIN contacts c ON d.contact_id = c.id WHERE " . implode(" AND ", $depWhere) . " ORDER BY d.id DESC LIMIT 1");
+                            $stmtDep->execute($depParams);
+                            $foundDep = $stmtDep->fetch(PDO::FETCH_ASSOC);
+                            if ($foundDep) {
+                                $soId = (int)$foundDep['id'];
+                                $soTitle = $foundDep['unit_code'] ?: "Đơn cọc #{$soId} ({$foundDep['contact_name']})";
+                                $directUrl = "{$baseUrl}/deposits?id={$soId}";
+                                $escTitle = addslashes($soTitle);
+                                $smartTag = "<<<ERP_CARD:{\"entity_type\":\"so\",\"entity_id\":{$soId},\"title\":\"{$escTitle}\",\"amount\":{$foundDep['price']},\"status\":\"{$foundDep['status']}\",\"direct_url\":\"{$directUrl}\",\"action_label\":\"Mở đơn cọc SO\"}>>>";
+                                return [
+                                    'success' => true,
+                                    'found_entity' => true,
+                                    'entity_type' => 'so',
+                                    'entity_id' => $soId,
+                                    'title' => "Đơn cọc SO: {$soTitle}",
+                                    'direct_url' => $directUrl,
+                                    'relative_url' => "/deposits?id={$soId}",
+                                    'open_tab_markdown' => "[👉 Bấm để mở đơn cọc SO #{$soId}]({$directUrl})",
+                                    'smart_tag' => $smartTag,
+                                    'description' => "Đã mở sẵn đơn đặt cọc SO #{$soId}. Bấm đường dẫn trực tiếp hoặc thẻ ERP để mở chi tiết."
+                                ];
+                            }
+                        }
+                    }
+
+                    // 5. STANDARD SYSTEM MODULE FALLBACK
                     $navMap = [
                         'workspace' => [
                             'keywords' => ['bàn làm việc', 'cong viec', 'công việc', 'task', 'nhiem vu', 'nhiệm vụ', 'workspace'],
@@ -2299,12 +3487,16 @@ class AgentToolRegistry {
                         ];
                     }
 
+                    $directUrl = "{$baseUrl}{$matched['url']}";
                     return [
                         'success' => true,
+                        'found_entity' => false,
                         'title' => $matched['title'],
                         'url' => $matched['url'],
+                        'direct_url' => $directUrl,
+                        'open_tab_markdown' => "[👉 Bấm để mở {$matched['title']}]({$directUrl})",
                         'description' => $matched['desc'],
-                        'guide' => "Bạn có thể truy cập trực tiếp tại: {$matched['url']} hoặc nhấp vào thanh Menu điều hướng bên trái."
+                        'guide' => "Bạn có thể truy cập trực tiếp tại: [{$matched['title']}]({$directUrl}) hoặc nhấp vào thanh Menu điều hướng bên trái."
                     ];
                 }
 
@@ -2415,7 +3607,11 @@ class AgentToolRegistry {
                                 'date_field' => $params['date_field'] ?? '',
                                 'team_id' => $params['team_id'] ?? '',
                                 'owner_id' => $params['owner_id'] ?? '',
-                                'tag' => $params['tag'] ?? ''
+                                'tag' => $params['tag'] ?? '',
+                                'data_type' => $params['data_type'] ?? '',
+                                'student_sub_tab' => $params['student_sub_tab'] ?? '',
+                                'multi_program' => $params['multi_program'] ?? '',
+                                'export_mode' => $params['export_mode'] ?? 'filtered'
                             ]));
                             $params['download_url'] = '/export?' . $queryParams;
                         }
@@ -4586,7 +5782,7 @@ class AgentToolRegistry {
                              LEFT JOIN users u ON c.owner_id = u.id
                              LEFT JOIN teams t ON u.team_id = t.id
                              LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
-                             WHERE c.id = ? AND c.tenant_id = ?";
+                             WHERE c.id = ? AND (c.tenant_id = ? OR c.tenant_id IS NULL OR c.tenant_id = 0)";
                     $cStmt = $db->prepare($cSql);
                     $cStmt->execute([$contactId, $tid]);
                     $contact = $cStmt->fetch(PDO::FETCH_ASSOC);
@@ -4709,9 +5905,15 @@ class AgentToolRegistry {
                         error_log("Error fetching contact notes: " . $e->getMessage());
                     }
 
+                    // Parse dynamic notes_limit (default 3, min 1, max 50)
+                    $notesLimit = isset($args['notes_limit']) ? (int)$args['notes_limit'] : 3;
+                    if ($notesLimit <= 0) $notesLimit = 3;
+                    if ($notesLimit > 50) $notesLimit = 50;
+
                     // Sort chronologically descending
                     usort($timelineItems, fn($a, $b) => $b['timestamp'] <=> $a['timestamp']);
-                    $notesTimeline = array_map(fn($item) => $item['text'], array_slice($timelineItems, 0, 25));
+                    $totalAvailableNotes = count($timelineItems);
+                    $notesTimeline = array_map(fn($item) => $item['text'], array_slice($timelineItems, 0, $notesLimit));
 
                     // 5. Fetch Files from cloud_files (Hồ sơ có gì)
                     $cfStmt = $db->prepare("
@@ -4777,10 +5979,10 @@ class AgentToolRegistry {
                     $dStmt = $db->prepare("
                         SELECT id, unit_code, price as amount, status, created_at
                         FROM deposits
-                        WHERE contact_id = ? AND tenant_id = ? AND status != 'cancelled'
+                        WHERE contact_id = ? AND status != 'cancelled'
                         ORDER BY id DESC LIMIT 5
                     ");
-                    $dStmt->execute([$contactId, $tid]);
+                    $dStmt->execute([$contactId]);
                     $deposits = $dStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
                     $totalPaid = 0;
@@ -4807,7 +6009,7 @@ class AgentToolRegistry {
                         'timeline' => [
                             'entered_crm_at' => $createdDateFormatted,
                             'source' => $contact['source'] ?: 'Chưa cập nhật',
-                            'campaign' => $contact['utm_campaign'] ?: ($contact['utm_source'] ?: 'Không có'),
+                            'campaign' => (!empty($contact['utm_campaign']) ? $contact['utm_campaign'] : (!empty($contact['utm_source']) ? $contact['utm_source'] : 'Không có')),
                             'last_contact' => $lastContactFormatted
                         ],
                         'care_team' => [
@@ -4816,8 +6018,11 @@ class AgentToolRegistry {
                             'collaborators' => !empty($collaboratorNames) ? implode(', ', $collaboratorNames) : 'Không có'
                         ],
                         'notes_history' => [
-                            'total_notes' => count($notesTimeline),
-                            'latest_notes' => $notesTimeline
+                            'total_notes_in_system' => $totalAvailableNotes,
+                            'displayed_count' => count($notesTimeline),
+                            'notes_limit_applied' => $notesLimit,
+                            'latest_notes' => $notesTimeline,
+                            'guidance_for_ai' => 'BẮT BUỘC liệt kê đầy đủ tất cả ' . count($notesTimeline) . ' tương tác gần nhất trên (dưới dạng Bảng Markdown hoặc danh sách có ngày giờ chi tiết). Nếu người dùng muốn xem thêm (5, 10 hoặc tất cả), gọi lại tool với notes_limit tương ứng.'
                         ],
                         'dossier_and_files' => [
                             'total_files' => count($submittedFiles),
@@ -4876,6 +6081,20 @@ class AgentToolRegistry {
                     $statStmt = $db->prepare($statSql);
                     $statStmt->execute($baseParams);
                     $stats = $statStmt->fetch(PDO::FETCH_ASSOC) ?: ['total_leads' => 0, 'active_leads' => 0, 'enrolled_leads' => 0];
+
+                    // 2b. Query Approved Revenue & Deposits for this consultant
+                    $revTargetUid = ($filterAssigned > 0) ? $filterAssigned : $uid;
+                    $revSql = "SELECT 
+                                    COUNT(d.id) as approved_deposits_count,
+                                    COALESCE(SUM(d.price), 0) as approved_revenue
+                               FROM deposits d
+                               LEFT JOIN contacts c ON d.contact_id = c.id
+                               WHERE d.status = 'approved' AND (c.owner_id = ? OR d.created_by = ?)";
+                    $revStmt = $db->prepare($revSql);
+                    $revStmt->execute([$revTargetUid, $revTargetUid]);
+                    $revData = $revStmt->fetch(PDO::FETCH_ASSOC) ?: ['approved_deposits_count' => 0, 'approved_revenue' => 0];
+                    $approvedRevenue = (float)($revData['approved_revenue'] ?? 0);
+                    $approvedDepositsCount = (int)($revData['approved_deposits_count'] ?? 0);
 
                     // 3. Query Stale Leads (Active in funnel + last note/interaction >= $daysThreshold days)
                     $staleWhere = "{$baseWhere} AND (c.stage_id IN (SELECT id FROM pipeline_stages WHERE tenant_id = c.tenant_id AND order_index < 14) OR c.stage_id IS NULL) AND (c.status IS NULL OR c.status != 'inactive')";
@@ -4956,6 +6175,8 @@ class AgentToolRegistry {
                             'active_in_funnel' => (int)$stats['active_leads'],
                             'enrolled_count' => $enrolledLeads,
                             'conversion_rate' => $convRate,
+                            'approved_deposits_count' => $approvedDepositsCount,
+                            'approved_revenue_total' => number_format($approvedRevenue, 0, ',', '.') . ' VND',
                             'stale_leads_count' => $totalStaleCount,
                             'stale_criteria' => "Không có tương tác ghi chú >= {$daysThreshold} ngày"
                         ],
@@ -5646,7 +6867,7 @@ class AgentToolRegistry {
                     $statusFilter = in_array($args['status'] ?? '', ['approved', 'pending', 'all'], true) ? $args['status'] : 'all';
                     $limit = max(1, min(15, (int)($args['limit'] ?? 5)));
 
-                    $where = "d.tenant_id = ?";
+                    $where = "(c.tenant_id = ? OR c.tenant_id IS NULL)";
                     $params = [$tid];
 
                     if ($statusFilter !== 'all') {

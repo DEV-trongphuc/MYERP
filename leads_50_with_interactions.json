@@ -1,0 +1,3652 @@
+[
+  {
+    "index": 1,
+    "id": 1022574,
+    "phone": "0973129909",
+    "full_name": "Hà Đào",
+    "email": "philipphan93@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "Facebook UMEF",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2019-12-03 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 3/12/19",
+        "content": "gửi thông tin ct."
+      },
+      {
+        "date": "2020-04-06 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 6/4/20",
+        "content": "email k39 12/6/20 email k40. 11/8/20 email k41"
+      },
+      {
+        "date": "2020-05-28 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 28/5/20",
+        "content": "nhắn tin hỏi thăm anh nghiên cứu tìm hiểu ct ntn? nhưng anh chưa xem tin nhắn cũng chưa thấy trả lời."
+      },
+      {
+        "date": "2021-01-06 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 6/1/21",
+        "content": "email chính sách khóa 43."
+      },
+      {
+        "date": "2021-04-08 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 8/4/21",
+        "content": "gửi email thông báo tuyển sinh khóa 44."
+      },
+      {
+        "date": "2021-05-29 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 29/5/21",
+        "content": "nhắn hỏi thăm coi đã nhận được email và xem qua chưa."
+      },
+      {
+        "date": "2021-06-03 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 3/6/21",
+        "content": "email k46. máy bận."
+      },
+      {
+        "date": "2021-07-23 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 23/7/21",
+        "content": "nhắn chúc ngày mới vui vẻ"
+      },
+      {
+        "date": "2021-07-23 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 23/7/21",
+        "content": "nhắn zalo hỏi thăm\nanonymous.tqhd@gmail.com"
+      },
+      {
+        "date": "2021-08-26 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 26/8/21",
+        "content": "mời anh/chị tham gia talkshow do học viên và cựu học viên tổ chức"
+      }
+    ]
+  },
+  {
+    "index": 2,
+    "id": 1021566,
+    "phone": "0899753666",
+    "full_name": "Mạnh Huy",
+    "email": "manhhuy.ng@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "other",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2021-10-26 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 26/10/21",
+        "content": "anh nhắn page nói là làm về dược nên lúng túng khi học MBA, đã kết bạn F nhắn tin mess đợi anh phản hồi."
+      },
+      {
+        "date": "2021-11-08 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 8/11/21",
+        "content": "nhắn tin mess hỏi thăm đã nhận được email chưa, đợi anh rep"
+      },
+      {
+        "date": "2021-11-09 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 9/11/21",
+        "content": "nhắn tin mess hỏi thăm anh đã nhận được email chưa?"
+      },
+      {
+        "date": "2022-01-15 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 15/1/22",
+        "content": "luuphuongtuan@gmail.com\t\thttps://www.facebook.com/fjliu\tFacebook MBA-Huy\t\tQUYÊN\nChỉ có bằng ĐH và chứng chỉ B nhưng lâu rồi. Lâu rồi không xài nên giờ tiếng Anh không được tốt, đã gửi email"
+      },
+      {
+        "date": "2022-02-28 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 28/02/22",
+        "content": "anh đang làm việc, chưa rảnh nghe tư vấn."
+      },
+      {
+        "date": "2022-05-03 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 3/5/22",
+        "content": "117\tData Email Apollos\tL ĐAN\tHạnh Kim\t\tKimhanh0602@gmail.com\thttps://www.facebook.com/hanh.kim.3386\tFacebook Apollos\t\tChưa có tiếng a, Chưa có kn làm viec, E moi lay bằng tn đh thôi, Tiếng a nghe hiểu đàm thoại thôi ad, Cho e xin thông tin khoá tiếng a doanh nhân của trường nhé,  Khi nào khai giảng khoá av vậy ad"
+      },
+      {
+        "date": "2022-05-04 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 4/5/22",
+        "content": "đã gửi email thông tin chương trình cho chị và nhắn tin trên page cho chị"
+      },
+      {
+        "date": "2022-05-05 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 05/05/22",
+        "content": "hiện tại chưa có nhu cầu, khi nào có nhu cầu sẽ liên hệ lại."
+      },
+      {
+        "date": "2022-05-13 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 13/05/22",
+        "content": "Đã gửi email TTCT học UBIS, xin thông tin liên hệ qua mail, nhắn trên page"
+      },
+      {
+        "date": "2022-05-13 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 13/05/22",
+        "content": "Đã gửi email thông tin chương trình Apollos, nhắn tin trên page Apollos nhờ chị check mail và cho sdt để tư vấn"
+      }
+    ]
+  },
+  {
+    "index": 3,
+    "id": 1018388,
+    "phone": "0977036623",
+    "full_name": "KIM CHI",
+    "email": "ng.t.kimchi@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "other",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2022-05-23 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 23/5/22",
+        "content": "17\tData chuẩn UBIS\tL ĐAN\tSophie Kim - Chi\t0977036623\tNg.t.kimchi@gmail.com\thttps://www.facebook.com/kimchivuive\tFacebook MBA-Huy\t\tBằng đại học thì có rồi, Toeic mình có cách đây 2 năm rồi 695. Bạn gửi giúp mình chương trình học, Học phí, Và cả thời gian học, Chứng chỉ"
+      },
+      {
+        "date": "2022-05-23 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 23/05/22",
+        "content": "Gọi Tư vấn, nói toeic hết hạn. Muốn hỏi phỏng vấn tiếng anh. Kết bạn Zalo hỗ trợ thêm. Đãgửi email chương trình. (chị khá kỹ tính tư vấn gì cũng note lại)"
+      },
+      {
+        "date": "2022-05-30 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 30/05/2022",
+        "content": "Nhắn Zalo hỏi chị xem chương trình nào phù hợp với chị hơn, chị nói chắc chị tim học chương trình trực tiếp vì chị sợ học online chị không tập trung được. Có thuyết phục chị nhưng chị không rep tin nhắn."
+      },
+      {
+        "date": "2022-06-02 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 02/06/2022",
+        "content": "Chị đang cân nhắc lại và chị cũng đang họp từ từ gọi lại sau nha"
+      },
+      {
+        "date": "2022-06-07 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 07/06/2022",
+        "content": "Gọi lại chị nói đang họp có gì nhắn tin Zalo cho chị nha. Đã nhắn tin báo lịch phỏng vấn cho chị. Chị rep câu hỏi là gì để chị biết mà chị chuẩn bị."
+      },
+      {
+        "date": "2022-06-08 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 08/06/22",
+        "content": "Hỏi chốt lịch giờ phỏng vấn mà không trả lời, gọi không nghe. Chị nghe đt nhưng nói đang bận nên chưa xem câu hỏi."
+      },
+      {
+        "date": "2022-06-11 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 11/6/22",
+        "content": "Chị hẹn tuần sau phỏng vấn"
+      },
+      {
+        "date": "2022-06-13 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 13/06/22",
+        "content": "Báo chị chính sách 700$"
+      },
+      {
+        "date": "2022-06-15 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 15/06/22",
+        "content": "Gọi lại chị interview chị nói chị đang lo online không ổn kiến thức kêu cuối tuần gọi lại chị"
+      },
+      {
+        "date": "2022-06-18 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 18/6/22",
+        "content": "Gọi interview KNM"
+      }
+    ]
+  },
+  {
+    "index": 4,
+    "id": 1022285,
+    "phone": "0792353783",
+    "full_name": "Võ Thái Lâm",
+    "email": "vothailam@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "other",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2021-11-15 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 15/11/21",
+        "content": "anh làm trong cơ quan nhà nước, nên cần Bộ"
+      },
+      {
+        "date": "2022-01-19 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 19/1/22",
+        "content": "đã ntn fb, anh làm bên trung tâm TA thì phải"
+      },
+      {
+        "date": "2022-01-20 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 20/1/22",
+        "content": "có tìm hiểu thêm UBIS, nt fb k thấy tl luôn"
+      },
+      {
+        "date": "2022-01-24 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 24/1/22",
+        "content": "đã gửi email"
+      },
+      {
+        "date": "2022-03-22 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 22/3/22",
+        "content": "111\tData Email UBIS\tMIÊN\tSơn Tuyền\t\tlethisontuyen92@gmail.com\thttps://www.facebook.com/song.le.1656\t\t\tMình học chuyên nghành kế toán và có văn bằng hai tiếng anh rồi\nđã email"
+      },
+      {
+        "date": "2022-05-16 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 16/5/22",
+        "content": "đã email thêm chính sách\nBÙI THỊ THANH DUYÊN"
+      },
+      {
+        "date": "2022-05-20 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 20/5/22",
+        "content": "kb zalo k đòng ý, nt trên đó cũng k tl"
+      },
+      {
+        "date": "2022-07-01 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 1/7/22",
+        "content": "knm, 0792353783, để cuối tuần anh nghiên cứu"
+      },
+      {
+        "date": "2022-08-12 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 12/8/22",
+        "content": "nt zalo k thấy tương tác lại"
+      },
+      {
+        "date": "2022-08-18 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 18/8/22",
+        "content": "gửi mail UBIS"
+      }
+    ]
+  },
+  {
+    "index": 5,
+    "id": 1012375,
+    "phone": "0918968599",
+    "full_name": "TRUONG NGUYEN",
+    "email": "dinhtruong.hut@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "other",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2022-06-10 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 10/06/22",
+        "content": "Đã gửi thông tin chương trình qua Zalo cho anh tham khảo trước.\tĐã báo chính sách. Anh hỏi nhiều về học phí, rớt môn, cộng đồng sinh viên, phỏng vấn tiếng Anh, bảo lưu. Đã thông tin tới anh và sắp xếp interview ngày"
+      },
+      {
+        "date": "2022-06-12 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 12/06/22",
+        "content": "Anh ok\t\t\t\n12/6/22; Đã interview anh nói tốt khá ok, cần trả kết quả nhanh"
+      },
+      {
+        "date": "2022-06-12 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 12/6/22",
+        "content": "Đã interview anh nói tốt khá ok, cần trả kết quả nhanh"
+      },
+      {
+        "date": "2022-06-13 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 13/06/22",
+        "content": "Chốt chính sách 700$ nhưng anh đang đắng đo anh ở Hà Nội cân nhắc học offline, gọi hỏi anh lại cân nhắc có được VN công nhân không"
+      },
+      {
+        "date": "2022-07-06 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 06/07/22",
+        "content": "Anh nói anh đang họp gọi lại anh sau. Có nhắn Zalo anh PV"
+      },
+      {
+        "date": "2022-07-07 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 07/07/22",
+        "content": "Gọi anh đang họp có gì anh phản hồi qua zalo cho nhé. Mời orientation 50, KNM, nhắn Zalo"
+      },
+      {
+        "date": "2022-07-13 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 13/07/22",
+        "content": "Gọi điện thoại nhắc anh vụ phỏng vấn với anh Vinh để được chính sách học bổng, hoàn tất hồ sơ và học phí đợt 1 trước"
+      },
+      {
+        "date": "2022-07-15 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 15/7/22",
+        "content": "Nhắn nói anh sắp lịch phỏng vấn tuần sau vào buổi tối hoặc cuối tuần. Anh hỏi lại lịch Orientation intake 50 mấy giờ bắt đầu, thời lượng bao lâu"
+      },
+      {
+        "date": "2022-07-19 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 19/7/22",
+        "content": "Đã nhắn anh về lịch chốt khóa 51, anh thả tim"
+      },
+      {
+        "date": "2022-07-21 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 21/7/22",
+        "content": "Anh nói để anh sắp xếp thời gian phỏng vấn với anh Vinh trước"
+      }
+    ]
+  },
+  {
+    "index": 6,
+    "id": 1022570,
+    "phone": "0903945091",
+    "full_name": "Thanh Phan",
+    "email": "mshangthu@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "Referral",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2013-07-03 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 3/7/2013",
+        "content": "gui chi tham khao"
+      },
+      {
+        "date": "2021-09-14 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 14/9/21",
+        "content": "gửi email 2 chương trình MBA cho anh, anh nt trên page EIU hỏi ct có dc BGD công nhận không vì anh đang đi dạy cho trường đại học nên là cần bằng có BGD mới dc, mặc dù là a thấy ct này khá hay"
+      },
+      {
+        "date": "2021-12-09 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 9/12/21",
+        "content": "gửi ttct Apollos KH tham khảo"
+      },
+      {
+        "date": "2022-01-07 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 7/1/22",
+        "content": "chưa có kế hoạch nhập học"
+      },
+      {
+        "date": "2022-04-30 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 30/4/22",
+        "content": "có bằng cử nhân, chị lớn tuổi rồi sn 81. Chị làm việc tại Quảng Ngãi 18 năm nay, công ty lại không có tiếng anh em."
+      },
+      {
+        "date": "2022-09-13 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 13/9/22",
+        "content": "đã mail MSOM apollos"
+      },
+      {
+        "date": "2024-09-03 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 3/9/24",
+        "content": "tối tv ct dba cho chị, chị có quan tâm về doanh nghiệp của các học viên đang công tác là những dn nào, tv và báo hp 14500 EUR chưa bao gồm phí thuê giáo sư, chị hỏi giáo sư của trường là người nước nào vì chị học mba gv người Pháp giảng rất khó nghe, chị hỏi đã có hv tốt nghiệp chưa, để chị hỏi thành xem gv nước ngoài giảng dễ hiẻu không, nhiều khi nghe gv VN giảng thì có khi lại ok hơn."
+      },
+      {
+        "date": "2024-09-18 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 18/9/24",
+        "content": "bằng của chị là học 2 năm 240 chỉ, hệ như của Anh, mình nói là vậy trường UMEF thì nếu chị muốn apply mình sẽ cần liên thông, gt cho chị trường ASC, gửi thông tin cho chị, chị hỏi có bài test tiếng anh đầu vào của trường không, mình ní về interview cho chị. 19/9/24 mời chị tham gia ort, chị cho email để gửi nhưng không tham gia 1/10/24 gửi video record cho chị 30/10/24 gửi hình ảnh lễ tốt nghiệp ở VN và Pháp"
+      },
+      {
+        "date": "2024-09-19 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 19/9/24",
+        "content": "đã báo cho chị chính sách 2000 EUR, gửi video record cô viola thử xem người Pháp nói chuyện có bị khó nghe không, hôm trước chị có hỏi \"Thường lịch học của mình tập trung ntn em? Chị đang cân nhắc có nên off hẳn CV để theo học DBA hay vừa học vừa làm\" th2 mình đã trả lời chị ùi"
+      },
+      {
+        "date": "2024-10-01 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 1/10/24",
+        "content": "báo chính sách giảm 2000 EUR học phí cho chị"
+      }
+    ]
+  },
+  {
+    "index": 7,
+    "id": 1005608,
+    "phone": "0901414345",
+    "full_name": "Mai Thi Kim Manh",
+    "email": "maikimmanh@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "Facebook IDEAS",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "0000-00-00 00:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 9/15",
+        "content": "câu Họ tên: Mai Thị Kim Mạnh Số điện thoại: 0901414345 Email: maikimmanh@gmail.com Đơn vị công tác: Citibank Chức vụ: Nhân viên Anh/Chị biết đến chương trình này từ đâu: Website"
+      },
+      {
+        "date": "0000-00-00 00:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 7/15",
+        "content": "câu, gọi thì bạn đang họp, chiều gọi lại chiều gọi lại KNM - add zalo nt k trả lời"
+      },
+      {
+        "date": "2021-01-23 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 23/01/21",
+        "content": "chị nói gửi tt chị coi trc rồi có gì thứ 2 chị gọi lại, có kbzalo"
+      },
+      {
+        "date": "2021-01-26 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 26/01/21",
+        "content": "nhắn tin zalo với chị báo chị test dc 8 câu thì dc giảm $100"
+      },
+      {
+        "date": "2021-10-08 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 8/10/21",
+        "content": "đã gọi nhưng đang bận k nghe máy dc, lúc khác gọi lại, gửi mail"
+      },
+      {
+        "date": "2021-10-19 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 19/10/21",
+        "content": "tìm hiểu nhìu lần lắm rồi mà vẫn chưa đi học, nói là không khóa này thì khóa sau chắc chắn học, push chị học khóa này với chính sách $1000 và chia nhỏ hp nếu cần, chị báo sẽ cân nhắc tối sẽ báo"
+      },
+      {
+        "date": "2021-11-18 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 18/11/21",
+        "content": "chút xíu nữa gọi lại nha, c đang bận"
+      },
+      {
+        "date": "2021-12-07 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 7/12/21",
+        "content": "knm\nMarketing Note: Cử nhân - Tiếng anh & CV: Kinh nghiệm làm việc 7 năm - MBA Online"
+      },
+      {
+        "date": "2025-03-03 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 3/3/25",
+        "content": "Gọi chị thì hỏi kết bạn zalo vì giờ đang chuẩn bị họp"
+      },
+      {
+        "date": "2025-04-01 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 1/4/25",
+        "content": "Gọi lại chị nói tại hôm trước em quên kết bạn zalo với chị đó ạ, để em kết bạn lại nha. Đã SMS lại cho khách số zalo để khách add lại, kêu đang bận đi làm, mà gọi lúc 6h30 tối rồi á"
+      }
+    ]
+  },
+  {
+    "index": 8,
+    "id": 1009744,
+    "phone": "0909094712",
+    "full_name": "Lê Thị Ái Phương",
+    "email": "phoenixruan309@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "Web IDEAS",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2024-07-26 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 26/7/24",
+        "content": "Chị quan tâm chương trình UMEF Thụy Sĩ, chị hỏi ielts 6.0 thì bắt buộc thi phải không , chi phí chương trình học thế nào, mới báo tới cách học buổi tối chưa nói được phần Viện IDEAS là tự nhiên ồn ồn tiếng nhiều người, chị kêu giờ lái xe rồi có gì gửi thông tin zalo số này cho chị nha, hỏi nhẹ nhàng dễ thương lắm. Đã kết nối zalo, chị hỏi khi nào học? Dạ bằng này đc công nhận ko ạ, Là bằng mba chính thức ạ? (TVV gửi kiểm định), Sau khi tốt nghiệp thì mình nhận bằng ở đâu ạ, gửi mẫu Motivation letter cho chị, chị hỏi không biết học khó không em, chị nói thời gian thì chị có thể sắp xếp mà chị lo tiếng Anh vì tiếng Anh chị không quá giỏi, C có dùng nhưng đa số là viết, có dùng tiếng trung thay thế học dc ko em? Hay phải tiếng anh?, E có sách từ vựng j để c ôn tập thêm trong 3 tháng này để tháng 10 chuẩn bị vào học ko e, chị nói chắc chị đăng ký học rồi giờ tới đó chị ôn tiếng Anh, có gì em hỗ trợ chị với nhé."
+      },
+      {
+        "date": "2024-07-29 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 29/7/24",
+        "content": "Hỏi chị hoàn tất hồ sơ chưa mà chị rep ơi em"
+      },
+      {
+        "date": "2024-07-30 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 30/7/24",
+        "content": "remind hồ sơ, hỏi có lăn tăn gì không thì chị kêu không, do bận chưa có thời gian làm hồ sơ"
+      },
+      {
+        "date": "2024-07-31 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 31/7/24",
+        "content": "Chị nhắn nói có bạn mới tìm hiểu và giới thiệu chị Thục Đoan"
+      },
+      {
+        "date": "2024-08-06 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 6/8/24",
+        "content": "Có nhắn hỏi chị Đoan có lăn tăn gì k thì chị nói em hỏi chị ấy giúp chị nha, chị bận k có thời gian tâm sự với chị ấy. Hỏi qua hồ sơ của chị cái chị im"
+      },
+      {
+        "date": "2024-08-21 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 21/8/24",
+        "content": "Gọi 1 lần KNM, cái gọi lần 2 chị kêu em ơi chị đang bận xíu nha có gì chị gọi lại em nha"
+      },
+      {
+        "date": "2024-08-28 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 28/8/24",
+        "content": "Gọi lại chị bữa giờ chị bận quá chưa chuẩn bị được gì hết, thông báo hết hb còn 2 chuyến đi, có vẻ thích 2 chuyến đi hơn. Chị kêu em gọi chị Đoan đi, nói với chị Đoan là chị  Phương đang chuẩn bị hồ sơ nè, chị Đoan chuẩn bị để học luôn với chị, rồi có gì tối chị gọi chị Đoan, chị Đoan cũng lười học lắm."
+      },
+      {
+        "date": "2024-08-29 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 29/8/24",
+        "content": "Nhắn lại chị nhắc hồ sơ với nói chị vụ chị Đoan phản hồi, chị nói chị cũng thích học mà chị ngán tiếng Anh vì tiếng Anh chị Đoan còn tốt hơn chị. Nói các sự hỗ trợ thì chị nói chị yên tâm hơn rồi, xin website trường và Viện lại."
+      },
+      {
+        "date": "2024-09-09 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 9/9/24",
+        "content": "Nhắn nhắc hồ sơ chị thêm mà thả tim không phản hồi gì"
+      },
+      {
+        "date": "2024-09-13 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 13/9/24",
+        "content": "Báo 20/9 tới hạn chốt hồ sơ học và chính sách 2 chuyến đi, hỏi chị còn vấn đề lăn tăn gì không mà chị thả tim không phản hồi."
+      }
+    ]
+  },
+  {
+    "index": 9,
+    "id": 1012441,
+    "phone": "0919167675",
+    "full_name": "NGUYỄN NGỌC AN",
+    "email": "nguyenngocan999@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "other",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2022-09-26 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 26/09/22",
+        "content": "Anh này cần học MBA theo chính sách công ty, cần gửi thông tin để trình sếp xem"
+      },
+      {
+        "date": "2022-09-27 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 27/09/22",
+        "content": "Anh nhắn zalo hỏi tỷ lệ tốt nghiệp vì anh sợ khó tốt nghiệp. Đó là cam kết để anh xin công ty tài trợ học phí. Đã làm hồ sơ và chuyển hồ sơ cho anh."
+      },
+      {
+        "date": "2022-09-28 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 28/09/22",
+        "content": "Hỏi thăm hồ sơ ký chưa anh nói cứ từ từ vì tháng 12 mới khai giảng lận mà, vì team anh đang chạy dự án vài tuần, rồi anh xem. Có hỏi bên em là công ty tư vấn tuyển sinh cho việc học thôi đúng không?"
+      },
+      {
+        "date": "2022-10-11 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 11/10/22",
+        "content": "Nhắn Zalo hỏi thăm anh coi hồ sơ ổn chưa"
+      },
+      {
+        "date": "2022-10-17 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 17/10/22",
+        "content": "Gọi lại hỏi gửi hợp đồng đã cập nhật anh nói anh đang bận"
+      },
+      {
+        "date": "2022-11-09 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 09/11/22",
+        "content": "Anh nói anh đang bên Singapore, gọi lại sau"
+      },
+      {
+        "date": "2022-11-15 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 15/11/22",
+        "content": "Gọi lại anh băn khoăn vấn đề anh đi công tác nhiều sợ không theo học chương trình được tới cùng. Nhưng thích offline hơn do không có thời gian cũng k tham gia được. Anh này thì muốn học online buổi tối, chứ cuối tuần anh sợ anh bận đi công tác suốt. Anh có tìm hiểu chương trình Liên kết của trường ĐH Kinh tế với trường Canada nào đó. Và muốn tìm giảng viên hỗ trợ thêm cho anh vì nhiều khi tính chất công việc không them gia oflfine được nhiều nên cần bổ trợ thêm kiến thức. Anh nói cho tài khoản học thử để anh xem lượng kiến thức thế nào. Để anh suy nghĩ thêm"
+      },
+      {
+        "date": "2022-11-17 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 17/11/22",
+        "content": "Đăng ký phỏng vấn"
+      },
+      {
+        "date": "2022-11-24 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 24/11/22",
+        "content": "Gọi anh nghe bên UBIS thì anh im lặng, rồi tắt máy. Nhắn Zalo \"anh lo phần học online, học không chủ động được, khi không hiểu không biết hỏi ai\". Có nói anh cứ vào phỏng vấn để trao đổi những vấn đề thấy khó khăn với thầy"
+      },
+      {
+        "date": "2022-12-08 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 8/12/22",
+        "content": "Nhắn Zalo hỏi thăm anh, anh nói \"Sorry, A quyết định k học nha em. Thanks Em đã nhiệt tình tư vấn và gửi lời Thanks Thầy Vinh giup Anh nha.\" :)))"
+      }
+    ]
+  },
+  {
+    "index": 10,
+    "id": 1024117,
+    "phone": "0904932001",
+    "full_name": "NGUYEN Thi Huyen",
+    "email": "huyennguyen.acc@gmail.com",
+    "status": "lead",
+    "temperature": "warm",
+    "source": "other",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2025-07-14 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 14/7/25",
+        "content": "tư vấn thì chị muốn học kiểu ASC hơn, tại tiếng Anh chị bỏ lâu rồi tư vấn MBA ASC và UMEF, chị kêu tiếng Anh chị không tốt lắm, kiểu chị đang muốn học ASC hơn. Mà ráng bẻ chị qua EMBA Standard. Chị này cũng có dự định đi Mỹ nữa. Nói gửi bảng so sánh qua cho chị xem. Chị hỏi học phí, hỏi bên mình có liên kết để trả góp không, chị kêu bên con chị học thì có cà payoo có trả góp luôn. Có nói chị là phí chuyển đổi của payoo cao hơn ngân hàng á. Nên chị cà thẻ bình thường rồi đăng kí trả góp với ngân hàng chị. Đã báo chính sách tháng 7 đăng kí sớm"
+      },
+      {
+        "date": "2025-07-16 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 16/7/25",
+        "content": "Chị có hỏi hồ sơ để chuẩn bị, với mở thẻ sacombank; Có nói với chị về EMBA nếu chị đi định cư thì có thể công nhận tương đương master chưa được, hướng chị học MBA cho chắc."
+      },
+      {
+        "date": "2025-07-17 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 17/7/25",
+        "content": "chị có xin thêm tt ASC"
+      },
+      {
+        "date": "2025-07-22 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 22/7/25",
+        "content": "hỏi thăm chị cân nhắc sao rồi, chị kêu vẫn còn đang phân vân EMBA và MAB, giải thích lại cho chị."
+      },
+      {
+        "date": "2026-09-22 16:46:57",
+        "type": "note",
+        "subject": "Duyệt Đợt Thanh Toán",
+        "content": "UNC/Đợt thanh toán ID: 590 đã được phê duyệt. Số tiền thực nhận: 22.320.000 VND"
+      },
+      {
+        "date": "2026-09-22 16:47:11",
+        "type": "note",
+        "subject": "Duyệt Đợt Thanh Toán",
+        "content": "UNC/Đợt thanh toán ID: 591 đã được phê duyệt. Số tiền thực nhận: 5.120.000 VND"
+      },
+      {
+        "date": "2026-09-22 16:47:33",
+        "type": "note",
+        "subject": "Duyệt Đợt Thanh Toán",
+        "content": "UNC/Đợt thanh toán ID: 592 đã được phê duyệt. Số tiền thực nhận: 5.120.000 VND"
+      },
+      {
+        "date": "2026-09-22 16:47:50",
+        "type": "note",
+        "subject": "Duyệt Đợt Thanh Toán",
+        "content": "UNC/Đợt thanh toán ID: 593 đã được phê duyệt. Số tiền thực nhận: 5.120.000 VND"
+      },
+      {
+        "date": "2026-09-22 16:48:11",
+        "type": "note",
+        "subject": "Duyệt Đợt Thanh Toán",
+        "content": "UNC/Đợt thanh toán ID: 594 đã được phê duyệt. Số tiền thực nhận: 5.120.000 VND"
+      },
+      {
+        "date": "2026-09-22 16:48:29",
+        "type": "note",
+        "subject": "Duyệt Đợt Thanh Toán",
+        "content": "UNC/Đợt thanh toán ID: 595 đã được phê duyệt. Số tiền thực nhận: 5.120.000 VND"
+      }
+    ]
+  },
+  {
+    "index": 11,
+    "id": 1014316,
+    "phone": "0936798882",
+    "full_name": "Chị Nguyễn Thị Hoài Thu_Nữ",
+    "email": "dieucucthu@gmail.com, dieucucthu@yahoo.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "other",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2021-07-22 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 22/07/21",
+        "content": "gửi mail thông tin học MBA ko là trở ngại trong đợt dịch covid"
+      },
+      {
+        "date": "2021-07-23 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 23/07/21",
+        "content": "mời tham gia buổi học online chủ nhật ngày"
+      },
+      {
+        "date": "2021-08-17 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 17/08/21",
+        "content": "chị đang họp nên ko nói chuyện được, có nhắn bên zalo cho chị mời chị tham gia buổi nhập môn chủ nhật ngày"
+      },
+      {
+        "date": "2021-08-22 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 22/08/21",
+        "content": "06/09/21 : gửi thông tin tuyển sinh khoá 47 sẽ kết thúc tuyển sinh đợt 1 vào ngày"
+      },
+      {
+        "date": "2021-09-06 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 06/09/21",
+        "content": "gửi thông tin tuyển sinh khoá 47 sẽ kết thúc tuyển sinh đợt 1 vào ngày 17/09/2021 với ưu đãi 250usd giảm ngay vào học phí"
+      },
+      {
+        "date": "2021-09-17 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 17/09/2021",
+        "content": "với ưu đãi 250usd giảm ngay vào học phí"
+      },
+      {
+        "date": "2026-02-03 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 03/02/26",
+        "content": "đã gọi lại tư vấn chương trình High MBA cho c vì TA chị có thể nghe được chỉ ngại nói, chị kêu gửi thông tin qua zalo chị xem lại sau khi nghe tư vấn"
+      },
+      {
+        "date": "2026-05-11 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 11/5/26",
+        "content": "Chương trình: UMEF K18\nTên: Thu Nguyen"
+      },
+      {
+        "date": "2026-05-11 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 11/5/26",
+        "content": "Chương trình: UMEF K18\nTên: Thu Nguyen\nEmail: dieucucthu@yahoo.com\nPhone: 936798882\nMarketing Note: Cử nhân - tiếng Anh: Trình độ Tiếng Anh cơ bản, đang chuẩn bị học ôn TOEIC - - Online MBA data bàn giao\nChị hỏi TOEIC là cần trung bình hay sao, rồi chị hỏi học này là MBA bao lâu, EMBA bao lâu, khác gì nhau, giờ học sao, lớp giảng viên nước ngoài rồi lớp giảng viên Việt Nam sao. Rồi nói chị có 2 bạn học chung, hỏi về học phí sao, chênh nhau k nhiều nhưng mà nhiều giờ hơn với giảng viên hả."
+      },
+      {
+        "date": "2026-05-11 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 11/5/26",
+        "content": "Chương trình: UMEF K18"
+      }
+    ]
+  },
+  {
+    "index": 12,
+    "id": 1019523,
+    "phone": "0983496015",
+    "full_name": "Cam van Huynh",
+    "email": "camvan094pt@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "Facebook IDEAS",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "0000-00-00 00:00:00",
+        "type": "note",
+        "subject": "Tương tác - 6/8/247",
+        "content": "Chị tính đi giảng dạy cơ hữu nhưng văn bằng của mình k được BGD công nhận, chị có gửi trường ĐH kêu k được, với thỉnh giảng họ cũng yêu cầu công nhận. Nên chị cân nhắc lại, nếu k thì phải nghỉ việc một thời gian đi học offline."
+      },
+      {
+        "date": "2018-12-18 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 18/12/18",
+        "content": "chị quan tâm chương trình, chị hỏi có cần bằng tiếng anh gì không, chị chưa có, nếu học chắc chị phải học bổ sung vì chị không tự tin tiếng anh, có nói thời gian khai giảng nhưng chị nói chị phải học tiếng anh trước đã, gửi bài test tiếng anh để chị test, gửi emai thông tin chương trình học, kon6 học, chị hỏi trường này ở bên Thuỵ Sĩ xếp hạn bao nhiêu, chị nghe lạ, chị hỏi học vậy có ít không e, nói là thời gian học bằng các ct khác, vì bản chất của ct là nghiên cứu."
+      },
+      {
+        "date": "2019-03-20 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 20/3/19",
+        "content": "không bắt máy."
+      },
+      {
+        "date": "2019-03-20 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 20/3/19",
+        "content": "giờ chị đang busy chút nên có có gì chị báo e sau hak, có thông tin khoá mới e sẽ mail chị."
+      },
+      {
+        "date": "2019-11-06 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 6/11/19",
+        "content": "không bắt máy."
+      },
+      {
+        "date": "2020-06-02 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 2/6/20",
+        "content": "hiện tại chị chưa sắp xếp tham gia được"
+      },
+      {
+        "date": "2024-07-30 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 30/7/24",
+        "content": "Gọi chị nói chị đang ngoài đường mà còn có meeting nên là em add  zalo chị nha. Chị đã xác nhận kết bạn, TVV hỏi CN chuyên ngành gì chị chưa phản hồi"
+      },
+      {
+        "date": "2024-07-31 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 31/7/24",
+        "content": "Chị nói chị cảm ơn, xem xong chị sẽ báo lại nhé."
+      },
+      {
+        "date": "2025-02-13 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 13/2/25",
+        "content": "UMEF K11 Cam van Huynh camvan094pt@gmail.com 983496015 \"Cử nhân\n- Tiếng Anh: Khá\n- Công việc: Commercial Director\n- EMBA \" FB Ads Facebook IDEAS Form\n@Nguyễn Thị Linh Đan em tương tác thêm data này nhé"
+      },
+      {
+        "date": "2025-02-14 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 14/2/25",
+        "content": "UMEF K11 Cam van Huynh camvan094pt@gmail.com 983496015 \"Cử nhân\n- Tiếng Anh/CV: Giao tiếp và dùng được trong công việc. Kinh nghiệm làm việc 20 năm\n- Executive MBA\" FB Ads Facebook IDEAS Form\nChị nói chị hỏi lại bạn thì nói online cũng ok, chủ yếu chị làm doanh nghiệp thôi chứ dạy chơi. Tất cả ok hết, báo học bổng 500 - 1000 CHF, chuyến đi, và lì xì tết, có bạn học chung. Chị là bạn chị Nga vừa tốt nghiệp DBA bên mình, gửi cả high và standard chị xem"
+      }
+    ]
+  },
+  {
+    "index": 13,
+    "id": 1024103,
+    "phone": "0934532135",
+    "full_name": "TRẦN THỊ THANH TÂM",
+    "email": "joytran9999@gmail.com",
+    "status": "customer",
+    "temperature": "hot",
+    "source": "other",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2025-05-22 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 22/5/25",
+        "content": "Chị đã kết nối zalo kêu xíu chị rảnh rồi nc."
+      },
+      {
+        "date": "2025-05-26 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 26/5/25",
+        "content": "Chị nhắn lại để tư vấn. Hỏi Bộ giáo dục, học sao , group lớp có không vì chị cần tương tác, học hỏi từ bạn bè, tương tác nhiều rất tốt cho mối quan hệ công việc. Chị hẹn tháng 09 - 10 học vì chị còn đang học văn bằng 2 tới đó mới xong và sắp xếp tài chính, em gửi chị phôi bằng. list môn. Cũng đang học tiếng Trung, bên này. nhiều tiền với chị, nên biết đâu tới đó có chính sách tốt hơn. Đã gửi thông tin"
+      },
+      {
+        "date": "2025-06-04 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 4/6/25",
+        "content": "Chị hỏi tháng 7, 8, 9 gì cũng có khai giảng hả em, nếu tháng 9 thì tháng 8 đăng ký đúng không. Có chính sách ưu đãi gì không em. Báo chính sách trợ phí 500 CHF + vouchers 200 CHF của TVV"
+      },
+      {
+        "date": "2025-06-09 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 9/6/25",
+        "content": "Chị Nữ duyệt cho chị này được hỗ trợ 24 tháng"
+      },
+      {
+        "date": "2025-06-10 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 10/6/25",
+        "content": "Chị rep lại hôm bữa e gửi thông tin thì c hiểu là e và Viện đã rất hỗ trợ tìm giải pháp giúp c rồi.  C rất cảm ơn. Tuy nhiên, do c hiểu lầm là ngoài cái đó ra còn đc giảm thêm 200 bên VC , nên c hơi suy nghĩ... Ngoài ra, như c chia sẻ là cá nhân c thời điểm hiện tại c phải rất cân nhắc về tài chính để học. Nên nếu học phí bên MBA hơi quá so với c thì c đang muốn xem xét lại bên EMBA, mà nếu cái này thì tới tháng 9 c học vẫn kịp, trong thời gian đó c có thể ôn TOEIC để kịp thi và nộp cho trường."
+      },
+      {
+        "date": "2025-06-12 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 12/6/25",
+        "content": "Đề xuất các phương án bảo lãnh và chia nhỏ cho chị , chị nói mai trong giờ hành chính trao đổi."
+      },
+      {
+        "date": "2025-06-13 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 13/6/25",
+        "content": "C vẫn đang bận, 2 ngày này c ngoài đường nhiều, tối nay c meeting với thầy đến 9h. Sau đó c sẽ xem và nt cho e nhé ( e tắt thông báo khỏi phiền) rồi mai e reply c cg dc na"
+      },
+      {
+        "date": "2026-09-22 16:19:46",
+        "type": "note",
+        "subject": "Duyệt Đợt Thanh Toán",
+        "content": "UNC/Đợt thanh toán ID: 565 đã được phê duyệt. Số tiền thực nhận: 20.460.000 VND"
+      },
+      {
+        "date": "2026-09-22 16:19:48",
+        "type": "note",
+        "subject": "Duyệt Đợt Thanh Toán",
+        "content": "UNC/Đợt thanh toán ID: 566 đã được phê duyệt. Số tiền thực nhận: 3.410.000 VND"
+      },
+      {
+        "date": "2026-09-22 16:19:51",
+        "type": "note",
+        "subject": "Duyệt Đợt Thanh Toán",
+        "content": "UNC/Đợt thanh toán ID: 567 đã được phê duyệt. Số tiền thực nhận: 3.410.000 VND"
+      }
+    ]
+  },
+  {
+    "index": 14,
+    "id": 1024762,
+    "phone": "0913628246",
+    "full_name": "Anh Nguyễn Tường Vũ",
+    "email": "ngtv2000@yahoo.com",
+    "status": "customer",
+    "temperature": "neutral",
+    "source": "other",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2017-04-16 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 16/4/2017",
+        "content": "hẹn gặp, buổi chiều Chủ Nhật ngày 23/4/2017. Ngày"
+      },
+      {
+        "date": "2025-11-04 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 4.11.25",
+        "content": "Gọi 10h07 nhận sms tự động Bác sĩ Nguyễn Tường Vũ- bệnh viện Chợ Rẫy đang bận, gọi lại sau. Add zalo"
+      },
+      {
+        "date": "2025-11-06 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 6.11.25",
+        "content": "Hỏi anh cân nhắc chtrinh ntn rồi thì anh kêu để anh xem lịch đã - đã nhắn thêm lịch và ưu đãi học phí, hỗ trợ chia nhỏ"
+      },
+      {
+        "date": "2025-12-03 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 3/12/2025",
+        "content": "Msc AI\tTuong Vu Nguyen\tngtvu2000@gmail.com\t913628246\tCử nhân - tiếng Anh: Đủ hiểu và > 20 năm - FB Ads\tFacebook IDEAS\tForm"
+      },
+      {
+        "date": "2026-02-02 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 2/2/2026",
+        "content": "gọi 2h ngắt máy"
+      },
+      {
+        "date": "2026-03-02 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 2/3/26",
+        "content": "nhắn zalo gửi anh thông tin tổng quan, hp tháng 3, mẫu bằng cũng như lịch học anh xem qua thêm - nay mới accept"
+      },
+      {
+        "date": "2026-03-03 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 3/3/26",
+        "content": "anh hỏi Bên em cấp bằng là của University hay Institution? - Đã giải đáp, hẹn"
+      },
+      {
+        "date": "2026-03-12 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 12/3/26",
+        "content": "ghé nghe tư vấn - Gặp anh Dương - Anh Vũ có dự án ứng dụng AI sẵn rồi, có tìm hiểu FPT, ĐH kinh tế nhưng anh cảm thấy mơ mộng, vẽ vời chứ k thực tế vào thứ anh cần - Anh thấy bên em ok - Báo anh các bước tiếp theo qua email anh phản hồi sau"
+      },
+      {
+        "date": "2026-03-15 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 15/3/26",
+        "content": "anh hỏi Anh hỏi tổng chi phí khóa học sau khi giảm phí là bao nhiêu?"
+      },
+      {
+        "date": "2026-03-17 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 17/3/26",
+        "content": "nhắn không rep"
+      }
+    ]
+  },
+  {
+    "index": 15,
+    "id": 1021506,
+    "phone": "0908610975",
+    "full_name": "MINH THÙY",
+    "email": "tricianguyen0410@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "other",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "0000-00-00 00:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 31/6",
+        "content": "Kết bạn Zalo chặn tin nhắn người lạ"
+      },
+      {
+        "date": "2022-06-27 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 27/6/2022",
+        "content": "Gửi email intake 50, báo chính sách 400$ hạn"
+      },
+      {
+        "date": "2022-06-28 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 28/6/22",
+        "content": "Gọi tư vấn báo chính sách 700$, chị cũng khá thích chương trình"
+      },
+      {
+        "date": "2022-06-29 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 29/6/22",
+        "content": "Gọi lại xem chương trình thế nào chị nói chị đang chạy ở ngoài có gì xíu chị gọi lại nc với em nha"
+      },
+      {
+        "date": "2022-06-30 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 30/6/22",
+        "content": "Chị nói chị đang ở ngoài có thể không sắp xếp được thời gian khóa này, có gì chị báo lại em"
+      },
+      {
+        "date": "2022-07-17 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 17/07/22",
+        "content": "Email mời Orientation 50, KNM"
+      },
+      {
+        "date": "2022-07-20 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 20/7/22",
+        "content": "Gửi email thông tin khóa 51."
+      },
+      {
+        "date": "2022-07-28 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 28/7/22",
+        "content": "Gọi hỏi lịch interview, chị nói trước chị cũng tính tham gia rồi nhưng bàn lại với gia đình thì lấn cấn nên giờ chị phải sắp xêp chuyện gia đình cái đã. Chị nói về học phí chị thấy ok chị không vấn đề gì cả chỉ chưa sắp xếp được thời gian thôi."
+      },
+      {
+        "date": "2022-11-24 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 24/11/22",
+        "content": "Đã kết nối Zalo được với chị, chị nói cũng đang sắp xếp lại thời gian, gửi chị lịch học và học phí. Báo chính sách giảm 10%, 8% và đi thực tế, chuyển main campus"
+      },
+      {
+        "date": "2022-12-07 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 7/12/22",
+        "content": "Gọi lại chị nói chị đang muốn học và thích chương trình lắm nhưng mà giờ đang nhập hàng bận quá trời, nhưng để chị cân nhắc xem sao, khóa này không được thì khóa sau. Học phí dù có tăng đôi chút cũng hem sao"
+      }
+    ]
+  },
+  {
+    "index": 16,
+    "id": 1000457,
+    "phone": "0933723643",
+    "full_name": "LÊ THỊ NGỌC HIÊN",
+    "email": "Hienle512@gmail.com",
+    "status": "customer",
+    "temperature": "hot",
+    "source": "gioi_thieu",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2021-10-21 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 21/10/21",
+        "content": "KNM đã kết bạn zalo."
+      },
+      {
+        "date": "2021-10-27 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 27/10/21",
+        "content": "KNM đã nhắn tin zalo cho chị hỏi thăm nhưng chưa rep"
+      },
+      {
+        "date": "2021-11-08 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 8/11/21",
+        "content": "Thầy Lê Sơn Phong giới thiệu, gọi anh KNM đã kết bạn zalo với anh và nhắn tin cho anh, bạn anh Nam quan tâm chứ ko phải anh Nam. số anh Nam 0902411799.\nĐã kết bạn với bạn anh Nam rồi."
+      },
+      {
+        "date": "2021-11-09 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 9/11/21",
+        "content": "em em chị đang họp có gì chị sẽ nhắn lại em sau nhé."
+      },
+      {
+        "date": "2021-11-09 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 9/11/21",
+        "content": "chị nói đang trong giờ làm việc nhắn zalo cho chị đi nha"
+      },
+      {
+        "date": "2021-11-16 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 16/11/21",
+        "content": "KNM, nhắn zalo ko rep"
+      },
+      {
+        "date": "2021-11-17 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 17/11/21",
+        "content": "em ơi, năm nay chị ko sx học được đâu em chị bận lắm, chị hỏi kế hoạch tuyển sinh cho năm sau, qua tết ta thì chị mới sx được có gì đến đó chị liên hệ với em, xin email chị nói gửi zalo đi chị ít dùng emai, gửi zalo rồi chị xem, mà kết bạn zalo chị ko chấp nhận lời mời kết bạn,"
+      },
+      {
+        "date": "2021-11-18 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 18/11/21",
+        "content": "Nhắn tin zalo hỏi thăm chị đã nhận được email, đã xem TTCT chưa và có thắc mắc gì ko? chị nói chưa nhận được, chưa xem, nhờ chị check trong spam."
+      },
+      {
+        "date": "2022-04-28 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 28/04/22",
+        "content": "gọi chị nói đã tham gia khóa học khác vào tháng 2 vì hơi gấp. Em cứ kết bạn Zalo với chị khi nào chị có nhu cầu học sẽ liên hệ lại em. Gửi chị thông tin intake 50. Nhưng chưa kết bạn Zalo được vì sdt chị chặn tìm kiếm."
+      },
+      {
+        "date": "2022-06-22 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 22/6/22",
+        "content": "Tạm thời chị chưa dự định học MBA, cứ kết bạn Zalo khi nào chị học thì chị nhắn Zalo cho em."
+      }
+    ]
+  },
+  {
+    "index": 17,
+    "id": 1004480,
+    "phone": "0833391362",
+    "full_name": "Khang Hoang",
+    "email": "",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "Facebook IDEAS",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2026-01-16 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 16.1.2026",
+        "content": "gọi 11h_chờ anh chút xíu nha anh đang bận tay á anh gọi lại liền _ 11h25 gọi lại ảnh bấm tắt_ 12h30 a gọi - Anh này diploma Singapo, 2 năm. Báo anh kinh nghiệm làm việc 5 năm trở lên 2 năm vị trí quản lý có thể apply EMBA. Hỏi thăm nhu cầu để xem EMBA hay BBA. Anh thì cũng đang cân nhắc, đã tư vấn đầy đủ EMBA về hình thức học, tgian học, hồ sơ, học phí, chính sách, kiểm định chất lượng, dịch vụ bổ trợ. Anh hỏi thêm BBA thì sao em, cũng tư vấn đầy đủ hình thức học, hồ sơ, học phí, chính sách - Anh nói anh tự học có giảm tgian kh, TA thì phỏng vấn trực tiếp hay onl, anh hỏi thêm chỗ sacom cho rõ hơn, anh hỏi địa chỉ vp bên em, hỏi khi nào khai giảng - anh nói nếu học chắc chắn anh ghé qua. - Đã accept zalo - Gửi thông tin cả EMBA và Top up BBA, Kiểm định chất lượng, mẫu bằng - anh hỏi thêm làm sao biết bằng thật bằng giả - đã tư vấn trên văn bằng thể hiện bằng gốc (Degree) có dấu nổi, chữ ký và tem chứng nhận là đã đủ pháp lý. Tư vấn thêm dấu mộc caton vs hợp thức hóa lãnh sự - 200 CHF 1 mộc anh Ok. Nói thêm sau này tốt nghiệp đi Thụy Sĩ thì chi phí thêm. Anh ok _ Mời anh hôm nay tham gia ORT BBA"
+      },
+      {
+        "date": "2026-01-17 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 17/1/2026",
+        "content": "tới giờ\n20.1.2026: zalo vẫn off từ"
+      },
+      {
+        "date": "2026-01-17 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 17/1",
+        "content": "Nhắn hỏi thăm cân nhắc chtrinh ntn rồi, dự kiến đki trong tháng 1 luôn cho tối ưu không - Anh nói ok chắc mai anh ghé qua bên em  - không qua\n21.1.2026: hỏi ảnh sao k qua em thì k xem k rep\n24.1.2026: Gọi 11h tính hỏi thăm mà k nghe máy\n26.1.2026: nhắn ảnh t3,t4 bên mình đi team buiding - anh ghé qua hnay luôn k hay ntn - Ảnh tính qua nhưng ảnh phản hồi k qua được - Hẹn tối trao đổi thêm vs em, gửi HĐ mẫu cho coi luôn - k rep\n28.1.2026: nhắn hỏi mai a qua bên em đc k, hay xử lý hồ sơ online luôn - k xem k rep \n29.1.2026: nhắn hạn chót ngày mai hết chính sách - rep là cuối năm tiệc tùng quá luôn, nói a cứ chụp passport vs bằng và liệt kê các công việc đã làm đi em hỗ trợ mình hoàn tất hồ sơ - thả like"
+      },
+      {
+        "date": "2026-01-19 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 19.1.2026",
+        "content": "định nhắn hỏi thăm mà thấy zalo off từ 17/1/2026 tới giờ"
+      },
+      {
+        "date": "2026-01-20 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 20.1.2026",
+        "content": "zalo vẫn off từ 17/1 - Nhắn hỏi thăm cân nhắc chtrinh ntn rồi, dự kiến đki trong tháng 1 luôn cho tối ưu không - Anh nói ok chắc mai anh ghé qua bên em  - không qua"
+      },
+      {
+        "date": "2026-01-21 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 21.1.2026",
+        "content": "hỏi ảnh sao k qua em thì k xem k rep"
+      },
+      {
+        "date": "2026-01-24 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 24.1.2026",
+        "content": "Gọi 11h tính hỏi thăm mà k nghe máy"
+      },
+      {
+        "date": "2026-01-26 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 26.1.2026",
+        "content": "nhắn ảnh t3,t4 bên mình đi team buiding - anh ghé qua hnay luôn k hay ntn - Ảnh tính qua nhưng ảnh phản hồi k qua được - Hẹn tối trao đổi thêm vs em, gửi HĐ mẫu cho coi luôn - k rep"
+      },
+      {
+        "date": "2026-01-28 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 28.1.2026",
+        "content": "nhắn hỏi mai a qua bên em đc k, hay xử lý hồ sơ online luôn - k xem k rep"
+      },
+      {
+        "date": "2026-01-29 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 29.1.2026",
+        "content": "nhắn hạn chót ngày mai hết chính sách - rep là cuối năm tiệc tùng quá luôn, nói a cứ chụp passport vs bằng và liệt kê các công việc đã làm đi em hỗ trợ mình hoàn tất hồ sơ - thả like"
+      }
+    ]
+  },
+  {
+    "index": 18,
+    "id": 1015986,
+    "phone": "0946203479",
+    "full_name": "Thuy Dung Ngo",
+    "email": "thuydungngo.93@gmail.com, dungntt2@vietinbank.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "Facebook IDEAS",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2020-11-04 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 4/11/20",
+        "content": "Data 42 Link fb: https://www.facebook.com/thuydung.ngo.562, đã gửi email kết bạn zalo. KNM, kết bạn zalo chặn tin nhắn ng lạ, ngân hàng viettin bank, học đại học mở HCM, cũng có nhu cầu muốn học, hỏi về thời gian tuyển sinh. Tiếng anh bt, chưa có cc tiếng anh, nắm hình dung CT, ko quan tâm học phí, zalo chị chặn người lạ, nhờ chị kết bạn lại giúp."
+      },
+      {
+        "date": "2020-11-10 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 10/11/20",
+        "content": "Gọi KNM, nhắn tin nhắn cho chỉ nhờ kết bạn giúp."
+      },
+      {
+        "date": "2020-11-19 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 19/11/20",
+        "content": "nhắn tin hỏi thăm chị, đợi phản hồi."
+      },
+      {
+        "date": "2020-12-08 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 8/12/20",
+        "content": "đk học Đh kinh tế rồi"
+      },
+      {
+        "date": "2023-03-22 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 22/3/23",
+        "content": "Khách hàng nhấp lại quảng cáo của page, gọi lại tư vấn sơ bộ thì chị nói cũng đang tìm hiểu nhiều chương trình lắm, cũng đang cân đo đông đếm về chương trình và học phí, tuy nhiên ưu tiên lớp offline. Chị đang ở Đồng Nai, mới tư vấn về lớp chuyên đề thôi do chị đang làm việc nên kêu gửi thông tin qua email, add zalo. Cho lại email: dungntt2@vietinbank.com"
+      },
+      {
+        "date": "2023-03-24 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 24/3/23",
+        "content": "Nhắn zalo báo chị chính sách tháng 3, có học viên đang bị lẻ nên muốn hỏi chị có muốn ghép đôi với chị này để được hưởng chính sách $250 không"
+      },
+      {
+        "date": "2024-07-29 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 29/7/24",
+        "content": "Thấy chị làm Vietinbank, tư vấn nghe có vẻ thích UMEF hơn, chỉ hỏi vẫn không học offline sao em, giải thích rõ chỗ này, tư vấn đầy đủ thông tin chị kêu gửi zalo chị nha"
+      },
+      {
+        "date": "2024-07-30 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 30/7/24",
+        "content": "Nhắn hỏi chị có thời gian xem qua chương trình học chưa"
+      },
+      {
+        "date": "2024-08-01 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 1/8/24",
+        "content": "Gọi chị chị nói chị bận chưa có thời gian xem qua chương trình học nữa, zalo em tên gì vậy. Để chị xem có gì chị nhắn zalo em nha"
+      },
+      {
+        "date": "2024-08-24 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 24/8/24",
+        "content": "Tối gọi đổ chuông 2 lần KNM"
+      }
+    ]
+  },
+  {
+    "index": 19,
+    "id": 1004243,
+    "phone": "0816099602",
+    "full_name": "Trần Quốc Sang",
+    "email": "",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "Web IDEAS",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "0000-00-00 00:00:00",
+        "type": "note",
+        "subject": "Tương tác - 24/8/247",
+        "content": "Bạn hỏi về các phương án chia nhỏ học phí với Viện và Sacombank, hồi thì hỏi trả trước 20%, hồi thì hỏi trả trước 40tr, hồi thì hỏi trả trước 50tr, 30 tr"
+      },
+      {
+        "date": "2024-06-26 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 26/6/24",
+        "content": "Gọi anh kêu tầm 12 phút nữa gọi lại, gọi lại anh kêu 5p nữa gọi, gọi lại đổ chuông KNM. 12h anh gọi lại  Cử nhân CN Kế toán giảng dạy bằng TA. , hiện đang làm MKT. Anh hỏi học phí và công nhận VN như thế nào, anh muốn làm GV cơ hữu TVV có thông tin anh chỗ này. Anh nói anh thấy bên mình có chương trình tự học với ASC giá 4000 EUR nên anh đang quan tâm chương trình này chứ không phải chương trình học với Viện ạ. TVV check lại chỗ này anh kêu có gì check lại rồi gửi thông tin qua zalo anh, đã kết nối zalo"
+      },
+      {
+        "date": "2024-07-04 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 4/7/24",
+        "content": "Nhắn zalo báo anh gói học phí tự học sẽ chạy từ tháng 7, học phí gốc 4500 dis 20% nên còn 3700 EUR chia làm 2 đợt, anh hỏi tiền Việt mỗi đợt khoảng bao nhiêu. tuy nhiên anh hỏi tưởng có học bổng 2500 EUR, rồi anh hỏi bên mình có hỗ trợ chia nhỏ từng tháng không, phản hồi chia nhỏ 4 đợt mỗi đợt cách nhau 3 tháng (mỗi đợt tầm 26tr). ANh hỏi đợt 1 phải đóng 26tr luôn ạ, có báo thêm cho anh các phương thức thanh toán học phí bao gồm thẻ tín dụng, anh nói để anh cân nhắc thêm vì anh là sinh viên mới đi làm nên khoảng phí này cần cân nhắc. Anh này vướn vấn đề lớn về mặt tài chính"
+      },
+      {
+        "date": "2024-08-23 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 23/8/24",
+        "content": "Anh nhắn lại hỏi \"Swiss UMEF học phí của chương trình này sao ạ chị, còn Acsencia Business School thì sao ạ chị, hỏi EMBA khóa này mình học có làm thesis không ạ, hỏi trả góp qua Sacombank chênh có nhiều không, hỏi luôn cả SBS, chương trình học nào có thời lượng ngắn nhất, em muốn đăng kí umef thì phải làm sao. Học cử nhân dạy bằng tiếng Anh thì sao ạ chị.  \n24/8/247; Bạn hỏi về các phương án chia nhỏ học phí với Viện và Sacombank, hồi thì hỏi trả trước 20%, hồi thì hỏi trả trước 40tr, hồi thì hỏi trả trước 50tr, 30 tr"
+      },
+      {
+        "date": "2024-08-27 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 27/8/24",
+        "content": "Hỏi anh cân nhắc các phương án học phí sao rồi"
+      },
+      {
+        "date": "2024-08-28 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 28/8/24",
+        "content": "Hỏi lại học phí tự học EMBA UMEF và hỏi có trong Naric không, Với chương trình này mình thi giữa kì và cuối kì hình thức ntn ạ chị,  bài final là mình tự làm hay theo nhóm, Dạ mình có thể đẩy nhanh tốc độ để hoàn thành sớm chương trình được không ạ, \n6/9/24; Bạn hỏi hạn nộp tiền khi nào, báo"
+      },
+      {
+        "date": "2024-09-06 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 6/9/24",
+        "content": "Bạn hỏi hạn nộp tiền khi nào, báo 10/10 bạn, đóng trước LPHS 15/9 ok, Hỏi BGD, hỏi học khi nào, dự kiến tốt nghiệp khi nào."
+      },
+      {
+        "date": "2024-09-11 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 11/9/24",
+        "content": "Hỏi đóng 18,5 tr được không (tương đương 20%), có nói được 14tr LPHS, còn lại 10/10 đóng, chọn trả qua Sacombank, Là trước tiên em chỉ cần đóng 18.5 và đợi tháng sau để trả góp đúng không ạ chị."
+      },
+      {
+        "date": "2024-09-13 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 13/9/24",
+        "content": "Thấy tỷ giá xuống nên nhắc hỏi anh có đóng tiền luôn chưa, anh thả tim chưa phản hồi."
+      },
+      {
+        "date": "2024-09-14 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 14/9/24",
+        "content": "Call lại anh mà đổ chuông 2 lần KNM, có nhắn có vấn đề gì thì anh phản hồi em biết nha cũng không phản hồi"
+      }
+    ]
+  },
+  {
+    "index": 20,
+    "id": 1016445,
+    "phone": "0961416775",
+    "full_name": "Võ Thành Nam",
+    "email": "vothanhnam@hoaphat.com.vn, mrvothanhnam@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "Facebook IDEAS",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "1991-12-21 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 21/12/1991",
+        "content": "Tiếng Anh/Kinh nghiệm: 6.0 Ielts \nTư vấn: ASC"
+      },
+      {
+        "date": "2020-02-26 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 26/2/20",
+        "content": "đã gửi email chưa liên hệ được, máy bận, kết bạn zalo anh chấp nhận anh nói anh đang họp mai tầm 3h chiều gọi anh nhé"
+      },
+      {
+        "date": "2020-02-27 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 27/2/20",
+        "content": "anh đang có cuộc hẹn với đối tác 1 tiếng nữa gọi anh nha, 4h gọi KNM"
+      },
+      {
+        "date": "2020-03-03 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 3/3/20",
+        "content": "KNM ; 7/3/20 KNM ; 15/3/20 anh nhắn tin zalo nói qua mùa cô vi đã em ơi, gửi icon mặt cười rồi im lặng luôn"
+      },
+      {
+        "date": "2020-03-04 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 4/3/20",
+        "content": "bắt máy anh hỏi em cần máy phút để tư vấn anh cho em 5' anh ở Quãng Ngãi, làm 2 việc ở cảng và có doanh nghiệp riêng, anh học MBA cần bằng nhiều hơn cũng cần kiến thức, tiếng anh anh tốt anh nói tiếng anh 1 dây luôn, rồi hỏi học tiếng anh hả em, anh thấy chương trình bên em hay có hỗ trợ học thuật đánh giá sơ bộ là rất tốt, hỏi về học phí anh nói thường chương trình quốc tế 20ngan đô hả em, học phí anh thấy khá thấp, anh hỏi bằng quốc tế vậy anh sang Canada hay Mỹ hay Úc làm thì được đúng ko em, gửi mẫu bằng anh xem rồi quyết định, học thì chắc chắn học nhưng vướng phải chủ yếu bằng cấp."
+      },
+      {
+        "date": "2020-03-15 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 15/3/20",
+        "content": "anh nhắn tin zalo nói qua mùa cô vi đã em ơi, gửi icon mặt cười rồi im lặng luôn"
+      },
+      {
+        "date": "2020-05-08 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 8/5/20",
+        "content": "KNM. ; 12/6/20 email k40. ; 6/8/20 email k41.KNM"
+      },
+      {
+        "date": "2020-11-10 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 10/11/20",
+        "content": "email k42.Anh muốn định cư Canada em à, chứ anh thích ct bên em lắm. ;"
+      },
+      {
+        "date": "2021-04-08 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 8/4/21",
+        "content": "gửi email thông báo tuyển sinh khóa 44. anh nói nào hết dịch mới học, chứ giờ còn dịch àm học gì em ơi. ;"
+      },
+      {
+        "date": "2021-08-26 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 26/8/21",
+        "content": "mời anh/chị tham gia talkshow do học viên và cựu học viên tổ chức\nPage IDEAS - Bằng cử nhân: có. \nNgày sinh:"
+      }
+    ]
+  },
+  {
+    "index": 21,
+    "id": 1024147,
+    "phone": "0964560464",
+    "full_name": "NGUYEN Thi Ngoc Buu",
+    "email": "nt.ngocbuu@gmail.com",
+    "status": "customer",
+    "temperature": "hot",
+    "source": "other",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2025-05-14 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 14/5/25",
+        "content": "Chị nói em đợi xíu em đợi xíu chị đang bận xíu chị gọi lại liền nha. Về điều kiện KNLV thì chị chuẩn rồi, chị cũng nghỉ việc sợ bảo hiểm xã hội khó check và xin giấy xác nhận công tác cũng khó, cao đẳng Ngôn ngữ Anh. tiếng Anh thì cũng có mà lâu rồi không dùng, lúc đầu tư vấn EMBA UMEF nhưng mà cũng có nói thêm High và 2 khung của Ascencia. Chị kêu gửi thông tin qua zalo chị xem nha."
+      },
+      {
+        "date": "2025-05-16 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 16/5/25",
+        "content": "Chị gửi thông tin CCCD để hỏi làm Sacom, chị ở Dĩ An nhưng có mong muốn mở thẻ, vẫn có thể di chuyển lên HCM"
+      },
+      {
+        "date": "2025-05-21 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 21/5/25",
+        "content": "Hỗ trợ chị chia nhỏ học phí"
+      },
+      {
+        "date": "2026-09-23 09:08:48",
+        "type": "note",
+        "subject": "Duyệt Đợt Thanh Toán",
+        "content": "UNC/Đợt thanh toán ID: 628 đã được phê duyệt. Số tiền thực nhận: 4.650.000 VND"
+      },
+      {
+        "date": "2026-09-23 09:08:50",
+        "type": "note",
+        "subject": "Duyệt Đợt Thanh Toán",
+        "content": "UNC/Đợt thanh toán ID: 629 đã được phê duyệt. Số tiền thực nhận: 3.367.800 VND"
+      },
+      {
+        "date": "2026-09-23 09:08:53",
+        "type": "note",
+        "subject": "Duyệt Đợt Thanh Toán",
+        "content": "UNC/Đợt thanh toán ID: 630 đã được phê duyệt. Số tiền thực nhận: 3.321.400 VND"
+      },
+      {
+        "date": "2026-09-23 09:08:56",
+        "type": "note",
+        "subject": "Duyệt Đợt Thanh Toán",
+        "content": "UNC/Đợt thanh toán ID: 631 đã được phê duyệt. Số tiền thực nhận: 5.053.650 VND"
+      },
+      {
+        "date": "2026-09-23 09:09:04",
+        "type": "note",
+        "subject": "Duyệt Đợt Thanh Toán",
+        "content": "UNC/Đợt thanh toán ID: 632 đã được phê duyệt. Số tiền thực nhận: 6.693.400 VND"
+      },
+      {
+        "date": "2026-09-23 09:09:07",
+        "type": "note",
+        "subject": "Duyệt Đợt Thanh Toán",
+        "content": "UNC/Đợt thanh toán ID: 633 đã được phê duyệt. Số tiền thực nhận: 6.784.800 VND"
+      },
+      {
+        "date": "2026-09-23 09:09:09",
+        "type": "note",
+        "subject": "Duyệt Đợt Thanh Toán",
+        "content": "UNC/Đợt thanh toán ID: 634 đã được phê duyệt. Số tiền thực nhận: 6.770.400 VND"
+      }
+    ]
+  },
+  {
+    "index": 22,
+    "id": 1021779,
+    "phone": "0937027205",
+    "full_name": "Hà Miên",
+    "email": "victorgiahuy@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "other",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2020-09-04 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 04/09/20",
+        "content": "anh hiếu biết nhiều, nghe có vẻ chức lớn, tiền nhiều. Nói chuyện hay bắt bẻ. Khá dễ thương, muốn học xong tiếng anh Ielts rồi mới học MBA. Hẹn khóa 42 do sắp chuyển vị trí cv cần làm quen tr. xin dc mail. kb zalo 05/11/20: gọi k nghe máy 12/01/2020: knm, nt zalo"
+      },
+      {
+        "date": "2021-04-06 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 06/04/021",
+        "content": "anh nhiều lí do để chưa đi học quá, chưa chín mùi đâu em, để anh suy nghĩ thêm"
+      },
+      {
+        "date": "2021-04-14 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 14/04/21",
+        "content": "3 phút nữa chị đi họp, 4h30 em gọi lại c nhé, gọi chị rồi, sau khi tư vấn thấy chị khá thích với ct bên mình"
+      },
+      {
+        "date": "2021-04-19 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 19/04/21",
+        "content": "đã gửi mail khóa 44"
+      },
+      {
+        "date": "2021-05-05 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 05/05/21",
+        "content": "chị đang họp, 5h gọi lại c nha"
+      },
+      {
+        "date": "2021-05-11 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 11/05/21",
+        "content": "anh nhắn zalo tìm hiểu lại"
+      },
+      {
+        "date": "2021-05-12 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 12/05/21",
+        "content": "anh nhắn tin muốn tìm hiểu lại đi học, nhưng lo lắng đủ thứ mà keieur nói vậy thôi chứ k biết thật k nữa"
+      },
+      {
+        "date": "2021-06-22 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 22/06/21",
+        "content": "chị này vòng mail, nên gửi mail và nt trước, ok mới kb zalo và gọi tư vấn, nt qua page và chị tự cho sdt để add zalo, sẽ xem xét mà gọi lại chị"
+      },
+      {
+        "date": "2021-06-25 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 25/06/21",
+        "content": "có nt zalo mà chưa thấy c tl, chị đang tìm hiểu thêm"
+      },
+      {
+        "date": "2021-06-30 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 30/06/21",
+        "content": "để anh coi thi toeic có online k, nói lí lẻ quá mắc mệt"
+      }
+    ]
+  },
+  {
+    "index": 23,
+    "id": 1010743,
+    "phone": "0912645828",
+    "full_name": "Chị Tú_Nhi",
+    "email": "",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "other",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2021-05-09 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 09/05/21",
+        "content": "ko nghe máy, gọi lại báo chị đang bận họp nên gọi lại sau\nNgày"
+      },
+      {
+        "date": "2021-06-03 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 03/6/21",
+        "content": "Chị nói em gửi tt qua zalo giúp chị đi, hiện tại chị đang họp. Đã gửi zalo cho chị, chị kb nhưng chưa pahnr hồi\nNgày"
+      },
+      {
+        "date": "2022-03-03 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 3/3/22",
+        "content": "Gửi tt tuyển sinh k49 ubis"
+      },
+      {
+        "date": "2023-02-09 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 09/02/2023",
+        "content": "Gửi chị tt tuyển sinh k54"
+      },
+      {
+        "date": "2025-10-11 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 11/10",
+        "content": "Gửi mail mời chị tham gia seminar ubis ngày"
+      },
+      {
+        "date": "2025-10-17 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 17/10",
+        "content": "3/3/22: Gửi tt tuyển sinh k49 ubis"
+      },
+      {
+        "date": "2026-06-09 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 09/6",
+        "content": "Báo cho chịchương trình tặng laptop HP trước"
+      },
+      {
+        "date": "2026-06-11 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 11/6",
+        "content": "gọi chị ko nghe máy\nNgày"
+      },
+      {
+        "date": "2026-06-18 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 18/6",
+        "content": "Gọi lại chị hỏi thăm chị ktham khảo qua ctr chưa, chị nói chị đang rất quan tâm, tối gọi lại cho chị nhé, giờ chị đang bận\nNgày"
+      },
+      {
+        "date": "2026-06-19 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 19/6",
+        "content": "Gọi lại chị 2 lần chị vẫn bận\nNgày"
+      }
+    ]
+  },
+  {
+    "index": 24,
+    "id": 1024118,
+    "phone": "0917966796",
+    "full_name": "LE Quang Hien",
+    "email": "lequanghien229@gmail.com",
+    "status": "customer",
+    "temperature": "hot",
+    "source": "other",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2025-05-27 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 27/5/25",
+        "content": "chiều liên hệ \n- Note: Đỗ Thị Thiên Nga UMEF K4 giới thiệu\nGiờ anh đang họp có gì em gọi lại sau hoặc chat giúp anh nha"
+      },
+      {
+        "date": "2025-05-29 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 29/5/25",
+        "content": "Gọi 2 lần đổ chuông KNM nên add zalo anh. anh học tài chính ngân hàng, đại học mở á em, chưa có ccta mà có dùng trong công việc hàng ngày, MBA/EMBA rồi High và Std khác biệt sao vậy em, Chất lượng thì sao e, Và nội dung học, giá trị văn bằng như nhau hả em.\n2/6/25; Hỏi lại anh xem thông tin chương trình học sao rồi. Anh nói anh đang đi công tác ở HN, có gì tuần sau nha em."
+      },
+      {
+        "date": "2025-06-12 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 12/6/25",
+        "content": "Nhắn lại hỏi thăm anh đi công tác về chưa. Anh nói tháng 09 nha em, lịch học bên em sao, Tại dạo này anh bận quá, Tháng 9 sẽ phù hợp hơn vì anh định là sang năm sẽ gap công việc xíu, mà học buổi tối hay sao em."
+      },
+      {
+        "date": "2025-06-18 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 18/6/25",
+        "content": "Anh nhắn zalo hi em, còn nếu mà sau tháng 9-10 thì lịch khai giảng tiếp theo là tháng mấy em ha"
+      },
+      {
+        "date": "2025-07-02 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 2/7/25",
+        "content": "Báo chính sách early bird tháng 7 cho anh, kêu anh định sớm nhất cuối năm mới học"
+      },
+      {
+        "date": "2025-09-12 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 12/9/25",
+        "content": "Báo chính sách Quốc khánh cho anh\n917966796"
+      },
+      {
+        "date": "2026-09-23 09:33:51",
+        "type": "note",
+        "subject": "Duyệt Đợt Thanh Toán",
+        "content": "UNC/Đợt thanh toán ID: 655 đã được phê duyệt. Số tiền thực nhận: 31.000.000 VND"
+      },
+      {
+        "date": "2026-09-23 09:33:53",
+        "type": "note",
+        "subject": "Duyệt Đợt Thanh Toán",
+        "content": "UNC/Đợt thanh toán ID: 656 đã được phê duyệt. Số tiền thực nhận: 5.906.425 VND"
+      },
+      {
+        "date": "2026-09-23 09:33:54",
+        "type": "note",
+        "subject": "Duyệt Đợt Thanh Toán",
+        "content": "UNC/Đợt thanh toán ID: 657 đã được phê duyệt. Số tiền thực nhận: 6.013.875 VND"
+      },
+      {
+        "date": "2026-09-23 09:33:59",
+        "type": "note",
+        "subject": "Duyệt Đợt Thanh Toán",
+        "content": "UNC/Đợt thanh toán ID: 658 đã được phê duyệt. Số tiền thực nhận: 5.921.125 VND"
+      }
+    ]
+  },
+  {
+    "index": 25,
+    "id": 1006971,
+    "phone": "0903811605",
+    "full_name": "Nguyen Thai Duy",
+    "email": "duy.ntvn@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "Facebook IDEAS",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "0000-00-00 00:00:00",
+        "type": "note",
+        "subject": "Tương tác - 9/24/2023",
+        "content": "Nguyen Thai Duy\t\t0903811605\tpage IDEAS - qc tuyển sinh UMEF - Cử nhân: có.\tFacebook Ads IDEAS\tBad Timing Miên"
+      },
+      {
+        "date": "2023-04-24 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 24/4/23",
+        "content": "Gọi anh nói anh có đọc thông tin chương trình thì quan tâm có nhưng tiếng Anh không đủ nên anh tải Dulingo đang ôn luyện, trước anh có làm cho doanh nghiệp nước ngoài nhưng cũng nghỉ hơn 10 năm rồi nên tiếng Anh không còn tốt nữa. Thấy hình như là tác giả viết sách, anh kêu em kết bạn zalo gửi thông tin anh xem thêm nha. Đã add Zalo note thông tin chi tiết lớp học cho anh"
+      },
+      {
+        "date": "2023-09-25 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 25/9/23",
+        "content": "knm FALSE\tFALSE"
+      },
+      {
+        "date": "2024-08-22 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 22/8/24",
+        "content": "Có call lại anh anh kêu vẫn còn quan tâm chương trình MBA có gì em nhắn gửi qua zalo giùm anh, đã nhắn mà anh thả tim không rep. Anh bận với có tinh thần tự học nên quan tâm ASC"
+      },
+      {
+        "date": "2024-09-09 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 9/9/24",
+        "content": "tiếng Anh không ổn, Việt Nam không thích. Quan tâm Tiến sĩ 60 năm. Chinh phục cuộc đời, Bằng DH mất tiêu. Anh kêu có gì anh nhắn em nha, nói anh Dương Võ là bạn anh học chung ở Úc, em gửi thông tin"
+      },
+      {
+        "date": "2024-09-10 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 10/9/24",
+        "content": "1. Hồ sơ gồm những gì?, 2. Học đóng từng phần hay sao, 3. Cho anh xem một số  mô đun học xem để anh xem khả năng tiếng anh của mình , 4. Một vài đoạn bài tập để anh hình dung xem. Đã thông tin chi tiết hệ thống học tập, môn học, AI trên LMS."
+      },
+      {
+        "date": "2024-09-13 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 13/9/24",
+        "content": "Nhắc anh chỗ học thì anh nói khóa sau khi nào em, hiện tại thời gian anh kẹt cứng, báo anh khóa này giữa tháng 10 mới học mà anh k phản hồi"
+      },
+      {
+        "date": "2024-11-05 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 5/11/24",
+        "content": "Báo thời gian nhập học khóa tiếp theo là giữa tháng 12/2024"
+      },
+      {
+        "date": "2024-12-02 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 2/12/24",
+        "content": "UMEF K11 Nguyen Thai Duy Duy.ntvn@gmail.com 903811605 \"Bằng cấp: Cử nhân\nTiếng Anh: Tệ\nMBA Online\" FB Ads Facebook IDEAS Form 0. Status - New\t\t\t\nGọi đổ chuông 3 lần KNM, nên nhắn zalo hỏi anh anh thả tim chứ k phản hồi"
+      },
+      {
+        "date": "2024-12-04 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 4/12/24",
+        "content": "Gọi tư vấn cho anh anh cũng hỏi cách học sao, này kia, học phí thế nào em, giới thiệu cho anh thêm chương trình EMBA Standard."
+      }
+    ]
+  },
+  {
+    "index": 26,
+    "id": 1021780,
+    "phone": "0965981875",
+    "full_name": "Apollos",
+    "email": "usagi010599@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "other",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2021-04-13 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 13/4/21",
+        "content": "data Fb: https://www.facebook.com/diubach. Nhắn F xin thông tin của chị nhưng chị ko cho nói cứ gửi email cho chị, chị cân nhắc rồi báo em sớm."
+      },
+      {
+        "date": "2021-05-04 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 4/5/21",
+        "content": "chị chủ động nhắn tin trên mess, đã tư vấn sơ bộ thông tin CT học cho chị."
+      },
+      {
+        "date": "2021-05-06 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 6/5/21",
+        "content": "đã tư vấn gửi hết thông tin và xin chính sách cho chị, chị phản hồi. Chị mong em thông cảm! Chị sẽ sắp xếp để học trong thời gian sớm nhất! Chị rất muốn học chương trình này vì nh thuận lợi cho chị! Và em cũng hỗ trợ chị hết mình nữa, mong là khoá sắp tới chị học cũng đc em hỗ trợ nè! Cám ơn em nh! Có gì thay đổi chị sẽ báo em nha."
+      },
+      {
+        "date": "2021-06-10 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 10/6/21",
+        "content": "nhắn tin mess gửi chị thông tin tuyển sinh , chị phản hồi Đợt này dịch quá em ơi công việc ko ổn định, đang khó khăn nên chắc đợt này chị chưa học đc, Để tình hình dịch ổn định xem sao! Tình hình này công việc của chị bị ảnh hưởng nh lắm em ah."
+      },
+      {
+        "date": "2021-07-29 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 29/7/21",
+        "content": "nhắn tin mess mời chị tham gia workshop chị nói để chị xem lại lịch rồi chị báo em nha."
+      },
+      {
+        "date": "2021-08-26 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 26/8/21",
+        "content": "mời anh/chị tham gia talkshow do học viên và cựu học viên tổ chức, đã gửi lại chị thông tin ct."
+      },
+      {
+        "date": "2021-08-30 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 30/8/21",
+        "content": "nhắn mess xin SĐT chị và nhắn hỏi thăm chị nhận được email thông tin chương trình và xem qua chưa?"
+      },
+      {
+        "date": "2021-09-01 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 1/9/21",
+        "content": "gửi email tuyển sinh khóa 47. Nhắn tin mess cho chị, và chị phản hồi Có gì mai chị trả lời nha em mấy bữa nay chị đang bận chuẩn bị chương trình cho hs học online em ah.\nOk em chị rãnh lúc nào chị sẽ nhắn em nha."
+      },
+      {
+        "date": "2021-09-04 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 4/9/21",
+        "content": "nhắn chúc chị cuối tuần vui vẻ, chị xem ko phản hồi. Đợi chị phản hồi ko thấy."
+      },
+      {
+        "date": "2021-09-11 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 11/9/21",
+        "content": "nhắn hoie thăm chị thì chị trả lời Chị cám ơn em nh! Nhưng thực sự 3 tháng nay công việc kinh doanh đứng dậm chân tại chỗ lun nên rất khó em ah chắc để hết dịch xem tình hình thế nào em ah."
+      }
+    ]
+  },
+  {
+    "index": 27,
+    "id": 1006830,
+    "phone": "0903705127",
+    "full_name": "Joe Phan",
+    "email": "joephanvu@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "Facebook IDEAS",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2025-12-10 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 10/12/25",
+        "content": "tín hiệu không tốt nói không nghe gì, chỉ nghe được lái xe lái xe, gọi lại sau, zalo a khá lớn tuổi rồi, gửi tin nhắn"
+      },
+      {
+        "date": "2026-01-07 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 7/1/26",
+        "content": "gọi lại cứ alo alo mà nghe xung quanh rất ồn, zalo k tìm được nữa đã gửi sms cho khách"
+      },
+      {
+        "date": "2026-01-12 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 12/1/26",
+        "content": "khoảng chút xíu nữa e kết bạn lại đi để tui coi sao, giọng cũng lớn tuổi rồi"
+      },
+      {
+        "date": "2026-01-21 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 21/1/26",
+        "content": "gọi a không nghe máy, nt zalo a không tl"
+      },
+      {
+        "date": "2026-01-24 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 24/1/26",
+        "content": "a hỏi có lớp dinh dưỡng không, đã phản hồi tn nhưng chưa thấy a tl lại"
+      },
+      {
+        "date": "2026-02-03 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 03/02/26",
+        "content": "gọi không nghe, đã gửi tin nhắn zalo\nUyên _"
+      },
+      {
+        "date": "2026-06-05 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 5/6/26",
+        "content": "học cử nhân 3 năm nghỉ ngang cách đây gần 30 năm - trước đây là Trường ĐH tổng hợp, giờ đổi tên thành gì tôi k rõ - Giờ muốn học lấy bằng cử nhân vậy thôi chứ k dùng làm gì cao siêu - Hỏi có ngành ngôn ngữ Anh k? Chỉ riêng QTKD thì tôi biết rồi - Hồi xưa học như kiểu bổ túc ban đêm chứ k phải chính quy nên nói vòng vo là giờ chắc chắn k minh chứng đc hồi trc học - Cũng tư vấn sơ lược chtrinh TOP UP và BBA Full cho anh - Hỏi học phí - Hỏi có học Mác Lênin k - Đã giải đáp - Kêu để tôi nghiên cứu thêm sau _ Add zalo"
+      },
+      {
+        "date": "2026-06-11 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 11/6/26",
+        "content": "chưa accept zalo - gửi lại lời mời kb"
+      },
+      {
+        "date": "2026-06-12 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 12/6/26",
+        "content": "ĐĂNG KÝ LẠI :  Tên KH:\tJoe Phan _0903705127 _joephanvu@gmail.com _Nguồn:\tFacebook Ads - Form _Loại Data:\tTOP-UP BBA _Vòng:\tBBA _Bằng cấp:\t12 _Thời gian tư vấn:\t9g _Thành phố:\tHo Chi Minh City\nGọi 10h - Anh kêu à bên đây tư vấn tôi rồi đúng k - Nói đúng r - Chốt vs anh hiện tại nếu k tìm đc bằng,bảng điểm thì phỏng vấn để xét riêng do anh đang làm Phiên dịch viên - tốt TA và gần 30 đi làm rồi - Anh ok hỏi địa chỉ văn phòng, anh nói cứ nhắn zalo hồ sơ đi tôi sẽ sx phỏng vấn hoặc đến trực tiếp test hay gì đó cũng được - Đã accept, gửi a tt tổng quan, thả tim"
+      },
+      {
+        "date": "2026-06-16 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 16/6/26",
+        "content": "nhắn hỏi thăm thì kêu Tôi chưa quyết định được bởi vì lớn tuổi rồi không biết có theo kịp chương trình không - Đã chia sẻ thêm, xem k rep"
+      }
+    ]
+  },
+  {
+    "index": 28,
+    "id": 1008822,
+    "phone": "0908161262",
+    "full_name": "VY NGUYỄN",
+    "email": "vynguyen1424@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "other",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2022-11-24 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 24/11/22",
+        "content": "Gọi tư vấn thấy chị cũng ok chương trình chỉ lo lớp chuyên đề tiếng Việt thì nghe riết sẽ quên tiếng Anh. Chị nói đi Sing về chị sẽ qua Viện. Đã báo chính sách chị khá thích chuyến đi cuối tháng 4"
+      },
+      {
+        "date": "2022-12-01 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 1/12/22",
+        "content": "Nhắn hỏi đi Sing về chưa? Chị rep để chị suy nghĩ thêm vì ba mẹ có vẻ vẫn chưa tin tưởng trung tâm lắm, sợ đăng ký học rồi bỏ con giữa chợ. \n                   Chị Nữ chỉ các hướng tư vấn sau: \n                    - Tham gia lớp học thử\n                    - Chia học phí thành nhiều đợt\n                    - Chứng nhận hợp tác\n                    - Học là học với trường, bên em chỉ hỗ trợ, nếu bên em có biến mất thì cũng vẫn là học với trường\n                    - Có thể gặp ba mẹ để tư vấn\nGọi lại chị nói sau 9h sáng gọi lại chị nhe"
+      },
+      {
+        "date": "2022-12-02 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 2/12/22",
+        "content": "Gọi lại chị nói cũng chia sẻ những ý trên, chị nói là làm sao để nhận được học bổng. Chị nói cho 1 - 2 ngày suy nghĩ nha"
+      },
+      {
+        "date": "2022-12-06 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 6/12/22",
+        "content": "Gọi chị xem cân nhắc chương trình học thế nào, chị nói mấy nay chị đang có việc trong viện nên chưa nghĩ, có gì trong hôm nay sẽ trả lời."
+      },
+      {
+        "date": "2022-12-13 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 13/12/22",
+        "content": "Chị đã tham gia phỏng vấn học bổng. Chị có chía sẻ là ba mẹ muốn làm cho bên VNPT (có thể nhà nước) nhưng mong muốn, đam mê của chị này là làm truyền thông. Anh Trung cũng có chia sẻ nên trao đổi với ba mẹ để có thể đi theo đam mê và tự lo cho bản thân được."
+      },
+      {
+        "date": "2022-12-23 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 23/12/22",
+        "content": "Gọi lại hỏi thăm chị nói đang ở Viện, mẹ đang ở Viện tầm mai bạn gọi lại được không"
+      },
+      {
+        "date": "2022-12-28 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 28/12/22",
+        "content": "Gọi lại chị tắt tiếng nên nhắn Zalo, nhắn Zalo hỏi tuần này chị có sắp xếp qua Viện cùng ba  mẹ để an tâm hơn việc học không"
+      },
+      {
+        "date": "2023-01-10 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 10/1/23",
+        "content": "Nhắn Zalo gửi chị link record Overview. Gọi lại hỏi chị qua viện được không. Chị nói chị đang lưỡng lự quá, vừa muốn học vừa phải lo nhiều chi phí vì qua tết là chị cưới rồi nên lo hơi nhiều, nói chị có thể đóng trước 500 - 850 vào đợt 15/1, số còn lại có thể đóng trước"
+      },
+      {
+        "date": "2023-02-17 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 17/2/23",
+        "content": "Thông báo khai giảng khóa 54, báo chính sách giảm 15% học phí vào tháng 02 + gói học phí nhưng chị không phản hồi"
+      },
+      {
+        "date": "2023-03-08 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 8/3/23",
+        "content": "Nhắn zalo chúc mừng"
+      }
+    ]
+  },
+  {
+    "index": 29,
+    "id": 1008098,
+    "phone": "0906794386",
+    "full_name": "Chị Trang",
+    "email": "",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "Referral",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2024-03-31 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 31/3/24",
+        "content": "đã gọi tư vấn ok cho chị này, có than học CMA mà mới đậu có level 1 ngán chị học k nổi, nên tìm hiểu MBA thông qua chị Nga do qua nhà chơi thấy chị Nga học nên hỏi, cũng chịu chia sẻ, chị nói có bạn học cùng."
+      },
+      {
+        "date": "2024-04-01 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 1/4/24",
+        "content": "Gửi outline môn học chị xem"
+      },
+      {
+        "date": "2024-04-02 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 2/4/24",
+        "content": "Hỏi thăm xem chị Trang và chị Huyền (bạn chị Trang) join kịp"
+      },
+      {
+        "date": "2024-04-10 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 10/4/24",
+        "content": "Nhắn lại tổng chính sách học phí (2100: 1000 HB, 800 vé, 300 giới thiệu) chị kêu nhắn học phí khi thanh toán 1 đợt và học phí khi thanh toán 2 đợt cho chị."
+      },
+      {
+        "date": "2024-04-25 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 25/4/24",
+        "content": "Mời webinar mà chị không phản hồi"
+      },
+      {
+        "date": "2024-06-03 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 3/6/24",
+        "content": "Hỏi chị cân nhắc sao, báo chị học bổng 2500 CHF và giảm 15% chị kêu để chị cân nhắc"
+      },
+      {
+        "date": "2024-09-16 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 16/9/24",
+        "content": "Giới thiệu chị chương trình Self Study mà chị nói chưa em, để chị sắp xếp công việc đã"
+      },
+      {
+        "date": "2024-11-06 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 6/11/24",
+        "content": "Hỏi chị cuối năm công việc đỡ bận hơn chưa chị"
+      },
+      {
+        "date": "2025-06-17 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 17/6/25",
+        "content": "Hỏi chị sẵn sàng hơn cho việc học chưa"
+      },
+      {
+        "date": "2025-09-16 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 16/9/25",
+        "content": "Nhắn zalo báo chính sách EMBA/MBA Std 2.900 CHF vào đợt tháng 9"
+      }
+    ]
+  },
+  {
+    "index": 30,
+    "id": 1017348,
+    "phone": "0862533634",
+    "full_name": "Trần Ngọc",
+    "email": "ngoc.daotaoketoan@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "Facebook IDEAS",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2023-05-08 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 8/5/23",
+        "content": "chị thi chứng chỉ TA lâu lắm r, cv cũng k dùng nhìu lắm, để chị xem thêm thông tin, kb zalo"
+      },
+      {
+        "date": "2023-05-18 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 18/5/23",
+        "content": "nói chuyện kiểu láo cực luôn, bó tay"
+      },
+      {
+        "date": "2023-11-13 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 13/11/23",
+        "content": "knm; chị gọi lại mới hỏi chị Trần ngọc phải k chị thì cúp máy ngang"
+      },
+      {
+        "date": "2023-11-13 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 13/11/23",
+        "content": "14g02: knm; chị gọi lại mới hỏi chị Trần ngọc phải k chị thì cúp máy ngang"
+      },
+      {
+        "date": "2025-04-21 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 21/4/25",
+        "content": "Cử nhân Kế toán, ngày xưa có bằng C thôi em ạ, ít dùng trong công việc, thấy nói chuyện cọc tánh khó khăn thôi chứ không phải quá đáng ghét, hỏi học phí sao, High và Standard khác nhau sao, chị hỏi văn bằng sao em, học phí bao gồm chưa hay phát sinh gì thêm không, chị kêu cứ gửi hết thông tin qua zalo chị nhé, đã kết nối zalo. chị hỏi có giống miniMBA không"
+      },
+      {
+        "date": "2025-06-19 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 19/6/25",
+        "content": "Hỏi lại xem chị có thời gian xem qua thông tin chương trình học chưa"
+      },
+      {
+        "date": "2025-07-28 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 28/7/25",
+        "content": "Chung Trần Ngọc ngoc.daotaoketoan@gmail.com 969229828 Cử nhân - tiếng Anh: kinh nghiệm làm việc 15 năm. tiếng anh hạn chế - Tư vấn chung FB Ads Facebook IDEAS Form\nGọi kêu 5p nữa gọi lại mà gọi lại thì bấm tắt máy nên nhắn lại zalo cho chị"
+      },
+      {
+        "date": "2025-08-22 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 22/8/25",
+        "content": "Tìm chứng chỉ ngắn hạn."
+      },
+      {
+        "date": "2026-03-02 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 2/3/26",
+        "content": "Chương trình: UMEF K17\nTên: Trần Ngọc"
+      },
+      {
+        "date": "2026-03-02 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 2/3/26",
+        "content": "Chương trình: UMEF K17\nTên: Trần Ngọc\nEmail: ngoc.daotaoketoan@gmail.com\nPhone: 969229828\nMarketing Note: Cử nhân - tiếng Anh: 15 năm kinh nghiệm - Online MBA data trên 6th\nGọi 2 lần đổ chuông KNM nên nhắn zalo"
+      }
+    ]
+  },
+  {
+    "index": 31,
+    "id": 1019862,
+    "phone": "0984834290",
+    "full_name": "Phượng Lê",
+    "email": "bephuong.le@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "Marketing",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2018-04-18 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 18/4/18",
+        "content": "chồng chị tên Chương đã tìm hiểu chương trình chỗ Thu, anh đã đăng kí khoá học CEO rồi vì học MBA lâu quá, học bên kia được học trực tiếp, như cầu của chị Phượng cũng vậy, mún học trực tiếp và thời gian ngắn, có thuyết phục chị là học k mất nhìu thời gian mà có dc tấm bằng MBA chính quy, chị học ngôn ngữ anh nên được miễn tiếng anh, email cho chị, chị nghiên cứu rồi liên hệ, nói chị hết t4 chốt khoá."
+      },
+      {
+        "date": "2018-04-24 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 24/4/18",
+        "content": "không bắt máy."
+      },
+      {
+        "date": "2018-05-02 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 2/5/18",
+        "content": "chị hỏi đóng học phí theo từng tháng được không, có nói chia học phí tối đa là 6 đợt, chị nói chị cũng mún vừa làm vừa học, rồi để chị xin công ty chị nữa."
+      },
+      {
+        "date": "2018-06-01 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 1/6/18",
+        "content": "chị nói chuyện dễ thương, chị nhận được mail chia học phí thành 6 dot, để chị cân nhắc tài chính, chị thấy bên em cũng tuyển sinh thường xuyên, nói thời hạn chốt khoá"
+      },
+      {
+        "date": "2018-07-05 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 5/7/18",
+        "content": "chị đang họp."
+      },
+      {
+        "date": "2019-04-04 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 4/4/19",
+        "content": "không bắt máy."
+      },
+      {
+        "date": "2019-04-04 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 4/4/19",
+        "content": "máy bận, nhắn tin zalo cho chị."
+      },
+      {
+        "date": "2019-07-17 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 17/7/19",
+        "content": "chị submit vào form Cần Thơ, chị quỳnh có tv ct rồi."
+      },
+      {
+        "date": "2019-11-21 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 21/11/19",
+        "content": "hỏi chị sắp xếp học dc đợt này không, chị nói là được, e gửi lại mail cho chị đi, chị có đăng kí bne6 trường Maay liên kết với dh Đà Nẵng mà nó lâu quá."
+      },
+      {
+        "date": "2020-07-07 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 7/7/20",
+        "content": "thông tin k40 mà chị ậm ờ, chi nói để chị voi, chị đang đi ngoài đừng, e cứ mail cho chị, nói chị giảm 800 USD."
+      }
+    ]
+  },
+  {
+    "index": 32,
+    "id": 1022578,
+    "phone": "0848029898",
+    "full_name": "Hà Chi",
+    "email": "mslucky2111@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "Marketing",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2022-11-23 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 23/11/22",
+        "content": "Đã gửi thông tin khóa 52 (chưa báo chính sách), nhắn page check mail.  Nhắn cho lại sdt mà chị cứ cảm ơn em (chắc không muốn cho thông tin)"
+      },
+      {
+        "date": "2022-11-29 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 29/11/22",
+        "content": "Đã gửi email khóa 52, chưa báo chính sách. Nhắn page check mail và xin sdt"
+      },
+      {
+        "date": "2022-12-12 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 12/12/22",
+        "content": "Nhắn page mong được kết nối với anh trong khóa 52"
+      },
+      {
+        "date": "2023-04-05 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 5/4/23",
+        "content": "Email UBIS khóa 54"
+      },
+      {
+        "date": "2023-05-29 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 29/5/23",
+        "content": "Gửi email K55"
+      },
+      {
+        "date": "2024-02-20 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 20/2/24",
+        "content": "knm; 19g20: chị đang yếu Tiếng Anh lắm em ạ, với lại chị học viện báo chí và truyền thống nên là cũng bị trái ngành, giờ chị viết báo cho cafe Biz cũng về doanh nghiệp. Nhưng mà chị tính học Quan hệ công chúng, anh Hà kêu chị học MBA đi. Có tư vấn cho chị về hình thức học của ASC, nói chị chủ yếu sẽ dùng kĩ năng đọc viết, chị nói vậy thì chị còn có thể có khả năng học được. Còn phần đầu vào chắc sẽ khó cho chị ấy, tại giờ kêu chị test hay pv là chị thua ấy. Nên thôi em cứ gửi chương trình qua cho chị rồi chị nghiên cứ thêm và phản hồi em nha\nChị nhắn là chắc chị sẽ học về đúng ngành của chị, với tiếng Anh của chị cũng không đủ để học đâu nè"
+      },
+      {
+        "date": "2024-06-23 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 23/6/24",
+        "content": "thấy anh nhắn mình xin thông tin ctr học thạc sĩ, nhắn chào, chia sẻ bên em có chương trình học MBA của Pháp với Thụy Sĩ, hỏi về phần tiếng Anh và mong muốn ctr như thế nào để chia sẻ chương trình phù hợp cho anh mà chưa thấy phản hồi."
+      },
+      {
+        "date": "2024-06-25 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 25/6/24",
+        "content": "nhắn zalo hỏi anh đã đọc thông tin em gửi chưa thì không có phản hồi, mà không có số điện thoại để gọi được ảnh luôn, zalo cũng không đồng ý kết bạn"
+      },
+      {
+        "date": "2024-09-18 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 18/9/24",
+        "content": "TA có toeic 690 mà thi cách đây 11 năm trước rồi, TA tốt để phỏng vấn được, Tư vấn hình thức học thì lịch học anh ok để học được. Đã báo HB lên đến 1000CHF và chính sách 1 chuyến đi qua trường, đã báo cấn trừ. Anh có hỏi về giá trị văn bằng. Gửi tt qua zalo"
+      },
+      {
+        "date": "2024-09-24 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 24/9/24",
+        "content": "gọi lại hỏi anh cân nhắc ctr sao rồi mà thuê bao, để nhắn zalo anh"
+      }
+    ]
+  },
+  {
+    "index": 33,
+    "id": 1010792,
+    "phone": "0913015536",
+    "full_name": "Dương Minh Hùng",
+    "email": "dnmhung@yahoo.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "other",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2022-03-29 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 29/3/22",
+        "content": "Đã tư vấn, anh ở Hà Nội làm kinh doanh về thiết bị cammera giám sát Bosch của Đức, tiếng anh tốt đã tư vấn interview, và các hồ sơ cần chuẩn bị để trường xét duyệt. Gửi email thông tin chương trình và các hồ sơ, add zalo tương tác thêm"
+      },
+      {
+        "date": "2022-04-01 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 1/4/22",
+        "content": "đã có lịch pv vào 4h chiều t7, anh xác nhận tham gia"
+      },
+      {
+        "date": "2022-04-02 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 2/4/22",
+        "content": "đã pv\t\t- anh báo mất bảng điểm, đang còn phân vân"
+      },
+      {
+        "date": "2022-04-12 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 12/4/22",
+        "content": "nhắc anh gửi hồ sơ anh nói tìm thấy bảng điểm cũ nhưng hồi đó k có dấu má gì, tối về anh chụp a gửi cho e xem. a hỏi lộ trình đóng hp"
+      },
+      {
+        "date": "2022-04-28 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 28/4/22",
+        "content": "anh nói bận quá nên chưa dk k49 dc, hi vọng qua khóa 50 sẽ dk"
+      },
+      {
+        "date": "2022-05-06 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 6/5/22",
+        "content": "gọi anh đang họp, anh nói chốc a gọi sau"
+      },
+      {
+        "date": "2022-05-24 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 24/5/22",
+        "content": "Anh bận quá, hàng hóa đợt này đi khó quá anh quên luôn việc học, đã nhắc nhở anh tranh thủ sớm anh nói ừm mà kiểu anh còn chưa sẵn sàng, hic"
+      },
+      {
+        "date": "2022-06-20 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 20/6/22",
+        "content": "anh vẫn chưa sắp xếp được, đợt này bận quá, hàng họ đi khó khăn, anh đi công tác suốt, anh đang ở SG, mời anh ghé Viện anh bảo sx dc anh sẽ ghé"
+      },
+      {
+        "date": "2022-09-20 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 20/9/22",
+        "content": "anh nói để anh cân nhắc, mười anh tham dự nhập môn MBA khóa 51"
+      },
+      {
+        "date": "2022-09-23 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 23/9/22",
+        "content": "anh đnag họp anh abor chắc để khóa sau, mà anh nói kiểu chối khéo, từ k49 tới nay khóa 51 rồi haiz"
+      }
+    ]
+  },
+  {
+    "index": 34,
+    "id": 1004143,
+    "phone": "0799126747",
+    "full_name": "Nguyen Thi Diem My",
+    "email": "my.kalaya@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "Facebook IDEAS",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2024-05-02 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 2/5/24",
+        "content": "gửi tt lộ trình, học phí, thời gian qua cho mình nha, gọi điện với chị mà chị cứ nói gì với ai ở ngoài á. kết bạn zalo gửi tt chương trình\nNhắn cho chị yêu cầu đầu vào, chị nói chị chưa có ielts chắc để chị thi. Chia sẻ cho chị hình thức phỏng vấn TA đầu vào với đại diện trường hoặc test BC, hỏi chị đánh giá chị đang tầm bao nhiêu chấm ielts để tư vấn tiếp mà thấy chị thả tim chưa phản hồi gì nữa"
+      },
+      {
+        "date": "2024-06-21 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 21/6/24",
+        "content": "chị học NN tiếng Thái Lan, nhưng mà tiếng Anh của chị cũng ổn, lâu rồi chưa thi lại k biết đánh được bao nhiêu chấm nữa. Có tư vấn cho chị hình thức học thì chị sợ TA của chị đang chưa đủ để học á. Có chia sẻ với chị là trường có hình thức phỏng vấn Tiếng Anh đầu vào với đại diện trường nên chị có thể đăng kí phỏng vấn tiếng Anh đầu vào  thì chị cũng ừ ừ thui, có nói cho chị PV online qua zoom, nói nội dung PV. Mà nghe bên chị cứ ồn ồn mà chị nói nhỏ xíu à. Em gửi tt qua zalo giúp chị nha, chị có việc xíu\n24.1.2026: tư vấn 15p_dự kiến kinh phí ok thì học sau tết hoặc tháng 6 năm nay. Tư vấn đầy đủ EMBA/MBA_so sánh giống nhau khác nhau_Học phí_Chị này có vẻ quan tâm về trường và học phí thôi. Add zalo nch thêm - đã accept, gửi thông tin chị thả tim chưa rep thêm \n26.1.2026: nhắn chị xem chtrinh ntn rồi, cân nhắc đki tháng 1 cho tối ưu chi phí luôn k  - Chị hỏi học standard thì k dc đki đi Thuỵ Sĩ hả e, đóng học phí mỗi học kỳ hay ntn - đã phản hồi hết chưa rep thêm \n29.1.2026: nhắn chị cân nhắc ntn rồi, ngày mai hết cs ưu đãi - chị hỏi thêm về sacom\n30.1.2026: sáng nay c gọi hỏi vụ mở thẻ - đã gửi CCCD - hỗ trợ hạn mức tốt nhất để đki MBA st - chưa cọc 100 CHF\n31.1.2026: hỏi thăm phương án học phí chị ok k chị thả tim k rep thêm"
+      },
+      {
+        "date": "2026-01-24 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 24.1.2026",
+        "content": "tư vấn 15p_dự kiến kinh phí ok thì học sau tết hoặc tháng 6 năm nay. Tư vấn đầy đủ EMBA/MBA_so sánh giống nhau khác nhau_Học phí_Chị này có vẻ quan tâm về trường và học phí thôi. Add zalo nch thêm - đã accept, gửi thông tin chị thả tim chưa rep thêm"
+      },
+      {
+        "date": "2026-01-26 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 26.1.2026",
+        "content": "nhắn chị xem chtrinh ntn rồi, cân nhắc đki tháng 1 cho tối ưu chi phí luôn k  - Chị hỏi học standard thì k dc đki đi Thuỵ Sĩ hả e, đóng học phí mỗi học kỳ hay ntn - đã phản hồi hết chưa rep thêm"
+      },
+      {
+        "date": "2026-01-29 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 29.1.2026",
+        "content": "nhắn chị cân nhắc ntn rồi, ngày mai hết cs ưu đãi - chị hỏi thêm về sacom"
+      },
+      {
+        "date": "2026-01-30 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 30.1.2026",
+        "content": "sáng nay c gọi hỏi vụ mở thẻ - đã gửi CCCD - hỗ trợ hạn mức tốt nhất để đki MBA st - chưa cọc 100 CHF"
+      },
+      {
+        "date": "2026-01-31 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 31.1.2026",
+        "content": "hỏi thăm phương án học phí chị ok k chị thả tim k rep thêm"
+      },
+      {
+        "date": "2026-02-03 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 3/2/26",
+        "content": "chị nhắn c chắc sẽ thanh toán 50 50 - báo hết cs chị hỏi khóa sau k có chtrinh ưu đãi hả em - báo thêm phương án đợt 1 trước 10/2, đợt 2"
+      },
+      {
+        "date": "2026-02-24 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 24/2/26",
+        "content": "nhắn lại chị về plan học, gửi lại học phí cs tháng 2 - push hồ sơ, mai hạn chót chốt khóa - Chị nói chị tính ghé qua vp bên em, xin địa chỉ - Đã rep, hỏi khi nào c qua được - k tl"
+      },
+      {
+        "date": "2026-03-02 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 2/3/26",
+        "content": "thứ 2 - nhắn chị dự kiến tuần này ghé qua bên em tìm hiểu chtrinh học đc k - Chị hẹn sau ngày"
+      }
+    ]
+  },
+  {
+    "index": 35,
+    "id": 1021588,
+    "phone": "0901369152",
+    "full_name": "T.Anh yếu, để bàn lại với sếp",
+    "email": "khanh.fnf@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "other",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2021-09-29 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 29/9/21",
+        "content": "data k47\nNote:  IELTS 6.5 hồi 2014  . Làm 3 năm về HR. Quan tâm đến interview với UBIS\nFb: https://www.facebook.com/profile.php?id=100009517991151\nGọi KNM, đã gửi email và kết bạn zalo. chị phản hồi, đang bận, gọi lại sau, Sau đó chị goi ở HCM, ta tốt, học ct nước ngoài, đi làm được 3 năm, đã học online nên hình dung được ct, mời tham gia WS để tự tin hơn khi đk học ."
+      },
+      {
+        "date": "2021-10-08 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 8/10/21",
+        "content": "đợt trước đk ws nhưng ko tham gia, liên hệ lại mời ws"
+      },
+      {
+        "date": "2021-10-12 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 12/10/21",
+        "content": "nói là tham gia nhưng gia đình có việc chưa sx được, cuối tuần này cũng vậy, nến khi nào ổn rồi sẽ liên hệ lại, Mời cuối tháng học thử chị nói ừ cuối tháng ok lúc đó cv cũng ổn, có gì gần đến ngày nhắc lại chị. ko tham gia ws"
+      },
+      {
+        "date": "2022-06-22 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 22/6/22",
+        "content": "Chị nhớ chương trình và hỏi lịch interview, chị kêu kết bạn Zalo để gửi thêm thông tin, nhưng interview chủ nhật tuần này (26/6/22) thì chị sợ hơi bận"
+      },
+      {
+        "date": "2022-06-23 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 23/6/22",
+        "content": "Có gọi lại xem lịch phỏng vấn, chị nói để chị xác nhận zalo rồi phản hồi, KNM"
+      },
+      {
+        "date": "2022-06-29 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 29/6/22",
+        "content": "Gọi lại xin lịch interview chị nói tại công ty chị cũng làm Chủ Nhật nên để chị check lại lịch rồi báo em qua Zalo"
+      },
+      {
+        "date": "2022-06-30 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 30/6/22",
+        "content": "Chị nói \"lần này chị bị bận quá nên chị chưa tham gia bên em dc, cám ơn em đã hỗ trợ chị nha\""
+      },
+      {
+        "date": "2022-07-07 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 07/07/22",
+        "content": "Mời Orientation intake 50, nhắn Zalo"
+      },
+      {
+        "date": "2022-07-20 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 20/7/22",
+        "content": "Báo chị lịch chốt khóa 51 trên Zalo"
+      },
+      {
+        "date": "2022-07-28 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 28/7/22",
+        "content": "Gọi nhắc khóa 51, chị nói em ơi em ơi chị đang họp có gì chị nc em sau nha"
+      }
+    ]
+  },
+  {
+    "index": 36,
+    "id": 1005562,
+    "phone": "0901239456",
+    "full_name": "Chị Hiếu_Nhi",
+    "email": "hieuhuynhvl@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "Marketing",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2021-05-24 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 24/5/21",
+        "content": "Khách hỏi là gọi từ đâu, có nói là gọi từ chi nhánh BD thì khách ok nói tiếp. Chị đang làm logictics, làm cho cả công ty nhà và đơn vị ngoài. Chị có hỏi thăm là học tại TP hay sao và giảng viên như thế nào, đã giải đáp cho chị. Chị hỏi có thông tin chương trình không gửi cho chị tham khảo, để chị nhắn email qua cho. Có gì chị liên hệ với em hoặc chị ghé qua\nNgày"
+      },
+      {
+        "date": "2022-03-03 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 3/3/22",
+        "content": "Gửi tt tuyển sinh k49 ubis"
+      },
+      {
+        "date": "2025-10-11 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 11/10",
+        "content": "Gửi mail mời chị tham gia seminar ubis ngày"
+      },
+      {
+        "date": "2025-11-11 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 11/11",
+        "content": "Gửi mail thông tin tuyển sinh khóa 48"
+      },
+      {
+        "date": "2026-05-25 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 25/5",
+        "content": "Khách rep tin nhắn zalo gửi địa chỉ mail để gửi thông tin cho chị. Đã gửi\nChị nói sao chị chưa nahajn được, nhờ chị check lại mail spam, chị ok đã thấy mail. Chị cũng ở tại TDM luôn, có mời chị ghé qua văn phòng để tham khảo, nhắn chị địa chỉ và giờ làm việc.\nNgày"
+      },
+      {
+        "date": "2026-05-26 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 26/5",
+        "content": "Nhắn tin zalo mời chị tham gia buổi học chuyên đề (30/5). Chị rep là chị thấy học phí cao hơn so với ĐHTDM quá. Có giải thích so sánh cho chị thấy ctr MBA quốc tế và VN, Giới thiệu profile giảng viên và học viên làm về logictics.\nNgày"
+      },
+      {
+        "date": "2026-06-08 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 08/6",
+        "content": "Gửi lời mời kb lại\nNgày"
+      },
+      {
+        "date": "2026-06-11 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 11/6",
+        "content": "Gọi lại chị hỏi thăm chị xem qua ctr chưa, chị nói chị bận quá nên chưa xem nữa, có gì để cuối tuần này chị có thời gian chị xem. Nói chị có cần hỗ trợ thêm thông tin gì thì liên hệ lại\nNgày"
+      },
+      {
+        "date": "2026-06-21 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 21/6",
+        "content": "Nhắn chị lịch tuyển sinh\nNgày"
+      },
+      {
+        "date": "2026-06-25 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 25/6",
+        "content": "Gửi mail chị về thông tin chương trình MBA UBIS\nNgày"
+      }
+    ]
+  },
+  {
+    "index": 37,
+    "id": 1003565,
+    "phone": "0768644883",
+    "full_name": "Kim Chung Nguyen Thi",
+    "email": "kim_chung302@yahoo.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "Facebook IDEAS",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2025-10-06 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 6.10.25",
+        "content": "gọi 11h18-Thuê bao, add zalo"
+      },
+      {
+        "date": "2025-10-07 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 7.10.25",
+        "content": "Thuê bao, đã mail MBA h/st + kiểm định, chưa add zalo"
+      },
+      {
+        "date": "2025-11-18 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 18.11.25",
+        "content": "gọi 2h05 nghe chào xong chị nói chị đang bận xíu á em có gì xíu gọi lại nha em"
+      },
+      {
+        "date": "2025-11-24 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 24.11.25",
+        "content": "gọi 10h53-KNM, gửi lại lời mời kb zalo - chị đã accept xin thông tin chtrinh và học phí"
+      },
+      {
+        "date": "2025-11-25 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 25.11.25",
+        "content": "nhắn lại nói chị xem chtrinh có gì thắc mắc cứ nhắn em chị cảm ơn"
+      },
+      {
+        "date": "2025-12-04 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 4.12.25",
+        "content": "nhắn cs trả góp 24 tháng qua sacombank - 20/12 chốt khóa, tháng 01 học - k rep"
+      },
+      {
+        "date": "2025-12-18 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 18.12.25",
+        "content": "nhắn cs tặng quà tết, có thể cấn trừ 1000 CHF"
+      },
+      {
+        "date": "2025-12-20 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 20/12",
+        "content": "chốt khóa, tháng 01 học - k rep\n18.12.25: nhắn cs tặng quà tết, có thể cấn trừ 1000 CHF\n8.1.2026: nhắn hỏi thăm chị cảm nhận về chtrinh ntn do nhắn nhiều thông tin mà k thấy chị phản hồi - Chị nói sorry em cuối năm lu bu quá, cho chị hỏi chị 47 tuổi rồi học đc k - đã giải đáp chị thả tim \n9.1.2026: nhắn mời tối nay tham gia ORT - chị hỏi lại mấy giờ, thả tim - Không join zoom\n13.1.2026: nhắn gửi file chính sách, hỏi thăm kế hoạch học tập dự kiến tgian nào - k rep"
+      },
+      {
+        "date": "2026-01-08 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 8.1.2026",
+        "content": "nhắn hỏi thăm chị cảm nhận về chtrinh ntn do nhắn nhiều thông tin mà k thấy chị phản hồi - Chị nói sorry em cuối năm lu bu quá, cho chị hỏi chị 47 tuổi rồi học đc k - đã giải đáp chị thả tim"
+      },
+      {
+        "date": "2026-01-09 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 9.1.2026",
+        "content": "nhắn mời tối nay tham gia ORT - chị hỏi lại mấy giờ, thả tim - Không join zoom"
+      }
+    ]
+  },
+  {
+    "index": 38,
+    "id": 1018649,
+    "phone": "0888918899",
+    "full_name": "Trần Phương",
+    "email": "huongtransg689@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "Facebook IDEAS",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2019-07-29 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 29/7/2019",
+        "content": "có gì gọi sau, anh đang bận, đã gửi mail"
+      },
+      {
+        "date": "2024-05-02 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 2/5/24",
+        "content": "Đổ chuông mà KNM 2 lần"
+      },
+      {
+        "date": "2024-05-03 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 3/5/24",
+        "content": "Đổ chuông mà KNM (lúc 3h chiều), chiều 6:30 gọi lại KNM"
+      },
+      {
+        "date": "2024-05-06 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 6/5/24",
+        "content": "kĩ thuật, làm hành chính của nhà nước, có nói thẳng với a là bằng k được thông qua bộ, a nói a muốn học thì học thôi chứ mắc gì phải nộp cho cơ quan, cũng có giải thích kĩ cho a, về hình thức đào tạo, tổ chức công nhận, haha a không sử dụng tiếng anh mà hồi đó có học ở trường kiểu bẳng B, tư vấn EC cho a, xin mail a nói để a nt"
+      },
+      {
+        "date": "2024-05-06 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 6/5/24",
+        "content": "Gọi điện lại đổ chuông vài tiếng cái bấm máy bận, TVV search thấy số 8899 có zalo nên TVV gửi lời mời kết bạn zalo trước.  Anh rep zalo có thể gọi lại nên TVV gọi lại tư vấn thì anh nói  học để năng cao trình độ chứ không nộp cơ quan, tiếng Anh không sử dụng, đọc được nghe nói k giỏi. TVV có nói các hỗ trợ của Viện IDEAS. Anh kêu ok gửi thông tin anh tham khảo qua zalo tiếp nha, zalo anh nhắn hỏi học phí bao nhiêu, anh ok học phí"
+      },
+      {
+        "date": "2024-07-11 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 11/7/24",
+        "content": "Nhắn báo học bổng 1500 - 2500 EUR mà anh chào lại có anh im"
+      },
+      {
+        "date": "2024-08-21 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 21/8/24",
+        "content": "Gọi anh hơi ồn ồn, anh nói có gì nhắn qua zalo anh nha."
+      },
+      {
+        "date": "2024-08-22 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 22/8/24",
+        "content": "Đã nhắn chính sách 2 chuyến đi và Sacombank, báo luôn chương trình tự học, anh hỏi 130tr là mấy năm, TVV kêu 15 tháng anh chưa phản hồi gì"
+      },
+      {
+        "date": "2024-08-24 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 24/8/24",
+        "content": "Gọi lại anh hỏi đầu vào sao em, nhớ anh tiếng Anh yếu nên nói khá chi tiết chỗ chuyên đề, đánh giá học thuật. Anh quan tâm nhiều về chính sách Sacom tuy nhiên anh sợ giữa chừng anh học không nổi thì mất tiền hả em (thì đúng rồi) nên anh hỏi anh mở thẻ sacombank mà thanh toán cho bên mình là 2 đợt hoặc 4 đợt được không. Anh kêu rồi ok để anh cân nhắc rồi phản hồi em nhé"
+      },
+      {
+        "date": "2024-08-28 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 28/8/24",
+        "content": "Nhắn anh ráng sắp xếp vì chính sách đang tốt."
+      }
+    ]
+  },
+  {
+    "index": 39,
+    "id": 1015500,
+    "phone": "0941534446",
+    "full_name": "Anh Phạm Minh Đức",
+    "email": "dpham22894@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "Facebook UBIS",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2020-07-03 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 3/7/20",
+        "content": "anh ở TP HCM, sinh năm 96 học đại học bên Thụy Sĩ về chuyên ngành quản trị nhà hàng khách sạn, mới tìm hiểu CT lo lắng, hỏi là UBIS ở Thụy Sĩ s anh ko biết, anh sợ trường ma đóng học phí rồi ko học được, anh hỏi về học phí, điều kiện đầu vào ntn? anh nắm và hình dung được CT, ko quan tâm học phí, kết bạn zalo anh cân nhắ liên hệ lại em nhé."
+      },
+      {
+        "date": "2020-12-17 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 17/12/20",
+        "content": "nhắn zalo hỏi thăm anh. Mắc cười tìm hiểu cho đã giờ nói A không có nhu cầu e nha."
+      },
+      {
+        "date": "2021-04-08 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 8/4/21",
+        "content": "gửi email thông báo tuyển sinh khóa 44."
+      },
+      {
+        "date": "2023-05-26 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 26/5/23",
+        "content": "Đăng ký Seminar"
+      },
+      {
+        "date": "2023-05-26 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 26/5/23",
+        "content": "Đăng ký Seminar 28/5/23 nhưng gọi lại thuê bao. Nhắn Zalo thì anh nói tham gia Seminar"
+      },
+      {
+        "date": "2023-05-28 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 28/5/23",
+        "content": "nhưng gọi lại thuê bao. Nhắn Zalo thì anh nói tham gia Seminar"
+      },
+      {
+        "date": "2023-11-03 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 3/11/23",
+        "content": "không đổ chuông, gọi lần 2 k đổ chuông"
+      },
+      {
+        "date": "2023-11-03 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 3/11/23",
+        "content": "gọi nghe giọng nam nhựa nhựa, bảo không phải, search zalo không có"
+      },
+      {
+        "date": "2024-03-31 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 31/3/24",
+        "content": "Tự nhắn zalo hỏi bên em có tuyển dụng vị trí nào không, TVV đã chuyển contact cho nhân sự"
+      },
+      {
+        "date": "2024-04-26 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 26/4/24",
+        "content": "Mời tham gia webinar"
+      }
+    ]
+  },
+  {
+    "index": 40,
+    "id": 1014732,
+    "phone": "0938001698",
+    "full_name": "NGUYEN LY HUYEN",
+    "email": "nguyenlyhuyen@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "other",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2022-06-19 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 19/6/22",
+        "content": "Đã gửi email TTCT báo chính sách 700$, đã kết nối Zalo, gọi tư vấn chị đang họp nói đầu giờ chiều gọi lại"
+      },
+      {
+        "date": "2022-06-21 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 21/6/22",
+        "content": "Chị nói chắc tạm thời chưa học do công ty đang bận quá. nên tầm tháng 10 mới đăng ký học được"
+      },
+      {
+        "date": "2022-07-07 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 07/07/22",
+        "content": "Mời orientation 50, gọi chị nói chị tham gia được. Vào báo chị phỏng vấn với anh Vinh ngày 10-23/7"
+      },
+      {
+        "date": "2022-07-20 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 20/7/22",
+        "content": "Nhắn báo thời gian khai giảng khóa 51 trên zalo,"
+      },
+      {
+        "date": "2022-07-21 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 21/7/22",
+        "content": "Chị nói chị cũng đang bận quá, nhưng gì em gửi chị trên zalo chị cũng chưa có thời gian xem lại nữa, để chị xem lại thời gian như thế nào rồi chị nhắn lại qua Zalo cho em"
+      },
+      {
+        "date": "2022-07-28 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 28/7/22",
+        "content": "Chị nói chị đang có dự án tới cuối tháng 9 lận, tuần nào chị cũng họp nên k tham gia phỏng vấn được. Có nói chị nếu tuần này rảnh thì sắp lịch interview, chị ok. (Dự án máy móc gì đó, cuối tháng 9 bên Châu Âu kiểm duyệt và cấp phép thì ổn)"
+      },
+      {
+        "date": "2022-10-13 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 13/10/22",
+        "content": "Chị hẹn 6h gọi lại"
+      },
+      {
+        "date": "2022-11-15 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 15/11/22",
+        "content": "Chị nói dự án đợt rồi chị khá thành công nên được thăng lên vị trí mới, giờ đang rất bận để giải quyết công việc ở vị trí mới chắc là đầu năm sau mới học được, chắc chắn khóa này chị không tham gia được rồi"
+      },
+      {
+        "date": "2023-01-10 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 10/1/23",
+        "content": "Nhắn lại Zalo báo chị lịch học được dời qua tới qua tết âm xem chị sắp xếp tham gia khóa 52 luôn được không, gửi schedule môn khóa 52"
+      },
+      {
+        "date": "2023-03-08 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 8/3/23",
+        "content": "Gửi zalo voucher 8/3, chúc"
+      }
+    ]
+  },
+  {
+    "index": 41,
+    "id": 1008627,
+    "phone": "0907982728",
+    "full_name": "Trần Quang",
+    "email": "tranquang.mercedes@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "Facebook IDEAS",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2018-01-10 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 10/1/18",
+        "content": "a đăng kí lại để hỏi về học phí, kiểu như a mún học lắm mà không có kinh phí, có tư vấn cho a học vs UBIS 5700USD."
+      },
+      {
+        "date": "2018-04-17 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 17/4/18",
+        "content": "email chương trình cho a, có nói thời hạn chốt khoá rồi."
+      },
+      {
+        "date": "2018-05-09 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 9/5/18",
+        "content": "không bắt máy, a nói giờ a đang ở ngoài đường mà mưa, tối gọi cho a."
+      },
+      {
+        "date": "2018-07-05 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 5/7/18",
+        "content": "thông báo khoá mới cho a rồi."
+      },
+      {
+        "date": "2018-11-08 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 8/11/18",
+        "content": "quận 12, làm Thaco, a quan tâm chương trình, trẻ, giỏi, quan tâm đến giá trị của văn bằng vì bên a ưa chuộng bằng cấp nước ngoài, a hỏi ranking, a quan tâm đến chương trình liên kết của đại học kinh tế và ngoại thương, a nói học phí có 4000-5000 (theo tìm hiểu thì 4000-5000 thì là chương trình trong nước chứ k phải liên hết, liên kết thì hơn 10000), email về ct và về trường, ranking cho a, a hỏi học phí có ưu dãi cho a dc không vì mức học phí bên e hơi cao, a phải cố gắng mới học dc, nói a để đề xuất với cấp trên."
+      },
+      {
+        "date": "2018-12-04 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 4/12/18",
+        "content": "không bắt máy."
+      },
+      {
+        "date": "2018-12-05 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 5/12/18",
+        "content": "xin lỗi mình đang họp tí, có gì mình gọi lại."
+      },
+      {
+        "date": "2019-04-04 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 4/4/19",
+        "content": "nt zalo thông tin khoá mới cho a rồi mà có vẻ a chưa đủ tiền học."
+      },
+      {
+        "date": "2019-09-05 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 5/9/19",
+        "content": "thông tin khóa 36."
+      },
+      {
+        "date": "2021-06-30 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 30/6/21",
+        "content": "nt zalo thông tin k46, gửi thông tin thay đổi qua zalo cho anh."
+      }
+    ]
+  },
+  {
+    "index": 42,
+    "id": 1002686,
+    "phone": "0392443700",
+    "full_name": "Quyen Nguyen",
+    "email": "oneworldin1@gmail.com, nguyenquyen2078@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "Facebook IDEAS",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2019-09-24 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 24/9/19",
+        "content": "kết bạn zalo qua số này 008613252998385 và gửi email chị tham khảo nha.10/10/19 tắt máy."
+      },
+      {
+        "date": "2019-10-29 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 29/10/19",
+        "content": "chị nói chị bận lắm chưa tham gia được có chat với chị trên zalo nhưng chị nói nhiều việc nó troi tin nhắn nên nhắn lại cho chị nhé, có nó chị bận chị học online được ko, chị muốn đi học thử để xem cơ sở và chất lượng bên mình rồi chị mới quyết định tham gia."
+      },
+      {
+        "date": "2019-11-06 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 6/11/19",
+        "content": "nhắn zalo cho chị nhưng chị ko trả lời, gọi điện KNM.7/11/19 nhắn tin zalo cho chị để hẹn chị mời học thử chị đồng ý."
+      },
+      {
+        "date": "2019-11-10 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 10/11/19",
+        "content": "gọi chị mời chị học thử chị nghe máy nói chị có việc bận tầm trưa chị qua trễ nhưng ko thấy chị đến gọi lại KNM."
+      },
+      {
+        "date": "2019-11-14 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 14/11/19",
+        "content": "liên hệ chị mời chị tuần này học thử nhưng chị nói đang bận chị gọi lại sau."
+      },
+      {
+        "date": "2020-02-24 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 24/2/20",
+        "content": "email k38 KNM , nhắn tin zalo cho chị rồi."
+      },
+      {
+        "date": "2020-04-12 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 12/4/20",
+        "content": "email k39.gọi"
+      },
+      {
+        "date": "2020-06-05 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 5/6/20",
+        "content": "KNM, nhắn tin zalo và đã gửi lại chương trình học. Chị gọi lại nói chưa đi học được, khi nào chị đi học sẽ phản hồi email của em và liên hệ lại em nhé."
+      },
+      {
+        "date": "2020-11-09 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 9/11/20",
+        "content": "email k42. chị đang họp gọi lại chị sau nhé"
+      },
+      {
+        "date": "2021-07-06 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 6/7/21",
+        "content": "bắt máy rồi tắt máy."
+      }
+    ]
+  },
+  {
+    "index": 43,
+    "id": 1014315,
+    "phone": "0936798486",
+    "full_name": "Triệu Thanh Ninh",
+    "email": "thanhninhdulich@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "Facebook IDEAS",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2025-10-15 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 15/10/25",
+        "content": "Data trùng BBA (noted by c.Quỳnh)"
+      },
+      {
+        "date": "2025-10-16 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 16.10.25",
+        "content": "chị này 2 năm cao đẳng ngành quản trị du lịch, tư vấn đầy đủ nhưng nghiêng về EMBA. Add zalo chia sẻ thêm"
+      },
+      {
+        "date": "2025-10-21 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 21/10/25",
+        "content": "chị đang bận em nhắn zalo giúp chị - gửi brochure BBA topup, chị hỏi chuyến đi và học phí, để chị cân nhắc."
+      },
+      {
+        "date": "2025-10-22 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 22/10",
+        "content": "nhắn chị k rep\n30.10.25: gọi 2h hỏi thăm chị plan học mà chị ngắt máy bấm máy bận \n11.11.25: nhắn chính sách sn Viện hp còn 2000 - chị rep hỏi lại hình thức học vs mẫu văn bằng. Đã tư vấn thêm push chị. Chị hỏi là chốt còn khoảng 67 triệu đúng k \n14.11.25: gửi mail IDEAS kỷ niệm 15 năm – Giảm 33% học phí chương trình BBA Swiss UMEF\n18.11.25: nhắn remind - k xem k rep \n21.11.25: báo chị 25 hạn chót chốt chính sách ưu đãi - k rep \n24.11.25: hỏi thăm chị dự kiến học khóa này luôn không, ngày mai chốt chính sách - k rep\n8.12.25:  nhắn báo cs trả góp 24 tháng qua sacombank, 20.12 chốt khóa, tháng 01.2026 nhập học - k xem k rep\n17.12.25: báo anh cs tặng quà tết, cấn trừ còn 2000CHF, giảm giá 12% đóng 01 lần - chị thả tim\n20.12.25: gọi 5h KNM\n24.12.25: nhắn remind, nói chị mai chốt khóa chị cân nhắc học luôn khóa này luôn k \n25.12.25: Gọi hỏi thăm - chị hỏi vụ Bộ GD VN công nhận, chị chốt chị k làm nhà nước nhưng học mà chưa đc công nhận chính thống thì không học"
+      },
+      {
+        "date": "2025-10-30 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 30.10.25",
+        "content": "gọi 2h hỏi thăm chị plan học mà chị ngắt máy bấm máy bận"
+      },
+      {
+        "date": "2025-11-11 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 11.11.25",
+        "content": "nhắn chính sách sn Viện hp còn 2000 - chị rep hỏi lại hình thức học vs mẫu văn bằng. Đã tư vấn thêm push chị. Chị hỏi là chốt còn khoảng 67 triệu đúng k"
+      },
+      {
+        "date": "2025-11-14 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 14.11.25",
+        "content": "gửi mail IDEAS kỷ niệm 15 năm – Giảm 33% học phí chương trình BBA Swiss UMEF"
+      },
+      {
+        "date": "2025-11-18 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 18.11.25",
+        "content": "nhắn remind - k xem k rep"
+      },
+      {
+        "date": "2025-11-21 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 21.11.25",
+        "content": "báo chị 25 hạn chót chốt chính sách ưu đãi - k rep"
+      },
+      {
+        "date": "2025-11-24 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 24.11.25",
+        "content": "hỏi thăm chị dự kiến học khóa này luôn không, ngày mai chốt chính sách - k rep"
+      }
+    ]
+  },
+  {
+    "index": 44,
+    "id": 1016168,
+    "phone": "0948047750",
+    "full_name": "Mai Thị Liễu",
+    "email": "lieumai0407@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "Facebook VTCI",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2025-11-13 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 13/11",
+        "content": "push gửi hồ sơ và gửi hồ sơ"
+      },
+      {
+        "date": "2025-11-14 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 14/11",
+        "content": "tư vấn Msc AI cho c để c giới thiệu học viên"
+      },
+      {
+        "date": "2025-11-16 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 16/11",
+        "content": "tư vấn và làm các bảng chi phí cho từng chương trình gửi c"
+      },
+      {
+        "date": "2025-11-17 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 17/11",
+        "content": "đã nhận acceptance letter nhắn báo học viên nhưng không thấy tl"
+      },
+      {
+        "date": "2025-11-18 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 18/11",
+        "content": "nhắn tin vẫn không thấy trả lời"
+      },
+      {
+        "date": "2025-11-19 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 19/11",
+        "content": "nhắn báo hạn thanh toán đợi 1 là"
+      },
+      {
+        "date": "2025-11-19 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 19/11",
+        "content": "nhắn báo hạn thanh toán đợi 1 là 25/11 c nói c đag họp khi nào xong c gọi nhưng đầu giờ chiều nhắn c cũng không tl, gọi k nghe máy"
+      },
+      {
+        "date": "2025-11-25 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 25/11",
+        "content": "c nói c đag họp khi nào xong c gọi nhưng đầu giờ chiều nhắn c cũng không tl, gọi k nghe máy"
+      },
+      {
+        "date": "2026-08-26 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 26/8",
+        "content": "c có bằng trung cấp nghành du lịch, hiện đag học cử nhân CNTT, đag cử nhân QTKD Quốc tế. chị phụ trách 1 team của 1 ban về dữ liệu của 1 tập đoàn, neu kinh nghiệm cty hiện tại thì chị làm dc 7 năm"
+      },
+      {
+        "date": "2026-08-27 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 27/8",
+        "content": "book lịch interview ngày 28/8 lúc 2h chiều"
+      }
+    ]
+  },
+  {
+    "index": 45,
+    "id": 1006247,
+    "phone": "0902991826",
+    "full_name": "Vu viet hoang",
+    "email": "vuviethoangston@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "Marketing",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2023-10-10 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 10/10/23",
+        "content": "anh đang dạy học, lúc khác gọi lại"
+      },
+      {
+        "date": "2023-10-26 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 26/10/23",
+        "content": "thuê bao\n\ncó cử nhân, lớn tuổi nên chưa ccta, sử dụng tiếng anh khi đi làm,\nnếu học thì có thể phỏng vấn tiếng anh ( hotline )"
+      },
+      {
+        "date": "2023-10-26 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 26/10/23",
+        "content": "thuê bao\ncó cử nhân, lớn tuổi nên chưa ccta, sử dụng tiếng anh khi đi làm,\nnếu học thì có thể phỏng vấn tiếng anh ( hotline )"
+      },
+      {
+        "date": "2023-11-07 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 7/11/23",
+        "content": "30' nữa anh gọi lại em nhé, anh cũng lớn tuổi rồi, 50t, anh đang dạy đại học Văn Lang, muốn tì hỉu EMBA, anh k thích học kiểu truyền thống, anh cũng có cty gia đình"
+      },
+      {
+        "date": "2024-05-17 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 17/5/24",
+        "content": "Nguồn FB IDEAS - Học phí \nTên: Hoang Vu\nSDT: 902991826\nEmail: Vuviethoangston@gmail.com\nHọc vấn: Cử nhân\nTiếng anh tương đương: Dưới IELTS 6.0\nCông việc: Coca cola- tribeco- gloria jeans coffee\nTối muốn tư vấn cả 3"
+      },
+      {
+        "date": "2024-05-17 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 17/5/24",
+        "content": "không bắt máy, nt zalo anh, anh gọi zalo lại, a hỏi ct nào dễ nhất em, nói ASC, xong mình nói còn ct khó nhát sẽ là EMBA của trường UMEF, anh nói đó đó, anh đang quan tâm ct đó, TA của anh ok, có thầy bên trường văn lang nói là anh đi học ct EMBA đi, nó học thực tế, anh hỏi học phí, đóng bao nhiêu đợt, mới chỉ nói vs anh này chia 2 đợt thôi, anh tính thì tầm 100 mấy triệu, anh hỏi khi nào học, anh nói tháng 6 anh đi Mỹ 1 tháng, anh mới dc cấp visa rồi, nói anh vậy thì anh học"
+      },
+      {
+        "date": "2024-05-20 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 20/5/24",
+        "content": "anh dk lại tìm hiểu 3 ct, mình nói k biết anh có gì thắc mắc thêm cần em hỗ trợ không thì a nói k có thắc mắc gì mà tại tháng 6 anh đi Mỹ 1 tháng luôn, nói vậy trong tháng này anh soạn hồ sơ gửi em đi, em sẽ làm hs rồi nào anh về a đóng hp trước ngày"
+      },
+      {
+        "date": "2024-05-24 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 24/5/24",
+        "content": "gọi điện anh kbm, nt zalo cho anh vụ hồ sơ."
+      },
+      {
+        "date": "2024-07-03 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 3/7/24",
+        "content": "hôm trước anh nói tháng 6 đi Mỹ tháng 7 về mà vì ba mẹ sức khoẻ không tốt nên mấy anh em dời lại, nếu mà mọi thứ ok thì thang 7 này đi tháng 8 về, anh thích ct bên e lắm mà mắc đi vậy á, nói anh nếu dc thì cpi hồ sơ trước, anh ok ok nói remind lại zalo cho anh"
+      },
+      {
+        "date": "2024-07-22 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 22/7/24",
+        "content": "gọi điện thấy thuê bao, chắc anh đi Mỹ rồi, nt zalo"
+      }
+    ]
+  },
+  {
+    "index": 46,
+    "id": 1016521,
+    "phone": "0962177922",
+    "full_name": "Anh Nguyễn Đông Quang_Nhi",
+    "email": "",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "other",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2021-04-05 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 05/4/21",
+        "content": "Anh làm bên kỹ thuật, anh có so sánh với ctr học của ĐH Bình Dương\nNgày"
+      },
+      {
+        "date": "2021-07-27 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 27/7/21",
+        "content": "Gọi lại mời anh tham gia buổi học chuyên đề (01/8/21), anh xác nhận sẽ tham gia để anh gửi mail qua cho, hẹn anh thứ 6 gửi ID"
+      },
+      {
+        "date": "2022-03-03 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 3/3/22",
+        "content": "Gửi tt tuyển sinh k49 ubis"
+      },
+      {
+        "date": "2026-04-06 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 06/4",
+        "content": "Anh có hỏi về ctr học EC vì anh chưa có chứng chỉ anh văn\nNgày"
+      },
+      {
+        "date": "2026-04-07 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 07/4",
+        "content": "Khách hẹn cuối tuần anh sẽ tham gia buổi học chuyên đề qua zoom\nNgày"
+      },
+      {
+        "date": "2026-04-09 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 09/4",
+        "content": "Đã gửi tài khoản zoom qua cho anh chuẩn bị học\nNgày"
+      },
+      {
+        "date": "2026-04-11 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 11/4",
+        "content": "Khách học online qua zoom\nNgyaf"
+      },
+      {
+        "date": "2026-04-12 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 12/4",
+        "content": "Anh cảm thấy khóa học bình thường cũng như các ctr học khác, anh hỏi đào tạo AV thì bên em luôn hay sao và hình thức học như nào, nếu k đạt có thi lại không, các môn học của MBA thì học online hết hay sao? Sau khi giải đáp cho anh thì có hẹn gặp, anh hỏi văn phòng ở đâu, khi nào có khai giảng khóa mới, anh nói để sắp xếp rồi báo lại\nNgày"
+      },
+      {
+        "date": "2026-04-21 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 21/4",
+        "content": "Anh trả lời tin nhắn zalo (19/4) là anh học bách khoa ngành kỹ sư điện, có giải thích là khóa tuyển sinh tiếp theo sẽ ko áp dụng bằng ngôn ngữ anh nữa nên hỏi thăm ngành học của anh để hỗ trợ tốt hơn\nNgày"
+      },
+      {
+        "date": "2026-04-22 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 22/4",
+        "content": "Gọi lại cho anh để chốt khóa 43. Anh nói thời gian này anh chưa học được, anh nói có thể là năm sau mới tham gia chương trình\nNgày"
+      }
+    ]
+  },
+  {
+    "index": 47,
+    "id": 1004697,
+    "phone": "0854760341",
+    "full_name": "Khúc Thị Vân",
+    "email": "vanhiena1@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "Facebook IDEAS",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "1997-08-01 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 01/08/1997",
+        "content": "Tiếng Anh/Kinh nghiệm: 6.5 ielts"
+      },
+      {
+        "date": "2024-01-05 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 5/1/24",
+        "content": "Note: Bằng cử nhân: có. Ngày sinh:"
+      },
+      {
+        "date": "2024-01-05 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 5/1/24",
+        "content": "Đã gọi tư vấn, chị nói đã tốt nghiệp ĐH chuyên ngành Tài chính, đang luyện thi IELTS để dành cho việc học thạc sĩ. Chị kêu sáng mai gọi lại nhé."
+      },
+      {
+        "date": "2024-01-06 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 6/1/24",
+        "content": "Gọi lại KNM"
+      },
+      {
+        "date": "2024-01-11 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 11/1/24",
+        "content": "4h chiều gọi lại chị nhé. Gọi tư vấn chị hẹn đúng 4h mai gọi lại chị nhé chị đang rất quan tâm chương trình này. Chị muốn theo hướng học nghiên cứu để dễ apply vào Tiến sĩ vì gia đình chị mấy năm tới muốn đi định cư nước ngoài. Chồng chị thì có học bổng rồi nên là giờ muốn tìm một chương trình trong nước để học lên tiễn sĩ."
+      },
+      {
+        "date": "2024-01-12 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 12/1/24",
+        "content": "Đã gọi tư vấn cho chị, chị thích học online và check ranking trường để sau apply Tiến sĩ cho dễ. Chị học được buổi chiều, tối thì lại bận con cái. Quan tâm học bổng nói nếu giảm xuống còn 100 thì tốt quá. Chị đang cân nhắc định cư Mỹ hay Châu Âu. Gửi thông tin 3 trường qua email cho chị. Chị k thích làm việc qua zalo"
+      },
+      {
+        "date": "2024-04-08 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 8/4/24",
+        "content": "Vừa mới chào cái kêu chị đang bận chị đang bận, lúc khác gọi rồi cúp máy"
+      },
+      {
+        "date": "2024-04-10 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 10/4/24",
+        "content": "Sáng 11h gọi KNM, 4h chiều gọi lại. Chiều gọi lại KNM"
+      },
+      {
+        "date": "2024-04-11 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 11/4/24",
+        "content": "Gọi 2 lần KNM"
+      },
+      {
+        "date": "2024-05-09 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 9/5/24",
+        "content": "Gọi lại chị nói giờ chị đang bận sửa cái tài khoản tí, mai tầm 3h chiều gọi lại cho chị nhé"
+      }
+    ]
+  },
+  {
+    "index": 48,
+    "id": 1000013,
+    "phone": "0966965788",
+    "full_name": "chị Quỳnh Như giới thiệu, KOREAN AIR",
+    "email": "tangngocanh1992@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "other",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2020-01-14 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 14/1/20",
+        "content": "Quảng Ninh, chị quan tâm chương trình, chủ động hỏi thông tin, học online như thế nào, có tương tác dc hay không, tiếng anh chị yếu, không biết có học dc không, học Ec có dảm bảo để học MBA không, học lần lượt hay học song song, học phi 2 ct, chị nói nhắn tin sdt cho chị, xin mail cị nói để có gì chị nhắn cho."
+      },
+      {
+        "date": "2020-02-11 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 11/2/20",
+        "content": "chị đang bận, có gì mai gọi lại sau."
+      },
+      {
+        "date": "2020-04-22 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 22/4/20",
+        "content": "chị chỉ còn lăn tăn về học phí thôi, nói chính sách mở thẻ sacom cho chị, chị mất mail mình rồi nên là gửi lại thông tin cho chị, các khoản học phí, tiền vệt, để chị cân đối, vỉ chị còn phải học tiếng anh EC nữa."
+      },
+      {
+        "date": "2020-04-29 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 29/4/20",
+        "content": "chị xem hồ sơ thì chị k tìm thấy bằng dh của chị, vs cv chị cũng đang bận quá nên cchac81 k học dợt này, nói giảm 800 USD cho chị, k hỗ trợ mở thẻ nữa, chị nói để chị xem."
+      },
+      {
+        "date": "2020-07-01 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 1/7/20",
+        "content": "chắc là chị chưa."
+      },
+      {
+        "date": "2021-06-17 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 17/6/21",
+        "content": "chị cũng muốn học lắm mà chị yếu tiếng anh quá sợ không học dc, với lại tình hình dịch nên chị không có thu nhập nữa, có ráng thuyết phục chị, chị nói gửi mail cho chị thông tin học phí"
+      },
+      {
+        "date": "2021-07-22 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 22/7/21",
+        "content": "có giớ thiệu thêm EIU, chị cũng quan tâm, EIU thì nếu chị không lấy dc bằng thì phỏng vấn đầuvào, còn UBIS bắt buộc phải có bằng, còn tiếng anh thì chị đang học lớp giao tiếp 3 4 tháng nên có gì khoá sau em liên hệ lại với chị nha chứ khoá này không kịp rồi."
+      },
+      {
+        "date": "2021-08-01 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 1/8/21",
+        "content": "chị Quỳnh Như giới thiệu, tiếp viên hàng không Korean Air Hà Nội, giờ chị cũng không có bay, mới đầu chị cũng mới nghe chị Như nói thôi, nên chị cũng tiềm hiểu chứ chưa có định hướng gì, nhưng mà tv rồi thì thấy chị cũng quan tâm, chị chưa có bằng TA nhưng mà TA chị ok, có thể xin phỏng vấn, chưa ghe chị than học phí, có nói ưu đãi giảm 420 tới hết khoá, chị quan tâm giá trị văn bằng, chị Như gợi ý là contact với anh Peter Phú Phạm."
+      },
+      {
+        "date": "2021-08-06 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 6/8/21",
+        "content": "mấy nay chị cũng hơi bận nên chưa xem chương trình, nói là nếu chị chưa biết nhiều ct bên em thì em sẽ cho chị contact chị hv ở HN, hv làm korean air hoặc viên ở nước ngoài cho chị."
+      },
+      {
+        "date": "2021-08-21 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 21/8/21",
+        "content": "nhắc tham gia nhập môn."
+      }
+    ]
+  },
+  {
+    "index": 49,
+    "id": 1021656,
+    "phone": "0919051083",
+    "full_name": "Hẹn  2022",
+    "email": "bhnguyen1983@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "other",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2020-08-04 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 4/8/2020",
+        "content": "a Đặng Quang Vinh k23 gt - đã add zalo anh nói mai gọi vì giờ anh đang bận"
+      },
+      {
+        "date": "2021-03-01 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 1/3/2021",
+        "content": "gửi lại mail cho anh với, đã báo giảm 750$ trước"
+      },
+      {
+        "date": "2022-02-23 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 23/2/22",
+        "content": "gọi anh nói là anh chưa học dc có thể cuối năm nhưng cũng k chắc. anh nói kiểu kiếm cớ từ chối"
+      },
+      {
+        "date": "2022-05-11 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 11/5/22",
+        "content": "a vinh gt lại cho c Thoa nhưng gọi a KNM, anh gọi lại nói gửi qua email anh"
+      },
+      {
+        "date": "2022-05-15 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 15/5/22",
+        "content": "đã báo cs giảm 700usd cho 2 anh Trí và Sơn nếu cùng dk. anh oki"
+      },
+      {
+        "date": "2022-05-25 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 25/5/22",
+        "content": "nhắc hồ sơ anh"
+      },
+      {
+        "date": "2022-09-15 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 15/9/22",
+        "content": "anh mới đổi cv, qua làm bên AIA, anh đi công tác suốt, k có thời gian học, nào học dc anh báo"
+      },
+      {
+        "date": "2026-03-08 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 8/3",
+        "content": "14/4 chưa chuẩn bị dc tiền, nc kiểu hờ hững, đã tư vấn hỗ trợ chia nhiều đợt mà a nói thôi để sang năm, với lên chức có tiền rồi anh học"
+      },
+      {
+        "date": "2026-04-14 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 14/4",
+        "content": "chưa chuẩn bị dc tiền, nc kiểu hờ hững, đã tư vấn hỗ trợ chia nhiều đợt mà a nói thôi để sang năm, với lên chức có tiền rồi anh học"
+      },
+      {
+        "date": "2026-08-05 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 5/8",
+        "content": "đã gọi điên tư vấn, anh đang làm việc tại HCM, trước anh TN ngành Công nghệ thông tin - ĐH An Giang, tiếng anh căn bản thôi chưa có CCTA, đã tư vấn anh 2 p.án bổ sung chứng chỉ. Gửi mail cho anh nghiên cứu thêm\nĐã nhắn cho anh về ưu đãi gt hv k41, giảm 300usd/800usd"
+      }
+    ]
+  },
+  {
+    "index": 50,
+    "id": 1022043,
+    "phone": "0976341397",
+    "full_name": "Hà Giang",
+    "email": "hagiangbox@gmail.com",
+    "status": "lead",
+    "temperature": "neutral",
+    "source": "other",
+    "total_interactions": 10,
+    "interactions": [
+      {
+        "date": "2021-07-08 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 8/7/21",
+        "content": "nhắn zalo nhắc chị soạn hồ sơ gửi ko trả lời."
+      },
+      {
+        "date": "2021-07-11 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 11/7/21",
+        "content": "nhắn hỏi thăm và chúc ngày mới đầy năng lượng cũng ko trả lời."
+      },
+      {
+        "date": "2021-07-23 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 23/7/21",
+        "content": "nhắn tin chúc ngày mới vui vẻ."
+      },
+      {
+        "date": "2021-08-09 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 9/8/21",
+        "content": "nhắn tin nhắc chị gửi hồ sơ nhiều lần chị ko phản hồi. Tối qua chị nhắn chị trước giờ ko quan tâm đến CT MBA vì đã có MBA rồi, giờ muốn tìm hiểu DBA đã tư vấn và gửi email thông tin cho chị. Đang nghi ngờ chị này tìm hiểu lấy thông tin chứ ko tìm hiểu để học."
+      },
+      {
+        "date": "2021-08-26 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 26/8/21",
+        "content": "mời anh/chị tham gia talkshow do học viên và cựu học viên tổ chức."
+      },
+      {
+        "date": "2021-10-08 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 8/10/21",
+        "content": "chị có add zalo, đã nhắn tin zalo mời chị tham gia WS.\n2/11/21gửi email TTCT DBA chị xem và gửi chị TT tuyển sinh DBA khóa 4"
+      },
+      {
+        "date": "2021-11-24 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 24/11/21",
+        "content": "chị xem ko phản hồi, nhắn tin chốt khóa"
+      },
+      {
+        "date": "2022-03-28 12:00:00",
+        "type": "note",
+        "subject": "Zalo - 28/3/22",
+        "content": "đã gửi email UBIS\t, nhắn page kêu anh add zalo. tương tác thêm qua zalo, anh đang ở nước ngoài tầm 1 tháng nữa về VN. Tiếng anh tốt, thường sử dụng, đã tư vấn anh interview, dk cuối tuần này cho anh. Về hồ sơ thì đã nói qua là cần thêm XN công tác và thư gt"
+      },
+      {
+        "date": "2022-08-09 12:00:00",
+        "type": "call",
+        "subject": "Cuộc gọi - 9/8/22",
+        "content": "gọi qua zalo KNM"
+      },
+      {
+        "date": "2022-10-11 12:00:00",
+        "type": "note",
+        "subject": "Tương tác - 11/10/22",
+        "content": "nhắn báo khóa 52 nhưng vẫn im re"
+      }
+    ]
+  }
+]

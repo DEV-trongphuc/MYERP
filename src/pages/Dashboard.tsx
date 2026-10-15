@@ -610,7 +610,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
           if (diff > 0) actualLate = diff;
         }
       }
-      const isLate = c.status === 'late' || actualLate > 0 || (c.check_in_time && c.work_start_time && c.check_in_time > c.work_start_time);
+      const isLate = actualLate > 0 || c.status === 'late';
       if (isLate) {
         const uid = c.user_id;
         const prof = hrProfileMap.get(Number(uid)) || hrProfileMap.get(uid);
@@ -624,8 +624,9 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
             value: 0 
           };
         }
+        const addVal = actualLate > 0 ? actualLate : 15;
         map[uid].count += 1;
-        map[uid].value += actualLate > 0 ? actualLate : 15;
+        map[uid].value += addVal;
       }
     });
 

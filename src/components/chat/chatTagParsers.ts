@@ -50,12 +50,25 @@ function safeParseJson<T = any>(str: string): T | null {
   }
 }
 
+export interface ErpCardTagData {
+  entity_type: 'contact' | 'expense' | 'deposit' | 'task' | 'approval' | 'system' | string;
+  entity_id?: number | string;
+  title: string;
+  subtitle?: string;
+  status?: string;
+  direct_url?: string;
+  relative_url?: string;
+  action_label?: string;
+  extra_info?: string;
+}
+
 export interface ParsedChatTags {
   cleanContent: string;
   proposal: ActionProposal | null;
   chart: DynamicChartData | null;
   nextBestActions: string[] | null;
   proactiveInsight: ProactiveInsightData | null;
+  erpCard: ErpCardTagData | null;
 }
 
 export function parseAllChatTags(rawContent: string): ParsedChatTags {
@@ -66,6 +79,7 @@ export function parseAllChatTags(rawContent: string): ParsedChatTags {
       chart: null,
       nextBestActions: null,
       proactiveInsight: null,
+      erpCard: null,
     };
   }
 
@@ -74,6 +88,7 @@ export function parseAllChatTags(rawContent: string): ParsedChatTags {
   let chart: DynamicChartData | null = null;
   let nextBestActions: string[] | null = null;
   let proactiveInsight: ProactiveInsightData | null = null;
+  let erpCard: ErpCardTagData | null = null;
 
   // 1. Parse & Strip ACTION_PROPOSAL
   const proposalMatch = text.match(/<<<ACTION_PROPOSAL:\s*({[\s\S]*?})\s*>>>/);
@@ -151,10 +166,38 @@ export function parseAllChatTags(rawContent: string): ParsedChatTags {
     }
   }
 
-  // 5. Clean any residual <<<SAVE_MEMORY:...>>> tags if present
+  // 5. Parse & Strip ERP_CARD
+  const erpCardMatch = text.match(/<<<ERP_CARD:\s*({[\s\S]*?})\s*>>>/);
+  if (erpCardMatch) {
+    text = text.replace(erpCardMatch[0], '').trim();
+    const rawCard = safeParseJson<any>(erpCardMatch[1]);
+    if (rawCard && rawCard.title) {
+      const eType = String(rawCard.entity_type || 'contact').toLowerCase();
+      // If entity_type is contact, but title or subtitle mentions staff/employee/nhân viên, suppress displaying as Lead card
+      const isStaffContext = /nhân viên|nhân sự|digital marketing|marketing|sale admin|kế toán|công nghệ|hr|developer/i.test(rawCard.subtitle || '') ||
+                             /nhân viên|nhân sự/i.test(rawCard.title || '');
+      erpCard = {
+        entity_type: isStaffContext && eType === 'contact' ? 'employee' : (rawCard.entity_type || 'contact'),
+        entity_id: rawCard.entity_id,
+        title: rawCard.title,
+        subtitle: rawCard.subtitle || '',
+        status: rawCard.status || '',
+        direct_url: rawCard.direct_url || '',
+        relative_url: rawCard.relative_url || '',
+        action_label: rawCard.action_label || (isStaffContext ? 'Mở hồ sơ nhân sự' : 'Mở xem chi tiết'),
+        extra_info: rawCard.extra_info || '',
+      };
+    }
+  }
+
+  // 6. Clean any residual <<<SAVE_MEMORY:...>>> tags if present
   text = text.replace(/<<<SAVE_MEMORY:\s*({[\s\S]*?})\s*>>>/g, '').trim();
 
-  // 6. Streaming Anti-Flicker Guard: Strip any unclosed <<<TAG: partial content at the very end of stream
+  // 6.1 Clean any machine phrases like '(Zero-Trust)' or 'Zero-Trust'
+  text = text.replace(/\s*\((?:Zero-Trust|Zero Trust)\)/gi, '');
+  text = text.replace(/\b(?:Zero-Trust|Zero Trust)\b/gi, 'bảo mật');
+
+  // 7. Streaming Anti-Flicker Guard: Strip any unclosed <<<TAG: partial content at the very end of stream
   text = text.replace(/<<<[A-Z_]+(?::[\s\S]*)?$/, '').trim();
 
   return {
@@ -163,5 +206,6 @@ export function parseAllChatTags(rawContent: string): ParsedChatTags {
     chart,
     nextBestActions,
     proactiveInsight,
+    erpCard,
   };
 }

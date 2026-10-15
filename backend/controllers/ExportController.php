@@ -12,6 +12,12 @@ class ExportController {
         
         $type = $_GET['type'] ?? 'contact';
         
+        // Attendance export handler
+        if ($type === 'attendance') {
+            $this->exportAttendance($auth);
+            return;
+        }
+
         // Allowed types
         if (!in_array($type, ['contact', 'company', 'deal', 'product', 'inventory'])) {
             respond(400, null, 'Loại dữ liệu xuất không hợp lệ', false);
@@ -203,16 +209,18 @@ class ExportController {
                 $params[] = $auth['user_id'];
             }
 
-            if ($search) {
-                $where[]  = '(t.full_name LIKE ? OR t.phone LIKE ? OR t.mobile LIKE ? OR t.email LIKE ? OR t.id = ?)';
-                $params[] = "%$search%";
-                $params[] = "%$search%";
-                $params[] = "%$search%";
-                $params[] = "%$search%";
-                $params[] = is_numeric($search) ? (int)$search : 0;
+            if ($search !== '') {
+                require_once __DIR__ . '/../utils/search_helpers.php';
+                $searchRes = buildContactSearchClause($search, 't.');
+                if (!empty($searchRes['clause'])) {
+                    $where[] = $searchRes['clause'];
+                    foreach ($searchRes['params'] as $sp) {
+                        $params[] = $sp;
+                    }
+                }
             }
 
-            // Filter by Lead Status (active, nurture, lost) or default hide lost
+            // Filter by Lead Status (active, nurture, lost) or default hide lost & nurture
             if ($leadStatus !== '') {
                 $statuses = array_filter(array_map('trim', explode(',', $leadStatus)));
                 if (!empty($statuses)) {
@@ -226,8 +234,8 @@ class ExportController {
                         $params[] = $st;
                     }
                 }
-            } elseif (!$showLost) {
-                $where[] = "(t.lead_status != 'lost' OR t.lead_status IS NULL)";
+            } elseif (!$showLost && empty($search)) {
+                $where[] = "(t.lead_status NOT IN ('lost', 'nurture') OR t.lead_status IS NULL)";
             }
 
             if ($status) {
@@ -240,13 +248,111 @@ class ExportController {
             }
             if ($source) { $where[] = 't.source = ?'; $params[] = $source; }
             if ($owner)  { $where[] = 't.owner_id = ?'; $params[] = (int)$owner; }
+            
+            $stageSlug = !empty($_GET['stage_slug']) ? trim($_GET['stage_slug']) : '';
             if ($stage)  {
+                $isNum = is_numeric($stage);
                 if ($stageOp === 'not_in') {
-                    $where[] = 't.stage_id != ?';
+                    if ($isNum) {
+                        $where[] = "(t.stage_id != ? AND (t.pipeline_status IS NULL OR t.pipeline_status != ?))";
+                        $params[] = (int)$stage;
+                        $params[] = $stageSlug ?: (string)$stage;
+                    } else {
+                        $where[] = "(t.pipeline_status != ? AND (t.stage_id IS NULL OR t.stage_id != (SELECT ps.id FROM pipeline_stages ps WHERE ps.system_slug = ? LIMIT 1)))";
+                        $params[] = $stage;
+                        $params[] = $stage;
+                    }
                 } else {
-                    $where[] = 't.stage_id = ?';
+                    if ($isNum) {
+                        $clause = "(
+                            t.stage_id = ? 
+                            OR (t.stage_id IS NULL AND t.pipeline_status = ?)
+                            OR (t.stage_id IS NULL AND t.pipeline_status = (SELECT ps.system_slug FROM pipeline_stages ps WHERE ps.id = ? LIMIT 1))";
+                        $params[] = (int)$stage;
+                        $params[] = $stageSlug ?: (string)$stage;
+                        $params[] = (int)$stage;
+                        if (!empty($stageSlug)) {
+                            $clause .= " OR t.pipeline_status = ? OR t.stage_id = (SELECT ps2.id FROM pipeline_stages ps2 WHERE ps2.system_slug = ? LIMIT 1)";
+                            $params[] = $stageSlug;
+                            $params[] = $stageSlug;
+                        }
+                        $clause .= ")";
+                        $where[] = $clause;
+                    } else {
+                        $where[] = "(t.pipeline_status = ? OR t.stage_id = (SELECT ps.id FROM pipeline_stages ps WHERE ps.system_slug = ? LIMIT 1))";
+                        $params[] = $stage;
+                        $params[] = $stage;
+                    }
                 }
-                $params[] = (int)$stage;
+            }
+
+            // Multi-stage filtering (e.g., stages=1,2,3,4,13 or stages=1-4,13 or stage_ids=31,32,33,34,43)
+            $stagesParam = trim((string)($_GET['stages'] ?? $_GET['stage_ids'] ?? ''));
+            if (!empty($stagesParam)) {
+                $rawParts = explode(',', $stagesParam);
+                $stageIds = [];
+                $orderIndexes = [];
+                $stageSlugs = [];
+
+                foreach ($rawParts as $part) {
+                    $part = trim($part);
+                    if (empty($part)) continue;
+
+                    // Handle ranges like "1-4"
+                    if (strpos($part, '-') !== false) {
+                        $rangeParts = explode('-', $part, 2);
+                        $min = (int)trim($rangeParts[0]);
+                        $max = (int)trim($rangeParts[1]);
+                        if ($min > 0 && $max >= $min) {
+                            for ($r = $min; $r <= $max; $r++) {
+                                if ($r <= 14) $orderIndexes[] = $r - 1;
+                                $stageIds[] = $r;
+                            }
+                        }
+                    } elseif (is_numeric($part)) {
+                        $n = (int)$part;
+                        if ($n >= 1 && $n <= 14) {
+                            $orderIndexes[] = $n - 1; // Pipeline order 1-14 mapped to 0-13
+                        }
+                        $stageIds[] = $n;
+                    } else {
+                        $stageSlugs[] = $part;
+                    }
+                }
+
+                $stageOrClauses = [];
+                if (!empty($stageIds)) {
+                    $inIds = implode(',', array_unique(array_map('intval', $stageIds)));
+                    $stageOrClauses[] = "t.stage_id IN ($inIds)";
+                }
+                if (!empty($orderIndexes)) {
+                    $inOrders = implode(',', array_unique(array_map('intval', $orderIndexes)));
+                    $stageOrClauses[] = "t.stage_id IN (SELECT id FROM pipeline_stages WHERE order_index IN ($inOrders))";
+                }
+                if (!empty($stageSlugs)) {
+                    $placeholders = implode(',', array_fill(0, count($stageSlugs), '?'));
+                    $stageOrClauses[] = "t.pipeline_status IN ($placeholders)";
+                    foreach ($stageSlugs as $slug) {
+                        $params[] = $slug;
+                    }
+                }
+
+                if (!empty($stageOrClauses)) {
+                    $where[] = "(" . implode(' OR ', $stageOrClauses) . ")";
+                }
+            }
+
+            // Gender filtering (male/nam vs female/nu)
+            $genderParam = strtolower(trim((string)($_GET['gender'] ?? '')));
+            if (!empty($genderParam) && $genderParam !== 'all') {
+                if (in_array($genderParam, ['male', 'nam', 'trai', 'boy'], true)) {
+                    $where[] = "(LOWER(TRIM(COALESCE(t.gender, ''))) IN ('male', 'nam'))";
+                } elseif (in_array($genderParam, ['female', 'nu', 'nữ', 'gai', 'girl'], true)) {
+                    $where[] = "(LOWER(TRIM(COALESCE(t.gender, ''))) IN ('female', 'nu') OR t.gender = 'Nữ')";
+                } else {
+                    $where[] = "t.gender = ?";
+                    $params[] = $genderParam;
+                }
             }
             if ($companyId) { $where[] = 't.company_id = ?'; $params[] = (int)$companyId; }
             if ($projectId !== '') { $where[] = 't.project_id = ?'; $params[] = (int)$projectId; }
@@ -257,19 +363,47 @@ class ExportController {
                 $params[] = (int)$teamId;
             }
             
+            $admissionFrom = $_GET['admission_from'] ?? '';
+            $admissionTo   = $_GET['admission_to'] ?? '';
+
             if ($from !== '') {
-                $whereField = in_array($dateField, ['created_at', 'updated_at', 'last_contact']) ? $dateField : 'created_at';
-                $where[] = "t.{$whereField} >= ?";
-                $params[] = $from . ' 00:00:00';
+                $whereField = in_array($dateField, ['created_at', 'updated_at', 'last_contact', 'admission_date']) ? $dateField : 'created_at';
+                if ($whereField === 'admission_date') {
+                    $where[] = "t.admission_date >= ?";
+                    $params[] = $from;
+                } else {
+                    $where[] = "t.{$whereField} >= ?";
+                    $params[] = $from . ' 00:00:00';
+                }
             }
             if ($to !== '') {
-                $whereField = in_array($dateField, ['created_at', 'updated_at', 'last_contact']) ? $dateField : 'created_at';
-                $where[] = "t.{$whereField} <= ?";
-                $params[] = $to . ' 23:59:59';
+                $whereField = in_array($dateField, ['created_at', 'updated_at', 'last_contact', 'admission_date']) ? $dateField : 'created_at';
+                if ($whereField === 'admission_date') {
+                    $where[] = "t.admission_date <= ?";
+                    $params[] = $to;
+                } else {
+                    $where[] = "t.{$whereField} <= ?";
+                    $params[] = $to . ' 23:59:59';
+                }
+            }
+
+            if ($admissionFrom !== '') {
+                $where[] = "t.admission_date >= ?";
+                $params[] = $admissionFrom;
+            }
+            if ($admissionTo !== '') {
+                $where[] = "t.admission_date <= ?";
+                $params[] = $admissionTo;
             }
 
             switch ($segment) {
-                case 'tiem_nang':  $where[] = "t.status != 'customer'"; break;
+                case 'tiem_nang':
+                    if (empty($stage) && empty($stageSlug) && empty($_GET['stage_id'])) {
+                        $where[] = "(t.stage_id != 44 AND (t.pipeline_status IS NULL OR t.pipeline_status NOT IN ('enrolled', 'hoc_vien')) AND t.status != 'customer')";
+                    } else {
+                        $where[] = "t.status != 'customer'";
+                    }
+                    break;
                 case 'hot':        $where[] = 't.lead_score >= 80'; break;
                 case 'customer':
                     if ($studentSubTab === 'le_phi' || $studentSubTab === 'nop_ho_so') {
@@ -280,7 +414,26 @@ class ExportController {
                     break;
                 case 'has_deal':   $where[] = "EXISTS (SELECT 1 FROM deals d WHERE d.contact_id = t.id AND d.deleted_at IS NULL)"; break;
                 case 'no_contact': $where[] = "t.last_contact < DATE_SUB(NOW(), INTERVAL 30 DAY)"; break;
-                case 'not_contacted': $where[] = "NOT EXISTS (SELECT 1 FROM activities WHERE related_type = 'contact' AND related_id = t.id) AND NOT EXISTS (SELECT 1 FROM notes WHERE entity_type = 'contact' AND entity_id = t.id)"; break;
+                case 'not_contacted':
+                    $where[] = "(
+                        (t.last_contact IS NULL OR t.last_contact = '')
+                        AND NOT EXISTS (
+                            SELECT 1 FROM activities a 
+                            WHERE a.tenant_id = t.tenant_id AND ((a.related_type = 'contact' AND a.related_id = t.id) OR a.contact_id = t.id) 
+                              AND a.deleted_at IS NULL
+                        )
+                        AND NOT EXISTS (
+                            SELECT 1 FROM notes n 
+                            WHERE n.tenant_id = t.tenant_id AND n.entity_type = 'contact' AND n.entity_id = t.id 
+                              AND n.body NOT LIKE '[Tự động]%' 
+                              AND n.body NOT LIKE '[Phân bổ]%' 
+                              AND n.body NOT LIKE '[Giao data]%'
+                              AND n.body NOT LIKE '[Auto]%'
+                              AND n.body NOT LIKE '[Import]%'
+                              AND n.body NOT LIKE '[Tái phân bổ]%'
+                        )
+                    )";
+                    break;
                 case 'new_week':   $where[] = "t.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)"; break;
             }
 
@@ -307,10 +460,24 @@ class ExportController {
             $multiProgram = !empty($_GET['multi_program']) && in_array(strtolower((string)$_GET['multi_program']), ['1', 'true', 'yes', '2'], true);
             if ($multiProgram) {
                 $where[] = "(
-                    (t.person_id > 0 AND t.person_id IN (SELECT person_id FROM contacts WHERE tenant_id = ? AND deleted_at IS NULL AND person_id > 0 GROUP BY person_id HAVING COUNT(*) > 1))
-                    OR (t.duplicate_with_id > 0)
-                    OR (t.id IN (SELECT duplicate_with_id FROM contacts WHERE tenant_id = ? AND deleted_at IS NULL AND duplicate_with_id > 0))
-                    OR (t.phone != '' AND t.phone IS NOT NULL AND t.phone IN (SELECT phone FROM contacts WHERE tenant_id = ? AND deleted_at IS NULL AND phone != '' AND phone IS NOT NULL GROUP BY phone HAVING COUNT(*) > 1))
+                    t.duplicate_with_id > 0
+                    OR t.id IN (SELECT duplicate_with_id FROM contacts WHERE tenant_id = ? AND deleted_at IS NULL AND duplicate_with_id > 0)
+                    OR (t.person_id > 0 AND t.person_id IN (
+                        SELECT person_id FROM contacts 
+                        WHERE tenant_id = ? AND deleted_at IS NULL AND person_id > 0 
+                        GROUP BY person_id 
+                        HAVING COUNT(DISTINCT COALESCE(NULLIF(TRIM(program), ''), '__empty__')) >= 2 
+                            OR COUNT(DISTINCT stage_id) >= 2 
+                            OR SUM(CASE WHEN duplicate_with_id > 0 THEN 1 ELSE 0 END) > 0
+                    ))
+                    OR (t.phone != '' AND t.phone IS NOT NULL AND t.phone IN (
+                        SELECT phone FROM contacts 
+                        WHERE tenant_id = ? AND deleted_at IS NULL AND phone != '' AND phone IS NOT NULL 
+                        GROUP BY phone 
+                        HAVING COUNT(DISTINCT COALESCE(NULLIF(TRIM(program), ''), '__empty__')) >= 2 
+                            OR COUNT(DISTINCT stage_id) >= 2 
+                            OR SUM(CASE WHEN duplicate_with_id > 0 THEN 1 ELSE 0 END) > 0
+                    ))
                 )";
                 $params[] = $auth['tenant_id'];
                 $params[] = $auth['tenant_id'];
@@ -833,6 +1000,189 @@ class ExportController {
             logActivity($this->db, $auth['tenant_id'], $auth['user_id'], "Export Data ($type)", $type, null, "Exported " . $totalExported . " records");
         }
         
+        exit;
+    }
+
+    /**
+     * Export attendance records to CSV (UTF-8 with BOM for Excel compatibility)
+     */
+    public function exportAttendance(array $auth): void {
+        $uid = (int)($auth['user_id'] ?? 0);
+        $tid = (int)($auth['tenant_id'] ?? 1);
+        $role = strtolower($auth['role'] ?? 'user');
+        $isGlobalAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director'], true);
+        $isHR = in_array($role, ['hr', 'nhan_su'], true);
+        $isManager = in_array($role, ['manager', 'truong_phong', 'leader'], true);
+        $canViewAll = ($isGlobalAdmin || $isHR);
+
+        $month = isset($_GET['month']) && !empty($_GET['month']) ? min(12, max(1, (int)$_GET['month'])) : (int)date('n');
+        $year = isset($_GET['year']) && !empty($_GET['year']) ? (int)$_GET['year'] : (int)date('Y');
+        $fromDate = trim((string)($_GET['from'] ?? ''));
+        $toDate = trim((string)($_GET['to'] ?? ''));
+        $userIdParam = trim((string)($_GET['user_id'] ?? ''));
+        $deptFilter = trim((string)($_GET['department'] ?? ''));
+
+        if (!empty($fromDate) && !empty($toDate)) {
+            $rangeStart = $fromDate;
+            $rangeEnd = $toDate;
+            $fileLabel = "{$fromDate}_den_{$toDate}";
+        } else {
+            $rangeStart = sprintf('%04d-%02d-01', $year, $month);
+            $rangeEnd = date('Y-m-t', strtotime($rangeStart));
+            $fileLabel = "thang_{$month}_{$year}";
+        }
+
+        // Prepare headers
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="bang_cham_cong_' . $fileLabel . '_' . date('Ymd_His') . '.csv"');
+        header('Cache-Control: no-cache, no-store, must-revalidate');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+
+        $output = fopen('php://output', 'w');
+        fputs($output, "\xEF\xBB\xBF"); // UTF-8 BOM for Excel
+
+        // Header row
+        $headers = [
+            'STT',
+            'Mã NV',
+            'Họ và tên',
+            'Phòng ban / Team',
+            'Chức danh',
+            'Email',
+            'Ngày chấm công',
+            'Thứ',
+            'Giờ vào (Check-in)',
+            'Giờ ra (Check-out)',
+            'Số phút trễ',
+            'Số phút về sớm',
+            'Tăng ca OT (Giờ)',
+            'Hình thức làm việc',
+            'Trạng thái công',
+            'Lý do / Ghi chú'
+        ];
+        fputcsv($output, $headers);
+
+        // Build query
+        $whereClauses = ["u.tenant_id = ?", "c.check_in_date BETWEEN ? AND ?"];
+        $params = [$tid, $rangeStart, $rangeEnd];
+
+        // RBAC filtering
+        if (!$canViewAll) {
+            if ($isManager) {
+                $whereClauses[] = "(u.id = ? OR u.team_id IN (SELECT id FROM teams WHERE leader_id = ? OR FIND_IN_SET(?, COALESCE(co_leader_ids, ''))) OR (u.team_id IS NOT NULL AND u.team_id = (SELECT team_id FROM users WHERE id = ?)))";
+                $params[] = $uid;
+                $params[] = $uid;
+                $params[] = $uid;
+                $params[] = $uid;
+            } else {
+                $whereClauses[] = "u.id = ?";
+                $params[] = $uid;
+            }
+        }
+
+        if (!empty($userIdParam) && $userIdParam !== 'all') {
+            $whereClauses[] = "c.user_id = ?";
+            $params[] = (int)$userIdParam;
+        }
+
+        if (!empty($deptFilter)) {
+            $whereClauses[] = "(t.name LIKE ? OR u.job_title LIKE ?)";
+            $params[] = "%$deptFilter%";
+            $params[] = "%$deptFilter%";
+        }
+
+        $sql = "SELECT 
+                    c.id as check_in_id,
+                    c.user_id,
+                    u.full_name,
+                    COALESCE(u.job_title, u.role) as job_title,
+                    COALESCE(t.name, 'Chung') as team_name,
+                    u.email,
+                    c.check_in_date,
+                    DATE_FORMAT(c.check_in_date, '%d/%m/%Y') as formatted_date,
+                    DAYNAME(c.check_in_date) as day_name,
+                    TIME_FORMAT(c.check_in_time, '%H:%i') as check_in_time,
+                    TIME_FORMAT(c.check_out_time, '%H:%i') as check_out_time,
+                    c.late_minutes,
+                    c.early_minutes,
+                    c.status,
+                    c.reason,
+                    c.admin_note
+                FROM check_ins c
+                JOIN users u ON c.user_id = u.id
+                LEFT JOIN teams t ON u.team_id = t.id
+                WHERE " . implode(' AND ', $whereClauses) . "
+                ORDER BY c.check_in_date ASC, u.full_name ASC";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+        $records = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        $stt = 1;
+        $dayMap = [
+            'Monday' => 'Thứ Hai',
+            'Tuesday' => 'Thứ Ba',
+            'Wednesday' => 'Thứ Tư',
+            'Thursday' => 'Thứ Năm',
+            'Friday' => 'Thứ Sáu',
+            'Saturday' => 'Thứ Bảy',
+            'Sunday' => 'Chủ Nhật'
+        ];
+
+        foreach ($records as $r) {
+            $otHours = 0.0;
+            if (!empty($r['check_out_time']) && $r['check_out_time'] > '17:00') {
+                $outM = (int)substr($r['check_out_time'], 0, 2) * 60 + (int)substr($r['check_out_time'], 3, 2);
+                $diff = $outM - (17 * 60);
+                if ($diff > 0) $otHours = round($diff / 60.0, 1);
+            }
+
+            $lateM = (int)($r['late_minutes'] ?? 0);
+            if ($lateM <= 0 && !empty($r['check_in_time']) && $r['check_in_time'] > '08:00') {
+                $inM = (int)substr($r['check_in_time'], 0, 2) * 60 + (int)substr($r['check_in_time'], 3, 2);
+                $diff = $inM - (8 * 60);
+                if ($diff > 0) $lateM = $diff;
+            }
+
+            $statusText = 'Đúng giờ';
+            if ($lateM > 0 && (int)($r['early_minutes'] ?? 0) > 0) {
+                $statusText = 'Trễ & Về sớm';
+            } elseif ($lateM > 0) {
+                $statusText = 'Đi trễ';
+            } elseif ((int)($r['early_minutes'] ?? 0) > 0) {
+                $statusText = 'Về sớm';
+            } elseif ($r['status'] === 'approved') {
+                $statusText = 'Đủ công';
+            }
+
+            $workType = (stripos((string)$r['reason'], 'wfh') !== false || stripos((string)$r['admin_note'], 'wfh') !== false) ? 'Làm việc từ xa (WFH)' : 'Tại văn phòng';
+
+            $note = trim(($r['reason'] ?: '') . ($r['admin_note'] ? ' | ' . $r['admin_note'] : ''));
+
+            $csvRow = [
+                $stt++,
+                $r['user_id'],
+                $r['full_name'],
+                $r['team_name'],
+                $r['job_title'],
+                $r['email'],
+                $r['formatted_date'],
+                $dayMap[$r['day_name']] ?? $r['day_name'],
+                $r['check_in_time'] ?: '--',
+                $r['check_out_time'] ?: '--',
+                $lateM,
+                (int)($r['early_minutes'] ?? 0),
+                $otHours,
+                $workType,
+                $statusText,
+                $note
+            ];
+
+            fputcsv($output, $csvRow);
+        }
+
+        fclose($output);
         exit;
     }
 }

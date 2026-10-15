@@ -1281,47 +1281,55 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({
           ) : (
             <Avatar src={avatarUrl} name={titleText} size={64} />
           )}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', margin: '10px 0 3px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '10px 0 3px' }}>
             <h4 style={{ margin: 0, fontSize: '0.975rem', fontWeight: 800, color: '#0f172a' }}>
               {titleText}
             </h4>
-            {isIdeasAi && (
-              <span style={{
-                fontSize: '0.62rem',
-                fontWeight: 800,
-                color: '#BD1D2D',
-                background: '#fef2f2',
-                border: '1px solid #fecaca',
-                padding: '1px 5px',
-                borderRadius: '4px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '3px'
-              }}>
-                <Sparkles size={10} style={{ color: '#BD1D2D' }} />
-                Super Intelligent
-              </span>
-            )}
           </div>
-          <span style={{
-            fontSize: '0.75rem',
-            color: isIdeasAi ? '#059669' : '#64748b',
-            fontWeight: 650,
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '5px'
-          }}>
-            {isIdeasAi && (
-              <span style={{
-                width: 7,
-                height: 7,
-                borderRadius: '50%',
-                background: '#10b981',
-                display: 'inline-block'
-              }} />
-            )}
-            {subtitleText}
-          </span>
+          {isIdeasAi ? (
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '2px' }}>
+              <span
+                onClick={() => onSelectAgent?.(SPECIALIZED_AGENTS[0])}
+                style={{
+                  fontSize: '0.64rem',
+                  fontWeight: 750,
+                  color: '#BD1D2D',
+                  background: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#fee2e2';
+                  e.currentTarget.style.borderColor = '#BD1D2D';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#fef2f2';
+                  e.currentTarget.style.borderColor = '#fecaca';
+                }}
+                title="Bấm để xem chi tiết & quyền hạn 11 Agent"
+              >
+                <Sparkles size={10} style={{ color: '#BD1D2D' }} />
+                Super Intelligent (11 Agents)
+              </span>
+            </div>
+          ) : (
+            <span style={{
+              fontSize: '0.75rem',
+              color: '#64748b',
+              fontWeight: 650,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px'
+            }}>
+              {subtitleText}
+            </span>
+          )}
         </div>
 
         {/* Chat Wallpaper Customization Button (Only for regular human direct/group chats) */}
@@ -1752,54 +1760,52 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({
                         )}
                       </div>
 
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px', marginBottom: '2px' }}>
-                          <span style={{ fontSize: '0.82rem', fontWeight: 800, color: isActive ? '#BD1D2D' : '#334155', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {agent.name}
-                          </span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
-                            {isActive && (
-                              <span style={{
-                                fontSize: '0.62rem',
-                                fontWeight: 800,
-                                padding: '1px 5px',
-                                borderRadius: '4px',
-                                background: isWorking ? '#dcfce7' : '#ecfdf5',
-                                color: '#059669',
-                                border: '1px solid #a7f3d0',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '3px'
-                              }}>
-                                <span style={{
-                                  width: 5,
-                                  height: 5,
-                                  borderRadius: '50%',
-                                  background: '#10b981',
-                                  display: 'inline-block',
-                                  animation: isWorking ? 'pulse 1.2s infinite' : 'none'
-                                }} />
-                                {isWorking ? 'Đang điều phối' : 'Đang xử lý'}
-                              </span>
-                            )}
-                            {/* Badge màu xám bình thường theo yêu cầu người dùng */}
+                      <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                        <span style={{ fontSize: '0.82rem', fontWeight: 800, color: isActive ? '#BD1D2D' : '#334155', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {agent.name}
+                        </span>
+
+                        {isActive ? (
+                          <span style={{
+                            fontSize: '0.62rem',
+                            fontWeight: 800,
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            background: isWorking ? '#dcfce7' : '#ecfdf5',
+                            color: '#059669',
+                            border: '1px solid #a7f3d0',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '3px',
+                            flexShrink: 0
+                          }}>
                             <span style={{
-                              fontSize: '0.64rem',
-                              fontWeight: 650,
-                              padding: '1px 6px',
-                              borderRadius: '4px',
-                              background: isActive ? '#fee2e2' : '#f1f5f9',
-                              color: isActive ? '#991b1b' : '#64748b',
-                              border: isActive ? '1px solid #fca5a5' : '1px solid #cbd5e1',
-                              flexShrink: 0
-                            }}>
-                              {agent.badge}
-                            </span>
-                          </div>
-                        </div>
-                        <div style={{ fontSize: '0.68rem', color: isActive ? '#991b1b' : '#64748b', fontWeight: isActive ? 650 : 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {isActive ? (isWorking ? agent.statusText : `● Đang phụ trách • ${agent.roleTitle}`) : agent.roleTitle}
-                        </div>
+                              width: 5,
+                              height: 5,
+                              borderRadius: '50%',
+                              background: '#10b981',
+                              display: 'inline-block',
+                              animation: isWorking ? 'pulse 1.2s infinite' : 'none'
+                            }} />
+                            {isWorking ? 'Đang điều phối' : 'Đang xử lý'}
+                          </span>
+                        ) : (
+                          <span style={{
+                            fontSize: '0.64rem',
+                            fontWeight: 650,
+                            padding: '1.5px 7px',
+                            borderRadius: '4px',
+                            background: '#f1f5f9',
+                            color: '#64748b',
+                            border: '1px solid #cbd5e1',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            flexShrink: 0,
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {agent.badge}
+                          </span>
+                        )}
                       </div>
                     </motion.div>
                   );

@@ -2,12 +2,6 @@
 // backend/controllers/ai_training_handler.php
 // IDEAS DATA CRM - AI Training and Settings controller handler
 
-if (!in_array($decodedUser['role'] ?? '', ['admin', 'super_admin'])) {
-    http_response_code(403);
-    echo json_encode(['success' => false, 'message' => 'Bạn không có quyền thực hiện thao tác này']);
-    exit;
-}
-
 try {
     $createdBy = $decodedUser['name'] ?? 'Admin';
     $actionType = '';
@@ -20,6 +14,33 @@ try {
         }
     } else {
         $actionType = $_GET['action_type'] ?? '';
+    }
+
+    $userRole = strtolower($decodedUser['role'] ?? '');
+    $canManageAI = in_array($userRole, ['admin', 'superadmin', 'super_admin', 'director'], true);
+
+    // Public / Read actions: list_docs can be accessed by all authenticated users.
+    // Admin-only actions: get_settings, update_settings, create_folder, add_manual, update_doc, delete_doc, delete_batch, toggle_batch, train_docs, upload_training_file
+    $adminOnlyActions = [
+        'get_settings',
+        'update_settings',
+        'create_folder',
+        'add_manual',
+        'update_doc',
+        'delete_doc',
+        'delete_batch',
+        'toggle_batch',
+        'train_docs',
+        'upload_training_file'
+    ];
+
+    if (in_array($actionType, $adminOnlyActions, true) && !$canManageAI) {
+        http_response_code(403);
+        echo json_encode([
+            'success' => false, 
+            'message' => 'Chỉ Quản trị viên (Admin/Super Admin) mới có quyền truy cập thông số RAG hoặc chỉnh sửa tri thức AI'
+        ]);
+        exit;
     }
 
     if ($actionType === 'get_settings') {
@@ -74,7 +95,7 @@ try {
         echo json_encode(['success' => true, 'message' => 'Cập nhật cấu hình RAG thành công']);
     }
     elseif ($actionType === 'list_docs') {
-        $stmt = $conn->prepare("SELECT id, name, content, tags, source_type, parent_id, is_active, status, file_path, file_size, created_at, updated_at FROM ai_training_docs WHERE tenant_id = 1 ORDER BY id DESC");
+        $stmt = $conn->prepare("SELECT id, name, content, tags, source_type, parent_id, is_active, status, file_path, file_size, created_at, updated_at, created_by, version FROM ai_training_docs WHERE tenant_id = 1 ORDER BY id DESC");
         $stmt->execute();
         $res = $stmt->get_result();
         $docs = [];
@@ -92,8 +113,8 @@ try {
             exit;
         }
         $source_type = 'folder';
-        $stmt = $conn->prepare("INSERT INTO ai_training_docs (name, source_type, parent_id) VALUES (?, ?, 0)");
-        $stmt->bind_param("ss", $name, $source_type);
+        $stmt = $conn->prepare("INSERT INTO ai_training_docs (name, source_type, parent_id, created_by) VALUES (?, ?, 0, ?)");
+        $stmt->bind_param("sss", $name, $source_type, $createdBy);
         $stmt->execute();
         $stmt->close();
         echo json_encode(['success' => true, 'message' => 'Đã tạo thư mục thành công']);
@@ -111,8 +132,8 @@ try {
         
         $source_type = (strpos($content, 'URL_TO_CRAWL:') === 0) ? 'web' : 'manual';
         
-        $stmt = $conn->prepare("INSERT INTO ai_training_docs (name, content, tags, source_type, parent_id) VALUES (?, ?, ?, ?, ?)");
-        $stmt->bind_param("ssssi", $name, $content, $tags, $source_type, $parentId);
+        $stmt = $conn->prepare("INSERT INTO ai_training_docs (name, content, tags, source_type, parent_id, created_by) VALUES (?, ?, ?, ?, ?, ?)");
+        $stmt->bind_param("ssssis", $name, $content, $tags, $source_type, $parentId, $createdBy);
         $stmt->execute();
         $stmt->close();
         echo json_encode(['success' => true, 'message' => 'Đã thêm tài liệu thành công']);
@@ -143,7 +164,7 @@ try {
                 exit;
             }
 
-            $stmt = $conn->prepare("UPDATE ai_training_docs SET name = ?, content = ?, tags = ?, parent_id = ?, status = 'pending' WHERE id = ?");
+            $stmt = $conn->prepare("UPDATE ai_training_docs SET name = ?, content = ?, tags = ?, parent_id = ?, version = COALESCE(version, 1) + 1, status = 'pending' WHERE id = ?");
             $stmt->bind_param("sssii", $name, $content, $tags, $parentId, $id);
             $stmt->execute();
             $stmt->close();

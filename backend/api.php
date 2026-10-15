@@ -841,7 +841,8 @@ if (!in_array($action, $publicActions)) {
         'get_workspace_settings',
         'preview_routing',
         'get_fair_share_stats',
-        'get_consultant_compensation_details'
+        'get_consultant_compensation_details',
+        'ai_training'
     ], true)) {
         $resolvedScope = 'all';
     }

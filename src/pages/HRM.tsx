@@ -808,7 +808,7 @@ export default function HRM() {
             if (diff > 0) actualLate = diff;
           }
         }
-        const isLate = c.status === 'late' || actualLate > 0 || (c.check_in_time && c.work_start_time && c.check_in_time > c.work_start_time);
+        const isLate = actualLate > 0 || c.status === 'late';
         if (isLate) {
           const uid = c.user_id;
           const prof = profiles.find(x => Number(x.id) === Number(uid));
@@ -822,8 +822,9 @@ export default function HRM() {
               value: 0
             };
           }
+          const addVal = actualLate > 0 ? actualLate : 15;
           map[uid].count += 1;
-          map[uid].value += actualLate > 0 ? actualLate : 15;
+          map[uid].value += addVal;
         }
       });
     }

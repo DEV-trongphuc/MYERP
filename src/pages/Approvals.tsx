@@ -6802,7 +6802,7 @@ export default function Approvals() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 999999
+          zIndex: 2147483647
         }}>
           <div className="card" style={{ width: '450px', padding: '1.5rem', background: 'var(--color-surface)' }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '1rem', color: '#ef4444' }}>
@@ -6932,7 +6932,7 @@ export default function Approvals() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              zIndex: 999999,
+              zIndex: 2147483647,
               padding: isMobile ? '12px' : '1.5rem'
             }}
             onClick={() => setApproveConfirmOpen(false)}
@@ -7120,6 +7120,7 @@ export default function Approvals() {
           onDuplicate={handleDuplicate}
           onEdit={handleEditRequest}
           onDelete={handleDeleteRequest}
+          zIndex={2147483640}
         />
       )}
 
@@ -7194,7 +7195,7 @@ export default function Approvals() {
                 display: 'flex',
                 justifyContent: 'center',
                 alignItems: 'center',
-                zIndex: 10000000,
+                zIndex: 2147483645,
                 animation: 'fadeIn 0.2s ease-out',
                 padding: isMobile ? '0.75rem' : '1rem'
               }} onClick={() => {
@@ -7658,7 +7659,7 @@ export default function Approvals() {
                   style={{
                     position: 'fixed',
                     inset: 0,
-                    zIndex: 10000000,
+                    zIndex: 2147483640,
                     background: 'rgba(0, 0, 0, 0.45)',
                     backdropFilter: 'blur(8px)',
                     WebkitBackdropFilter: 'blur(8px)'
@@ -7666,6 +7667,7 @@ export default function Approvals() {
                 />
 
                 <motion.div
+                  className="drawer-sheet"
                   initial={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
                   animate={{ y: 0, x: 0, opacity: 1 }}
                   exit={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
@@ -7684,7 +7686,7 @@ export default function Approvals() {
                     borderTopLeftRadius: 0,
                     borderBottomLeftRadius: 0,
                     overflow: 'hidden',
-                    zIndex: 10000100
+                    zIndex: 2147483645
                   }}
                 >
                   
@@ -14147,7 +14149,7 @@ export default function Approvals() {
               onSaveDraft={() => handleSaveCurrentDraft(true)}
               onDiscard={handleDiscardExit}
               onContinue={() => setShowExitConfirmModal(false)}
-              zIndex={99999999}
+              zIndex={2147483647}
             />
           </>
         );
@@ -14173,7 +14175,7 @@ export default function Approvals() {
         }}
         user={user}
         users={users}
-        zIndex={2000000000}
+        zIndex={2147483645}
       />
     </div>
   );
@@ -19069,7 +19071,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 2000000,
+          zIndex: 2147483647,
           padding: '1rem'
         }} onClick={() => setReminderTargetUser(null)}>
           <div style={{
@@ -19178,7 +19180,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 background: 'rgba(0, 0, 0, 0.45)',
                 backdropFilter: 'blur(8px)',
                 WebkitBackdropFilter: 'blur(8px)',
-                zIndex: zIndex || 2000000000
+                zIndex: zIndex ? Math.min(zIndex, 2147483640) : 2147483640
               }}
             />
 
@@ -19200,7 +19202,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 display: 'flex',
                 flexDirection: 'column',
                 boxSizing: 'border-box',
-                zIndex: (zIndex ? zIndex + 1 : 2000000005),
+                zIndex: (zIndex ? Math.min(zIndex, 2147483645) : 2147483645),
                 overflow: 'hidden'
               }} 
               onClick={e => e.stopPropagation()}
@@ -19726,6 +19728,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         onClose={() => setLightboxState(prev => ({ ...prev, isOpen: false }))}
         items={lightboxState.items}
         initialIndex={lightboxState.initialIndex}
+        zIndex={2147483647}
       />
 
       <NoteDetailModal
@@ -19734,12 +19737,14 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         title={activeNoteModal?.title || t('Ghi chú / Mục đích sử dụng')}
         itemName={activeNoteModal?.itemName}
         notes={activeNoteModal?.notes || ''}
+        zIndex={2147483647}
       />
 
       <QrImageModal
         isOpen={!!previewQrModalUrl}
         qrUrl={previewQrModalUrl}
         onClose={() => setPreviewQrModalUrl(null)}
+        zIndex={2147483647}
       />
 
       <input 

@@ -23,7 +23,7 @@ Write-Host "=========================================================" -Foregrou
 
 $sshKey = "C:\Users\LENOVO\.ssh\id_ed25519"
 $sshUser = "vhvxoigh"
-$sshHost = "103.110.87.26"
+$sshHost = "chiefaiofficer.vn"
 $sshPort = "2210"
 
 # 0. Smart Change Detection if neither BackendOnly nor FrontendOnly specified

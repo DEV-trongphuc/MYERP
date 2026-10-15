@@ -35,6 +35,7 @@ import api from '../../api/axios';
 import toast from 'react-hot-toast';
 import { isExecutive } from '../../utils/roleUtils';
 import { pushOverlay } from '../../utils/overlayStack';
+import { downloadExportFile } from '../../utils/exportHelper';
 
 import { getFileFormatConfig, formatFileSize, extractFirstUrl } from '../../utils/chatFileUtils';
 import { compressImageFile } from '../../utils/imageCompressor';
@@ -45,6 +46,7 @@ import { parseAllChatTags } from './chatTagParsers';
 import { ChatDynamicChart } from './ChatDynamicChart';
 import { NextBestActionChips } from './NextBestActionChips';
 import { ProactiveInsightCard } from './ProactiveInsightCard';
+import { ChatSmartErpCard } from './ChatSmartErpCard';
 
 const EMOJI_MAP: Record<string, string> = {
   like: '👍', love: '❤️', fire: '🔥', haha: '😂',
@@ -305,6 +307,267 @@ ChatImageBubble.displayName = 'ChatImageBubble';
 // Regex cache cho tin nhắn text tránh split lặp lại khi re-render
 const formattedTextCache = new Map<string, React.ReactNode>();
 
+const handleErpLinkClick = (e: React.MouseEvent, url: string) => {
+  if (!url) return;
+
+  // 0. Export / Download links: NEVER preventDefault into SPA router! Trigger direct file download
+  if (url.includes('/api/export') || url.includes('/export?') || url.includes('type=contact') || url.includes('type=attendance')) {
+    e.preventDefault();
+    e.stopPropagation();
+    toast.loading('Đang chuẩn bị file xuất dữ liệu...', { id: 'chat-export-loading' });
+    try {
+      const urlObj = new URL(url, window.location.origin);
+      const endpoint = urlObj.pathname.replace(/^\/api/, '');
+      const params: Record<string, string> = {};
+      urlObj.searchParams.forEach((val, key) => {
+        params[key] = val;
+      });
+
+      downloadExportFile({
+        endpoint,
+        params,
+        defaultFilename: params.type === 'attendance' ? 'bang_cong.xlsx' : 'danh_sach_lead.csv',
+        onSuccess: () => {
+          toast.success('Tải file dữ liệu thành công!', { id: 'chat-export-loading' });
+        },
+        onError: (err) => {
+          toast.error(err?.message || 'Không thể tải file xuất dữ liệu', { id: 'chat-export-loading' });
+        }
+      });
+    } catch {
+      // Fallback: direct window download
+      const token = localStorage.getItem('access_token') || localStorage.getItem('Ideas_token') || '';
+      const sep = url.includes('?') ? '&' : '?';
+      const fullUrl = token ? `${url}${sep}token=${encodeURIComponent(token)}` : url;
+      window.open(fullUrl, '_blank');
+      toast.dismiss('chat-export-loading');
+    }
+    return;
+  }
+
+  // 1. Contact / Lead / Student: /contact/1024976, /contacts?id=1024960, /crm/1016920, /crm/leads/1016920, /contacts/1016920
+  const contactMatch = url.match(/(?:contacts?|students?|leads?|crm)(?:\.php)?(?:[/?].*?(?:id|contact_id)=|\/)([0-9]+)/i);
+  if (contactMatch) {
+    e.preventDefault();
+    e.stopPropagation();
+    const contactId = Number(contactMatch[1]);
+    window.dispatchEvent(new CustomEvent('open-global-customer', { detail: { id: contactId, contactId } }));
+    return;
+  }
+
+  // 2. Expense / PO: /expenses?id=123, /expenses/123, /workflow/expense?id=123
+  const expenseMatch = url.match(/(?:expenses?|workflow\/expense)(?:\.php)?(?:[/?].*?(?:id|expense_id)=|\/)([0-9]+)/i);
+  if (expenseMatch) {
+    e.preventDefault();
+    e.stopPropagation();
+    const expenseId = Number(expenseMatch[1]);
+    window.dispatchEvent(new CustomEvent('open-expense-drawer', { detail: { id: expenseId } }));
+    return;
+  }
+
+  // 3. Task: /tasks?id=123, /workspace?task_id=123, /tasks/123
+  const taskMatch = url.match(/(?:tasks?|workspace)(?:\.php)?(?:[/?].*?(?:id|task_id)=|\/)([0-9]+)/i);
+  if (taskMatch) {
+    e.preventDefault();
+    e.stopPropagation();
+    const taskId = Number(taskMatch[1]);
+    window.dispatchEvent(new CustomEvent('open-global-task', { detail: { id: taskId } }));
+    return;
+  }
+
+  // 4. Approval / Workflow: /approvals?id=123, /approvals/123
+  const approvalMatch = url.match(/(?:approvals?)(?:\.php)?(?:[/?].*?(?:id|approval_id)=|\/)([0-9]+)/i);
+  if (approvalMatch) {
+    e.preventDefault();
+    e.stopPropagation();
+    const approvalId = Number(approvalMatch[1]);
+    window.dispatchEvent(new CustomEvent('open-global-approval', { detail: { id: approvalId, type: 'leave' } }));
+    return;
+  }
+
+  // 5. Deposit / SO: /deposits?id=123, /deposits/123
+  const depositMatch = url.match(/deposits?(?:\.php)?(?:[/?].*?(?:id|deposit_id)=|\/)([0-9]+)/i);
+  if (depositMatch) {
+    e.preventDefault();
+    e.stopPropagation();
+    const depositId = Number(depositMatch[1]);
+    window.dispatchEvent(new CustomEvent('open-deposit-drawer', { detail: { id: depositId, depositId } }));
+    return;
+  }
+
+  // 6. Navigation to internal routes without specific ID: use SPA navigation without full page reload
+  if (url.startsWith('/') || url.startsWith('https://myerp.ideas.edu.vn/')) {
+    e.preventDefault();
+    e.stopPropagation();
+    const targetPath = url.replace(/^https:\/\/myerp\.ideas\.edu\.vn/, '') || '/';
+    window.history.pushState({}, '', targetPath);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    return;
+  }
+};
+
+const renderInlineTokens = (rawText: string, isMine?: boolean, keyPrefix: string = 'inl') => {
+  if (!rawText) return null;
+  // Action tag [[type:id:name]], Mention, markdown link [text](url), raw URL, and bold pattern
+  const parts = rawText.split(/(\[\[[a-z_]+:[^:]+:[^\]]+\]\]|@[\w\u00C0-\u1EF9]+(?:[^\S\r\n]+[\w\u00C0-\u1EF9]+){0,4}(?=[^\S\r\n]|$|\n)|\[[^\]]+\]\s*\([^\s)]+\)|https?:\/\/[^\s()<>]+|\*\*[^*]+\*\*)/g);
+  return parts.map((part, idx) => {
+    if (!part) return null;
+    const tokenKey = `${keyPrefix}_${idx}`;
+
+    // Action tag e.g. [[crm_profile:1024960:Ngô Quang Hưng]] or [[task:123:Việc]]
+    const tagMatch = part.match(/^\[\[([a-z_]+):([^:]+):([^\]]+)\]\]$/);
+    if (tagMatch) {
+      const actionType = tagMatch[1];
+      const entityId = tagMatch[2];
+      const entityName = tagMatch[3].trim();
+      const cleanEntityName = entityName.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim() || entityName;
+
+      return (
+        <button
+          key={tokenKey}
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (actionType === 'crm_profile' || actionType === 'contact' || actionType === 'lead') {
+              window.dispatchEvent(new CustomEvent('open-global-customer', { detail: { id: Number(entityId), contactId: Number(entityId) } }));
+            } else if (actionType === 'task') {
+              window.dispatchEvent(new CustomEvent('open-global-task', { detail: { id: Number(entityId) } }));
+            } else if (actionType === 'expense' || actionType === 'po') {
+              window.dispatchEvent(new CustomEvent('open-expense-drawer', { detail: { id: Number(entityId) } }));
+            } else if (actionType === 'deposit' || actionType === 'so') {
+              window.dispatchEvent(new CustomEvent('open-deposit-drawer', { detail: { id: Number(entityId), depositId: Number(entityId) } }));
+            }
+          }}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px',
+            margin: '1px 2px',
+            padding: '2px 8px',
+            borderRadius: '6px',
+            backgroundColor: '#eff6ff',
+            border: '1px solid #bfdbfe',
+            color: '#1d4ed8',
+            fontWeight: 700,
+            fontSize: '0.8rem',
+            cursor: 'pointer',
+            verticalAlign: 'middle',
+            transition: 'all 0.15s ease'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = '#dbeafe';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = '#eff6ff';
+          }}
+        >
+          <span>{actionType === 'crm_profile' ? 'Mở hồ sơ' : cleanEntityName}</span>
+          <ExternalLink size={12} style={{ opacity: 0.85, flexShrink: 0 }} />
+        </button>
+      );
+    }
+
+    const mdLinkMatch = part.match(/^\[([^\]]+)\]\s*\(([^)]+)\)$/);
+    if (mdLinkMatch) {
+      const rawLabel = mdLinkMatch[1];
+      const cleanLabel = rawLabel.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim() || rawLabel;
+      const href = mdLinkMatch[2].trim();
+      const isInternal = href.startsWith('/') || href.includes('myerp.ideas.edu.vn');
+      return (
+        <a
+          key={tokenKey}
+          href={href}
+          onClick={(e) => handleErpLinkClick(e, href)}
+          target={isInternal ? undefined : '_blank'}
+          rel="noreferrer"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px',
+            margin: '1px 2px',
+            padding: '2px 8px',
+            borderRadius: '6px',
+            backgroundColor: isMine ? 'rgba(255, 255, 255, 0.22)' : '#eff6ff',
+            border: isMine ? '1px solid rgba(255, 255, 255, 0.35)' : '1px solid #bfdbfe',
+            color: isMine ? '#ffffff' : '#1d4ed8',
+            fontWeight: 700,
+            fontSize: '0.82rem',
+            textDecoration: 'none',
+            cursor: 'pointer',
+            verticalAlign: 'baseline',
+            transition: 'all 0.15s ease'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = isMine ? 'rgba(255, 255, 255, 0.35)' : '#dbeafe';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = isMine ? 'rgba(255, 255, 255, 0.22)' : '#eff6ff';
+          }}
+        >
+          <span>{cleanLabel}</span>
+          <ExternalLink size={12} style={{ opacity: 0.85, flexShrink: 0 }} />
+        </a>
+      );
+    }
+    if (part.startsWith('http://') || part.startsWith('https://')) {
+      const isInternal = part.includes('myerp.ideas.edu.vn');
+      return (
+        <a
+          key={tokenKey}
+          href={part}
+          onClick={(e) => handleErpLinkClick(e, part)}
+          target={isInternal ? undefined : '_blank'}
+          rel="noreferrer"
+          style={{
+            color: isMine ? '#dbeafe' : '#2563eb',
+            textDecoration: 'underline',
+            wordBreak: 'break-all',
+            fontWeight: 600,
+            cursor: 'pointer'
+          }}
+        >
+          {part}
+        </a>
+      );
+    }
+    if (part.startsWith('@')) {
+      return (
+        <span
+          key={tokenKey}
+          style={{
+            display: 'inline-block',
+            background: isMine ? 'rgba(255, 255, 255, 0.25)' : '#eff6ff',
+            color: isMine ? '#ffffff' : '#1d4ed8',
+            padding: '1px 5px',
+            borderRadius: '4px',
+            fontWeight: 750,
+            fontSize: '0.85rem'
+          }}
+        >
+          {part}
+        </span>
+      );
+    }
+    if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
+      return (
+        <strong
+          key={tokenKey}
+          style={{
+            fontWeight: 750,
+            color: isMine ? '#ffffff' : '#0f172a'
+          }}
+        >
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    return <span key={tokenKey}>{part}</span>;
+  });
+};
+
+const TABLE_BLOCK_REGEX = /((?:^|\n)\|[^\n]+\|\r?\n\|[ \t]*:?[-]+:?[ \t]*(?:\|[ \t]*:?[-]+:?[ \t]*)+\|(?:\r?\n\|[^\n]+\|)+)/g;
+
 const renderFormattedText = (text: string, isMine?: boolean) => {
   if (!text) return null;
   const cacheKey = `${isMine ? '1' : '0'}_${text}`;
@@ -314,63 +577,117 @@ const renderFormattedText = (text: string, isMine?: boolean) => {
   // Chuẩn hóa ký tự xuống dòng CRLF \r\n hoặc \r về LF \n tiêu chuẩn
   const cleanText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-  // Mention, link, and markdown bold pattern
-  const parts = cleanText.split(/(@[\w\u00C0-\u1EF9]+(?:[^\S\r\n]+[\w\u00C0-\u1EF9]+){0,4}(?=[^\S\r\n]|$|\n)|https?:\/\/[^\s()<>]+|\*\*[^*]+\*\*)/g);
-  const result = (
-    <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-      {parts.map((part, idx) => {
-        if (!part) return null;
-        if (part.startsWith('http://') || part.startsWith('https://')) {
+  // Kiểm tra xem có bảng Markdown Table (| col1 | col2 |) không
+  if (TABLE_BLOCK_REGEX.test(cleanText)) {
+    TABLE_BLOCK_REGEX.lastIndex = 0;
+    const blocks = cleanText.split(TABLE_BLOCK_REGEX);
+    const result = (
+      <div style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+        {blocks.map((block, bIdx) => {
+          if (!block) return null;
+          const isTable = TABLE_BLOCK_REGEX.test(block);
+          TABLE_BLOCK_REGEX.lastIndex = 0;
+          if (isTable) {
+            const lines = block.trim().split('\n').filter(l => l.trim().length > 0);
+            if (lines.length >= 2) {
+              const headerLine = lines[0];
+              const delimLine = lines[1];
+              const dataLines = lines.slice(2);
+
+              const headers = headerLine.replace(/^\|/, '').replace(/\|$/, '').split('|').map(s => s.trim());
+              const delims = delimLine.replace(/^\|/, '').replace(/\|$/, '').split('|').map(s => s.trim());
+              const alignments = delims.map(d => {
+                if (d.startsWith(':') && d.endsWith(':')) return 'center' as const;
+                if (d.endsWith(':')) return 'right' as const;
+                return 'left' as const;
+              });
+              const rows = dataLines.map(dl => dl.replace(/^\|/, '').replace(/\|$/, '').split('|').map(s => s.trim()));
+
+              return (
+                <div
+                  key={`tbl_${bIdx}`}
+                  style={{
+                    margin: '10px 0',
+                    width: '100%',
+                    overflowX: 'auto',
+                    borderRadius: '8px',
+                    border: isMine ? '1px solid rgba(255, 255, 255, 0.25)' : '1px solid #e2e8f0',
+                    background: isMine ? 'rgba(255, 255, 255, 0.08)' : '#ffffff',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                  }}
+                >
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{
+                        background: isMine ? 'rgba(255, 255, 255, 0.18)' : '#f8fafc',
+                        borderBottom: isMine ? '1px solid rgba(255, 255, 255, 0.2)' : '1px solid #cbd5e1'
+                      }}>
+                        {headers.map((h, hIdx) => (
+                          <th
+                            key={`th_${hIdx}`}
+                            style={{
+                              padding: '8px 12px',
+                              fontWeight: 750,
+                              color: isMine ? '#ffffff' : '#1e293b',
+                              whiteSpace: 'nowrap',
+                              textAlign: alignments[hIdx] || 'left'
+                            }}
+                          >
+                            {renderInlineTokens(h, isMine, `th_${bIdx}_${hIdx}`)}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((row, rIdx) => (
+                        <tr
+                          key={`tr_${rIdx}`}
+                          style={{
+                            borderBottom: rIdx === rows.length - 1 ? 'none' : (isMine ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid #f1f5f9'),
+                            background: rIdx % 2 === 0 ? 'transparent' : (isMine ? 'rgba(255, 255, 255, 0.04)' : '#f8fafc55')
+                          }}
+                        >
+                          {row.map((cell, cIdx) => (
+                            <td
+                              key={`td_${rIdx}_${cIdx}`}
+                              style={{
+                                padding: '8px 12px',
+                                color: isMine ? '#f8fafc' : '#334155',
+                                textAlign: alignments[cIdx] || 'left',
+                                verticalAlign: 'middle',
+                                whiteSpace: cell.length > 40 ? 'normal' : 'nowrap'
+                              }}
+                            >
+                              {renderInlineTokens(cell, isMine, `td_${bIdx}_${rIdx}_${cIdx}`)}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            }
+          }
           return (
-            <a
-              key={idx}
-              href={part}
-              target="_blank"
-              rel="noreferrer"
-              style={{
-                color: isMine ? '#dbeafe' : '#2563eb',
-                textDecoration: 'underline',
-                wordBreak: 'break-all',
-                fontWeight: 600
-              }}
-            >
-              {part}
-            </a>
-          );
-        }
-        if (part.startsWith('@')) {
-          return (
-            <span
-              key={idx}
-              style={{
-                display: 'inline-block',
-                background: isMine ? 'rgba(255, 255, 255, 0.25)' : '#eff6ff',
-                color: isMine ? '#ffffff' : '#1d4ed8',
-                padding: '1px 5px',
-                borderRadius: '4px',
-                fontWeight: 750,
-                fontSize: '0.85rem'
-              }}
-            >
-              {part}
+            <span key={`txt_${bIdx}`} style={{ whiteSpace: 'pre-wrap' }}>
+              {renderInlineTokens(block, isMine, `b_${bIdx}`)}
             </span>
           );
-        }
-        if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
-          return (
-            <strong
-              key={idx}
-              style={{
-                fontWeight: 750,
-                color: isMine ? '#ffffff' : '#0f172a'
-              }}
-            >
-              {part.slice(2, -2)}
-            </strong>
-          );
-        }
-        return <span key={idx}>{part}</span>;
-      })}
+        })}
+      </div>
+    );
+
+    if (formattedTextCache.size > 500) {
+      formattedTextCache.clear();
+    }
+    formattedTextCache.set(cacheKey, result);
+    return result;
+  }
+
+  const result = (
+    <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+      {renderInlineTokens(cleanText, isMine, 'std')}
     </span>
   );
 
@@ -494,7 +811,7 @@ export const WorkChatModal: React.FC = () => {
     clearConversationHistory
   } = useChatStore();
 
-  const { openCustomerDrawer, openTaskDrawer, openExpenseDrawer, openApprovalDrawer } = useUIStore();
+  const { openCustomerDrawer, openTaskDrawer, openExpenseDrawer, openApprovalDrawer, openDepositDrawer } = useUIStore();
 
   // Active conversation & wallpaper state with multi-source fallback
   const [showWallpaperModal, setShowWallpaperModal] = useState(false);
@@ -2140,16 +2457,32 @@ export const WorkChatModal: React.FC = () => {
                               <div style={{ fontSize: isMobile ? '0.9rem' : '0.96rem', fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                 {finalHeaderTitle}
                               </div>
-                              {isIdeasAi && (
+                              {isOtherInactive && !isIdeasAi && (
+                                <span style={{
+                                  fontSize: '0.64rem',
+                                  background: '#f1f5f9',
+                                  color: '#64748b',
+                                  padding: '1px 5px',
+                                  borderRadius: '4px',
+                                  fontWeight: 700,
+                                  border: '1px solid #cbd5e1',
+                                  flexShrink: 0
+                                }}>
+                                  Đã nghỉ việc
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '2px' }}>
+                              {isIdeasAi ? (
                                 <span 
                                   onClick={() => setSelectedAgentForModal(activeAgentByConvId?.[displayConv.id] || SPECIALIZED_AGENTS[0])}
                                   style={{
                                     fontSize: '0.64rem',
                                     background: '#fef2f2',
                                     color: '#BD1D2D',
-                                    padding: '2px 8px',
+                                    padding: '1.5px 7px',
                                     borderRadius: '6px',
-                                    fontWeight: 800,
+                                    fontWeight: 750,
                                     border: '1px solid #fecaca',
                                     display: 'inline-flex',
                                     alignItems: 'center',
@@ -2169,42 +2502,7 @@ export const WorkChatModal: React.FC = () => {
                                   title="Bấm để xem chi tiết & quyền hạn 11 Agent"
                                 >
                                   <Sparkles size={11} style={{ color: '#BD1D2D' }} />
-                                  Super Intelligent (11 Agents)
-                                </span>
-                              )}
-                              {isOtherInactive && !isIdeasAi && (
-                                <span style={{
-                                  fontSize: '0.64rem',
-                                  background: '#f1f5f9',
-                                  color: '#64748b',
-                                  padding: '1px 5px',
-                                  borderRadius: '4px',
-                                  fontWeight: 700,
-                                  border: '1px solid #cbd5e1',
-                                  flexShrink: 0
-                                }}>
-                                  Đã nghỉ việc
-                                </span>
-                              )}
-                            </div>
-                            <div style={{ fontSize: '0.72rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {isIdeasAi ? (
-                                <span 
-                                  onClick={() => setSelectedAgentForModal(activeAgentByConvId?.[displayConv.id] || SPECIALIZED_AGENTS[0])}
-                                  style={{
-                                    color: '#BD1D2D',
-                                    fontWeight: 650,
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '4px',
-                                    cursor: 'pointer',
-                                    textDecoration: 'underline',
-                                    textUnderlineOffset: '2px'
-                                  }}
-                                  title="Bấm để xem quyền hạn Agent này"
-                                >
-                                  <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#10b981' }} />
-                                  Smart Multi Agent (Xem quyền hạn)
+                                  <span>Super Intelligent (11 Agents)</span>
                                 </span>
                               ) : currentTypingUsers.length > 0 ? (
                                 <span style={{ color: '#dc2626', fontWeight: 700 }}>
@@ -3938,7 +4236,8 @@ export const WorkChatModal: React.FC = () => {
                                       workflow: { bg: '#f5f3ff', text: '#6d28d9', border: '#ddd6fe', accent: '#7c3aed', label: 'QUY TRÌNH', icon: <Clipboard size={13} color="#7c3aed" /> },
                                       so: { bg: '#ecfdf5', text: '#047857', border: '#a7f3d0', accent: '#059669', label: 'ĐƠN CỌC SO', icon: <Receipt size={13} color="#059669" /> },
                                       po: { bg: '#fffbeb', text: '#b45309', border: '#fde68a', accent: '#d97706', label: 'CHI PHÍ PO', icon: <CreditCard size={13} color="#d97706" /> },
-                                      contact: { bg: '#f0f9ff', text: '#0369a1', border: '#bae6fd', accent: '#0284c7', label: 'KHÁCH HÀNG', icon: <Users size={13} color="#0284c7" /> }
+                                      contact: { bg: '#f0f9ff', text: '#0369a1', border: '#bae6fd', accent: '#0284c7', label: 'KHÁCH HÀNG', icon: <Users size={13} color="#0284c7" /> },
+                                      employee: { bg: '#f5f3ff', text: '#6d28d9', border: '#ddd6fe', accent: '#7c3aed', label: 'NHÂN SỰ', icon: <Users size={13} color="#7c3aed" /> }
                                     };
                                     const theme = themeMap[eType] || themeMap.task;
 
@@ -4481,7 +4780,7 @@ export const WorkChatModal: React.FC = () => {
                                       </div>
                                     </div>
                                   ) : (() => {
-                                    const { cleanContent, proposal, chart, nextBestActions, proactiveInsight } = parseAllChatTags(msg.content);
+                                    const { cleanContent, proposal, chart, nextBestActions, proactiveInsight, erpCard } = parseAllChatTags(msg.content);
                                     const extractedUrl = extractFirstUrl(cleanContent);
                                     return (
                                       <div style={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap', lineHeight: '1.45' }}>
@@ -4510,6 +4809,31 @@ export const WorkChatModal: React.FC = () => {
                                             />
                                           )}
                                         </div>
+                                        {erpCard && (
+                                          <ChatSmartErpCard
+                                            card={erpCard}
+                                            onOpen={(c) => {
+                                              if (isMobile) closeChat();
+                                              const entityId = Number(c.entity_id);
+                                              const entityType = (c.entity_type || '').toLowerCase();
+                                              if (entityType === 'employee' || entityType === 'staff' || entityType === 'user') {
+                                                window.location.href = `/hrm?user_id=${entityId}`;
+                                              } else if (entityType === 'contact' || entityType === 'customer' || entityType === 'student' || entityType === 'lead') {
+                                                openCustomerDrawer(entityId);
+                                              } else if (entityType === 'expense' || entityType === 'po') {
+                                                openExpenseDrawer(entityId);
+                                              } else if (entityType === 'task') {
+                                                openTaskDrawer(entityId);
+                                              } else if (entityType === 'approval' || entityType === 'workflow' || entityType === 'leave') {
+                                                openApprovalDrawer({ id: entityId, type: 'leave' });
+                                              } else if (entityType === 'deposit' || entityType === 'so') {
+                                                openDepositDrawer(entityId);
+                                              } else if (c.direct_url) {
+                                                window.open(c.direct_url, '_blank');
+                                              }
+                                            }}
+                                          />
+                                        )}
                                         {chart && <ChatDynamicChart chart={chart} />}
                                         {proposal && (
                                           <ActionProposalCard 
@@ -4525,7 +4849,7 @@ export const WorkChatModal: React.FC = () => {
                                             }}
                                           />
                                         )}
-                                        {extractedUrl && <LinkPreviewCard url={extractedUrl} isMine={isMine} />}
+                                        {extractedUrl && !erpCard && <LinkPreviewCard url={extractedUrl} isMine={isMine} />}
                                       </div>
                                     );
                                   })()

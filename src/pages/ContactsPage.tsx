@@ -377,11 +377,18 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   const [decayDays, setDecayDays] = useState<number>(5);
   const [loading, setLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(() => searchParams.get('search') || searchParams.get('q') || '');
   const debouncedSearch = useDebounce(search.trim(), 300); // 300ms debounce
   const [pageSize, setPageSize] = useState<number>(() => {
     return Number(localStorage.getItem('Ideas_contacts_page_size')) || 50;
   });
+
+  useEffect(() => {
+    const q = searchParams.get('search') || searchParams.get('q');
+    if (q !== null && q !== undefined && q !== search) {
+      setSearch(q);
+    }
+  }, [searchParams]);
 
   const openContactId = searchParams.get('open_contact_id') || searchParams.get('id');
 
@@ -408,7 +415,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     }
   }, [openContactId]);
 
-  // Global event listener for instant drawer opening when notification is clicked
+  // Global event listener for instant drawer opening when notification or chat link is clicked
   useEffect(() => {
     const handleOpenContactDrawer = (e: any) => {
       const cid = Number(e.detail?.id || e.detail?.contactId);
@@ -423,7 +430,11 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       }
     };
     window.addEventListener('open-contact-drawer', handleOpenContactDrawer);
-    return () => window.removeEventListener('open-contact-drawer', handleOpenContactDrawer);
+    window.addEventListener('open-global-customer', handleOpenContactDrawer);
+    return () => {
+      window.removeEventListener('open-contact-drawer', handleOpenContactDrawer);
+      window.removeEventListener('open-global-customer', handleOpenContactDrawer);
+    };
   }, []);
 
   const isUserAcademic = isAcademic(user);
@@ -4523,48 +4534,79 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                           <td style={{ width: '135px', maxWidth: '150px', padding: '0.85rem 0.5rem', borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
                             {c.is_error_ticket ? (
                               <span 
-                                className="badge danger"
+                                className="stage-badge"
                                 style={{ 
-                                  backgroundColor: 'rgba(239, 68, 68, 0.1)', 
-                                  color: 'var(--color-danger)', 
-                                  border: '1px solid rgba(239, 68, 68, 0.2)'
+                                  backgroundColor: 'rgba(239, 68, 68, 0.12)', 
+                                  color: '#dc2626', 
+                                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                                  borderRadius: '9999px',
+                                  padding: '3.5px 12px',
+                                  fontSize: '0.76rem',
+                                  fontWeight: 650,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  lineHeight: '1.2'
                                 }}
                               >
                                 Ticket lỗi
+                              </span>
+                            ) : c.status === 'pending_approval' ? (
+                              <span 
+                                className="stage-badge"
+                                style={{ 
+                                  backgroundColor: '#fef3c7', 
+                                  color: '#d97706', 
+                                  border: '1px solid rgba(245, 158, 11, 0.28)',
+                                  borderRadius: '9999px',
+                                  padding: '3.5px 12px',
+                                  fontSize: '0.76rem',
+                                  fontWeight: 650,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  lineHeight: '1.2'
+                                }}
+                              >
+                                Tạm giữ
                               </span>
                             ) : c.lead_status === 'nurture' ? (
                               <span 
                                 className="stage-badge" 
                                 style={{ 
-                                  backgroundColor: 'rgba(2, 132, 199, 0.08)', 
+                                  backgroundColor: 'rgba(2, 132, 199, 0.12)', 
                                   color: '#0284c7', 
-                                  border: '1px solid rgba(2, 132, 199, 0.22)',
+                                  border: '1px solid rgba(2, 132, 199, 0.25)',
+                                  borderRadius: '9999px',
+                                  padding: '3.5px 12px',
+                                  fontSize: '0.76rem',
+                                  fontWeight: 650,
                                   display: 'inline-flex',
                                   alignItems: 'center',
-                                  gap: '6px',
-                                  padding: '3px 10px',
-                                  borderRadius: '9999px'
+                                  justifyContent: 'center',
+                                  lineHeight: '1.2'
                                 }}
                               >
-                                <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#0284c7', flexShrink: 0 }} />
-                                <span>Nurture</span>
+                                Nurture
                               </span>
                             ) : c.lead_status === 'lost' ? (
                               <span 
                                 className="stage-badge" 
                                 style={{ 
-                                  backgroundColor: 'rgba(239, 68, 68, 0.08)', 
+                                  backgroundColor: 'rgba(239, 68, 68, 0.12)', 
                                   color: '#dc2626', 
-                                  border: '1px solid rgba(239, 68, 68, 0.22)',
+                                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                                  borderRadius: '9999px',
+                                  padding: '3.5px 12px',
+                                  fontSize: '0.76rem',
+                                  fontWeight: 650,
                                   display: 'inline-flex',
                                   alignItems: 'center',
-                                  gap: '6px',
-                                  padding: '3px 10px',
-                                  borderRadius: '9999px'
+                                  justifyContent: 'center',
+                                  lineHeight: '1.2'
                                 }}
                               >
-                                <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#dc2626', flexShrink: 0 }} />
-                                <span>Lost</span>
+                                Lost
                               </span>
                             ) : (() => {
                               const stageInfo = getContactStage(c, pipelineStages);
@@ -4573,18 +4615,20 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                   <span 
                                     className="stage-badge" 
                                     style={{ 
-                                      backgroundColor: 'rgba(239, 68, 68, 0.08)', 
+                                      backgroundColor: 'rgba(239, 68, 68, 0.12)', 
                                       color: '#dc2626', 
-                                      border: '1px solid rgba(239, 68, 68, 0.22)',
+                                      border: '1px solid rgba(239, 68, 68, 0.25)',
+                                      borderRadius: '9999px',
+                                      padding: '3.5px 12px',
+                                      fontSize: '0.76rem',
+                                      fontWeight: 650,
                                       display: 'inline-flex',
                                       alignItems: 'center',
-                                      gap: '6px',
-                                      padding: '3px 10px',
-                                      borderRadius: '9999px'
+                                      justifyContent: 'center',
+                                      lineHeight: '1.2'
                                     }}
                                   >
-                                    <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#dc2626', flexShrink: 0 }} />
-                                    <span>Lost</span>
+                                    Lost
                                   </span>
                                 );
                               }
@@ -4592,18 +4636,20 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                 <span 
                                   className="stage-badge" 
                                   style={{ 
-                                    backgroundColor: stageInfo.bgColor, 
+                                    backgroundColor: `${stageInfo.color}15`, 
                                     color: stageInfo.color, 
-                                    border: `1px solid ${stageInfo.borderColor}`,
+                                    border: `1px solid ${stageInfo.color}30`,
+                                    borderRadius: '9999px',
+                                    padding: '3.5px 12px',
+                                    fontSize: '0.76rem',
+                                    fontWeight: 650,
                                     display: 'inline-flex',
                                     alignItems: 'center',
-                                    gap: '6px',
-                                    padding: '3px 10px',
-                                    borderRadius: '9999px'
+                                    justifyContent: 'center',
+                                    lineHeight: '1.2'
                                   }}
                                 >
-                                  <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: stageInfo.color, flexShrink: 0 }} />
-                                  <span>{stageInfo.name}</span>
+                                  {stageInfo.name}
                                 </span>
                               );
                             })()}
@@ -5089,19 +5135,19 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                   className="stage-badge" 
                                   style={{ 
                                     borderRadius: '9999px', 
-                                    padding: '3px 10px', 
-                                    fontSize: '0.72rem', 
-                                    fontWeight: 600,
-                                    backgroundColor: 'rgba(2, 132, 199, 0.08)', 
+                                    padding: '3.5px 12px', 
+                                    fontSize: '0.74rem', 
+                                    fontWeight: 650,
+                                    backgroundColor: 'rgba(2, 132, 199, 0.12)', 
                                     color: '#0284c7', 
-                                    border: '1px solid rgba(2, 132, 199, 0.22)',
+                                    border: '1px solid rgba(2, 132, 199, 0.25)',
                                     display: 'inline-flex',
                                     alignItems: 'center',
-                                    gap: '6px'
+                                    justifyContent: 'center',
+                                    lineHeight: '1.2'
                                   }}
                                 >
-                                  <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#0284c7', flexShrink: 0 }} />
-                                  <span>Nurture</span>
+                                  Nurture
                                 </span>
                               ) : (() => {
                                 const stageInfo = getContactStage(c, pipelineStages);
@@ -5111,19 +5157,19 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                       className="stage-badge" 
                                       style={{ 
                                         borderRadius: '9999px', 
-                                        padding: '3px 10px', 
-                                        fontSize: '0.72rem', 
-                                        fontWeight: 600,
-                                        backgroundColor: 'rgba(239, 68, 68, 0.08)', 
+                                        padding: '3.5px 12px', 
+                                        fontSize: '0.74rem', 
+                                        fontWeight: 650,
+                                        backgroundColor: 'rgba(239, 68, 68, 0.12)', 
                                         color: '#dc2626', 
-                                        border: '1px solid rgba(239, 68, 68, 0.22)',
+                                        border: '1px solid rgba(239, 68, 68, 0.25)',
                                         display: 'inline-flex',
                                         alignItems: 'center',
-                                        gap: '6px'
+                                        justifyContent: 'center',
+                                        lineHeight: '1.2'
                                       }}
                                     >
-                                      <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#dc2626', flexShrink: 0 }} />
-                                      <span>Lost</span>
+                                      Lost
                                     </span>
                                   );
                                 }
@@ -5132,19 +5178,19 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                     className="stage-badge" 
                                     style={{ 
                                       borderRadius: '9999px', 
-                                      padding: '3px 10px', 
-                                      fontSize: '0.72rem', 
-                                      fontWeight: 600,
-                                      backgroundColor: stageInfo.bgColor, 
+                                      padding: '3.5px 12px', 
+                                      fontSize: '0.74rem', 
+                                      fontWeight: 650,
+                                      backgroundColor: `${stageInfo.color}15`, 
                                       color: stageInfo.color, 
-                                      border: `1px solid ${stageInfo.borderColor}`,
+                                      border: `1px solid ${stageInfo.color}30`,
                                       display: 'inline-flex',
                                       alignItems: 'center',
-                                      gap: '6px'
+                                      justifyContent: 'center',
+                                      lineHeight: '1.2'
                                     }}
                                   >
-                                    <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: stageInfo.color, flexShrink: 0 }} />
-                                    <span>{stageInfo.name}</span>
+                                    {stageInfo.name}
                                   </span>
                                 );
                               })()}

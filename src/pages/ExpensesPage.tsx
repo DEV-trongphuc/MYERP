@@ -4223,12 +4223,14 @@ export const ExpensesPage: React.FC = () => {
         title={activeNoteModal?.title || 'Ghi chú / Mục đích sử dụng'}
         itemName={activeNoteModal?.itemName}
         notes={activeNoteModal?.notes || ''}
+        zIndex={2147483647}
       />
 
       <QrImageModal
         isOpen={!!previewQrModalUrl}
         qrUrl={previewQrModalUrl}
         onClose={() => setPreviewQrModalUrl(null)}
+        zIndex={2147483647}
       />
 
       <AttachmentLightboxModal
@@ -4236,6 +4238,7 @@ export const ExpensesPage: React.FC = () => {
         onClose={() => setLightboxState(prev => ({ ...prev, isOpen: false }))}
         items={lightboxState.items}
         initialIndex={lightboxState.initialIndex}
+        zIndex={2147483647}
       />
     </div>
   );

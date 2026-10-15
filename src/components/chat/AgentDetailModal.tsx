@@ -237,7 +237,7 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
                 </div>
               </div>
 
-              {/* Quyền Hạn & Thẩm Quyền Can Thiệp (Zero-Trust RBAC) */}
+              {/* Quyền Hạn & Thẩm Quyền Can Thiệp (Phân quyền bảo mật) */}
               <div>
                 <div style={{
                   display: 'flex',
@@ -249,7 +249,7 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
                   marginBottom: '10px'
                 }}>
                   <ShieldCheck size={18} color={THEME_ACCENT} />
-                  <span>Quyền Hạn & Thẩm Quyền Can Thiệp (Zero-Trust RBAC)</span>
+                  <span>Quyền Hạn & Thẩm Quyền Can Thiệp (Phân quyền bảo mật)</span>
                 </div>
                 
                 <div style={{
@@ -425,7 +425,7 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
             justifyContent: 'space-between'
           }}>
             <span style={{ fontSize: '0.74rem', color: '#94a3b8' }}>
-              Phân quyền theo tài khoản đăng nhập (Zero-Trust)
+              Phân quyền an toàn theo tài khoản đăng nhập
             </span>
             <button
               onClick={onClose}

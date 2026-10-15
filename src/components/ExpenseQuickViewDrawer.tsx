@@ -937,7 +937,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
 
   if (!expenseId) return null;
 
-  const baseZIndex = zIndex || 2147483640;
+  const baseZIndex = Math.min(zIndex || 2147483640, 2147483642);
 
   if (!viewItem) {
     return createPortal(
@@ -3675,12 +3675,14 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
         title={activeNoteModal?.title || 'Ghi chú / Mục đích sử dụng'}
         itemName={activeNoteModal?.itemName}
         notes={activeNoteModal?.notes || ''}
+        zIndex={2147483647}
       />
 
       <QrImageModal
         isOpen={!!previewQrModalUrl}
         qrUrl={previewQrModalUrl}
         onClose={() => setPreviewQrModalUrl(null)}
+        zIndex={2147483647}
       />
 
       <AttachmentLightboxModal
@@ -3688,6 +3690,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
         onClose={() => setLightboxState(prev => ({ ...prev, isOpen: false }))}
         items={lightboxState.items}
         initialIndex={lightboxState.initialIndex}
+        zIndex={2147483647}
       />
     </AnimatePresence>,
     document.body

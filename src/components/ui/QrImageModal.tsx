@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Download, QrCode } from 'lucide-react';
+import { pushOverlay } from '../../utils/overlayStack';
 
 interface QrImageModalProps {
   isOpen: boolean;
@@ -9,6 +10,7 @@ interface QrImageModalProps {
   qrUrl: string | null;
   title?: string;
   subtitle?: string;
+  zIndex?: number;
 }
 
 export const QrImageModal: React.FC<QrImageModalProps> = ({
@@ -16,8 +18,18 @@ export const QrImageModal: React.FC<QrImageModalProps> = ({
   onClose,
   qrUrl,
   title = 'Mã VietQR thanh toán',
-  subtitle = 'Quét bằng app ngân hàng để chuyển khoản chính xác'
+  subtitle = 'Quét bằng app ngân hàng để chuyển khoản chính xác',
+  zIndex = 2147483647
 }) => {
+  const effectiveZIndex = zIndex ? Math.min(zIndex, 2147483647) : 2147483647;
+
+  useEffect(() => {
+    if (isOpen && qrUrl) {
+      const unregister = pushOverlay('qr-image-modal', onClose, effectiveZIndex);
+      return () => unregister();
+    }
+  }, [isOpen, qrUrl, onClose, effectiveZIndex]);
+
   if (!isOpen || !qrUrl) return null;
 
   return createPortal(
@@ -26,7 +38,7 @@ export const QrImageModal: React.FC<QrImageModalProps> = ({
         style={{
           position: 'fixed',
           inset: 0,
-          zIndex: 2147483645,
+          zIndex: effectiveZIndex,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',

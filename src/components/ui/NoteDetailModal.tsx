@@ -10,6 +10,7 @@ interface NoteDetailModalProps {
   title?: string;
   itemName?: string;
   notes?: string;
+  zIndex?: number;
 }
 
 // Helper to extract URLs from text
@@ -152,17 +153,20 @@ export const NoteDetailModal: React.FC<NoteDetailModalProps> = ({
   onClose,
   title = 'Ghi chú / Mục đích sử dụng',
   itemName,
-  notes = ''
+  notes = '',
+  zIndex = 2147483647
 }) => {
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
   const [copiedAll, setCopiedAll] = useState(false);
 
+  const effectiveZIndex = zIndex ? Math.min(zIndex, 2147483647) : 2147483647;
+
   useEffect(() => {
     if (isOpen) {
-      const unregister = pushOverlay('note-detail-modal', onClose, 99999);
+      const unregister = pushOverlay('note-detail-modal', onClose, effectiveZIndex);
       return () => unregister();
     }
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, effectiveZIndex]);
 
   if (!isOpen) return null;
 
@@ -189,7 +193,7 @@ export const NoteDetailModal: React.FC<NoteDetailModalProps> = ({
           left: 0,
           right: 0,
           bottom: 0,
-          zIndex: 99999,
+          zIndex: effectiveZIndex,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',

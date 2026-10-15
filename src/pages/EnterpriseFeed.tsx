@@ -4179,6 +4179,7 @@ export const EnterpriseFeed: React.FC = () => {
         onClose={() => setLightboxData(null)}
         items={lightboxData?.items || []}
         initialIndex={lightboxData?.initialIndex || 0}
+        zIndex={2147483647}
       />
 
       {/* Floating Back to Top Button */}

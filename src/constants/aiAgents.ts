@@ -48,7 +48,7 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
     actionProposals: ['Tất cả các loại Thẻ Hành Động ERP'],
     synergyWith: ['sales', 'academic', 'records_legal', 'finance', 'hrm'],
     securityGuardrails: [
-      'Zero-Trust: Không tự ý ghi đè CSDL, 100% thay đổi phải qua Thẻ Đề Xuất',
+      'Bảo mật phân quyền: Không tự ý ghi đè CSDL, 100% thay đổi phải qua Thẻ Đề Xuất',
       'Tuân thủ bản quyền & quy chế kiểm định giáo dục Thụy Sĩ & Pháp'
     ]
   },

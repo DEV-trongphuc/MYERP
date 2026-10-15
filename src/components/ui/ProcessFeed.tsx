@@ -789,6 +789,7 @@ export const ProcessFeed: React.FC<ProcessFeedProps> = ({
         onClose={() => setLightboxState(prev => ({ ...prev, isOpen: false }))}
         items={lightboxState.items}
         initialIndex={lightboxState.initialIndex}
+        zIndex={2147483647}
       />
     </div>
   );

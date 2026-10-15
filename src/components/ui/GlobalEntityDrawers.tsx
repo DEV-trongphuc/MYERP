@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useUIStore } from '../../store/uiStore';
 import { useAuthStore } from '../../store/authStore';
@@ -14,6 +14,7 @@ const DepositDetailDrawer = lazy(() => import('../DepositDetailDrawer').then(mod
 
 export const GlobalEntityDrawers: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const {
     customerDrawer, closeCustomerDrawer, openCustomerDrawer,
     taskDrawer, closeTaskDrawer, openTaskDrawer,
@@ -26,6 +27,47 @@ export const GlobalEntityDrawers: React.FC = () => {
   const [fullTask, setFullTask] = useState<any>(null);
   const [expenseCreateOpen, setExpenseCreateOpen] = useState(false);
   const [expenseCreateEditItem, setExpenseCreateEditItem] = useState<any>(null);
+
+  // Deep link URL listener: Auto-open drawer when navigating with query parameters or direct entity path (e.g. /contact/123)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const path = location.pathname;
+
+    const contactPathMatch = path.match(/^\/(?:contacts?|students?|leads?|crm)\/([0-9]+)/i);
+    const contactId = params.get('contact_id') || 
+                      (contactPathMatch ? contactPathMatch[1] : null) || 
+                      ((path.startsWith('/contacts') || path.startsWith('/students')) ? params.get('id') : null);
+    if (contactId && !isNaN(Number(contactId))) {
+      openCustomerDrawer(Number(contactId), params.get('tab') || 'info');
+      return;
+    }
+
+    const expensePathMatch = path.match(/^\/(?:expenses?|workflow\/expense)\/([0-9]+)/i);
+    const expenseId = params.get('expense_id') || (expensePathMatch ? expensePathMatch[1] : null) || (path.startsWith('/expenses') ? params.get('id') : null);
+    if (expenseId && !isNaN(Number(expenseId))) {
+      openExpenseDrawer(Number(expenseId));
+      return;
+    }
+
+    const taskPathMatch = path.match(/^\/(?:tasks?|workspace)\/([0-9]+)/i);
+    const taskId = params.get('task_id') || (taskPathMatch ? taskPathMatch[1] : null) || ((path.startsWith('/tasks') || path.startsWith('/workspace')) ? params.get('id') : null);
+    if (taskId && !isNaN(Number(taskId))) {
+      openTaskDrawer(Number(taskId));
+      return;
+    }
+
+    const approvalId = params.get('approval_id') || (path.startsWith('/approvals') ? params.get('id') : null);
+    if (approvalId && !isNaN(Number(approvalId))) {
+      openApprovalDrawer({ id: Number(approvalId), type: params.get('type') || 'leave' });
+      return;
+    }
+
+    const depositId = params.get('deposit_id') || (path.startsWith('/deposits') ? params.get('id') : null);
+    if (depositId && !isNaN(Number(depositId))) {
+      openDepositDrawer(Number(depositId));
+      return;
+    }
+  }, [location.pathname, location.search, openCustomerDrawer, openExpenseDrawer, openTaskDrawer, openApprovalDrawer, openDepositDrawer]);
 
   // Sync / fetch full contact if only ID is provided
   useEffect(() => {
@@ -76,10 +118,6 @@ export const GlobalEntityDrawers: React.FC = () => {
     const handleOpenCustomer = (e: Event) => {
       const custom = e as CustomEvent;
       if (custom.detail) {
-        // If already on /contacts, let ContactsPage handle its native drawer
-        if (window.location.pathname.startsWith('/contacts')) {
-          return;
-        }
         const c = custom.detail.contact || custom.detail.contactId || custom.detail.id;
         const tab = custom.detail.initialTab || 'info';
         if (c) openCustomerDrawer(c, tab);
@@ -89,10 +127,6 @@ export const GlobalEntityDrawers: React.FC = () => {
     const handleOpenTask = (e: Event) => {
       const custom = e as CustomEvent;
       if (custom.detail) {
-        // If already on /workspace, let SalePortal handle its native drawer
-        if (window.location.pathname.startsWith('/workspace') || window.location.pathname === '/') {
-          return;
-        }
         const t = custom.detail.task || custom.detail.taskId || custom.detail.id;
         if (t) openTaskDrawer(t);
       }
@@ -120,10 +154,6 @@ export const GlobalEntityDrawers: React.FC = () => {
     const handleOpenDeposit = (e: Event) => {
       const custom = e as CustomEvent;
       if (custom.detail) {
-        // If already on /deposits, let DepositsPage handle its native drawer
-        if (window.location.pathname.startsWith('/deposits')) {
-          return;
-        }
         const d = custom.detail.deposit || custom.detail.id || custom.detail.depositId;
         if (d) {
           openDepositDrawer(d);
