@@ -80,16 +80,195 @@ class AgentToolRegistry {
                     ],
                     [
                         'name' => 'search_contacts',
-                        'description' => 'Tra cứu thông tin học viên, khách hàng tiềm năng, đối tác trong hệ thống CRM theo số điện thoại, email, họ tên hoặc mã #ID.',
+                        'description' => 'Tra cứu và lọc học viên, khách hàng tiềm năng, đối tác trong hệ thống CRM theo tổ hợp bộ lọc đa chiều (từ khóa họ tên/SĐT/Email, giới tính, giai đoạn pipeline, chuyên viên phụ trách, số ngày chưa tương tác/bỏ quên > 90 ngày, nguồn, ngày tạo). Tự động cung cấp link mở hồ sơ và đường link xuất file Excel/CSV chuẩn xác.',
                         'parameters' => [
                             'type' => 'OBJECT',
                             'properties' => [
                                 'query' => [
                                     'type' => 'STRING',
-                                    'description' => 'Số điện thoại, email, họ tên hoặc mã ID khách hàng'
+                                    'description' => 'Từ khóa tìm kiếm: Số điện thoại, email, họ tên hoặc mã ID khách hàng (tùy chọn)'
+                                ],
+                                'gender' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['all', 'male', 'female'],
+                                    'description' => 'Lọc theo giới tính (male: nam, female: nữ, all: tất cả)'
+                                ],
+                                'stage_id' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Mã giai đoạn pipeline (1: New Lead, 2: Connected, 3: Qualified, 4: Needed...)'
+                                ],
+                                'stage_name' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tên hoặc slug giai đoạn (ví dụ: "new_lead", "needed", "connected")'
+                                ],
+                                'owner_name' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tên chuyên viên phụ trách (ví dụ: "Linh Đan", "Bùi Tuấn Anh")'
+                                ],
+                                'owner_id' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Mã ID chuyên viên tư vấn phụ trách'
+                                ],
+                                'stale_days' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Lọc các lead bỏ quên / không có tương tác trên N ngày (ví dụ: 90 ngày)'
+                                ],
+                                'source' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Nguồn khách hàng (Facebook Ads, Website, Hotline, Zalo, Giới thiệu...)'
+                                ],
+                                'created_from' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Ngày tạo từ (YYYY-MM-DD)'
+                                ],
+                                'created_to' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Ngày tạo đến (YYYY-MM-DD)'
+                                ],
+                                'limit' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Số lượng khách hàng xem trước (mặc định 5, tối đa 20)'
                                 ]
-                            ],
-                            'required' => ['query']
+                            ]
+                        ]
+                    ],
+                    [
+                        'name' => 'filter_expenses_advanced',
+                        'description' => 'Tra cứu và lọc đề xuất thanh toán, chi phí (PO), tạm ứng toàn viện theo trạng thái duyệt (chờ duyệt L1/L2, đã duyệt, đã chi/chưa chi), phòng ban, hạn mức số tiền min-max, và hạn thanh toán.',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'status' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['all', 'pending', 'pending_l1', 'pending_l2', 'approved', 'rejected', 'paid', 'unpaid'],
+                                    'description' => 'Trạng thái đề xuất: pending (chờ duyệt), approved (đã duyệt), paid (đã chi), unpaid (đã duyệt chưa chi), all (tất cả)'
+                                ],
+                                'department' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tên phòng ban hoặc danh mục chi phí (ví dụ: Marketing, Văn phòng, Đào tạo)'
+                                ],
+                                'min_amount' => [
+                                    'type' => 'NUMBER',
+                                    'description' => 'Số tiền tối thiểu (VNĐ)'
+                                ],
+                                'max_amount' => [
+                                    'type' => 'NUMBER',
+                                    'description' => 'Số tiền tối đa (VNĐ)'
+                                ],
+                                'deadline_status' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['all', 'overdue', 'today', 'this_week'],
+                                    'description' => 'Hạn thanh toán: overdue (quá hạn), today (hôm nay), this_week (tuần này)'
+                                ],
+                                'created_by_name' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tên người tạo đề xuất'
+                                ],
+                                'limit' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Số lượng bản ghi (mặc định 5, tối đa 20)'
+                                ]
+                            ]
+                        ]
+                    ],
+                    [
+                        'name' => 'get_sales_leaderboard',
+                        'description' => 'Bảng vàng xếp hạng doanh số, tiền cọc và số hợp đồng của các chuyên viên tư vấn / Sales theo ngày, tuần, tháng, quý, năm.',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'period' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['today', 'yesterday', 'this_week', 'this_month', 'last_month', 'this_quarter', 'this_year'],
+                                    'description' => 'Khoảng thời gian thống kê (mặc định this_month)'
+                                ],
+                                'top_limit' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Số lượng chuyên viên hiển thị trong Top (mặc định 5, tối đa 10)'
+                                ]
+                            ]
+                        ]
+                    ],
+                    [
+                        'name' => 'get_staff_directory_advanced',
+                        'description' => 'Tra cứu danh bạ nhân sự toàn viện với bộ lọc chuyên sâu: sinh nhật trong tháng, loại hợp đồng (thử việc, chính thức, part-time), phòng ban, hoặc từ khóa tìm kiếm.',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'birthday_month' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Tháng sinh nhật cần tra cứu (1-12)'
+                                ],
+                                'contract_type' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['all', 'probation', 'official', 'part_time', 'intern', 'resigned'],
+                                    'description' => 'Loại hợp đồng: probation (thử việc), official (chính thức), part_time, resigned (đã nghỉ)'
+                                ],
+                                'department' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tên phòng ban hoặc chức danh'
+                                ],
+                                'keyword' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tên, email hoặc số điện thoại nhân sự'
+                                ],
+                                'limit' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Số lượng nhân sự hiển thị (mặc định 10, tối đa 30)'
+                                ]
+                            ]
+                        ]
+                    ],
+                    [
+                        'name' => 'get_academic_students_filter',
+                        'description' => 'Tra cứu và lọc hồ sơ học viên các chương trình đào tạo (EMBA, MBA, MSc AI, DBA), kiểm tra tình trạng thiếu hồ sơ nhập học, bản dịch công chứng, hợp đồng đào tạo.',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'program_code' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Mã hoặc tên chương trình đào tạo (ví dụ: EMBA, MBA, MSc AI, DBA)'
+                                ],
+                                'study_status' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['all', 'studying', 'graduated', 'deferred', 'dropped'],
+                                    'description' => 'Tình trạng học tập'
+                                ],
+                                'missing_doc' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['all', 'id_card', 'degree', 'translation', 'contract'],
+                                    'description' => 'Lọc theo tình trạng hồ sơ còn thiếu: id_card (thiếu CCCD), degree (thiếu bằng ĐH), translation (thiếu dịch thuật công chứng), contract (chưa ký hợp đồng)'
+                                ],
+                                'limit' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Số lượng học viên hiển thị (mặc định 5, tối đa 20)'
+                                ]
+                            ]
+                        ]
+                    ],
+                    [
+                        'name' => 'get_inventory_health_check',
+                        'description' => 'Kiểm tra sức khỏe kho vật tư, ấn phẩm tuyển sinh, quà tặng (balo, áo, bút ký, tài liệu) và tài sản công ty; phát hiện các món tồn kho dưới định mức an toàn hoặc hết hàng.',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'alert_only' => [
+                                    'type' => 'BOOLEAN',
+                                    'description' => 'Chỉ lấy các mặt hàng cảnh báo hết hoặc sắp hết (tồn kho <= 10 hoặc hết hàng)'
+                                ],
+                                'category' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Danh mục vật phẩm (quà tặng, ấn phẩm, đồng phục, tài sản)'
+                                ],
+                                'keyword' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tên hoặc SKU vật phẩm'
+                                ],
+                                'limit' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Số lượng kết quả (mặc định 10, tối đa 25)'
+                                ]
+                            ]
                         ]
                     ],
                     [
@@ -1689,31 +1868,132 @@ class AgentToolRegistry {
                 }
 
                 // ==========================================
-                // 4. SEARCH CONTACTS (CRM DEFENSE)
+                // 4. SEARCH CONTACTS (CRM DEFENSE & MULTI-FACETED FILTER)
                 // ==========================================
                 case 'search_contacts': {
                     $q = trim($args['query'] ?? '');
-                    if (mb_strlen($q) < 2) {
-                        return ['success' => false, 'message' => 'Từ khóa tìm kiếm quá ngắn.'];
+                    $gender = strtolower(trim($args['gender'] ?? 'all'));
+                    $stageId = !empty($args['stage_id']) ? (int)$args['stage_id'] : 0;
+                    $stageName = trim($args['stage_name'] ?? '');
+                    $ownerName = trim($args['owner_name'] ?? '');
+                    $ownerId = !empty($args['owner_id']) ? (int)$args['owner_id'] : 0;
+                    $staleDays = !empty($args['stale_days']) ? (int)$args['stale_days'] : 0;
+                    $source = trim($args['source'] ?? '');
+                    $createdFrom = trim($args['created_from'] ?? '');
+                    $createdTo = trim($args['created_to'] ?? '');
+                    $limit = max(1, min(20, (int)($args['limit'] ?? 5)));
+
+                    $hasSpecificFilter = ($gender !== 'all') || ($stageId > 0) || !empty($stageName) || !empty($ownerName) || ($ownerId > 0) || ($staleDays > 0) || !empty($source) || !empty($createdFrom) || !empty($createdTo);
+
+                    if (empty($q) && !$hasSpecificFilter) {
+                        return ['success' => false, 'message' => 'Vui lòng cung cấp từ khóa tìm kiếm hoặc chọn ít nhất một bộ lọc (chuyên viên, số ngày bỏ quên, giai đoạn, v.v.).'];
+                    }
+                    if (!empty($q) && mb_strlen($q) < 2 && !$hasSpecificFilter) {
+                        return ['success' => false, 'message' => 'Từ khóa tìm kiếm quá ngắn (tối thiểu 2 ký tự).'];
                     }
 
-                    $where = [];
+                    $where = ["c.tenant_id = ?", "c.deleted_at IS NULL"];
                     $params = [$tid];
 
-                    // Check numeric id
-                    if (is_numeric($q)) {
-                        $where[] = "c.id = ? OR c.phone LIKE ?";
-                        $params[] = (int)$q;
-                        $params[] = '%' . $q . '%';
-                    } else {
-                        $where[] = "c.full_name LIKE ? OR c.phone LIKE ? OR c.email LIKE ?";
-                        $like = '%' . $q . '%';
-                        $params[] = $like;
-                        $params[] = $like;
-                        $params[] = $like;
+                    // Resolve owner by name if owner_id not given
+                    if ($ownerId <= 0 && !empty($ownerName)) {
+                        $uStmt = $db->prepare("SELECT id, full_name FROM users WHERE tenant_id = ? AND full_name LIKE ? LIMIT 1");
+                        $uStmt->execute([$tid, '%' . $ownerName . '%']);
+                        $foundUser = $uStmt->fetch(PDO::FETCH_ASSOC);
+                        if ($foundUser) {
+                            $ownerId = (int)$foundUser['id'];
+                        }
                     }
 
-                    $sql = "SELECT c.id, c.full_name, c.phone, c.email, c.status, c.stage_id, ps.name as stage_name, ps.order_index as stage_order, u.full_name as owner_name,
+                    if ($ownerId > 0) {
+                        $where[] = "c.owner_id = ?";
+                        $params[] = $ownerId;
+                    } elseif (!empty($ownerName)) {
+                        $where[] = "u.full_name LIKE ?";
+                        $params[] = '%' . $ownerName . '%';
+                    }
+
+                    if (!empty($q)) {
+                        if (is_numeric($q)) {
+                            $where[] = "(c.id = ? OR c.phone LIKE ?)";
+                            $params[] = (int)$q;
+                            $params[] = '%' . $q . '%';
+                        } else {
+                            $where[] = "(c.full_name LIKE ? OR c.phone LIKE ? OR c.email LIKE ?)";
+                            $like = '%' . $q . '%';
+                            $params[] = $like;
+                            $params[] = $like;
+                            $params[] = $like;
+                        }
+                    }
+
+                    if ($gender === 'male' || $gender === 'nam') {
+                        $where[] = "c.gender IN ('male', 'nam', '1')";
+                    } elseif ($gender === 'female' || $gender === 'nu' || $gender === 'nữ') {
+                        $where[] = "c.gender IN ('female', 'nu', '0')";
+                    }
+
+                    if ($stageId > 0) {
+                        $where[] = "c.stage_id = ?";
+                        $params[] = $stageId;
+                    } elseif (!empty($stageName)) {
+                        $where[] = "(ps.name LIKE ? OR c.status LIKE ?)";
+                        $params[] = '%' . $stageName . '%';
+                        $params[] = '%' . $stageName . '%';
+                    }
+
+                    if ($staleDays > 0) {
+                        $where[] = "(
+                            (c.last_contact IS NOT NULL AND c.last_contact < DATE_SUB(NOW(), INTERVAL ? DAY))
+                            OR (c.last_contact IS NULL AND c.created_at < DATE_SUB(NOW(), INTERVAL ? DAY))
+                        )";
+                        $params[] = $staleDays;
+                        $params[] = $staleDays;
+                    }
+
+                    if (!empty($source)) {
+                        $where[] = "c.source LIKE ?";
+                        $params[] = '%' . $source . '%';
+                    }
+
+                    if (!empty($createdFrom)) {
+                        $where[] = "c.created_at >= ?";
+                        $params[] = $createdFrom . ' 00:00:00';
+                    }
+                    if (!empty($createdTo)) {
+                        $where[] = "c.created_at <= ?";
+                        $params[] = $createdTo . ' 23:59:59';
+                    }
+
+                    // Zero-Trust Sales & Staff Isolation: Non-admins only see own/collaborated contacts
+                    if (!$canAccessAllContacts) {
+                        $rbac = $getContactRbacClause('c');
+                        $where[] = $rbac['clause'];
+                        $params = array_merge($params, $rbac['params']);
+                    }
+
+                    $whereSql = implode(" AND ", $where);
+
+                    // 1. Total matching count (Accurate MySQL calculation)
+                    $countSql = "SELECT COUNT(1) FROM contacts c
+                                 LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
+                                 LEFT JOIN users u ON c.owner_id = u.id
+                                 WHERE {$whereSql}";
+                    $countStmt = $db->prepare($countSql);
+                    $countStmt->execute($params);
+                    $totalMatching = (int)$countStmt->fetchColumn();
+
+                    if ($totalMatching === 0) {
+                        return [
+                            'success' => true,
+                            'total_matching' => 0,
+                            'count' => 0,
+                            'message' => 'Không tìm thấy học viên/khách hàng phù hợp trong phạm vi quyền hạn của bạn.'
+                        ];
+                    }
+
+                    // 2. Fetch preview contacts
+                    $sql = "SELECT c.id, c.full_name, c.phone, c.email, c.status, c.stage_id, c.last_contact, ps.name as stage_name, ps.order_index as stage_order, u.full_name as owner_name,
                             (
                                 SELECT CONCAT('[', DATE_FORMAT(COALESCE(act.created_at, NOW()), '%d/%m/%Y %H:%i'), '] ', COALESCE(u_act.full_name, 'Tư vấn viên'), ' (', act.type, '): ', COALESCE(NULLIF(TRIM(act.body), ''), act.subject, ''))
                                 FROM activities act
@@ -1725,27 +2005,28 @@ class AgentToolRegistry {
                             FROM contacts c
                             LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
                             LEFT JOIN users u ON c.owner_id = u.id
-                            WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND (" . implode(" OR ", $where) . ")";
-
-                    // Zero-Trust Sales & Staff Isolation: Non-admins only see own/collaborated contacts
-                    if (!$canAccessAllContacts) {
-                        $rbac = $getContactRbacClause('c');
-                        $sql .= " AND " . $rbac['clause'];
-                        $params = array_merge($params, $rbac['params']);
-                    }
-
-                    $sql .= " ORDER BY c.id DESC LIMIT 5";
+                            WHERE {$whereSql}
+                            ORDER BY c.id DESC LIMIT " . (int)$limit;
                     $stmt = $db->prepare($sql);
                     $stmt->execute($params);
                     $contacts = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-                    if (empty($contacts)) {
-                        return ['success' => true, 'count' => 0, 'message' => 'Không tìm thấy học viên/khách hàng phù hợp trong phạm vi quyền hạn của bạn.'];
-                    }
+                    // 3. Build export URL
+                    $exportParams = ['type' => 'contact'];
+                    if (!empty($q)) $exportParams['search'] = $q;
+                    if ($ownerId > 0) $exportParams['owner_id'] = $ownerId;
+                    if ($stageId > 0) $exportParams['stage_id'] = $stageId;
+                    if ($staleDays > 0) $exportParams['stale_days'] = $staleDays;
+                    if (!empty($createdFrom)) $exportParams['from'] = $createdFrom;
+                    if (!empty($createdTo)) $exportParams['to'] = $createdTo;
+                    $exportUrl = '/export?' . http_build_query($exportParams);
 
                     return [
                         'success' => true,
+                        'total_matching' => $totalMatching,
                         'count' => count($contacts),
+                        'export_url' => $exportUrl,
+                        'export_markdown' => "[📥 Bấm vào đây để tải danh sách Excel/CSV ({$totalMatching} học viên/lead)]({$exportUrl})",
                         'contacts' => array_map(function($c) {
                             $stageOrder = !empty($c['stage_order']) ? (int)$c['stage_order'] : 1;
                             $isReadyForSo = ($stageOrder >= 13);
@@ -1763,6 +2044,7 @@ class AgentToolRegistry {
                                 'stage' => $stageName,
                                 'stage_id' => !empty($c['stage_id']) ? (int)$c['stage_id'] : null,
                                 'stage_order' => $stageOrder,
+                                'last_contact' => $c['last_contact'] ? date('d/m/Y H:i', strtotime($c['last_contact'])) : 'Chưa có tương tác',
                                 'direct_url' => $directUrl,
                                 'open_tab_markdown' => "[👉 Bấm để mở hồ sơ {$c['full_name']}]({$directUrl})",
                                 'smart_tag' => $smartTag,
@@ -3594,7 +3876,25 @@ class AgentToolRegistry {
                     if (empty($params['created_at'])) $params['created_at'] = date('H:i:s d/m/Y');
 
                     if ($actionType === 'export_data') {
-                        $exportType = $params['export_type'] ?? ($params['type'] ?? 'contact');
+                        $rawExportType = strtolower(trim((string)($params['export_type'] ?? ($params['type'] ?? 'contact'))));
+                        if (in_array($rawExportType, ['lead', 'leads', 'crm', 'crm_leads', 'student', 'students', 'hoc_vien', 'khach_hang', 'export_data', 'export'], true)) {
+                            $exportType = 'contact';
+                        } elseif (in_array($rawExportType, ['company', 'companies', 'doanh_nghiep'], true)) {
+                            $exportType = 'company';
+                        } elseif (in_array($rawExportType, ['deal', 'deals', 'co_hoi'], true)) {
+                            $exportType = 'deal';
+                        } elseif (in_array($rawExportType, ['product', 'products', 'san_pham'], true)) {
+                            $exportType = 'product';
+                        } elseif (in_array($rawExportType, ['inventory', 'inventories', 'kho', 'vat_tu'], true)) {
+                            $exportType = 'inventory';
+                        } elseif (in_array($rawExportType, ['attendance', 'attendances', 'bang_cong', 'cham_cong'], true)) {
+                            $exportType = 'attendance';
+                        } else {
+                            $exportType = 'contact';
+                        }
+                        $params['export_type'] = $exportType;
+                        $params['type'] = $exportType;
+
                         if (empty($params['download_url'])) {
                             $queryParams = http_build_query(array_filter([
                                 'type' => $exportType,
@@ -3602,6 +3902,7 @@ class AgentToolRegistry {
                                 'lead_status' => $params['lead_status'] ?? '',
                                 'status' => $params['status'] ?? '',
                                 'segment' => $params['segment'] ?? '',
+                                'stale_days' => $params['stale_days'] ?? '',
                                 'from' => $params['from'] ?? '',
                                 'to' => $params['to'] ?? '',
                                 'date_field' => $params['date_field'] ?? '',
@@ -7599,6 +7900,496 @@ class AgentToolRegistry {
                             ];
                         }
                     }
+                }
+
+                // ==========================================
+                // 39. FILTER EXPENSES ADVANCED (ENTERPRISE FINANCE)
+                // ==========================================
+                case 'filter_expenses_advanced': {
+                    $status = strtolower(trim((string)($args['status'] ?? 'all')));
+                    $department = trim((string)($args['department'] ?? ''));
+                    $minAmount = isset($args['min_amount']) ? (float)$args['min_amount'] : null;
+                    $maxAmount = isset($args['max_amount']) ? (float)$args['max_amount'] : null;
+                    $deadlineStatus = strtolower(trim((string)($args['deadline_status'] ?? 'all')));
+                    $limit = max(1, min(15, (int)($args['limit'] ?? 5)));
+
+                    $where = ["e.tenant_id = ?", "e.deleted_at IS NULL"];
+                    $params = [$tid];
+
+                    // Zero-Trust RBAC: Non-admin/accountant only see expenses created by or assigned to them
+                    if (!$isGlobalAdmin && !$isAccountant && !$isManager) {
+                        $where[] = "(e.created_by = ? OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ? OR FIND_IN_SET(?, IFNULL(e.related_user_ids, '')))";
+                        $params[] = $uid;
+                        $params[] = $uid;
+                        $params[] = $uid;
+                        $params[] = $uid;
+                        $params[] = (string)$uid;
+                    }
+
+                    if ($status === 'pending') {
+                        $where[] = "e.status = 'pending'";
+                    } elseif ($status === 'pending_l1') {
+                        $where[] = "e.status = 'pending' AND (e.status_level_1 = 'pending' OR e.status_level_1 IS NULL)";
+                    } elseif ($status === 'pending_l2') {
+                        $where[] = "e.status = 'pending' AND e.status_level_1 = 'approved' AND (e.status_level_2 = 'pending' OR e.status_level_2 IS NULL)";
+                    } elseif ($status === 'approved') {
+                        $where[] = "e.status = 'approved'";
+                    } elseif ($status === 'rejected') {
+                        $where[] = "e.status = 'rejected'";
+                    } elseif ($status === 'paid') {
+                        $where[] = "(e.status = 'paid' OR (e.status = 'approved' AND e.is_refunded = 1))";
+                    } elseif ($status === 'unpaid') {
+                        $where[] = "e.status = 'approved' AND (e.is_refunded = 0 OR e.is_refunded IS NULL)";
+                    }
+
+                    if (!empty($department)) {
+                        $where[] = "(e.category LIKE ? OR e.title LIKE ?)";
+                        $params[] = '%' . $department . '%';
+                        $params[] = '%' . $department . '%';
+                    }
+
+                    if ($minAmount !== null && $minAmount > 0) {
+                        $where[] = "e.amount >= ?";
+                        $params[] = $minAmount;
+                    }
+                    if ($maxAmount !== null && $maxAmount > 0) {
+                        $where[] = "e.amount <= ?";
+                        $params[] = $maxAmount;
+                    }
+
+                    if ($deadlineStatus === 'overdue') {
+                        $where[] = "e.due_date IS NOT NULL AND e.due_date < CURDATE()";
+                    } elseif ($deadlineStatus === 'today') {
+                        $where[] = "e.due_date IS NOT NULL AND DATE(e.due_date) = CURDATE()";
+                    } elseif ($deadlineStatus === 'this_week') {
+                        $where[] = "e.due_date IS NOT NULL AND YEARWEEK(e.due_date, 1) = YEARWEEK(CURDATE(), 1)";
+                    }
+
+                    $whereSql = implode(" AND ", $where);
+
+                    // Aggregate total count and sum
+                    $aggSql = "SELECT COUNT(1) as total_count, COALESCE(SUM(e.amount), 0) as total_amount FROM expenses e WHERE {$whereSql}";
+                    $aggStmt = $db->prepare($aggSql);
+                    $aggStmt->execute($params);
+                    $agg = $aggStmt->fetch(PDO::FETCH_ASSOC);
+                    $totalCount = (int)($agg['total_count'] ?? 0);
+                    $totalAmount = (float)($agg['total_amount'] ?? 0);
+
+                    if ($totalCount === 0) {
+                        return [
+                            'success' => true,
+                            'total_matching' => 0,
+                            'total_amount' => 0,
+                            'message' => 'Không tìm thấy phiếu chi/đề xuất thanh toán phù hợp với bộ lọc trong phạm vi quyền hạn.'
+                        ];
+                    }
+
+                    $sql = "SELECT e.id, e.title, e.amount, e.currency, e.category, e.vendor_name, e.status, e.approval_status, e.date, e.due_date, e.created_at,
+                                   u.full_name as creator_name,
+                                   u2.full_name as approver_name
+                            FROM expenses e
+                            LEFT JOIN users u ON e.created_by = u.id
+                            LEFT JOIN users u2 ON e.approver_id = u2.id
+                            WHERE {$whereSql}
+                            ORDER BY e.id DESC
+                            LIMIT " . (int)$limit;
+                    $stmt = $db->prepare($sql);
+                    $stmt->execute($params);
+                    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                    $items = array_map(function($r) {
+                        $eId = (int)$r['id'];
+                        $directUrl = "https://myerp.ideas.edu.vn/finance?tab=expenses&id={$eId}";
+                        $amtFormatted = number_format((float)$r['amount'], 0, ',', '.') . ' ' . ($r['currency'] ?: 'VND');
+                        $smartTag = "<<<ERP_CARD:{\"entity_type\":\"po\",\"entity_id\":{$eId},\"title\":\"[PO-{$eId}] " . addslashes($r['title']) . "\",\"subtitle\":\"{$amtFormatted} • " . ($r['vendor_name'] ?: 'Nội bộ') . "\",\"status\":\"" . ($r['status'] === 'approved' ? 'completed' : 'in_progress') . "\",\"direct_url\":\"{$directUrl}\",\"action_label\":\"Mở phiếu chi\"}>>>";
+                        return [
+                            'id' => $eId,
+                            'title' => $r['title'],
+                            'amount' => (float)$r['amount'],
+                            'amount_formatted' => $amtFormatted,
+                            'category' => $r['category'] ?: 'Chưa phân loại',
+                            'vendor' => $r['vendor_name'] ?: 'Nội bộ',
+                            'creator' => $r['creator_name'] ?: 'Nhân sự',
+                            'approver' => $r['approver_name'] ?: 'Chưa chỉ định',
+                            'status' => $r['status'],
+                            'date' => $r['date'] ? date('d/m/Y', strtotime($r['date'])) : null,
+                            'due_date' => $r['due_date'] ? date('d/m/Y', strtotime($r['due_date'])) : 'Không đặt hạn chót',
+                            'is_overdue' => (!empty($r['due_date']) && strtotime($r['due_date']) < strtotime('today')),
+                            'direct_url' => $directUrl,
+                            'open_link_markdown' => "[👉 Bấm xem Phiếu chi #{$eId}]({$directUrl})",
+                            'smart_tag' => $smartTag
+                        ];
+                    }, $rows);
+
+                    return [
+                        'success' => true,
+                        'total_matching' => $totalCount,
+                        'total_amount' => $totalAmount,
+                        'total_amount_formatted' => number_format($totalAmount, 0, ',', '.') . ' VND',
+                        'count' => count($items),
+                        'expenses' => $items
+                    ];
+                }
+
+                // ==========================================
+                // 40. GET SALES LEADERBOARD (CRM LEADERBOARD)
+                // ==========================================
+                case 'get_sales_leaderboard': {
+                    $period = strtolower(trim((string)($args['period'] ?? 'this_month')));
+                    $fromDate = trim((string)($args['from_date'] ?? ''));
+                    $toDate = trim((string)($args['to_date'] ?? ''));
+                    $limit = max(1, min(10, (int)($args['limit'] ?? 5)));
+
+                    if (!empty($fromDate) && !empty($toDate)) {
+                        $from = $fromDate . ' 00:00:00';
+                        $to = $toDate . ' 23:59:59';
+                    } elseif ($period === 'last_month') {
+                        $from = date('Y-m-01 00:00:00', strtotime('first day of last month'));
+                        $to = date('Y-m-t 23:59:59', strtotime('last day of last month'));
+                    } elseif ($period === 'this_quarter') {
+                        $curMonth = (int)date('n');
+                        $quarterStartMonth = floor(($curMonth - 1) / 3) * 3 + 1;
+                        $from = date(sprintf('Y-%02d-01 00:00:00', $quarterStartMonth));
+                        $to = date('Y-m-d 23:59:59');
+                    } elseif ($period === 'this_year') {
+                        $from = date('Y-01-01 00:00:00');
+                        $to = date('Y-12-31 23:59:59');
+                    } else { // this_month default
+                        $from = date('Y-m-01 00:00:00');
+                        $to = date('Y-m-t 23:59:59');
+                    }
+
+                    // Zero-Trust Sales RBAC: Sales rep can view the leaderboard ranking, but cannot see private data
+                    $where = "u.tenant_id = ? AND u.is_active = 1 AND u.role IN ('admin','manager','sales','sale','director','superadmin','super_admin')";
+
+                    $sql = "
+                        SELECT u.id, u.full_name, u.role,
+                               COUNT(DISTINCT d.id) as deal_count,
+                               COALESCE(SUM(CASE WHEN ps.is_won = 1 THEN d.value ELSE 0 END), 0) as won_value,
+                               COUNT(DISTINCT CASE WHEN ps.is_won = 1 THEN d.id ELSE NULL END) as won_count,
+                               COALESCE((
+                                   SELECT SUM(dep.price) FROM deposits dep 
+                                   WHERE dep.created_by = u.id AND dep.status = 'approved' AND dep.created_at BETWEEN ? AND ?
+                               ), 0) as total_deposit_collected
+                        FROM users u
+                        LEFT JOIN deals d ON d.owner_id = u.id AND d.deleted_at IS NULL AND d.tenant_id = ? AND d.created_at BETWEEN ? AND ?
+                        LEFT JOIN pipeline_stages ps ON d.stage_id = ps.id
+                        WHERE {$where}
+                        GROUP BY u.id, u.full_name, u.role
+                        ORDER BY won_value DESC, total_deposit_collected DESC, won_count DESC
+                        LIMIT " . (int)$limit;
+
+                    $stmt = $db->prepare($sql);
+                    $stmt->execute([$from, $to, $tid, $from, $to, $tid]);
+                    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                    $ranked = [];
+                    $rank = 1;
+                    foreach ($rows as $r) {
+                        $wonVal = (float)$r['won_value'];
+                        $depVal = (float)$r['total_deposit_collected'];
+                        $ranked[] = [
+                            'rank' => $rank++,
+                            'user_id' => (int)$r['id'],
+                            'name' => $r['full_name'],
+                            'role' => $r['role'],
+                            'won_deals_count' => (int)$r['won_count'],
+                            'total_deals' => (int)$r['deal_count'],
+                            'won_revenue' => $wonVal,
+                            'won_revenue_formatted' => number_format($wonVal, 0, ',', '.') . ' VND',
+                            'deposit_collected' => $depVal,
+                            'deposit_collected_formatted' => number_format($depVal, 0, ',', '.') . ' VND'
+                        ];
+                    }
+
+                    return [
+                        'success' => true,
+                        'period' => $period,
+                        'from' => substr($from, 0, 10),
+                        'to' => substr($to, 0, 10),
+                        'total_consultants' => count($ranked),
+                        'leaderboard' => $ranked,
+                        'summary' => count($ranked) > 0 ? "Top 1 hiện tại là {$ranked[0]['name']} với doanh số " . $ranked[0]['won_revenue_formatted'] . "." : "Chưa có dữ liệu doanh số trong kỳ."
+                    ];
+                }
+
+                // ==========================================
+                // 41. GET STAFF DIRECTORY ADVANCED (HRM ROSTER)
+                // ==========================================
+                case 'get_staff_directory_advanced': {
+                    $bMonth = !empty($args['birthday_month']) ? (int)$args['birthday_month'] : 0;
+                    $contractType = strtolower(trim((string)($args['contract_type'] ?? 'all')));
+                    $department = trim((string)($args['department'] ?? ''));
+                    $keyword = trim((string)($args['keyword'] ?? ''));
+                    $limit = max(1, min(30, (int)($args['limit'] ?? 10)));
+
+                    $where = ["u.tenant_id = ?"];
+                    $params = [$tid];
+
+                    // Zero-Trust RBAC: Only Admin, Director, HR, or Manager can query inactive/resigned personnel
+                    $canViewInactive = ($isGlobalAdmin || in_array($role, ['hr', 'director', 'manager', 'truong_phong'], true));
+
+                    if ($contractType === 'resigned') {
+                        if ($canViewInactive) {
+                            $where[] = "(u.is_active = 0 OR u.status IN ('inactive', 'leave', 'resigned'))";
+                        } else {
+                            $where[] = "1=0"; // Restricted
+                        }
+                    } elseif ($contractType === 'probation') {
+                        $where[] = "(u.is_active = 1 OR u.is_active IS NULL) AND (u.status = 'active' OR u.status IS NULL)";
+                        $where[] = "(u.role = 'probation' OR u.job_title LIKE '%thử việc%' OR p.joined_date >= DATE_SUB(NOW(), INTERVAL 2 MONTH))";
+                    } elseif ($contractType === 'official') {
+                        $where[] = "(u.is_active = 1 OR u.is_active IS NULL) AND (u.status = 'active' OR u.status IS NULL)";
+                        $where[] = "(u.role != 'probation' AND (u.job_title NOT LIKE '%thử việc%' OR u.job_title IS NULL))";
+                    } elseif (!$canViewInactive) {
+                        $where[] = "(u.is_active = 1 OR u.is_active IS NULL) AND (u.status = 'active' OR u.status IS NULL)";
+                    }
+
+                    if ($bMonth >= 1 && $bMonth <= 12) {
+                        $where[] = "u.dob IS NOT NULL AND MONTH(u.dob) = ?";
+                        $params[] = $bMonth;
+                    }
+
+                    if (!empty($keyword)) {
+                        $where[] = "(u.full_name LIKE ? OR u.phone LIKE ? OR u.email LIKE ? OR u.username LIKE ?)";
+                        $kw = '%' . $keyword . '%';
+                        $params = array_merge($params, [$kw, $kw, $kw, $kw]);
+                    }
+
+                    if (!empty($department)) {
+                        $where[] = "(t.name LIKE ? OR u.job_title LIKE ? OR u.department LIKE ?)";
+                        $dKw = '%' . $department . '%';
+                        $params = array_merge($params, [$dKw, $dKw, $dKw]);
+                    }
+
+                    $whereSql = implode(" AND ", $where);
+
+                    $sql = "SELECT u.id, u.full_name, u.email, u.phone, u.role, u.job_title, u.dob, u.gender, u.status, u.is_active,
+                                   t.name as team_name,
+                                   p.joined_date,
+                                   COALESCE(NULLIF(TRIM(u.department), ''), NULLIF(TRIM(t.name), ''), 
+                                       CASE 
+                                           WHEN u.role IN ('admin', 'superadmin', 'super_admin', 'director') THEN 'Ban Giám đốc'
+                                           WHEN u.role = 'hr' THEN 'Phòng Nhân sự'
+                                           WHEN u.role = 'accountant' THEN 'Phòng Kế toán'
+                                           WHEN u.role = 'marketing' THEN 'Phòng Marketing'
+                                           WHEN u.role IN ('sales', 'sale', 'sale_admin', 'saleadmin') THEN 'Phòng Kinh doanh'
+                                           ELSE 'Khác'
+                                       END
+                                   ) as department
+                            FROM users u
+                            LEFT JOIN teams t ON u.team_id = t.id
+                            LEFT JOIN hrm_profiles p ON u.id = p.user_id
+                            WHERE {$whereSql}
+                            ORDER BY u.full_name ASC
+                            LIMIT " . (int)$limit;
+
+                    $stmt = $db->prepare($sql);
+                    $stmt->execute($params);
+                    $staff = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                    $formatted = array_map(function($s) {
+                        return [
+                            'id' => (int)$s['id'],
+                            'name' => $s['full_name'],
+                            'email' => $s['email'],
+                            'phone' => $s['phone'] ?: 'Chưa cập nhật',
+                            'job_title' => $s['job_title'] ?: 'Nhân viên',
+                            'department' => $s['department'],
+                            'birthday' => $s['dob'] ? date('d/m/Y', strtotime($s['dob'])) : 'Chưa cập nhật',
+                            'gender' => $s['gender'] ?: 'Chưa cập nhật',
+                            'joined_date' => $s['joined_date'] ? date('d/m/Y', strtotime($s['joined_date'])) : 'Chưa cập nhật',
+                            'status' => ($s['is_active'] == 1 && $s['status'] !== 'inactive') ? 'Đang làm việc' : 'Đã nghỉ việc / Tạm hoãn'
+                        ];
+                    }, $staff);
+
+                    return [
+                        'success' => true,
+                        'count' => count($formatted),
+                        'staff' => $formatted,
+                        'summary' => count($formatted) > 0 ? "Tìm thấy " . count($formatted) . " nhân sự phù hợp." : "Không có nhân sự nào phù hợp với điều kiện tra cứu."
+                    ];
+                }
+
+                // ==========================================
+                // 42. GET ACADEMIC STUDENTS FILTER (ADMISSIONS CHECK)
+                // ==========================================
+                case 'get_academic_students_filter': {
+                    $programCode = strtoupper(trim((string)($args['program_code'] ?? '')));
+                    $studyStatus = strtolower(trim((string)($args['study_status'] ?? 'all')));
+                    $missingDoc = strtolower(trim((string)($args['missing_doc'] ?? 'all')));
+                    $limit = max(1, min(20, (int)($args['limit'] ?? 5)));
+
+                    $where = ["c.tenant_id = ?", "c.deleted_at IS NULL"];
+                    $params = [$tid];
+
+                    // Zero-Trust Contact RBAC: If not admin/manager/academic, restrict to assigned contacts
+                    if (!$canAccessAllContacts && !$isAcademic) {
+                        $rbac = $getContactRbacClause('c');
+                        $where[] = $rbac['clause'];
+                        $params = array_merge($params, $rbac['params']);
+                    }
+
+                    // Enrolled or advanced stage contacts (students)
+                    $where[] = "(c.is_customer = 1 OR c.stage_id >= 10 OR c.status IN ('enrolled', 'student', 'hoc_vien') OR c.notes LIKE '%EMBA%' OR c.notes LIKE '%MBA%' OR c.notes LIKE '%DBA%')";
+
+                    if (!empty($programCode)) {
+                        $where[] = "(c.notes LIKE ? OR p.name LIKE ? OR d.title LIKE ?)";
+                        $pKw = '%' . $programCode . '%';
+                        $params = array_merge($params, [$pKw, $pKw, $pKw]);
+                    }
+
+                    $whereSql = implode(" AND ", $where);
+
+                    $sql = "SELECT c.id, c.full_name, c.phone, c.email, c.status, c.stage_id, c.notes,
+                                   ps.name as stage_name,
+                                   u.full_name as consultant_name
+                            FROM contacts c
+                            LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
+                            LEFT JOIN users u ON c.owner_id = u.id
+                            LEFT JOIN projects p ON c.project_id = p.id
+                            LEFT JOIN deals d ON d.contact_id = c.id
+                            WHERE {$whereSql}
+                            GROUP BY c.id
+                            ORDER BY c.id DESC
+                            LIMIT " . (int)($limit * 3); // Overfetch slightly to evaluate document checklist
+
+                    $stmt = $db->prepare($sql);
+                    $stmt->execute($params);
+                    $candidates = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                    $results = [];
+                    foreach ($candidates as $c) {
+                        $cId = (int)$c['id'];
+                        // Fetch files
+                        $cfStmt = $db->prepare("SELECT name, category FROM cloud_files WHERE contact_id = ? AND tenant_id = ?");
+                        $cfStmt->execute([$cId, $tid]);
+                        $files = $cfStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                        $hasId = false;
+                        $hasDegree = false;
+                        $hasTranslation = false;
+                        $hasContract = false;
+
+                        foreach ($files as $f) {
+                            $nm = mb_strtolower($f['name'] ?? '');
+                            $cat = mb_strtolower($f['category'] ?? '');
+                            if (str_contains($nm, 'cccd') || str_contains($nm, 'passport') || str_contains($cat, 'cccd') || str_contains($cat, 'hộ chiếu')) $hasId = true;
+                            if (str_contains($nm, 'bang') || str_contains($nm, 'diploma') || str_contains($nm, 'degree') || str_contains($cat, 'bằng')) $hasDegree = true;
+                            if (str_contains($nm, 'dich') || str_contains($nm, 'translation') || str_contains($cat, 'dịch')) $hasTranslation = true;
+                            if (str_contains($nm, 'hop_dong') || str_contains($nm, 'contract') || str_contains($cat, 'hợp đồng')) $hasContract = true;
+                        }
+
+                        // Filter by missingDoc if specified
+                        if ($missingDoc === 'id_card' && $hasId) continue;
+                        if ($missingDoc === 'degree' && $hasDegree) continue;
+                        if ($missingDoc === 'translation' && $hasTranslation) continue;
+                        if ($missingDoc === 'contract' && $hasContract) continue;
+
+                        $missingList = [];
+                        if (!$hasId) $missingList[] = 'CCCD / Hộ chiếu';
+                        if (!$hasDegree) $missingList[] = 'Bằng ĐH';
+                        if (!$hasTranslation) $missingList[] = 'Bản dịch công chứng';
+                        if (!$hasContract) $missingList[] = 'Hợp đồng đào tạo';
+
+                        $directUrl = "https://myerp.ideas.edu.vn/contacts?id={$cId}";
+                        $smartTag = "<<<ERP_CARD:{\"entity_type\":\"contact\",\"entity_id\":{$cId},\"title\":\"" . addslashes($c['full_name']) . "\",\"subtitle\":\"" . ($c['phone'] ?: '') . " • " . (empty($missingList) ? 'Đủ hồ sơ' : 'Thiếu ' . count($missingList) . ' mục') . "\",\"status\":\"" . (empty($missingList) ? 'completed' : 'in_progress') . "\",\"direct_url\":\"{$directUrl}\",\"action_label\":\"Mở hồ sơ học viên\"}>>>";
+
+                        $results[] = [
+                            'id' => $cId,
+                            'name' => $c['full_name'],
+                            'phone' => $c['phone'],
+                            'email' => $c['email'],
+                            'stage' => $c['stage_name'] ?: ($c['status'] ?: 'Đang học'),
+                            'consultant' => $c['consultant_name'] ?: 'Chưa phân công',
+                            'admission_ready' => empty($missingList),
+                            'missing_documents' => $missingList,
+                            'direct_url' => $directUrl,
+                            'smart_tag' => $smartTag
+                        ];
+
+                        if (count($results) >= $limit) break;
+                    }
+
+                    return [
+                        'success' => true,
+                        'count' => count($results),
+                        'students' => $results,
+                        'summary' => count($results) > 0 ? "Tìm thấy " . count($results) . " học viên phù hợp." : "Không có học viên nào phù hợp với điều kiện hồ sơ tra cứu."
+                    ];
+                }
+
+                // ==========================================
+                // 43. GET INVENTORY HEALTH CHECK (STOCK DEFENSE)
+                // ==========================================
+                case 'get_inventory_health_check': {
+                    $alertOnly = !empty($args['alert_only']);
+                    $category = trim((string)($args['category'] ?? ''));
+                    $keyword = trim((string)($args['keyword'] ?? ''));
+                    $limit = max(1, min(25, (int)($args['limit'] ?? 10)));
+
+                    $where = ["p.tenant_id = ?"];
+                    $params = [$tid];
+
+                    if (!empty($category)) {
+                        $where[] = "p.category LIKE ?";
+                        $params[] = '%' . $category . '%';
+                    }
+
+                    if (!empty($keyword)) {
+                        $where[] = "(p.name LIKE ? OR p.sku LIKE ?)";
+                        $params[] = '%' . $keyword . '%';
+                        $params[] = '%' . $keyword . '%';
+                    }
+
+                    $whereSql = implode(" AND ", $where);
+
+                    $sql = "
+                        SELECT p.id, p.name, p.sku, p.category, p.unit, p.price,
+                               COALESCE(SUM(CASE WHEN b.status = 'active' THEN b.current_qty ELSE 0 END), 0) as total_qty
+                        FROM products p
+                        LEFT JOIN batches b ON p.id = b.product_id AND b.tenant_id = ?
+                        WHERE {$whereSql}
+                        GROUP BY p.id, p.name, p.sku, p.category, p.unit, p.price
+                    ";
+
+                    if ($alertOnly) {
+                        $sql .= " HAVING total_qty <= 10";
+                    }
+
+                    $sql .= " ORDER BY total_qty ASC, p.name ASC LIMIT " . (int)$limit;
+
+                    $stmt = $db->prepare($sql);
+                    $stmt->execute(array_merge([$tid], $params));
+                    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                    $items = array_map(function($r) {
+                        $qty = (int)$r['total_qty'];
+                        if ($qty <= 0) {
+                            $health = '🚨 HẾT HÀNG';
+                        } elseif ($qty <= 10) {
+                            $health = '⚠️ CẢNH BÁO: SẮP HẾT (<= 10)';
+                        } else {
+                            $health = '✅ AN TOÀN';
+                        }
+
+                        return [
+                            'product_id' => (int)$r['id'],
+                            'name' => $r['name'],
+                            'sku' => $r['sku'] ?: 'N/A',
+                            'category' => $r['category'] ?: 'Vật phẩm / Quà tặng',
+                            'unit' => $r['unit'] ?: 'cái',
+                            'current_stock' => $qty,
+                            'health_status' => $health
+                        ];
+                    }, $rows);
+
+                    return [
+                        'success' => true,
+                        'count' => count($items),
+                        'inventory' => $items,
+                        'summary' => count($items) > 0 ? "Tìm thấy " . count($items) . " vật phẩm trong kho." : "Không có cảnh báo tồn kho bất thường."
+                    ];
                 }
 
                 default:

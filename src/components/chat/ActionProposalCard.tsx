@@ -8,6 +8,7 @@ import {
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
+import { downloadExportFile } from '../../utils/exportHelper';
 import { useUIStore } from '../../store/uiStore';
 import { useAuthStore } from '../../store/authStore';
 import { useChatStore } from '../../store/chatStore';
@@ -497,10 +498,44 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
         case 'export_data':
         case 'export': {
           setStatus('submitting');
-          const expType = p.export_type || p.type || 'contact';
-          let downloadUrl = p.download_url || p.url || '';
-          if (!downloadUrl) {
-            const paramsObj: Record<string, string> = { type: expType };
+          const rawType = String(p.export_type || p.type || 'contact').toLowerCase();
+          let expType = 'contact';
+          if (['company', 'companies', 'doanh_nghiep'].includes(rawType)) {
+            expType = 'company';
+          } else if (['deal', 'deals', 'co_hoi'].includes(rawType)) {
+            expType = 'deal';
+          } else if (['product', 'products', 'san_pham'].includes(rawType)) {
+            expType = 'product';
+          } else if (['inventory', 'inventories', 'kho', 'vat_tu'].includes(rawType)) {
+            expType = 'inventory';
+          } else if (['attendance', 'attendances', 'bang_cong', 'cham_cong'].includes(rawType)) {
+            expType = 'attendance';
+          }
+
+          toast.loading('Đang trích xuất và tải tệp Excel...', { id: 'export-action-toast' });
+          const fileName = p.filename || p.file_name || `export_${expType}_${new Date().toISOString().slice(0, 10)}.csv`;
+
+          let endpoint = '/export';
+          const paramsObj: Record<string, any> = { type: expType };
+          const downloadUrl = p.download_url || p.url || '';
+          if (downloadUrl) {
+            try {
+              const urlObj = new URL(downloadUrl, window.location.origin);
+              endpoint = urlObj.pathname.replace(/^\/api/, '');
+              urlObj.searchParams.forEach((val, key) => {
+                paramsObj[key] = val;
+              });
+            } catch {
+              const qParts = downloadUrl.split('?');
+              endpoint = qParts[0].replace(/^\/api/, '');
+              if (qParts[1]) {
+                const sp = new URLSearchParams(qParts[1]);
+                sp.forEach((val, key) => {
+                  paramsObj[key] = val;
+                });
+              }
+            }
+          } else {
             if (p.search) paramsObj.search = p.search;
             if (p.segment) paramsObj.segment = p.segment;
             if (p.lead_status) paramsObj.lead_status = p.lead_status;
@@ -514,25 +549,23 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
             if (p.student_sub_tab) paramsObj.student_sub_tab = p.student_sub_tab;
             if (p.multi_program) paramsObj.multi_program = String(p.multi_program);
             if (p.export_mode) paramsObj.export_mode = p.export_mode;
-            const qs = new URLSearchParams(paramsObj).toString();
-            downloadUrl = `/export?${qs}`;
           }
 
-          toast.loading('Đang trích xuất và tải tệp Excel...', { id: 'export-action-toast' });
-          const fileName = p.filename || p.file_name || `export_${expType}_${new Date().toISOString().slice(0, 10)}.csv`;
+          // Ensure normalized type
+          paramsObj.type = expType;
 
-          const res = await api.get(downloadUrl, { responseType: 'blob' });
-          const blob = new Blob([res.data], { type: 'text/csv;charset=utf-8;' });
-          const blobUrl = window.URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = blobUrl;
-          link.setAttribute('download', fileName);
-          document.body.appendChild(link);
-          link.click();
-          link.remove();
-          window.URL.revokeObjectURL(blobUrl);
-
-          toast.success('Đã tải tệp Excel thành công!', { id: 'export-action-toast' });
+          await downloadExportFile({
+            endpoint,
+            params: paramsObj,
+            defaultFilename: fileName,
+            onSuccess: () => {
+              toast.success('Đã tải tệp Excel thành công!', { id: 'export-action-toast' });
+            },
+            onError: (err: any) => {
+              const errTxt = err?.message || 'Không thể tải file xuất dữ liệu';
+              toast.error(errTxt, { id: 'export-action-toast' });
+            }
+          });
           break;
         }
 
@@ -546,10 +579,10 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
       }
     } catch (err: any) {
       console.error('Open & Prefill Error:', err);
-      const msg = err.message || 'Lỗi khi mở phiếu đề xuất';
+      const msg = err.response?.data?.message || err.message || 'Lỗi khi mở phiếu đề xuất';
       setErrorMsg(msg);
       setStatus('error');
-      toast.error(msg);
+      toast.error(msg, { id: 'export-action-toast' });
     } finally {
       inFlightRef.current = false;
     }

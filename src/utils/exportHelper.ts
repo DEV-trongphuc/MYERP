@@ -88,6 +88,23 @@ export async function downloadExportFile({
       onSuccess();
     }
   } catch (err: any) {
+    if (err?.response?.data instanceof Blob) {
+      try {
+        const text = await (err.response.data as Blob).text();
+        const json = JSON.parse(text);
+        if (json && typeof json === 'object') {
+          const errMsg = json.message || json.error || text;
+          if (errMsg) {
+            err.message = errMsg;
+            if (err.response.data) {
+              err.response.data = json;
+            }
+          }
+        }
+      } catch {
+        // Keep original err.message if Blob text is not valid JSON
+      }
+    }
     if (onError) {
       onError(err);
     }

@@ -99,7 +99,7 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
       'Xem tổng quan doanh thu & dòng tiền tháng (Admin/Kế toán)',
       'Đề xuất lập phiếu chi PO, tạm ứng, và đơn hàng bán SO có chia đợt'
     ],
-    allowedTools: ['get_contact_financial_summary', 'lookup_recent_cash_receipts_and_deposits', 'get_my_payment_proposals', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'draft_action_proposal'],
+    allowedTools: ['filter_expenses_advanced', 'get_sales_leaderboard', 'get_contact_financial_summary', 'lookup_recent_cash_receipts_and_deposits', 'get_my_payment_proposals', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'draft_action_proposal'],
     actionProposals: [
       'Thẻ Đề xuất thanh toán chi phí (expense)',
       'Thẻ Đề xuất tạm ứng công tác (advance_payment)',
@@ -133,7 +133,7 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
       'Cập nhật bước chuyển phễu Pipeline & thêm ghi chú chăm sóc',
       'Cập nhật thông tin liên hệ (chức danh, công ty, địa chỉ)'
     ],
-    allowedTools: ['get_contact_360_profile', 'search_contacts', 'check_lead_duplicate_and_fairshare_status', 'schedule_contact_activity', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'lookup_recent_cash_receipts_and_deposits', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'draft_action_proposal'],
+    allowedTools: ['get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'get_sales_leaderboard', 'check_lead_duplicate_and_fairshare_status', 'schedule_contact_activity', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'lookup_recent_cash_receipts_and_deposits', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'draft_action_proposal'],
     actionProposals: [
       'Thẻ Thêm học viên / Khách tiềm năng (lead)',
       'Thẻ Đơn hàng bán / Lịch thu học phí (sales_order)',
@@ -166,7 +166,7 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
       'Tra cứu phiếu phê duyệt đang chờ duyệt (nghỉ phép, giải trình công)',
       'Đề xuất tạo đơn xin nghỉ phép, bổ sung công và đổi ca trực'
     ],
-    allowedTools: ['get_company_staff_directory', 'get_company_leave_and_absence', 'get_my_attendance_summary', 'get_my_payslip', 'get_pending_approvals', 'trace_approval_blocker', 'draft_action_proposal'],
+    allowedTools: ['get_company_staff_directory', 'get_staff_directory_advanced', 'get_company_leave_and_absence', 'get_my_attendance_summary', 'get_my_payslip', 'get_pending_approvals', 'trace_approval_blocker', 'draft_action_proposal'],
     actionProposals: [
       'Thẻ Đơn xin nghỉ phép (leave)',
       'Thẻ Giải trình quên chấm công (supplementary)',
@@ -197,7 +197,7 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
       'Tra cứu dự án & chương trình đào tạo đang mở tuyển sinh',
       'Tư vấn chính sách bảo lưu, chuyển tiếp tín chỉ và lộ trình luận văn tốt nghiệp'
     ],
-    allowedTools: ['get_program_details', 'get_academic_schedule_and_intakes', 'get_active_projects_and_campaigns', 'search_ideas_knowledge'],
+    allowedTools: ['get_academic_students_filter', 'get_program_details', 'get_academic_schedule_and_intakes', 'get_active_projects_and_campaigns', 'search_contacts', 'export_crm_leads_advanced', 'search_ideas_knowledge'],
     actionProposals: ['Thẻ Đăng ký chương trình đào tạo / Khóa học'],
     synergyWith: ['sales', 'records_legal', 'master'],
     securityGuardrails: [
@@ -224,7 +224,7 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
       'Đính kèm / lưu file tài liệu vào hồ sơ học viên CRM từ đoạn chat',
       'Đề xuất Thẻ Thông báo yêu cầu bổ sung hồ sơ và Hợp đồng đào tạo pháp lý'
     ],
-    allowedTools: ['check_student_admission_records', 'get_contact_360_profile', 'attach_files_to_contact', 'draft_action_proposal'],
+    allowedTools: ['check_student_admission_records', 'get_academic_students_filter', 'get_contact_360_profile', 'attach_files_to_contact', 'draft_action_proposal'],
     actionProposals: [
       'Thẻ Yêu cầu bổ sung hồ sơ học viên (admission_document_request)',
       'Thẻ Đề xuất ký kết hợp đồng pháp lý (legal_contract)'
@@ -254,7 +254,7 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
       'Đề xuất Phiếu nhập kho vật tư / giáo trình',
       'Đề xuất Biên bản bàn giao tài sản và trang thiết bị làm việc'
     ],
-    allowedTools: ['get_inventory_and_asset_status', 'draft_action_proposal'],
+    allowedTools: ['get_inventory_health_check', 'get_inventory_and_asset_status', 'draft_action_proposal'],
     actionProposals: [
       'Thẻ Phiếu nhập kho ấn phẩm / vật tư (inventory_receipt)',
       'Thẻ Biên bản bàn giao tài sản thiết bị (asset_handover)'
@@ -312,7 +312,7 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
       'Tổng hợp số lượng đơn cọc mới và tiến độ hoàn thành KPI tuyển sinh toàn viện',
       'Báo cáo P&L thời gian thực phục vụ Ban Giám đốc ra quyết định điều hành'
     ],
-    allowedTools: ['get_executive_financial_pulse', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'get_system_health_status'],
+    allowedTools: ['get_executive_morning_brief', 'get_sales_leaderboard', 'filter_expenses_advanced', 'get_staff_directory_advanced', 'get_inventory_health_check', 'get_executive_financial_pulse', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'get_system_health_status'],
     actionProposals: ['Thẻ Báo cáo điều hành P&L', 'Thẻ Khuyến nghị can thiệp dòng tiền'],
     synergyWith: ['finance', 'sales', 'hrm', 'master'],
     securityGuardrails: [

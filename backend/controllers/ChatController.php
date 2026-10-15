@@ -3577,7 +3577,15 @@ class ChatController {
                 . "7. ĐỊNH DẠNG BẢNG MARKDOWN CHO DANH SÁCH DỮ LIỆU (MARKDOWN TABLES):\n"
                 . "   - Khi phản hồi danh sách từ 2 đối tượng trở lên (danh sách công việc, danh sách học viên/lead, phiếu duyệt PO/SO, công nợ/đặt cọc, lịch sử tương tác nhiều mốc...): BẮT BUỘC định dạng dưới dạng BẢNG MARKDOWN chuẩn (| Cột 1 | Cột 2 | ...) có header, phân cách căn lề rõ ràng.\n"
                 . "   - Đính kèm các đường link mở hồ sơ `[👉 Tên](action/url)` ngay trong ô của bảng để người dùng có thể nhấp trực tiếp.\n"
-                . "   - Tránh tuyệt đối việc liệt kê text thô dài dòng khi có dữ liệu dạng bảng.\n\n";
+                . "   - Tránh tuyệt đối việc liệt kê text thô dài dòng khi có dữ liệu dạng bảng.\n\n"
+                . "8. TỪ ĐIỂN TỪ LÓNG & CÔNG CỤ TÌM KIẾM / LỌC CHUYÊN SÂU (VIETNAMESE BUSINESS & CRM SLANG DICTIONARY):\n"
+                . "   - 'củ', 'chai': Triệu đồng VNĐ (ví dụ: '5 củ' = 5.000.000 VNĐ, '10 chai' = 10.000.000 VNĐ, '50 củ' = 50.000.000 VNĐ).\n"
+                . "   - 'lead ngâm', 'bỏ quên', 'chưa chăm sóc > N ngày': Gọi ngay `search_contacts` hoặc `export_crm_leads_advanced` với `stale_days` tương ứng (ví dụ: 90 ngày). Cung cấp đường link tải Excel/CSV và hiển thị xem trước.\n"
+                . "   - 'cháy deadline', 'trễ hạn', 'quá hạn': Với công việc, gọi `get_my_tasks` với `filter='overdue'`; với đề xuất chi phí, gọi `filter_expenses_advanced` với `deadline_status='overdue'`.\n"
+                . "   - 'leaderboard', 'top sale', 'bảng xếp hạng doanh số', 'ai bán chạy nhất': Gọi `get_sales_leaderboard` với kỳ phù hợp (this_month, last_month, this_quarter).\n"
+                . "   - 'sinh nhật trong tháng', 'hợp đồng thử việc', 'nhân sự mới': Gọi `get_staff_directory_advanced` với `birthday_month` hoặc `contract_type='probation'`.\n"
+                . "   - 'hồ sơ nhập học', 'thiếu bằng', 'thiếu dịch thuật', 'thiếu CCCD': Gọi `get_academic_students_filter` kèm `missing_doc` tương ứng.\n"
+                . "   - 'kiểm kho', 'quà tặng tuyển sinh hết hàng', 'cảnh báo tồn kho': Gọi `get_inventory_health_check` với `alert_only=true`.\n\n";
 
             // Dynamic Multimodal Document / Contract Review (ONLY injected when file is present)
             if (!empty($attachedFile)) {
@@ -5044,16 +5052,16 @@ class ChatController {
             require_once __DIR__ . '/AgentToolRegistry.php';
 
             $agentToolMap = [
-                'sales' => ['get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'check_lead_duplicate_and_fairshare_status', 'schedule_contact_activity', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'manage_lead_round_distribution', 'lookup_recent_cash_receipts_and_deposits', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'quick_log_crm_activity', 'reassign_lead_owner', 'get_company_staff_directory', 'draft_action_proposal', 'get_system_navigation'],
-                'finance' => ['get_contact_financial_summary', 'lookup_recent_cash_receipts_and_deposits', 'get_my_payment_proposals', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'approve_or_reject_erp_ticket', 'draft_action_proposal', 'get_system_navigation'],
-                'hrm' => ['query_company_attendance_and_work_hours', 'get_company_staff_directory', 'get_company_leave_and_absence', 'get_my_attendance_summary', 'get_my_payslip', 'get_pending_approvals', 'trace_approval_blocker', 'approve_or_reject_erp_ticket', 'update_task_progress_and_status', 'draft_action_proposal', 'get_system_navigation'],
+                'sales' => ['get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'get_sales_leaderboard', 'check_lead_duplicate_and_fairshare_status', 'schedule_contact_activity', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'manage_lead_round_distribution', 'lookup_recent_cash_receipts_and_deposits', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'quick_log_crm_activity', 'reassign_lead_owner', 'get_company_staff_directory', 'draft_action_proposal', 'get_system_navigation'],
+                'finance' => ['filter_expenses_advanced', 'get_sales_leaderboard', 'get_contact_financial_summary', 'lookup_recent_cash_receipts_and_deposits', 'get_my_payment_proposals', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'approve_or_reject_erp_ticket', 'draft_action_proposal', 'get_system_navigation'],
+                'hrm' => ['get_staff_directory_advanced', 'query_company_attendance_and_work_hours', 'get_company_staff_directory', 'get_company_leave_and_absence', 'get_my_attendance_summary', 'get_my_payslip', 'get_pending_approvals', 'trace_approval_blocker', 'approve_or_reject_erp_ticket', 'update_task_progress_and_status', 'draft_action_proposal', 'get_system_navigation'],
                 'tasks' => ['get_my_tasks', 'get_task_detail', 'get_company_staff_directory', 'schedule_contact_activity', 'update_task_progress_and_status', 'complete_task_checklist_item', 'draft_action_proposal', 'get_system_navigation'],
-                'academic' => ['get_program_details', 'get_academic_schedule_and_intakes', 'get_active_projects_and_campaigns', 'search_contacts', 'export_crm_leads_advanced', 'search_ideas_knowledge', 'draft_action_proposal', 'get_system_navigation'],
-                'records_legal' => ['check_student_admission_records', 'get_contact_360_profile', 'attach_files_to_contact', 'draft_action_proposal', 'get_system_navigation'],
-                'assets_inventory' => ['get_inventory_and_asset_status', 'draft_action_proposal', 'get_system_navigation'],
+                'academic' => ['get_academic_students_filter', 'get_program_details', 'get_academic_schedule_and_intakes', 'get_active_projects_and_campaigns', 'search_contacts', 'export_crm_leads_advanced', 'search_ideas_knowledge', 'draft_action_proposal', 'get_system_navigation'],
+                'records_legal' => ['check_student_admission_records', 'get_academic_students_filter', 'get_contact_360_profile', 'attach_files_to_contact', 'draft_action_proposal', 'get_system_navigation'],
+                'assets_inventory' => ['get_inventory_health_check', 'get_inventory_and_asset_status', 'draft_action_proposal', 'get_system_navigation'],
                 'b2b_partner' => ['get_b2b_partner_and_contract_summary', 'draft_action_proposal', 'get_system_navigation'],
                 'marketing_campaigns' => ['export_crm_leads_advanced', 'get_campaign_marketing_stats', 'get_active_projects_and_campaigns', 'draft_action_proposal', 'get_system_navigation'],
-                'executive_bi' => ['get_executive_morning_brief', 'export_crm_leads_advanced', 'query_company_attendance_and_work_hours', 'get_executive_financial_pulse', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'lookup_recent_cash_receipts_and_deposits', 'get_my_tasks', 'get_system_health_status', 'manage_lead_round_distribution', 'approve_or_reject_erp_ticket', 'update_task_progress_and_status', 'reassign_lead_owner', 'draft_action_proposal', 'get_system_navigation'],
+                'executive_bi' => ['get_executive_morning_brief', 'get_sales_leaderboard', 'filter_expenses_advanced', 'get_staff_directory_advanced', 'get_inventory_health_check', 'export_crm_leads_advanced', 'query_company_attendance_and_work_hours', 'get_executive_financial_pulse', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'lookup_recent_cash_receipts_and_deposits', 'get_my_tasks', 'get_system_health_status', 'manage_lead_round_distribution', 'approve_or_reject_erp_ticket', 'update_task_progress_and_status', 'reassign_lead_owner', 'draft_action_proposal', 'get_system_navigation'],
                 'system_it' => ['get_system_health_status', 'get_ticket_status_and_sla_breaches', 'draft_action_proposal', 'get_system_navigation']
             ];
 

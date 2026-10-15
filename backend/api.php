@@ -78,7 +78,7 @@ if (strpos($action, '?') !== false) {
 }
 
 $segments = array_values(array_filter(explode('/', $action)));
-if (isset($segments[0]) && $segments[0] === 'v1') {
+if (isset($segments[0]) && in_array($segments[0], ['v1', 'api'], true)) {
     array_shift($segments);
     $action = implode('/', $segments);
 }

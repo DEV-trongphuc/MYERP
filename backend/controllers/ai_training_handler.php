@@ -95,6 +95,37 @@ try {
         echo json_encode(['success' => true, 'message' => 'Cập nhật cấu hình RAG thành công']);
     }
     elseif ($actionType === 'list_docs') {
+        // Auto-seed CRM & Financial Slang Dictionary if not existing
+        $checkDoc = $conn->prepare("SELECT id FROM ai_training_docs WHERE name = 'Từ điển Thuật ngữ Kinh doanh & Tài chính CRM' AND tenant_id = 1 LIMIT 1");
+        if ($checkDoc) {
+            $checkDoc->execute();
+            if (!$checkDoc->get_result()->fetch_assoc()) {
+                $slangContent = "BỘ TỪ ĐIỂN THUẬT NGỮ KINH DOANH & TÀI CHÍNH CRM (IDEAS SLANG & BUSINESS DICTIONARY)\n\n"
+                    . "1. ĐƠN VỊ TIỀN TỆ THƯỜNG DÙNG:\n"
+                    . "- 'củ', 'chai': Triệu đồng VNĐ. Ví dụ: '5 củ' = 5.000.000 VNĐ; '10 chai' = 10.000.000 VNĐ; '50 củ' = 50.000.000 VNĐ.\n\n"
+                    . "2. CHĂM SÓC KHÁCH HÀNG & CRM:\n"
+                    . "- 'lead ngâm', 'bỏ quên', 'chưa chăm sóc > N ngày': Khách hàng / học viên tiềm năng không có tương tác (cuộc gọi, ghi chú, gặp mặt) trong khoảng thời gian N ngày (thường là 7 ngày hoặc 90 ngày). Khi phát hiện, cần gọi công cụ search_contacts hoặc export_crm_leads_advanced kèm tham số stale_days để xuất danh sách và bàn giao lại.\n"
+                    . "- 'bù data', 'bù lead': Nghiệp vụ bù data cho chuyên viên tư vấn khi nhận phải số điện thoại trùng hoặc rác. Sử dụng công cụ manage_lead_round_distribution với action 'compensate_consultant'.\n"
+                    . "- 'vòng phân bổ', 'vòng xoay lead': Cơ chế chia đều cơ hội học viên (Fair Share) cho các nhóm kinh doanh theo ca trực.\n\n"
+                    . "3. TIẾN ĐỘ & TÀI CHÍNH:\n"
+                    . "- 'cháy deadline', 'trễ hạn': Đối với công việc cá nhân, gọi get_my_tasks với filter='overdue'. Đối với đề xuất thanh toán chi phí (PO), gọi filter_expenses_advanced với deadline_status='overdue'.\n"
+                    . "- 'leaderboard', 'top sale', 'bảng xếp hạng': Xếp hạng doanh số tuyển sinh và số tiền thu cọc của các chuyên viên tư vấn, gọi get_sales_leaderboard.\n"
+                    . "- 'hồ sơ nhập học': Danh mục giấy tờ xét tuyển bao gồm CCCD/Hộ chiếu, Bằng tốt nghiệp ĐH, Bảng điểm ĐH, CV tiếng Anh, Bản dịch công chứng, Hợp đồng tư vấn đào tạo. Gọi get_academic_students_filter để kiểm tra tình trạng thiếu.";
+                $docName = 'Từ điển Thuật ngữ Kinh doanh & Tài chính CRM';
+                $tags = 'từ điển, thuật ngữ, slang, crm, tài chính, sale';
+                $src = 'manual';
+                $status = 'trained';
+                $cBy = 'Hệ thống';
+                $ins = $conn->prepare("INSERT INTO ai_training_docs (name, content, tags, source_type, parent_id, created_by, status, is_active, tenant_id) VALUES (?, ?, ?, ?, 0, ?, ?, 1, 1)");
+                if ($ins) {
+                    $ins->bind_param("ssssss", $docName, $slangContent, $tags, $src, $cBy, $status);
+                    $ins->execute();
+                    $ins->close();
+                }
+            }
+            $checkDoc->close();
+        }
+
         $stmt = $conn->prepare("SELECT id, name, content, tags, source_type, parent_id, is_active, status, file_path, file_size, created_at, updated_at, created_by, version FROM ai_training_docs WHERE tenant_id = 1 ORDER BY id DESC");
         $stmt->execute();
         $res = $stmt->get_result();

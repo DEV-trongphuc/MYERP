@@ -10,7 +10,28 @@ class ExportController {
             respond(403, null, 'Bạn không có quyền xuất dữ liệu', false);
         }
         
-        $type = $_GET['type'] ?? 'contact';
+        // Boost resources for massive dataset streaming
+        @set_time_limit(300);
+        @ini_set('memory_limit', '512M');
+
+        $rawType = strtolower(trim((string)($_GET['type'] ?? 'contact')));
+
+        // Normalize type synonyms to prevent false 400 Bad Request
+        if (in_array($rawType, ['contact', 'contacts', 'lead', 'leads', 'crm', 'crm_leads', 'student', 'students', 'hoc_vien', 'khach_hang', 'export_data', 'export'], true)) {
+            $type = 'contact';
+        } elseif (in_array($rawType, ['company', 'companies', 'doanh_nghiep'], true)) {
+            $type = 'company';
+        } elseif (in_array($rawType, ['deal', 'deals', 'co_hoi'], true)) {
+            $type = 'deal';
+        } elseif (in_array($rawType, ['product', 'products', 'san_pham'], true)) {
+            $type = 'product';
+        } elseif (in_array($rawType, ['inventory', 'inventories', 'kho', 'vat_tu'], true)) {
+            $type = 'inventory';
+        } elseif (in_array($rawType, ['attendance', 'attendances', 'bang_cong', 'cham_cong'], true)) {
+            $type = 'attendance';
+        } else {
+            $type = $rawType;
+        }
         
         // Attendance export handler
         if ($type === 'attendance') {
@@ -20,7 +41,12 @@ class ExportController {
 
         // Allowed types
         if (!in_array($type, ['contact', 'company', 'deal', 'product', 'inventory'])) {
-            respond(400, null, 'Loại dữ liệu xuất không hợp lệ', false);
+            respond(400, null, "Loại dữ liệu xuất '$rawType' không hợp lệ", false);
+        }
+
+        // Clean any residual output buffers so streaming starts immediately with zero delay
+        while (ob_get_level() > 0) {
+            @ob_end_clean();
         }
 
         $segmentForFile = strtolower(trim((string)($_GET['segment'] ?? '')));
@@ -193,20 +219,25 @@ class ExportController {
             $where  = ['t.tenant_id = ?', 't.deleted_at IS NULL'];
             $params = [$auth['tenant_id']];
 
-            // Role-based visibility: Sale can only see their own contacts / collaborated contacts
-            $userRole = strtolower($auth['role'] ?? '');
-            if (in_array($userRole, ['sales', 'sale'], true)) {
-                $where[] = '(t.owner_id = ? OR FIND_IN_SET(?, t.collaborator_ids))';
-                $params[] = $auth['user_id'];
-                $params[] = $auth['user_id'];
-            } else if ($userRole === 'manager') {
-                $where[] = '(t.owner_id = ? OR t.owner_id IN (
-                    SELECT id FROM users WHERE team_id IN (
-                        SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))
-                    )
-                ))';
-                $params[] = $auth['user_id'];
-                $params[] = $auth['user_id'];
+            // Zero-Trust RBAC Default-Deny: Only global admins/directors see all contacts. Managers see own/team. All others restricted to own/collaborated.
+            $userRole = strtolower($auth['role'] ?? 'user');
+            $isGlobalAdmin = in_array($userRole, ['admin', 'superadmin', 'super_admin', 'director'], true);
+            $isManager = in_array($userRole, ['manager', 'truong_phong', 'leader'], true);
+
+            if (!$isGlobalAdmin) {
+                if ($isManager) {
+                    $where[] = '(t.owner_id = ? OR t.owner_id IN (
+                        SELECT id FROM users WHERE team_id IN (
+                            SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))
+                        )
+                    ))';
+                    $params[] = $auth['user_id'];
+                    $params[] = $auth['user_id'];
+                } else {
+                    $where[] = '(t.owner_id = ? OR FIND_IN_SET(?, IFNULL(t.collaborator_ids, \'\')))';
+                    $params[] = $auth['user_id'];
+                    $params[] = (string)$auth['user_id'];
+                }
             }
 
             if ($search !== '') {
@@ -363,6 +394,13 @@ class ExportController {
                 $params[] = (int)$teamId;
             }
             
+            $staleDays = isset($_GET['stale_days']) && is_numeric($_GET['stale_days']) ? (int)$_GET['stale_days'] : 0;
+            if ($staleDays > 0) {
+                $where[] = "(t.last_contact < DATE_SUB(NOW(), INTERVAL ? DAY) OR (t.last_contact IS NULL AND t.created_at < DATE_SUB(NOW(), INTERVAL ? DAY)))";
+                $params[] = $staleDays;
+                $params[] = $staleDays;
+            }
+
             $admissionFrom = $_GET['admission_from'] ?? '';
             $admissionTo   = $_GET['admission_to'] ?? '';
 
@@ -522,14 +560,7 @@ class ExportController {
                                WHEN t.pipeline_status IN ('enrolled', 'hoc_vien') OR t.status = 'customer' THEN
                                    COALESCE(
                                        t.admission_date,
-                                       (
-                                           SELECT MIN(al.created_at)
-                                           FROM audit_logs al
-                                           WHERE al.resource = 'contact'
-                                             AND al.resource_id = t.id
-                                             AND al.action = 'MOVE_STAGE'
-                                             AND (al.new_data LIKE '%enrolled%' OR al.new_data LIKE '%hoc_vien%')
-                                       ),
+                                       t.closed_date,
                                        (
                                            SELECT MIN(dm.created_at)
                                            FROM deposit_milestones dm
@@ -608,17 +639,23 @@ class ExportController {
             
             $where = ['t.tenant_id = ?', 't.deleted_at IS NULL'];
             $params = [$auth['tenant_id']];
-            if (in_array(strtolower($auth['role'] ?? ''), ['sales', 'sale'], true)) {
-                $where[] = 't.owner_id = ?';
-                $params[] = $auth['user_id'];
-            } else if (strtolower($auth['role'] ?? '') === 'manager') {
-                $where[] = '(t.owner_id = ? OR t.owner_id IN (
-                    SELECT id FROM users WHERE team_id IN (
-                        SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))
-                    )
-                ))';
-                $params[] = $auth['user_id'];
-                $params[] = $auth['user_id'];
+            $userRole = strtolower($auth['role'] ?? 'user');
+            $isGlobalAdmin = in_array($userRole, ['admin', 'superadmin', 'super_admin', 'director'], true);
+            $isManager = in_array($userRole, ['manager', 'truong_phong', 'leader'], true);
+
+            if (!$isGlobalAdmin) {
+                if ($isManager) {
+                    $where[] = '(t.owner_id = ? OR t.owner_id IN (
+                        SELECT id FROM users WHERE team_id IN (
+                            SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))
+                        )
+                    ))';
+                    $params[] = $auth['user_id'];
+                    $params[] = $auth['user_id'];
+                } else {
+                    $where[] = 't.owner_id = ?';
+                    $params[] = $auth['user_id'];
+                }
             }
 
             $search = $_GET['search'] ?? '';

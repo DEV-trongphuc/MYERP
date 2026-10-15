@@ -311,17 +311,35 @@ const handleErpLinkClick = (e: React.MouseEvent, url: string) => {
   if (!url) return;
 
   // 0. Export / Download links: NEVER preventDefault into SPA router! Trigger direct file download
-  if (url.includes('/api/export') || url.includes('/export?') || url.includes('type=contact') || url.includes('type=attendance')) {
+  if (url.includes('/export') || url.includes('action=export')) {
     e.preventDefault();
     e.stopPropagation();
     toast.loading('Đang chuẩn bị file xuất dữ liệu...', { id: 'chat-export-loading' });
     try {
       const urlObj = new URL(url, window.location.origin);
-      const endpoint = urlObj.pathname.replace(/^\/api/, '');
+      let endpoint = urlObj.pathname.replace(/^\/?(backend|api)+/i, '');
+      if (!endpoint.startsWith('/')) endpoint = '/' + endpoint;
+      if (!endpoint || endpoint === '/') endpoint = '/export';
+
       const params: Record<string, string> = {};
       urlObj.searchParams.forEach((val, key) => {
         params[key] = val;
       });
+
+      const rawType = String(params.type || 'contact').toLowerCase();
+      if (['company', 'companies', 'doanh_nghiep'].includes(rawType)) {
+        params.type = 'company';
+      } else if (['deal', 'deals', 'co_hoi'].includes(rawType)) {
+        params.type = 'deal';
+      } else if (['product', 'products', 'san_pham'].includes(rawType)) {
+        params.type = 'product';
+      } else if (['inventory', 'inventories', 'kho', 'vat_tu'].includes(rawType)) {
+        params.type = 'inventory';
+      } else if (['attendance', 'attendances', 'bang_cong', 'cham_cong'].includes(rawType)) {
+        params.type = 'attendance';
+      } else {
+        params.type = 'contact';
+      }
 
       downloadExportFile({
         endpoint,
