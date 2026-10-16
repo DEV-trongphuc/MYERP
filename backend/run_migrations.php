@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 324;
+$targetVersion = 325;
 $currentVersion = 186;
 
 // Query current DB version
@@ -4662,6 +4662,17 @@ try {
         $logMsg("Nâng cấp lên phiên bản 324 hoàn tất.", "success");
     }
 
+    if ($currentVersion < 325) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 325: Thêm B-Tree composite indexes cho DOMATION Marketing Automation & Omnichannel Tracking...", "info");
+        try {
+            require_once __DIR__ . '/migrations/325_domation_performance_indexes.php';
+            $logMsg("Thêm composite indexes phiên bản 325 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi chạy migration 325: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 325 hoàn tất.", "success");
+    }
+
     // Reconnect $conn if it timed out during heavy PDO migration
     try {
         $alive = false;
@@ -4680,9 +4691,9 @@ try {
     } catch (Throwable $eReconn) {}
 
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '324') ON DUPLICATE KEY UPDATE setting_value = '324'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '325') ON DUPLICATE KEY UPDATE setting_value = '325'");
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 324", "success");
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 325", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");
