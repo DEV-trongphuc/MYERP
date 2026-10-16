@@ -100,7 +100,7 @@ class ExportController {
         }
 
         $segmentForFile = strtolower(trim((string)($_GET['segment'] ?? $_GET['record_type'] ?? '')));
-        $filenamePrefix = ($type === 'contact' && in_array($segmentForFile, ['customer', 'students_only'], true)) ? 'danh_sach_hoc_vien' : ($type === 'contact' ? 'danh_sach_lien_he' : 'export_' . $type);
+        $filenamePrefix = ($type === 'contact' && in_array($segmentForFile, ['customer', 'student', 'students_only', 'hoc_vien'], true)) ? 'danh_sach_hoc_vien' : ($type === 'contact' ? 'danh_sach_lien_he' : 'export_' . $type);
 
         // Prepare response headers for CSV download
         header('Content-Type: text/csv; charset=UTF-8');
@@ -130,8 +130,8 @@ class ExportController {
             $segment       = strtolower(trim((string)($_GET['segment'] ?? 'all')));
             $recordType    = strtolower(trim((string)($_GET['record_type'] ?? '')));
             if ($segment === 'all' && $recordType !== '') {
-                if ($recordType === 'students_only') $segment = 'customer';
-                elseif ($recordType === 'leads_only') $segment = 'tiem_nang';
+                if (in_array($recordType, ['students_only', 'customer', 'student', 'hoc_vien'], true)) $segment = 'customer';
+                elseif (in_array($recordType, ['leads_only', 'lead', 'tiem_nang'], true)) $segment = 'tiem_nang';
             }
             $studentSubTab = strtolower(trim((string)($_GET['student_sub_tab'] ?? '')));
 
@@ -249,7 +249,7 @@ class ExportController {
                 ];
             }
             
-            $search        = $_GET['search'] ?? '';
+            $search        = trim((string)($_GET['search'] ?? ($_GET['search_query'] ?? '')));
             $status        = $_GET['status'] ?? '';
             $uncontacted   = !empty($_GET['uncontacted']) && in_array(strtolower((string)$_GET['uncontacted']), ['1', 'true', 'yes'], true);
             if ($status === 'not_contacted') {
@@ -259,6 +259,14 @@ class ExportController {
             $source        = trim((string)($_GET['source'] ?? $_GET['sources'] ?? ''));
             $owner         = $_GET['owner_id'] ?? '';
             $ownersParam   = trim((string)($_GET['owners'] ?? ''));
+            $assignedToRaw = trim((string)($_GET['assigned_to'] ?? ''));
+            if ($assignedToRaw !== '' && $assignedToRaw !== 'all') {
+                if (is_numeric($assignedToRaw) && $owner === '') {
+                    $owner = $assignedToRaw;
+                } elseif ($ownersParam === '') {
+                    $ownersParam = $assignedToRaw;
+                }
+            }
             $stage         = $_GET['stage_id'] ?? '';
             $companyId     = $_GET['company_id'] ?? '';
             $projectId     = $_GET['project_id'] ?? '';
@@ -266,7 +274,26 @@ class ExportController {
             $tag           = trim((string)($_GET['tag'] ?? $_GET['tags'] ?? ''));
             $from          = trim((string)($_GET['from'] ?? $_GET['from_date'] ?? ''));
             $to            = trim((string)($_GET['to'] ?? $_GET['to_date'] ?? ''));
-            $dateField     = $_GET['date_field'] ?? 'created_at';
+            $period        = strtolower(trim((string)($_GET['period'] ?? '')));
+            if ($from === '' && $to === '' && $period !== '') {
+                if ($period === 'today') {
+                    $from = date('Y-m-d');
+                    $to   = date('Y-m-d');
+                } elseif ($period === 'yesterday') {
+                    $from = date('Y-m-d', strtotime('-1 day'));
+                    $to   = date('Y-m-d', strtotime('-1 day'));
+                } elseif ($period === 'this_week') {
+                    $from = date('Y-m-d', strtotime('monday this week'));
+                    $to   = date('Y-m-d');
+                } elseif ($period === 'this_month') {
+                    $from = date('Y-m-01');
+                    $to   = date('Y-m-t');
+                } elseif ($period === 'this_year') {
+                    $from = date('Y-01-01');
+                    $to   = date('Y-12-31');
+                }
+            }
+            $dateField     = strtolower(trim((string)($_GET['date_field'] ?? 'created_at')));
             $studentSubTab = $_GET['student_sub_tab'] ?? '';
             $teamId        = $_GET['team_id'] ?? '';
             $dataType      = $_GET['data_type'] ?? '';
@@ -279,7 +306,10 @@ class ExportController {
             $cityParam     = trim((string)($_GET['city'] ?? $_GET['branches_or_cities'] ?? ''));
 
             $where  = ['t.tenant_id = ?', 't.deleted_at IS NULL'];
-            if (empty($_GET['unassigned']) && $status !== 'unassigned') {
+            $isUnassignedQuery = !empty($_GET['unassigned'])
+                || $status === 'unassigned'
+                || in_array(mb_strtolower($ownersParam, 'UTF-8'), ['unassigned', 'none', 'null', '0', 'chua_phan_bo', 'chưa phân bổ', 'chua phan bo', 'chưa gán', 'chua gan'], true);
+            if (!$isUnassignedQuery && $exportMode !== 'full') {
                 $where[] = 't.owner_id IS NOT NULL';
             }
             $params = [$auth['tenant_id']];
@@ -307,12 +337,19 @@ class ExportController {
             }
 
             if ($search !== '') {
-                require_once __DIR__ . '/../utils/search_helpers.php';
-                $searchRes = buildContactSearchClause($search, 't.');
-                if (!empty($searchRes['clause'])) {
-                    $where[] = $searchRes['clause'];
-                    foreach ($searchRes['params'] as $sp) {
-                        $params[] = $sp;
+                if ($exportMode === 'full') {
+                    $fuzzySearchName = AgentToolRegistry::buildVietnameseFuzzyNameWhere('t.full_name', $search, $params);
+                    $likeQ = '%' . $search . '%';
+                    $where[] = "({$fuzzySearchName} OR t.phone LIKE ? OR t.email LIKE ? OR t.company LIKE ? OR t.job_title LIKE ? OR t.notes LIKE ?)";
+                    array_push($params, $likeQ, $likeQ, $likeQ, $likeQ, $likeQ);
+                } else {
+                    require_once __DIR__ . '/../utils/search_helpers.php';
+                    $searchRes = buildContactSearchClause($search, 't.');
+                    if (!empty($searchRes['clause'])) {
+                        $where[] = $searchRes['clause'];
+                        foreach ($searchRes['params'] as $sp) {
+                            $params[] = $sp;
+                        }
                     }
                 }
             }
@@ -360,14 +397,15 @@ class ExportController {
                 if (!empty($srcList)) {
                     $srcOrs = [];
                     foreach ($srcList as $sItem) {
-                        $srcOrs[] = "(t.source LIKE ? OR t.utm_source LIKE ?)";
+                        $srcOrs[] = "(t.source LIKE ? OR t.utm_source LIKE ? OR t.platform LIKE ?)";
+                        $params[] = '%' . $sItem . '%';
                         $params[] = '%' . $sItem . '%';
                         $params[] = '%' . $sItem . '%';
                     }
                     $where[] = "(" . implode(' OR ', $srcOrs) . ")";
                 }
             }
-            if ($owner) {
+            if ($owner !== '') {
                 $where[] = '(t.owner_id = ? OR FIND_IN_SET(?, IFNULL(t.collaborator_ids, \'\')))';
                 $params[] = (int)$owner;
                 $params[] = (string)(int)$owner;
@@ -375,13 +413,16 @@ class ExportController {
                 $ownList = array_filter(array_map('trim', explode(',', $ownersParam)));
                 $ownOrs = [];
                 foreach ($ownList as $own) {
-                    if (is_numeric($own)) {
+                    $ownLow = mb_strtolower($own, 'UTF-8');
+                    if (in_array($ownLow, ['unassigned', 'none', 'null', '0', 'chua_phan_bo', 'chưa phân bổ', 'chua phan bo', 'chưa gán', 'chua gan'], true)) {
+                        $ownOrs[] = "(t.owner_id IS NULL OR t.owner_id = 0)";
+                    } elseif (is_numeric($own)) {
                         $ownOrs[] = "(t.owner_id = ? OR FIND_IN_SET(?, IFNULL(t.collaborator_ids, '')))";
                         $params[] = (int)$own;
                         $params[] = (string)(int)$own;
                     } else {
-                        $ownOrs[] = "EXISTS (SELECT 1 FROM users u_own WHERE (u_own.id = t.owner_id OR FIND_IN_SET(u_own.id, IFNULL(t.collaborator_ids, ''))) AND (u_own.full_name LIKE ? OR u_own.email LIKE ?))";
-                        $params[] = '%' . $own . '%';
+                        $ownFuzzyWhere = AgentToolRegistry::buildVietnameseFuzzyNameWhere('u_own.full_name', $own, $params);
+                        $ownOrs[] = "EXISTS (SELECT 1 FROM users u_own WHERE (u_own.id = t.owner_id OR FIND_IN_SET(u_own.id, IFNULL(t.collaborator_ids, ''))) AND ({$ownFuzzyWhere} OR u_own.email LIKE ?))";
                         $params[] = '%' . $own . '%';
                     }
                 }
@@ -390,29 +431,30 @@ class ExportController {
                 }
             }
 
-            // Program multi-filter (from AI tool or UI)
+            // Program / Project multi-filter (100% synced with AgentToolRegistry)
             if ($programParam !== '' && $programParam !== 'all') {
                 $progList = array_filter(array_map('trim', explode(',', $programParam)));
                 if (!empty($progList)) {
                     $progOrs = [];
                     foreach ($progList as $pItem) {
-                        $progOrs[] = "t.program LIKE ?";
+                        $progOrs[] = "(t.program LIKE ? OR EXISTS (SELECT 1 FROM projects prj_f WHERE prj_f.id = t.project_id AND (prj_f.name LIKE ? OR prj_f.code LIKE ?)))";
+                        $params[] = '%' . $pItem . '%';
+                        $params[] = '%' . $pItem . '%';
                         $params[] = '%' . $pItem . '%';
                     }
                     $where[] = "(" . implode(' OR ', $progOrs) . ")";
                 }
             }
 
-            // City / District / Address multi-filter (from AI tool or UI)
+            // City / District / Ward / Address & Team Branch multi-filter (100% synced with AgentToolRegistry)
             if ($cityParam !== '' && $cityParam !== 'all') {
                 $cityList = array_filter(array_map('trim', explode(',', $cityParam)));
                 if (!empty($cityList)) {
                     $cityOrs = [];
                     foreach ($cityList as $cItem) {
-                        $cityOrs[] = "(t.city LIKE ? OR t.district LIKE ? OR t.address LIKE ?)";
-                        $params[] = '%' . $cItem . '%';
-                        $params[] = '%' . $cItem . '%';
-                        $params[] = '%' . $cItem . '%';
+                        $cityOrs[] = "(t.city LIKE ? OR t.district LIKE ? OR t.ward LIKE ? OR t.address LIKE ? OR EXISTS (SELECT 1 FROM users u_br JOIN teams tm_br ON u_br.team_id = tm_br.id WHERE u_br.id = t.owner_id AND (tm_br.branch LIKE ? OR tm_br.name LIKE ?)))";
+                        $likeCity = '%' . $cItem . '%';
+                        array_push($params, $likeCity, $likeCity, $likeCity, $likeCity, $likeCity, $likeCity);
                     }
                     $where[] = "(" . implode(' OR ', $cityOrs) . ")";
                 }
@@ -455,8 +497,8 @@ class ExportController {
                 }
             }
 
-            // Multi-stage filtering (e.g., stages=1,2,3,4,13 or stages=1-4,13 or stage_ids=31,32,33,34,43 or stage names)
-            $stagesParam = trim((string)($_GET['stages'] ?? $_GET['stage_ids'] ?? ''));
+            // Multi-stage filtering (supports stage_op: in, not_in, gte, lte, gt, lt, and stage_name fallback)
+            $stagesParam = trim((string)($_GET['stages'] ?? $_GET['stage_ids'] ?? $_GET['stage_name'] ?? ''));
             if (!empty($stagesParam) && $stagesParam !== 'all') {
                 $rawParts = explode(',', $stagesParam);
                 $stageIds = [];
@@ -489,37 +531,51 @@ class ExportController {
                     }
                 }
 
-                $stageOrClauses = [];
-                if (!empty($stageIds)) {
-                    $inIds = implode(',', array_unique(array_map('intval', $stageIds)));
-                    $stageOrClauses[] = "t.stage_id IN ($inIds)";
-                }
-                if (!empty($orderIndexes)) {
-                    $inOrders = implode(',', array_unique(array_map('intval', $orderIndexes)));
-                    $stageOrClauses[] = "t.stage_id IN (SELECT id FROM pipeline_stages WHERE order_index IN ($inOrders))";
-                }
-                if (!empty($stageSlugs)) {
-                    foreach ($stageSlugs as $slug) {
-                        $stageOrClauses[] = "(t.pipeline_status LIKE ? OR t.status LIKE ? OR EXISTS (SELECT 1 FROM pipeline_stages ps_s WHERE ps_s.id = t.stage_id AND (ps_s.system_slug = ? OR ps_s.name LIKE ?)))";
-                        $params[] = '%' . $slug . '%';
-                        $params[] = '%' . $slug . '%';
-                        $params[] = $slug;
-                        $params[] = '%' . $slug . '%';
+                if (in_array($stageOp, ['gte', 'lte', 'gt', 'lt'], true) && (!empty($orderIndexes) || !empty($stageIds))) {
+                    $refOrder = !empty($orderIndexes) ? min($orderIndexes) : (max(1, min($stageIds)) - 1);
+                    $opMap = ['gte' => '>=', 'lte' => '<=', 'gt' => '>', 'lt' => '<'];
+                    $sqlOp = $opMap[$stageOp];
+                    $where[] = "EXISTS (SELECT 1 FROM pipeline_stages ps_op WHERE ps_op.id = t.stage_id AND ps_op.order_index {$sqlOp} ?)";
+                    $params[] = (int)$refOrder;
+                } else {
+                    $stageOrClauses = [];
+                    if (!empty($stageIds)) {
+                        $inIds = implode(',', array_unique(array_map('intval', $stageIds)));
+                        $stageOrClauses[] = "COALESCE(t.stage_id, 0) IN ($inIds)";
                     }
-                }
+                    if (!empty($orderIndexes)) {
+                        $inOrders = implode(',', array_unique(array_map('intval', $orderIndexes)));
+                        $stageOrClauses[] = "EXISTS (SELECT 1 FROM pipeline_stages ps_o WHERE ps_o.id = t.stage_id AND ps_o.order_index IN ($inOrders))";
+                    }
+                    if (!empty($stageSlugs)) {
+                        foreach ($stageSlugs as $slug) {
+                            $stageOrClauses[] = "(COALESCE(t.pipeline_status, '') LIKE ? OR COALESCE(t.status, '') LIKE ? OR EXISTS (SELECT 1 FROM pipeline_stages ps_s WHERE ps_s.id = t.stage_id AND (ps_s.system_slug = ? OR ps_s.name LIKE ?)))";
+                            $params[] = '%' . $slug . '%';
+                            $params[] = '%' . $slug . '%';
+                            $params[] = $slug;
+                            $params[] = '%' . $slug . '%';
+                        }
+                    }
 
-                if (!empty($stageOrClauses)) {
-                    $where[] = "(" . implode(' OR ', $stageOrClauses) . ")";
+                    if (!empty($stageOrClauses)) {
+                        if ($stageOp === 'not_in' || $stageOp === 'exclude') {
+                            $where[] = "NOT (" . implode(' OR ', $stageOrClauses) . ")";
+                        } else {
+                            $where[] = "(" . implode(' OR ', $stageOrClauses) . ")";
+                        }
+                    }
                 }
             }
 
-            // Gender filtering (male/nam vs female/nu)
+            // Gender filtering (male/nam vs female/nu vs unknown)
             $genderParam = strtolower(trim((string)($_GET['gender'] ?? '')));
             if (!empty($genderParam) && $genderParam !== 'all') {
-                if (in_array($genderParam, ['male', 'nam', 'trai', 'boy'], true)) {
-                    $where[] = "(LOWER(TRIM(COALESCE(t.gender, ''))) IN ('male', 'nam', '1'))";
-                } elseif (in_array($genderParam, ['female', 'nu', 'nữ', 'gai', 'girl'], true)) {
-                    $where[] = "(LOWER(TRIM(COALESCE(t.gender, ''))) IN ('female', 'nu', '0') OR t.gender = 'Nữ')";
+                if (in_array($genderParam, ['male', 'nam', 'trai', 'boy', '1', 'm'], true)) {
+                    $where[] = "LOWER(TRIM(COALESCE(t.gender, ''))) IN ('male', 'nam', '1', 'm')";
+                } elseif (in_array($genderParam, ['female', 'nu', 'nữ', 'gai', 'girl', '0', 'f'], true)) {
+                    $where[] = "(LOWER(TRIM(COALESCE(t.gender, ''))) IN ('female', 'nu', '0', 'f') OR t.gender = 'Nữ')";
+                } elseif (in_array($genderParam, ['unknown', 'empty', 'null', 'chua_ro', 'chưa rõ'], true)) {
+                    $where[] = "(t.gender IS NULL OR TRIM(t.gender) = '' OR LOWER(TRIM(t.gender)) IN ('unknown', 'other', 'khác', 'khac'))";
                 } else {
                     $where[] = "t.gender = ?";
                     $params[] = $genderParam;
@@ -549,7 +605,7 @@ class ExportController {
             if ($financialFilter === 'has_deposit') {
                 $where[] = "EXISTS (SELECT 1 FROM deposits dep_f WHERE dep_f.contact_id = t.id AND dep_f.status NOT IN ('cancelled', 'rejected'))";
             } elseif ($financialFilter === 'approved_deposit' || $financialFilter === 'has_approved_deposit') {
-                $where[] = "EXISTS (SELECT 1 FROM deposits dep_f WHERE dep_f.contact_id = t.id AND dep_f.status IN ('approved', 'completed'))";
+                $where[] = "EXISTS (SELECT 1 FROM deposits dep_f WHERE dep_f.contact_id = t.id AND dep_f.status = 'approved')";
             } elseif ($financialFilter === 'pending_deposit') {
                 $where[] = "EXISTS (SELECT 1 FROM deposits dep_f WHERE dep_f.contact_id = t.id AND dep_f.status = 'pending')";
             } elseif ($financialFilter === 'no_deposit') {
@@ -560,9 +616,11 @@ class ExportController {
                 $where[] = "EXISTS (SELECT 1 FROM deposits dep_f WHERE dep_f.contact_id = t.id AND dep_f.price >= 10000000 AND dep_f.status NOT IN ('cancelled', 'rejected'))";
             }
 
-            $minDeposit = isset($_GET['min_deposit']) && is_numeric($_GET['min_deposit']) ? (float)$_GET['min_deposit'] : 0;
+            $minDeposit = isset($_GET['min_deposit']) && is_numeric($_GET['min_deposit'])
+                ? (float)$_GET['min_deposit']
+                : (isset($_GET['min_deposit_amount']) && is_numeric($_GET['min_deposit_amount']) ? (float)$_GET['min_deposit_amount'] : 0);
             if ($minDeposit > 0) {
-                $where[] = "EXISTS (SELECT 1 FROM deposits dep_m WHERE dep_m.contact_id = t.id AND dep_m.price >= ? AND dep_m.status NOT IN ('cancelled', 'rejected'))";
+                $where[] = "EXISTS (SELECT 1 FROM deposits dep_m WHERE dep_m.contact_id = t.id AND dep_m.status NOT IN ('cancelled', 'rejected') GROUP BY dep_m.contact_id HAVING SUM(dep_m.price) >= ?)";
                 $params[] = $minDeposit;
             }
 
@@ -577,15 +635,13 @@ class ExportController {
                     OR EXISTS (SELECT 1 FROM activities act_f WHERE (act_f.contact_id = t.id OR (act_f.related_id = t.id AND act_f.related_type IN ('contact', 'lead'))) AND act_f.deleted_at IS NULL)
                     OR EXISTS (
                         SELECT 1 FROM notes n_f 
-                        WHERE n_f.tenant_id = t.tenant_id AND n_f.entity_type = 'contact' AND n_f.entity_id = t.id 
+                        WHERE n_f.entity_type = 'contact' AND n_f.entity_id = t.id 
                           AND n_f.body NOT LIKE '[Tự động]%' 
                           AND n_f.body NOT LIKE '[Phân bổ]%' 
                           AND n_f.body NOT LIKE '[Giao data]%'
                           AND n_f.body NOT LIKE '[Auto]%'
                           AND n_f.body NOT LIKE '[Import]%'
                           AND n_f.body NOT LIKE '[Tái phân bổ]%'
-                          AND n_f.body NOT LIKE 'Tái phân bổ%'
-                          AND n_f.body NOT LIKE 'Giao lại%'
                     )
                 )";
             } elseif ($interactionStatus === 'no_activity' || $interactionStatus === 'uncontacted') {
@@ -594,27 +650,21 @@ class ExportController {
                     AND NOT EXISTS (SELECT 1 FROM activities act_f WHERE (act_f.contact_id = t.id OR (act_f.related_id = t.id AND act_f.related_type IN ('contact', 'lead'))) AND act_f.deleted_at IS NULL)
                     AND NOT EXISTS (
                         SELECT 1 FROM notes n_f 
-                        WHERE n_f.tenant_id = t.tenant_id AND n_f.entity_type = 'contact' AND n_f.entity_id = t.id 
+                        WHERE n_f.entity_type = 'contact' AND n_f.entity_id = t.id 
                           AND n_f.body NOT LIKE '[Tự động]%' 
                           AND n_f.body NOT LIKE '[Phân bổ]%' 
                           AND n_f.body NOT LIKE '[Giao data]%'
                           AND n_f.body NOT LIKE '[Auto]%'
                           AND n_f.body NOT LIKE '[Import]%'
                           AND n_f.body NOT LIKE '[Tái phân bổ]%'
-                          AND n_f.body NOT LIKE 'Tái phân bổ%'
-                          AND n_f.body NOT LIKE 'Giao lại%'
                     )
                 )";
             } elseif ($interactionStatus === 'has_call_recently') {
                 $where[] = "EXISTS (SELECT 1 FROM activities act_f WHERE (act_f.contact_id = t.id OR (act_f.related_id = t.id AND act_f.related_type IN ('contact', 'lead'))) AND act_f.type = 'call' AND act_f.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY) AND act_f.deleted_at IS NULL)";
             }
-            
-            $staleDays = isset($_GET['stale_days']) && is_numeric($_GET['stale_days']) ? (int)$_GET['stale_days'] : 0;
-            if ($staleDays > 0) {
-                $where[] = "(t.last_contact < DATE_SUB(NOW(), INTERVAL ? DAY) OR (t.last_contact IS NULL AND t.created_at < DATE_SUB(NOW(), INTERVAL ? DAY)))";
-                $params[] = $staleDays;
-                $params[] = $staleDays;
-            }
+
+            // Shared Multi-Tier Extended Filters (stale_days, interacted_within_days, call counts, note_keyword, age/birthday, job_titles, companies, industries, education, teams, campaign_or_utm, temperature, lead_score, study_status, missing_document, max_deposit, overdue_milestone, custom_rules)
+            AgentToolRegistry::applyMultitierExtendedContactFilters($this->db, 't.', $_GET, $where, $params);
 
             $admissionFrom = $_GET['admission_from'] ?? '';
             $admissionTo   = $_GET['admission_to'] ?? '';
@@ -631,26 +681,28 @@ class ExportController {
                     $where[] = "EXISTS (SELECT 1 FROM deposits dep_d WHERE dep_d.contact_id = t.id AND dep_d.status NOT IN ('cancelled', 'rejected') AND dep_d.created_at <= ?)";
                     $params[] = $to . ' 23:59:59';
                 }
-            } else {
+            } elseif (in_array($dateField, ['admission_date', 'next_followup_date', 'expected_decision_date', 'birthday'], true)) {
+                $colExpr = ($dateField === 'birthday') ? 'COALESCE(t.birthday, t.dob)' : "t.{$dateField}";
                 if ($from !== '') {
-                    $whereField = in_array($dateField, ['created_at', 'updated_at', 'last_contact', 'admission_date']) ? $dateField : 'created_at';
-                    if ($whereField === 'admission_date') {
-                        $where[] = "t.admission_date >= ?";
-                        $params[] = $from;
-                    } else {
-                        $where[] = "t.{$whereField} >= ?";
-                        $params[] = $from . ' 00:00:00';
-                    }
+                    $where[] = "{$colExpr} >= ?";
+                    $params[] = $from;
                 }
                 if ($to !== '') {
-                    $whereField = in_array($dateField, ['created_at', 'updated_at', 'last_contact', 'admission_date']) ? $dateField : 'created_at';
-                    if ($whereField === 'admission_date') {
-                        $where[] = "t.admission_date <= ?";
-                        $params[] = $to;
-                    } else {
-                        $where[] = "t.{$whereField} <= ?";
-                        $params[] = $to . ' 23:59:59';
-                    }
+                    $where[] = "{$colExpr} <= ?";
+                    $params[] = $to . ' 23:59:59';
+                }
+            } else {
+                $targetDateField = ($dateField === 'last_contact') ? 't.last_contact' : (($dateField === 'updated_at') ? 't.updated_at' : 't.created_at');
+                if ($from !== '' && $to !== '') {
+                    $where[] = "{$targetDateField} BETWEEN ? AND ?";
+                    $params[] = $from . ' 00:00:00';
+                    $params[] = $to . ' 23:59:59';
+                } elseif ($from !== '') {
+                    $where[] = "{$targetDateField} >= ?";
+                    $params[] = $from . ' 00:00:00';
+                } elseif ($to !== '') {
+                    $where[] = "{$targetDateField} <= ?";
+                    $params[] = $to . ' 23:59:59';
                 }
             }
 
@@ -665,10 +717,10 @@ class ExportController {
 
             switch ($segment) {
                 case 'tiem_nang':
-                    if (empty($stage) && empty($stageSlug) && empty($_GET['stage_id'])) {
-                        $where[] = "((t.stage_id IS NULL OR t.stage_id != 44) AND (t.pipeline_status IS NULL OR t.pipeline_status NOT IN ('enrolled', 'hoc_vien')) AND (t.status IS NULL OR t.status != 'customer'))";
-                    } else {
+                    if ($exportMode === 'full' || !empty($stage) || !empty($stageSlug) || !empty($_GET['stage_id']) || !empty($stagesParam)) {
                         $where[] = "(t.status IS NULL OR t.status != 'customer')";
+                    } else {
+                        $where[] = "((t.stage_id IS NULL OR t.stage_id != 44) AND (t.pipeline_status IS NULL OR t.pipeline_status NOT IN ('enrolled', 'hoc_vien')) AND (t.status IS NULL OR t.status != 'customer'))";
                     }
                     break;
                 case 'hot':        $where[] = 't.lead_score >= 80'; break;
@@ -806,6 +858,11 @@ class ExportController {
                            COALESCE(
                                NULLIF(t.expected_revenue, 0),
                                (
+                                   SELECT NULLIF(SUM(dep_v.price), 0)
+                                   FROM deposits dep_v
+                                   WHERE dep_v.contact_id = t.id AND dep_v.status NOT IN ('cancelled', 'rejected')
+                               ),
+                               (
                                    SELECT COALESCE(SUM(d.value), 0) 
                                    FROM deals d 
                                    WHERE d.contact_id = t.id AND d.deleted_at IS NULL
@@ -813,8 +870,9 @@ class ExportController {
                                0
                            ) as open_deal_value,
                            COALESCE(
-                               (SELECT n.body FROM notes n WHERE n.tenant_id = t.tenant_id AND n.entity_type = 'contact' AND n.entity_id = t.id ORDER BY n.id DESC LIMIT 1),
-                               (SELECT COALESCE(a.body, a.subject) FROM activities a WHERE a.tenant_id = t.tenant_id AND a.related_type = 'contact' AND a.related_id = t.id AND a.deleted_at IS NULL ORDER BY a.id DESC LIMIT 1)
+                               (SELECT COALESCE(NULLIF(TRIM(a.body), ''), a.subject) FROM activities a WHERE ((a.related_type IN ('contact', 'lead') AND a.related_id = t.id) OR a.contact_id = t.id) AND a.deleted_at IS NULL ORDER BY a.id DESC LIMIT 1),
+                               (SELECT n.body FROM notes n WHERE n.entity_type = 'contact' AND n.entity_id = t.id AND n.body NOT LIKE '[Tự động]%' AND n.body NOT LIKE '[Phân bổ]%' AND n.body NOT LIKE '[Giao data]%' AND n.body NOT LIKE '[Auto]%' AND n.body NOT LIKE '[Import]%' AND n.body NOT LIKE '[Tái phân bổ]%' ORDER BY n.id DESC LIMIT 1),
+                               (SELECT n2.body FROM notes n2 WHERE n2.entity_type = 'contact' AND n2.entity_id = t.id ORDER BY n2.id DESC LIMIT 1)
                            ) as last_interaction
                     FROM contacts t 
                     LEFT JOIN companies co ON t.company_id = co.id 

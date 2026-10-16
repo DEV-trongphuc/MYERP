@@ -1316,56 +1316,176 @@ class AgentToolRegistry {
                     ],
                     [
                         'name' => 'query_crm_leads_multitier',
-                        'description' => 'SIÊU CÔNG CỤ TRUY VẤN & PHÂN TÍCH CRM ĐA TẦNG, ĐA CẤP (MULTI-TIER CRM QUERY & FACET ENGINE): Lọc và bóc tách phễu dữ liệu học viên/lead theo tổ hợp nhiều điều kiện lồng nhau: nhiều chương trình (MBA, EMBA, DBA, MSCAI, BBA), nhiều giai đoạn pipeline (ví dụ: "1-4,13", "1,2,3,4", "new_lead,consulted,deposit"), nhiều nguồn tiếp cận (Facebook, Hotline, Referral, Workshop), nhiều chi nhánh/thành phố (Hà Nội, TP.HCM, Đà Nẵng), chuyên viên tư vấn, tình trạng đóng cọc / hợp đồng SO (có cọc / chưa cọc, mức tiền cọc tối thiểu/tối đa), số ngày bỏ quên chưa tương tác (stale_days), và khoảng thời gian. Tự động tính toán tổng số bản ghi thực tế, ma trận phân nhóm đa chiều (Group-by Program, Stage, Source, Owner), tỷ lệ chuyển đổi %, trích xuất xem trước các học viên tiêu biểu kèm link mở hồ sơ, sinh biểu đồ trực quan Recharts và tạo link tải file Excel/CSV UTF-8 BOM.',
+                        'description' => 'SIÊU CÔNG CỤ TRUY VẤN & PHÂN TÍCH CRM ĐA TẦNG, ĐA CẤP (MULTI-TIER CRM QUERY & FACET ENGINE): Lọc và bóc tách phễu dữ liệu học viên/lead theo tổ hợp không giới hạn các điều kiện chồng lấp: nhiều chương trình đào tạo/dự án (MBA, EMBA, DBA, MSCAI, BBA, ESG...), nhiều giai đoạn pipeline kèm toán tử so sánh (stage_op: in, not_in, gte, lte, gt, lt), nhiều nguồn tiếp cận (Facebook, Hotline, Referral, Workshop, Zalo, TikTok...), địa bàn/chi nhánh (Hà Nội, TP.HCM, Đà Nẵng...), chuyên viên tư vấn (hoặc data mồ côi chưa phân bổ "unassigned"), đội nhóm Sale (teams), tình trạng tài chính/đặt cọc/hợp đồng SO/quá hạn đóng tiền theo đợt (overdue_milestone), hạn mức tiền cọc (min/max), số ngày bỏ quên chưa tương tác (stale_days), đã tương tác trong N ngày qua (interacted_within_days + interaction_type), số lần gọi điện (min/max_call_count), từ khóa tìm sâu trong ghi chú/cuộc gọi/lý do hủy (note_keyword), nhân khẩu học (độ tuổi age_min/age_max, năm sinh, tháng sinh nhật, giới tính), chức danh (job_titles), công ty (companies), ngành nghề (industries), trình độ/chuyên ngành (education_or_degree), chiến dịch Marketing/UTM/Vòng chia data (campaign_or_utm), độ nóng (temperature), điểm lead (min/max_lead_score), trạng thái học vụ (study_status), mã học viên, kỳ nhập học (expected_intake), tình trạng thiếu hồ sơ đính kèm (missing_document) và quy tắc lọc động tùy biến (custom_rules). Tự động tính toán tổng số bản ghi thực tế, ma trận phân nhóm đa chiều, tỷ lệ chuyển đổi %, trích xuất xem trước các học viên tiêu biểu kèm link mở hồ sơ, sinh biểu đồ trực quan Recharts và tạo link tải file Excel/CSV UTF-8 BOM khớp 100% bộ lọc.',
                         'parameters' => [
                             'type' => 'OBJECT',
                             'properties' => [
                                 'programs' => [
                                     'type' => 'STRING',
-                                    'description' => 'Danh sách một hoặc nhiều chương trình đào tạo cần lọc (cách nhau bởi dấu phẩy, ví dụ: "MBA, EMBA" hoặc "DBA, MSCAI, BBA"). Để trống nếu lấy tất cả.'
+                                    'description' => 'Danh sách một hoặc nhiều chương trình đào tạo / dự án cần lọc (cách nhau bởi dấu phẩy, ví dụ: "MBA, EMBA", "DBA, MSCAI, BBA", "ESG"). Để trống nếu lấy tất cả.'
                                 ],
                                 'stages' => [
                                     'type' => 'STRING',
-                                    'description' => 'Danh sách các giai đoạn pipeline (ví dụ: "1-4", "1,2,3,4,13", "new_lead,connected,consulted", hoặc "deposit"). Để trống nếu lấy tất cả.'
+                                    'description' => 'Danh sách các giai đoạn pipeline (ví dụ: "1-4", "1,2,3,4,13", "new_lead,connected,consulted", "deposit", "enrolled"). Để trống nếu lấy tất cả.'
+                                ],
+                                'stage_op' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['in', 'not_in', 'gte', 'lte', 'gt', 'lt'],
+                                    'description' => 'Toán tử lọc giai đoạn: in (nằm trong danh sách, mặc định), not_in (loại trừ các giai đoạn chỉ định), gte (từ giai đoạn N trở đi), lte (từ giai đoạn N trở xuống), gt (lớn hơn giai đoạn N), lt (nhỏ hơn giai đoạn N).'
                                 ],
                                 'sources' => [
                                     'type' => 'STRING',
-                                    'description' => 'Danh sách nguồn khách hàng (ví dụ: "Facebook, Hotline, Referral" hoặc "Website, Workshop").'
+                                    'description' => 'Danh sách nguồn khách hàng (ví dụ: "Facebook, Hotline, Referral" hoặc "Website, Workshop, Zalo, TikTok").'
                                 ],
                                 'branches_or_cities' => [
                                     'type' => 'STRING',
-                                    'description' => 'Địa bàn / chi nhánh (ví dụ: "Hà Nội, TP.HCM", "HCM", "Đà Nẵng").'
+                                    'description' => 'Địa bàn / tỉnh thành / chi nhánh (ví dụ: "Hà Nội, TP.HCM", "HCM", "Đà Nẵng"). Khớp cả địa chỉ khách hàng lẫn chi nhánh team của Sale phụ trách.'
                                 ],
                                 'gender' => [
                                     'type' => 'STRING',
-                                    'enum' => ['all', 'male', 'female'],
-                                    'description' => 'Lọc theo giới tính: male (nam), female (nữ), all (tất cả).'
+                                    'enum' => ['all', 'male', 'female', 'unknown'],
+                                    'description' => 'Lọc theo giới tính: male (nam), female (nữ), unknown (chưa cập nhật giới tính), all (tất cả).'
                                 ],
                                 'owners' => [
                                     'type' => 'STRING',
-                                    'description' => 'Tên hoặc ID chuyên viên tư vấn phụ trách (cách nhau bởi dấu phẩy, ví dụ: "Linh Đan, Bùi Tuấn Anh" hoặc "Phúc").'
+                                    'description' => 'Tên hoặc ID chuyên viên tư vấn phụ trách (cách nhau bởi dấu phẩy, ví dụ: "Linh Đan, Bùi Tuấn Anh" hoặc "Phúc"). Truyền "unassigned" hoặc "chưa phân bổ" để lọc lead mồ côi chưa có Sale phụ trách.'
+                                ],
+                                'teams' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tên hoặc ID đội nhóm Sale (Team) phụ trách (cách nhau bởi dấu phẩy, ví dụ: "Team Hà Nội, Team HCM" hoặc "Team 1").'
+                                ],
+                                'record_type' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['all', 'lead', 'customer', 'student'],
+                                    'description' => 'Phân loại bản ghi: all (tất cả), lead (chỉ ứng viên tiềm năng), customer/student (chỉ học viên đã nhập học / chốt).'
+                                ],
+                                'lead_status' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Trạng thái phễu: all, active_only (đang chăm sóc, loại trừ lost/nurture), lost (đã hủy/mất), nurture (nuôi dưỡng), qualified, new, contacted.'
+                                ],
+                                'temperature' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Độ nóng của lead (cách nhau bởi dấu phẩy, ví dụ: "hot", "warm", "cold", "hot,warm").'
+                                ],
+                                'min_lead_score' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Điểm đánh giá tiềm năng (lead_score) tối thiểu.'
+                                ],
+                                'max_lead_score' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Điểm đánh giá tiềm năng (lead_score) tối đa.'
+                                ],
+                                'tags' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Danh sách nhãn phân loại (tags) cách nhau bởi dấu phẩy (ví dụ: "VIP, Học bổng, Sự kiện").'
                                 ],
                                 'financial_filter' => [
                                     'type' => 'STRING',
-                                    'enum' => ['all', 'has_deposit', 'no_deposit', 'has_so', 'high_value_deposit'],
-                                    'description' => 'Bộ lọc tài chính: all (tất cả), has_deposit (đã có đặt cọc), no_deposit (chưa có đặt cọc), has_so (đã ký đơn bán hàng SO), high_value_deposit (tiền cọc >= 10.000.000 VNĐ).'
+                                    'enum' => ['all', 'has_deposit', 'approved_deposit', 'pending_deposit', 'no_deposit', 'has_so', 'high_value_deposit', 'overdue_milestone'],
+                                    'description' => 'Bộ lọc tài chính: all (tất cả), has_deposit (đã có đặt cọc), approved_deposit (đã duyệt cọc), pending_deposit (cọc chờ duyệt), no_deposit (chưa có đặt cọc), has_so (đã ký đơn bán hàng SO), high_value_deposit (tiền cọc >= 10.000.000 VNĐ), overdue_milestone (quá hạn đóng học phí/tiền cọc theo đợt milestone).'
                                 ],
                                 'min_deposit_amount' => [
                                     'type' => 'NUMBER',
-                                    'description' => 'Số tiền cọc tối thiểu (VNĐ) nếu muốn lọc chính xác theo mức tiền.'
+                                    'description' => 'Tổng số tiền cọc tối thiểu (VNĐ).'
+                                ],
+                                'max_deposit_amount' => [
+                                    'type' => 'NUMBER',
+                                    'description' => 'Tổng số tiền cọc tối đa (VNĐ).'
                                 ],
                                 'stale_days' => [
                                     'type' => 'INTEGER',
-                                    'description' => 'Lọc học viên/lead bỏ quên không có tương tác trên N ngày (ví dụ: 30, 60, 90).'
+                                    'description' => 'Lọc học viên/lead bị bỏ quên không có bất kỳ tương tác thực tế nào (cuộc gọi, ghi chú chăm sóc, cập nhật liên hệ) trên N ngày (ví dụ: 7, 14, 30, 60, 90).'
+                                ],
+                                'interacted_within_days' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Lọc học viên/lead ĐÃ CÓ tương tác chăm sóc trong vòng N ngày gần đây (ví dụ: 3, 7, 14, 30).'
+                                ],
+                                'interaction_type' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['all', 'call', 'note', 'meeting', 'email', 'task', 'chat'],
+                                    'description' => 'Loại hình tương tác kết hợp với interacted_within_days (mặc định all: mọi tương tác; call: cuộc gọi; note: ghi chú; meeting: lịch hẹn; email; task).'
                                 ],
                                 'interaction_status' => [
                                     'type' => 'STRING',
                                     'enum' => ['all', 'has_activity', 'no_activity', 'has_call_recently'],
-                                    'description' => 'Trạng thái chăm sóc: has_activity (đã có lịch sử gọi/ghi chú), no_activity (chưa từng tương tác), has_call_recently (có cuộc gọi trong 30 ngày qua).'
+                                    'description' => 'Trạng thái chăm sóc: has_activity (đã có lịch sử gọi/ghi chú thực tế), no_activity (chưa từng tương tác chăm sóc), has_call_recently (có cuộc gọi trong 30 ngày qua).'
+                                ],
+                                'min_call_count' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Số lượng cuộc gọi tối thiểu đã thực hiện với học viên (ví dụ: min_call_count=3 để tìm khách đã gọi >= 3 lần).'
+                                ],
+                                'max_call_count' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Số lượng cuộc gọi tối đa đã thực hiện với học viên (ví dụ: max_call_count=0 để tìm khách chưa từng được gọi điện).'
+                                ],
+                                'note_keyword' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Từ khóa tìm kiếm sâu bên trong nội dung ghi chú chăm sóc (notes), nhật ký cuộc gọi (activities), lý do hủy (lost_reason) hoặc lý do nuôi dưỡng (nurture_reason), ví dụ: "học phí", "bận", "hẹn tuần sau", "học bổng".'
+                                ],
+                                'age_min' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Độ tuổi tối thiểu của khách hàng/học viên (tính theo ngày sinh, ví dụ: 25).'
+                                ],
+                                'age_max' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Độ tuổi tối đa của khách hàng/học viên (tính theo ngày sinh, ví dụ: 45).'
+                                ],
+                                'birth_year_from' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Năm sinh từ năm (ví dụ: 1980).'
+                                ],
+                                'birth_year_to' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Năm sinh đến năm (ví dụ: 1995).'
+                                ],
+                                'birthday_month' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Tháng sinh nhật (từ 1 đến 12) để lọc khách hàng có sinh nhật trong tháng.'
+                                ],
+                                'job_titles' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Chức danh / vị trí công việc (cách nhau bởi dấu phẩy, ví dụ: "CEO, Giám đốc, Trưởng phòng, Manager"). Hoặc truyền "has_job_title" / "no_job_title".'
+                                ],
+                                'companies' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tên công ty / đơn vị công tác (cách nhau bởi dấu phẩy, ví dụ: "Vietcombank, FPT, Vingroup"). Hoặc truyền "has_company" / "no_company".'
+                                ],
+                                'industries' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Ngành nghề / lĩnh vực hoạt động hoặc phòng ban (cách nhau bởi dấu phẩy, ví dụ: "Ngân hàng, Tài chính, Bất động sản, Y tế, Xây dựng").'
+                                ],
+                                'education_or_degree' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Chuyên ngành / trình độ học vấn / bằng cấp (cách nhau bởi dấu phẩy, ví dụ: "Đại học, Thạc sĩ, Cử nhân, Kinh tế, Kỹ thuật").'
+                                ],
+                                'campaign_or_utm' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tên chiến dịch Marketing, UTM Campaign/Source/Medium, Form đăng ký hoặc Tên vòng chia data (Distribution Round).'
+                                ],
+                                'study_status' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Trạng thái học vụ của học viên (ví dụ: "studying", "reserved", "graduated", "dropped", "bảo lưu", "đang học", "tốt nghiệp").'
+                                ],
+                                'student_code' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Mã số học viên (student_code / student_id).'
+                                ],
+                                'expected_intake' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Kỳ nhập học dự kiến / khóa tuyển sinh (expected_intake).'
+                                ],
+                                'missing_document' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['all', 'id_card', 'degree', 'translation', 'contract', 'incomplete', 'complete'],
+                                    'description' => 'Lọc theo tình trạng hồ sơ đính kèm của học viên: id_card (thiếu CCCD/Hộ chiếu), degree (thiếu bằng cấp), translation (thiếu bản dịch), contract (thiếu hợp đồng), incomplete (thiếu bất kỳ giấy tờ nào), complete (đã đủ 4 loại giấy tờ).'
+                                ],
+                                'custom_rules' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Chuỗi JSON chứa mảng các quy tắc lọc động đa tầng tùy biến trên các cột của bảng contacts: [{"field":"expected_revenue","operator":"gte","value":50000000}]. Hỗ trợ operator: eq, neq, like, not_like, gt, gte, lt, lte, in, not_in, is_empty, is_not_empty.'
                                 ],
                                 'date_field' => [
                                     'type' => 'STRING',
-                                    'enum' => ['created_at', 'last_contact', 'deposit_date'],
+                                    'enum' => ['created_at', 'last_contact', 'deposit_date', 'updated_at', 'admission_date', 'next_followup_date', 'expected_decision_date', 'birthday'],
                                     'description' => 'Trường thời gian áp dụng cho from_date / to_date (mặc định created_at).'
                                 ],
                                 'from_date' => [
@@ -1378,12 +1498,12 @@ class AgentToolRegistry {
                                 ],
                                 'search_query' => [
                                     'type' => 'STRING',
-                                    'description' => 'Từ khóa tìm kiếm theo tên, số điện thoại hoặc email.'
+                                    'description' => 'Từ khóa tìm kiếm theo tên, số điện thoại, email, công ty, chức danh hoặc ghi chú.'
                                 ],
                                 'group_by' => [
                                     'type' => 'STRING',
                                     'enum' => ['program_stage', 'source_stage', 'owner_stage', 'branch_program', 'month_source', 'none'],
-                                    'description' => 'Chiều bóc tách ma trận: program_stage (Chương trình × Giai đoạn), source_stage (Nguồn × Giai đoạn/Cọc), owner_stage (Chuyên viên × Doanh số cọc), branch_program (Chi nhánh × Chương trình), month_source (Tháng × Nguồn lead).'
+                                    'description' => 'Chiều bóc tách ma trận và biểu đồ chính: program_stage (Chương trình × Giai đoạn), source_stage (Nguồn × Giai đoạn/Cọc), owner_stage (Chuyên viên × Doanh số cọc), branch_program (Chi nhánh × Chương trình), month_source (Tháng × Nguồn lead).'
                                 ],
                                 'limit' => [
                                     'type' => 'INTEGER',
@@ -2937,10 +3057,12 @@ class AgentToolRegistry {
                         }
                     }
 
-                    if ($gender === 'male' || $gender === 'nam') {
-                        $where[] = "c.gender IN ('male', 'nam', '1')";
-                    } elseif ($gender === 'female' || $gender === 'nu' || $gender === 'nữ') {
-                        $where[] = "c.gender IN ('female', 'nu', '0')";
+                    if (in_array($gender, ['male', 'nam', 'trai', 'boy', '1', 'm'], true)) {
+                        $where[] = "LOWER(TRIM(COALESCE(c.gender, ''))) IN ('male', 'nam', '1', 'm')";
+                    } elseif (in_array($gender, ['female', 'nu', 'nữ', 'gai', 'girl', '0', 'f'], true)) {
+                        $where[] = "(LOWER(TRIM(COALESCE(c.gender, ''))) IN ('female', 'nu', '0', 'f') OR c.gender = 'Nữ')";
+                    } elseif (in_array($gender, ['unknown', 'empty', 'null', 'chua_ro', 'chưa rõ'], true)) {
+                        $where[] = "(c.gender IS NULL OR TRIM(c.gender) = '' OR LOWER(TRIM(c.gender)) IN ('unknown', 'other', 'khác', 'khac'))";
                     }
 
                     if ($stageId > 0) {
@@ -10055,19 +10177,21 @@ class AgentToolRegistry {
                 case 'query_crm_leads_multitier': {
                     $programsParam = trim((string)($args['programs'] ?? ($args['program'] ?? '')));
                     $stagesParam = trim((string)($args['stages'] ?? ''));
+                    $stageOp = strtolower(trim((string)($args['stage_op'] ?? 'in')));
                     $sourcesParam = trim((string)($args['sources'] ?? ($args['source'] ?? '')));
                     $branchesParam = trim((string)($args['branches_or_cities'] ?? ($args['city'] ?? '')));
                     $gender = strtolower(trim((string)($args['gender'] ?? 'all')));
                     $ownersParam = trim((string)($args['owners'] ?? ($args['assigned_to'] ?? '')));
                     $financialFilter = strtolower(trim((string)($args['financial_filter'] ?? ($args['deposit_status'] ?? 'all'))));
                     $minDeposit = isset($args['min_deposit_amount']) ? (float)$args['min_deposit_amount'] : (isset($args['min_deposit']) ? (float)$args['min_deposit'] : 0);
+                    $maxDeposit = isset($args['max_deposit_amount']) ? (float)$args['max_deposit_amount'] : (isset($args['max_deposit']) ? (float)$args['max_deposit'] : 0);
                     $staleDays = !empty($args['stale_days']) ? (int)$args['stale_days'] : 0;
                     $interactionStatus = strtolower(trim((string)($args['interaction_status'] ?? ($args['activity_status'] ?? 'all'))));
                     $recordType = strtolower(trim((string)($args['record_type'] ?? 'all')));
                     $leadStatus = strtolower(trim((string)($args['lead_status'] ?? 'all')));
                     $rawTags = trim((string)($args['tags'] ?? ($args['tag'] ?? '')));
                     $dateField = strtolower(trim((string)($args['date_field'] ?? 'created_at')));
-                    if (!in_array($dateField, ['created_at', 'last_contact', 'deposit_date', 'updated_at', 'admission_date'], true)) {
+                    if (!in_array($dateField, ['created_at', 'last_contact', 'deposit_date', 'updated_at', 'admission_date', 'next_followup_date', 'expected_decision_date', 'birthday'], true)) {
                         $dateField = 'created_at';
                     }
                     $fromDate = trim((string)($args['from_date'] ?? ($args['from'] ?? '')));
@@ -10096,9 +10220,9 @@ class AgentToolRegistry {
                     }
 
                     // 0a. Record Type Filter (lead vs customer vs all)
-                    if ($recordType === 'lead') {
+                    if ($recordType === 'lead' || $recordType === 'leads_only' || $recordType === 'tiem_nang') {
                         $where[] = "(c.status != 'customer' OR c.status IS NULL)";
-                    } elseif ($recordType === 'customer' || $recordType === 'student') {
+                    } elseif ($recordType === 'customer' || $recordType === 'student' || $recordType === 'students_only') {
                         $where[] = "(c.status = 'customer' OR c.pipeline_status IN ('enrolled', 'hoc_vien') OR c.stage_id IN (SELECT id FROM pipeline_stages WHERE system_slug IN ('enrolled', 'hoc_vien') OR is_won = 1))";
                     }
 
@@ -10116,20 +10240,22 @@ class AgentToolRegistry {
                         }
                     }
 
-                    // 1. Programs Multi-Filter
+                    // 1. Programs / Projects Multi-Filter (matches c.program and linked projects)
                     if (!empty($programsParam) && $programsParam !== 'all') {
                         $progList = array_filter(array_map('trim', explode(',', $programsParam)));
                         if (!empty($progList)) {
                             $progOrs = [];
                             foreach ($progList as $p) {
-                                $progOrs[] = "c.program LIKE ?";
+                                $progOrs[] = "(c.program LIKE ? OR EXISTS (SELECT 1 FROM projects prj_f WHERE prj_f.id = c.project_id AND (prj_f.name LIKE ? OR prj_f.code LIKE ?)))";
+                                $params[] = '%' . $p . '%';
+                                $params[] = '%' . $p . '%';
                                 $params[] = '%' . $p . '%';
                             }
                             $where[] = "(" . implode(' OR ', $progOrs) . ")";
                         }
                     }
 
-                    // 2. Stages Multi-Filter
+                    // 2. Stages Multi-Filter (supports stage_op: in, not_in, gte, lte, gt, lt)
                     if (!empty($stagesParam) && $stagesParam !== 'all') {
                         $stageParts = array_filter(array_map('trim', explode(',', $stagesParam)));
                         $stageIds = [];
@@ -10158,36 +10284,49 @@ class AgentToolRegistry {
                             }
                         }
 
-                        $stageOrs = [];
-                        if (!empty($stageIds)) {
-                            $inIds = implode(',', array_unique(array_map('intval', $stageIds)));
-                            $stageOrs[] = "c.stage_id IN ($inIds)";
-                        }
-                        if (!empty($orderIndexes)) {
-                            $inOrders = implode(',', array_unique(array_map('intval', $orderIndexes)));
-                            $stageOrs[] = "c.stage_id IN (SELECT id FROM pipeline_stages WHERE order_index IN ($inOrders))";
-                        }
-                        if (!empty($stageNames)) {
-                            foreach ($stageNames as $sn) {
-                                $stageOrs[] = "(c.pipeline_status LIKE ? OR c.status LIKE ? OR EXISTS (SELECT 1 FROM pipeline_stages ps_s WHERE ps_s.id = c.stage_id AND (ps_s.system_slug = ? OR ps_s.name LIKE ?)))";
-                                $params[] = '%' . $sn . '%';
-                                $params[] = '%' . $sn . '%';
-                                $params[] = $sn;
-                                $params[] = '%' . $sn . '%';
+                        if (in_array($stageOp, ['gte', 'lte', 'gt', 'lt'], true) && (!empty($orderIndexes) || !empty($stageIds))) {
+                            $refOrder = !empty($orderIndexes) ? min($orderIndexes) : (max(1, min($stageIds)) - 1);
+                            $opMap = ['gte' => '>=', 'lte' => '<=', 'gt' => '>', 'lt' => '<'];
+                            $sqlOp = $opMap[$stageOp];
+                            $where[] = "EXISTS (SELECT 1 FROM pipeline_stages ps_op WHERE ps_op.id = c.stage_id AND ps_op.order_index {$sqlOp} ?)";
+                            $params[] = (int)$refOrder;
+                        } else {
+                            $stageOrs = [];
+                            if (!empty($stageIds)) {
+                                $inIds = implode(',', array_unique(array_map('intval', $stageIds)));
+                                $stageOrs[] = "COALESCE(c.stage_id, 0) IN ($inIds)";
                             }
-                        }
-                        if (!empty($stageOrs)) {
-                            $where[] = "(" . implode(' OR ', $stageOrs) . ")";
+                            if (!empty($orderIndexes)) {
+                                $inOrders = implode(',', array_unique(array_map('intval', $orderIndexes)));
+                                $stageOrs[] = "EXISTS (SELECT 1 FROM pipeline_stages ps_o WHERE ps_o.id = c.stage_id AND ps_o.order_index IN ($inOrders))";
+                            }
+                            if (!empty($stageNames)) {
+                                foreach ($stageNames as $sn) {
+                                    $stageOrs[] = "(COALESCE(c.pipeline_status, '') LIKE ? OR COALESCE(c.status, '') LIKE ? OR EXISTS (SELECT 1 FROM pipeline_stages ps_s WHERE ps_s.id = c.stage_id AND (ps_s.system_slug = ? OR ps_s.name LIKE ?)))";
+                                    $params[] = '%' . $sn . '%';
+                                    $params[] = '%' . $sn . '%';
+                                    $params[] = $sn;
+                                    $params[] = '%' . $sn . '%';
+                                }
+                            }
+                            if (!empty($stageOrs)) {
+                                if ($stageOp === 'not_in' || $stageOp === 'exclude') {
+                                    $where[] = "NOT (" . implode(' OR ', $stageOrs) . ")";
+                                } else {
+                                    $where[] = "(" . implode(' OR ', $stageOrs) . ")";
+                                }
+                            }
                         }
                     }
 
-                    // 3. Sources Multi-Filter (matches both source and utm_source)
+                    // 3. Sources Multi-Filter (matches source, utm_source, and platform)
                     if (!empty($sourcesParam) && $sourcesParam !== 'all') {
                         $srcList = array_filter(array_map('trim', explode(',', $sourcesParam)));
                         if (!empty($srcList)) {
                             $srcOrs = [];
                             foreach ($srcList as $s) {
-                                $srcOrs[] = "(c.source LIKE ? OR c.utm_source LIKE ?)";
+                                $srcOrs[] = "(c.source LIKE ? OR c.utm_source LIKE ? OR c.platform LIKE ?)";
+                                $params[] = '%' . $s . '%';
                                 $params[] = '%' . $s . '%';
                                 $params[] = '%' . $s . '%';
                             }
@@ -10195,34 +10334,38 @@ class AgentToolRegistry {
                         }
                     }
 
-                    // 4. Branches / Cities / Districts Multi-Filter (Schema-safe: contacts has city, district, address)
+                    // 4. Branches / Cities / Districts Multi-Filter (matches contact address & owner's team branch)
                     if (!empty($branchesParam) && $branchesParam !== 'all') {
                         $cityList = array_filter(array_map('trim', explode(',', $branchesParam)));
                         if (!empty($cityList)) {
                             $cityOrs = [];
                             foreach ($cityList as $city) {
-                                $cityOrs[] = "(c.city LIKE ? OR c.district LIKE ? OR c.address LIKE ?)";
-                                $params[] = '%' . $city . '%';
-                                $params[] = '%' . $city . '%';
-                                $params[] = '%' . $city . '%';
+                                $cityOrs[] = "(c.city LIKE ? OR c.district LIKE ? OR c.ward LIKE ? OR c.address LIKE ? OR EXISTS (SELECT 1 FROM users u_br JOIN teams tm_br ON u_br.team_id = tm_br.id WHERE u_br.id = c.owner_id AND (tm_br.branch LIKE ? OR tm_br.name LIKE ?)))";
+                                $likeCity = '%' . $city . '%';
+                                array_push($params, $likeCity, $likeCity, $likeCity, $likeCity, $likeCity, $likeCity);
                             }
                             $where[] = "(" . implode(' OR ', $cityOrs) . ")";
                         }
                     }
 
                     // 5. Gender Filter
-                    if (in_array($gender, ['male', 'nam', 'trai', 'boy'], true)) {
-                        $where[] = "LOWER(TRIM(COALESCE(c.gender, ''))) IN ('male', 'nam', '1')";
-                    } elseif (in_array($gender, ['female', 'nu', 'nữ', 'gai', 'girl'], true)) {
-                        $where[] = "(LOWER(TRIM(COALESCE(c.gender, ''))) IN ('female', 'nu', '0') OR c.gender = 'Nữ')";
+                    if (in_array($gender, ['male', 'nam', 'trai', 'boy', '1', 'm'], true)) {
+                        $where[] = "LOWER(TRIM(COALESCE(c.gender, ''))) IN ('male', 'nam', '1', 'm')";
+                    } elseif (in_array($gender, ['female', 'nu', 'nữ', 'gai', 'girl', '0', 'f'], true)) {
+                        $where[] = "(LOWER(TRIM(COALESCE(c.gender, ''))) IN ('female', 'nu', '0', 'f') OR c.gender = 'Nữ')";
+                    } elseif (in_array($gender, ['unknown', 'empty', 'null', 'chua_ro', 'chưa rõ'], true)) {
+                        $where[] = "(c.gender IS NULL OR TRIM(c.gender) = '' OR LOWER(TRIM(c.gender)) IN ('unknown', 'other', 'khác', 'khac'))";
                     }
 
-                    // 6. Owners Multi-Filter (matches owner_id or collaborator_ids by name/ID with Vietnamese accent-insensitive matching)
+                    // 6. Owners Multi-Filter (matches owner_id, collaborator_ids, or unassigned/orphan leads)
                     if (!empty($ownersParam) && $ownersParam !== 'all') {
                         $ownerList = array_filter(array_map('trim', explode(',', $ownersParam)));
                         $ownerOrs = [];
                         foreach ($ownerList as $own) {
-                            if (is_numeric($own)) {
+                            $ownLow = mb_strtolower($own, 'UTF-8');
+                            if (in_array($ownLow, ['unassigned', 'none', 'null', '0', 'chua_phan_bo', 'chưa phân bổ', 'chua phan bo', 'chưa gán', 'chua gan'], true)) {
+                                $ownerOrs[] = "(c.owner_id IS NULL OR c.owner_id = 0)";
+                            } elseif (is_numeric($own)) {
                                 $ownerOrs[] = "(c.owner_id = ? OR FIND_IN_SET(?, COALESCE(c.collaborator_ids, '')))";
                                 $params[] = (int)$own;
                                 $params[] = (string)(int)$own;
@@ -10266,18 +10409,11 @@ class AgentToolRegistry {
                     }
 
                     if ($minDeposit > 0) {
-                        $where[] = "EXISTS (SELECT 1 FROM deposits dep_m WHERE dep_m.contact_id = c.id AND dep_m.price >= ? AND dep_m.status NOT IN ('cancelled', 'rejected'))";
+                        $where[] = "EXISTS (SELECT 1 FROM deposits dep_m WHERE dep_m.contact_id = c.id AND dep_m.status NOT IN ('cancelled', 'rejected') GROUP BY dep_m.contact_id HAVING SUM(dep_m.price) >= ?)";
                         $params[] = $minDeposit;
                     }
 
-                    // 8. Stale Days Filter
-                    if ($staleDays > 0) {
-                        $where[] = "((c.last_contact IS NOT NULL AND c.last_contact < DATE_SUB(NOW(), INTERVAL ? DAY)) OR (c.last_contact IS NULL AND c.created_at < DATE_SUB(NOW(), INTERVAL ? DAY)))";
-                        $params[] = $staleDays;
-                        $params[] = $staleDays;
-                    }
-
-                    // 9. Interaction Status Filter (3-source NULL-safe EXISTS / NOT EXISTS: activities, notes, and last_contact)
+                    // 8. Interaction Status Filter (3-source NULL-safe EXISTS / NOT EXISTS: activities, notes, and last_contact)
                     if ($interactionStatus === 'has_activity' || $interactionStatus === 'contacted') {
                         $where[] = "(
                             (c.last_contact IS NOT NULL AND c.last_contact != '')
@@ -10294,11 +10430,14 @@ class AgentToolRegistry {
                         $where[] = "EXISTS (SELECT 1 FROM activities act_f WHERE (act_f.contact_id = c.id OR (act_f.related_id = c.id AND act_f.related_type IN ('contact', 'lead'))) AND act_f.type = 'call' AND act_f.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY) AND act_f.deleted_at IS NULL)";
                     }
 
+                    // 9. Extended Multi-Tier Filters (100% shared between AgentToolRegistry and ExportController)
+                    self::applyMultitierExtendedContactFilters($db, 'c.', $args, $where, $params);
+
                     // Snapshot filters before Date Range Filter for diagnostic fallback when created_at returns 0 rows
                     $whereWithoutDate = $where;
                     $paramsWithoutDate = $params;
 
-                    // 10. Date Range Filter (supports created_at, last_contact, updated_at, admission_date, and deposit_date)
+                    // 10. Date Range Filter (supports created_at, last_contact, updated_at, admission_date, next_followup_date, expected_decision_date, birthday, and deposit_date)
                     if ($dateField === 'deposit_date') {
                         if (!empty($fromDate) && !empty($toDate)) {
                             $where[] = "EXISTS (SELECT 1 FROM deposits dep_d WHERE dep_d.contact_id = c.id AND dep_d.status NOT IN ('cancelled', 'rejected') AND dep_d.created_at BETWEEN ? AND ?)";
@@ -10311,14 +10450,15 @@ class AgentToolRegistry {
                             $where[] = "EXISTS (SELECT 1 FROM deposits dep_d WHERE dep_d.contact_id = c.id AND dep_d.status NOT IN ('cancelled', 'rejected') AND dep_d.created_at <= ?)";
                             $params[] = $toDate . ' 23:59:59';
                         }
-                    } elseif ($dateField === 'admission_date') {
+                    } elseif (in_array($dateField, ['admission_date', 'next_followup_date', 'expected_decision_date', 'birthday'], true)) {
+                        $colExpr = ($dateField === 'birthday') ? 'COALESCE(c.birthday, c.dob)' : "c.{$dateField}";
                         if (!empty($fromDate)) {
-                            $where[] = "c.admission_date >= ?";
+                            $where[] = "{$colExpr} >= ?";
                             $params[] = $fromDate;
                         }
                         if (!empty($toDate)) {
-                            $where[] = "c.admission_date <= ?";
-                            $params[] = $toDate;
+                            $where[] = "{$colExpr} <= ?";
+                            $params[] = $toDate . ' 23:59:59';
                         }
                     } else {
                         $targetDateField = ($dateField === 'last_contact') ? 'c.last_contact' : (($dateField === 'updated_at') ? 'c.updated_at' : 'c.created_at');
@@ -10376,7 +10516,7 @@ class AgentToolRegistry {
                                 'from_date' => $fromDate,
                                 'to_date' => $toDate
                             ],
-                            'message' => 'Không tìm thấy học viên/khách hàng nào có ngày tạo (created_at) đúng trong khoảng thời gian yêu cầu.'
+                            'message' => 'Không tìm thấy học viên/khách hàng nào khớp với tổ hợp điều kiện lọc hiện tại.'
                         ];
 
                         // Diagnostic Fallback: When a date filter returned 0 rows, check total all-time leads and recently updated/assigned leads for those same non-date filters
@@ -10594,7 +10734,21 @@ class AgentToolRegistry {
                     $chartTitle = "Phân tích Phễu & Cơ cấu Lead CRM";
 
                     if (!empty($chartDatasets)) {
+                        $preferredKey = 'by_program';
+                        if ($groupBy === 'source_stage' || $groupBy === 'month_source') {
+                            $preferredKey = 'by_source';
+                        } elseif ($groupBy === 'owner_stage') {
+                            $preferredKey = 'by_consultant';
+                        } elseif ($groupBy === 'stage') {
+                            $preferredKey = 'by_stage';
+                        }
                         $primaryChart = $chartDatasets[0];
+                        foreach ($chartDatasets as $ds) {
+                            if (($ds['key'] ?? '') === $preferredKey) {
+                                $primaryChart = $ds;
+                                break;
+                            }
+                        }
                         $chartData = $primaryChart['data'];
                         $chartSeries = $primaryChart['series'];
                         $chartTitle = $primaryChart['title'];
@@ -10608,11 +10762,21 @@ class AgentToolRegistry {
                                           COALESCE(ps.order_index, 0) as stage_order,
                                           COALESCE(u.full_name, 'Chưa phân công') as owner_name,
                                           (SELECT SUM(price) FROM deposits WHERE contact_id = c.id AND status NOT IN ('cancelled', 'rejected')) as total_deposit,
-                                          (
-                                            SELECT CONCAT('[', DATE_FORMAT(act.created_at, '%d/%m/%Y'), '] ', act.type, ': ', COALESCE(NULLIF(TRIM(act.body), ''), act.subject, ''))
-                                            FROM activities act
-                                            WHERE ((act.related_id = c.id AND act.related_type IN ('contact', 'lead')) OR act.contact_id = c.id) AND act.deleted_at IS NULL
-                                            ORDER BY act.created_at DESC LIMIT 1
+                                          COALESCE(
+                                            (
+                                              SELECT CONCAT('[', DATE_FORMAT(act.created_at, '%d/%m/%Y'), '] ', act.type, ': ', COALESCE(NULLIF(TRIM(act.body), ''), act.subject, ''))
+                                              FROM activities act
+                                              WHERE ((act.related_id = c.id AND act.related_type IN ('contact', 'lead')) OR act.contact_id = c.id) AND act.deleted_at IS NULL
+                                              ORDER BY act.created_at DESC LIMIT 1
+                                            ),
+                                            (
+                                              SELECT CONCAT('[', DATE_FORMAT(n_p.created_at, '%d/%m/%Y'), '] Ghi chú: ', TRIM(n_p.body))
+                                              FROM notes n_p
+                                              WHERE n_p.entity_type = 'contact' AND n_p.entity_id = c.id
+                                                AND n_p.body NOT LIKE '[Tự động]%' AND n_p.body NOT LIKE '[Phân bổ]%' AND n_p.body NOT LIKE '[Giao data]%' AND n_p.body NOT LIKE '[Auto]%' AND n_p.body NOT LIKE '[Import]%' AND n_p.body NOT LIKE '[Tái phân bổ]%'
+                                              ORDER BY n_p.created_at DESC LIMIT 1
+                                            ),
+                                            NULLIF(TRIM(c.notes), '')
                                           ) as latest_note
                                    FROM contacts c
                                    LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
@@ -10677,6 +10841,7 @@ class AgentToolRegistry {
                     if (!empty($leadStatus) && $leadStatus !== 'all') $exportParams['lead_status'] = $leadStatus;
                     if (!empty($programsParam) && $programsParam !== 'all') $exportParams['program'] = $programsParam;
                     if (!empty($stagesParam) && $stagesParam !== 'all') $exportParams['stages'] = $stagesParam;
+                    if (!empty($stageOp) && $stageOp !== 'in') $exportParams['stage_op'] = $stageOp;
                     if (!empty($sourcesParam) && $sourcesParam !== 'all') $exportParams['source'] = $sourcesParam;
                     if (!empty($branchesParam) && $branchesParam !== 'all') $exportParams['city'] = $branchesParam;
                     if (!empty($gender) && $gender !== 'all') $exportParams['gender'] = $gender;
@@ -10684,16 +10849,32 @@ class AgentToolRegistry {
                     if (!empty($rawTags) && $rawTags !== 'all') $exportParams['tags'] = $rawTags;
                     if (!empty($financialFilter) && $financialFilter !== 'all') $exportParams['financial_filter'] = $financialFilter;
                     if ($minDeposit > 0) $exportParams['min_deposit'] = $minDeposit;
+                    if ($maxDeposit > 0) $exportParams['max_deposit_amount'] = $maxDeposit;
                     if ($staleDays > 0) $exportParams['stale_days'] = $staleDays;
                     if (!empty($interactionStatus) && $interactionStatus !== 'all') $exportParams['interaction_status'] = $interactionStatus;
                     if (!empty($dateField) && $dateField !== 'created_at') $exportParams['date_field'] = $dateField;
                     if (!empty($fromDate)) $exportParams['from'] = $fromDate;
                     if (!empty($toDate)) $exportParams['to'] = $toDate;
                     if (!empty($searchQuery)) $exportParams['search'] = $searchQuery;
+
+                    // Forward all extended multi-tier parameters for 100% ExportController parity
+                    $extendedExportKeys = [
+                        'interacted_within_days', 'interaction_type', 'min_call_count', 'max_call_count',
+                        'note_keyword', 'age_min', 'age_max', 'birth_year_from', 'birth_year_to', 'birthday_month',
+                        'job_titles', 'companies', 'industries', 'education_or_degree', 'teams',
+                        'campaign_or_utm', 'temperature', 'min_lead_score', 'max_lead_score',
+                        'study_status', 'student_code', 'expected_intake', 'missing_document', 'custom_rules'
+                    ];
+                    foreach ($extendedExportKeys as $extKey) {
+                        if (isset($args[$extKey]) && $args[$extKey] !== '' && $args[$extKey] !== 'all' && $args[$extKey] !== null) {
+                            $exportParams[$extKey] = $args[$extKey];
+                        }
+                    }
+
                     $exportUrl = '/export?' . http_build_query($exportParams);
 
                     $dynamicChartObj = !empty($chartData) ? [
-                        'type' => 'bar',
+                        'type' => $primaryChart['type'] ?? 'bar',
                         'title' => $chartTitle,
                         'xAxisKey' => 'name',
                         'data' => $chartData,
@@ -13295,4 +13476,483 @@ class AgentToolRegistry {
                 : "Đã thêm Data cá nhân cho {$targetOwnerName}: Tạo mới " . count($createdLeads) . " hồ sơ, cập nhật " . count($reassignedLeads) . " hồ sơ" . (!empty($skippedDuplicates) ? ", bỏ qua " . count($skippedDuplicates) . " hồ sơ trùng." : ".")
         ];
     }
+
+    /**
+     * Shared Multi-Tier Extended Contact Filters (100% SQL Parity between AI Tool `query_crm_leads_multitier` & `ExportController`)
+     * Supports arbitrary table alias ('c.' or 't.') and NULL-safe EXISTS / NOT EXISTS subqueries.
+     */
+    public static function applyMultitierExtendedContactFilters(PDO $db, string $alias, array $args, array &$where, array &$params): void {
+        $p = rtrim(trim($alias), '.') . '.';
+
+        // 1. Stale Days Filter (3-source NULL-safe check: last_contact, activities, and manual notes)
+        $staleDays = !empty($args['stale_days']) ? (int)$args['stale_days'] : 0;
+        if ($staleDays > 0) {
+            $where[] = "(
+                {$p}created_at < DATE_SUB(NOW(), INTERVAL ? DAY)
+                AND ({$p}last_contact IS NULL OR {$p}last_contact < DATE_SUB(NOW(), INTERVAL ? DAY))
+                AND NOT EXISTS (
+                    SELECT 1 FROM activities act_st
+                    WHERE (act_st.contact_id = {$p}id OR (act_st.related_type IN ('contact', 'lead') AND act_st.related_id = {$p}id))
+                      AND act_st.deleted_at IS NULL
+                      AND act_st.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM notes n_st
+                    WHERE n_st.entity_type = 'contact' AND n_st.entity_id = {$p}id
+                      AND n_st.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+                      AND n_st.body NOT LIKE '[Tự động]%' AND n_st.body NOT LIKE '[Phân bổ]%' AND n_st.body NOT LIKE '[Giao data]%' AND n_st.body NOT LIKE '[Auto]%' AND n_st.body NOT LIKE '[Import]%' AND n_st.body NOT LIKE '[Tái phân bổ]%'
+                )
+            )";
+            array_push($params, $staleDays, $staleDays, $staleDays, $staleDays);
+        }
+
+        // 2. Interacted Within Days + Interaction Type Filter
+        $interactedWithinDays = !empty($args['interacted_within_days']) ? (int)$args['interacted_within_days'] : 0;
+        $interactionType = strtolower(trim((string)($args['interaction_type'] ?? 'all')));
+        if ($interactedWithinDays > 0) {
+            if (in_array($interactionType, ['call', 'meeting', 'email', 'task', 'chat'], true)) {
+                $where[] = "EXISTS (
+                    SELECT 1 FROM activities act_iw
+                    WHERE (act_iw.contact_id = {$p}id OR (act_iw.related_type IN ('contact', 'lead') AND act_iw.related_id = {$p}id))
+                      AND act_iw.type = ?
+                      AND act_iw.deleted_at IS NULL
+                      AND act_iw.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+                )";
+                array_push($params, $interactionType, $interactedWithinDays);
+            } elseif ($interactionType === 'note') {
+                $where[] = "(
+                    EXISTS (
+                        SELECT 1 FROM notes n_iw
+                        WHERE n_iw.entity_type = 'contact' AND n_iw.entity_id = {$p}id
+                          AND n_iw.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+                          AND n_iw.body NOT LIKE '[Tự động]%' AND n_iw.body NOT LIKE '[Phân bổ]%' AND n_iw.body NOT LIKE '[Giao data]%' AND n_iw.body NOT LIKE '[Auto]%' AND n_iw.body NOT LIKE '[Import]%' AND n_iw.body NOT LIKE '[Tái phân bổ]%'
+                    )
+                    OR EXISTS (
+                        SELECT 1 FROM activities act_iw
+                        WHERE (act_iw.contact_id = {$p}id OR (act_iw.related_type IN ('contact', 'lead') AND act_iw.related_id = {$p}id))
+                          AND act_iw.type = 'note'
+                          AND act_iw.deleted_at IS NULL
+                          AND act_iw.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+                    )
+                )";
+                array_push($params, $interactedWithinDays, $interactedWithinDays);
+            } else {
+                $where[] = "(
+                    ({$p}last_contact IS NOT NULL AND {$p}last_contact >= DATE_SUB(NOW(), INTERVAL ? DAY))
+                    OR EXISTS (
+                        SELECT 1 FROM activities act_iw
+                        WHERE (act_iw.contact_id = {$p}id OR (act_iw.related_type IN ('contact', 'lead') AND act_iw.related_id = {$p}id))
+                          AND act_iw.deleted_at IS NULL
+                          AND act_iw.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+                    )
+                    OR EXISTS (
+                        SELECT 1 FROM notes n_iw
+                        WHERE n_iw.entity_type = 'contact' AND n_iw.entity_id = {$p}id
+                          AND n_iw.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+                          AND n_iw.body NOT LIKE '[Tự động]%' AND n_iw.body NOT LIKE '[Phân bổ]%' AND n_iw.body NOT LIKE '[Giao data]%' AND n_iw.body NOT LIKE '[Auto]%' AND n_iw.body NOT LIKE '[Import]%' AND n_iw.body NOT LIKE '[Tái phân bổ]%'
+                    )
+                )";
+                array_push($params, $interactedWithinDays, $interactedWithinDays, $interactedWithinDays);
+            }
+        }
+
+        // 3. Call Count Range (min_call_count / max_call_count)
+        if (isset($args['min_call_count']) && $args['min_call_count'] !== '' && $args['min_call_count'] !== null) {
+            $minCalls = max(0, (int)$args['min_call_count']);
+            $where[] = "(SELECT COUNT(1) FROM activities act_minc WHERE (act_minc.contact_id = {$p}id OR (act_minc.related_type IN ('contact', 'lead') AND act_minc.related_id = {$p}id)) AND act_minc.type = 'call' AND act_minc.deleted_at IS NULL) >= ?";
+            $params[] = $minCalls;
+        }
+        if (isset($args['max_call_count']) && $args['max_call_count'] !== '' && $args['max_call_count'] !== null) {
+            $maxCalls = max(0, (int)$args['max_call_count']);
+            $where[] = "(SELECT COUNT(1) FROM activities act_maxc WHERE (act_maxc.contact_id = {$p}id OR (act_maxc.related_type IN ('contact', 'lead') AND act_maxc.related_id = {$p}id)) AND act_maxc.type = 'call' AND act_maxc.deleted_at IS NULL) <= ?";
+            $params[] = $maxCalls;
+        }
+
+        // 4. Deep Note & Activity Keyword Search (note_keyword)
+        $noteKeyword = trim((string)($args['note_keyword'] ?? ''));
+        if (!empty($noteKeyword)) {
+            $kwList = array_filter(array_map('trim', explode(',', $noteKeyword)));
+            if (!empty($kwList)) {
+                $kwOrs = [];
+                foreach ($kwList as $kw) {
+                    $likeKw = '%' . $kw . '%';
+                    $kwOrs[] = "(
+                        {$p}notes LIKE ?
+                        OR {$p}lost_reason LIKE ?
+                        OR {$p}nurture_reason LIKE ?
+                        OR EXISTS (SELECT 1 FROM notes n_kw WHERE n_kw.entity_type = 'contact' AND n_kw.entity_id = {$p}id AND n_kw.body LIKE ?)
+                        OR EXISTS (SELECT 1 FROM activities act_kw WHERE (act_kw.contact_id = {$p}id OR (act_kw.related_type IN ('contact', 'lead') AND act_kw.related_id = {$p}id)) AND act_kw.deleted_at IS NULL AND (act_kw.body LIKE ? OR act_kw.subject LIKE ?))
+                    )";
+                    array_push($params, $likeKw, $likeKw, $likeKw, $likeKw, $likeKw, $likeKw);
+                }
+                $where[] = "(" . implode(' OR ', $kwOrs) . ")";
+            }
+        }
+
+        // 5. Age, Birth Year & Birthday Month Filters
+        $dobExpr = "COALESCE({$p}birthday, {$p}dob)";
+        if (isset($args['age_min']) && $args['age_min'] !== '' && (int)$args['age_min'] > 0) {
+            $where[] = "({$dobExpr} IS NOT NULL AND {$dobExpr} > '1900-01-01' AND TIMESTAMPDIFF(YEAR, {$dobExpr}, CURDATE()) >= ?)";
+            $params[] = (int)$args['age_min'];
+        }
+        if (isset($args['age_max']) && $args['age_max'] !== '' && (int)$args['age_max'] > 0) {
+            $where[] = "({$dobExpr} IS NOT NULL AND {$dobExpr} > '1900-01-01' AND TIMESTAMPDIFF(YEAR, {$dobExpr}, CURDATE()) <= ?)";
+            $params[] = (int)$args['age_max'];
+        }
+        if (isset($args['birth_year_from']) && $args['birth_year_from'] !== '' && (int)$args['birth_year_from'] > 1900) {
+            $where[] = "({$dobExpr} IS NOT NULL AND YEAR({$dobExpr}) >= ?)";
+            $params[] = (int)$args['birth_year_from'];
+        }
+        if (isset($args['birth_year_to']) && $args['birth_year_to'] !== '' && (int)$args['birth_year_to'] > 1900) {
+            $where[] = "({$dobExpr} IS NOT NULL AND YEAR({$dobExpr}) <= ?)";
+            $params[] = (int)$args['birth_year_to'];
+        }
+        if (isset($args['birthday_month']) && $args['birthday_month'] !== '') {
+            $bMonth = (int)$args['birthday_month'];
+            if ($bMonth >= 1 && $bMonth <= 12) {
+                $where[] = "({$dobExpr} IS NOT NULL AND MONTH({$dobExpr}) = ?)";
+                $params[] = $bMonth;
+            }
+        }
+
+        // 6. Job Titles Filter
+        $jobTitlesParam = trim((string)($args['job_titles'] ?? ($args['job_title'] ?? '')));
+        if (!empty($jobTitlesParam) && $jobTitlesParam !== 'all') {
+            $jtLow = strtolower($jobTitlesParam);
+            if ($jtLow === 'has_job_title' || $jtLow === 'not_empty') {
+                $where[] = "({$p}job_title IS NOT NULL AND TRIM({$p}job_title) != '')";
+            } elseif ($jtLow === 'no_job_title' || $jtLow === 'empty') {
+                $where[] = "({$p}job_title IS NULL OR TRIM({$p}job_title) = '')";
+            } else {
+                $jtList = array_filter(array_map('trim', explode(',', $jobTitlesParam)));
+                if (!empty($jtList)) {
+                    $jtOrs = [];
+                    foreach ($jtList as $jt) {
+                        $jtOrs[] = "{$p}job_title LIKE ?";
+                        $params[] = '%' . $jt . '%';
+                    }
+                    $where[] = "(" . implode(' OR ', $jtOrs) . ")";
+                }
+            }
+        }
+
+        // 7. Companies Filter
+        $companiesParam = trim((string)($args['companies'] ?? ''));
+        if (!empty($companiesParam) && $companiesParam !== 'all') {
+            $compLow = strtolower($companiesParam);
+            if ($compLow === 'has_company' || $compLow === 'not_empty') {
+                $where[] = "(({$p}company IS NOT NULL AND TRIM({$p}company) != '') OR ({$p}company_id IS NOT NULL AND {$p}company_id > 0))";
+            } elseif ($compLow === 'no_company' || $compLow === 'empty') {
+                $where[] = "(({$p}company IS NULL OR TRIM({$p}company) = '') AND ({$p}company_id IS NULL OR {$p}company_id = 0))";
+            } else {
+                $compList = array_filter(array_map('trim', explode(',', $companiesParam)));
+                if (!empty($compList)) {
+                    $compOrs = [];
+                    foreach ($compList as $comp) {
+                        $likeComp = '%' . $comp . '%';
+                        $compOrs[] = "({$p}company LIKE ? OR EXISTS (SELECT 1 FROM companies co_f WHERE co_f.id = {$p}company_id AND co_f.name LIKE ?))";
+                        array_push($params, $likeComp, $likeComp);
+                    }
+                    $where[] = "(" . implode(' OR ', $compOrs) . ")";
+                }
+            }
+        }
+
+        // 8. Industries / Department Filter
+        $industriesParam = trim((string)($args['industries'] ?? ($args['industry'] ?? '')));
+        if (!empty($industriesParam) && $industriesParam !== 'all') {
+            $indList = array_filter(array_map('trim', explode(',', $industriesParam)));
+            if (!empty($indList)) {
+                $indOrs = [];
+                foreach ($indList as $ind) {
+                    $likeInd = '%' . $ind . '%';
+                    $indOrs[] = "({$p}industry LIKE ? OR {$p}department LIKE ? OR EXISTS (SELECT 1 FROM companies co_i WHERE co_i.id = {$p}company_id AND co_i.industry LIKE ?))";
+                    array_push($params, $likeInd, $likeInd, $likeInd);
+                }
+                $where[] = "(" . implode(' OR ', $indOrs) . ")";
+            }
+        }
+
+        // 9. Education / Major / Degree Filter
+        $eduParam = trim((string)($args['education_or_degree'] ?? ($args['education'] ?? ($args['degree'] ?? ($args['major'] ?? '')))));
+        if (!empty($eduParam) && $eduParam !== 'all') {
+            $eduList = array_filter(array_map('trim', explode(',', $eduParam)));
+            if (!empty($eduList)) {
+                $eduOrs = [];
+                foreach ($eduList as $ed) {
+                    $likeEd = '%' . $ed . '%';
+                    $eduOrs[] = "({$p}major LIKE ? OR {$p}ttl1_data LIKE ? OR {$p}notes LIKE ? OR {$p}job_title LIKE ?)";
+                    array_push($params, $likeEd, $likeEd, $likeEd, $likeEd);
+                }
+                $where[] = "(" . implode(' OR ', $eduOrs) . ")";
+            }
+        }
+
+        // 10. Teams Multi-Filter
+        $teamsParam = trim((string)($args['teams'] ?? ($args['team'] ?? '')));
+        if (!empty($teamsParam) && $teamsParam !== 'all') {
+            $teamList = array_filter(array_map('trim', explode(',', $teamsParam)));
+            if (!empty($teamList)) {
+                $teamOrs = [];
+                foreach ($teamList as $tm) {
+                    if (is_numeric($tm)) {
+                        $teamOrs[] = "EXISTS (SELECT 1 FROM users u_tm WHERE u_tm.id = {$p}owner_id AND u_tm.team_id = ?)";
+                        $params[] = (int)$tm;
+                    } else {
+                        $likeTm = '%' . $tm . '%';
+                        $teamOrs[] = "EXISTS (SELECT 1 FROM users u_tm JOIN teams tm_f ON u_tm.team_id = tm_f.id WHERE u_tm.id = {$p}owner_id AND (tm_f.name LIKE ? OR tm_f.branch LIKE ?))";
+                        array_push($params, $likeTm, $likeTm);
+                    }
+                }
+                $where[] = "(" . implode(' OR ', $teamOrs) . ")";
+            }
+        }
+
+        // 11. Marketing Campaign, UTM & Distribution Round Filter
+        $campaignParam = trim((string)($args['campaign_or_utm'] ?? ($args['utm_campaign'] ?? ($args['round_name'] ?? ''))));
+        if (!empty($campaignParam) && $campaignParam !== 'all') {
+            $campList = array_filter(array_map('trim', explode(',', $campaignParam)));
+            if (!empty($campList)) {
+                $campOrs = [];
+                foreach ($campList as $cp) {
+                    $likeCp = '%' . $cp . '%';
+                    $campOrs[] = "(
+                        {$p}utm_campaign LIKE ?
+                        OR {$p}utm_source LIKE ?
+                        OR {$p}utm_medium LIKE ?
+                        OR {$p}utm_content LIKE ?
+                        OR {$p}form_name LIKE ?
+                        OR {$p}platform LIKE ?
+                        OR EXISTS (SELECT 1 FROM marketing_campaigns mc_f WHERE mc_f.id = {$p}campaign_id AND mc_f.name LIKE ?)
+                        OR EXISTS (
+                            SELECT 1 FROM leads l_f
+                            LEFT JOIN distribution_logs dl_f ON dl_f.lead_id = l_f.id
+                            LEFT JOIN distribution_rounds dr_f ON (dr_f.id = dl_f.round_id OR dr_f.id = l_f.target_round_id)
+                            WHERE ((l_f.person_id IS NOT NULL AND l_f.person_id = {$p}person_id) OR (l_f.phone IS NOT NULL AND l_f.phone = {$p}phone))
+                              AND (l_f.campaign_name LIKE ? OR dr_f.round_name LIKE ?)
+                        )
+                    )";
+                    array_push($params, $likeCp, $likeCp, $likeCp, $likeCp, $likeCp, $likeCp, $likeCp, $likeCp, $likeCp);
+                }
+                $where[] = "(" . implode(' OR ', $campOrs) . ")";
+            }
+        }
+
+        // 12. Temperature & Lead Score Range
+        $tempParam = strtolower(trim((string)($args['temperature'] ?? ($args['lead_temperature'] ?? ''))));
+        if (!empty($tempParam) && $tempParam !== 'all') {
+            $tempList = array_filter(array_map('trim', explode(',', $tempParam)));
+            if (!empty($tempList)) {
+                $tempPh = implode(',', array_fill(0, count($tempList), '?'));
+                $where[] = "(LOWER(TRIM(COALESCE({$p}temperature, ''))) IN ($tempPh) OR LOWER(TRIM(COALESCE({$p}lead_temperature, ''))) IN ($tempPh))";
+                foreach ($tempList as $tp) $params[] = $tp;
+                foreach ($tempList as $tp) $params[] = $tp;
+            }
+        }
+        if (isset($args['min_lead_score']) && $args['min_lead_score'] !== '' && $args['min_lead_score'] !== null) {
+            $where[] = "COALESCE({$p}lead_score, 0) >= ?";
+            $params[] = (int)$args['min_lead_score'];
+        }
+        if (isset($args['max_lead_score']) && $args['max_lead_score'] !== '' && $args['max_lead_score'] !== null) {
+            $where[] = "COALESCE({$p}lead_score, 0) <= ?";
+            $params[] = (int)$args['max_lead_score'];
+        }
+
+        // 13. Academic Status (study_status), Student Code & Expected Intake
+        $studyStatusParam = trim((string)($args['study_status'] ?? ($args['study_statuses'] ?? '')));
+        if (!empty($studyStatusParam) && strtolower($studyStatusParam) !== 'all') {
+            $ssList = array_filter(array_map('trim', explode(',', $studyStatusParam)));
+            if (!empty($ssList)) {
+                $ssOrs = [];
+                foreach ($ssList as $ss) {
+                    $ssLow = mb_strtolower($ss, 'UTF-8');
+                    if (in_array($ssLow, ['reserved', 'bảo lưu', 'bao luu', 'baoluu'], true)) {
+                        $ssOrs[] = "LOWER(TRIM(COALESCE({$p}study_status, ''))) IN ('reserved', 'bảo lưu', 'bao luu', 'baoluu', 'defer', 'deferred')";
+                    } elseif (in_array($ssLow, ['suspended', 'tam_ngung', 'tạm ngưng', 'pause'], true)) {
+                        $ssOrs[] = "LOWER(TRIM(COALESCE({$p}study_status, ''))) IN ('suspended', 'tam_ngung', 'tạm ngưng', 'pause')";
+                    } elseif (in_array($ssLow, ['studying', 'đang học', 'dang hoc', 'active'], true)) {
+                        $ssOrs[] = "LOWER(TRIM(COALESCE({$p}study_status, ''))) IN ('studying', 'đang học', 'dang hoc', 'active')";
+                    } elseif (in_array($ssLow, ['graduated', 'completed', 'hoan_thanh', 'hoàn thành', 'tốt nghiệp', 'tot nghiep'], true)) {
+                        $ssOrs[] = "LOWER(TRIM(COALESCE({$p}study_status, ''))) IN ('graduated', 'tốt nghiệp', 'tot nghiep', 'completed', 'hoan_thanh', 'hoàn thành')";
+                    } elseif (in_array($ssLow, ['dropped', 'nghỉ học', 'nghi hoc', 'dropout', 'cancelled'], true)) {
+                        $ssOrs[] = "LOWER(TRIM(COALESCE({$p}study_status, ''))) IN ('dropped', 'nghỉ học', 'nghi hoc', 'dropout', 'cancelled', 'thôi học')";
+                    } else {
+                        $ssOrs[] = "{$p}study_status LIKE ?";
+                        $params[] = '%' . $ss . '%';
+                    }
+                }
+                $where[] = "(" . implode(' OR ', $ssOrs) . ")";
+            }
+        }
+        $studentCodeParam = trim((string)($args['student_code'] ?? ''));
+        if (!empty($studentCodeParam) && strtolower($studentCodeParam) !== 'all') {
+            $scLow = strtolower($studentCodeParam);
+            if ($scLow === 'has_code') {
+                $where[] = "({$p}student_id IS NOT NULL AND TRIM({$p}student_id) != '')";
+            } elseif ($scLow === 'no_code') {
+                $where[] = "({$p}student_id IS NULL OR TRIM({$p}student_id) = '')";
+            } else {
+                $where[] = "{$p}student_id LIKE ?";
+                $params[] = '%' . $studentCodeParam . '%';
+            }
+        }
+        $expectedIntakeParam = trim((string)($args['expected_intake'] ?? ''));
+        if (!empty($expectedIntakeParam) && strtolower($expectedIntakeParam) !== 'all') {
+            $where[] = "{$p}expected_intake LIKE ?";
+            $params[] = '%' . $expectedIntakeParam . '%';
+        }
+
+        // 14. Missing Document / Profile Completeness Filter (cloud_files + citizen_id)
+        $missingDoc = strtolower(trim((string)($args['missing_document'] ?? ($args['missing_doc'] ?? ''))));
+        if (!empty($missingDoc) && $missingDoc !== 'all') {
+            $hasIdCardSql = "(({$p}citizen_id IS NOT NULL AND TRIM({$p}citizen_id) != '') OR EXISTS (SELECT 1 FROM cloud_files cf_id WHERE cf_id.contact_id = {$p}id AND (cf_id.name LIKE '%cccd%' OR cf_id.name LIKE '%cmnd%' OR cf_id.name LIKE '%passport%' OR cf_id.name LIKE '%ho_chieu%' OR cf_id.category LIKE '%cccd%' OR cf_id.category LIKE '%hộ chiếu%')))";
+            $hasDegreeSql = "EXISTS (SELECT 1 FROM cloud_files cf_deg WHERE cf_deg.contact_id = {$p}id AND (cf_deg.name LIKE '%bang%' OR cf_deg.name LIKE '%diploma%' OR cf_deg.name LIKE '%degree%' OR cf_deg.category LIKE '%bằng%'))";
+            $hasTransSql = "EXISTS (SELECT 1 FROM cloud_files cf_tr WHERE cf_tr.contact_id = {$p}id AND (cf_tr.name LIKE '%dich%' OR cf_tr.name LIKE '%translation%' OR cf_tr.name LIKE '%cong_chung%' OR cf_tr.category LIKE '%dịch%'))";
+            $hasContractSql = "EXISTS (SELECT 1 FROM cloud_files cf_ct WHERE cf_ct.contact_id = {$p}id AND (cf_ct.name LIKE '%hop_dong%' OR cf_ct.name LIKE '%contract%' OR cf_ct.category LIKE '%hợp đồng%'))";
+
+            if ($missingDoc === 'id_card' || $missingDoc === 'cccd') {
+                $where[] = "NOT {$hasIdCardSql}";
+            } elseif ($missingDoc === 'degree' || $missingDoc === 'bang_cap') {
+                $where[] = "NOT {$hasDegreeSql}";
+            } elseif ($missingDoc === 'translation' || $missingDoc === 'ban_dich') {
+                $where[] = "NOT {$hasTransSql}";
+            } elseif ($missingDoc === 'contract' || $missingDoc === 'hop_dong') {
+                $where[] = "NOT {$hasContractSql}";
+            } elseif ($missingDoc === 'complete') {
+                $where[] = "({$hasIdCardSql} AND {$hasDegreeSql} AND {$hasTransSql} AND {$hasContractSql})";
+            } elseif ($missingDoc === 'incomplete') {
+                $where[] = "NOT ({$hasIdCardSql} AND {$hasDegreeSql} AND {$hasTransSql} AND {$hasContractSql})";
+            }
+        }
+
+        // 15. Max Deposit Amount & Multi-Value Financial / Overdue Milestone Filter
+        $maxDeposit = isset($args['max_deposit_amount']) ? (float)$args['max_deposit_amount'] : (isset($args['max_deposit']) ? (float)$args['max_deposit'] : 0);
+        if ($maxDeposit > 0) {
+            $where[] = "(SELECT COALESCE(SUM(dep_mx.price), 0) FROM deposits dep_mx WHERE dep_mx.contact_id = {$p}id AND dep_mx.status NOT IN ('cancelled', 'rejected')) <= ?";
+            $params[] = $maxDeposit;
+        }
+        $finFilter = strtolower(trim((string)($args['financial_filter'] ?? ($args['deposit_status'] ?? ''))));
+        if ($finFilter !== '' && $finFilter !== 'all') {
+            $finTokens = array_filter(array_map('trim', explode(',', $finFilter)));
+            $finExtraOrs = [];
+            foreach ($finTokens as $ft) {
+                if ($ft === 'overdue_milestone' || $ft === 'overdue_payment') {
+                    $finExtraOrs[] = "EXISTS (
+                        SELECT 1 FROM deposits dep_om
+                        JOIN deposit_milestones dm_om ON dm_om.deposit_id = dep_om.id
+                        WHERE dep_om.contact_id = {$p}id
+                          AND dep_om.status NOT IN ('cancelled', 'rejected')
+                          AND dm_om.status NOT IN ('paid', 'approved', 'completed', 'cancelled', 'rejected')
+                          AND dm_om.expected_pay_date IS NOT NULL
+                          AND dm_om.expected_pay_date < CURDATE()
+                    )";
+                } elseif ($ft === 'has_revenue') {
+                    $finExtraOrs[] = "(EXISTS (SELECT 1 FROM deposits dep_rv WHERE dep_rv.contact_id = {$p}id AND dep_rv.status IN ('approved', 'completed') AND dep_rv.price > 0) OR EXISTS (SELECT 1 FROM invoices inv_rv WHERE inv_rv.contact_id = {$p}id AND inv_rv.deleted_at IS NULL AND inv_rv.status IN ('paid', 'partially_paid') AND inv_rv.amount_paid > 0))";
+                } elseif ($ft === 'has_commission') {
+                    $finExtraOrs[] = "EXISTS (SELECT 1 FROM deposits dep_cm WHERE dep_cm.contact_id = {$p}id AND dep_cm.status NOT IN ('cancelled', 'rejected') AND COALESCE(dep_cm.expected_commission, 0) > 0)";
+                }
+            }
+            if (!empty($finExtraOrs)) {
+                $where[] = "(" . implode(' OR ', $finExtraOrs) . ")";
+            }
+        }
+
+        // 16. Dynamic Custom Rules Engine (JSON array of {field, operator, value, valueTo} with strict schema whitelist)
+        $rawRules = $args['custom_rules'] ?? ($args['rules'] ?? null);
+        if (!empty($rawRules)) {
+            $rules = is_string($rawRules) ? json_decode($rawRules, true) : (is_array($rawRules) ? $rawRules : []);
+            if (is_array($rules)) {
+                $allowedCols = [
+                    'id', 'person_id', 'company_id', 'project_id', 'owner_id', 'collaborator_ids', 'created_by', 'full_name', 'email', 'phone', 'mobile', 'phone2', 'zalo_phone',
+                    'job_title', 'department', 'source', 'status', 'tags', 'notes', 'stage_id', 'birthday', 'dob', 'address',
+                    'city', 'district', 'ward', 'preferred_location', 'expected_revenue', 'win_probability', 'last_contact', 'lead_score',
+                    'pipeline_status', 'ttl1_completed', 'ttl1_data', 'gender', 'customer_type', 'industry', 'budget_range',
+                    'temperature', 'campaign_id', 'citizen_id', 'passport', 'company', 'tax_code', 'budget', 'demand_type',
+                    'utm_source', 'utm_campaign', 'utm_medium', 'utm_content', 'utm_term', 'platform', 'form_name',
+                    'lead_status', 'lead_temperature', 'next_action', 'next_followup_date', 'expected_decision_date',
+                    'expected_intake', 'nurture_reason', 'lost_reason', 'lost_stage_id', 'program', 'admission_date',
+                    'student_id', 'study_status', 'major', 'total_spent', 'order_count', 'last_order_at', 'created_at', 'updated_at'
+                ];
+                $ruleClauses = [];
+                foreach ($rules as $rule) {
+                    if (!is_array($rule)) continue;
+                    $field = strtolower(trim((string)($rule['field'] ?? '')));
+                    if (!in_array($field, $allowedCols, true)) continue;
+                    $op = strtolower(trim((string)($rule['operator'] ?? ($rule['op'] ?? 'eq'))));
+                    $val = $rule['value'] ?? '';
+                    $valTo = $rule['valueTo'] ?? ($rule['value_to'] ?? null);
+                    $col = "{$p}{$field}";
+
+                    if (in_array($op, ['is_empty', 'empty', 'is_null', 'null'], true)) {
+                        $ruleClauses[] = "({$col} IS NULL OR TRIM(CAST({$col} AS CHAR)) = '')";
+                    } elseif (in_array($op, ['is_not_empty', 'not_empty', 'is_not_null', 'not_null'], true)) {
+                        $ruleClauses[] = "({$col} IS NOT NULL AND TRIM(CAST({$col} AS CHAR)) != '')";
+                    } elseif (in_array($op, ['eq', '=', 'equals'], true)) {
+                        $ruleClauses[] = "{$col} = ?";
+                        $params[] = (string)$val;
+                    } elseif (in_array($op, ['neq', '!=', '<>', 'not_equals'], true)) {
+                        $ruleClauses[] = "({$col} IS NULL OR {$col} != ?)";
+                        $params[] = (string)$val;
+                    } elseif (in_array($op, ['like', 'contains'], true)) {
+                        $ruleClauses[] = "{$col} LIKE ?";
+                        $params[] = '%' . (string)$val . '%';
+                    } elseif ($op === 'starts_with') {
+                        $ruleClauses[] = "{$col} LIKE ?";
+                        $params[] = (string)$val . '%';
+                    } elseif ($op === 'ends_with') {
+                        $ruleClauses[] = "{$col} LIKE ?";
+                        $params[] = '%' . (string)$val;
+                    } elseif (in_array($op, ['not_like', 'not_contains'], true)) {
+                        $ruleClauses[] = "({$col} IS NULL OR {$col} NOT LIKE ?)";
+                        $params[] = '%' . (string)$val . '%';
+                    } elseif (in_array($op, ['gt', '>'], true)) {
+                        $ruleClauses[] = "{$col} > ?";
+                        $params[] = $val;
+                    } elseif (in_array($op, ['gte', '>='], true)) {
+                        $ruleClauses[] = "{$col} >= ?";
+                        $params[] = $val;
+                    } elseif (in_array($op, ['lt', '<'], true)) {
+                        $ruleClauses[] = "{$col} < ?";
+                        $params[] = $val;
+                    } elseif (in_array($op, ['lte', '<='], true)) {
+                        $ruleClauses[] = "{$col} <= ?";
+                        $params[] = $val;
+                    } elseif ($op === 'between') {
+                        $bMin = $val;
+                        $bMax = $valTo;
+                        if (is_array($val) && count($val) >= 2) {
+                            $bMin = $val[0];
+                            $bMax = $val[1];
+                        } elseif (is_string($val) && str_contains($val, ',') && $bMax === null) {
+                            [$bMin, $bMax] = array_map('trim', explode(',', $val, 2));
+                        }
+                        if ($bMin !== null && $bMax !== null && $bMin !== '' && $bMax !== '') {
+                            $ruleClauses[] = "({$col} >= ? AND {$col} <= ?)";
+                            $params[] = $bMin;
+                            $params[] = $bMax;
+                        }
+                    } elseif ($op === 'in') {
+                        $inList = is_array($val) ? $val : array_filter(array_map('trim', explode(',', (string)$val)));
+                        if (!empty($inList)) {
+                            $ph = implode(',', array_fill(0, count($inList), '?'));
+                            $ruleClauses[] = "{$col} IN ({$ph})";
+                            foreach ($inList as $item) $params[] = $item;
+                        }
+                    } elseif ($op === 'not_in') {
+                        $inList = is_array($val) ? $val : array_filter(array_map('trim', explode(',', (string)$val)));
+                        if (!empty($inList)) {
+                            $ph = implode(',', array_fill(0, count($inList), '?'));
+                            $ruleClauses[] = "({$col} IS NULL OR {$col} NOT IN ({$ph}))";
+                            foreach ($inList as $item) $params[] = $item;
+                        }
+                    }
+                }
+                if (!empty($ruleClauses)) {
+                    $logic = strtoupper(trim((string)($args['custom_rules_logic'] ?? 'AND'))) === 'OR' ? 'OR' : 'AND';
+                    $where[] = '(' . implode(" {$logic} ", $ruleClauses) . ')';
+                }
+            }
+        }
+    }
 }
+

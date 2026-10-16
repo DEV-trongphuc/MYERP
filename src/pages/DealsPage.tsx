@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef, lazy, Suspense } from 'rea
 import { useNavigate, useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { Pagination } from '../components/ui/Pagination';
-import { Plus, GripVertical, Pencil, Trash2, Calendar, Target, DollarSign, MessageSquare, Building2, Loader2, Search, Filter, Users, User, CheckCircle2, Phone, Mail, LayoutGrid, List, Clock, Download, Upload, RefreshCw, X, AlertCircle, AlertTriangle, ShieldAlert, ChevronRight, ChevronLeft, ChevronDown, MoreHorizontal, Columns, ArrowDownUp, GraduationCap, Tag as TagIcon, SlidersHorizontal, ArrowRight, Flag, Layers, RotateCcw } from 'lucide-react';
+import { Plus, GripVertical, Pencil, Trash2, Calendar, Target, DollarSign, MessageSquare, Building2, Briefcase, BarChart3, Loader2, Search, Filter, Users, User, CheckCircle2, Phone, Mail, LayoutGrid, List, Clock, Download, Upload, RefreshCw, X, AlertCircle, AlertTriangle, ShieldAlert, ChevronRight, ChevronLeft, ChevronDown, MoreHorizontal, Columns, ArrowDownUp, GraduationCap, Tag as TagIcon, SlidersHorizontal, ArrowRight, Flag, Layers, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar } from '../components/ui/Avatar';
 import { triggerFullConfetti } from '../utils/confettiHelper';
@@ -21,6 +21,18 @@ import { CustomSelect } from '../components/ui/CustomSelect';
 import { CustomCheckbox } from '../components/ui/CustomCheckbox';
 import { useDebounce } from '../hooks/useDebounce';
 import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
+const LEAD_SOURCES = [
+  { value: 'facebook', label: 'Facebook' },
+  { value: 'google', label: 'Google Ads' },
+  { value: 'gioi_thieu', label: 'Giới thiệu' },
+  { value: 'ca_nhan', label: 'Cá nhân tự khai thác' },
+  { value: 'website', label: 'Website' },
+  { value: 'zalo', label: 'Zalo' },
+  { value: 'tiktok', label: 'TikTok' },
+  { value: 'hotline', label: 'Hotline' },
+  { value: 'event', label: 'Sự kiện / Hội thảo' },
+  { value: 'other', label: 'Khác' }
+];
 
 const FMT = (n: number) => {
   const num = Number(n || 0);
@@ -61,7 +73,7 @@ const parseCardTags = (rawTags: any): string[] => {
   if (!rawTags) return [];
   const list = typeof rawTags === 'string'
     ? rawTags.split(',').map((t: string) => t.trim()).filter(Boolean)
-    : (Array.isArray(rawTags) ? rawTags.map((t: any) => String(t?.name || t || '').trim()).filter(Boolean) : []);
+    : (Array.from(Array.isArray(rawTags) ? rawTags.map((t: any) => String(t?.name || t || '').trim()).filter(Boolean) : []));
   const cleanRegex = /^\d+\.\s*(status\s*-\s*)?/i;
   return Array.from(new Set(list.map((t: string) => t.replace(cleanRegex, '').trim()).filter(Boolean)));
 };
@@ -143,6 +155,150 @@ const DEFAULT_PIPELINE_COLUMNS: ColumnDef[] = [
 ];
 
 const PIPELINE_COLS_STORAGE_KEY = 'myerp_pipeline_columns_v2';
+
+export interface CustomSchemaRule {
+  id?: string;
+  field: string;
+  operator: string;
+  value: string;
+  valueTo?: string;
+}
+
+const CONTACT_SCHEMA_FIELDS: Array<{ value: string; label: string; sublabel?: string; type: 'text' | 'number' | 'date' }> = [
+  { value: 'full_name', label: 'Họ tên (full_name)', sublabel: 'Hồ sơ cơ bản', type: 'text' },
+  { value: 'phone', label: 'SĐT chính (phone)', sublabel: 'Liên hệ', type: 'text' },
+  { value: 'mobile', label: 'SĐT phụ (mobile)', sublabel: 'Liên hệ', type: 'text' },
+  { value: 'phone2', label: 'SĐT 2 (phone2)', sublabel: 'Liên hệ', type: 'text' },
+  { value: 'zalo_phone', label: 'Zalo (zalo_phone)', sublabel: 'Liên hệ', type: 'text' },
+  { value: 'email', label: 'Email (email)', sublabel: 'Liên hệ', type: 'text' },
+  { value: 'student_id', label: 'Mã học viên (student_id)', sublabel: 'Định danh & Học vụ', type: 'text' },
+  { value: 'citizen_id', label: 'CCCD/CMND (citizen_id)', sublabel: 'Định danh', type: 'text' },
+  { value: 'passport', label: 'Hộ chiếu (passport)', sublabel: 'Định danh', type: 'text' },
+  { value: 'gender', label: 'Giới tính (gender)', sublabel: 'Nhân khẩu học', type: 'text' },
+  { value: 'birthday', label: 'Ngày sinh (birthday)', sublabel: 'Nhân khẩu học', type: 'date' },
+  { value: 'address', label: 'Địa chỉ (address)', sublabel: 'Địa lý', type: 'text' },
+  { value: 'ward', label: 'Phường/Xã (ward)', sublabel: 'Địa lý', type: 'text' },
+  { value: 'district', label: 'Quận/Huyện (district)', sublabel: 'Địa lý', type: 'text' },
+  { value: 'city', label: 'Tỉnh/Thành (city)', sublabel: 'Địa lý', type: 'text' },
+  { value: 'preferred_location', label: 'Khu vực ưu tiên (preferred_location)', sublabel: 'Địa lý', type: 'text' },
+  { value: 'company', label: 'Công ty (company)', sublabel: 'Nghề nghiệp', type: 'text' },
+  { value: 'job_title', label: 'Chức vụ (job_title)', sublabel: 'Nghề nghiệp', type: 'text' },
+  { value: 'department', label: 'Phòng ban (department)', sublabel: 'Nghề nghiệp', type: 'text' },
+  { value: 'industry', label: 'Ngành nghề (industry)', sublabel: 'Nghề nghiệp', type: 'text' },
+  { value: 'tax_code', label: 'Mã số thuế (tax_code)', sublabel: 'Nghề nghiệp', type: 'text' },
+  { value: 'customer_type', label: 'Loại KH (customer_type)', sublabel: 'Phân loại', type: 'text' },
+  { value: 'program', label: 'Chương trình (program)', sublabel: 'Học vụ & Đào tạo', type: 'text' },
+  { value: 'major', label: 'Chuyên ngành (major)', sublabel: 'Học vụ & Đào tạo', type: 'text' },
+  { value: 'expected_intake', label: 'Kỳ nhập học (expected_intake)', sublabel: 'Học vụ & Đào tạo', type: 'text' },
+  { value: 'admission_date', label: 'Ngày nhập học (admission_date)', sublabel: 'Học vụ & Đào tạo', type: 'date' },
+  { value: 'study_status', label: 'Trạng thái học tập (study_status)', sublabel: 'Học vụ & Đào tạo', type: 'text' },
+  { value: 'source', label: 'Nguồn (source)', sublabel: 'Marketing & Nguồn', type: 'text' },
+  { value: 'platform', label: 'Nền tảng (platform)', sublabel: 'Marketing & Nguồn', type: 'text' },
+  { value: 'form_name', label: 'Tên Form (form_name)', sublabel: 'Marketing & Nguồn', type: 'text' },
+  { value: 'utm_source', label: 'UTM Source (utm_source)', sublabel: 'Marketing & Nguồn', type: 'text' },
+  { value: 'utm_campaign', label: 'UTM Campaign (utm_campaign)', sublabel: 'Marketing & Nguồn', type: 'text' },
+  { value: 'utm_medium', label: 'UTM Medium (utm_medium)', sublabel: 'Marketing & Nguồn', type: 'text' },
+  { value: 'utm_content', label: 'UTM Content (utm_content)', sublabel: 'Marketing & Nguồn', type: 'text' },
+  { value: 'temperature', label: 'Nhiệt độ Lead (temperature)', sublabel: 'Đánh giá & Chăm sóc', type: 'text' },
+  { value: 'lead_score', label: 'Điểm Lead (lead_score)', sublabel: 'Đánh giá & Chăm sóc', type: 'number' },
+  { value: 'win_probability', label: 'Xác suất chốt (win_probability)', sublabel: 'Đánh giá & Chăm sóc', type: 'number' },
+  { value: 'ttl1_completed', label: 'Đã TVL1 (ttl1_completed)', sublabel: 'Đánh giá & Chăm sóc', type: 'text' },
+  { value: 'next_action', label: 'Hành động tiếp theo (next_action)', sublabel: 'Đánh giá & Chăm sóc', type: 'text' },
+  { value: 'next_followup_date', label: 'Ngày hẹn theo dõi (next_followup_date)', sublabel: 'Đánh giá & Chăm sóc', type: 'date' },
+  { value: 'expected_decision_date', label: 'Ngày dự kiến chốt (expected_decision_date)', sublabel: 'Đánh giá & Chăm sóc', type: 'date' },
+  { value: 'nurture_reason', label: 'Lý do nuôi dưỡng (nurture_reason)', sublabel: 'Đánh giá & Chăm sóc', type: 'text' },
+  { value: 'lost_reason', label: 'Lý do hủy (lost_reason)', sublabel: 'Đánh giá & Chăm sóc', type: 'text' },
+  { value: 'expected_revenue', label: 'Doanh thu kỳ vọng (expected_revenue)', sublabel: 'Tài chính', type: 'number' },
+  { value: 'budget', label: 'Ngân sách (budget)', sublabel: 'Tài chính', type: 'number' },
+  { value: 'total_spent', label: 'Tổng chi tiêu (total_spent)', sublabel: 'Tài chính', type: 'number' },
+  { value: 'notes', label: 'Ghi chú (notes)', sublabel: 'Ghi chú & Phân loại', type: 'text' },
+  { value: 'tags', label: 'Tags (tags)', sublabel: 'Ghi chú & Phân loại', type: 'text' },
+  { value: 'created_at', label: 'Ngày tạo (created_at)', sublabel: 'Mốc thời gian', type: 'date' },
+  { value: 'updated_at', label: 'Ngày cập nhật (updated_at)', sublabel: 'Mốc thời gian', type: 'date' },
+  { value: 'last_contact', label: 'Ngày liên hệ cuối (last_contact)', sublabel: 'Mốc thời gian', type: 'date' },
+];
+
+const SCHEMA_OPERATORS: Array<{ value: CustomSchemaRule['operator']; label: string }> = [
+  { value: 'contains', label: 'Chứa (Contains)' },
+  { value: 'not_contains', label: 'Không chứa (Not Contains)' },
+  { value: 'eq', label: 'Bằng (=)' },
+  { value: 'neq', label: 'Khác (!=)' },
+  { value: 'gt', label: 'Lớn hơn (>)' },
+  { value: 'gte', label: 'Lớn hơn hoặc bằng (>=)' },
+  { value: 'lt', label: 'Nhỏ hơn (<)' },
+  { value: 'lte', label: 'Nhỏ hơn hoặc bằng (<=)' },
+  { value: 'between', label: 'Trong khoảng (Between)' },
+  { value: 'is_empty', label: 'Đang trống / Chưa có' },
+  { value: 'is_not_empty', label: 'Đã có dữ liệu' },
+];
+
+const INTERACTION_TYPE_OPTIONS = [
+  { value: 'all', label: 'Tất cả loại tương tác' },
+  { value: 'call', label: 'Gọi điện (Call)' },
+  { value: 'note', label: 'Ghi chú chăm sóc (Note)' },
+  { value: 'meeting', label: 'Hẹn gặp (Meeting)' },
+  { value: 'email', label: 'Email' },
+  { value: 'task', label: 'Công việc (Task)' },
+];
+
+const FINANCIAL_STATUS_OPTIONS = [
+  { value: 'all', label: 'Tất cả trạng thái đặt cọc / học phí' },
+  { value: 'has_deposit', label: 'Đã đặt cọc' },
+  { value: 'approved_deposit', label: 'Đã duyệt cọc' },
+  { value: 'pending_deposit', label: 'Chờ duyệt cọc' },
+  { value: 'no_deposit', label: 'Chưa đặt cọc' },
+  { value: 'has_so', label: 'Đã lên đơn SO' },
+  { value: 'high_value_deposit', label: 'Cọc giá trị cao' },
+  { value: 'overdue_milestone', label: 'Quá hạn đóng phí' },
+];
+
+const COMMON_CITY_OPTIONS = [
+  { value: 'all', label: 'Tất cả Tỉnh / Thành phố' },
+  { value: 'TP.HCM', label: 'TP.HCM' },
+  { value: 'Hà Nội', label: 'Hà Nội' },
+  { value: 'Đà Nẵng', label: 'Đà Nẵng' },
+  { value: 'Cần Thơ', label: 'Cần Thơ' },
+  { value: 'Hải Phòng', label: 'Hải Phòng' },
+  { value: 'Bình Dương', label: 'Bình Dương' },
+  { value: 'Đồng Nai', label: 'Đồng Nai' },
+  { value: 'Bà Rịa - Vũng Tàu', label: 'Bà Rịa - Vũng Tàu' },
+  { value: 'Khánh Hòa', label: 'Khánh Hòa' },
+  { value: 'Lâm Đồng', label: 'Lâm Đồng' },
+  { value: 'Đắk Lắk', label: 'Đắk Lắk' },
+  { value: 'An Giang', label: 'An Giang' },
+  { value: 'Kiên Giang', label: 'Kiên Giang' },
+  { value: 'Long An', label: 'Long An' },
+  { value: 'Tiền Giang', label: 'Tiền Giang' },
+];
+
+const csvToMulti = (csv: string): string[] => {
+  if (!csv || !csv.trim()) return ['all'];
+  const parts = csv.split(',').map(s => s.trim()).filter(Boolean);
+  return parts.length > 0 ? parts : ['all'];
+};
+
+const multiToCsv = (val: any, currentCsv = ''): string => {
+  if (Array.isArray(val)) {
+    const cleaned = val.map(v => String(v).trim()).filter(v => v && v !== 'all');
+    return Array.from(new Set(cleaned)).join(',');
+  }
+  const s = String(val || '').trim();
+  if (!s || s === 'all') return '';
+  const existing = currentCsv ? currentCsv.split(',').map(x => x.trim()).filter(Boolean) : [];
+  if (!existing.includes(s)) existing.push(s);
+  return existing.join(',');
+};
+
+const ensureOptionsWithSelected = (baseOpts: Array<{ value: string; label: string; [k: string]: any }>, csv: string) => {
+  if (!csv) return baseOpts;
+  const existingVals = new Set(baseOpts.map(o => String(o.value)));
+  const extra = csv
+    .split(',')
+    .map(s => s.trim())
+    .filter(s => s && s !== 'all' && !existingVals.has(s))
+    .map(s => ({ value: s, label: s }));
+  return extra.length > 0 ? [...baseOpts, ...extra] : baseOpts;
+};
 
 interface HoveredDealCardData {
   item: any;
@@ -460,7 +616,7 @@ export const DealsPage: React.FC = () => {
 
   useEffect(() => {
     const currentUser = useAuthStore.getState().user;
-    if (currentUser && ['manager', 'admin', 'superadmin'].includes(currentUser.role)) {
+    if (currentUser && ['manager', 'admin', 'superadmin', 'super_admin', 'director', 'sale_admin', 'saleadmin', 'marketing'].includes(currentUser.role)) {
       api.get('/teams').then(res => {
         setTeams(res.data.data || res.data || []);
       }).catch(() => {});
@@ -533,20 +689,85 @@ export const DealsPage: React.FC = () => {
   // Filter States
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearch = useDebounce(searchTerm.trim(), 300);
-  const [dateField, setDateField] = useState<'created_at' | 'updated_at' | 'last_contact' | 'admission_date'>('created_at');
+  const [dateField, setDateField] = useState<'created_at' | 'updated_at' | 'last_contact' | 'admission_date' | 'deposit_date' | 'next_followup_date' | 'birthday'>('created_at');
   const [dateFilterType, setDateFilterType] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
   const [admissionFrom, setAdmissionFrom] = useState('');
   const [admissionTo, setAdmissionTo] = useState('');
-  const [filterLeadStatus, setFilterLeadStatus] = useState<string>(''); // '' (Đang chăm sóc), 'nurture', 'lost', 'all'
+  const [filterLeadStatus, setFilterLeadStatus] = useState<string>(''); // '' (Đang chăm sóc), 'active', 'nurture', 'lost', 'all' or comma-separated
+  const [filterLeadStatusOp, setFilterLeadStatusOp] = useState<'in' | 'not_in'>('in');
   const [filterAssignee, setFilterAssignee] = useState('');
+  const [filterTeam, setFilterTeam] = useState('');
   const [filterStage, setFilterStage] = useState('');
+  const [filterStageOp, setFilterStageOp] = useState<'in' | 'not_in'>('in');
   const [filterProject, setFilterProject] = useState('');
   const [filterCampaign, setFilterCampaign] = useState('');
   const [filterSource, setFilterSource] = useState('');
   const [filterTag, setFilterTag] = useState('');
   const [filterInteractionStatus, setFilterInteractionStatus] = useState<string>(''); // '' | 'uncontacted' | 'contacted'
+
+  // Deep Interaction & Care Cadence Filters
+  const [staleDays, setStaleDays] = useState('');
+  const [interactedWithinDays, setInteractedWithinDays] = useState('');
+  const [interactionType, setInteractionType] = useState('');
+  const [minCallCount, setMinCallCount] = useState('');
+  const [maxCallCount, setMaxCallCount] = useState('');
+  const [noteKeyword, setNoteKeyword] = useState('');
+
+  // Demographics, Academic & Financial Filters
+  const [gender, setGender] = useState('');
+  const [city, setCity] = useState('');
+  const [ageMin, setAgeMin] = useState('');
+  const [ageMax, setAgeMax] = useState('');
+  const [jobTitle, setJobTitle] = useState('');
+  const [company, setCompany] = useState('');
+  const [financialFilter, setFinancialFilter] = useState('');
+  const [minAmount, setMinAmount] = useState('');
+  const [maxAmount, setMaxAmount] = useState('');
+  const [studyStatus, setStudyStatus] = useState('');
+  const [studentCode, setStudentCode] = useState('');
+  const [expectedIntake, setExpectedIntake] = useState('');
+
+  // Dynamic Schema Rule Builder (100% DB Schema)
+  const [customRules, setCustomRules] = useState<CustomSchemaRule[]>([]);
+  const [customRulesLogic, setCustomRulesLogic] = useState<'AND' | 'OR'>('AND');
+
+  const validCustomRules = useMemo(() => {
+    return (customRules || []).filter(
+      r => r.field && (r.operator === 'is_empty' || r.operator === 'is_not_empty' || String(r.value || '').trim() !== '')
+    );
+  }, [customRules]);
+
+  const debouncedExtraFilterSig = useDebounce(
+    JSON.stringify({
+      filterTeam,
+      staleDays: staleDays.trim(),
+      interactedWithinDays: interactedWithinDays.trim(),
+      interactionType,
+      minCallCount: minCallCount.trim(),
+      maxCallCount: maxCallCount.trim(),
+      noteKeyword: noteKeyword.trim(),
+      gender,
+      city,
+      ageMin: ageMin.trim(),
+      ageMax: ageMax.trim(),
+      jobTitle: jobTitle.trim(),
+      company: company.trim(),
+      financialFilter,
+      minAmount: minAmount.trim(),
+      maxAmount: maxAmount.trim(),
+      studyStatus,
+      studentCode: studentCode.trim(),
+      expectedIntake: expectedIntake.trim(),
+      validCustomRules,
+      customRulesLogic,
+      filterStageOp,
+      filterLeadStatusOp
+    }),
+    300
+  );
+
   const [sortBy, setSortBy] = useState<'updated_desc' | 'created_desc' | 'interaction_desc' | 'value_desc' | 'name_asc'>('updated_desc');
 
   const [projects, setProjects] = useState<any[]>([]);
@@ -637,22 +858,31 @@ export const DealsPage: React.FC = () => {
     const params: Record<string, any> = {
       search: debouncedSearch || undefined,
       owner_id: filterAssignee || undefined,
+      owners: filterAssignee || undefined,
       stage_id: debouncedSearch ? undefined : (effectiveStage || undefined),
+      stages: debouncedSearch ? undefined : (effectiveStage || undefined),
+      stage_op: effectiveStage ? filterStageOp : undefined,
       project_id: filterProject || undefined,
+      projects: filterProject || undefined,
       campaign_id: filterCampaign || undefined,
+      campaigns: filterCampaign || undefined,
       source: filterSource || undefined,
+      sources: filterSource || undefined,
       tag: filterTag || undefined,
+      tags: filterTag || undefined,
     };
 
+    if (filterAssignee === 'unassigned') {
+      params.unassigned = 1;
+    }
+
     if (filterLeadStatus) {
-      if (filterLeadStatus === 'lost') {
-        params.lead_status = 'lost';
+      params.lead_status = filterLeadStatus;
+      params.lead_status_op = filterLeadStatusOp;
+      const parts = filterLeadStatus.split(',').map(s => s.trim());
+      if (parts.includes('lost') || parts.includes('all')) {
         params.show_lost = 1;
-      } else if (filterLeadStatus === 'nurture') {
-        params.lead_status = 'nurture';
-      } else if (filterLeadStatus === 'all') {
-        params.lead_status = 'all';
-        params.show_lost = 1;
+        params.include_lost = 1;
       }
     }
 
@@ -663,6 +893,52 @@ export const DealsPage: React.FC = () => {
       params.interaction_status = 'contacted';
     }
 
+    // Deep Interaction & Care Cadence params
+    if (staleDays.trim()) params.stale_days = staleDays.trim();
+    if (interactedWithinDays.trim()) params.interacted_within_days = interactedWithinDays.trim();
+    if (interactionType) params.interaction_type = interactionType;
+    if (minCallCount.trim()) params.min_call_count = minCallCount.trim();
+    if (maxCallCount.trim()) params.max_call_count = maxCallCount.trim();
+    if (noteKeyword.trim()) params.note_keyword = noteKeyword.trim();
+
+    // Demographics, Academic & Financial params
+    if (gender) params.gender = gender;
+    if (city) {
+      params.cities = city;
+      params.city = city;
+    }
+    if (ageMin.trim()) params.age_min = ageMin.trim();
+    if (ageMax.trim()) params.age_max = ageMax.trim();
+    if (jobTitle.trim()) {
+      params.job_titles = jobTitle.trim();
+      params.job_title = jobTitle.trim();
+    }
+    if (company.trim()) {
+      params.companies = company.trim();
+      params.company = company.trim();
+    }
+    if (financialFilter) {
+      params.financial_filter = financialFilter;
+      params.deposit_status = financialFilter;
+    }
+    if (minAmount.trim()) {
+      params.min_deposit = minAmount.trim();
+      params.min_amount = minAmount.trim();
+    }
+    if (maxAmount.trim()) {
+      params.max_deposit = maxAmount.trim();
+      params.max_amount = maxAmount.trim();
+    }
+    if (studyStatus) params.study_status = studyStatus;
+    if (studentCode.trim()) params.student_code = studentCode.trim();
+    if (expectedIntake.trim()) params.expected_intake = expectedIntake.trim();
+
+    // Dynamic Schema Rules (100% DB Schema)
+    if (validCustomRules.length > 0) {
+      params.custom_rules = JSON.stringify(validCustomRules);
+      params.custom_rules_logic = customRulesLogic || 'AND';
+    }
+
     if (debouncedSearch && pipelineView === 'contacts') {
       params.all_pipeline = 1;
       params.show_lost = 1;
@@ -671,6 +947,9 @@ export const DealsPage: React.FC = () => {
     const teamId = getEffectiveTeamId();
     if (teamId) {
       params.team_id = teamId;
+    } else if (filterTeam) {
+      params.team_id = filterTeam;
+      params.teams = filterTeam;
     }
 
     if (dateFilterType) {
@@ -1203,7 +1482,8 @@ export const DealsPage: React.FC = () => {
     admissionTo,
     sortBy,
     viewMode,
-    effectiveTeamId
+    effectiveTeamId,
+    debouncedExtraFilterSig
   ]);
 
   useEffect(() => {
@@ -1244,7 +1524,8 @@ export const DealsPage: React.FC = () => {
     admissionFrom,
     admissionTo,
     sortBy,
-    pipelineView
+    pipelineView,
+    debouncedExtraFilterSig
   ]);
 
   useEffect(() => {
@@ -1430,24 +1711,61 @@ export const DealsPage: React.FC = () => {
     return [
       filterLeadStatus,
       filterAssignee,
+      filterTeam,
       filterStage,
       filterProject,
       filterCampaign,
       filterSource,
       filterTag,
       filterInteractionStatus,
+      staleDays.trim(),
+      interactedWithinDays.trim(),
+      interactionType,
+      (minCallCount.trim() || maxCallCount.trim()) ? 'call_count' : '',
+      noteKeyword.trim(),
+      gender,
+      city,
+      (ageMin.trim() || ageMax.trim()) ? 'age' : '',
+      jobTitle.trim(),
+      company.trim(),
+      financialFilter,
+      (minAmount.trim() || maxAmount.trim()) ? 'amount' : '',
+      studyStatus,
+      studentCode.trim(),
+      expectedIntake.trim(),
+      validCustomRules.length > 0 ? 'custom_rules' : '',
       dateFilterType ? 'date' : '',
       (admissionFrom || admissionTo) ? 'admission' : '',
     ].filter(Boolean).length;
   }, [
     filterLeadStatus,
     filterAssignee,
+    filterTeam,
     filterStage,
     filterProject,
     filterCampaign,
     filterSource,
     filterTag,
     filterInteractionStatus,
+    staleDays,
+    interactedWithinDays,
+    interactionType,
+    minCallCount,
+    maxCallCount,
+    noteKeyword,
+    gender,
+    city,
+    ageMin,
+    ageMax,
+    jobTitle,
+    company,
+    financialFilter,
+    minAmount,
+    maxAmount,
+    studyStatus,
+    studentCode,
+    expectedIntake,
+    validCustomRules,
     dateFilterType,
     admissionFrom,
     admissionTo
@@ -1458,14 +1776,37 @@ export const DealsPage: React.FC = () => {
   const handleClearFilters = () => {
     setSearchTerm('');
     setFilterLeadStatus('');
+    setFilterLeadStatusOp('in');
     setFilterAssignee('');
+    setFilterTeam('');
     setFilterStage('');
+    setFilterStageOp('in');
     setActiveStageFilter('all');
     setFilterProject('');
     setFilterCampaign('');
     setFilterSource('');
     setFilterTag('');
     setFilterInteractionStatus('');
+    setStaleDays('');
+    setInteractedWithinDays('');
+    setInteractionType('');
+    setMinCallCount('');
+    setMaxCallCount('');
+    setNoteKeyword('');
+    setGender('');
+    setCity('');
+    setAgeMin('');
+    setAgeMax('');
+    setJobTitle('');
+    setCompany('');
+    setFinancialFilter('');
+    setMinAmount('');
+    setMaxAmount('');
+    setStudyStatus('');
+    setStudentCode('');
+    setExpectedIntake('');
+    setCustomRules([]);
+    setCustomRulesLogic('AND');
     setDateField('created_at');
     setDateFilterType('');
     setFilterDateFrom('');
@@ -1491,7 +1832,10 @@ export const DealsPage: React.FC = () => {
       created_at: 'Tạo',
       updated_at: 'Cập nhật',
       last_contact: 'Liên hệ',
-      admission_date: 'Nhập học'
+      admission_date: 'Nhập học',
+      deposit_date: 'Đặt cọc',
+      next_followup_date: 'Hẹn gọi lại',
+      birthday: 'Sinh nhật'
     };
     if (!dateFilterType && (admissionFrom || admissionTo)) {
       return `Nhập học: ${admissionFrom || '...'} → ${admissionTo || '...'}`;
@@ -1502,8 +1846,26 @@ export const DealsPage: React.FC = () => {
 
   const filteredCampaigns = useMemo(() => {
     if (!filterProject) return campaigns;
-    return campaigns.filter((c: any) => !c.project_id || String(c.project_id) === String(filterProject));
+    const selectedProjIds = new Set(filterProject.split(',').map(s => s.trim()).filter(Boolean));
+    if (selectedProjIds.size === 0) return campaigns;
+    return campaigns.filter((c: any) => !c.project_id || selectedProjIds.has(String(c.project_id)));
   }, [campaigns, filterProject]);
+
+  const mergedSourceOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const list: { value: string; label: string }[] = [];
+    const addOpt = (val: string, lbl?: string) => {
+      const clean = String(val || '').trim();
+      if (!clean) return;
+      const key = clean.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      list.push({ value: clean, label: lbl || clean });
+    };
+    LEAD_SOURCES.forEach(s => addOpt(s.value, s.label));
+    sources.forEach(s => addOpt(String(s), String(s)));
+    return list;
+  }, [sources]);
 
   const tagOptions = useMemo(() => {
     const names = new Set<string>();
@@ -1837,7 +2199,10 @@ export const DealsPage: React.FC = () => {
                                 { id: 'created_at', label: 'Ngày tạo' },
                                 { id: 'updated_at', label: 'Ngày cập nhật' },
                                 { id: 'last_contact', label: 'Liên hệ cuối' },
-                                { id: 'admission_date', label: 'Ngày nhập học' }
+                                { id: 'admission_date', label: 'Ngày nhập học' },
+                                { id: 'deposit_date', label: 'Ngày đặt cọc' },
+                                { id: 'next_followup_date', label: 'Ngày hẹn gọi lại' },
+                                { id: 'birthday', label: 'Sinh nhật' }
                               ].map(f => {
                                 const isSel = dateField === f.id;
                                 return (
@@ -2106,31 +2471,51 @@ export const DealsPage: React.FC = () => {
                   </span>
                   {filterLeadStatus && (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.1)', color: '#d97706', fontWeight: 600, fontSize: '0.74rem' }}>
-                      <span>Trạng thái Lead: {filterLeadStatus === 'nurture' ? 'Nuôi dưỡng' : filterLeadStatus === 'lost' ? 'Ngừng chăm sóc (Lost)' : 'Tất cả'}</span>
-                      <button type="button" onClick={() => setFilterLeadStatus('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'inherit' }}><X size={12} /></button>
+                      <span>
+                        Trạng thái Lead{filterLeadStatusOp === 'not_in' ? ' (Loại trừ)' : ''}:{' '}
+                        {csvToMulti(filterLeadStatus).map(st => st === 'active' ? 'Hoạt động' : st === 'nurture' ? 'Nuôi dưỡng' : st === 'lost' ? 'Data Lost' : 'Tất cả').join(', ')}
+                      </span>
+                      <button type="button" onClick={() => { setFilterLeadStatus(''); setFilterLeadStatusOp('in'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'inherit' }}><X size={12} /></button>
                     </span>
                   )}
                   {filterAssignee && (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '8px', background: 'rgba(14, 165, 233, 0.1)', color: '#0284c7', fontWeight: 600, fontSize: '0.74rem' }}>
-                      <span>Sale: {allUsers.find(u => String(u.id) === String(filterAssignee))?.full_name || filterAssignee}</span>
+                      <span>
+                        Sale: {csvToMulti(filterAssignee).map(id => id === 'unassigned' ? 'Chưa phân bổ' : (allUsers.find(u => String(u.id) === String(id))?.full_name || id)).join(', ')}
+                      </span>
                       <button type="button" onClick={() => setFilterAssignee('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'inherit' }}><X size={12} /></button>
+                    </span>
+                  )}
+                  {filterTeam && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '8px', background: 'rgba(14, 165, 233, 0.1)', color: '#0284c7', fontWeight: 600, fontSize: '0.74rem' }}>
+                      <span>
+                        Đội nhóm: {csvToMulti(filterTeam).map(id => teams.find(t => String(t.id) === String(id))?.name || id).join(', ')}
+                      </span>
+                      <button type="button" onClick={() => setFilterTeam('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'inherit' }}><X size={12} /></button>
                     </span>
                   )}
                   {filterStage && (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '8px', background: 'rgba(139, 92, 246, 0.1)', color: '#7c3aed', fontWeight: 600, fontSize: '0.74rem' }}>
-                      <span>Giai đoạn: {stages.find(s => String(s.id) === String(filterStage))?.name || filterStage}</span>
-                      <button type="button" onClick={() => { setFilterStage(''); setActiveStageFilter('all'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'inherit' }}><X size={12} /></button>
+                      <span>
+                        Giai đoạn{filterStageOp === 'not_in' ? ' (Loại trừ)' : ''}:{' '}
+                        {csvToMulti(filterStage).map(id => stages.find(s => String(s.id) === String(id))?.name || id).join(', ')}
+                      </span>
+                      <button type="button" onClick={() => { setFilterStage(''); setFilterStageOp('in'); setActiveStageFilter('all'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'inherit' }}><X size={12} /></button>
                     </span>
                   )}
                   {filterProject && (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '8px', background: 'rgba(37, 99, 235, 0.1)', color: '#2563eb', fontWeight: 600, fontSize: '0.74rem' }}>
-                      <span>Chương trình: {projects.find(p => String(p.id) === String(filterProject))?.name || filterProject}</span>
+                      <span>
+                        Chương trình: {csvToMulti(filterProject).map(id => projects.find(p => String(p.id) === String(id))?.name || id).join(', ')}
+                      </span>
                       <button type="button" onClick={() => setFilterProject('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'inherit' }}><X size={12} /></button>
                     </span>
                   )}
                   {filterCampaign && (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '8px', background: 'rgba(236, 72, 153, 0.1)', color: '#db2777', fontWeight: 600, fontSize: '0.74rem' }}>
-                      <span>Chiến dịch: {campaigns.find(c => String(c.id) === String(filterCampaign))?.name || filterCampaign}</span>
+                      <span>
+                        Chiến dịch: {csvToMulti(filterCampaign).map(id => campaigns.find(c => String(c.id) === String(id))?.name || id).join(', ')}
+                      </span>
                       <button type="button" onClick={() => setFilterCampaign('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'inherit' }}><X size={12} /></button>
                     </span>
                   )}
@@ -2151,6 +2536,102 @@ export const DealsPage: React.FC = () => {
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', color: '#dc2626', fontWeight: 600, fontSize: '0.74rem' }}>
                       <span>Tương tác: {filterInteractionStatus === 'uncontacted' ? 'Chưa liên hệ' : 'Đã liên hệ'}</span>
                       <button type="button" onClick={() => setFilterInteractionStatus('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'inherit' }}><X size={12} /></button>
+                    </span>
+                  )}
+                  {staleDays.trim() && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', color: '#dc2626', fontWeight: 600, fontSize: '0.74rem' }}>
+                      <span>Chưa tương tác ≥ {staleDays.trim()} ngày</span>
+                      <button type="button" onClick={() => setStaleDays('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'inherit' }}><X size={12} /></button>
+                    </span>
+                  )}
+                  {interactedWithinDays.trim() && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.1)', color: '#059669', fontWeight: 600, fontSize: '0.74rem' }}>
+                      <span>Tương tác trong {interactedWithinDays.trim()} ngày qua</span>
+                      <button type="button" onClick={() => setInteractedWithinDays('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'inherit' }}><X size={12} /></button>
+                    </span>
+                  )}
+                  {interactionType && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '8px', background: 'rgba(14, 165, 233, 0.1)', color: '#0284c7', fontWeight: 600, fontSize: '0.74rem' }}>
+                      <span>Kênh TT: {interactionType}</span>
+                      <button type="button" onClick={() => setInteractionType('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'inherit' }}><X size={12} /></button>
+                    </span>
+                  )}
+                  {(minCallCount.trim() || maxCallCount.trim()) && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '8px', background: 'rgba(14, 165, 233, 0.1)', color: '#0284c7', fontWeight: 600, fontSize: '0.74rem' }}>
+                      <span>Số lần gọi: {minCallCount.trim() || '0'} → {maxCallCount.trim() || '∞'}</span>
+                      <button type="button" onClick={() => { setMinCallCount(''); setMaxCallCount(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'inherit' }}><X size={12} /></button>
+                    </span>
+                  )}
+                  {noteKeyword.trim() && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.1)', color: '#d97706', fontWeight: 600, fontSize: '0.74rem' }}>
+                      <span>Ghi chú: "{noteKeyword.trim()}"</span>
+                      <button type="button" onClick={() => setNoteKeyword('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'inherit' }}><X size={12} /></button>
+                    </span>
+                  )}
+                  {gender && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '8px', background: 'rgba(100, 116, 139, 0.1)', color: '#475569', fontWeight: 600, fontSize: '0.74rem' }}>
+                      <span>Giới tính: {gender}</span>
+                      <button type="button" onClick={() => setGender('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'inherit' }}><X size={12} /></button>
+                    </span>
+                  )}
+                  {city && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '8px', background: 'rgba(100, 116, 139, 0.1)', color: '#475569', fontWeight: 600, fontSize: '0.74rem' }}>
+                      <span>Tỉnh/TP: {city}</span>
+                      <button type="button" onClick={() => setCity('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'inherit' }}><X size={12} /></button>
+                    </span>
+                  )}
+                  {(ageMin.trim() || ageMax.trim()) && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '8px', background: 'rgba(100, 116, 139, 0.1)', color: '#475569', fontWeight: 600, fontSize: '0.74rem' }}>
+                      <span>Độ tuổi: {ageMin.trim() || '0'} - {ageMax.trim() || '∞'}</span>
+                      <button type="button" onClick={() => { setAgeMin(''); setAgeMax(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'inherit' }}><X size={12} /></button>
+                    </span>
+                  )}
+                  {jobTitle.trim() && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '8px', background: 'rgba(100, 116, 139, 0.1)', color: '#475569', fontWeight: 600, fontSize: '0.74rem' }}>
+                      <span>Nghề nghiệp: {jobTitle.trim()}</span>
+                      <button type="button" onClick={() => setJobTitle('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'inherit' }}><X size={12} /></button>
+                    </span>
+                  )}
+                  {company.trim() && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '8px', background: 'rgba(100, 116, 139, 0.1)', color: '#475569', fontWeight: 600, fontSize: '0.74rem' }}>
+                      <span>Đơn vị: {company.trim()}</span>
+                      <button type="button" onClick={() => setCompany('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'inherit' }}><X size={12} /></button>
+                    </span>
+                  )}
+                  {financialFilter && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.1)', color: '#059669', fontWeight: 600, fontSize: '0.74rem' }}>
+                      <span>Tài chính: {FINANCIAL_STATUS_OPTIONS.find(o => o.value === financialFilter)?.label || financialFilter}</span>
+                      <button type="button" onClick={() => setFinancialFilter('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'inherit' }}><X size={12} /></button>
+                    </span>
+                  )}
+                  {(minAmount.trim() || maxAmount.trim()) && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.1)', color: '#059669', fontWeight: 600, fontSize: '0.74rem' }}>
+                      <span>Số tiền: {minAmount.trim() || '0'} → {maxAmount.trim() || '∞'}</span>
+                      <button type="button" onClick={() => { setMinAmount(''); setMaxAmount(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'inherit' }}><X size={12} /></button>
+                    </span>
+                  )}
+                  {studyStatus && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '8px', background: 'rgba(37, 99, 235, 0.1)', color: '#2563eb', fontWeight: 600, fontSize: '0.74rem' }}>
+                      <span>Học vụ: {studyStatus}</span>
+                      <button type="button" onClick={() => setStudyStatus('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'inherit' }}><X size={12} /></button>
+                    </span>
+                  )}
+                  {studentCode.trim() && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '8px', background: 'rgba(37, 99, 235, 0.1)', color: '#2563eb', fontWeight: 600, fontSize: '0.74rem' }}>
+                      <span>Mã HV: {studentCode.trim()}</span>
+                      <button type="button" onClick={() => setStudentCode('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'inherit' }}><X size={12} /></button>
+                    </span>
+                  )}
+                  {expectedIntake.trim() && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '8px', background: 'rgba(37, 99, 235, 0.1)', color: '#2563eb', fontWeight: 600, fontSize: '0.74rem' }}>
+                      <span>Khóa dự kiến: {expectedIntake.trim()}</span>
+                      <button type="button" onClick={() => setExpectedIntake('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'inherit' }}><X size={12} /></button>
+                    </span>
+                  )}
+                  {validCustomRules.length > 0 && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '8px', background: 'rgba(139, 92, 246, 0.12)', color: '#7c3aed', fontWeight: 600, fontSize: '0.74rem' }}>
+                      <span>Điều kiện nâng cao ({validCustomRules.length} quy tắc {customRulesLogic})</span>
+                      <button type="button" onClick={() => setCustomRules([])} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'inherit' }}><X size={12} /></button>
                     </span>
                   )}
                   {dateFilterType && (
@@ -2420,7 +2901,10 @@ export const DealsPage: React.FC = () => {
                             { value: 'created_at', label: 'Ngày tạo' },
                             { value: 'updated_at', label: 'Ngày cập nhật' },
                             { value: 'last_contact', label: 'Ngày tương tác cuối' },
-                            { value: 'admission_date', label: 'Ngày nhập học' }
+                            { value: 'admission_date', label: 'Ngày nhập học' },
+                            { value: 'deposit_date', label: 'Ngày đặt cọc' },
+                            { value: 'next_followup_date', label: 'Ngày hẹn gọi lại' },
+                            { value: 'birthday', label: 'Sinh nhật' }
                           ]}
                         />
                       </div>
@@ -2544,22 +3028,63 @@ export const DealsPage: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Trạng thái Lead */}
+                    {/* Trạng thái Lead (Multi-select + Include/Exclude) */}
                     <div style={{ marginBottom: '1rem' }}>
-                      <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '6px' }}>Trạng thái Lead</label>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                        <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)' }}>Trạng thái Lead (Chọn nhiều)</label>
+                        <div style={{ display: 'inline-flex', borderRadius: '6px', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+                          {([
+                            { id: 'in', label: 'Bao gồm' },
+                            { id: 'not_in', label: 'Loại trừ' }
+                          ] as const).map(op => (
+                            <button
+                              key={op.id}
+                              type="button"
+                              onClick={() => setFilterLeadStatusOp(op.id)}
+                              style={{
+                                padding: '2px 8px',
+                                fontSize: '0.7rem',
+                                fontWeight: filterLeadStatusOp === op.id ? 700 : 500,
+                                border: 'none',
+                                background: filterLeadStatusOp === op.id ? 'var(--color-primary)' : 'var(--color-surface)',
+                                color: filterLeadStatusOp === op.id ? '#fff' : 'var(--color-text-muted)',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {op.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
                         {[
                           { id: 'all', label: 'Tất cả', color: 'var(--color-primary)' },
-                          { id: '', label: 'Hoạt động', color: '#10b981' },
+                          { id: 'active', label: 'Hoạt động', color: '#10b981' },
                           { id: 'nurture', label: 'Nuôi dưỡng', color: '#d97706' },
                           { id: 'lost', label: 'Data Lost', color: '#ef4444' }
                         ].map(st => {
-                          const isSelected = filterLeadStatus === st.id;
+                          const selectedParts = csvToMulti(filterLeadStatus);
+                          const isSelected = st.id === 'all'
+                            ? selectedParts.includes('all')
+                            : (st.id === 'active' && filterLeadStatus === '' ? true : selectedParts.includes(st.id));
                           return (
                             <button
-                              key={st.id || 'active'}
+                              key={st.id}
                               type="button"
-                              onClick={() => setFilterLeadStatus(st.id)}
+                              onClick={() => {
+                                if (st.id === 'all') {
+                                  setFilterLeadStatus(selectedParts.includes('all') ? '' : 'all');
+                                  return;
+                                }
+                                const current = selectedParts.filter(p => p !== 'all');
+                                let next: string[];
+                                if (current.includes(st.id)) {
+                                  next = current.filter(p => p !== st.id);
+                                } else {
+                                  next = [...current, st.id];
+                                }
+                                setFilterLeadStatus(next.join(','));
+                              }}
                               style={{
                                 padding: '7px 6px',
                                 fontSize: '0.76rem',
@@ -2578,23 +3103,66 @@ export const DealsPage: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Giai đoạn Pipeline */}
-                    <div style={{ marginBottom: '1rem' }}>
-                      <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Giai đoạn Pipeline</label>
+                    {/* Giai đoạn Pipeline (Multi-select + Include/Exclude) */}
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                        <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)' }}>Giai đoạn Pipeline (Chọn nhiều)</label>
+                        <div style={{ display: 'inline-flex', borderRadius: '6px', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+                          {([
+                            { id: 'in', label: 'Bao gồm' },
+                            { id: 'not_in', label: 'Loại trừ' }
+                          ] as const).map(op => (
+                            <button
+                              key={op.id}
+                              type="button"
+                              onClick={() => setFilterStageOp(op.id)}
+                              style={{
+                                padding: '2px 8px',
+                                fontSize: '0.7rem',
+                                fontWeight: filterStageOp === op.id ? 700 : 500,
+                                border: 'none',
+                                background: filterStageOp === op.id ? 'var(--color-primary)' : 'var(--color-surface)',
+                                color: filterStageOp === op.id ? '#fff' : 'var(--color-text-muted)',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {op.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                       <CustomSelect
-                        options={[{ value: '', label: 'Tất cả giai đoạn' }, ...stages.map(s => ({ value: String(s.id), label: s.name }))]}
-                        value={filterStage}
+                        multiple={true}
+                        placeholder="Tất cả giai đoạn"
+                        options={ensureOptionsWithSelected(
+                          stages.map(s => ({ value: String(s.id), label: s.name })),
+                          filterStage
+                        )}
+                        value={csvToMulti(filterStage)}
                         onChange={v => {
-                          const val = v as string;
-                          setFilterStage(val);
-                          setActiveStageFilter(val ? (Number(val) || val) : 'all');
+                          const csv = multiToCsv(v);
+                          setFilterStage(csv);
+                          const arr = csvToMulti(csv);
+                          setActiveStageFilter(arr.length === 1 ? (Number(arr[0]) || arr[0]) : 'all');
                         }}
                         searchable
                       />
                     </div>
+                  </div>
+
+                  {/* Card 3: Lịch sử Tương tác & Chăm sóc chuyên sâu */}
+                  <div style={{
+                    padding: '1.1rem',
+                    borderRadius: '14px',
+                    background: 'var(--color-bg-alt, rgba(0,0,0,0.02))',
+                    border: '1px solid var(--color-border-light)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.875rem' }}>
+                      <Clock size={16} color="var(--color-text, #0f172a)" /> Lịch sử Tương tác & Chăm sóc chuyên sâu
+                    </div>
 
                     {/* Trạng thái tương tác */}
-                    <div>
+                    <div style={{ marginBottom: '0.875rem' }}>
                       <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '6px' }}>Trạng thái tương tác</label>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
                         {[
@@ -2625,9 +3193,90 @@ export const DealsPage: React.FC = () => {
                         })}
                       </div>
                     </div>
+
+                    {/* Stale days & Interacted within days */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '0.875rem' }}>
+                      <div>
+                        <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Chưa tương tác quá (ngày)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          className="form-input"
+                          placeholder="VD: 3, 7, 14..."
+                          value={staleDays}
+                          onChange={e => setStaleDays(e.target.value)}
+                          style={{ height: '36px', fontSize: '0.8125rem', borderRadius: '8px' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Có tương tác trong (ngày qua)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          className="form-input"
+                          placeholder="VD: 1, 7, 30..."
+                          value={interactedWithinDays}
+                          onChange={e => setInteractedWithinDays(e.target.value)}
+                          style={{ height: '36px', fontSize: '0.8125rem', borderRadius: '8px' }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Kênh / Loại tương tác */}
+                    <div style={{ marginBottom: '0.875rem' }}>
+                      <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Kênh / Loại tương tác (Chọn nhiều)</label>
+                      <CustomSelect
+                        multiple={true}
+                        placeholder="Tất cả kênh tương tác"
+                        options={ensureOptionsWithSelected(INTERACTION_TYPE_OPTIONS, interactionType)}
+                        value={csvToMulti(interactionType)}
+                        onChange={v => setInteractionType(multiToCsv(v))}
+                        searchable
+                      />
+                    </div>
+
+                    {/* Số lần gọi & Từ khóa ghi chú */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '0.875rem' }}>
+                      <div>
+                        <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Số lần gọi tối thiểu</label>
+                        <input
+                          type="number"
+                          min={0}
+                          className="form-input"
+                          placeholder="Từ (VD: 1)"
+                          value={minCallCount}
+                          onChange={e => setMinCallCount(e.target.value)}
+                          style={{ height: '36px', fontSize: '0.8125rem', borderRadius: '8px' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Số lần gọi tối đa</label>
+                        <input
+                          type="number"
+                          min={0}
+                          className="form-input"
+                          placeholder="Đến (VD: 5)"
+                          value={maxCallCount}
+                          onChange={e => setMaxCallCount(e.target.value)}
+                          style={{ height: '36px', fontSize: '0.8125rem', borderRadius: '8px' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Từ khóa trong ghi chú chăm sóc</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="Tìm nội dung trong lịch sử ghi chú / cuộc gọi..."
+                        value={noteKeyword}
+                        onChange={e => setNoteKeyword(e.target.value)}
+                        style={{ height: '36px', fontSize: '0.8125rem', borderRadius: '8px' }}
+                      />
+                    </div>
                   </div>
 
-                  {/* Card 3: Phụ trách & Nguồn dữ liệu */}
+                  {/* Card 4: Phụ trách & Nguồn dữ liệu */}
                   <div style={{
                     padding: '1.1rem',
                     borderRadius: '14px',
@@ -2641,17 +3290,40 @@ export const DealsPage: React.FC = () => {
                     {/* Sale phụ trách */}
                     {currentUser?.role !== 'sale' && currentUser?.role !== 'sales' && (
                       <div style={{ marginBottom: '0.875rem' }}>
-                        <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Sale phụ trách</label>
+                        <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Sale phụ trách (Chọn nhiều)</label>
                         <CustomSelect
-                          options={[{ value: '', label: 'Tất cả Sale' }, ...allUsers.map(u => ({
-                            value: String(u.id),
-                            label: u.full_name,
-                            avatar: u.avatar_url,
-                            sublabel: [u.phone, u.email, u.role].filter(Boolean).join(' - ')
-                          }))]}
-                          value={filterAssignee}
-                          onChange={v => setFilterAssignee(v as string)}
+                          multiple={true}
+                          placeholder="Tất cả Sale"
+                          options={ensureOptionsWithSelected([
+                            { value: 'unassigned', label: 'Chưa phân bổ (Kho chung)' },
+                            ...allUsers.map(u => ({
+                              value: String(u.id),
+                              label: u.full_name,
+                              avatar: u.avatar_url,
+                              sublabel: [u.phone, u.email, u.role].filter(Boolean).join(' - ')
+                            }))
+                          ], filterAssignee)}
+                          value={csvToMulti(filterAssignee)}
+                          onChange={v => setFilterAssignee(multiToCsv(v))}
                           showAvatars
+                          searchable
+                        />
+                      </div>
+                    )}
+
+                    {/* Đội nhóm Sale */}
+                    {teams.length > 0 && !effectiveTeamId && (
+                      <div style={{ marginBottom: '0.875rem' }}>
+                        <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Đội nhóm Sale (Chọn nhiều)</label>
+                        <CustomSelect
+                          multiple={true}
+                          placeholder="Tất cả đội nhóm"
+                          options={ensureOptionsWithSelected(
+                            teams.map((t: any) => ({ value: String(t.id), label: t.name })),
+                            filterTeam
+                          )}
+                          value={csvToMulti(filterTeam)}
+                          onChange={v => setFilterTeam(multiToCsv(v))}
                           searchable
                         />
                       </div>
@@ -2662,10 +3334,15 @@ export const DealsPage: React.FC = () => {
                       <div>
                         <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Chương trình / Dự án</label>
                         <CustomSelect
-                          options={[{ value: '', label: 'Tất cả chương trình' }, ...projects.map(p => ({ value: String(p.id), label: p.name }))]}
-                          value={filterProject}
+                          multiple={true}
+                          placeholder="Tất cả chương trình"
+                          options={ensureOptionsWithSelected(
+                            projects.map(p => ({ value: String(p.id), label: p.name })),
+                            filterProject
+                          )}
+                          value={csvToMulti(filterProject)}
                           onChange={v => {
-                            setFilterProject(v as string);
+                            setFilterProject(multiToCsv(v));
                             setFilterCampaign('');
                           }}
                           searchable
@@ -2674,9 +3351,14 @@ export const DealsPage: React.FC = () => {
                       <div>
                         <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Chiến dịch</label>
                         <CustomSelect
-                          options={[{ value: '', label: 'Tất cả chiến dịch' }, ...filteredCampaigns.map(c => ({ value: String(c.id), label: c.name }))]}
-                          value={filterCampaign}
-                          onChange={v => setFilterCampaign(v as string)}
+                          multiple={true}
+                          placeholder="Tất cả chiến dịch"
+                          options={ensureOptionsWithSelected(
+                            filteredCampaigns.map(c => ({ value: String(c.id), label: c.name })),
+                            filterCampaign
+                          )}
+                          value={csvToMulti(filterCampaign)}
+                          onChange={v => setFilterCampaign(multiToCsv(v))}
                           searchable
                         />
                       </div>
@@ -2687,22 +3369,346 @@ export const DealsPage: React.FC = () => {
                       <div>
                         <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Nguồn khách hàng</label>
                         <CustomSelect
-                          options={[{ value: '', label: 'Tất cả nguồn' }, ...sources.map(s => ({ value: String(s), label: String(s) }))]}
-                          value={filterSource}
-                          onChange={v => setFilterSource(v as string)}
+                          multiple={true}
+                          placeholder="Tất cả nguồn"
+                          options={ensureOptionsWithSelected(mergedSourceOptions, filterSource)}
+                          value={csvToMulti(filterSource)}
+                          onChange={v => setFilterSource(multiToCsv(v))}
                           searchable
+                          allowCustomInput
+                          customInputLabel="Thêm nguồn khác"
                         />
                       </div>
                       <div>
                         <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Phân loại (Tag)</label>
                         <CustomSelect
-                          options={[{ value: '', label: 'Tất cả Tag' }, ...tagOptions]}
-                          value={filterTag}
-                          onChange={v => setFilterTag(v as string)}
+                          multiple={true}
+                          placeholder="Tất cả Tag"
+                          options={ensureOptionsWithSelected(tagOptions, filterTag)}
+                          value={csvToMulti(filterTag)}
+                          onChange={v => setFilterTag(multiToCsv(v))}
                           searchable
+                          allowCustomInput
+                          customInputLabel="Thêm Tag cần lọc"
                         />
                       </div>
                     </div>
+                  </div>
+
+                  {/* Card 5: Nhân khẩu học, Học tập & Tài chính */}
+                  <div style={{
+                    padding: '1.1rem',
+                    borderRadius: '14px',
+                    background: 'var(--color-bg-alt, rgba(0,0,0,0.02))',
+                    border: '1px solid var(--color-border-light)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.875rem' }}>
+                      <Briefcase size={16} color="var(--color-text, #0f172a)" /> Nhân khẩu học, Học tập & Tài chính
+                    </div>
+
+                    {/* Giới tính & Tỉnh/Thành phố */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '0.875rem' }}>
+                      <div>
+                        <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Giới tính</label>
+                        <CustomSelect
+                          value={gender}
+                          onChange={v => setGender(v as string)}
+                          options={[
+                            { value: '', label: 'Tất cả giới tính' },
+                            { value: 'Nam', label: 'Nam' },
+                            { value: 'Nữ', label: 'Nữ' },
+                            { value: 'Khác', label: 'Khác' }
+                          ]}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Tỉnh / Thành phố</label>
+                        <CustomSelect
+                          multiple={true}
+                          placeholder="Tất cả Tỉnh/TP"
+                          options={ensureOptionsWithSelected(COMMON_CITY_OPTIONS, city)}
+                          value={csvToMulti(city)}
+                          onChange={v => setCity(multiToCsv(v))}
+                          searchable
+                          allowCustomInput
+                          customInputLabel="Thêm Tỉnh/TP"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Độ tuổi */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '0.875rem' }}>
+                      <div>
+                        <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Độ tuổi từ</label>
+                        <input
+                          type="number"
+                          min={0}
+                          max={120}
+                          className="form-input"
+                          placeholder="VD: 18"
+                          value={ageMin}
+                          onChange={e => setAgeMin(e.target.value)}
+                          style={{ height: '36px', fontSize: '0.8125rem', borderRadius: '8px' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Độ tuổi đến</label>
+                        <input
+                          type="number"
+                          min={0}
+                          max={120}
+                          className="form-input"
+                          placeholder="VD: 35"
+                          value={ageMax}
+                          onChange={e => setAgeMax(e.target.value)}
+                          style={{ height: '36px', fontSize: '0.8125rem', borderRadius: '8px' }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Nghề nghiệp & Đơn vị/Trường học */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '0.875rem' }}>
+                      <div>
+                        <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Nghề nghiệp / Chức danh</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder="VD: Sinh viên, Kỹ sư..."
+                          value={jobTitle}
+                          onChange={e => setJobTitle(e.target.value)}
+                          style={{ height: '36px', fontSize: '0.8125rem', borderRadius: '8px' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Công ty / Trường học</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder="Tên trường hoặc đơn vị..."
+                          value={company}
+                          onChange={e => setCompany(e.target.value)}
+                          style={{ height: '36px', fontSize: '0.8125rem', borderRadius: '8px' }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Tình trạng Tài chính / Đặt cọc & Khoảng tiền */}
+                    <div style={{ marginBottom: '0.875rem' }}>
+                      <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Tình trạng Tài chính / Đặt cọc</label>
+                      <CustomSelect
+                        value={financialFilter}
+                        onChange={v => setFinancialFilter(v as string)}
+                        options={FINANCIAL_STATUS_OPTIONS}
+                      />
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '0.875rem' }}>
+                      <div>
+                        <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Số tiền / Giá trị từ (VNĐ)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          className="form-input"
+                          placeholder="VD: 5000000"
+                          value={minAmount}
+                          onChange={e => setMinAmount(e.target.value)}
+                          style={{ height: '36px', fontSize: '0.8125rem', borderRadius: '8px' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Số tiền / Giá trị đến (VNĐ)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          className="form-input"
+                          placeholder="VD: 50000000"
+                          value={maxAmount}
+                          onChange={e => setMaxAmount(e.target.value)}
+                          style={{ height: '36px', fontSize: '0.8125rem', borderRadius: '8px' }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Tình trạng học vụ, Mã HV, Khóa dự kiến */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                      <div>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Tình trạng học vụ</label>
+                        <CustomSelect
+                          value={studyStatus}
+                          onChange={v => setStudyStatus(v as string)}
+                          options={[
+                            { value: '', label: 'Tất cả' },
+                            { value: 'studying', label: 'Đang học' },
+                            { value: 'reserved', label: 'Bảo lưu' },
+                            { value: 'completed', label: 'Hoàn thành' },
+                            { value: 'dropped', label: 'Nghỉ học' }
+                          ]}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Mã học viên</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder="VD: HV001..."
+                          value={studentCode}
+                          onChange={e => setStudentCode(e.target.value)}
+                          style={{ height: '36px', fontSize: '0.8125rem', borderRadius: '8px' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Khóa dự kiến</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder="VD: K25, T10..."
+                          value={expectedIntake}
+                          onChange={e => setExpectedIntake(e.target.value)}
+                          style={{ height: '36px', fontSize: '0.8125rem', borderRadius: '8px' }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 6: Bộ lọc theo trường dữ liệu (100% DB Schema) */}
+                  <div style={{
+                    padding: '1.1rem',
+                    borderRadius: '14px',
+                    background: 'var(--color-bg-alt, rgba(0,0,0,0.02))',
+                    border: '1px solid var(--color-border-light)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.875rem', gap: '8px', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        <BarChart3 size={16} color="var(--color-text, #0f172a)" /> Bộ lọc theo trường dữ liệu (100% DB Schema)
+                      </div>
+
+                      <div style={{ display: 'inline-flex', borderRadius: '6px', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+                        {([
+                          { id: 'AND', label: 'Thỏa tất cả (AND)' },
+                          { id: 'OR', label: 'Thỏa một trong (OR)' }
+                        ] as const).map(lg => (
+                          <button
+                            key={lg.id}
+                            type="button"
+                            onClick={() => setCustomRulesLogic(lg.id)}
+                            style={{
+                              padding: '3px 8px',
+                              fontSize: '0.7rem',
+                              fontWeight: customRulesLogic === lg.id ? 700 : 500,
+                              border: 'none',
+                              background: customRulesLogic === lg.id ? 'var(--color-primary)' : 'var(--color-surface)',
+                              color: customRulesLogic === lg.id ? '#fff' : 'var(--color-text-muted)',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {lg.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {customRules.length === 0 ? (
+                      <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem' }}>
+                        Chưa có điều kiện tùy chỉnh. Bấm nút bên dưới để lọc bất kỳ trường dữ liệu nào trong bảng khách hàng (CCCD, hộ chiếu, điểm GPA/IELTS, quận/huyện, người giới thiệu...).
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '0.75rem' }}>
+                        {customRules.map((rule, idx) => {
+                          const hideValue = rule.operator === 'is_empty' || rule.operator === 'is_not_empty';
+                          return (
+                            <div
+                              key={idx}
+                              style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '6px',
+                                padding: '8px',
+                                borderRadius: '10px',
+                                background: 'var(--color-surface, #ffffff)',
+                                border: '1px solid var(--color-border)'
+                              }}
+                            >
+                              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr auto', gap: '6px', alignItems: 'center' }}>
+                                <CustomSelect
+                                  value={rule.field}
+                                  onChange={v => {
+                                    const next = [...customRules];
+                                    next[idx] = { ...next[idx], field: v as string };
+                                    setCustomRules(next);
+                                  }}
+                                  options={CONTACT_SCHEMA_FIELDS}
+                                  searchable
+                                />
+                                <CustomSelect
+                                  value={rule.operator}
+                                  onChange={v => {
+                                    const next = [...customRules];
+                                    next[idx] = { ...next[idx], operator: v as string };
+                                    setCustomRules(next);
+                                  }}
+                                  options={SCHEMA_OPERATORS}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setCustomRules(customRules.filter((_, i) => i !== idx))}
+                                  title="Xóa điều kiện"
+                                  style={{
+                                    width: '32px',
+                                    height: '32px',
+                                    borderRadius: '8px',
+                                    border: '1px solid var(--color-border)',
+                                    background: 'transparent',
+                                    color: 'var(--color-danger, #ef4444)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                              {!hideValue && (
+                                <input
+                                  type="text"
+                                  className="form-input"
+                                  placeholder={rule.operator === 'in' || rule.operator === 'not_in' ? 'Nhập danh sách giá trị, cách nhau bằng dấu phẩy...' : 'Nhập giá trị cần đối chiếu...'}
+                                  value={rule.value}
+                                  onChange={e => {
+                                    const next = [...customRules];
+                                    next[idx] = { ...next[idx], value: e.target.value };
+                                    setCustomRules(next);
+                                  }}
+                                  style={{ height: '34px', fontSize: '0.8rem', borderRadius: '8px' }}
+                                />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => setCustomRules([...customRules, { field: 'full_name', operator: 'contains', value: '' }])}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        border: '1px dashed var(--color-primary)',
+                        background: 'rgba(189, 29, 45, 0.04)',
+                        color: 'var(--color-primary)',
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <Plus size={14} /> Thêm điều kiện lọc trường dữ liệu
+                    </button>
                   </div>
                 </div>
 

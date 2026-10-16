@@ -199,8 +199,9 @@ class ContactController {
             }
         }
 
+        require_once __DIR__ . '/../utils/search_helpers.php';
+
         if ($search !== '') {
-            require_once __DIR__ . '/../utils/search_helpers.php';
             $searchRes = buildContactSearchClause($search, 'c.');
             if (!empty($searchRes['clause'])) {
                 $where[] = $searchRes['clause'];
@@ -217,20 +218,7 @@ class ContactController {
             }
             $params[] = $status;
         }
-        if ($source) { $where[] = 'c.source = ?'; $params[] = $source; }
-        if ($owner)  { $where[] = 'c.owner_id = ?'; $params[] = (int)$owner; }
-        if ($teamId !== '' && $teamId !== 'all') {
-            $where[] = 'c.owner_id IN (SELECT id FROM users WHERE team_id = ? AND tenant_id = ?)';
-            $params[] = (int)$teamId;
-            $params[] = $tid;
-        }
-        if ($companyId) { $where[] = 'c.company_id = ?'; $params[] = (int)$companyId; }
-        if ($projectId !== '') { $where[] = 'c.project_id = ?'; $params[] = (int)$projectId; }
-        if ($campaignId !== '') { $where[] = 'c.campaign_id = ?'; $params[] = (int)$campaignId; }
-        if ($tag !== '') { $where[] = 'c.tags LIKE ?'; $params[] = '%"' . $tag . '"%'; }
 
-
-        
         if ($dataType !== '') {
             $errorCond = "(
                 EXISTS (SELECT 1 FROM tickets tk WHERE tk.contact_id = c.id AND tk.status IN ('open', 'in_progress'))
@@ -256,43 +244,20 @@ class ContactController {
                 $where[] = "NOT $personalCond";
             }
         }
-        
-        if ($from !== '') {
-            $whereField = in_array($dateField, ['created_at', 'updated_at', 'last_contact', 'admission_date']) ? $dateField : 'created_at';
-            if ($whereField === 'admission_date') {
-                $where[] = "c.admission_date >= ?";
-                $params[] = $from;
-            } else {
-                $where[] = "c.{$whereField} >= ?";
-                $params[] = $from . ' 00:00:00';
-            }
-        }
-        if ($to !== '') {
-            $whereField = in_array($dateField, ['created_at', 'updated_at', 'last_contact', 'admission_date']) ? $dateField : 'created_at';
-            if ($whereField === 'admission_date') {
-                $where[] = "c.admission_date <= ?";
-                $params[] = $to;
-            } else {
-                $where[] = "c.{$whereField} <= ?";
-                $params[] = $to . ' 23:59:59';
-            }
-        }
 
-        if ($admissionFrom !== '') {
-            $where[] = "c.admission_date >= ?";
-            $params[] = $admissionFrom;
-        }
-        if ($admissionTo !== '') {
-            $where[] = "c.admission_date <= ?";
-            $params[] = $admissionTo;
-        }
+        // Apply shared Multi-Tier CRM Filter Engine (deferring stage_id/stages until after stageCounts)
+        $baseFilterInput = $_GET;
+        $baseFilterInput['_defer_stage_filter'] = true;
+        unset($baseFilterInput['uncontacted']);
+        applyCrmAdvancedMultiTierFilters($this->db, 'c.', $baseFilterInput, $where, $params);
 
+        $stageSlug = !empty($_GET['stage_slug']) ? trim((string)$_GET['stage_slug']) : '';
         if (!$isGlobalPipelineSearch) {
             switch ($segment) {
                 case 'tiem_nang':
                     // By default, exclude pipeline 14 (enrolled / customer / won) from Tiềm năng list.
                     // If searching ($isGlobalPipelineSearch) or filtering explicitly by stage 14, it remains accessible.
-                    if (empty($stage) && empty($stageSlug) && empty($_GET['stage_id'])) {
+                    if (empty($stage) && empty($stageSlug) && empty($_GET['stage_id']) && empty($_GET['stages']) && empty($_GET['stage_ids'])) {
                         $where[] = "(c.stage_id != 44 AND (c.pipeline_status IS NULL OR c.pipeline_status NOT IN ('enrolled', 'hoc_vien', 'won')) AND c.status != 'customer')";
                     }
                     break;
@@ -496,50 +461,20 @@ class ContactController {
             $where[] = "(c.lead_status NOT IN ('lost', 'nurture') OR c.lead_status IS NULL)";
         }
 
-        $stageSlug = !empty($_GET['stage_slug']) ? trim($_GET['stage_slug']) : '';
-        if ($stage && !$isGlobalPipelineSearch) {
-            $isNum = is_numeric($stage);
-            if ($stageOp === 'not_in') {
-                if ($isNum) {
-                    $where[] = "(c.stage_id != ? AND (c.pipeline_status IS NULL OR c.pipeline_status != ?))";
-                    $params[] = (int)$stage;
-                    $params[] = $stageSlug ?: (string)$stage;
-                } else {
-                    $where[] = "(c.pipeline_status != ? AND (c.stage_id IS NULL OR c.stage_id != (SELECT ps.id FROM pipeline_stages ps WHERE ps.system_slug = ? LIMIT 1)))";
-                    $params[] = $stage;
-                    $params[] = $stage;
-                }
-            } else {
-                if ($isNum) {
-                    $clause = "(
-                        c.stage_id = ? 
-                        OR (c.stage_id IS NULL AND c.pipeline_status = ?)
-                        OR (c.stage_id IS NULL AND c.pipeline_status = (SELECT ps.system_slug FROM pipeline_stages ps WHERE ps.id = ? LIMIT 1))";
-                    $params[] = (int)$stage;
-                    $params[] = $stageSlug ?: (string)$stage;
-                    $params[] = (int)$stage;
-                    if (!empty($stageSlug)) {
-                        $clause .= " OR c.pipeline_status = ? OR c.stage_id = (SELECT ps2.id FROM pipeline_stages ps2 WHERE ps2.system_slug = ? LIMIT 1)";
-                        $params[] = $stageSlug;
-                        $params[] = $stageSlug;
-                    }
-                    $clause .= ")";
-                    $where[] = $clause;
-                } else {
-                    $where[] = "(c.pipeline_status = ? OR c.stage_id = (SELECT ps.id FROM pipeline_stages ps WHERE ps.system_slug = ? LIMIT 1))";
-                    $params[] = $stage;
-                    $params[] = $stage;
-                }
-            }
+        if (!$isGlobalPipelineSearch || !empty($_GET['stages']) || !empty($_GET['stage_ids'])) {
+            applyCrmStageMultiFilter($this->db, 'c.', $_GET, $where, $params);
         }
 
         if (($uncontacted || $segment === 'not_contacted') && !$isGlobalPipelineSearch) {
             $where[] = "(
                 (c.last_contact IS NULL OR c.last_contact = '')
                 AND NOT EXISTS (
-                    SELECT 1 FROM activities a 
-                    WHERE a.tenant_id = c.tenant_id AND ((a.related_type = 'contact' AND a.related_id = c.id) OR a.contact_id = c.id) 
-                      AND a.deleted_at IS NULL
+                    SELECT 1 FROM activities a1
+                    WHERE a1.contact_id = c.id AND a1.deleted_at IS NULL
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM activities a2
+                    WHERE a2.related_type IN ('contact', 'lead') AND a2.related_id = c.id AND a2.deleted_at IS NULL
                 )
                 AND NOT EXISTS (
                     SELECT 1 FROM notes n 
@@ -671,11 +606,7 @@ class ContactController {
                                (SELECT n.created_at FROM notes n WHERE n.tenant_id = c.tenant_id AND n.entity_type = 'contact' AND n.entity_id = c.id ORDER BY n.id DESC LIMIT 1),
                                (SELECT a.created_at FROM activities a WHERE a.tenant_id = c.tenant_id AND a.related_type = 'contact' AND a.related_id = c.id AND a.deleted_at IS NULL ORDER BY a.id DESC LIMIT 1)
                            ) as last_interaction_at,
-                           (
-                               SELECT COALESCE(SUM(dep.price), 0)
-                               FROM deposits dep
-                               WHERE dep.contact_id = c.id AND dep.status NOT IN ('cancelled', 'rejected')
-                           ) as total_deposit,
+                           0 as total_deposit,
                            COALESCE(
                                NULLIF(c.expected_revenue, 0),
                                (SELECT COALESCE(SUM(d.value), 0) FROM deals d WHERE d.contact_id = c.id AND d.deleted_at IS NULL),
@@ -696,6 +627,7 @@ class ContactController {
                 $kStmt->execute($kanbanIds);
                 $data = $kStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
                 $this->populateLinkedProfilesCount($data, (int)$tid);
+                $this->populateBatchedFinancialStats($data);
             }
 
             $grouped = [];
@@ -853,6 +785,7 @@ class ContactController {
         $stmt->execute($targetIds);
         $data = $stmt->fetchAll();
         $this->populateLinkedProfilesCount($data, (int)($tid ?: 1));
+        $this->populateBatchedFinancialStats($data);
         // Parse JSON tags & reconcile effective stage
         foreach ($data as &$row) {
             $row['tags'] = json_decode($row['tags'] ?? '[]');
@@ -866,6 +799,86 @@ class ContactController {
             'total_pages' => ceil($total / $limit),
             'stage_counts' => $stageCounts
         ]);
+    }
+
+    /**
+     * Batch-populate financial stats (`deposit_count`, `total_deposit`, `total_deposit_amount`, `approved_deposit_amount`, `paid_amount`, `last_deposit_at`)
+     * for the paginated contact IDs without per-row correlated subqueries.
+     */
+    private function populateBatchedFinancialStats(array &$data): void {
+        if (empty($data)) return;
+
+        $contactIds = [];
+        foreach ($data as $row) {
+            $cid = (int)($row['id'] ?? 0);
+            if ($cid > 0) {
+                $contactIds[] = $cid;
+            }
+        }
+        $contactIds = array_values(array_unique($contactIds));
+        if (empty($contactIds)) return;
+
+        $idPlaceholders = implode(',', array_fill(0, count($contactIds), '?'));
+        $depMap = [];
+        $invMap = [];
+
+        try {
+            $depositStatsSql = "
+                SELECT contact_id,
+                       COUNT(*) AS deposit_count,
+                       COALESCE(SUM(CASE WHEN status NOT IN ('cancelled','rejected') THEN price ELSE 0 END), 0) AS total_deposit_amount,
+                       COALESCE(SUM(CASE WHEN status IN ('approved','completed') THEN price ELSE 0 END), 0) AS approved_deposit_amount,
+                       MAX(created_at) AS last_deposit_at
+                FROM deposits
+                WHERE contact_id IN ($idPlaceholders)
+                GROUP BY contact_id
+            ";
+            $depStmt = $this->db->prepare($depositStatsSql);
+            $depStmt->execute($contactIds);
+            while ($dRow = $depStmt->fetch(PDO::FETCH_ASSOC)) {
+                $depMap[(int)$dRow['contact_id']] = $dRow;
+            }
+        } catch (\Throwable $e) {
+            // Non-blocking fallback if deposits table is unavailable
+        }
+
+        try {
+            $invCols = function_exists('getCrmTableColumnsCache') ? getCrmTableColumnsCache($this->db, 'invoices') : [];
+            $paidColExpr = isset($invCols['amount_paid']) ? 'COALESCE(amount_paid, total, 0)' : 'COALESCE(total, 0)';
+            $invStatsSql = "
+                SELECT contact_id,
+                       COALESCE(SUM(CASE WHEN status IN ('paid','approved','completed','partial') THEN {$paidColExpr} ELSE 0 END), 0) AS paid_invoice_amount
+                FROM invoices
+                WHERE contact_id IN ($idPlaceholders)
+                GROUP BY contact_id
+            ";
+            $invStmt = $this->db->prepare($invStatsSql);
+            $invStmt->execute($contactIds);
+            while ($iRow = $invStmt->fetch(PDO::FETCH_ASSOC)) {
+                $invMap[(int)$iRow['contact_id']] = (float)($iRow['paid_invoice_amount'] ?? 0);
+            }
+        } catch (\Throwable $e) {
+            // Non-blocking fallback if invoices table is unavailable
+        }
+
+        foreach ($data as &$row) {
+            $cid = (int)($row['id'] ?? 0);
+            $depInfo = $depMap[$cid] ?? null;
+            $invPaid = (float)($invMap[$cid] ?? 0);
+
+            $depCount = $depInfo ? (int)($depInfo['deposit_count'] ?? 0) : 0;
+            $totDep   = $depInfo ? (float)($depInfo['total_deposit_amount'] ?? 0) : 0.0;
+            $appDep   = $depInfo ? (float)($depInfo['approved_deposit_amount'] ?? 0) : 0.0;
+            $lastDep  = $depInfo['last_deposit_at'] ?? null;
+
+            $row['deposit_count']           = $depCount;
+            $row['total_deposit']           = $totDep;
+            $row['total_deposit_amount']    = $totDep;
+            $row['approved_deposit_amount'] = $appDep;
+            $row['paid_amount']             = $appDep + $invPaid;
+            $row['last_deposit_at']         = $lastDep;
+        }
+        unset($row);
     }
 
     private function populateLinkedProfilesCount(array &$data, int $tid): void {
@@ -3280,6 +3293,22 @@ class ContactController {
         } else {
             $where[] = '1=0';
         }
+
+        require_once __DIR__ . '/../utils/search_helpers.php';
+        $search = trim((string)($_GET['search'] ?? ''));
+        if ($search !== '') {
+            $searchRes = buildContactSearchClause($search, 'c.');
+            if (!empty($searchRes['clause'])) {
+                $where[] = $searchRes['clause'];
+                foreach ($searchRes['params'] as $sp) {
+                    $params[] = $sp;
+                }
+            }
+        }
+
+        $studentFilterInput = $_GET;
+        $studentFilterInput['_defer_stage_filter'] = true;
+        applyCrmAdvancedMultiTierFilters($this->db, 'c.', $studentFilterInput, $where, $params);
 
         $where[] = "(c.lead_status NOT IN ('lost', 'nurture') OR c.lead_status IS NULL)";
         $baseWhereStr = implode(' AND ', $where);

@@ -93,6 +93,55 @@ function getPhoneSearchVariants(string $search): array {
 }
 
 /**
+ * Inspect and cache table columns per request so queries never reference missing columns.
+ */
+function getCrmTableColumnsCache(?PDO $db, string $table = 'contacts'): array {
+    static $cache = [];
+    if (isset($cache[$table])) {
+        return $cache[$table];
+    }
+    if ($db instanceof PDO) {
+        try {
+            $stmt = $db->query("SHOW COLUMNS FROM `{$table}`");
+            if ($stmt) {
+                $cols = [];
+                foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                    if (!empty($row['Field'])) {
+                        $cols[$row['Field']] = true;
+                    }
+                }
+                if (!empty($cols)) {
+                    $cache[$table] = $cols;
+                    return $cols;
+                }
+            }
+        } catch (\Throwable $e) {
+            // Fallback to known schema below
+        }
+    }
+    if ($table === 'contacts') {
+        $defaultCols = [
+            'id', 'tenant_id', 'person_id', 'full_name', 'phone', 'mobile', 'phone2', 'zalo_phone',
+            'email', 'gender', 'birthday', 'dob', 'citizen_id', 'passport', 'address', 'ward',
+            'district', 'city', 'preferred_location', 'company_id', 'company', 'job_title',
+            'department', 'industry', 'tax_code', 'customer_type', 'owner_id', 'collaborator_ids',
+            'created_by', 'status', 'stage_id', 'pipeline_status', 'lead_status', 'temperature',
+            'lead_temperature', 'lead_score', 'win_probability', 'ttl1_completed', 'next_action',
+            'next_followup_date', 'expected_decision_date', 'nurture_reason', 'lost_reason',
+            'project_id', 'program', 'expected_intake', 'admission_date', 'student_id',
+            'study_status', 'source', 'campaign_id', 'platform', 'form_name', 'utm_source',
+            'utm_campaign', 'utm_medium', 'utm_content', 'utm_term', 'tags', 'notes',
+            'expected_revenue', 'budget', 'budget_range', 'last_contact', 'created_at',
+            'updated_at', 'deleted_at'
+        ];
+        $cache[$table] = array_fill_keys($defaultCols, true);
+        return $cache[$table];
+    }
+    $cache[$table] = [];
+    return [];
+}
+
+/**
  * Build search WHERE clause & params for Contacts / Leads
  * 
  * Supports:
@@ -100,6 +149,7 @@ function getPhoneSearchVariants(string $search): array {
  * - Phone numbers: full number, tail numbers (1 vài số đuôi), with/without leading 0, +84, spaces, dots, dashes, parentheses
  * - Email: exact, partial username, tail numbers (e.g. 92 in haodiep92@gmail.com, 0584 in trangnguyen0584@gmail.com), fuzzy without dots/spaces
  * - Exact ID, person_id
+ * - student_id, citizen_id, company, job_title
  */
 function buildContactSearchClause(string $search, string $prefix = 'c.'): array {
     $search = trim($search);
@@ -107,26 +157,28 @@ function buildContactSearchClause(string $search, string $prefix = 'c.'): array 
         return ['clause' => '', 'params' => []];
     }
 
-    $tableRef = rtrim($prefix, '.') ?: 'contacts';
+    $trimmedPrefix = trim($prefix);
+    $a = $trimmedPrefix === '' ? '' : (str_ends_with($trimmedPrefix, '.') ? $trimmedPrefix : $trimmedPrefix . '.');
+    $tableRef = rtrim($a, '.') ?: 'contacts';
     $conds = [];
     $params = [];
 
     // 1. Email check (case-insensitive, fuzzy/partial matching)
     // 1.1 Direct LIKE
-    $conds[] = "LOWER({$prefix}email) LIKE LOWER(?)";
+    $conds[] = "LOWER({$a}email) LIKE LOWER(?)";
     $params[] = "%$search%";
 
     // 1.2 Normalized email without spaces, dots, hyphens, underscores (e.g. trangnguyen -> trang.nguyen@...)
     $cleanEmailQuery = str_replace([' ', '.', '-', '_'], '', strtolower($search));
     if (strlen($cleanEmailQuery) >= 2 && $cleanEmailQuery !== strtolower($search)) {
-        $conds[] = "REPLACE(REPLACE(REPLACE(REPLACE(LOWER(IFNULL({$prefix}email, '')), '.', ''), '-', ''), '_', ''), ' ', '') LIKE ?";
+        $conds[] = "REPLACE(REPLACE(REPLACE(REPLACE(LOWER(IFNULL({$a}email, '')), '.', ''), '-', ''), '_', ''), ' ', '') LIKE ?";
         $params[] = "%$cleanEmailQuery%";
     }
 
     // 1.3 If user typed Vietnamese accents without spaces (e.g. "hảo diệp" or "trang nguyễn") -> match email "haodiep..." / "trangnguyen..."
     $unaccentedNoSpaces = removeVietnameseAccents($cleanEmailQuery);
     if (strlen($unaccentedNoSpaces) >= 3 && $unaccentedNoSpaces !== $cleanEmailQuery) {
-        $conds[] = "REPLACE(REPLACE(REPLACE(REPLACE(LOWER(IFNULL({$prefix}email, '')), '.', ''), '-', ''), '_', ''), ' ', '') LIKE ?";
+        $conds[] = "REPLACE(REPLACE(REPLACE(REPLACE(LOWER(IFNULL({$a}email, '')), '.', ''), '-', ''), '_', ''), ' ', '') LIKE ?";
         $params[] = "%$unaccentedNoSpaces%";
     }
 
@@ -140,9 +192,9 @@ function buildContactSearchClause(string $search, string $prefix = 'c.'): array 
 
     // 2. Exact ID / Person ID check if numeric
     if (is_numeric($search) && strlen($search) <= 10) {
-        $conds[] = "{$prefix}id = ?";
+        $conds[] = "{$a}id = ?";
         $params[] = (int)$search;
-        $conds[] = "{$prefix}person_id = ?";
+        $conds[] = "{$a}person_id = ?";
         $params[] = (int)$search;
     }
 
@@ -155,23 +207,23 @@ function buildContactSearchClause(string $search, string $prefix = 'c.'): array 
 
         foreach ($phoneVariants as $pv) {
             // Direct LIKE on all phone columns
-            $conds[] = "{$prefix}phone LIKE ?";
+            $conds[] = "{$a}phone LIKE ?";
             $params[] = "%$pv%";
-            $conds[] = "{$prefix}mobile LIKE ?";
+            $conds[] = "{$a}mobile LIKE ?";
             $params[] = "%$pv%";
-            $conds[] = "{$prefix}phone2 LIKE ?";
+            $conds[] = "{$a}phone2 LIKE ?";
             $params[] = "%$pv%";
-            $conds[] = "{$prefix}zalo_phone LIKE ?";
+            $conds[] = "{$a}zalo_phone LIKE ?";
             $params[] = "%$pv%";
 
             // Normalized format (strips spaces, dots, hyphens, plus, parentheses)
-            $conds[] = $cleanPhoneFn("{$prefix}phone") . " LIKE ?";
+            $conds[] = $cleanPhoneFn("{$a}phone") . " LIKE ?";
             $params[] = "%$pv%";
-            $conds[] = $cleanPhoneFn("{$prefix}mobile") . " LIKE ?";
+            $conds[] = $cleanPhoneFn("{$a}mobile") . " LIKE ?";
             $params[] = "%$pv%";
-            $conds[] = $cleanPhoneFn("{$prefix}phone2") . " LIKE ?";
+            $conds[] = $cleanPhoneFn("{$a}phone2") . " LIKE ?";
             $params[] = "%$pv%";
-            $conds[] = $cleanPhoneFn("{$prefix}zalo_phone") . " LIKE ?";
+            $conds[] = $cleanPhoneFn("{$a}zalo_phone") . " LIKE ?";
             $params[] = "%$pv%";
 
             // Check contact_phones table
@@ -184,8 +236,16 @@ function buildContactSearchClause(string $search, string $prefix = 'c.'): array 
         }
     }
 
-    // 4. Name check: Standard LIKE for exact substring
-    $conds[] = "{$prefix}full_name LIKE ?";
+    // 4. Name & Extended Identity/B2B fields: full_name, student_id, citizen_id, company, job_title
+    $conds[] = "{$a}full_name LIKE ?";
+    $params[] = "%$search%";
+    $conds[] = "{$a}student_id LIKE ?";
+    $params[] = "%$search%";
+    $conds[] = "{$a}citizen_id LIKE ?";
+    $params[] = "%$search%";
+    $conds[] = "{$a}company LIKE ?";
+    $params[] = "%$search%";
+    $conds[] = "{$a}job_title LIKE ?";
     $params[] = "%$search%";
 
     // 5. Multi-word Regex for Vietnamese unaccented/accented support
@@ -197,7 +257,7 @@ function buildContactSearchClause(string $search, string $prefix = 'c.'): array 
             foreach ($words as $w) {
                 $pattern = buildVietnameseWordRegex($w);
                 if (!empty($pattern)) {
-                    $wordRegexClauses[] = "{$prefix}full_name REGEXP ?";
+                    $wordRegexClauses[] = "{$a}full_name REGEXP ?";
                     $wordRegexParams[] = $pattern;
                 }
             }
@@ -214,4 +274,1448 @@ function buildContactSearchClause(string $search, string $prefix = 'c.'): array 
         'clause' => '(' . implode(' OR ', $conds) . ')',
         'params' => $params
     ];
+}
+
+/**
+ * Parse a multi-value filter parameter (array or comma-separated string),
+ * ignoring 'all' / 'tat_ca' sentinel tokens.
+ */
+function parseCrmMultiFilterValues($raw): array {
+    if ($raw === null || $raw === '' || $raw === false) {
+        return [];
+    }
+    $items = [];
+    if (is_array($raw)) {
+        foreach ($raw as $v) {
+            if (is_scalar($v)) {
+                foreach (explode(',', (string)$v) as $part) {
+                    $t = trim($part);
+                    if ($t !== '' && !in_array(strtolower($t), ['all', 'tat_ca', 'tất cả'], true)) {
+                        $items[] = $t;
+                    }
+                }
+            }
+        }
+    } elseif (is_scalar($raw)) {
+        foreach (explode(',', (string)$raw) as $part) {
+            $t = trim($part);
+            if ($t !== '' && !in_array(strtolower($t), ['all', 'tat_ca', 'tất cả'], true)) {
+                $items[] = $t;
+            }
+        }
+    }
+    return array_values(array_unique($items));
+}
+
+/**
+ * Resolve fuzzy staff names or emails against `users` table (accent-insensitive) into user IDs.
+ */
+function resolveStaffUserIdsByFuzzyName(PDO $db, string $nameOrEmail): array {
+    static $usersCache = null;
+    if ($usersCache === null) {
+        try {
+            $stmt = $db->query("SELECT id, full_name, username, email FROM users");
+            $usersCache = $stmt ? ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: []) : [];
+        } catch (\Throwable $e) {
+            $usersCache = [];
+        }
+    }
+
+    $needle = mb_strtolower(trim($nameOrEmail), 'UTF-8');
+    $needleUnaccent = mb_strtolower(removeVietnameseAccents($needle), 'UTF-8');
+    if ($needle === '') {
+        return [];
+    }
+
+    $matchedIds = [];
+    foreach ($usersCache as $u) {
+        $uid = (int)($u['id'] ?? 0);
+        if ($uid <= 0) continue;
+        $fn = mb_strtolower((string)($u['full_name'] ?? ''), 'UTF-8');
+        $fnUnaccent = mb_strtolower(removeVietnameseAccents($fn), 'UTF-8');
+        $un = mb_strtolower((string)($u['username'] ?? ''), 'UTF-8');
+        $em = mb_strtolower((string)($u['email'] ?? ''), 'UTF-8');
+
+        if (
+            ($fn !== '' && str_contains($fn, $needle))
+            || ($fnUnaccent !== '' && $needleUnaccent !== '' && str_contains($fnUnaccent, $needleUnaccent))
+            || ($un !== '' && str_contains($un, $needleUnaccent))
+            || ($em !== '' && str_contains($em, $needle))
+        ) {
+            $matchedIds[] = $uid;
+        }
+    }
+    return array_values(array_unique($matchedIds));
+}
+
+/**
+ * Apply Multi-Stage filter (`stage_id`, `stages`, `stage_ids`, `stage_slug` + `stage_op` = 'in' | 'not_in').
+ * Supports comma-separated stage IDs, 1-based ranges (e.g. `1-4`), stage slugs, or stage names (`pipeline_stages`).
+ */
+function applyCrmStageMultiFilter(PDO $db, string $alias, array $input, array &$where, array &$params): void {
+    $trimmedAlias = trim($alias);
+    $a = $trimmedAlias === '' ? '' : (str_ends_with($trimmedAlias, '.') ? $trimmedAlias : $trimmedAlias . '.');
+
+    $stageTokens = array_values(array_unique(array_merge(
+        parseCrmMultiFilterValues($input['stage_id'] ?? null),
+        parseCrmMultiFilterValues($input['stages'] ?? null),
+        parseCrmMultiFilterValues($input['stage_ids'] ?? null)
+    )));
+    $stageSlug = trim((string)($input['stage_slug'] ?? ''));
+    if (empty($stageTokens) && $stageSlug !== '' && strtolower($stageSlug) !== 'all') {
+        $stageTokens[] = $stageSlug;
+    }
+    if (empty($stageTokens)) {
+        return;
+    }
+
+    $stageOp = strtolower(trim((string)($input['stage_op'] ?? 'in')));
+    $stageIds = [];
+    $orderIndexes = [];
+    $stageNamesOrSlugs = [];
+
+    foreach ($stageTokens as $part) {
+        if (preg_match('/^(\d+)\s*-\s*(\d+)$/', $part, $rm)) {
+            $minR = (int)$rm[1];
+            $maxR = (int)$rm[2];
+            if ($minR > 0 && $maxR >= $minR && ($maxR - $minR) <= 50) {
+                for ($r = $minR; $r <= $maxR; $r++) {
+                    if ($r >= 1 && $r <= 14) {
+                        $orderIndexes[] = $r - 1;
+                    }
+                    $stageIds[] = $r;
+                }
+            }
+        } elseif (is_numeric($part)) {
+            $n = (int)$part;
+            if ($n >= 1 && $n <= 14) {
+                $orderIndexes[] = $n - 1;
+            }
+            $stageIds[] = $n;
+        } else {
+            $stageNamesOrSlugs[] = $part;
+        }
+    }
+
+    $stageIds = array_values(array_unique($stageIds));
+    $orderIndexes = array_values(array_unique($orderIndexes));
+    $stageNamesOrSlugs = array_values(array_unique($stageNamesOrSlugs));
+
+    if ($stageOp === 'not_in') {
+        $notConds = [];
+        if (!empty($stageIds)) {
+            $ph = implode(',', array_fill(0, count($stageIds), '?'));
+            $notConds[] = "({$a}stage_id NOT IN ($ph) OR {$a}stage_id IS NULL)";
+            foreach ($stageIds as $sid) {
+                $params[] = (int)$sid;
+            }
+            if (count($stageIds) === 1 && $stageSlug !== '') {
+                $notConds[] = "({$a}pipeline_status IS NULL OR {$a}pipeline_status != ?)";
+                $params[] = $stageSlug;
+            }
+        }
+        if (!empty($orderIndexes)) {
+            $phOrd = implode(',', array_fill(0, count($orderIndexes), '?'));
+            $notConds[] = "({$a}stage_id NOT IN (SELECT ps_ni.id FROM pipeline_stages ps_ni WHERE ps_ni.order_index IN ($phOrd)) OR {$a}stage_id IS NULL)";
+            foreach ($orderIndexes as $oi) {
+                $params[] = (int)$oi;
+            }
+        }
+        foreach ($stageNamesOrSlugs as $sn) {
+            $notConds[] = "(({$a}pipeline_status IS NULL OR {$a}pipeline_status NOT LIKE ?) AND ({$a}stage_id IS NULL OR {$a}stage_id NOT IN (SELECT ps_ns.id FROM pipeline_stages ps_ns WHERE ps_ns.system_slug = ? OR ps_ns.name LIKE ?)))";
+            $params[] = '%' . $sn . '%';
+            $params[] = $sn;
+            $params[] = '%' . $sn . '%';
+        }
+        if (!empty($notConds)) {
+            $where[] = '(' . implode(' AND ', $notConds) . ')';
+        }
+    } else {
+        $orConds = [];
+        if (!empty($stageIds)) {
+            $ph = implode(',', array_fill(0, count($stageIds), '?'));
+            $orConds[] = "{$a}stage_id IN ($ph)";
+            foreach ($stageIds as $sid) {
+                $params[] = (int)$sid;
+            }
+            if (count($stageIds) === 1) {
+                $singleSid = (int)$stageIds[0];
+                $orConds[] = "({$a}stage_id IS NULL AND {$a}pipeline_status = (SELECT ps_fb1.system_slug FROM pipeline_stages ps_fb1 WHERE ps_fb1.id = ? LIMIT 1))";
+                $params[] = $singleSid;
+                if ($stageSlug !== '') {
+                    $orConds[] = "{$a}pipeline_status = ?";
+                    $params[] = $stageSlug;
+                    $orConds[] = "{$a}stage_id = (SELECT ps_fb2.id FROM pipeline_stages ps_fb2 WHERE ps_fb2.system_slug = ? LIMIT 1)";
+                    $params[] = $stageSlug;
+                }
+            }
+        }
+        if (!empty($orderIndexes)) {
+            $phOrd = implode(',', array_fill(0, count($orderIndexes), '?'));
+            $orConds[] = "{$a}stage_id IN (SELECT ps_oi.id FROM pipeline_stages ps_oi WHERE ps_oi.order_index IN ($phOrd))";
+            foreach ($orderIndexes as $oi) {
+                $params[] = (int)$oi;
+            }
+        }
+        foreach ($stageNamesOrSlugs as $sn) {
+            $orConds[] = "({$a}pipeline_status LIKE ? OR {$a}status LIKE ? OR {$a}stage_id IN (SELECT ps_s.id FROM pipeline_stages ps_s WHERE ps_s.system_slug = ? OR ps_s.name LIKE ?))";
+            $params[] = '%' . $sn . '%';
+            $params[] = '%' . $sn . '%';
+            $params[] = $sn;
+            $params[] = '%' . $sn . '%';
+        }
+        if (!empty($orConds)) {
+            $where[] = '(' . implode(' OR ', $orConds) . ')';
+        }
+    }
+}
+
+/**
+ * Apply SARGable Date Range filter on extended `date_field`
+ * (`created_at`, `updated_at`, `last_contact`, `admission_date`, `deposit_date`, `next_followup_date`, `expected_decision_date`, `birthday`)
+ * plus `admission_from` / `admission_to`.
+ */
+function applyCrmDateRangeFilter(PDO $db, string $alias, array $input, array &$where, array &$params): void {
+    $trimmedAlias = trim($alias);
+    $a = $trimmedAlias === '' ? '' : (str_ends_with($trimmedAlias, '.') ? $trimmedAlias : $trimmedAlias . '.');
+    $contactCols = getCrmTableColumnsCache($db, 'contacts');
+
+    $dateField = strtolower(trim((string)($input['date_field'] ?? 'created_at')));
+    $allowedDateFields = [
+        'created_at', 'updated_at', 'last_contact', 'admission_date',
+        'deposit_date', 'next_followup_date', 'expected_decision_date', 'birthday'
+    ];
+    if (!in_array($dateField, $allowedDateFields, true)) {
+        $dateField = 'created_at';
+    }
+
+    $from = trim((string)($input['from'] ?? ($input['from_date'] ?? '')));
+    $to   = trim((string)($input['to'] ?? ($input['to_date'] ?? '')));
+
+    $fromDateOnly = $from !== '' ? substr($from, 0, 10) : '';
+    $toDateOnly   = $to !== '' ? substr($to, 0, 10) : '';
+    $fromDt       = $fromDateOnly !== '' ? (strlen($from) > 10 ? $from : $fromDateOnly . ' 00:00:00') : '';
+    $toDt         = $toDateOnly !== '' ? (strlen($to) > 10 ? $to : $toDateOnly . ' 23:59:59') : '';
+
+    if ($from !== '' || $to !== '') {
+        if ($dateField === 'deposit_date') {
+            if ($fromDt !== '' && $toDt !== '') {
+                $where[] = "EXISTS (SELECT 1 FROM deposits dep_d WHERE dep_d.contact_id = {$a}id AND dep_d.status NOT IN ('cancelled', 'rejected') AND dep_d.created_at >= ? AND dep_d.created_at <= ?)";
+                $params[] = $fromDt;
+                $params[] = $toDt;
+            } elseif ($fromDt !== '') {
+                $where[] = "EXISTS (SELECT 1 FROM deposits dep_d WHERE dep_d.contact_id = {$a}id AND dep_d.status NOT IN ('cancelled', 'rejected') AND dep_d.created_at >= ?)";
+                $params[] = $fromDt;
+            } elseif ($toDt !== '') {
+                $where[] = "EXISTS (SELECT 1 FROM deposits dep_d WHERE dep_d.contact_id = {$a}id AND dep_d.status NOT IN ('cancelled', 'rejected') AND dep_d.created_at <= ?)";
+                $params[] = $toDt;
+            }
+        } elseif ($dateField === 'admission_date' || $dateField === 'expected_decision_date') {
+            $col = isset($contactCols[$dateField]) ? $dateField : 'created_at';
+            if ($fromDateOnly !== '') {
+                $where[] = "{$a}{$col} >= ?";
+                $params[] = $fromDateOnly;
+            }
+            if ($toDateOnly !== '') {
+                $where[] = "{$a}{$col} <= ?";
+                $params[] = $toDateOnly;
+            }
+        } elseif ($dateField === 'birthday') {
+            $bdayExpr = isset($contactCols['dob']) ? "COALESCE({$a}birthday, {$a}dob)" : "{$a}birthday";
+            if ($fromDateOnly !== '') {
+                $where[] = "{$bdayExpr} >= ?";
+                $params[] = $fromDateOnly;
+            }
+            if ($toDateOnly !== '') {
+                $where[] = "{$bdayExpr} <= ?";
+                $params[] = $toDateOnly;
+            }
+        } else {
+            $col = isset($contactCols[$dateField]) ? $dateField : 'created_at';
+            if ($fromDt !== '') {
+                $where[] = "{$a}{$col} >= ?";
+                $params[] = $fromDt;
+            }
+            if ($toDt !== '') {
+                $where[] = "{$a}{$col} <= ?";
+                $params[] = $toDt;
+            }
+        }
+    }
+
+    $admissionFrom = trim((string)($input['admission_from'] ?? ''));
+    $admissionTo   = trim((string)($input['admission_to'] ?? ''));
+    if ($admissionFrom !== '') {
+        $where[] = "{$a}admission_date >= ?";
+        $params[] = substr($admissionFrom, 0, 10);
+    }
+    if ($admissionTo !== '') {
+        $where[] = "{$a}admission_date <= ?";
+        $params[] = substr($admissionTo, 0, 10);
+    }
+}
+
+/**
+ * Shared, reusable Multi-Tier CRM Filter Engine for Contacts / Leads / Students.
+ * Supports:
+ * 1. Multi-Owner (`owner_id`/`owners`), Collaborator (`collaborator_id`/`collaborators`), Creator (`created_by`), Team (`team_id`/`teams`)
+ * 2. Multi-Stage (`stage_id`/`stages` + `stage_op` = 'in'|'not_in')
+ * 3. Interaction Cadence (`stale_days`, `interacted_within_days`, `interaction_type`, `interaction_status`, `min_call_count`, `max_call_count`, `min_interaction_count`, `max_interaction_count`, `note_keyword`)
+ * 4. Demographics & B2B (`gender`, `cities`/`city`/`branches_or_cities`, `districts`/`district`, `age_min`, `age_max`, `birth_year_from`, `birth_year_to`, `birthday_month`, `job_titles`, `companies`, `industries`, `departments`, `education_or_degree`)
+ * 5. Academic, Marketing, Lead Quality & Financial (`programs`/`program`/`project_id`, `campaign_id`/`campaigns`/`campaign_or_utm`, `sources`/`source`, `tags`/`tag`+`tag_op`, `temperature`, `score_min`/`score_max`, `study_status`, `student_code`, `expected_intake`, `major`, `missing_document`, `financial_filter`/`deposit_status`, `min_deposit`/`max_deposit`, `min_expected_revenue`/`max_expected_revenue`)
+ * 6. Dynamic Schema Rule Builder (`custom_rules` + `custom_rules_logic` = 'AND'|'OR')
+ */
+function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, array &$where, array &$params): void {
+    $trimmedAlias = trim($alias);
+    $a = $trimmedAlias === '' ? '' : (str_ends_with($trimmedAlias, '.') ? $trimmedAlias : $trimmedAlias . '.');
+    $contactCols = getCrmTableColumnsCache($db, 'contacts');
+
+    // =========================================================================
+    // 1. MULTI-OWNER, COLLABORATOR, CREATOR & TEAM
+    // =========================================================================
+    $ownerTokens = array_values(array_unique(array_merge(
+        parseCrmMultiFilterValues($input['owner_id'] ?? null),
+        parseCrmMultiFilterValues($input['owners'] ?? null),
+        parseCrmMultiFilterValues($input['assigned_to'] ?? null)
+    )));
+    if (!empty($input['unassigned']) && in_array(strtolower((string)$input['unassigned']), ['1', 'true', 'yes'], true)) {
+        $ownerTokens[] = 'unassigned';
+    }
+
+    if (!empty($ownerTokens)) {
+        $numericOwnerIds = [];
+        $includeUnassigned = false;
+        $fuzzyFallbackTokens = [];
+
+        foreach ($ownerTokens as $tok) {
+            $lowTok = strtolower(trim($tok));
+            if (in_array($lowTok, ['unassigned', 'none', 'null', 'chua_phan_bo', '0'], true)) {
+                $includeUnassigned = true;
+            } elseif (is_numeric($tok) && (int)$tok > 0) {
+                $numericOwnerIds[] = (int)$tok;
+            } else {
+                $resolvedIds = resolveStaffUserIdsByFuzzyName($db, $tok);
+                if (!empty($resolvedIds)) {
+                    foreach ($resolvedIds as $rid) {
+                        $numericOwnerIds[] = (int)$rid;
+                    }
+                } else {
+                    $fuzzyFallbackTokens[] = $tok;
+                }
+            }
+        }
+
+        if ($includeUnassigned) {
+            // Remove strict `owner_id IS NOT NULL` base guard when explicitly filtering for unassigned leads
+            $where = array_values(array_filter($where, function ($w) use ($a) {
+                return trim($w) !== "{$a}owner_id IS NOT NULL";
+            }));
+        }
+
+        $numericOwnerIds = array_values(array_unique($numericOwnerIds));
+        $ownerOrClauses = [];
+
+        if (!empty($numericOwnerIds)) {
+            $phOwners = implode(',', array_fill(0, count($numericOwnerIds), '?'));
+            $ownerOrClauses[] = "{$a}owner_id IN ($phOwners)";
+            foreach ($numericOwnerIds as $oid) {
+                $params[] = (int)$oid;
+            }
+            foreach ($numericOwnerIds as $oid) {
+                $ownerOrClauses[] = "FIND_IN_SET(?, COALESCE({$a}collaborator_ids, '')) > 0";
+                $params[] = (string)(int)$oid;
+            }
+        }
+
+        foreach ($fuzzyFallbackTokens as $fTok) {
+            $regexPat = buildVietnameseWordRegex($fTok);
+            if ($regexPat !== '') {
+                $ownerOrClauses[] = "EXISTS (SELECT 1 FROM users u_own WHERE (u_own.id = {$a}owner_id OR FIND_IN_SET(u_own.id, COALESCE({$a}collaborator_ids, '')) > 0) AND (u_own.full_name REGEXP ? OR u_own.email LIKE ?))";
+                $params[] = $regexPat;
+                $params[] = '%' . $fTok . '%';
+            } else {
+                $ownerOrClauses[] = "EXISTS (SELECT 1 FROM users u_own WHERE (u_own.id = {$a}owner_id OR FIND_IN_SET(u_own.id, COALESCE({$a}collaborator_ids, '')) > 0) AND (u_own.full_name LIKE ? OR u_own.email LIKE ?))";
+                $params[] = '%' . $fTok . '%';
+                $params[] = '%' . $fTok . '%';
+            }
+        }
+
+        if ($includeUnassigned) {
+            $ownerOrClauses[] = "({$a}owner_id IS NULL OR {$a}owner_id = 0)";
+        }
+
+        if (!empty($ownerOrClauses)) {
+            $where[] = '(' . implode(' OR ', $ownerOrClauses) . ')';
+        }
+    }
+
+    // Collaborator filter (`collaborator_id` / `collaborators`)
+    $collabTokens = array_values(array_unique(array_merge(
+        parseCrmMultiFilterValues($input['collaborator_id'] ?? null),
+        parseCrmMultiFilterValues($input['collaborators'] ?? null)
+    )));
+    if (!empty($collabTokens)) {
+        $collabIds = [];
+        foreach ($collabTokens as $ct) {
+            if (is_numeric($ct) && (int)$ct > 0) {
+                $collabIds[] = (int)$ct;
+            } else {
+                foreach (resolveStaffUserIdsByFuzzyName($db, $ct) as $rid) {
+                    $collabIds[] = (int)$rid;
+                }
+            }
+        }
+        $collabIds = array_values(array_unique($collabIds));
+        if (!empty($collabIds)) {
+            $collabOrs = [];
+            foreach ($collabIds as $cid) {
+                $collabOrs[] = "FIND_IN_SET(?, COALESCE({$a}collaborator_ids, '')) > 0";
+                $params[] = (string)(int)$cid;
+            }
+            $where[] = '(' . implode(' OR ', $collabOrs) . ')';
+        }
+    }
+
+    // Creator filter (`created_by`)
+    $creatorTokens = parseCrmMultiFilterValues($input['created_by'] ?? null);
+    if (!empty($creatorTokens)) {
+        $creatorIds = [];
+        foreach ($creatorTokens as $crt) {
+            if (is_numeric($crt) && (int)$crt > 0) {
+                $creatorIds[] = (int)$crt;
+            } else {
+                foreach (resolveStaffUserIdsByFuzzyName($db, $crt) as $rid) {
+                    $creatorIds[] = (int)$rid;
+                }
+            }
+        }
+        $creatorIds = array_values(array_unique($creatorIds));
+        if (!empty($creatorIds)) {
+            $phCr = implode(',', array_fill(0, count($creatorIds), '?'));
+            $where[] = "{$a}created_by IN ($phCr)";
+            foreach ($creatorIds as $crId) {
+                $params[] = (int)$crId;
+            }
+        }
+    }
+
+    // Team filter (`team_id` / `teams`)
+    $teamTokens = array_values(array_unique(array_merge(
+        parseCrmMultiFilterValues($input['team_id'] ?? null),
+        parseCrmMultiFilterValues($input['teams'] ?? null)
+    )));
+    if (!empty($teamTokens)) {
+        $teamIds = [];
+        $teamNames = [];
+        foreach ($teamTokens as $tt) {
+            if (is_numeric($tt) && (int)$tt > 0) {
+                $teamIds[] = (int)$tt;
+            } else {
+                $teamNames[] = $tt;
+            }
+        }
+        $tmSubConds = [];
+        if (!empty($teamIds)) {
+            $phTm = implode(',', array_fill(0, count($teamIds), '?'));
+            $tmSubConds[] = "u_tm.team_id IN ($phTm)";
+            foreach ($teamIds as $tIdVal) {
+                $params[] = (int)$tIdVal;
+            }
+        }
+        foreach ($teamNames as $tName) {
+            $tmSubConds[] = "tm.name LIKE ?";
+            $params[] = '%' . $tName . '%';
+        }
+        if (!empty($tmSubConds)) {
+            $where[] = "{$a}owner_id IN (SELECT u_tm.id FROM users u_tm LEFT JOIN teams tm ON u_tm.team_id = tm.id WHERE u_tm.tenant_id = {$a}tenant_id AND (" . implode(' OR ', $tmSubConds) . "))";
+        }
+    }
+
+    // =========================================================================
+    // 2. MULTI-STAGE (`stage_id` / `stages` + `stage_op` = 'in' | 'not_in')
+    // =========================================================================
+    if (empty($input['_defer_stage_filter'])) {
+        applyCrmStageMultiFilter($db, $alias, $input, $where, $params);
+    }
+
+    // =========================================================================
+    // 3. INTERACTION CADENCE & ACTIVITY / NOTE FILTERS
+    // =========================================================================
+    $staleDays = (int)($input['stale_days'] ?? ($input['inactive_days'] ?? 0));
+    if ($staleDays > 0) {
+        $where[] = "(
+            {$a}created_at < DATE_SUB(NOW(), INTERVAL ? DAY)
+            AND ({$a}last_contact IS NULL OR {$a}last_contact < DATE_SUB(NOW(), INTERVAL ? DAY))
+            AND NOT EXISTS (
+                SELECT 1 FROM activities act_st1
+                WHERE act_st1.contact_id = {$a}id AND act_st1.deleted_at IS NULL
+                  AND act_st1.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+            )
+            AND NOT EXISTS (
+                SELECT 1 FROM activities act_st2
+                WHERE act_st2.related_type IN ('contact', 'lead') AND act_st2.related_id = {$a}id AND act_st2.deleted_at IS NULL
+                  AND act_st2.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+            )
+            AND NOT EXISTS (
+                SELECT 1 FROM notes n_st
+                WHERE n_st.entity_type = 'contact' AND n_st.entity_id = {$a}id
+                  AND n_st.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+                  AND n_st.body NOT LIKE '[Tự động]%'
+                  AND n_st.body NOT LIKE '[Phân bổ]%'
+                  AND n_st.body NOT LIKE '[Giao data]%'
+                  AND n_st.body NOT LIKE '[Auto]%'
+                  AND n_st.body NOT LIKE '[Import]%'
+                  AND n_st.body NOT LIKE '[Tái phân bổ]%'
+            )
+        )";
+        array_push($params, $staleDays, $staleDays, $staleDays, $staleDays, $staleDays);
+    }
+
+    $withinDays = (int)($input['interacted_within_days'] ?? ($input['contacted_in_last_days'] ?? 0));
+    $intTypes = array_map('strtolower', parseCrmMultiFilterValues($input['interaction_type'] ?? ($input['activity_type'] ?? null)));
+
+    if ($withinDays > 0) {
+        if (!empty($intTypes) && !in_array('all', $intTypes, true)) {
+            $iwOrs = [];
+            $actFilterTypes = array_values(array_unique($intTypes));
+            if (!empty($actFilterTypes)) {
+                $phActTypes = implode(',', array_fill(0, count($actFilterTypes), '?'));
+                $iwOrs[] = "EXISTS (
+                    SELECT 1 FROM activities act_iw1
+                    WHERE act_iw1.contact_id = {$a}id AND act_iw1.deleted_at IS NULL
+                      AND act_iw1.type IN ($phActTypes)
+                      AND act_iw1.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+                )";
+                foreach ($actFilterTypes as $at) {
+                    $params[] = $at;
+                }
+                $params[] = $withinDays;
+
+                $iwOrs[] = "EXISTS (
+                    SELECT 1 FROM activities act_iw2
+                    WHERE act_iw2.related_type IN ('contact', 'lead') AND act_iw2.related_id = {$a}id AND act_iw2.deleted_at IS NULL
+                      AND act_iw2.type IN ($phActTypes)
+                      AND act_iw2.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+                )";
+                foreach ($actFilterTypes as $at) {
+                    $params[] = $at;
+                }
+                $params[] = $withinDays;
+            }
+            if (array_intersect(['note', 'zalo', 'chat'], $intTypes)) {
+                $iwOrs[] = "EXISTS (
+                    SELECT 1 FROM notes n_iw
+                    WHERE n_iw.entity_type = 'contact' AND n_iw.entity_id = {$a}id
+                      AND n_iw.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+                      AND n_iw.body NOT LIKE '[Tự động]%'
+                      AND n_iw.body NOT LIKE '[Phân bổ]%'
+                      AND n_iw.body NOT LIKE '[Giao data]%'
+                      AND n_iw.body NOT LIKE '[Auto]%'
+                      AND n_iw.body NOT LIKE '[Import]%'
+                      AND n_iw.body NOT LIKE '[Tái phân bổ]%'
+                )";
+                $params[] = $withinDays;
+            }
+            if (!empty($iwOrs)) {
+                $where[] = '(' . implode(' OR ', $iwOrs) . ')';
+            }
+        } else {
+            $where[] = "(
+                {$a}last_contact >= DATE_SUB(NOW(), INTERVAL ? DAY)
+                OR EXISTS (
+                    SELECT 1 FROM activities act_iw1
+                    WHERE act_iw1.contact_id = {$a}id AND act_iw1.deleted_at IS NULL
+                      AND act_iw1.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+                )
+                OR EXISTS (
+                    SELECT 1 FROM activities act_iw2
+                    WHERE act_iw2.related_type IN ('contact', 'lead') AND act_iw2.related_id = {$a}id AND act_iw2.deleted_at IS NULL
+                      AND act_iw2.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+                )
+                OR EXISTS (
+                    SELECT 1 FROM notes n_iw
+                    WHERE n_iw.entity_type = 'contact' AND n_iw.entity_id = {$a}id
+                      AND n_iw.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+                      AND n_iw.body NOT LIKE '[Tự động]%'
+                      AND n_iw.body NOT LIKE '[Phân bổ]%'
+                      AND n_iw.body NOT LIKE '[Giao data]%'
+                      AND n_iw.body NOT LIKE '[Auto]%'
+                      AND n_iw.body NOT LIKE '[Import]%'
+                      AND n_iw.body NOT LIKE '[Tái phân bổ]%'
+                )
+            )";
+            array_push($params, $withinDays, $withinDays, $withinDays, $withinDays);
+        }
+    } elseif (!empty($intTypes) && !in_array('all', $intTypes, true)) {
+        $itOrs = [];
+        $phActTypes = implode(',', array_fill(0, count($intTypes), '?'));
+        $itOrs[] = "EXISTS (
+            SELECT 1 FROM activities act_it1
+            WHERE act_it1.contact_id = {$a}id AND act_it1.deleted_at IS NULL
+              AND act_it1.type IN ($phActTypes)
+        )";
+        foreach ($intTypes as $at) {
+            $params[] = $at;
+        }
+        $itOrs[] = "EXISTS (
+            SELECT 1 FROM activities act_it2
+            WHERE act_it2.related_type IN ('contact', 'lead') AND act_it2.related_id = {$a}id AND act_it2.deleted_at IS NULL
+              AND act_it2.type IN ($phActTypes)
+        )";
+        foreach ($intTypes as $at) {
+            $params[] = $at;
+        }
+        if (array_intersect(['note', 'zalo', 'chat'], $intTypes)) {
+            $itOrs[] = "EXISTS (
+                SELECT 1 FROM notes n_it
+                WHERE n_it.entity_type = 'contact' AND n_it.entity_id = {$a}id
+                  AND n_it.body NOT LIKE '[Tự động]%'
+                  AND n_it.body NOT LIKE '[Phân bổ]%'
+                  AND n_it.body NOT LIKE '[Giao data]%'
+                  AND n_it.body NOT LIKE '[Auto]%'
+                  AND n_it.body NOT LIKE '[Import]%'
+                  AND n_it.body NOT LIKE '[Tái phân bổ]%'
+            )";
+        }
+        $where[] = '(' . implode(' OR ', $itOrs) . ')';
+    }
+
+    // Interaction status (`interaction_status` / `activity_status` / `uncontacted`)
+    $intStatus = strtolower(trim((string)($input['interaction_status'] ?? ($input['activity_status'] ?? ''))));
+    if ($intStatus === '' && !empty($input['uncontacted']) && in_array(strtolower((string)$input['uncontacted']), ['1', 'true', 'yes'], true)) {
+        $intStatus = 'uncontacted';
+    }
+    if (in_array($intStatus, ['uncontacted', 'no_activity', 'not_contacted'], true)) {
+        $where[] = "(
+            ({$a}last_contact IS NULL OR {$a}last_contact = '')
+            AND NOT EXISTS (
+                SELECT 1 FROM activities act_un1
+                WHERE act_un1.contact_id = {$a}id AND act_un1.deleted_at IS NULL
+            )
+            AND NOT EXISTS (
+                SELECT 1 FROM activities act_un2
+                WHERE act_un2.related_type IN ('contact', 'lead') AND act_un2.related_id = {$a}id AND act_un2.deleted_at IS NULL
+            )
+            AND NOT EXISTS (
+                SELECT 1 FROM notes n_un
+                WHERE n_un.entity_type = 'contact' AND n_un.entity_id = {$a}id
+                  AND n_un.body NOT LIKE '[Tự động]%'
+                  AND n_un.body NOT LIKE '[Phân bổ]%'
+                  AND n_un.body NOT LIKE '[Giao data]%'
+                  AND n_un.body NOT LIKE '[Auto]%'
+                  AND n_un.body NOT LIKE '[Import]%'
+                  AND n_un.body NOT LIKE '[Tái phân bổ]%'
+                  AND n_un.body NOT LIKE 'Tái phân bổ%'
+                  AND n_un.body NOT LIKE 'Giao lại%'
+            )
+        )";
+    } elseif (in_array($intStatus, ['contacted', 'has_activity'], true)) {
+        $where[] = "(
+            ({$a}last_contact IS NOT NULL AND {$a}last_contact != '')
+            OR EXISTS (
+                SELECT 1 FROM activities act_ca1
+                WHERE act_ca1.contact_id = {$a}id AND act_ca1.deleted_at IS NULL
+            )
+            OR EXISTS (
+                SELECT 1 FROM activities act_ca2
+                WHERE act_ca2.related_type IN ('contact', 'lead') AND act_ca2.related_id = {$a}id AND act_ca2.deleted_at IS NULL
+            )
+            OR EXISTS (
+                SELECT 1 FROM notes n_ca
+                WHERE n_ca.entity_type = 'contact' AND n_ca.entity_id = {$a}id
+                  AND n_ca.body NOT LIKE '[Tự động]%'
+                  AND n_ca.body NOT LIKE '[Phân bổ]%'
+                  AND n_ca.body NOT LIKE '[Giao data]%'
+                  AND n_ca.body NOT LIKE '[Auto]%'
+                  AND n_ca.body NOT LIKE '[Import]%'
+                  AND n_ca.body NOT LIKE '[Tái phân bổ]%'
+                  AND n_ca.body NOT LIKE 'Tái phân bổ%'
+                  AND n_ca.body NOT LIKE 'Giao lại%'
+            )
+        )";
+    } elseif ($intStatus === 'has_call_recently') {
+        $where[] = "(
+            EXISTS (
+                SELECT 1 FROM activities act_c1
+                WHERE act_c1.contact_id = {$a}id AND act_c1.type = 'call' AND act_c1.deleted_at IS NULL
+                  AND act_c1.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+            )
+            OR EXISTS (
+                SELECT 1 FROM activities act_c2
+                WHERE act_c2.related_type IN ('contact', 'lead') AND act_c2.related_id = {$a}id AND act_c2.type = 'call' AND act_c2.deleted_at IS NULL
+                  AND act_c2.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+            )
+        )";
+    }
+
+    // Call & total interaction count bounds
+    if (isset($input['min_call_count']) && $input['min_call_count'] !== '' && is_numeric($input['min_call_count'])) {
+        $where[] = "(SELECT COUNT(*) FROM activities act_cc WHERE act_cc.contact_id = {$a}id AND act_cc.type = 'call' AND act_cc.deleted_at IS NULL) >= ?";
+        $params[] = (int)$input['min_call_count'];
+    }
+    if (isset($input['max_call_count']) && $input['max_call_count'] !== '' && is_numeric($input['max_call_count'])) {
+        $where[] = "(SELECT COUNT(*) FROM activities act_cc WHERE act_cc.contact_id = {$a}id AND act_cc.type = 'call' AND act_cc.deleted_at IS NULL) <= ?";
+        $params[] = (int)$input['max_call_count'];
+    }
+    if (isset($input['min_interaction_count']) && $input['min_interaction_count'] !== '' && is_numeric($input['min_interaction_count'])) {
+        $where[] = "((SELECT COUNT(*) FROM activities act_ic WHERE act_ic.contact_id = {$a}id AND act_ic.deleted_at IS NULL) + (SELECT COUNT(*) FROM notes n_ic WHERE n_ic.entity_type = 'contact' AND n_ic.entity_id = {$a}id AND n_ic.body NOT LIKE '[Tự động]%' AND n_ic.body NOT LIKE '[Phân bổ]%')) >= ?";
+        $params[] = (int)$input['min_interaction_count'];
+    }
+    if (isset($input['max_interaction_count']) && $input['max_interaction_count'] !== '' && is_numeric($input['max_interaction_count'])) {
+        $where[] = "((SELECT COUNT(*) FROM activities act_ic WHERE act_ic.contact_id = {$a}id AND act_ic.deleted_at IS NULL) + (SELECT COUNT(*) FROM notes n_ic WHERE n_ic.entity_type = 'contact' AND n_ic.entity_id = {$a}id AND n_ic.body NOT LIKE '[Tự động]%' AND n_ic.body NOT LIKE '[Phân bổ]%')) <= ?";
+        $params[] = (int)$input['max_interaction_count'];
+    }
+
+    // Note / Activity / Reason keyword (`note_keyword`)
+    $noteKeywords = parseCrmMultiFilterValues($input['note_keyword'] ?? null);
+    if (!empty($noteKeywords)) {
+        $nkOrs = [];
+        foreach ($noteKeywords as $nkw) {
+            $kwLike = '%' . $nkw . '%';
+            $nkOrs[] = "(
+                {$a}notes LIKE ?
+                OR {$a}lost_reason LIKE ?
+                OR {$a}nurture_reason LIKE ?
+                OR EXISTS (SELECT 1 FROM notes n_kw WHERE n_kw.entity_type = 'contact' AND n_kw.entity_id = {$a}id AND n_kw.body LIKE ?)
+                OR EXISTS (SELECT 1 FROM activities act_kw WHERE act_kw.contact_id = {$a}id AND act_kw.deleted_at IS NULL AND (act_kw.subject LIKE ? OR act_kw.body LIKE ?))
+            )";
+            array_push($params, $kwLike, $kwLike, $kwLike, $kwLike, $kwLike, $kwLike);
+        }
+        $where[] = '(' . implode(' OR ', $nkOrs) . ')';
+    }
+
+    // =========================================================================
+    // 4. DEMOGRAPHICS & B2B FILTERS
+    // =========================================================================
+    // Gender
+    $genderTokens = parseCrmMultiFilterValues($input['gender'] ?? null);
+    if (!empty($genderTokens)) {
+        $genderOrs = [];
+        foreach ($genderTokens as $gt) {
+            $gLow = mb_strtolower(trim($gt), 'UTF-8');
+            if (in_array($gLow, ['male', 'nam', '1', 'trai', 'boy', 'm'], true)) {
+                $genderOrs[] = "LOWER(TRIM(COALESCE({$a}gender, ''))) IN ('male', 'nam', '1', 'trai', 'boy')";
+            } elseif (in_array($gLow, ['female', 'nu', 'nữ', '0', 'gai', 'girl', 'f'], true)) {
+                $genderOrs[] = "(LOWER(TRIM(COALESCE({$a}gender, ''))) IN ('female', 'nu', 'nữ', '0', 'gai', 'girl') OR {$a}gender = 'Nữ')";
+            } elseif (in_array($gLow, ['other', 'khac', 'khác', '2'], true)) {
+                $genderOrs[] = "LOWER(TRIM(COALESCE({$a}gender, ''))) IN ('other', 'khac', 'khác', '2')";
+            } elseif (in_array($gLow, ['unknown', 'empty', 'null', 'chua_ro', 'none'], true)) {
+                $genderOrs[] = "({$a}gender IS NULL OR TRIM({$a}gender) = '')";
+            } else {
+                $genderOrs[] = "{$a}gender = ?";
+                $params[] = $gt;
+            }
+        }
+        if (!empty($genderOrs)) {
+            $where[] = '(' . implode(' OR ', array_unique($genderOrs)) . ')';
+        }
+    }
+
+    // Age & Birth Year & Birthday Month (SARGable on COALESCE(birthday, dob))
+    $bdayColExpr = isset($contactCols['dob']) ? "COALESCE({$a}birthday, {$a}dob)" : "{$a}birthday";
+    if (isset($input['age_min']) && $input['age_min'] !== '' && is_numeric($input['age_min'])) {
+        $ageMin = max(0, (int)$input['age_min']);
+        if ($ageMin > 0) {
+            $where[] = "({$bdayColExpr} IS NOT NULL AND {$bdayColExpr} > '1900-01-01' AND {$bdayColExpr} <= DATE_SUB(CURDATE(), INTERVAL ? YEAR))";
+            $params[] = $ageMin;
+        }
+    }
+    if (isset($input['age_max']) && $input['age_max'] !== '' && is_numeric($input['age_max'])) {
+        $ageMax = max(0, (int)$input['age_max']);
+        if ($ageMax > 0) {
+            $where[] = "({$bdayColExpr} IS NOT NULL AND {$bdayColExpr} > '1900-01-01' AND {$bdayColExpr} >= DATE_SUB(CURDATE(), INTERVAL ? YEAR))";
+            $params[] = $ageMax + 1;
+        }
+    }
+    if (isset($input['birth_year_from']) && $input['birth_year_from'] !== '' && is_numeric($input['birth_year_from'])) {
+        $byFrom = (int)$input['birth_year_from'];
+        if ($byFrom >= 1900 && $byFrom <= 2100) {
+            $where[] = "{$bdayColExpr} >= ?";
+            $params[] = sprintf('%04d-01-01', $byFrom);
+        }
+    }
+    if (isset($input['birth_year_to']) && $input['birth_year_to'] !== '' && is_numeric($input['birth_year_to'])) {
+        $byTo = (int)$input['birth_year_to'];
+        if ($byTo >= 1900 && $byTo <= 2100) {
+            $where[] = "{$bdayColExpr} <= ?";
+            $params[] = sprintf('%04d-12-31', $byTo);
+        }
+    }
+    $bdayMonths = parseCrmMultiFilterValues($input['birthday_month'] ?? null);
+    if (!empty($bdayMonths)) {
+        $validMonths = [];
+        foreach ($bdayMonths as $bm) {
+            if (is_numeric($bm) && (int)$bm >= 1 && (int)$bm <= 12) {
+                $validMonths[] = (int)$bm;
+            }
+        }
+        if (!empty($validMonths)) {
+            $phBm = implode(',', array_fill(0, count($validMonths), '?'));
+            $where[] = "MONTH({$bdayColExpr}) IN ($phBm)";
+            foreach ($validMonths as $mVal) {
+                $params[] = $mVal;
+            }
+        }
+    }
+
+    // Cities / Branches (`cities`, `city`, `branches_or_cities`)
+    $cityTokens = array_values(array_unique(array_merge(
+        parseCrmMultiFilterValues($input['cities'] ?? null),
+        parseCrmMultiFilterValues($input['city'] ?? null),
+        parseCrmMultiFilterValues($input['branches_or_cities'] ?? null)
+    )));
+    if (!empty($cityTokens)) {
+        $cityOrs = [];
+        foreach ($cityTokens as $cTok) {
+            $variants = [$cTok];
+            $unacc = removeVietnameseAccents($cTok);
+            if ($unacc !== $cTok) {
+                $variants[] = $unacc;
+            }
+            $lowUnacc = strtolower(trim($unacc));
+            if (in_array($lowUnacc, ['hcm', 'tphcm', 'tp.hcm', 'tp hcm', 'ho chi minh', 'sai gon', 'saigon'], true)) {
+                $variants = array_merge($variants, ['Hồ Chí Minh', 'Ho Chi Minh', 'HCM', 'Sài Gòn']);
+            } elseif (in_array($lowUnacc, ['hn', 'ha noi', 'hanoi', 'tp ha noi'], true)) {
+                $variants = array_merge($variants, ['Hà Nội', 'Ha Noi']);
+            } elseif (in_array($lowUnacc, ['dn', 'da nang', 'danang'], true)) {
+                $variants = array_merge($variants, ['Đà Nẵng', 'Da Nang']);
+            }
+            foreach (array_unique($variants) as $vCity) {
+                $likeC = '%' . $vCity . '%';
+                $cityOrs[] = "({$a}city LIKE ? OR {$a}district LIKE ? OR {$a}ward LIKE ? OR {$a}address LIKE ?)";
+                array_push($params, $likeC, $likeC, $likeC, $likeC);
+            }
+        }
+        if (!empty($cityOrs)) {
+            $where[] = '(' . implode(' OR ', $cityOrs) . ')';
+        }
+    }
+
+    // Districts (`districts` / `district`)
+    $districtTokens = array_values(array_unique(array_merge(
+        parseCrmMultiFilterValues($input['districts'] ?? null),
+        parseCrmMultiFilterValues($input['district'] ?? null)
+    )));
+    if (!empty($districtTokens)) {
+        $distOrs = [];
+        foreach ($districtTokens as $dTok) {
+            $variants = array_unique([$dTok, removeVietnameseAccents($dTok)]);
+            foreach ($variants as $vDist) {
+                $likeD = '%' . $vDist . '%';
+                $distOrs[] = "({$a}district LIKE ? OR {$a}ward LIKE ? OR {$a}address LIKE ?)";
+                array_push($params, $likeD, $likeD, $likeD);
+            }
+        }
+        $where[] = '(' . implode(' OR ', $distOrs) . ')';
+    }
+
+    // B2B & Professional (`job_titles`, `companies`, `industries`, `departments`, `education_or_degree`)
+    $jobTokens = array_values(array_unique(array_merge(
+        parseCrmMultiFilterValues($input['job_titles'] ?? null),
+        parseCrmMultiFilterValues($input['job_title'] ?? null)
+    )));
+    if (!empty($jobTokens)) {
+        $jtOrs = [];
+        foreach ($jobTokens as $jt) {
+            $jtOrs[] = "{$a}job_title LIKE ?";
+            $params[] = '%' . $jt . '%';
+        }
+        $where[] = '(' . implode(' OR ', $jtOrs) . ')';
+    }
+
+    $compTokens = array_values(array_unique(array_merge(
+        parseCrmMultiFilterValues($input['companies'] ?? null),
+        parseCrmMultiFilterValues($input['company'] ?? null),
+        parseCrmMultiFilterValues($input['company_id'] ?? null)
+    )));
+    if (!empty($compTokens)) {
+        $cpOrs = [];
+        foreach ($compTokens as $cp) {
+            if (is_numeric($cp) && (int)$cp > 0) {
+                $cpOrs[] = "{$a}company_id = ?";
+                $params[] = (int)$cp;
+            } else {
+                $cpOrs[] = "({$a}company LIKE ? OR EXISTS (SELECT 1 FROM companies comp_f WHERE comp_f.id = {$a}company_id AND comp_f.name LIKE ?))";
+                $params[] = '%' . $cp . '%';
+                $params[] = '%' . $cp . '%';
+            }
+        }
+        $where[] = '(' . implode(' OR ', $cpOrs) . ')';
+    }
+
+    $indTokens = array_values(array_unique(array_merge(
+        parseCrmMultiFilterValues($input['industries'] ?? null),
+        parseCrmMultiFilterValues($input['industry'] ?? null)
+    )));
+    if (!empty($indTokens)) {
+        $indOrs = [];
+        foreach ($indTokens as $ind) {
+            $indOrs[] = "{$a}industry LIKE ?";
+            $params[] = '%' . $ind . '%';
+        }
+        $where[] = '(' . implode(' OR ', $indOrs) . ')';
+    }
+
+    $deptTokens = array_values(array_unique(array_merge(
+        parseCrmMultiFilterValues($input['departments'] ?? null),
+        parseCrmMultiFilterValues($input['department'] ?? null)
+    )));
+    if (!empty($deptTokens)) {
+        $dpOrs = [];
+        foreach ($deptTokens as $dp) {
+            $dpOrs[] = "{$a}department LIKE ?";
+            $params[] = '%' . $dp . '%';
+        }
+        $where[] = '(' . implode(' OR ', $dpOrs) . ')';
+    }
+
+    $eduTokens = parseCrmMultiFilterValues($input['education_or_degree'] ?? null);
+    if (!empty($eduTokens)) {
+        $edOrs = [];
+        $hasMajorCol = isset($contactCols['major']);
+        foreach ($eduTokens as $ed) {
+            $likeEd = '%' . $ed . '%';
+            if ($hasMajorCol) {
+                $edOrs[] = "({$a}major LIKE ? OR {$a}job_title LIKE ? OR {$a}notes LIKE ? OR EXISTS (SELECT 1 FROM custom_field_values cfv_ed JOIN custom_fields cf_ed ON cfv_ed.custom_field_id = cf_ed.id WHERE cfv_ed.entity_id = {$a}id AND cf_ed.entity_type = 'contact' AND cfv_ed.value_text LIKE ?))";
+                array_push($params, $likeEd, $likeEd, $likeEd, $likeEd);
+            } else {
+                $edOrs[] = "({$a}job_title LIKE ? OR {$a}notes LIKE ? OR EXISTS (SELECT 1 FROM custom_field_values cfv_ed JOIN custom_fields cf_ed ON cfv_ed.custom_field_id = cf_ed.id WHERE cfv_ed.entity_id = {$a}id AND cf_ed.entity_type = 'contact' AND cfv_ed.value_text LIKE ?))";
+                array_push($params, $likeEd, $likeEd, $likeEd);
+            }
+        }
+        $where[] = '(' . implode(' OR ', $edOrs) . ')';
+    }
+
+    // =========================================================================
+    // 5. ACADEMIC, MARKETING, LEAD QUALITY & FINANCIAL FILTERS
+    // =========================================================================
+    // Programs / Project (`programs`, `program`, `project_id`)
+    $progTokens = array_values(array_unique(array_merge(
+        parseCrmMultiFilterValues($input['programs'] ?? null),
+        parseCrmMultiFilterValues($input['program'] ?? null),
+        parseCrmMultiFilterValues($input['project_id'] ?? null)
+    )));
+    if (!empty($progTokens)) {
+        $progOrs = [];
+        foreach ($progTokens as $pt) {
+            if (is_numeric($pt) && (int)$pt > 0) {
+                $progOrs[] = "({$a}project_id = ? OR ({$a}program IS NOT NULL AND {$a}program != '' AND EXISTS (SELECT 1 FROM projects pr_p WHERE pr_p.id = ? AND ({$a}program = pr_p.name OR {$a}program LIKE CONCAT('%', pr_p.name, '%')))))";
+                $params[] = (int)$pt;
+                $params[] = (int)$pt;
+            } else {
+                $likeP = '%' . $pt . '%';
+                $progOrs[] = "({$a}program LIKE ? OR {$a}project_id IN (SELECT pr_p.id FROM projects pr_p WHERE pr_p.name LIKE ? OR pr_p.code LIKE ?))";
+                array_push($params, $likeP, $likeP, $likeP);
+            }
+        }
+        $where[] = '(' . implode(' OR ', $progOrs) . ')';
+    }
+
+    // Campaigns / UTM (`campaign_id`, `campaigns`, `campaign_or_utm`)
+    $campTokens = array_values(array_unique(array_merge(
+        parseCrmMultiFilterValues($input['campaign_id'] ?? null),
+        parseCrmMultiFilterValues($input['campaigns'] ?? null),
+        parseCrmMultiFilterValues($input['campaign_or_utm'] ?? null)
+    )));
+    if (!empty($campTokens)) {
+        $lscaCols = getCrmTableColumnsCache($db, 'lms_student_campaign_allocations');
+        $lscaContactCol = isset($lscaCols['contact_id']) ? 'contact_id' : (isset($lscaCols['student_id']) ? 'student_id' : null);
+
+        $campOrs = [];
+        foreach ($campTokens as $ctk) {
+            if (is_numeric($ctk) && (int)$ctk > 0) {
+                if ($lscaContactCol !== null) {
+                    $campOrs[] = "({$a}campaign_id = ? OR EXISTS (SELECT 1 FROM lms_student_campaign_allocations lsca WHERE lsca.{$lscaContactCol} = {$a}id AND lsca.campaign_id = ?))";
+                    $params[] = (int)$ctk;
+                    $params[] = (int)$ctk;
+                } else {
+                    $campOrs[] = "{$a}campaign_id = ?";
+                    $params[] = (int)$ctk;
+                }
+            } else {
+                $likeCamp = '%' . $ctk . '%';
+                if ($lscaContactCol !== null) {
+                    $campOrs[] = "({$a}utm_campaign LIKE ? OR {$a}utm_source LIKE ? OR {$a}platform LIKE ? OR {$a}form_name LIKE ? OR {$a}campaign_id IN (SELECT mc_f.id FROM marketing_campaigns mc_f WHERE mc_f.name LIKE ?) OR EXISTS (SELECT 1 FROM lms_student_campaign_allocations lsca JOIN marketing_campaigns mc_l ON lsca.campaign_id = mc_l.id WHERE lsca.{$lscaContactCol} = {$a}id AND mc_l.name LIKE ?))";
+                    array_push($params, $likeCamp, $likeCamp, $likeCamp, $likeCamp, $likeCamp, $likeCamp);
+                } else {
+                    $campOrs[] = "({$a}utm_campaign LIKE ? OR {$a}utm_source LIKE ? OR {$a}platform LIKE ? OR {$a}form_name LIKE ? OR {$a}campaign_id IN (SELECT mc_f.id FROM marketing_campaigns mc_f WHERE mc_f.name LIKE ?))";
+                    array_push($params, $likeCamp, $likeCamp, $likeCamp, $likeCamp, $likeCamp);
+                }
+            }
+        }
+        $where[] = '(' . implode(' OR ', $campOrs) . ')';
+    }
+
+    // Sources (`sources` / `source`)
+    $srcTokens = array_values(array_unique(array_merge(
+        parseCrmMultiFilterValues($input['sources'] ?? null),
+        parseCrmMultiFilterValues($input['source'] ?? null)
+    )));
+    if (!empty($srcTokens)) {
+        $srcOrs = [];
+        foreach ($srcTokens as $st) {
+            $likeSrc = '%' . $st . '%';
+            $srcOrs[] = "({$a}source LIKE ? OR {$a}utm_source LIKE ? OR {$a}platform LIKE ?)";
+            array_push($params, $likeSrc, $likeSrc, $likeSrc);
+        }
+        $where[] = '(' . implode(' OR ', $srcOrs) . ')';
+    }
+
+    // Tags (`tags` / `tag` + `tag_op` = 'any' | 'all' | 'not')
+    $tagTokens = array_values(array_unique(array_merge(
+        parseCrmMultiFilterValues($input['tags'] ?? null),
+        parseCrmMultiFilterValues($input['tag'] ?? null)
+    )));
+    if (!empty($tagTokens)) {
+        $tagOp = strtolower(trim((string)($input['tag_op'] ?? 'any')));
+        $tagConds = [];
+        if (in_array($tagOp, ['not', 'not_in', 'none'], true)) {
+            foreach ($tagTokens as $tg) {
+                $tagConds[] = "({$a}tags IS NULL OR {$a}tags NOT LIKE ?)";
+                $params[] = '%' . $tg . '%';
+            }
+            $where[] = '(' . implode(' AND ', $tagConds) . ')';
+        } elseif (in_array($tagOp, ['all', 'and'], true)) {
+            foreach ($tagTokens as $tg) {
+                $tagConds[] = "{$a}tags LIKE ?";
+                $params[] = '%' . $tg . '%';
+            }
+            $where[] = '(' . implode(' AND ', $tagConds) . ')';
+        } else {
+            foreach ($tagTokens as $tg) {
+                $tagConds[] = "{$a}tags LIKE ?";
+                $params[] = '%' . $tg . '%';
+            }
+            $where[] = '(' . implode(' OR ', $tagConds) . ')';
+        }
+    }
+
+    // Temperature (`temperature` / `temperatures` / `lead_temperature`)
+    $tempTokens = array_values(array_unique(array_merge(
+        parseCrmMultiFilterValues($input['temperature'] ?? null),
+        parseCrmMultiFilterValues($input['temperatures'] ?? null),
+        parseCrmMultiFilterValues($input['lead_temperature'] ?? null)
+    )));
+    if (!empty($tempTokens)) {
+        $tempVals = [];
+        foreach ($tempTokens as $tt) {
+            $tLow = mb_strtolower(trim($tt), 'UTF-8');
+            if (in_array($tLow, ['hot', 'nong', 'nóng'], true)) {
+                $tempVals = array_merge($tempVals, ['hot', 'nong', 'nóng']);
+            } elseif (in_array($tLow, ['warm', 'am', 'ấm'], true)) {
+                $tempVals = array_merge($tempVals, ['warm', 'am', 'ấm']);
+            } elseif (in_array($tLow, ['cold', 'lanh', 'lạnh'], true)) {
+                $tempVals = array_merge($tempVals, ['cold', 'lanh', 'lạnh']);
+            } else {
+                $tempVals[] = $tLow;
+            }
+        }
+        $tempVals = array_values(array_unique($tempVals));
+        if (!empty($tempVals)) {
+            $phTemp = implode(',', array_fill(0, count($tempVals), '?'));
+            if (isset($contactCols['lead_temperature'])) {
+                $where[] = "(LOWER(TRIM(COALESCE({$a}temperature, ''))) IN ($phTemp) OR LOWER(TRIM(COALESCE({$a}lead_temperature, ''))) IN ($phTemp))";
+                foreach ($tempVals as $tv) $params[] = $tv;
+                foreach ($tempVals as $tv) $params[] = $tv;
+            } else {
+                $where[] = "LOWER(TRIM(COALESCE({$a}temperature, ''))) IN ($phTemp)";
+                foreach ($tempVals as $tv) $params[] = $tv;
+            }
+        }
+    }
+
+    // Lead Score bounds (`score_min` / `min_lead_score` & `score_max` / `max_lead_score`)
+    $scoreMinRaw = $input['score_min'] ?? ($input['min_lead_score'] ?? null);
+    if ($scoreMinRaw !== null && $scoreMinRaw !== '' && is_numeric($scoreMinRaw)) {
+        $where[] = "COALESCE({$a}lead_score, 0) >= ?";
+        $params[] = (int)$scoreMinRaw;
+    }
+    $scoreMaxRaw = $input['score_max'] ?? ($input['max_lead_score'] ?? null);
+    if ($scoreMaxRaw !== null && $scoreMaxRaw !== '' && is_numeric($scoreMaxRaw)) {
+        $where[] = "COALESCE({$a}lead_score, 0) <= ?";
+        $params[] = (int)$scoreMaxRaw;
+    }
+
+    // Study Status (`study_status` / `study_statuses`)
+    $studyTokens = array_values(array_unique(array_merge(
+        parseCrmMultiFilterValues($input['study_status'] ?? null),
+        parseCrmMultiFilterValues($input['study_statuses'] ?? null)
+    )));
+    if (!empty($studyTokens) && isset($contactCols['study_status'])) {
+        $expandedStatuses = [];
+        foreach ($studyTokens as $stTok) {
+            $sLow = mb_strtolower(trim($stTok), 'UTF-8');
+            if (in_array($sLow, ['studying', 'dang_hoc', 'đang học', 'active'], true)) {
+                $expandedStatuses = array_merge($expandedStatuses, ['studying', 'dang_hoc', 'đang học']);
+            } elseif (in_array($sLow, ['completed', 'graduated', 'hoan_thanh', 'hoàn thành', 'tot_nghiep', 'tốt nghiệp'], true)) {
+                $expandedStatuses = array_merge($expandedStatuses, ['completed', 'graduated', 'hoan_thanh', 'hoàn thành', 'tot_nghiep', 'tốt nghiệp']);
+            } elseif (in_array($sLow, ['reserved', 'deferred', 'bao_luu', 'bảo lưu'], true)) {
+                $expandedStatuses = array_merge($expandedStatuses, ['reserved', 'deferred', 'bao_luu', 'bảo lưu']);
+            } elseif (in_array($sLow, ['suspended', 'tam_ngung', 'tạm ngưng', 'pause'], true)) {
+                $expandedStatuses = array_merge($expandedStatuses, ['suspended', 'tam_ngung', 'tạm ngưng']);
+            } elseif (in_array($sLow, ['dropped', 'bo_hoc', 'bỏ học', 'nghi_hoc', 'nghỉ học'], true)) {
+                $expandedStatuses = array_merge($expandedStatuses, ['dropped', 'bo_hoc', 'bỏ học', 'nghi_hoc', 'nghỉ học']);
+            } else {
+                $expandedStatuses[] = $sLow;
+            }
+        }
+        $expandedStatuses = array_values(array_unique($expandedStatuses));
+        if (!empty($expandedStatuses)) {
+            $phSt = implode(',', array_fill(0, count($expandedStatuses), '?'));
+            $where[] = "LOWER(TRIM(COALESCE({$a}study_status, ''))) IN ($phSt)";
+            foreach ($expandedStatuses as $es) {
+                $params[] = $es;
+            }
+        }
+    }
+
+    // Student Code (`student_code`)
+    $studentCode = trim((string)($input['student_code'] ?? ''));
+    if ($studentCode !== '' && strtolower($studentCode) !== 'all' && isset($contactCols['student_id'])) {
+        $scLow = strtolower($studentCode);
+        if ($scLow === 'has_code') {
+            $where[] = "({$a}student_id IS NOT NULL AND TRIM({$a}student_id) != '')";
+        } elseif ($scLow === 'no_code') {
+            $where[] = "({$a}student_id IS NULL OR TRIM({$a}student_id) = '')";
+        } else {
+            $where[] = "{$a}student_id LIKE ?";
+            $params[] = '%' . $studentCode . '%';
+        }
+    }
+
+    // Expected Intake & Major
+    $intakeTokens = array_values(array_unique(array_merge(
+        parseCrmMultiFilterValues($input['expected_intake'] ?? null),
+        parseCrmMultiFilterValues($input['expected_intakes'] ?? null)
+    )));
+    if (!empty($intakeTokens) && isset($contactCols['expected_intake'])) {
+        $inOrs = [];
+        foreach ($intakeTokens as $itk) {
+            $inOrs[] = "{$a}expected_intake LIKE ?";
+            $params[] = '%' . $itk . '%';
+        }
+        $where[] = '(' . implode(' OR ', $inOrs) . ')';
+    }
+
+    $majorTokens = array_values(array_unique(array_merge(
+        parseCrmMultiFilterValues($input['major'] ?? null),
+        parseCrmMultiFilterValues($input['majors'] ?? null)
+    )));
+    if (!empty($majorTokens)) {
+        $mjOrs = [];
+        $hasMajor = isset($contactCols['major']);
+        foreach ($majorTokens as $mj) {
+            if ($hasMajor) {
+                $mjOrs[] = "({$a}major LIKE ? OR {$a}program LIKE ?)";
+                $params[] = '%' . $mj . '%';
+                $params[] = '%' . $mj . '%';
+            } else {
+                $mjOrs[] = "{$a}program LIKE ?";
+                $params[] = '%' . $mj . '%';
+            }
+        }
+        $where[] = '(' . implode(' OR ', $mjOrs) . ')';
+    }
+
+    // Missing Document (`missing_document` / `document_status`) via `cloud_files`
+    $docTokens = array_values(array_unique(array_merge(
+        parseCrmMultiFilterValues($input['missing_document'] ?? null),
+        parseCrmMultiFilterValues($input['document_status'] ?? null)
+    )));
+    if (!empty($docTokens)) {
+        $idCardExistsSql = "EXISTS (SELECT 1 FROM cloud_files cf_id WHERE cf_id.contact_id = {$a}id AND (LOWER(cf_id.name) REGEXP 'cccd|cmnd|căn cước|can cuoc|chứng minh|chung minh|id_card|id card|passport|hộ chiếu|ho chieu' OR LOWER(COALESCE(cf_id.category, '')) REGEXP 'cccd|cmnd|id_card|personal|ca_nhan|cá nhân'))";
+        $degreeExistsSql = "EXISTS (SELECT 1 FROM cloud_files cf_dg WHERE cf_dg.contact_id = {$a}id AND (LOWER(cf_dg.name) REGEXP 'bằng|bang|degree|diploma|bảng điểm|bang diem|transcript|học bạ|hoc ba' OR LOWER(COALESCE(cf_dg.category, '')) REGEXP 'bằng|bang|degree|academic|hoc_tap|học tập'))";
+        $transExistsSql  = "EXISTS (SELECT 1 FROM cloud_files cf_tr WHERE cf_tr.contact_id = {$a}id AND (LOWER(cf_tr.name) REGEXP 'dịch|dich|translation|notar|công chứng|cong chung' OR LOWER(COALESCE(cf_tr.category, '')) REGEXP 'dịch|dich|translation'))";
+        $contractExistsSql = "EXISTS (SELECT 1 FROM cloud_files cf_ct WHERE cf_ct.contact_id = {$a}id AND (LOWER(cf_ct.name) REGEXP 'hợp đồng|hop dong|contract|application|đơn nhập học|don nhap hoc|offer' OR LOWER(COALESCE(cf_ct.category, '')) REGEXP 'hợp đồng|hop dong|contract|đơn hàng|don hang'))";
+
+        $docOrs = [];
+        foreach ($docTokens as $dtk) {
+            $dLow = strtolower(trim($dtk));
+            if ($dLow === 'id_card' || $dLow === 'cccd') {
+                $docOrs[] = "(NOT {$idCardExistsSql} AND ({$a}citizen_id IS NULL OR TRIM({$a}citizen_id) = ''))";
+            } elseif ($dLow === 'degree' || $dLow === 'bang_cap') {
+                $docOrs[] = "NOT {$degreeExistsSql}";
+            } elseif ($dLow === 'translation' || $dLow === 'ban_dich') {
+                $docOrs[] = "NOT {$transExistsSql}";
+            } elseif ($dLow === 'contract' || $dLow === 'hop_dong') {
+                $docOrs[] = "NOT {$contractExistsSql}";
+            } elseif ($dLow === 'incomplete') {
+                $docOrs[] = "(NOT {$idCardExistsSql} OR NOT {$degreeExistsSql})";
+            } elseif ($dLow === 'complete') {
+                $docOrs[] = "({$idCardExistsSql} AND {$degreeExistsSql})";
+            }
+        }
+        if (!empty($docOrs)) {
+            $where[] = '(' . implode(' OR ', $docOrs) . ')';
+        }
+    }
+
+    // Financial & Deposit Status Filters (`financial_filter` / `deposit_status` + min/max deposit & expected_revenue)
+    $finTokens = array_values(array_unique(array_merge(
+        parseCrmMultiFilterValues($input['financial_filter'] ?? null),
+        parseCrmMultiFilterValues($input['deposit_status'] ?? null)
+    )));
+    if (!empty($finTokens)) {
+        $finOrs = [];
+        foreach ($finTokens as $ft) {
+            $fLow = strtolower(trim($ft));
+            if ($fLow === 'has_deposit') {
+                $finOrs[] = "EXISTS (SELECT 1 FROM deposits dep_f WHERE dep_f.contact_id = {$a}id AND dep_f.status NOT IN ('cancelled', 'rejected'))";
+            } elseif ($fLow === 'approved_deposit' || $fLow === 'has_approved_deposit') {
+                $finOrs[] = "EXISTS (SELECT 1 FROM deposits dep_f WHERE dep_f.contact_id = {$a}id AND dep_f.status IN ('approved', 'completed'))";
+            } elseif ($fLow === 'pending_deposit') {
+                $finOrs[] = "EXISTS (SELECT 1 FROM deposits dep_f WHERE dep_f.contact_id = {$a}id AND dep_f.status = 'pending')";
+            } elseif ($fLow === 'no_deposit') {
+                $finOrs[] = "NOT EXISTS (SELECT 1 FROM deposits dep_f WHERE dep_f.contact_id = {$a}id AND dep_f.status NOT IN ('cancelled', 'rejected'))";
+            } elseif ($fLow === 'has_so') {
+                $finOrs[] = "({$a}stage_id IN (SELECT id FROM pipeline_stages WHERE order_index >= 12) OR {$a}status = 'customer' OR {$a}pipeline_status IN ('deposit_tuition_payment', 'dong_le_phi_ho_so', 'enrolled', 'hoc_vien'))";
+            } elseif ($fLow === 'high_value_deposit') {
+                $finOrs[] = "EXISTS (SELECT 1 FROM deposits dep_f WHERE dep_f.contact_id = {$a}id AND dep_f.price >= 10000000 AND dep_f.status NOT IN ('cancelled', 'rejected'))";
+            } elseif ($fLow === 'overdue_milestone') {
+                $finOrs[] = "EXISTS (SELECT 1 FROM deposits dep_om JOIN deposit_milestones dm_om ON dm_om.deposit_id = dep_om.id WHERE dep_om.contact_id = {$a}id AND dep_om.status NOT IN ('cancelled', 'rejected') AND dm_om.status NOT IN ('paid', 'approved', 'completed', 'cancelled', 'rejected') AND dm_om.expected_pay_date IS NOT NULL AND dm_om.expected_pay_date < CURDATE())";
+            } elseif ($fLow === 'has_revenue') {
+                $finOrs[] = "(EXISTS (SELECT 1 FROM deposits dep_rv WHERE dep_rv.contact_id = {$a}id AND dep_rv.status IN ('approved', 'completed') AND dep_rv.price > 0) OR EXISTS (SELECT 1 FROM invoices inv_rv WHERE inv_rv.contact_id = {$a}id AND inv_rv.deleted_at IS NULL AND inv_rv.status IN ('paid', 'partially_paid') AND inv_rv.amount_paid > 0))";
+            } elseif ($fLow === 'has_commission') {
+                $finOrs[] = "EXISTS (SELECT 1 FROM deposits dep_cm WHERE dep_cm.contact_id = {$a}id AND dep_cm.status NOT IN ('cancelled', 'rejected') AND COALESCE(dep_cm.expected_commission, 0) > 0)";
+            }
+        }
+        if (!empty($finOrs)) {
+            $where[] = '(' . implode(' OR ', $finOrs) . ')';
+        }
+    }
+
+    $minDepositRaw = $input['min_deposit_amount'] ?? ($input['min_deposit'] ?? null);
+    if ($minDepositRaw !== null && $minDepositRaw !== '' && is_numeric($minDepositRaw) && (float)$minDepositRaw > 0) {
+        $where[] = "(SELECT COALESCE(SUM(dep_min.price), 0) FROM deposits dep_min WHERE dep_min.contact_id = {$a}id AND dep_min.status NOT IN ('cancelled', 'rejected')) >= ?";
+        $params[] = (float)$minDepositRaw;
+    }
+    $maxDepositRaw = $input['max_deposit_amount'] ?? ($input['max_deposit'] ?? null);
+    if ($maxDepositRaw !== null && $maxDepositRaw !== '' && is_numeric($maxDepositRaw) && (float)$maxDepositRaw >= 0) {
+        $where[] = "(SELECT COALESCE(SUM(dep_max.price), 0) FROM deposits dep_max WHERE dep_max.contact_id = {$a}id AND dep_max.status NOT IN ('cancelled', 'rejected')) <= ?";
+        $params[] = (float)$maxDepositRaw;
+    }
+
+    if (isset($input['min_expected_revenue']) && $input['min_expected_revenue'] !== '' && is_numeric($input['min_expected_revenue'])) {
+        $where[] = "COALESCE({$a}expected_revenue, 0) >= ?";
+        $params[] = (float)$input['min_expected_revenue'];
+    }
+    if (isset($input['max_expected_revenue']) && $input['max_expected_revenue'] !== '' && is_numeric($input['max_expected_revenue'])) {
+        $where[] = "COALESCE({$a}expected_revenue, 0) <= ?";
+        $params[] = (float)$input['max_expected_revenue'];
+    }
+
+    // Optional Date Range Filter (when not explicitly skipped by caller)
+    if (empty($input['_skip_date_filter'])) {
+        applyCrmDateRangeFilter($db, $alias, $input, $where, $params);
+    }
+
+    // =========================================================================
+    // 6. DYNAMIC SCHEMA RULE BUILDER (`custom_rules` + `custom_rules_logic` = 'AND'|'OR')
+    // =========================================================================
+    $rawRules = $input['custom_rules'] ?? null;
+    if (!empty($rawRules)) {
+        $rules = is_string($rawRules) ? (json_decode($rawRules, true) ?: []) : (is_array($rawRules) ? $rawRules : []);
+        if (!empty($rules) && is_array($rules)) {
+            $whitelistedColumns = [
+                'id', 'person_id', 'full_name', 'phone', 'mobile', 'phone2', 'zalo_phone', 'email',
+                'gender', 'birthday', 'dob', 'citizen_id', 'passport', 'address', 'ward', 'district',
+                'city', 'preferred_location', 'company_id', 'company', 'job_title', 'department',
+                'industry', 'tax_code', 'customer_type', 'owner_id', 'collaborator_ids', 'created_by',
+                'status', 'stage_id', 'pipeline_status', 'lead_status', 'temperature', 'lead_temperature',
+                'lead_score', 'win_probability', 'ttl1_completed', 'next_action', 'next_followup_date',
+                'expected_decision_date', 'nurture_reason', 'lost_reason', 'project_id', 'program',
+                'major', 'expected_intake', 'admission_date', 'student_id', 'study_status', 'source',
+                'campaign_id', 'platform', 'form_name', 'utm_source', 'utm_campaign', 'utm_medium',
+                'utm_content', 'utm_term', 'tags', 'notes', 'expected_revenue', 'budget', 'budget_range',
+                'total_spent', 'order_count', 'last_order_at', 'last_contact', 'created_at', 'updated_at'
+            ];
+            $whitelistMap = array_fill_keys($whitelistedColumns, true);
+
+            $ruleClauses = [];
+            foreach ($rules as $rule) {
+                if (!is_array($rule)) continue;
+                $field = trim((string)($rule['field'] ?? ($rule['column'] ?? '')));
+                $op    = strtolower(trim((string)($rule['operator'] ?? ($rule['op'] ?? 'eq'))));
+                $val   = $rule['value'] ?? null;
+                $valTo = $rule['valueTo'] ?? ($rule['value_to'] ?? ($rule['value2'] ?? null));
+
+                if ($field === '') continue;
+
+                // Map operator synonyms
+                $opMap = [
+                    '=' => 'eq', 'equals' => 'eq',
+                    '!=' => 'neq', '<>' => 'neq', 'not_equals' => 'neq',
+                    'like' => 'contains',
+                    'not_like' => 'not_contains',
+                    '>' => 'gt', '>=' => 'gte', '<' => 'lt', '<=' => 'lte',
+                    'empty' => 'is_empty', 'is_null' => 'is_empty',
+                    'not_empty' => 'is_not_empty', 'is_not_null' => 'is_not_empty',
+                ];
+                if (isset($opMap[$op])) {
+                    $op = $opMap[$op];
+                }
+
+                // Case A: Custom Field (`cf_<field_key>`)
+                if (str_starts_with($field, 'cf_')) {
+                    $cfKey = substr($field, 3);
+                    if (!preg_match('/^[a-zA-Z0-9_]+$/', $cfKey)) {
+                        continue;
+                    }
+                    $cfValExpr = "COALESCE(cfv_r.value_text, CAST(cfv_r.value_number AS CHAR), CAST(cfv_r.value_date AS CHAR), cfv_r.value_json)";
+                    $cfNumExpr = "COALESCE(cfv_r.value_number, CAST(cfv_r.value_text AS DECIMAL(18,4)))";
+
+                    if ($op === 'is_empty') {
+                        $ruleClauses[] = "NOT EXISTS (SELECT 1 FROM custom_field_values cfv_r JOIN custom_fields cf_r ON cfv_r.custom_field_id = cf_r.id WHERE cf_r.entity_type = 'contact' AND cf_r.field_key = ? AND cfv_r.entity_id = {$a}id AND TRIM(COALESCE({$cfValExpr}, '')) != '')";
+                        $params[] = $cfKey;
+                    } elseif ($op === 'is_not_empty') {
+                        $ruleClauses[] = "EXISTS (SELECT 1 FROM custom_field_values cfv_r JOIN custom_fields cf_r ON cfv_r.custom_field_id = cf_r.id WHERE cf_r.entity_type = 'contact' AND cf_r.field_key = ? AND cfv_r.entity_id = {$a}id AND TRIM(COALESCE({$cfValExpr}, '')) != '')";
+                        $params[] = $cfKey;
+                    } elseif ($op === 'eq') {
+                        $ruleClauses[] = "EXISTS (SELECT 1 FROM custom_field_values cfv_r JOIN custom_fields cf_r ON cfv_r.custom_field_id = cf_r.id WHERE cf_r.entity_type = 'contact' AND cf_r.field_key = ? AND cfv_r.entity_id = {$a}id AND {$cfValExpr} = ?)";
+                        $params[] = $cfKey;
+                        $params[] = (string)$val;
+                    } elseif ($op === 'neq') {
+                        $ruleClauses[] = "NOT EXISTS (SELECT 1 FROM custom_field_values cfv_r JOIN custom_fields cf_r ON cfv_r.custom_field_id = cf_r.id WHERE cf_r.entity_type = 'contact' AND cf_r.field_key = ? AND cfv_r.entity_id = {$a}id AND {$cfValExpr} = ?)";
+                        $params[] = $cfKey;
+                        $params[] = (string)$val;
+                    } elseif ($op === 'contains') {
+                        $ruleClauses[] = "EXISTS (SELECT 1 FROM custom_field_values cfv_r JOIN custom_fields cf_r ON cfv_r.custom_field_id = cf_r.id WHERE cf_r.entity_type = 'contact' AND cf_r.field_key = ? AND cfv_r.entity_id = {$a}id AND {$cfValExpr} LIKE ?)";
+                        $params[] = $cfKey;
+                        $params[] = '%' . (string)$val . '%';
+                    } elseif ($op === 'starts_with') {
+                        $ruleClauses[] = "EXISTS (SELECT 1 FROM custom_field_values cfv_r JOIN custom_fields cf_r ON cfv_r.custom_field_id = cf_r.id WHERE cf_r.entity_type = 'contact' AND cf_r.field_key = ? AND cfv_r.entity_id = {$a}id AND {$cfValExpr} LIKE ?)";
+                        $params[] = $cfKey;
+                        $params[] = (string)$val . '%';
+                    } elseif ($op === 'ends_with') {
+                        $ruleClauses[] = "EXISTS (SELECT 1 FROM custom_field_values cfv_r JOIN custom_fields cf_r ON cfv_r.custom_field_id = cf_r.id WHERE cf_r.entity_type = 'contact' AND cf_r.field_key = ? AND cfv_r.entity_id = {$a}id AND {$cfValExpr} LIKE ?)";
+                        $params[] = $cfKey;
+                        $params[] = '%' . (string)$val;
+                    } elseif ($op === 'not_contains') {
+                        $ruleClauses[] = "NOT EXISTS (SELECT 1 FROM custom_field_values cfv_r JOIN custom_fields cf_r ON cfv_r.custom_field_id = cf_r.id WHERE cf_r.entity_type = 'contact' AND cf_r.field_key = ? AND cfv_r.entity_id = {$a}id AND {$cfValExpr} LIKE ?)";
+                        $params[] = $cfKey;
+                        $params[] = '%' . (string)$val . '%';
+                    } elseif (in_array($op, ['gt', 'gte', 'lt', 'lte'], true)) {
+                        $sqlOp = $op === 'gt' ? '>' : ($op === 'gte' ? '>=' : ($op === 'lt' ? '<' : '<='));
+                        $targetExpr = is_numeric($val) ? $cfNumExpr : $cfValExpr;
+                        $ruleClauses[] = "EXISTS (SELECT 1 FROM custom_field_values cfv_r JOIN custom_fields cf_r ON cfv_r.custom_field_id = cf_r.id WHERE cf_r.entity_type = 'contact' AND cf_r.field_key = ? AND cfv_r.entity_id = {$a}id AND {$targetExpr} {$sqlOp} ?)";
+                        $params[] = $cfKey;
+                        $params[] = is_numeric($val) ? (float)$val : (string)$val;
+                    } elseif ($op === 'between') {
+                        $bMin = $val;
+                        $bMax = $valTo;
+                        if (is_array($val) && count($val) >= 2) {
+                            $bMin = $val[0];
+                            $bMax = $val[1];
+                        } elseif (is_string($val) && str_contains($val, ',') && $bMax === null) {
+                            [$bMin, $bMax] = array_map('trim', explode(',', $val, 2));
+                        }
+                        if ($bMin !== null && $bMax !== null) {
+                            $targetExpr = (is_numeric($bMin) && is_numeric($bMax)) ? $cfNumExpr : $cfValExpr;
+                            $ruleClauses[] = "EXISTS (SELECT 1 FROM custom_field_values cfv_r JOIN custom_fields cf_r ON cfv_r.custom_field_id = cf_r.id WHERE cf_r.entity_type = 'contact' AND cf_r.field_key = ? AND cfv_r.entity_id = {$a}id AND {$targetExpr} >= ? AND {$targetExpr} <= ?)";
+                            $params[] = $cfKey;
+                            $params[] = is_numeric($bMin) ? (float)$bMin : (string)$bMin;
+                            $params[] = is_numeric($bMax) ? (float)$bMax : (string)$bMax;
+                        }
+                    } elseif ($op === 'in' || $op === 'not_in') {
+                        $inItems = parseCrmMultiFilterValues($val);
+                        if (!empty($inItems)) {
+                            $phIn = implode(',', array_fill(0, count($inItems), '?'));
+                            $prefixNot = $op === 'not_in' ? 'NOT ' : '';
+                            $ruleClauses[] = "{$prefixNot}EXISTS (SELECT 1 FROM custom_field_values cfv_r JOIN custom_fields cf_r ON cfv_r.custom_field_id = cf_r.id WHERE cf_r.entity_type = 'contact' AND cf_r.field_key = ? AND cfv_r.entity_id = {$a}id AND {$cfValExpr} IN ($phIn))";
+                            $params[] = $cfKey;
+                            foreach ($inItems as $iv) {
+                                $params[] = (string)$iv;
+                            }
+                        }
+                    }
+                    continue;
+                }
+
+                // Case B: Whitelisted `contacts` column
+                if (!isset($whitelistMap[$field])) {
+                    continue;
+                }
+
+                // Resolve expression for computed/virtual vs physical columns
+                if (!isset($contactCols[$field])) {
+                    if ($field === 'total_spent') {
+                        $colExpr = "(SELECT COALESCE(SUM(dep_ts.price), 0) FROM deposits dep_ts WHERE dep_ts.contact_id = {$a}id AND dep_ts.status IN ('approved', 'completed'))";
+                    } elseif ($field === 'order_count') {
+                        $colExpr = "(SELECT COUNT(*) FROM deposits dep_oc WHERE dep_oc.contact_id = {$a}id AND dep_oc.status NOT IN ('cancelled', 'rejected'))";
+                    } elseif ($field === 'last_order_at') {
+                        $colExpr = "(SELECT MAX(dep_lo.created_at) FROM deposits dep_lo WHERE dep_lo.contact_id = {$a}id AND dep_lo.status NOT IN ('cancelled', 'rejected'))";
+                    } else {
+                        continue;
+                    }
+                } else {
+                    $colExpr = "{$a}{$field}";
+                }
+
+                if ($op === 'is_empty') {
+                    $ruleClauses[] = "({$colExpr} IS NULL OR TRIM(CAST({$colExpr} AS CHAR)) = '')";
+                } elseif ($op === 'is_not_empty') {
+                    $ruleClauses[] = "({$colExpr} IS NOT NULL AND TRIM(CAST({$colExpr} AS CHAR)) != '')";
+                } elseif ($op === 'eq') {
+                    $ruleClauses[] = "{$colExpr} = ?";
+                    $params[] = (string)$val;
+                } elseif ($op === 'neq') {
+                    $ruleClauses[] = "({$colExpr} IS NULL OR {$colExpr} != ?)";
+                    $params[] = (string)$val;
+                } elseif ($op === 'contains') {
+                    $ruleClauses[] = "{$colExpr} LIKE ?";
+                    $params[] = '%' . (string)$val . '%';
+                } elseif ($op === 'starts_with') {
+                    $ruleClauses[] = "{$colExpr} LIKE ?";
+                    $params[] = (string)$val . '%';
+                } elseif ($op === 'ends_with') {
+                    $ruleClauses[] = "{$colExpr} LIKE ?";
+                    $params[] = '%' . (string)$val;
+                } elseif ($op === 'not_contains') {
+                    $ruleClauses[] = "({$colExpr} IS NULL OR {$colExpr} NOT LIKE ?)";
+                    $params[] = '%' . (string)$val . '%';
+                } elseif (in_array($op, ['gt', 'gte', 'lt', 'lte'], true)) {
+                    $sqlOp = $op === 'gt' ? '>' : ($op === 'gte' ? '>=' : ($op === 'lt' ? '<' : '<='));
+                    $ruleClauses[] = "{$colExpr} {$sqlOp} ?";
+                    $params[] = is_numeric($val) ? ($val + 0) : (string)$val;
+                } elseif ($op === 'between') {
+                    $bMin = $val;
+                    $bMax = $valTo;
+                    if (is_array($val) && count($val) >= 2) {
+                        $bMin = $val[0];
+                        $bMax = $val[1];
+                    } elseif (is_string($val) && str_contains($val, ',') && $bMax === null) {
+                        [$bMin, $bMax] = array_map('trim', explode(',', $val, 2));
+                    }
+                    if ($bMin !== null && $bMax !== null && $bMin !== '' && $bMax !== '') {
+                        $ruleClauses[] = "({$colExpr} >= ? AND {$colExpr} <= ?)";
+                        $params[] = is_numeric($bMin) ? ($bMin + 0) : (string)$bMin;
+                        $params[] = is_numeric($bMax) ? ($bMax + 0) : (string)$bMax;
+                    }
+                } elseif ($op === 'in') {
+                    $inItems = parseCrmMultiFilterValues($val);
+                    if (!empty($inItems)) {
+                        $phIn = implode(',', array_fill(0, count($inItems), '?'));
+                        $ruleClauses[] = "{$colExpr} IN ($phIn)";
+                        foreach ($inItems as $iv) {
+                            $params[] = (string)$iv;
+                        }
+                    }
+                } elseif ($op === 'not_in') {
+                    $inItems = parseCrmMultiFilterValues($val);
+                    if (!empty($inItems)) {
+                        $phIn = implode(',', array_fill(0, count($inItems), '?'));
+                        $ruleClauses[] = "({$colExpr} IS NULL OR {$colExpr} NOT IN ($phIn))";
+                        foreach ($inItems as $iv) {
+                            $params[] = (string)$iv;
+                        }
+                    }
+                }
+            }
+
+            if (!empty($ruleClauses)) {
+                $logic = strtoupper(trim((string)($input['custom_rules_logic'] ?? 'AND'))) === 'OR' ? 'OR' : 'AND';
+                $where[] = '(' . implode(" {$logic} ", $ruleClauses) . ')';
+            }
+        }
+    }
 }

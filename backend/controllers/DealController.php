@@ -131,9 +131,9 @@ class DealController {
             $params[] = $auth['user_id'];
             $params[] = $auth['user_id'];
         }
-        $search = trim($_GET['search'] ?? '');
+        require_once __DIR__ . '/../utils/search_helpers.php';
+        $search = trim((string)($_GET['search'] ?? ''));
         if ($search !== '') {
-            require_once __DIR__ . '/../utils/search_helpers.php';
             $searchRes = buildContactSearchClause($search, 'c.');
             $dConds = ["d.title LIKE ?"];
             $dParams = ["%$search%"];
@@ -149,35 +149,162 @@ class DealController {
                 $params[] = $dp;
             }
         }
-        if ($stage && $search === '') { $where[]='d.stage_id=?'; $params[]=(int)$stage; }
-        if ($owner) { $where[]='d.owner_id=?'; $params[]=(int)$owner; }
-        $teamId = trim((string)($_GET['team_id'] ?? ''));
-        if ($teamId !== '' && $teamId !== 'all') {
-            $where[] = 'd.owner_id IN (SELECT id FROM users WHERE team_id = ?)';
-            $params[] = (int)$teamId;
+
+        // Multi-Stage on deals (`stage_id`, `stages`, `stage_ids`)
+        $dealStages = array_values(array_unique(array_merge(
+            parseCrmMultiFilterValues($_GET['stage_id'] ?? null),
+            parseCrmMultiFilterValues($_GET['stages'] ?? null),
+            parseCrmMultiFilterValues($_GET['stage_ids'] ?? null)
+        )));
+        if (!empty($dealStages) && ($search === '' || !empty($_GET['stages']) || !empty($_GET['stage_ids']))) {
+            $dStageOrs = [];
+            $dStageIds = [];
+            foreach ($dealStages as $dst) {
+                if (is_numeric($dst)) {
+                    $dStageIds[] = (int)$dst;
+                } else {
+                    $dStageOrs[] = "d.stage_id IN (SELECT ps_d.id FROM pipeline_stages ps_d WHERE ps_d.system_slug = ? OR ps_d.name LIKE ?)";
+                    $params[] = $dst;
+                    $params[] = '%' . $dst . '%';
+                }
+            }
+            if (!empty($dStageIds)) {
+                $phDs = implode(',', array_fill(0, count($dStageIds), '?'));
+                array_unshift($dStageOrs, "d.stage_id IN ($phDs)");
+                $idParams = array_map('intval', $dStageIds);
+                array_splice($params, count($params) - (count($dStageOrs) - 1) * 2, 0, $idParams);
+            }
+            if (!empty($dStageOrs)) {
+                $where[] = '(' . implode(' OR ', $dStageOrs) . ')';
+            }
         }
-        if ($contactId) { $where[]='d.contact_id=?'; $params[]=(int)$contactId; }
-        if ($companyId) { $where[]='d.company_id=?'; $params[]=(int)$companyId; }
-        $projectId = trim((string)($_GET['project_id'] ?? ''));
-        if ($projectId !== '' && $projectId !== 'all') {
-            $where[] = 'd.contact_id IN (SELECT id FROM contacts WHERE project_id = ? AND deleted_at IS NULL)';
-            $params[] = (int)$projectId;
+
+        // Multi-Owner on deals (`owner_id`, `owners`, `assigned_to`)
+        $dealOwners = array_values(array_unique(array_merge(
+            parseCrmMultiFilterValues($_GET['owner_id'] ?? null),
+            parseCrmMultiFilterValues($_GET['owners'] ?? null),
+            parseCrmMultiFilterValues($_GET['assigned_to'] ?? null)
+        )));
+        if (!empty($dealOwners)) {
+            $resolvedOwnerIds = [];
+            foreach ($dealOwners as $do) {
+                if (is_numeric($do) && (int)$do > 0) {
+                    $resolvedOwnerIds[] = (int)$do;
+                } else {
+                    foreach (resolveStaffUserIdsByFuzzyName($this->db, $do) as $rid) {
+                        $resolvedOwnerIds[] = (int)$rid;
+                    }
+                }
+            }
+            $resolvedOwnerIds = array_values(array_unique($resolvedOwnerIds));
+            if (!empty($resolvedOwnerIds)) {
+                $phDo = implode(',', array_fill(0, count($resolvedOwnerIds), '?'));
+                $where[] = "d.owner_id IN ($phDo)";
+                foreach ($resolvedOwnerIds as $roid) {
+                    $params[] = (int)$roid;
+                }
+            }
         }
-        $campaignId = trim((string)($_GET['campaign_id'] ?? ''));
-        if ($campaignId !== '' && $campaignId !== 'all') {
-            $where[] = 'd.contact_id IN (SELECT id FROM contacts WHERE campaign_id = ? AND deleted_at IS NULL)';
-            $params[] = (int)$campaignId;
+
+        // Multi-Team on deals (`team_id`, `teams`)
+        $dealTeams = array_values(array_unique(array_merge(
+            parseCrmMultiFilterValues($_GET['team_id'] ?? null),
+            parseCrmMultiFilterValues($_GET['teams'] ?? null)
+        )));
+        if (!empty($dealTeams)) {
+            $dTeamIds = [];
+            $dTeamNames = [];
+            foreach ($dealTeams as $dt) {
+                if (is_numeric($dt) && (int)$dt > 0) {
+                    $dTeamIds[] = (int)$dt;
+                } else {
+                    $dTeamNames[] = $dt;
+                }
+            }
+            $dtOrs = [];
+            if (!empty($dTeamIds)) {
+                $phDt = implode(',', array_fill(0, count($dTeamIds), '?'));
+                $dtOrs[] = "u_dt.team_id IN ($phDt)";
+                foreach ($dTeamIds as $dtId) {
+                    $params[] = (int)$dtId;
+                }
+            }
+            foreach ($dTeamNames as $dtName) {
+                $dtOrs[] = "tm_d.name LIKE ?";
+                $params[] = '%' . $dtName . '%';
+            }
+            if (!empty($dtOrs)) {
+                $where[] = "d.owner_id IN (SELECT u_dt.id FROM users u_dt LEFT JOIN teams tm_d ON u_dt.team_id = tm_d.id WHERE " . implode(' OR ', $dtOrs) . ")";
+            }
         }
-        $source = trim((string)($_GET['source'] ?? ''));
-        if ($source !== '' && $source !== 'all') {
-            $where[] = 'd.contact_id IN (SELECT id FROM contacts WHERE source = ? AND deleted_at IS NULL)';
-            $params[] = $source;
+
+        if ($contactId) {
+            $where[] = 'd.contact_id = ?';
+            $params[] = (int)$contactId;
         }
-        $from = trim((string)($_GET['from'] ?? ''));
-        $to   = trim((string)($_GET['to'] ?? ''));
-        if ($from !== '') { $where[] = 'd.created_at >= ?'; $params[] = $from . ' 00:00:00'; }
-        if ($to !== '')   { $where[] = 'd.created_at <= ?'; $params[] = $to . ' 23:59:59'; }
-        $w = implode(' AND ',$where);
+        if ($companyId && is_numeric($companyId)) {
+            $where[] = 'd.company_id = ?';
+            $params[] = (int)$companyId;
+        }
+
+        // Deal value bounds (`min_amount` / `max_amount` / `min_value` / `max_value`)
+        $minAmountRaw = $_GET['min_amount'] ?? ($_GET['min_value'] ?? null);
+        if ($minAmountRaw !== null && $minAmountRaw !== '' && is_numeric($minAmountRaw)) {
+            $where[] = 'COALESCE(d.value, 0) >= ?';
+            $params[] = (float)$minAmountRaw;
+        }
+        $maxAmountRaw = $_GET['max_amount'] ?? ($_GET['max_value'] ?? null);
+        if ($maxAmountRaw !== null && $maxAmountRaw !== '' && is_numeric($maxAmountRaw)) {
+            $where[] = 'COALESCE(d.value, 0) <= ?';
+            $params[] = (float)$maxAmountRaw;
+        }
+
+        // SARGable Date Range on `d.created_at`
+        $from = trim((string)($_GET['from'] ?? ($_GET['from_date'] ?? '')));
+        $to   = trim((string)($_GET['to'] ?? ($_GET['to_date'] ?? '')));
+        if ($from !== '') {
+            $fromDate = substr($from, 0, 10);
+            $where[] = 'd.created_at >= ?';
+            $params[] = strlen($from) > 10 ? $from : $fromDate . ' 00:00:00';
+        }
+        if ($to !== '') {
+            $toDate = substr($to, 0, 10);
+            $where[] = 'd.created_at <= ?';
+            $params[] = strlen($to) > 10 ? $to : $toDate . ' 23:59:59';
+        }
+
+        // Contact-level multi-tier filters (`programs`/`program`/`project_id`, `campaign_id`/`campaigns`/`campaign_or_utm`, `sources`/`source`, `cities`/`city`, `gender`, `tags`/`tag`, `custom_rules`, etc.)
+        $contactFilterInput = $_GET;
+        unset(
+            $contactFilterInput['owner_id'],
+            $contactFilterInput['owners'],
+            $contactFilterInput['assigned_to'],
+            $contactFilterInput['team_id'],
+            $contactFilterInput['teams'],
+            $contactFilterInput['stage_id'],
+            $contactFilterInput['stages'],
+            $contactFilterInput['stage_ids'],
+            $contactFilterInput['company_id'],
+            $contactFilterInput['from'],
+            $contactFilterInput['to'],
+            $contactFilterInput['from_date'],
+            $contactFilterInput['to_date']
+        );
+        $contactFilterInput['_defer_stage_filter'] = true;
+        $contactFilterInput['_skip_date_filter'] = true;
+
+        $cWhere = [];
+        $cParams = [];
+        applyCrmAdvancedMultiTierFilters($this->db, 'c.', $contactFilterInput, $cWhere, $cParams);
+        if (!empty($cWhere)) {
+            $where[] = "d.contact_id IN (SELECT c.id FROM contacts c WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND " . implode(' AND ', $cWhere) . ")";
+            $params[] = $tid;
+            foreach ($cParams as $cp) {
+                $params[] = $cp;
+            }
+        }
+
+        $w = implode(' AND ', $where);
 
         $cnt = $this->db->prepare("SELECT COUNT(*) FROM deals d WHERE $w");
         $cnt->execute($params); $total=(int)$cnt->fetchColumn();
