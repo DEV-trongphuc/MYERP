@@ -1226,10 +1226,37 @@ export const ExpensesPage: React.FC = () => {
             </thead>
             <tbody>
               {loading && Array.from({ length: 6 }).map((_, i) => (
-                <tr key={i}>
-                  {Array.from({ length: 6 }).map((__, j) => (
-                    <td key={j}><div className="skeleton" style={{ height: 20, borderRadius: 4, width: j === 1 ? '80%' : j === 2 ? '60%' : '70%' }} /></td>
-                  ))}
+                <tr key={i} style={{ borderBottom: '1px solid var(--color-border-light)' }}>
+                  <td style={{ padding: '0.85rem 1rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div className="skeleton" style={{ height: 14, width: '75%', borderRadius: 4 }} />
+                      <div className="skeleton" style={{ height: 18, width: 90, borderRadius: 10 }} />
+                    </div>
+                  </td>
+                  <td style={{ padding: '0.85rem 1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div className="skeleton" style={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0 }} />
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
+                        <div className="skeleton" style={{ height: 12, width: 100, borderRadius: 4 }} />
+                        <div className="skeleton" style={{ height: 10, width: 70, borderRadius: 4 }} />
+                      </div>
+                    </div>
+                  </td>
+                  <td style={{ padding: '0.85rem 1rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                      <div className="skeleton" style={{ height: 14, width: 95, borderRadius: 4 }} />
+                      <div className="skeleton" style={{ height: 16, width: 75, borderRadius: 4 }} />
+                    </div>
+                  </td>
+                  <td style={{ padding: '0.85rem 1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <div className="skeleton" style={{ width: 26, height: 26, borderRadius: '50%' }} />
+                      <div className="skeleton" style={{ width: 26, height: 26, borderRadius: '50%' }} />
+                    </div>
+                  </td>
+                  <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
+                    <div className="skeleton" style={{ height: 24, width: 56, borderRadius: 6, marginLeft: 'auto' }} />
+                  </td>
                 </tr>
               ))}
               <AnimatePresence>

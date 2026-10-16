@@ -19,6 +19,7 @@ import { CustomSelect } from '../components/ui/CustomSelect';
 import { Pagination } from '../components/ui/Pagination';
 import { Avatar } from '../components/ui/Avatar';
 import { CopyButton } from '../components/ui/CopyButton';
+import { CardSkeleton } from '../components/ui/Skeleton';
 import { ActivityModal } from '../components/ui/ActivityModal';
 import styles from './EntityDrawer.module.css';
 import { canEditPartnerOrSupplier, isSales } from '../utils/roleUtils';
@@ -544,8 +545,18 @@ export const SuppliersPage: React.FC = () => {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="spinner sm"></div>
+        <div style={{ width: '100%' }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, minmax(0, 1fr))',
+            gap: '1rem',
+            width: '100%',
+            marginBottom: '1.5rem'
+          }}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <CardSkeleton key={i} height={180} />
+            ))}
+          </div>
         </div>
       ) : total === 0 ? (
         <div className="card mobile-flat-container" style={{ padding: '2rem 1rem', overflow: 'hidden' }}>

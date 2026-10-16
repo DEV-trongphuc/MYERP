@@ -4542,7 +4542,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                             onMouseLeave={() => setHoveredCell(null)}
                           >
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
-                              <span style={{ fontSize: '0.75rem', fontWeight: 700, fontFamily: 'monospace', padding: '2px 7px', borderRadius: '6px', background: 'rgba(37, 99, 235, 0.08)', color: 'var(--color-primary)' }}>
+                              <span style={{ fontSize: '0.75rem', fontWeight: 700, fontFamily: 'monospace', padding: '2px 7px', borderRadius: '6px', background: 'rgba(100, 116, 139, 0.1)', color: 'var(--color-text-muted)' }}>
                                 {c.student_code || c.student_id || ('KH' + String(c.id).padStart(6, '0'))}
                               </span>
                               {c.admission_date ? (() => {
@@ -4553,7 +4553,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                   : `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
                                 return (
                                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>
-                                    <Calendar size={11} style={{ color: '#059669', flexShrink: 0 }} />
+                                    <Calendar size={11} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
                                     <span>{formatted}</span>
                                   </span>
                                 );
@@ -4903,8 +4903,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                               }
                               const pad = (n: number) => String(n).padStart(2, '0');
                               return (
-                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)' }}>
-                                  <Calendar size={13} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>
+                                  <Calendar size={13} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
                                   <span>{`${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`}</span>
                                 </div>
                               );

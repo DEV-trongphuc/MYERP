@@ -19,6 +19,7 @@ import api from '../api/axios';
 import { Tooltip } from '../components/ui/Tooltip';
 import { useDebounce } from '../hooks/useDebounce';
 import { Avatar } from '../components/ui/Avatar';
+import { TableRowSkeleton } from '../components/ui/Skeleton';
 
 const PAGE_SIZE = 10;
 
@@ -511,10 +512,8 @@ export const QuotesPage: React.FC = () => {
             </thead>
             <tbody>
               {loading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={i}>
-                    <td colSpan={8}><div className="skeleton" style={{ height: 48, borderRadius: 8 }} /></td>
-                  </tr>
+                Array.from({ length: 6 }).map((_, i) => (
+                  <TableRowSkeleton key={i} cols={8} />
                 ))
               ) : items.length === 0 ? (
                 <tr className="empty-row">

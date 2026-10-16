@@ -70,9 +70,10 @@ const SplashPreviewPage = lazy(() => import('./pages/SplashPreviewPage').then(mo
 const DocumentationPage = lazy(() => import('./pages/DocumentationPage'));
 const ApiDocumentationPage = lazy(() => import('./pages/ApiDocumentationPage'));
 const ApiV1DocumentationPage = lazy(() => import('./pages/ApiV1DocumentationPage'));
+import { RouteTabSkeleton } from './components/ui/Skeleton';
 
-// Lightweight null fallback so each tab/page renders its own dedicated, tailored skeleton
-const PageLoader = () => null;
+// Instant route-aware skeleton fallback so no tab ever flashes a blank white screen while lazy chunks load
+const PageLoader = ({ path }: { path?: string }) => <RouteTabSkeleton path={path} />;
 
 const AccessDeniedView = () => (
   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh', gap: '14px', color: 'var(--color-text-muted)' }}>
@@ -136,11 +137,7 @@ const AppTabs = () => {
   const location = useLocation();
 
   if (!user) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', width: '100%' }}>
-        <div className="spin animate-spin" style={{ width: '32px', height: '32px', border: '3px solid rgba(189,29,45,0.2)', borderTopColor: 'var(--color-primary)', borderRadius: '50%' }} />
-      </div>
-    );
+    return <RouteTabSkeleton path={location.pathname} />;
   }
 
   const renderPageComponent = (path: string) => {
@@ -267,7 +264,7 @@ const AppTabs = () => {
 
   useEffect(() => {
     if (!visitedPaths.includes(location.pathname)) {
-      setVisitedPaths(prev => [...prev, location.pathname]);
+      setVisitedPaths(prev => (prev.includes(location.pathname) ? prev : [...prev, location.pathname]));
     }
   }, [location.pathname, visitedPaths]);
 
@@ -288,9 +285,13 @@ const AppTabs = () => {
     };
   }, []);
 
+  const effectiveVisitedPaths = visitedPaths.includes(location.pathname)
+    ? visitedPaths
+    : [...visitedPaths, location.pathname];
+
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-      {visitedPaths.map(path => {
+      {effectiveVisitedPaths.map(path => {
         const isActive = path === location.pathname;
         const rKey = refreshKeys[path] || 0;
         return (
@@ -305,7 +306,7 @@ const AppTabs = () => {
               contentVisibility: isActive ? 'visible' : 'hidden',
             }}
           >
-            <Suspense fallback={<PageLoader />}>
+            <Suspense fallback={<RouteTabSkeleton path={path} />}>
               {renderPageComponent(path)}
             </Suspense>
           </div>

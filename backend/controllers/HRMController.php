@@ -6,6 +6,54 @@ class HRMController {
         $this->db = $db;
     }
 
+    private static bool $checkInsHealed = false;
+
+    public static function healPollutedCheckIns(PDO $db): void {
+        if (self::$checkInsHealed) return;
+        self::$checkInsHealed = true;
+        try {
+            $stmt = $db->query("
+                SELECT id, reason, status, late_minutes, selfie_url
+                FROM check_ins
+                WHERE reason LIKE '%[Ngoài bán kính%'
+                   OR reason LIKE '%[Không có tọa độ GPS%'
+                   OR (selfie_url IS NOT NULL AND TRIM(selfie_url) != '' AND (status = 'pending_approval' OR (reason IS NOT NULL AND TRIM(reason) != '')))
+                   OR (status = 'pending_approval' AND late_minutes > 0)
+                LIMIT 500
+            ");
+            $rows = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+            if (!empty($rows)) {
+                $upd = $db->prepare("UPDATE check_ins SET reason = ?, status = ?, late_minutes = ? WHERE id = ?");
+                foreach ($rows as $r) {
+                    $hasSelfie = !empty(trim((string)($r['selfie_url'] ?? '')));
+                    $lateMins = (int)($r['late_minutes'] ?? 0);
+                    $newStatus = $r['status'];
+
+                    if ($hasSelfie) {
+                        $cleanedReason = null;
+                        if ($newStatus === 'pending_approval') {
+                            $newStatus = 'approved';
+                        }
+                    } else {
+                        $cleaned = (string)($r['reason'] ?? '');
+                        $cleaned = preg_replace('/\s*\[Ngoài bán kính văn phòng:[^\]]*\]/u', '', $cleaned);
+                        $cleaned = preg_replace('/\s*\[Không có tọa độ GPS[^\]]*\]/u', '', $cleaned);
+                        $cleaned = trim($cleaned);
+                        $cleanedReason = $cleaned !== '' ? $cleaned : null;
+                        if ($cleanedReason === null && $newStatus === 'pending_approval') {
+                            $newStatus = 'approved';
+                        }
+                        if ($newStatus === 'pending_approval') {
+                            $lateMins = 0;
+                        }
+                    }
+
+                    $upd->execute([$cleanedReason, $newStatus, $lateMins, (int)$r['id']]);
+                }
+            }
+        } catch (\Throwable $e) {}
+    }
+
     private function isAdmin(array $auth): bool {
         return in_array($auth['role'], ['admin', 'super_admin', 'superadmin', 'director', 'hr'], true);
     }
@@ -3677,7 +3725,8 @@ class HRMController {
             }
         }
 
-        // 4. Pending Checkins - CHỈ LẤY ĐƠN BỔ SUNG CHẤM CÔNG (Bỏ giải trình đi trễ vì đi trễ auto-accept)
+        // 4. Pending Checkins - CHỈ LẤY ĐƠN BỔ SUNG CHẤM CÔNG THỦ CÔNG (Bỏ giải trình đi trễ và ngoài bán kính vì auto-accept)
+        self::healPollutedCheckIns($this->db);
         if (in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'hr'], true) || !empty($managedUserIds)) {
             // Lấy ID của Trưởng phòng HCNS (Phương) để tự động gắn vào người theo dõi
             $phuongId = 0;
@@ -3700,8 +3749,12 @@ class HRMController {
                          WHERE u.tenant_id = ? 
                            AND c.status = 'pending_approval' 
                            AND c.user_id != ?
-                           AND (c.reason IS NULL OR (c.reason NOT LIKE '%Ngoài bán kính%' AND c.reason NOT LIKE '%Không có tọa độ GPS%'))
-                           AND (c.late_minutes = 0 OR c.reason LIKE '%Bổ sung%' OR c.reason LIKE '%Quên%')";
+                           AND (c.selfie_url IS NULL OR TRIM(c.selfie_url) = '')
+                           AND COALESCE(c.late_minutes, 0) = 0
+                           AND c.reason IS NOT NULL
+                           AND TRIM(c.reason) != ''
+                           AND c.reason NOT LIKE '%Ngoài bán kính%'
+                           AND c.reason NOT LIKE '%Không có tọa độ GPS%'";
             $pCheck = [$auth['tenant_id'], $userId];
             if (!in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'hr'], true)) {
                 $placeholders = implode(',', array_fill(0, count($managedUserIds), '?'));
@@ -4028,7 +4081,8 @@ class HRMController {
             ];
         }
 
-        // 4. My Checkins (Chỉ lấy khi là đơn đề xuất chờ duyệt hoặc có lý do giải trình thực sự từ nhân viên)
+        // 4. My Checkins (Chỉ lấy đơn bổ sung chấm công thủ công, tuyệt đối không lấy chấm công thường/đi trễ/ngoài bán kính)
+        self::healPollutedCheckIns($this->db);
         $phuongMyId = 0;
         try {
             $stmtHrMyP = $this->db->prepare("SELECT id FROM users WHERE (username = 'phuongntd' OR full_name LIKE '%Duy Phương%' OR role = 'hr') LIMIT 1");
@@ -4049,18 +4103,27 @@ class HRMController {
             LEFT JOIN teams t ON u.team_id = t.id
             LEFT JOIN users t_lead ON t.leader_id = t_lead.id
             LEFT JOIN users ap ON c.approved_by = ap.id
-            WHERE c.user_id = ? AND (c.status = 'pending_approval' OR (c.reason IS NOT NULL AND TRIM(c.reason) != '' AND c.reason NOT LIKE 'Duyệt%' AND c.reason NOT LIKE 'Tự động%'))
+            WHERE c.user_id = ?
+              AND (c.selfie_url IS NULL OR TRIM(c.selfie_url) = '')
+              AND COALESCE(c.late_minutes, 0) = 0
+              AND c.reason IS NOT NULL
+              AND TRIM(c.reason) != ''
+              AND c.reason NOT LIKE 'Duyệt%'
+              AND c.reason NOT LIKE 'Tự động%'
+              AND c.reason NOT LIKE '%Ngoài bán kính%'
+              AND c.reason NOT LIKE '%Không có tọa độ GPS%'
+              AND (
+                  c.status = 'pending_approval'
+                  OR (c.status IN ('approved', 'rejected') AND c.approved_by IS NOT NULL)
+              )
             ORDER BY c.id DESC
             LIMIT 100
         ");
         $stmtCheckins->execute([$userId]);
         $checkins = $stmtCheckins->fetchAll(PDO::FETCH_ASSOC);
         foreach ($checkins as $c) {
-            $isLate = (int)($c['late_minutes'] ?? 0) > 0;
-            $title = $isLate ? ('Giải trình đi trễ ngày ' . $c['check_in_date']) : ('Bổ sung chấm công ngày ' . $c['check_in_date']);
-            $desc = $isLate 
-                ? ('Đi trễ ' . $c['late_minutes'] . ' phút (Check-in lúc ' . $c['check_in_time'] . '). Lý do: "' . $c['reason'] . '"')
-                : ('Bổ sung chấm công (Check-in lúc ' . $c['check_in_time'] . '). Lý do: "' . ($c['reason'] ?: 'Quên chấm công') . '"');
+            $title = 'Bổ sung chấm công ngày ' . $c['check_in_date'];
+            $desc = 'Bổ sung chấm công (Check-in lúc ' . $c['check_in_time'] . '). Lý do: "' . ($c['reason'] ?: 'Quên chấm công') . '"';
             $mgrId = (int)($c['manager_id'] ?: $c['team_leader_id'] ?: 0);
             $mgrName = $c['approver_name'] ?: $c['team_leader_name'] ?: null;
             $mgrAvatar = $c['approver_avatar'] ?: $c['team_leader_avatar'] ?: null;
@@ -4750,10 +4813,15 @@ class HRMController {
             ];
         }
 
-        // 4. All Checkins - CHỈ LẤY ĐƠN BỔ SUNG CHẤM CÔNG (Loại bỏ giải trình đi trễ)
+        // 4. All Checkins - CHỈ LẤY ĐƠN BỔ SUNG CHẤM CÔNG THỦ CÔNG (Loại bỏ giải trình đi trễ và ngoài bán kính)
+        self::healPollutedCheckIns($this->db);
         $condCheckin = "c.status = 'pending_approval' 
-            AND (c.reason IS NULL OR (c.reason NOT LIKE '%Ngoài bán kính%' AND c.reason NOT LIKE '%Không có tọa độ GPS%'))
-            AND (c.late_minutes = 0 OR c.reason LIKE '%Bổ sung%' OR c.reason LIKE '%Quên%')";
+            AND (c.selfie_url IS NULL OR TRIM(c.selfie_url) = '')
+            AND COALESCE(c.late_minutes, 0) = 0
+            AND c.reason IS NOT NULL
+            AND TRIM(c.reason) != ''
+            AND c.reason NOT LIKE '%Ngoài bán kính%'
+            AND c.reason NOT LIKE '%Không có tọa độ GPS%'";
         
         $phuongAllId = 0;
         try {

@@ -14,6 +14,7 @@ import { PhoneLink } from '../components/ui/PhoneLink';
 import { useDebounce } from '../hooks/useDebounce';
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { EmptyCard } from '../components/ui/EmptyCard';
+import { CardSkeleton, TableSkeleton } from '../components/ui/Skeleton';
 import { canEditPartnerOrSupplier, isSales } from '../utils/roleUtils';
 
 const STATUSES = ['active', 'inactive', 'prospect'];
@@ -484,9 +485,20 @@ export const CompaniesPage: React.FC = () => {
       </div>
 
       {loading && (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '4rem' }}>
-          <Loader2 size={36} className="spin" style={{ color: 'var(--color-primary)' }} />
-        </div>
+        viewMode === 'card' ? (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(270px, 1fr))',
+            gap: '1.25rem',
+            alignItems: 'stretch'
+          }}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <CardSkeleton key={i} height={180} />
+            ))}
+          </div>
+        ) : (
+          <TableSkeleton rows={6} cols={5} />
+        )
       )}
 
       {/* Card Grid View */}

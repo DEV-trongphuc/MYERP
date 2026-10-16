@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, AlertTriangle, CheckCircle2, Clock, Sparkles, RefreshCw, X, Fingerprint, MapPin, FileText } from 'lucide-react';
+import { Camera, CheckCircle2, Clock, Sparkles, RefreshCw, X, Fingerprint, MapPin, FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { CustomModal } from './CustomModal';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -61,7 +61,6 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
   const [cameraError, setCameraError] = useState('');
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [capturedBlob, setCapturedBlob] = useState<Blob | null>(null);
-  const [checkInReason, setCheckInReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   // Scanner & AI Auto Detection States
@@ -249,30 +248,7 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
     }
   };
 
-  const getMinutesLate = () => {
-    if (isTodayDayOff) return 0; 
-    
-    const workStart = currentDayConfig?.start || consultantProfile?.work_start_time || '08:00';
-    const morningEnd = currentDayConfig?.end || '12:00';
-    const afternoonStart = currentDayConfig?.start_afternoon || '13:00';
-    
-    let startHM = workStart;
-    if (curHM > morningEnd) {
-      if (currentDayConfig?.start_afternoon || currentDayConfig?.end_afternoon) {
-        startHM = afternoonStart;
-      }
-    }
-    
-    const [startH, startM] = startHM.split(':').map(Number);
-    const currentH = now.getHours();
-    const currentM = now.getMinutes();
-    const startTotal = startH * 60 + startM;
-    const currentTotal = currentH * 60 + currentM;
-    return Math.max(0, currentTotal - startTotal);
-  };
-
   const isLate = isCheckOutMode ? false : checkIsLate();
-  const minutesLate = isCheckOutMode ? 0 : getMinutesLate();
 
   // Camera Control
   const startCamera = async () => {
@@ -341,7 +317,6 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
       setCapturedImage(null);
       setCapturedBlob(null);
       setIsManualMode(false);
-      setCheckInReason('');
       setIsSuccessScreen(false);
       setFaceScanProgress(0);
     }
@@ -394,12 +369,10 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
       setCapturedImage(snap.dataUrl);
       setCapturedBlob(snap.blob);
       stopCamera();
-      if (!isLate) {
-        if (isCheckOutMode) {
-          setShowCheckOutConfirmModal(true);
-        } else {
-          submitCheckIn(snap.dataUrl, snap.blob);
-        }
+      if (isCheckOutMode) {
+        setShowCheckOutConfirmModal(true);
+      } else {
+        submitCheckIn(snap.dataUrl, snap.blob);
       }
     } else {
       toast.error(t('Chưa nhận được khung hình camera. Vui lòng thử lại.'));
@@ -581,7 +554,7 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
           checkout_selfie_url: uploadRes.data.url,
           action: isCheckOutMode ? 'checkout' : 'checkin',
           checkout: isCheckOutMode ? 1 : 0,
-          reason: isLate ? checkInReason : null,
+          reason: null,
           latitude: coords?.latitude?.toString() || '',
           longitude: coords?.longitude?.toString() || '',
           location_address: addressStr
@@ -746,7 +719,7 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
                 ? t('Đã Hoàn thành Ngày làm việc') 
                 : todayCheckIn.status === 'approved' 
                   ? t('Đã Chấm công Thành công') 
-                  : t('Đang chờ phê duyệt đi trễ')}
+                  : t('Đang chờ phê duyệt bổ sung công')}
             </h3>
             <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', margin: '6px 0 0' }}>
               {todayCheckIn.check_out_time 
@@ -806,7 +779,7 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
             {successMeta?.isCheckOut 
               ? t('Hẹn gặp lại bạn vào ca làm việc tiếp theo. Chúc bạn một buổi tối vui vẻ!')
               : successMeta?.isLate 
-                ? t('Yêu cầu đi trễ đã gửi tới quản lý. Đã ghi nhận thời gian chấm công!')
+                ? t('Đã ghi nhận thời gian chấm công vào ca hôm nay!')
                 : t('Cổng nhận data tự động hôm nay đã mở. Chúc bạn giao dịch chốt cọc bùng nổ!')}
           </p>
 
@@ -1147,61 +1120,8 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
             </div>
           </div>
 
-          {/* Bottom Area: Late Reason & Control Buttons */}
+          {/* Bottom Area: Control Buttons */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {/* Late Reason Input */}
-            {isLate && capturedImage && (
-              <div style={{
-                background: 'linear-gradient(135deg, rgba(189, 29, 45, 0.03) 0%, rgba(189, 29, 45, 0.08) 100%)',
-                border: '1px solid rgba(189, 29, 45, 0.18)',
-                borderRadius: '16px',
-                padding: '16px',
-                boxShadow: '0 8px 30px rgba(189, 29, 45, 0.04)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '10px',
-                transition: 'all 0.3s ease'
-              }}>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', color: '#991b1b', fontSize: '0.875rem', fontWeight: 800 }}>
-                  <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'rgba(189, 29, 45, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <AlertTriangle size={15} />
-                  </div>
-                  {t('Bạn đã trễ') + ` ${minutesLate} ` + t('phút!')}
-                </div>
-                <p style={{ fontSize: '0.78rem', color: '#4b5563', margin: 0, lineHeight: 1.4 }}>
-                  {t('Ghi chú lý do đi trễ (tùy chọn):')}
-                </p>
-                <textarea
-                  className="form-control"
-                  style={{
-                    width: '100%',
-                    height: '60px',
-                    fontSize: '0.8125rem',
-                    padding: '8px 12px',
-                    borderRadius: '10px',
-                    border: '1px solid var(--color-border)',
-                    background: '#ffffff',
-                    color: '#1e293b',
-                    resize: 'none',
-                    outline: 'none',
-                    boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)',
-                    transition: 'all 0.25s ease'
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = '#BD1D2D';
-                    e.target.style.boxShadow = '0 0 0 3px rgba(189, 29, 45, 0.12)';
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = 'var(--color-border)';
-                    e.target.style.boxShadow = 'inset 0 2px 4px rgba(0,0,0,0.02)';
-                  }}
-                  placeholder={t('Ghi chú (tùy chọn)...')}
-                  value={checkInReason}
-                  onChange={(e) => setCheckInReason(e.target.value)}
-                />
-              </div>
-            )}
-
             {/* Manual Capture Option (Shown only during active scanning) */}
             {isCameraActive && !capturedImage && (
               <div style={{ textAlign: 'center', marginTop: '1rem', paddingBottom: '0.5rem' }}>

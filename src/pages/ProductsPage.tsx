@@ -9,6 +9,7 @@ import { downloadExportFile } from '../utils/exportHelper';
 import { useDebounce } from '../hooks/useDebounce';
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { CustomCheckbox } from '../components/ui/CustomCheckbox';
+import { TableRowSkeleton } from '../components/ui/Skeleton';
 import { numberToText } from '../utils/numberToText';
 
 const FMT = (n: number) => new Intl.NumberFormat('vi-VN', { style:'currency', currency:'VND', maximumFractionDigits:0 }).format(n);
@@ -255,7 +256,11 @@ export const ProductsPage: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(p => (
+              {loading ? (
+                Array.from({ length: 6 }).map((_, i) => (
+                  <TableRowSkeleton key={i} cols={6} />
+                ))
+              ) : filtered.map(p => (
                 <motion.tr key={p.id} initial={{ opacity:0 }} animate={{ opacity:1 }}>
                   <td>
                     <CustomCheckbox 

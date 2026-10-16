@@ -10,7 +10,57 @@ class CheckInController {
         $this->db = $db;
     }
 
+    private static bool $checkInsHealed = false;
+
+    public static function healPollutedCheckIns(PDO $db): void {
+        if (self::$checkInsHealed) return;
+        self::$checkInsHealed = true;
+        try {
+            $stmt = $db->query("
+                SELECT id, reason, status, late_minutes, selfie_url
+                FROM check_ins
+                WHERE reason LIKE '%[Ngoài bán kính%'
+                   OR reason LIKE '%[Không có tọa độ GPS%'
+                   OR (selfie_url IS NOT NULL AND TRIM(selfie_url) != '' AND (status = 'pending_approval' OR (reason IS NOT NULL AND TRIM(reason) != '')))
+                   OR (status = 'pending_approval' AND late_minutes > 0)
+                LIMIT 500
+            ");
+            $rows = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+            if (!empty($rows)) {
+                $upd = $db->prepare("UPDATE check_ins SET reason = ?, status = ?, late_minutes = ? WHERE id = ?");
+                foreach ($rows as $r) {
+                    $hasSelfie = !empty(trim((string)($r['selfie_url'] ?? '')));
+                    $lateMins = (int)($r['late_minutes'] ?? 0);
+                    $newStatus = $r['status'];
+
+                    if ($hasSelfie) {
+                        // Real-time check-in: never create an explanation/approval ticket
+                        $cleanedReason = null;
+                        if ($newStatus === 'pending_approval') {
+                            $newStatus = 'approved';
+                        }
+                    } else {
+                        $cleaned = (string)($r['reason'] ?? '');
+                        $cleaned = preg_replace('/\s*\[Ngoài bán kính văn phòng:[^\]]*\]/u', '', $cleaned);
+                        $cleaned = preg_replace('/\s*\[Không có tọa độ GPS[^\]]*\]/u', '', $cleaned);
+                        $cleaned = trim($cleaned);
+                        $cleanedReason = $cleaned !== '' ? $cleaned : null;
+                        if ($cleanedReason === null && $newStatus === 'pending_approval') {
+                            $newStatus = 'approved';
+                        }
+                        if ($newStatus === 'pending_approval') {
+                            $lateMins = 0;
+                        }
+                    }
+
+                    $upd->execute([$cleanedReason, $newStatus, $lateMins, (int)$r['id']]);
+                }
+            }
+        } catch (\Throwable $e) {}
+    }
+
     public function index(array $auth): void {
+        self::healPollutedCheckIns($this->db);
         // Option to check only today's check-in for the logged-in user (useful for dashboard/buttons)
         $globalWorkStart = '08:00';
         $globalWorkEnd = '17:00';
@@ -392,6 +442,7 @@ class CheckInController {
     }
 
     public function store(array $auth): void {
+        self::healPollutedCheckIns($this->db);
         $b = getBody();
         $selfieUrl = trim($b['selfie_url'] ?? '');
         $reason = trim($b['reason'] ?? '');
@@ -733,42 +784,18 @@ class CheckInController {
             }
         }
 
-        // Geofence Validation (SEC-HR-01)
-        $officeLat = isset($settingsMap['office_latitude']) && is_numeric($settingsMap['office_latitude']) ? (float)$settingsMap['office_latitude'] : null;
-        $officeLng = isset($settingsMap['office_longitude']) && is_numeric($settingsMap['office_longitude']) ? (float)$settingsMap['office_longitude'] : null;
-        $allowedRadius = isset($settingsMap['office_allowed_radius']) && is_numeric($settingsMap['office_allowed_radius']) ? (float)$settingsMap['office_allowed_radius'] : 0.0;
-
-        $isOutOfGeofence = false;
-        $distanceMeters = 0.0;
-        if ($officeLat !== null && $officeLng !== null && $allowedRadius > 0) {
-            if (empty($lat) || empty($lng) || !is_numeric($lat) || !is_numeric($lng)) {
-                $isOutOfGeofence = true;
-                $reason = trim(($reason ?? '') . " [Không có tọa độ GPS khi công ty yêu cầu định vị]");
-            } else {
-                // Haversine distance calculation in meters
-                $earthRadius = 6371000;
-                $dLat = deg2rad((float)$lat - $officeLat);
-                $dLng = deg2rad((float)$lng - $officeLng);
-                $a = sin($dLat / 2) * sin($dLat / 2) +
-                     cos(deg2rad($officeLat)) * cos(deg2rad((float)$lat)) *
-                     sin($dLng / 2) * sin($dLng / 2);
-                $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
-                $distanceMeters = round($earthRadius * $c, 1);
-
-                if ($distanceMeters > $allowedRadius) {
-                    $isOutOfGeofence = true;
-                    $diffM = round($distanceMeters);
-                    $reason = trim(($reason ?? '') . " [Ngoài bán kính văn phòng: {$diffM}m (cho phép: {$allowedRadius}m)]");
-                }
-            }
+        // Chấm công thực tế (!isSupplementary): Không tự tạo lý do giải trình đi trễ hay ngoài bán kính GPS.
+        // Giữ $reason = null để ghi nhận đúng giờ thực tế, số phút trễ, tọa độ và trạng thái 'approved'.
+        if (!$isSupplementary) {
+            $reason = null;
+        } else {
+            $isLate = false;
+            $lateMinutes = 0;
         }
 
         // Đi trễ và ngoài bán kính văn phòng: Tự động ghi nhận (Auto-accept status = 'approved')
         // Chỉ khi là yêu cầu Bổ sung chấm công (isSupplementary): Mới chuyển status = 'pending_approval' để Quản lý duyệt
         $status = ($isSupplementary && !$isLeaderOrManager) ? 'pending_approval' : 'approved';
-        if ($isSupplementary && $isLeaderOrManager) {
-            $lateMinutes = 0;
-        }
 
         $inTimeStr = $today . ' ' . $currentTime;
 
@@ -901,15 +928,14 @@ class CheckInController {
             'status' => $status
         ]));
 
-        // Send notifications to Admins & Managers if late (and approval is needed) or supplementary request
-        if (($isLate && $status === 'pending_approval') || $isSupplementary) {
+        // Send notifications to Admins & Managers only for supplementary request
+        if ($isSupplementary) {
             require_once __DIR__ . '/../NotificationService.php';
             $stmtUserDetails = $this->db->prepare("SELECT full_name, team_id FROM users WHERE id = ?");
             $stmtUserDetails->execute([$auth['user_id']]);
             $uDetails = $stmtUserDetails->fetch(PDO::FETCH_ASSOC);
 
-            $eventType = $isSupplementary ? 'ATTENDANCE_UPDATE' : 'CHECKIN_LATE';
-            NotificationService::send($this->db, $auth['tenant_id'], $eventType, [
+            NotificationService::send($this->db, $auth['tenant_id'], 'ATTENDANCE_UPDATE', [
                 'user_name' => $uDetails ? $uDetails['full_name'] : 'Nhân viên',
                 'team_id' => $uDetails ? $uDetails['team_id'] : null,
                 'date' => $today,
@@ -922,7 +948,7 @@ class CheckInController {
         if ($status === 'approved' && $isLate) {
             $msgText = "Đã ghi nhận Chấm công Vào ca! (Đi trễ {$lateMinutes} phút)";
         } else if ($status === 'pending_approval') {
-            $msgText = $isSupplementary ? 'Đã gửi yêu cầu bổ sung chấm công thành công. Đang chờ phê duyệt.' : 'Đã gửi báo cáo đi trễ thành công. Đang chờ phê duyệt.';
+            $msgText = 'Đã gửi yêu cầu bổ sung chấm công thành công. Đang chờ phê duyệt.';
         }
 
         respond(200, [

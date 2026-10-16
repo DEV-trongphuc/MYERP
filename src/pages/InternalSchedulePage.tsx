@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { fetchAPI } from '../utils/api';
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { Avatar } from '../components/ui/Avatar';
+import { CalendarSkeleton, Skeleton } from '../components/ui/Skeleton';
 import { CompanyDrawer } from './CompanyDrawer';
 import { 
   Calendar, BookOpen, User, Users, Copy, ExternalLink, 
@@ -493,8 +494,29 @@ export const InternalSchedulePage: React.FC = () => {
 
       {/* Main Calendar View Area */}
       {loading ? (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '300px', background: 'var(--color-surface)', borderRadius: '16px', border: '1px solid var(--color-border-light)' }}>
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <div style={{
+            background: 'var(--color-surface)',
+            borderRadius: '16px',
+            border: '1px solid var(--color-border-light)',
+            padding: '1.25rem 1.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '1rem'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <Skeleton width={52} height={52} borderRadius="50%" />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <Skeleton width={220} height={18} />
+                <Skeleton width={300} height={12} />
+              </div>
+            </div>
+            <Skeleton width={140} height={36} borderRadius={10} />
+          </div>
+          <div style={{ background: 'var(--color-surface)', borderRadius: '16px', border: '1px solid var(--color-border-light)', overflow: 'hidden' }}>
+            <CalendarSkeleton />
+          </div>
         </div>
       ) : error ? (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '300px', background: 'var(--color-surface)', borderRadius: '16px', border: '1px solid var(--color-border-light)', padding: '2rem' }}>

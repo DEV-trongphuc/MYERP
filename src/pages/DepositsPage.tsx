@@ -12,7 +12,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '../contexts/LanguageContext';
 import { EmptyCard } from '../components/ui/EmptyCard';
 import { Avatar } from '../components/ui/Avatar';
-import { TableSkeleton } from '../components/ui/Skeleton';
+import { TableSkeleton, ChartSkeleton, TimelineSkeleton } from '../components/ui/Skeleton';
 const CustomerProfileDrawer = lazy(() => import('./CustomerProfileDrawer').then(module => ({ default: module.CustomerProfileDrawer })));
 const DepositDetailDrawer = lazy(() => import('../components/DepositDetailDrawer').then(module => ({ default: module.DepositDetailDrawer })));
 import { CurrencyInput } from '../components/ui/CurrencyInput';
@@ -1838,10 +1838,14 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap', position: 'relative', zIndex: 2 }}>
-                    <div className="stat-value" style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--color-text)', margin: '4px 0' }}>
-                      {k.value}
-                    </div>
-                    {k.pendingSub}
+                    {loading ? (
+                      <div className="skeleton" style={{ height: 26, width: '75%', borderRadius: 6, margin: '4px 0' }} />
+                    ) : (
+                      <div className="stat-value" style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--color-text)', margin: '4px 0' }}>
+                        {k.value}
+                      </div>
+                    )}
+                    {!loading && k.pendingSub}
                   </div>
 
                   <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 'auto', zIndex: 2, fontWeight: 600 }}>
@@ -2753,7 +2757,9 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
               </div>
             </div>
 
-            {filteredTimelineItems.length === 0 ? (
+            {loading ? (
+              <TimelineSkeleton count={5} />
+            ) : filteredTimelineItems.length === 0 ? (
               <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
                 {timelineFilter === 'upcoming' 
                   ? 'Không có khoản dự thu hay dự chi nào trong tương lai gần.' 

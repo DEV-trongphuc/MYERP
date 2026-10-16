@@ -16,6 +16,7 @@ import { EmptyCard } from '../components/ui/EmptyCard';
 import { Avatar } from '../components/ui/Avatar';
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { Pagination } from '../components/ui/Pagination';
+import { CardSkeleton, TableSkeleton, Skeleton } from '../components/ui/Skeleton';
 import { useAuthStore } from '../store/authStore';
 
 import { useUploadProgress } from '../contexts/UploadProgressContext';
@@ -701,9 +702,28 @@ export const FilesPage: React.FC<FilesPageProps> = ({ embedProjectId, isEmbedded
 
           <div style={{ flex: 1, overflowY: 'auto', paddingRight: '8px', paddingBottom: '160px' }}>
             {loading ? (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '1.5rem' }}>
-                {[1,2,3,4,5,6].map(i => <div key={i} className="skeleton" style={{ height: '192px', borderRadius: 'var(--radius-2xl)' }} />)}
-              </div>
+              viewMode === 'list' ? (
+                <TableSkeleton rows={6} cols={5} />
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '1rem' }}>
+                    {[1, 2, 3, 4].map(i => (
+                      <div key={i} className="card skeleton-card" style={{ padding: '0.85rem 1.15rem', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <Skeleton width={32} height={32} borderRadius={8} />
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <Skeleton width="70%" height={13} />
+                          <Skeleton width="40%" height={10} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '1.25rem' }}>
+                    {[1, 2, 3, 4, 5, 6].map(i => (
+                      <CardSkeleton key={i} height={150} />
+                    ))}
+                  </div>
+                </div>
+              )
             ) : (displayFolders.length === 0 && displayFiles.length === 0) ? (
               <div style={{ flex: 1, display: 'flex', minHeight: '400px', width: '100%' }}>
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', width: '100%' }}>

@@ -285,3 +285,610 @@ export const TimelineSkeleton = ({ count = 4 }: { count?: number }) => (
     ))}
   </div>
 );
+
+// ─── Specialized Per-Tab Skeletons ───────────────────────────────────────────
+
+export const DashboardTabSkeleton = () => {
+  const isMobile = useResponsive();
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', width: '100%' }}>
+      {/* Header + Period Filter */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <Skeleton width={isMobile ? 180 : 240} height={24} borderRadius={8} />
+          <Skeleton width={isMobile ? 220 : 320} height={13} borderRadius={6} />
+        </div>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <Skeleton width={150} height={38} borderRadius={10} />
+          {!isMobile && <Skeleton width={110} height={38} borderRadius={10} />}
+        </div>
+      </div>
+
+      {/* 4-Card KPI Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: '1rem' }}>
+        {Array.from({ length: 4 }).map((_, i) => (
+          <KpiCardSkeleton key={i} />
+        ))}
+      </div>
+
+      {/* 2-Column Charts Row */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.4fr 1fr', gap: '1.25rem' }}>
+        <ChartSkeleton height={280} />
+        <ChartSkeleton height={280} />
+      </div>
+
+      {/* Bottom Table / Leaderboard Card */}
+      <TableSkeleton rows={5} cols={5} />
+    </div>
+  );
+};
+
+export const WorkspaceTabSkeleton = () => {
+  const isMobile = useResponsive();
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', width: '100%' }}>
+      {/* Greeting Banner + Quick Stats Pills */}
+      <div className="card skeleton-card" style={{ padding: '1.25rem 1.5rem', display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <Skeleton width={48} height={48} borderRadius="50%" />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <Skeleton width={220} height={20} borderRadius={6} />
+            <Skeleton width={280} height={12} borderRadius={6} />
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} width={96} height={32} borderRadius={20} />
+          ))}
+        </div>
+      </div>
+
+      {/* 2-Column Split: Left Task List & Priorities, Right Activity Timeline & SLA */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.35fr 1fr', gap: '1.25rem' }}>
+        <div className="card skeleton-card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Skeleton width={180} height={18} />
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <Skeleton width={70} height={26} borderRadius={14} />
+              <Skeleton width={70} height={26} borderRadius={14} />
+            </div>
+          </div>
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', borderRadius: '10px', border: '1px solid var(--color-border-light)' }}>
+              <Skeleton width={20} height={20} borderRadius={6} />
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <Skeleton width="70%" height={13} />
+                <Skeleton width="45%" height={10} />
+              </div>
+              <Skeleton width={68} height={22} borderRadius={12} />
+            </div>
+          ))}
+        </div>
+
+        <div className="card skeleton-card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Skeleton width={160} height={18} />
+            <Skeleton width={60} height={22} borderRadius={10} />
+          </div>
+          <TimelineSkeleton count={4} />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export const CalendarTabSkeleton = () => {
+  const isMobile = useResponsive();
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', width: '100%' }}>
+      {/* Header with Month/Week/Day switcher pills */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <Skeleton width={200} height={22} />
+          <Skeleton width={260} height={12} />
+        </div>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <Skeleton width={120} height={36} borderRadius={8} />
+          <div style={{ display: 'flex', gap: '4px', padding: '4px', background: 'var(--color-surface)', borderRadius: 10, border: '1px solid var(--color-border-light)' }}>
+            <Skeleton width={64} height={28} borderRadius={6} />
+            <Skeleton width={64} height={28} borderRadius={6} />
+            {!isMobile && <Skeleton width={64} height={28} borderRadius={6} />}
+          </div>
+        </div>
+      </div>
+
+      {/* Weekday Header + 7-Column Calendar Grid */}
+      <div className="card skeleton-card" style={{ padding: 0, overflow: 'hidden', borderRadius: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid var(--color-border-light)', padding: '10px 0', background: 'var(--color-bg)' }}>
+          {Array.from({ length: 7 }).map((_, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'center' }}>
+              <Skeleton width={isMobile ? 24 : 48} height={12} borderRadius={4} />
+            </div>
+          ))}
+        </div>
+        <CalendarSkeleton />
+      </div>
+    </div>
+  );
+};
+
+export const FeedTabSkeleton = () => {
+  const isMobile = useResponsive();
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '260px minmax(0, 1fr) 280px', gap: '1.25rem', width: '100%', alignItems: 'start' }}>
+      {/* Left: Quick profile / groups card */}
+      {!isMobile && (
+        <div className="card skeleton-card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <Skeleton width={44} height={44} borderRadius="50%" />
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <Skeleton width="80%" height={14} />
+              <Skeleton width="55%" height={11} />
+            </div>
+          </div>
+          <div style={{ height: 1, background: 'var(--color-border-light)' }} />
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Skeleton width={28} height={28} borderRadius={8} />
+              <Skeleton width="70%" height={12} />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Center: Post composer + 2 rich social post card skeletons */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div className="card skeleton-card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <Skeleton width={40} height={40} borderRadius="50%" />
+            <Skeleton width="100%" height={40} borderRadius={20} style={{ flex: 1 }} />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', borderTop: '1px solid var(--color-border-light)' }}>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <Skeleton width={85} height={28} borderRadius={8} />
+              <Skeleton width={85} height={28} borderRadius={8} />
+            </div>
+            <Skeleton width={90} height={32} borderRadius={8} />
+          </div>
+        </div>
+
+        {Array.from({ length: 2 }).map((_, i) => (
+          <div key={i} className="card skeleton-card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <Skeleton width={42} height={42} borderRadius="50%" />
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <Skeleton width={160} height={14} />
+                <Skeleton width={100} height={11} />
+              </div>
+              <Skeleton width={28} height={28} borderRadius={6} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <Skeleton width="95%" height={12} />
+              <Skeleton width="82%" height={12} />
+              <Skeleton width="60%" height={12} />
+            </div>
+            <Skeleton width="100%" height={190} borderRadius={12} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', borderTop: '1px solid var(--color-border-light)' }}>
+              <Skeleton width={70} height={24} borderRadius={6} />
+              <Skeleton width={90} height={24} borderRadius={6} />
+              <Skeleton width={70} height={24} borderRadius={6} />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Right: Pinned announcements & birthday widget */}
+      {!isMobile && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div className="card skeleton-card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <Skeleton width={140} height={15} />
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px', borderRadius: 8, background: 'var(--color-bg)' }}>
+                <Skeleton width="85%" height={12} />
+                <Skeleton width="50%" height={10} />
+              </div>
+            ))}
+          </div>
+          <div className="card skeleton-card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <Skeleton width={130} height={15} />
+            <StatRowSkeleton />
+            <StatRowSkeleton />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export const ApprovalsTabSkeleton = () => {
+  const isMobile = useResponsive();
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem', width: '100%' }}>
+      {/* Header: Quy trình hệ thống + Làm mới / Tạo đề xuất */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <Skeleton width={210} height={24} borderRadius={8} />
+          <Skeleton width={290} height={13} borderRadius={6} />
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <Skeleton width={96} height={38} borderRadius={10} />
+          <Skeleton width={130} height={38} borderRadius={10} />
+        </div>
+      </div>
+
+      {/* Tabs Bar: Cần tôi duyệt, Đề xuất của tôi, Đang theo dõi, Tất cả */}
+      <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px', borderBottom: '1px solid var(--color-border-light)' }}>
+        {[120, 130, 125, 90].map((w, i) => (
+          <Skeleton key={i} width={w} height={36} borderRadius={10} />
+        ))}
+      </div>
+
+      {/* Category Filter Pills: Tất cả phân loại, PO / Quy trình có tiền, Quy trình hành chính */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {[125, 165, 160].map((w, i) => (
+            <Skeleton key={i} width={w} height={30} borderRadius={20} />
+          ))}
+        </div>
+        {!isMobile && <Skeleton width={240} height={36} borderRadius={10} />}
+      </div>
+
+      {/* 5 Approval Request Card/Row Skeletons */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="card skeleton-card" style={{ padding: '1rem 1.25rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '14px', borderRadius: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: '1 1 280px' }}>
+              <Skeleton width={40} height={40} borderRadius={10} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Skeleton width={48} height={18} borderRadius={5} />
+                  <Skeleton width="55%" height={15} />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <Skeleton width={20} height={20} borderRadius="50%" />
+                  <Skeleton width={110} height={11} />
+                  <Skeleton width={80} height={11} />
+                </div>
+              </div>
+            </div>
+            {/* Step circles */}
+            {!isMobile && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Skeleton width={26} height={26} borderRadius="50%" />
+                <Skeleton width={14} height={4} />
+                <Skeleton width={26} height={26} borderRadius="50%" />
+                <Skeleton width={14} height={4} />
+                <Skeleton width={26} height={26} borderRadius="50%" />
+              </div>
+            )}
+            {/* Action buttons */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Skeleton width={90} height={28} borderRadius={8} />
+              <Skeleton width={76} height={32} borderRadius={8} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export const CrmContactsTabSkeleton = () => {
+  const isMobile = useResponsive();
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <Skeleton width={200} height={24} />
+          <Skeleton width={260} height={12} />
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {!isMobile && <Skeleton width={100} height={36} borderRadius={8} />}
+          <Skeleton width={130} height={36} borderRadius={8} />
+        </div>
+      </div>
+
+      {/* Pipeline stage tabs strip (8 pill skeletons) */}
+      <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
+        {Array.from({ length: 8 }).map((_, i) => (
+          <Skeleton key={i} width={105} height={32} borderRadius={18} />
+        ))}
+      </div>
+
+      {/* Search & Filter Toolbar */}
+      <div className="card skeleton-card" style={{ padding: '0.75rem 1rem', display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
+        <Skeleton width={isMobile ? '100%' : 280} height={38} borderRadius={10} style={{ flex: isMobile ? '1 1 100%' : 1 }} />
+        {!isMobile && (
+          <>
+            <Skeleton width={150} height={38} borderRadius={10} />
+            <Skeleton width={150} height={38} borderRadius={10} />
+            <Skeleton width={130} height={38} borderRadius={10} />
+          </>
+        )}
+      </div>
+
+      {/* 7-Column CRM Table Skeleton */}
+      <div className="card skeleton-card" style={{ padding: 0, overflow: 'hidden', borderRadius: '14px' }}>
+        <div style={{ padding: '0.9rem 1.25rem', borderBottom: '1px solid var(--color-border)', display: 'grid', gridTemplateColumns: isMobile ? '1.5fr 1fr' : '1.6fr 1.1fr 1fr 1.2fr 0.9fr 0.9fr 0.6fr', gap: '12px' }}>
+          {Array.from({ length: isMobile ? 2 : 7 }).map((_, i) => (
+            <Skeleton key={i} width="75%" height={11} />
+          ))}
+        </div>
+        {Array.from({ length: 7 }).map((_, rowIdx) => (
+          <div key={rowIdx} style={{ padding: '0.85rem 1.25rem', borderBottom: '1px solid var(--color-border-light)', display: 'grid', gridTemplateColumns: isMobile ? '1.5fr 1fr' : '1.6fr 1.1fr 1fr 1.2fr 0.9fr 0.9fr 0.6fr', gap: '12px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Skeleton width={36} height={36} borderRadius="50%" />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', flex: 1 }}>
+                <Skeleton width="80%" height={13} />
+                <Skeleton width="50%" height={10} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+              <Skeleton width="85%" height={12} />
+              <Skeleton width="60%" height={10} />
+            </div>
+            {!isMobile && (
+              <>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <Skeleton width={52} height={20} borderRadius={10} />
+                  <Skeleton width={44} height={20} borderRadius={10} />
+                </div>
+                <Skeleton width="90%" height={12} />
+                <Skeleton width={78} height={22} borderRadius={12} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Skeleton width={26} height={26} borderRadius="50%" />
+                  <Skeleton width="65%" height={12} />
+                </div>
+                <Skeleton width={60} height={24} borderRadius={6} />
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export const DealsKanbanTabSkeleton = () => {
+  const isMobile = useResponsive();
+  const cols = isMobile ? 1 : 4;
+  const borderColors = ['#3b82f6', '#f59e0b', '#8b5cf6', '#10b981'];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%' }}>
+      {/* Header + Filter Toolbar */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <Skeleton width={220} height={24} />
+          <Skeleton width={280} height={12} />
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <Skeleton width={160} height={38} borderRadius={10} />
+          <Skeleton width={120} height={38} borderRadius={10} />
+        </div>
+      </div>
+
+      {/* 4-Column Horizontal Kanban Board Skeleton */}
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(260px, 1fr))`, gap: '1rem', alignItems: 'start' }}>
+        {Array.from({ length: cols }).map((_, colIdx) => (
+          <div
+            key={colIdx}
+            className="card skeleton-card"
+            style={{
+              padding: '0.875rem',
+              borderRadius: '14px',
+              borderTop: `3px solid ${borderColors[colIdx % borderColors.length]}`,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.75rem',
+              background: 'var(--color-bg-secondary, rgba(0,0,0,0.015))'
+            }}
+          >
+            {/* Column header: title + count badge + revenue line */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Skeleton width={120} height={15} />
+              <Skeleton width={28} height={20} borderRadius={10} />
+            </div>
+            <Skeleton width={100} height={11} />
+
+            {/* 3 Kanban Card Skeletons */}
+            {Array.from({ length: 3 }).map((__, cardIdx) => (
+              <div
+                key={cardIdx}
+                style={{
+                  background: 'var(--color-surface)',
+                  border: '1px solid var(--color-border-light)',
+                  borderRadius: '12px',
+                  padding: '0.875rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <Skeleton width={34} height={34} borderRadius="50%" />
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                    <Skeleton width="75%" height={13} />
+                    <Skeleton width="55%" height={10} />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <Skeleton width={68} height={20} borderRadius={10} />
+                  <Skeleton width={54} height={20} borderRadius={10} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '6px', borderTop: '1px solid var(--color-border-light)' }}>
+                  <Skeleton width={80} height={12} />
+                  <Skeleton width={22} height={22} borderRadius="50%" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export const ProjectsTabSkeleton = () => {
+  const isMobile = useResponsive();
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', width: '100%' }}>
+      {/* Header + Tabs (Chương trình đào tạo, Chiến dịch Marketing, Tài liệu) */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <Skeleton width={230} height={24} />
+          <Skeleton width={300} height={12} />
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <Skeleton width={140} height={36} borderRadius={8} />
+          <Skeleton width={140} height={36} borderRadius={8} />
+          {!isMobile && <Skeleton width={95} height={36} borderRadius={8} />}
+        </div>
+      </div>
+
+      {/* 3-Card KPI Summary */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: '1rem' }}>
+        {Array.from({ length: 3 }).map((_, i) => (
+          <KpiCardSkeleton key={i} />
+        ))}
+      </div>
+
+      {/* 3-Column Project/Course Cards Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: '1.25rem' }}>
+        {Array.from({ length: 6 }).map((_, i) => (
+          <CardSkeleton key={i} height={175} />
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export const FinancialOpsTabSkeleton = ({ isCardGrid = false }: { isCardGrid?: boolean }) => {
+  const isMobile = useResponsive();
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', width: '100%' }}>
+      {/* Header with action buttons */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <Skeleton width={210} height={24} />
+          <Skeleton width={280} height={12} />
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <Skeleton width={120} height={38} borderRadius={10} />
+          <Skeleton width={135} height={38} borderRadius={10} />
+        </div>
+      </div>
+
+      {/* 4 Financial/Ops KPI Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: '1rem' }}>
+        {Array.from({ length: 4 }).map((_, i) => (
+          <KpiCardSkeleton key={i} />
+        ))}
+      </div>
+
+      {/* Filter Toolbar */}
+      <div className="card skeleton-card" style={{ padding: '0.85rem 1.25rem', display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
+        <Skeleton width={isMobile ? '100%' : 260} height={38} borderRadius={10} style={{ flex: 1 }} />
+        {!isMobile && (
+          <>
+            <Skeleton width={160} height={38} borderRadius={10} />
+            <Skeleton width={160} height={38} borderRadius={10} />
+          </>
+        )}
+      </div>
+
+      {/* Data Table or Card Grid Skeleton */}
+      {isCardGrid ? (
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: '1.25rem' }}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <CardSkeleton key={i} height={180} />
+          ))}
+        </div>
+      ) : (
+        <TableSkeleton rows={6} cols={6} />
+      )}
+    </div>
+  );
+};
+
+// ─── Route-Aware Per-Tab Skeleton Dispatcher ─────────────────────────────────
+export const RouteTabSkeleton = ({ path }: { path?: string }) => {
+  const currentPath = (path || (typeof window !== 'undefined' ? window.location.pathname : '/')).split('?')[0];
+
+  if (
+    currentPath === '/' ||
+    currentPath === '/financial-dashboard' ||
+    currentPath === '/reports-crm' ||
+    currentPath === '/fair-share' ||
+    currentPath === '/cash-flow'
+  ) {
+    return <DashboardTabSkeleton />;
+  }
+
+  if (currentPath === '/workspace') {
+    return <WorkspaceTabSkeleton />;
+  }
+
+  if (
+    currentPath === '/calendar' ||
+    currentPath === '/personal-calendar' ||
+    currentPath === '/account' ||
+    currentPath === '/schedules' ||
+    currentPath === '/attendance'
+  ) {
+    return <CalendarTabSkeleton />;
+  }
+
+  if (currentPath === '/feed') {
+    return <FeedTabSkeleton />;
+  }
+
+  if (currentPath === '/approvals') {
+    return <ApprovalsTabSkeleton />;
+  }
+
+  if (
+    currentPath === '/contacts' ||
+    currentPath === '/students' ||
+    currentPath === '/data'
+  ) {
+    return <CrmContactsTabSkeleton />;
+  }
+
+  if (currentPath === '/deals') {
+    return <DealsKanbanTabSkeleton />;
+  }
+
+  if (currentPath === '/projects') {
+    return <ProjectsTabSkeleton />;
+  }
+
+  if (currentPath === '/rounds') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', width: '100%' }}>
+        <PageHeaderSkeleton />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.25rem' }}>
+          <RoundCardSkeleton />
+          <RoundCardSkeleton />
+          <RoundCardSkeleton />
+        </div>
+      </div>
+    );
+  }
+
+  if (
+    currentPath === '/companies' ||
+    currentPath === '/suppliers' ||
+    currentPath === '/files' ||
+    currentPath === '/rules' ||
+    currentPath === '/integrations' ||
+    currentPath === '/settings' ||
+    currentPath === '/ai-training'
+  ) {
+    return <FinancialOpsTabSkeleton isCardGrid={true} />;
+  }
+
+  // Default for /gatekeeper, /tickets, /support-tickets, /deposits, /sales-orders, /expenses, /quotes, /inventory, /purchase-orders, /products, /hrm, /consultants, /accounts, /my-payslips, /activities
+  return <FinancialOpsTabSkeleton isCardGrid={false} />;
+};
+
