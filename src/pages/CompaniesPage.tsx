@@ -100,7 +100,7 @@ export const CompaniesPage: React.FC = () => {
   useEffect(() => {
     const controller = new AbortController();
     const urlParams = new URLSearchParams(window.location.search);
-    const targetId = urlParams.get('id') || urlParams.get('company_id');
+    const targetId = urlParams.get('id') || urlParams.get('company_id') || urlParams.get('open_company_id');
     if (targetId) {
       const cid = Number(targetId);
       if (cid) {
@@ -108,17 +108,19 @@ export const CompaniesPage: React.FC = () => {
           if (!controller.signal.aborted && res.data.success && res.data.data) {
             setEditItem(res.data.data);
             setShowModal(true);
-            
-            // Clean URL parameters
-            const newParams = new URLSearchParams(window.location.search);
-            newParams.delete('id');
-            newParams.delete('company_id');
-            const cleanUrl = window.location.pathname + (newParams.toString() ? '?' + newParams.toString() : '');
-            window.history.replaceState({}, '', cleanUrl);
           }
         }).catch(err => {
           if (err?.name === 'AbortError' || err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return;
           console.error("Error loading deep link company:", err);
+        }).finally(() => {
+          if (!controller.signal.aborted) {
+            const newParams = new URLSearchParams(window.location.search);
+            newParams.delete('id');
+            newParams.delete('company_id');
+            newParams.delete('open_company_id');
+            const cleanUrl = window.location.pathname + (newParams.toString() ? '?' + newParams.toString() : '');
+            window.history.replaceState({}, '', cleanUrl);
+          }
         });
       }
     }
@@ -548,7 +550,6 @@ export const CompaniesPage: React.FC = () => {
                               style={{ 
                                 background: '#f1f5f9', 
                                 color: '#475569', 
-                                border: '1px solid #e2e8f0',
                                 fontSize: '0.68rem', 
                                 fontWeight: 600, 
                                 padding: '2px 8px',
@@ -787,6 +788,7 @@ export const CompaniesPage: React.FC = () => {
                 type: 'company',
                 search: debouncedSearch,
                 status: statusFilter || undefined,
+                tier: tierFilter || undefined,
               },
               defaultFilename: `export_companies_${Date.now()}.csv`,
               onSuccess: () => {

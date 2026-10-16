@@ -84,7 +84,7 @@ export default defineConfig(({ mode }) => {
               if (id.includes('lucide-react')) {
                 return 'vendor-icons';
               }
-              if (id.includes('react') || id.includes('react-dom') || id.includes('react-router') || id.includes('react-router-dom') || id.includes('zustand')) {
+              if (/[\\/]node_modules[\\/](react|react-dom|react-router|react-router-dom|scheduler)[\\/]/.test(id)) {
                 return 'vendor-react';
               }
               return 'vendor';

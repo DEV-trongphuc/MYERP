@@ -549,6 +549,26 @@ export default function ProjectsPage() {
     }
   }, [window.location.search]);
 
+  const copySubjectInFlightRef = useRef(false);
+  const saveSubjectsConfigInFlightRef = useRef(false);
+  const saveThesisMilestonesInFlightRef = useRef(false);
+  const saveRemindersInFlightRef = useRef(false);
+  const quickUploadInFlightRef = useRef(false);
+  const renameDocInFlightRef = useRef(false);
+  const openedUrlTargetRef = useRef<string | null>(null);
+
+  const clearEntityParamsFromUrl = () => {
+    const newParams = new URLSearchParams(window.location.search);
+    if (newParams.has('open_id') || newParams.has('id') || newParams.has('project_id') || newParams.has('campaign_id')) {
+      newParams.delete('open_id');
+      newParams.delete('id');
+      newParams.delete('project_id');
+      newParams.delete('campaign_id');
+      const cleanUrl = window.location.pathname + (newParams.toString() ? '?' + newParams.toString() : '');
+      window.history.replaceState({}, '', cleanUrl);
+    }
+  };
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const isCampaigns = params.get('tab') === 'campaigns' || params.get('sub') === 'campaigns' || Boolean(params.get('campaign_id'));
@@ -559,42 +579,35 @@ export default function ProjectsPage() {
     }
 
     const targetId = params.get('open_id') || params.get('id') || params.get('project_id') || params.get('campaign_id');
-    if (targetId) {
-      if (isCampaigns) {
-        if (campaigns.length > 0) {
-          const matched = campaigns.find(c => String(c.id) === targetId);
-          if (matched) {
-            setEditingCampaign(matched);
-            setCampaignModalMode('view');
-            setIsCampaignModalOpen(true);
+    if (!targetId) {
+      openedUrlTargetRef.current = null;
+      return;
+    }
+    if (openedUrlTargetRef.current === `${isCampaigns ? 'camp' : 'proj'}:${targetId}`) {
+      clearEntityParamsFromUrl();
+      return;
+    }
 
-            // clean url parameters while preserving highlight_comment_id
-            const newParams = new URLSearchParams(window.location.search);
-            newParams.delete('open_id');
-            newParams.delete('id');
-            newParams.delete('project_id');
-            newParams.delete('campaign_id');
-            const cleanUrl = window.location.pathname + (newParams.toString() ? '?' + newParams.toString() : '');
-            window.history.replaceState({}, '', cleanUrl);
-          }
+    if (isCampaigns) {
+      if (campaigns.length > 0) {
+        const matched = campaigns.find(c => String(c.id) === targetId);
+        if (matched) {
+          openedUrlTargetRef.current = `camp:${targetId}`;
+          setEditingCampaign(matched);
+          setCampaignModalMode('view');
+          setIsCampaignModalOpen(true);
+          clearEntityParamsFromUrl();
         }
-      } else {
-        if (projects.length > 0) {
-          const matched = projects.find(p => String(p.id) === targetId);
-          if (matched) {
-            setEditingProject(matched);
-            setProjectModalMode('view');
-            setIsEditModalOpen(true);
-
-            // clean url parameters while preserving highlight_comment_id
-            const newParams = new URLSearchParams(window.location.search);
-            newParams.delete('open_id');
-            newParams.delete('id');
-            newParams.delete('project_id');
-            newParams.delete('campaign_id');
-            const cleanUrl = window.location.pathname + (newParams.toString() ? '?' + newParams.toString() : '');
-            window.history.replaceState({}, '', cleanUrl);
-          }
+      }
+    } else {
+      if (projects.length > 0) {
+        const matched = projects.find(p => String(p.id) === targetId);
+        if (matched) {
+          openedUrlTargetRef.current = `proj:${targetId}`;
+          setEditingProject(matched);
+          setProjectModalMode('view');
+          setIsEditModalOpen(true);
+          clearEntityParamsFromUrl();
         }
       }
     }
@@ -1541,11 +1554,13 @@ export default function ProjectsPage() {
   };
 
   const handleConfirmCopySubject = async () => {
+    if (isCopyingSubject || copySubjectInFlightRef.current) return;
     if (!subjectToCopy || !copyTargetCampaignId) {
       addToast('Vui lòng chọn khóa học đích!', 'error');
       return;
     }
 
+    copySubjectInFlightRef.current = true;
     setIsCopyingSubject(true);
     try {
       const resCamp = await fetchAPI(`campaigns/${copyTargetCampaignId}`);
@@ -1608,6 +1623,7 @@ export default function ProjectsPage() {
     } catch (e: any) {
       addToast(e.message || 'Lỗi kết nối hệ thống', 'error');
     } finally {
+      copySubjectInFlightRef.current = false;
       setIsCopyingSubject(false);
     }
   };
@@ -3583,6 +3599,8 @@ export default function ProjectsPage() {
                 className="btn primary sm"
                 disabled={isSaving}
                 onClick={async () => {
+                  if (isSaving || saveSubjectsConfigInFlightRef.current) return;
+                  saveSubjectsConfigInFlightRef.current = true;
                   try {
                     setIsSaving(true);
                     const res = await fetchAPI(`campaigns/${editingCampaign.id}`, {
@@ -3605,6 +3623,7 @@ export default function ProjectsPage() {
                   } catch (e: any) {
                     addToast(e.message || 'Lỗi kết nối', 'error');
                   } finally {
+                    saveSubjectsConfigInFlightRef.current = false;
                     setIsSaving(false);
                   }
                 }}
@@ -3904,6 +3923,8 @@ export default function ProjectsPage() {
               className="btn primary sm"
               disabled={isSaving}
               onClick={async () => {
+                if (isSaving || saveThesisMilestonesInFlightRef.current) return;
+                saveThesisMilestonesInFlightRef.current = true;
                 try {
                   setIsSaving(true);
                   const res = await fetchAPI(`campaigns/${editingCampaign.id}`, {
@@ -3926,6 +3947,7 @@ export default function ProjectsPage() {
                 } catch (e: any) {
                   addToast(e.message || 'Lỗi kết nối', 'error');
                 } finally {
+                  saveThesisMilestonesInFlightRef.current = false;
                   setIsSaving(false);
                 }
               }}
@@ -3943,7 +3965,8 @@ export default function ProjectsPage() {
     const canEdit = user && ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'academic'].includes(user.role);
 
     const handleSaveReminders = async () => {
-      if (!editingCampaign?.id) return;
+      if (!editingCampaign?.id || isSaving || saveRemindersInFlightRef.current) return;
+      saveRemindersInFlightRef.current = true;
       try {
         setIsSaving(true);
         const res = await fetchAPI(`campaigns/${editingCampaign.id}`, {
@@ -3966,6 +3989,7 @@ export default function ProjectsPage() {
       } catch (e: any) {
         addToast(e.message || 'Lỗi kết nối', 'error');
       } finally {
+        saveRemindersInFlightRef.current = false;
         setIsSaving(false);
       }
     };
@@ -5162,7 +5186,8 @@ export default function ProjectsPage() {
 
   const handleQuickUpload = async (e: React.ChangeEvent<HTMLInputElement>, projectId?: number) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || uploadingDoc || quickUploadInFlightRef.current) return;
+    quickUploadInFlightRef.current = true;
     setUploadingDoc(true);
     const fd = new FormData();
     fd.append('file', file);
@@ -5205,6 +5230,7 @@ export default function ProjectsPage() {
     } catch (err: any) {
       addToast(err.message || 'Lỗi tải tệp tin', 'error');
     } finally {
+      quickUploadInFlightRef.current = false;
       setUploadingDoc(false);
     }
   };
@@ -5716,6 +5742,8 @@ export default function ProjectsPage() {
       setEditingDocKey(null);
       return;
     }
+    if (renameDocInFlightRef.current) return;
+    renameDocInFlightRef.current = true;
 
     try {
       let res;
@@ -5744,6 +5772,8 @@ export default function ProjectsPage() {
       }
     } catch (e: any) {
       addToast(e.message || 'Lỗi kết nối', 'error');
+    } finally {
+      renameDocInFlightRef.current = false;
     }
   };
 
@@ -6804,6 +6834,7 @@ export default function ProjectsPage() {
           () => {
             setIsEditModalOpen(false);
             setEditingProject(null);
+            clearEntityParamsFromUrl();
           },
           projectModalMode === 'view'
             ? `Chi tiết Chương trình: ${editingProject?.name}`
@@ -8531,6 +8562,7 @@ export default function ProjectsPage() {
           () => {
             setIsCampaignModalOpen(false);
             setEditingCampaign(null);
+            clearEntityParamsFromUrl();
           },
           campaignModalMode === 'view'
             ? `Chi tiết Khóa học: ${editingCampaign?.name}`

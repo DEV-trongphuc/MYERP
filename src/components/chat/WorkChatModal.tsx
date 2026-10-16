@@ -307,6 +307,19 @@ ChatImageBubble.displayName = 'ChatImageBubble';
 
 // Regex cache cho tin nhắn text tránh split lặp lại khi re-render
 const formattedTextCache = new Map<string, React.ReactNode>();
+const parsedChatTagsCache = new Map<string, ReturnType<typeof parseAllChatTags>>();
+
+const getMemoizedParsedTags = (msg: ChatMessage) => {
+  const cacheKey = `${msg.id}_${msg.content || ''}_${(msg as any).updated_at || ''}`;
+  const cached = parsedChatTagsCache.get(cacheKey);
+  if (cached) return cached;
+  const parsed = parseAllChatTags(msg.content);
+  if (parsedChatTagsCache.size > 500) {
+    parsedChatTagsCache.clear();
+  }
+  parsedChatTagsCache.set(cacheKey, parsed);
+  return parsed;
+};
 
 const dockChatForPeek = () => {
   const chatState = useChatStore.getState();
@@ -498,7 +511,7 @@ const renderInlineTokens = (rawText: string, isMine?: boolean, keyPrefix: string
             padding: '2px 8px',
             borderRadius: '6px',
             backgroundColor: '#eff6ff',
-            border: '1px solid #bfdbfe',
+            border: 'none',
             color: '#1d4ed8',
             fontWeight: 700,
             fontSize: '0.8rem',
@@ -540,7 +553,7 @@ const renderInlineTokens = (rawText: string, isMine?: boolean, keyPrefix: string
             padding: '2px 8px',
             borderRadius: '6px',
             backgroundColor: isMine ? 'rgba(255, 255, 255, 0.22)' : '#eff6ff',
-            border: isMine ? '1px solid rgba(255, 255, 255, 0.35)' : '1px solid #bfdbfe',
+            border: 'none',
             color: isMine ? '#ffffff' : '#1d4ed8',
             fontWeight: 700,
             fontSize: '0.82rem',
@@ -1102,7 +1115,7 @@ export const WorkChatModal: React.FC = () => {
     if (next) {
       toast.success('Đã bật âm thanh thông báo');
     } else {
-      toast('Đã tắt âm thanh thông báo', { icon: '🔕' });
+      toast('Đã tắt âm thanh thông báo');
     }
   };
 
@@ -1449,7 +1462,7 @@ export const WorkChatModal: React.FC = () => {
         id: 'stk_approved',
         name: 'Đã Duyệt',
         category: 'work',
-        icon: '✅',
+        icon: 'OK',
         badgeText: 'ĐÃ DUYỆT',
         color: '#059669',
         bgGradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
@@ -1892,7 +1905,7 @@ export const WorkChatModal: React.FC = () => {
                     color: '#b91c1c',
                     fontWeight: 800,
                     background: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)',
-                    border: '1px solid #fecaca',
+                    border: 'none',
                     padding: '1px 6px',
                     borderRadius: '5px',
                     letterSpacing: '0.3px',
@@ -2214,7 +2227,7 @@ export const WorkChatModal: React.FC = () => {
                                   fontWeight: 800,
                                   color: '#BD1D2D',
                                   background: '#fef2f2',
-                                  border: '1px solid #fecaca',
+                                  border: 'none',
                                   padding: '1px 5px',
                                   borderRadius: '4px',
                                   display: 'inline-flex',
@@ -2354,7 +2367,7 @@ export const WorkChatModal: React.FC = () => {
                                 fontWeight: 800,
                                 color: '#BD1D2D',
                                 background: '#fef2f2',
-                                border: '1px solid #fecaca',
+                                border: 'none',
                                 padding: '1px 5px',
                                 borderRadius: '4px',
                                 display: 'inline-flex',
@@ -2571,7 +2584,7 @@ export const WorkChatModal: React.FC = () => {
                                     padding: '1.5px 7px',
                                     borderRadius: '6px',
                                     fontWeight: 750,
-                                    border: '1px solid #fecaca',
+                                    border: 'none',
                                     display: 'inline-flex',
                                     alignItems: 'center',
                                     gap: '4px',
@@ -2581,11 +2594,9 @@ export const WorkChatModal: React.FC = () => {
                                   }}
                                   onMouseEnter={(e) => {
                                     e.currentTarget.style.backgroundColor = '#fee2e2';
-                                    e.currentTarget.style.borderColor = '#BD1D2D';
                                   }}
                                   onMouseLeave={(e) => {
                                     e.currentTarget.style.backgroundColor = '#fef2f2';
-                                    e.currentTarget.style.borderColor = '#fecaca';
                                   }}
                                   title="Bấm để xem chi tiết & quyền hạn 11 Agent"
                                 >
@@ -3611,7 +3622,7 @@ export const WorkChatModal: React.FC = () => {
                                   alignItems: 'center',
                                   gap: '8px',
                                   background: 'linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%)',
-                                  border: '1.5px solid #a7f3d0',
+                                  border: 'none',
                                   color: '#065f46',
                                   fontSize: '0.78rem',
                                   padding: '6px 16px',
@@ -3724,14 +3735,15 @@ export const WorkChatModal: React.FC = () => {
                               fontWeight: 800,
                               color: '#b45309',
                               background: '#fef3c7',
-                              border: '1px solid #fde68a',
+                              border: 'none',
                               borderRadius: '6px',
                               padding: '2px 8px',
                               marginBottom: '4px',
                               marginLeft: isMine ? 0 : '38px',
                               boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
                             }}>
-                              <span>🔔 Bạn được nhắc tên</span>
+                              <Bell size={11} />
+                              <span>Bạn được nhắc tên</span>
                             </div>
                           )}
 
@@ -3780,7 +3792,7 @@ export const WorkChatModal: React.FC = () => {
                                     marginLeft: '36px',
                                     padding: '2px 8px 2px 6px',
                                     borderRadius: '999px',
-                                    border: `1px solid ${matchedSpec.badgeBorder || '#e2e8f0'}`,
+                                    border: 'none',
                                     background: matchedSpec.badgeBg || '#f8fafc',
                                     cursor: 'pointer',
                                     fontSize: '0.68rem',
@@ -3872,7 +3884,7 @@ export const WorkChatModal: React.FC = () => {
                                   <button
                                     type="button"
                                     onClick={async () => {
-                                      const { cleanContent } = parseAllChatTags(msg.content);
+                                      const { cleanContent } = getMemoizedParsedTags(msg);
                                       const textToCopy = (cleanContent || msg.content || '').trim();
                                       if (!textToCopy) return;
                                       const ok = await copyTextSafely(textToCopy);
@@ -4197,76 +4209,76 @@ export const WorkChatModal: React.FC = () => {
                                       }
 
                                       return (
-                                        <div 
-                                          onContextMenu={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            openFloatingMenu(msg, e.clientX, e.clientY);
-                                          }}
-                                          style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '8px',
-                                            padding: '8px 14px',
-                                            borderRadius: '16px',
-                                            background: msg.metadata?.bgGradient || '#2563eb',
-                                            color: '#ffffff',
-                                            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                                            userSelect: 'none',
-                                            transition: 'transform 0.15s ease'
-                                          }}
-                                          title="Chuột phải để mở tùy chọn tin nhắn"
-                                        >
-                                          <span style={{ fontSize: '1.4rem' }}>{msg.metadata?.icon || '🌟'}</span>
-                                          <span style={{ fontSize: '0.85rem', fontWeight: 800, letterSpacing: '0.3px' }}>
-                                            {msg.metadata?.badgeText || msg.content}
-                                          </span>
-                                        </div>
-                                      );
-                                    })()
-                                  ) : msg.message_type === 'image' ? (
-                                  /* IMAGE WITH ZERO CLS & LAZY LOAD */
-                                  <ChatImageBubble
-                                    url={msg.metadata?.url}
-                                    content={msg.content}
-                                    fileName={msg.metadata?.file_name}
-                                    onPreview={(url) => setSelectedPreviewImage(url)}
-                                  />
-                                ) : msg.message_type === 'file' ? (
-                                  /* FILE WITH SMART FORMAT UI */
-                                  (() => {
-                                    const fmt = getFileFormatConfig(msg.metadata?.file_name || msg.content);
-                                    const FileIcon = fmt.icon;
-                                    const fileName = msg.metadata?.file_name || msg.content || 'Tệp đính kèm';
-                                    const fileSizeStr = formatFileSize(msg.metadata?.file_size);
-                                    const fileUrl = msg.metadata?.url;
+                                          <div 
+                                            onContextMenu={(e) => {
+                                              e.preventDefault();
+                                              e.stopPropagation();
+                                              openFloatingMenu(msg, e.clientX, e.clientY);
+                                            }}
+                                            style={{
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: '8px',
+                                              padding: '8px 14px',
+                                              borderRadius: '16px',
+                                              background: msg.metadata?.bgGradient || '#2563eb',
+                                              color: '#ffffff',
+                                              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                                              userSelect: 'none',
+                                              transition: 'transform 0.15s ease'
+                                            }}
+                                            title="Chuột phải để mở tùy chọn tin nhắn"
+                                          >
+                                            <span style={{ fontSize: '1.4rem', display: 'inline-flex', alignItems: 'center' }}>{msg.metadata?.icon || <Sparkles size={16} />}</span>
+                                            <span style={{ fontSize: '0.85rem', fontWeight: 800, letterSpacing: '0.3px' }}>
+                                              {msg.metadata?.badgeText || msg.content}
+                                            </span>
+                                          </div>
+                                        );
+                                      })()
+                                    ) : msg.message_type === 'image' ? (
+                                    /* IMAGE WITH ZERO CLS & LAZY LOAD */
+                                    <ChatImageBubble
+                                      url={msg.metadata?.url}
+                                      content={msg.content}
+                                      fileName={msg.metadata?.file_name}
+                                      onPreview={(url) => setSelectedPreviewImage(url)}
+                                    />
+                                  ) : msg.message_type === 'file' ? (
+                                    /* FILE WITH SMART FORMAT UI */
+                                    (() => {
+                                      const fmt = getFileFormatConfig(msg.metadata?.file_name || msg.content);
+                                      const FileIcon = fmt.icon;
+                                      const fileName = msg.metadata?.file_name || msg.content || 'Tệp đính kèm';
+                                      const fileSizeStr = formatFileSize(msg.metadata?.file_size);
+                                      const fileUrl = msg.metadata?.url;
 
-                                    return (
-                                      <div style={{
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        gap: '6px',
-                                        minWidth: '220px',
-                                        maxWidth: '340px'
-                                      }}>
+                                      return (
                                         <div style={{
                                           display: 'flex',
-                                          alignItems: 'center',
-                                          gap: '10px',
-                                          padding: '8px 10px',
-                                          borderRadius: '10px',
-                                          background: isMine ? 'rgba(255, 255, 255, 0.16)' : '#ffffff',
-                                          border: isMine ? '1px solid rgba(255, 255, 255, 0.28)' : '1px solid #e2e8f0',
-                                          boxShadow: isMine ? '0 2px 6px rgba(0,0,0,0.08)' : '0 2px 6px rgba(0,0,0,0.03)'
+                                          flexDirection: 'column',
+                                          gap: '6px',
+                                          minWidth: '220px',
+                                          maxWidth: '340px'
                                         }}>
-                                          {/* Format Icon with colored badge pill */}
                                           <div style={{
-                                            width: 42,
-                                            height: 42,
-                                            borderRadius: '8px',
-                                            background: isMine ? '#ffffff' : fmt.bg,
-                                            border: `1px solid ${isMine ? 'rgba(255,255,255,0.4)' : fmt.border}`,
                                             display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '10px',
+                                            padding: '8px 10px',
+                                            borderRadius: '10px',
+                                            background: isMine ? 'rgba(255, 255, 255, 0.16)' : '#ffffff',
+                                            border: isMine ? '1px solid rgba(255, 255, 255, 0.28)' : '1px solid #e2e8f0',
+                                            boxShadow: isMine ? '0 2px 6px rgba(0,0,0,0.08)' : '0 2px 6px rgba(0,0,0,0.03)'
+                                          }}>
+                                            {/* Format Icon with colored badge pill */}
+                                            <div style={{
+                                              width: 42,
+                                              height: 42,
+                                              borderRadius: '8px',
+                                              background: isMine ? '#ffffff' : fmt.bg,
+                                              border: 'none',
+                                              display: 'flex',
                                             flexDirection: 'column',
                                             alignItems: 'center',
                                             justifyContent: 'center',
@@ -4506,7 +4518,7 @@ export const WorkChatModal: React.FC = () => {
                                           background: '#ffffff',
                                           padding: '10px 12px',
                                           borderRadius: '12px',
-                                          border: `1px solid ${theme.border}`,
+                                          border: '1px solid #e2e8f0',
                                           boxShadow: '0 3px 10px rgba(0, 0, 0, 0.06)',
                                           minWidth: '230px',
                                           maxWidth: '290px',
@@ -4537,7 +4549,7 @@ export const WorkChatModal: React.FC = () => {
                                               borderRadius: '4px',
                                               background: theme.bg,
                                               color: theme.text,
-                                              border: `1px solid ${theme.border}`,
+                                              border: 'none',
                                               whiteSpace: 'nowrap'
                                             }}>
                                               {theme.icon}
@@ -4728,7 +4740,7 @@ export const WorkChatModal: React.FC = () => {
                                                 padding: '6px 10px',
                                                 borderRadius: '7px',
                                                 background: '#ecfdf5',
-                                                border: '1px solid #a7f3d0',
+                                                border: 'none',
                                                 color: '#059669',
                                                 fontSize: '0.74rem',
                                                 fontWeight: 700,
@@ -4750,7 +4762,7 @@ export const WorkChatModal: React.FC = () => {
                                                 padding: '6px 10px',
                                                 borderRadius: '7px',
                                                 background: '#fef2f2',
-                                                border: '1px solid #fecaca',
+                                                border: 'none',
                                                 color: '#dc2626',
                                                 fontSize: '0.74rem',
                                                 fontWeight: 700,
@@ -4818,7 +4830,7 @@ export const WorkChatModal: React.FC = () => {
                                                 style={{
                                                   padding: '6.5px 8px',
                                                   borderRadius: '7px',
-                                                  border: '1px solid #fca5a5',
+                                                  border: 'none',
                                                   background: '#fff1f2',
                                                   color: '#e11d48',
                                                   fontSize: '0.73rem',
@@ -4972,7 +4984,7 @@ export const WorkChatModal: React.FC = () => {
                                       </div>
                                     </div>
                                   ) : (() => {
-                                    const parsedTags = parseAllChatTags(msg.content);
+                                    const parsedTags = getMemoizedParsedTags(msg);
                                     const { cleanContent, proposal, proposals, chart, nextBestActions, clarifyOptions, proactiveInsight, erpCard, erpCards } = parsedTags;
                                     const allErpCards = erpCards && erpCards.length > 0 ? erpCards : (erpCard ? [erpCard] : []);
                                     const allProposals = proposals && proposals.length > 0 ? proposals : (proposal ? [proposal] : []);
@@ -5106,7 +5118,7 @@ export const WorkChatModal: React.FC = () => {
                                           alignItems: 'center',
                                           gap: '3px',
                                           background: rx.reacted_by_me ? '#eff6ff' : '#ffffff',
-                                          border: rx.reacted_by_me ? '1px solid #93c5fd' : '1px solid #e2e8f0',
+                                          border: 'none',
                                           borderRadius: '12px',
                                           padding: '1px 6px',
                                           fontSize: '0.72rem',
@@ -5435,7 +5447,7 @@ export const WorkChatModal: React.FC = () => {
                               height: 22,
                               borderRadius: '50%',
                               overflow: 'hidden',
-                              border: '1.5px solid #BD1D2D',
+                              border: 'none',
                               flexShrink: 0,
                               background: '#ffffff',
                               display: 'flex',
@@ -5465,7 +5477,7 @@ export const WorkChatModal: React.FC = () => {
                               height: 20,
                               borderRadius: '50%',
                               overflow: 'hidden',
-                              border: '1px solid #BD1D2D',
+                              border: 'none',
                               flexShrink: 0
                             }}>
                               <img
@@ -5495,7 +5507,7 @@ export const WorkChatModal: React.FC = () => {
                                           padding: '2px 8px',
                                           borderRadius: '12px',
                                           background: ag.badgeBg || '#f1f5f9',
-                                          border: `1px solid ${ag.badgeColor || '#cbd5e1'}55`,
+                                          border: 'none',
                                           cursor: 'pointer',
                                           transition: 'all 0.15s ease'
                                         }}
@@ -5562,7 +5574,7 @@ export const WorkChatModal: React.FC = () => {
                                     borderRadius: '4px',
                                     background: activeAgent.badgeBg || '#f1f5f9',
                                     color: activeAgent.badgeColor || '#475569',
-                                    border: `1px solid ${activeAgent.badgeColor || '#cbd5e1'}33`
+                                    border: 'none'
                                   }}>
                                     {activeAgent.badge}
                                   </span>
@@ -5633,7 +5645,7 @@ export const WorkChatModal: React.FC = () => {
                             padding: '2.5px 8px',
                             borderRadius: '6px',
                             background: '#fee2e2',
-                            border: '1px solid #fca5a5',
+                            border: 'none',
                             color: '#b91c1c',
                             fontSize: '0.68rem',
                             fontWeight: 700,
@@ -7150,7 +7162,7 @@ export const WorkChatModal: React.FC = () => {
                       <button
                         type="button"
                         onClick={async () => {
-                          const { cleanContent } = parseAllChatTags(fMsg.content);
+                          const { cleanContent } = getMemoizedParsedTags(fMsg);
                           const textToCopy = (cleanContent || fMsg.content || '').trim();
                           const ok = await copyTextSafely(textToCopy);
                           if (ok) {

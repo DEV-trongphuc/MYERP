@@ -44,7 +44,7 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
       'Truy vết nút thắt phê duyệt và điểm nghẽn quy trình liên phòng ban',
       'Tổng hợp báo cáo đa phân hệ & định tuyến người dùng'
     ],
-    allowedTools: ['search_ideas_knowledge', 'get_program_details', 'get_system_navigation', 'get_system_health_status', 'trace_approval_blocker'],
+    allowedTools: ['query_cross_domain_executive_synthesis', 'search_ideas_knowledge', 'get_program_details', 'get_system_navigation', 'get_system_health_status', 'trace_approval_blocker'],
     actionProposals: ['Tất cả các loại Thẻ Hành Động ERP'],
     synergyWith: ['sales', 'academic', 'records_legal', 'finance', 'hrm'],
     securityGuardrails: [
@@ -71,7 +71,7 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
       'Đề xuất phân rã việc con (WBS) & giao việc cho nhân sự phòng ban',
       'Cảnh báo công việc quá hạn (overdue) và mức độ khẩn cấp'
     ],
-    allowedTools: ['get_my_tasks', 'get_task_detail', 'schedule_contact_activity', 'draft_action_proposal'],
+    allowedTools: ['query_tasks_and_projects_multitier', 'get_my_tasks', 'get_task_detail', 'schedule_contact_activity', 'update_task_progress_and_status', 'complete_task_checklist_item', 'draft_action_proposal'],
     actionProposals: ['Thẻ Giao việc / Phân rã Task (task)'],
     synergyWith: ['hrm', 'sales', 'marketing_campaigns'],
     securityGuardrails: [
@@ -99,7 +99,7 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
       'Xem tổng quan doanh thu & dòng tiền tháng (Admin/Kế toán)',
       'Đề xuất lập phiếu chi PO, tạm ứng, và đơn hàng bán SO có chia đợt'
     ],
-    allowedTools: ['filter_expenses_advanced', 'get_sales_leaderboard', 'get_contact_financial_summary', 'lookup_recent_cash_receipts_and_deposits', 'get_my_payment_proposals', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'draft_action_proposal'],
+    allowedTools: ['query_finance_multitier_analytics', 'query_deposits_and_revenue_multitier', 'query_cross_domain_executive_synthesis', 'filter_expenses_advanced', 'get_sales_leaderboard', 'get_contact_financial_summary', 'lookup_recent_cash_receipts_and_deposits', 'get_my_payment_proposals', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'approve_or_reject_erp_ticket', 'draft_action_proposal'],
     actionProposals: [
       'Thẻ Đề xuất thanh toán chi phí (expense)',
       'Thẻ Đề xuất tạm ứng công tác (advance_payment)',
@@ -133,7 +133,7 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
       'Cập nhật bước chuyển phễu Pipeline & thêm ghi chú chăm sóc',
       'Cập nhật thông tin liên hệ (chức danh, công ty, địa chỉ)'
     ],
-    allowedTools: ['get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'get_sales_leaderboard', 'check_lead_duplicate_and_fairshare_status', 'schedule_contact_activity', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'lookup_recent_cash_receipts_and_deposits', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'draft_action_proposal'],
+    allowedTools: ['query_crm_leads_multitier', 'query_deposits_and_revenue_multitier', 'query_deals_and_b2b_multitier', 'query_cross_domain_executive_synthesis', 'get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_sales_leaderboard', 'check_lead_duplicate_and_fairshare_status', 'schedule_contact_activity', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'manage_lead_round_distribution', 'lookup_recent_cash_receipts_and_deposits', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'quick_log_crm_activity', 'reassign_lead_owner', 'draft_action_proposal'],
     actionProposals: [
       'Thẻ Thêm học viên / Khách tiềm năng (lead)',
       'Thẻ Đơn hàng bán / Lịch thu học phí (sales_order)',
@@ -166,7 +166,7 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
       'Tra cứu phiếu phê duyệt đang chờ duyệt (nghỉ phép, giải trình công)',
       'Đề xuất tạo đơn xin nghỉ phép, bổ sung công và đổi ca trực'
     ],
-    allowedTools: ['get_company_staff_directory', 'get_staff_directory_advanced', 'get_company_leave_and_absence', 'get_my_attendance_summary', 'get_my_payslip', 'get_pending_approvals', 'trace_approval_blocker', 'draft_action_proposal'],
+    allowedTools: ['query_hrm_workforce_and_payroll_multitier', 'get_staff_directory_advanced', 'query_company_attendance_and_work_hours', 'get_company_staff_directory', 'get_company_leave_and_absence', 'get_my_attendance_summary', 'get_my_payslip', 'get_pending_approvals', 'trace_approval_blocker', 'approve_or_reject_erp_ticket', 'draft_action_proposal'],
     actionProposals: [
       'Thẻ Đơn xin nghỉ phép (leave)',
       'Thẻ Giải trình quên chấm công (supplementary)',
@@ -197,7 +197,7 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
       'Tra cứu dự án & chương trình đào tạo đang mở tuyển sinh',
       'Tư vấn chính sách bảo lưu, chuyển tiếp tín chỉ và lộ trình luận văn tốt nghiệp'
     ],
-    allowedTools: ['get_academic_students_filter', 'get_program_details', 'get_academic_schedule_and_intakes', 'get_active_projects_and_campaigns', 'search_contacts', 'export_crm_leads_advanced', 'search_ideas_knowledge'],
+    allowedTools: ['query_crm_leads_multitier', 'get_academic_students_filter', 'get_program_details', 'get_academic_schedule_and_intakes', 'get_active_projects_and_campaigns', 'search_contacts', 'export_crm_leads_advanced', 'search_ideas_knowledge'],
     actionProposals: ['Thẻ Đăng ký chương trình đào tạo / Khóa học'],
     synergyWith: ['sales', 'records_legal', 'master'],
     securityGuardrails: [
@@ -254,7 +254,7 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
       'Đề xuất Phiếu nhập kho vật tư / giáo trình',
       'Đề xuất Biên bản bàn giao tài sản và trang thiết bị làm việc'
     ],
-    allowedTools: ['get_inventory_health_check', 'get_inventory_and_asset_status', 'draft_action_proposal'],
+    allowedTools: ['query_inventory_and_assets_multitier', 'get_inventory_health_check', 'get_inventory_and_asset_status', 'draft_action_proposal'],
     actionProposals: [
       'Thẻ Phiếu nhập kho ấn phẩm / vật tư (inventory_receipt)',
       'Thẻ Biên bản bàn giao tài sản thiết bị (asset_handover)'
@@ -284,7 +284,7 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
       'Phân tích nội dung quảng cáo, copywriting, brochure và kế hoạch truyền thông',
       'Đề xuất Khởi tạo chiến dịch Marketing mới hoặc sự kiện tuyển sinh EduFair'
     ],
-    allowedTools: ['get_campaign_marketing_stats', 'get_active_projects_and_campaigns', 'draft_action_proposal'],
+    allowedTools: ['query_crm_leads_multitier', 'query_deposits_and_revenue_multitier', 'query_deals_and_b2b_multitier', 'query_cross_domain_executive_synthesis', 'analyze_leads_demographics_and_job_titles', 'get_campaign_marketing_stats', 'get_active_projects_and_campaigns', 'draft_action_proposal'],
     actionProposals: ['Thẻ Khởi tạo chiến dịch Marketing (marketing_campaign)'],
     synergyWith: ['sales', 'assets_inventory', 'tasks'],
     securityGuardrails: [
@@ -312,7 +312,7 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
       'Tổng hợp số lượng đơn cọc mới và tiến độ hoàn thành KPI tuyển sinh toàn viện',
       'Báo cáo P&L thời gian thực phục vụ Ban Giám đốc ra quyết định điều hành'
     ],
-    allowedTools: ['get_executive_morning_brief', 'get_sales_leaderboard', 'filter_expenses_advanced', 'get_staff_directory_advanced', 'get_inventory_health_check', 'get_executive_financial_pulse', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'get_system_health_status'],
+    allowedTools: ['query_cross_domain_executive_synthesis', 'query_crm_leads_multitier', 'query_finance_multitier_analytics', 'query_deposits_and_revenue_multitier', 'query_tasks_and_projects_multitier', 'query_deals_and_b2b_multitier', 'query_tickets_and_sla_multitier', 'query_hrm_workforce_and_payroll_multitier', 'query_inventory_and_assets_multitier', 'get_executive_morning_brief', 'get_sales_leaderboard', 'filter_expenses_advanced', 'get_staff_directory_advanced', 'get_inventory_health_check', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'query_company_attendance_and_work_hours', 'get_executive_financial_pulse', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'get_system_health_status'],
     actionProposals: ['Thẻ Báo cáo điều hành P&L', 'Thẻ Khuyến nghị can thiệp dòng tiền'],
     synergyWith: ['finance', 'sales', 'hrm', 'master'],
     securityGuardrails: [
@@ -340,7 +340,7 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
       'Theo dõi số lượng nhân sự đang trực tuyến thời gian thực (presence)',
       'Hỗ trợ định hướng link điều hướng và xử lý các sự cố vận hành kỹ thuật'
     ],
-    allowedTools: ['get_system_health_status', 'get_ticket_status_and_sla_breaches', 'get_system_navigation'],
+    allowedTools: ['query_tickets_and_sla_multitier', 'get_system_health_status', 'get_ticket_status_and_sla_breaches', 'get_system_navigation'],
     actionProposals: ['Thẻ Báo cáo sự cố hệ thống IT', 'Thẻ Yêu cầu bảo trì kỹ thuật'],
     synergyWith: ['master', 'executive_bi'],
     securityGuardrails: [
@@ -356,39 +356,39 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
 export function detectActiveAgent(query: string, toolName?: string, actionType?: string): SpecializedAgent {
   // 1. Direct tool mapping
   if (toolName) {
-    if (['get_my_tasks', 'get_task_detail'].includes(toolName)) {
+    if (['query_tasks_and_projects_multitier', 'get_my_tasks', 'get_task_detail', 'update_task_progress_and_status', 'complete_task_checklist_item'].includes(toolName)) {
       return SPECIALIZED_AGENTS.find(a => a.id === 'tasks')!;
     }
-    if (['get_financial_overview', 'get_my_payment_proposals'].includes(toolName)) {
+    if (['query_finance_multitier_analytics', 'query_deposits_and_revenue_multitier', 'filter_expenses_advanced', 'get_financial_overview', 'get_my_payment_proposals', 'lookup_recent_cash_receipts_and_deposits', 'get_upcoming_tuition_receivables'].includes(toolName)) {
       return SPECIALIZED_AGENTS.find(a => a.id === 'finance')!;
     }
-    if (['get_contact_360_profile', 'search_contacts', 'get_contact_financial_summary', 'get_my_crm_inbox', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile'].includes(toolName)) {
+    if (['query_crm_leads_multitier', 'query_deals_and_b2b_multitier', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_sales_leaderboard', 'get_contact_360_profile', 'search_contacts', 'get_contact_financial_summary', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'manage_lead_round_distribution', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'quick_log_crm_activity', 'reassign_lead_owner', 'schedule_contact_activity'].includes(toolName)) {
       return SPECIALIZED_AGENTS.find(a => a.id === 'sales')!;
     }
-    if (['get_pending_approvals', 'get_my_attendance_summary', 'get_my_payslip', 'get_company_staff_directory', 'get_company_leave_and_absence'].includes(toolName)) {
+    if (['query_hrm_workforce_and_payroll_multitier', 'get_staff_directory_advanced', 'query_company_attendance_and_work_hours', 'get_pending_approvals', 'trace_approval_blocker', 'get_my_attendance_summary', 'get_my_payslip', 'get_company_staff_directory', 'get_company_leave_and_absence'].includes(toolName)) {
       return SPECIALIZED_AGENTS.find(a => a.id === 'hrm')!;
     }
-    if (['get_program_details', 'search_ideas_knowledge', 'get_active_projects_and_campaigns'].includes(toolName)) {
+    if (['get_academic_students_filter', 'get_academic_schedule_and_intakes', 'get_program_details', 'search_ideas_knowledge', 'get_active_projects_and_campaigns'].includes(toolName)) {
       return SPECIALIZED_AGENTS.find(a => a.id === 'academic')!;
     }
     if (['attach_files_to_contact', 'check_student_admission_records'].includes(toolName)) {
       return SPECIALIZED_AGENTS.find(a => a.id === 'records_legal')!;
     }
-    if (['get_inventory_and_asset_status'].includes(toolName)) {
+    if (['query_inventory_and_assets_multitier', 'get_inventory_health_check', 'get_inventory_and_asset_status'].includes(toolName)) {
       return SPECIALIZED_AGENTS.find(a => a.id === 'assets_inventory')!;
     }
     if (['get_campaign_marketing_stats'].includes(toolName)) {
       return SPECIALIZED_AGENTS.find(a => a.id === 'marketing_campaigns')!;
     }
-    if (['get_executive_financial_pulse'].includes(toolName)) {
+    if (['query_cross_domain_executive_synthesis', 'get_executive_morning_brief', 'get_executive_financial_pulse'].includes(toolName)) {
       return SPECIALIZED_AGENTS.find(a => a.id === 'executive_bi')!;
     }
-    if (['get_system_health_status', 'get_system_navigation'].includes(toolName)) {
+    if (['query_tickets_and_sla_multitier', 'get_ticket_status_and_sla_breaches', 'get_system_health_status', 'get_system_navigation'].includes(toolName)) {
       return SPECIALIZED_AGENTS.find(a => a.id === 'system_it')!;
     }
     if (toolName === 'draft_action_proposal') {
       if (actionType === 'task') return SPECIALIZED_AGENTS.find(a => a.id === 'tasks')!;
-      if (['expense', 'advance_payment', 'sales_order'].includes(actionType || '')) {
+      if (['expense', 'advance_payment', 'sales_order', 'deposit'].includes(actionType || '')) {
         return SPECIALIZED_AGENTS.find(a => a.id === 'finance')!;
       }
       if (['leave', 'supplementary', 'shift_swap'].includes(actionType || '')) {

@@ -2030,6 +2030,8 @@ class ChatController {
         $idParam = (int)$q;
 
         try {
+            require_once __DIR__ . '/AgentToolRegistry.php';
+
             // 1. Tasks / Todo (from activities table)
             if (in_array($type, ['all', 'task'], true)) {
                 $taskSql = "
@@ -2049,11 +2051,11 @@ class ChatController {
                     $taskParams[] = (string)$uid;
                 }
                 if ($hasSearch) {
-                    $taskSql .= " AND (a.subject LIKE ? OR a.id = ? OR u.full_name LIKE ? OR cr.full_name LIKE ?)";
                     $taskParams[] = $searchParam;
                     $taskParams[] = $idParam;
-                    $taskParams[] = $searchParam;
-                    $taskParams[] = $searchParam;
+                    $fzAssignee = AgentToolRegistry::buildVietnameseFuzzyNameWhere('u.full_name', $q, $taskParams);
+                    $fzCreator = AgentToolRegistry::buildVietnameseFuzzyNameWhere('cr.full_name', $q, $taskParams);
+                    $taskSql .= " AND (a.subject LIKE ? OR a.id = ? OR {$fzAssignee} OR {$fzCreator})";
                 }
                 $taskSql .= " ORDER BY a.id DESC LIMIT 15";
                 $stmt = $this->db->prepare($taskSql);
@@ -2111,11 +2113,11 @@ class ChatController {
                     $expParams[] = (string)$uid;
                 }
                 if ($hasSearch) {
-                    $expSql .= " AND (e.title LIKE ? OR e.category LIKE ? OR e.id = ? OR u.full_name LIKE ?)";
                     $expParams[] = $searchParam;
                     $expParams[] = $searchParam;
                     $expParams[] = $idParam;
-                    $expParams[] = $searchParam;
+                    $fzExpCreator = AgentToolRegistry::buildVietnameseFuzzyNameWhere('u.full_name', $q, $expParams);
+                    $expSql .= " AND (e.title LIKE ? OR e.category LIKE ? OR e.id = ? OR {$fzExpCreator})";
                 }
                 $expSql .= " ORDER BY e.id DESC LIMIT 10";
                 $stmtExp = $this->db->prepare($expSql);
@@ -2186,11 +2188,11 @@ class ChatController {
                     $leaveParams[] = $uid;
                 }
                 if ($hasSearch) {
-                    $leaveSql .= " AND (l.reason LIKE ? OR l.id = ? OR u.full_name LIKE ? OR l.leave_type LIKE ?)";
                     $leaveParams[] = $searchParam;
                     $leaveParams[] = $idParam;
+                    $fzLeaveCreator = AgentToolRegistry::buildVietnameseFuzzyNameWhere('u.full_name', $q, $leaveParams);
                     $leaveParams[] = $searchParam;
-                    $leaveParams[] = $searchParam;
+                    $leaveSql .= " AND (l.reason LIKE ? OR l.id = ? OR {$fzLeaveCreator} OR l.leave_type LIKE ?)";
                 }
                 $leaveSql .= " ORDER BY l.id DESC LIMIT 10";
                 $stmtLeave = $this->db->prepare($leaveSql);
@@ -2291,12 +2293,12 @@ class ChatController {
                     }
                 }
                 if ($hasSearch) {
-                    $soSql .= " AND (d.unit_code LIKE ? OR d.id = ? OR c.full_name LIKE ? OR c.phone LIKE ? OR p.name LIKE ?)";
                     $soParams[] = $searchParam;
                     $soParams[] = $idParam;
+                    $fzSoContact = AgentToolRegistry::buildVietnameseFuzzyNameWhere('c.full_name', $q, $soParams);
                     $soParams[] = $searchParam;
                     $soParams[] = $searchParam;
-                    $soParams[] = $searchParam;
+                    $soSql .= " AND (d.unit_code LIKE ? OR d.id = ? OR {$fzSoContact} OR c.phone LIKE ? OR p.name LIKE ?)";
                 }
                 $soSql .= " ORDER BY d.id DESC LIMIT 15";
                 $stmt = $this->db->prepare($soSql);
@@ -2347,11 +2349,11 @@ class ChatController {
                     $poParams[] = (string)$uid;
                 }
                 if ($hasSearch) {
-                    $poSql .= " AND (e.title LIKE ? OR e.vendor_name LIKE ? OR e.id = ? OR u.full_name LIKE ?)";
                     $poParams[] = $searchParam;
                     $poParams[] = $searchParam;
                     $poParams[] = $idParam;
-                    $poParams[] = $searchParam;
+                    $fzPoCreator = AgentToolRegistry::buildVietnameseFuzzyNameWhere('u.full_name', $q, $poParams);
+                    $poSql .= " AND (e.title LIKE ? OR e.vendor_name LIKE ? OR e.id = ? OR {$fzPoCreator})";
                 }
                 $poSql .= " ORDER BY e.id DESC LIMIT 15";
                 $stmt = $this->db->prepare($poSql);
@@ -2386,7 +2388,6 @@ class ChatController {
 
             // 5. Contacts / Leads (Flexible search: name, phone, email — synced 100% with ContactController::getScope)
             if (in_array($type, ['all', 'contact'], true)) {
-                require_once __DIR__ . '/AgentToolRegistry.php';
                 $leadRbac = AgentToolRegistry::evaluateLeadReadScope($this->db, $auth);
                 $cSql = "
                     SELECT c.id, c.full_name, c.phone, c.email, c.pipeline_status, c.created_at, c.tags, c.last_contact, c.source,
@@ -2412,12 +2413,12 @@ class ChatController {
                     }
                 }
                 if ($hasSearch) {
-                    $cSql .= " AND (c.full_name LIKE ? OR c.phone LIKE ? OR c.email LIKE ? OR c.id = ? OR u.full_name LIKE ?)";
-                    $cParams[] = $searchParam;
+                    $fzContactName = AgentToolRegistry::buildVietnameseFuzzyNameWhere('c.full_name', $q, $cParams);
                     $cParams[] = $searchParam;
                     $cParams[] = $searchParam;
                     $cParams[] = $idParam;
-                    $cParams[] = $searchParam;
+                    $fzContactOwner = AgentToolRegistry::buildVietnameseFuzzyNameWhere('u.full_name', $q, $cParams);
+                    $cSql .= " AND ({$fzContactName} OR c.phone LIKE ? OR c.email LIKE ? OR c.id = ? OR {$fzContactOwner})";
                 }
                 $cSql .= " ORDER BY c.id DESC LIMIT 15";
                 $stmt = $this->db->prepare($cSql);
@@ -4141,40 +4142,47 @@ class ChatController {
      */
     private function getAmbientUserStateSnapshot(int $uid, int $tid, string $role): string {
         try {
-            // 1. Task stats (Workspace defense)
-            $stmtT = $this->db->prepare("
-                SELECT COUNT(1) as total_undone,
-                       SUM(CASE WHEN a.due_date IS NOT NULL AND a.due_date < NOW() THEN 1 ELSE 0 END) as overdue_count,
-                       SUM(CASE WHEN a.priority IN ('urgent', 'high') THEN 1 ELSE 0 END) as urgent_count,
-                       SUM(CASE WHEN a.due_date IS NOT NULL AND DATE(a.due_date) = CURDATE() THEN 1 ELSE 0 END) as today_count
+            $isGlobalAdmin = in_array(strtolower($role), ['admin', 'superadmin', 'super_admin', 'director'], true);
+            $leaveAdminOr = $isGlobalAdmin ? "OR (l.approver_id IS NULL OR l.approver_id = 0)" : "";
+            $expAdminOr = $isGlobalAdmin ? "OR (e.approver_id IS NULL OR e.approver_id = 0)" : "";
+
+            // Consolidated Single-Pass Query (1 round-trip instead of 3)
+            $stmtCombined = $this->db->prepare("
+                SELECT 
+                    COUNT(1) as total_undone,
+                    COALESCE(SUM(CASE WHEN a.due_date IS NOT NULL AND a.due_date < NOW() THEN 1 ELSE 0 END), 0) as overdue_count,
+                    COALESCE(SUM(CASE WHEN a.priority IN ('urgent', 'high') THEN 1 ELSE 0 END), 0) as urgent_count,
+                    COALESCE(SUM(CASE WHEN a.due_date IS NOT NULL AND a.due_date >= CURDATE() AND a.due_date < DATE_ADD(CURDATE(), INTERVAL 1 DAY) THEN 1 ELSE 0 END), 0) as today_count,
+                    (
+                        SELECT COUNT(1) 
+                        FROM hrm_leave_requests l
+                        JOIN users u ON l.user_id = u.id
+                        WHERE u.tenant_id = ? AND l.status = 'pending' 
+                          AND (l.user_id = ? OR l.approver_id = ? OR l.approver_id_2 = ? {$leaveAdminOr})
+                    ) as pending_leaves,
+                    (
+                        SELECT COUNT(1) 
+                        FROM expenses e 
+                        WHERE e.tenant_id = ? AND e.deleted_at IS NULL AND e.status = 'pending' 
+                          AND (e.created_by = ? OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ? {$expAdminOr})
+                    ) as pending_expenses
                 FROM activities a
                 WHERE a.tenant_id = ? AND a.deleted_at IS NULL
                   AND (a.user_id = ? OR a.created_by = ? OR a.approver_id = ? OR FIND_IN_SET(?, IFNULL(a.participant_ids, '')))
                   AND (a.status IS NULL OR a.status NOT IN ('completed', 'cancelled', 'done', 'hoan_thanh', 'da_xong'))
             ");
-            $stmtT->execute([$tid, $uid, $uid, $uid, (string)$uid]);
-            $tStats = $stmtT->fetch(PDO::FETCH_ASSOC) ?: [];
+            $stmtCombined->execute([
+                $tid, $uid, $uid, $uid,
+                $tid, $uid, $uid, $uid, $uid,
+                $tid, $uid, $uid, $uid, (string)$uid
+            ]);
+            $tStats = $stmtCombined->fetch(PDO::FETCH_ASSOC) ?: [];
             $totalTasks = (int)($tStats['total_undone'] ?? 0);
             $overdueTasks = (int)($tStats['overdue_count'] ?? 0);
             $urgentTasks = (int)($tStats['urgent_count'] ?? 0);
             $todayTasks = (int)($tStats['today_count'] ?? 0);
-
-            // 2. Approvals stats
-            $isGlobalAdmin = in_array(strtolower($role), ['admin', 'superadmin', 'super_admin', 'director'], true);
-            $stmtLv = $this->db->prepare("
-                SELECT COUNT(1) 
-                FROM hrm_leave_requests l
-                JOIN users u ON l.user_id = u.id
-                WHERE u.tenant_id = ? AND l.status = 'pending' 
-                  AND (l.user_id = ? OR l.approver_id = ? OR l.approver_id_2 = ? " . ($isGlobalAdmin ? "OR (l.approver_id IS NULL OR l.approver_id = 0)" : "") . ")
-            ");
-            $stmtLv->execute([$tid, $uid, $uid, $uid]);
-            $pendingLeaves = (int)$stmtLv->fetchColumn();
-
-            $stmtExp = $this->db->prepare("SELECT COUNT(1) FROM expenses WHERE tenant_id = ? AND deleted_at IS NULL AND status = 'pending' AND (created_by = ? OR approver_id = ? OR approver_id_2 = ? OR approver_id_3 = ? " . ($isGlobalAdmin ? "OR (approver_id IS NULL OR approver_id = 0)" : "") . ")");
-            $stmtExp->execute([$tid, $uid, $uid, $uid, $uid]);
-            $pendingExpenses = (int)$stmtExp->fetchColumn();
-
+            $pendingLeaves = (int)($tStats['pending_leaves'] ?? 0);
+            $pendingExpenses = (int)($tStats['pending_expenses'] ?? 0);
             $totalApprovals = $pendingLeaves + $pendingExpenses;
 
             return "\n\n--- [TRẠNG THÁI TỔNG QUAN THỰC TẾ TRÊN HỆ THỐNG CỦA NGƯỜI DÙNG] ---\n"
@@ -4521,8 +4529,8 @@ class ChatController {
                     $cParams[] = $searchId;
                 }
                 if (empty($cWhere) && mb_strlen($cleanTerm) >= 2) {
-                    $cWhere[] = "(c.full_name LIKE ? OR c.phone LIKE ? OR c.email LIKE ?)";
-                    $cParams[] = $like;
+                    $fzLookupName = AgentToolRegistry::buildVietnameseFuzzyNameWhere('c.full_name', $cleanTerm, $cParams);
+                    $cWhere[] = "({$fzLookupName} OR c.phone LIKE ? OR c.email LIKE ?)";
                     $cParams[] = $like;
                     $cParams[] = $like;
                 }
@@ -5063,119 +5071,152 @@ class ChatController {
     }
 
     /**
-     * AI Semantic Micro-Router for Multi-Agent Swarm (Zero Regex / Pure Agentic)
-     * Ultra-fast ~180ms classifier that maps user query intent into domain and tool requirements.
+     * Instant Deterministic Multi-Domain Semantic & Context Router (<1ms Zero-Network Latency)
+     * Maps user query intent and active browser context into domain and tool requirements without blocking CURL round-trips.
      */
     private function routeQueryWithAiMicroRouter(string $userQuery, string $apiKey, string $model, ?array $currentContext = null): array {
         $safeFallback = [
             'intent_type' => 'database_action',
             'primary_domain' => null,
+            'matched_domains' => [],
             'requires_tools' => true,
             'is_multi_domain' => true,
             'reasoning' => 'Fallback safe default'
         ];
 
-        if (empty($userQuery) || empty($apiKey)) {
+        $trimmed = trim($userQuery);
+        if ($trimmed === '') {
             return $safeFallback;
         }
 
-        $contextHint = "";
+        require_once __DIR__ . '/AgentToolRegistry.php';
+        $qLower = mb_strtolower($trimmed, 'UTF-8');
+        $qAscii = AgentToolRegistry::removeVietnameseAccents($qLower);
+
+        // 1. Pure conversational check (greetings, thanks, short social phrases)
+        if (preg_match('/^(xin chao|chao|hello|hi|hey|cam on|thanks|thank you|tks|tam biet|bye|ok|oke|vang|da|tuyet voi|tot qua)(\s+(ban|em|anh|chi|ad|ai|si ideas|ideas))?[!.,?\s]*$/u', $qAscii)) {
+            return [
+                'intent_type' => 'conversational',
+                'primary_domain' => 'none',
+                'matched_domains' => [],
+                'requires_tools' => false,
+                'is_multi_domain' => false,
+                'reasoning' => 'Instant conversational greeting/acknowledgment'
+            ];
+        }
+
+        // 2. Active Browser Context & Pronoun Resolution
+        $contextDomain = null;
         if (!empty($currentContext) && is_array($currentContext)) {
-            $hints = [];
-            $path = trim($currentContext['pathname'] ?? '');
-            $pageTitle = trim($currentContext['page_title'] ?? '');
-            if (!empty($path)) {
-                $hints[] = "Màn hình đang mở: {$path}" . ($pageTitle ? " ({$pageTitle})" : "");
-            }
             $activeEntity = $currentContext['active_entity'] ?? null;
-            if (!empty($activeEntity) && is_array($activeEntity) && !empty($activeEntity['id'])) {
-                $eType = $activeEntity['type'] ?? 'thực thể';
-                $eId = (int)$activeEntity['id'];
-                $eName = trim($activeEntity['name'] ?? '');
-                $hints[] = "Drawer hồ sơ đang mở: {$eType} ID #{$eId}" . ($eName ? " ({$eName})" : "");
-            }
-            if (!empty($hints)) {
-                $contextHint = "\n[NGỮ CẢNH TRÌNH DUYỆT]: " . implode(' | ', $hints);
+            $eType = strtolower(trim((string)($activeEntity['type'] ?? '')));
+            $path = strtolower(trim((string)($currentContext['pathname'] ?? '')));
+
+            if (in_array($eType, ['contact', 'lead', 'deal', 'student', 'customer'], true) || strpos($path, '/crm') !== false || strpos($path, '/contacts') !== false || strpos($path, '/leads') !== false) {
+                $contextDomain = 'sales';
+            } elseif (in_array($eType, ['expense', 'deposit', 'sales_order', 'purchase_order', 'invoice', 'payment'], true) || strpos($path, '/finance') !== false || strpos($path, '/expenses') !== false || strpos($path, '/accounting') !== false) {
+                $contextDomain = 'finance';
+            } elseif (in_array($eType, ['employee', 'staff', 'leave', 'attendance', 'payslip', 'approval'], true) || strpos($path, '/hrm') !== false || strpos($path, '/attendance') !== false || strpos($path, '/approvals') !== false) {
+                $contextDomain = 'hrm';
+            } elseif ($eType === 'task' || strpos($path, '/tasks') !== false || strpos($path, '/projects') !== false) {
+                $contextDomain = 'tasks';
+            } elseif (strpos($path, '/inventory') !== false || strpos($path, '/assets') !== false) {
+                $contextDomain = 'assets_inventory';
             }
         }
 
-        $systemPrompt = "Bạn là AI Semantic Router tối cao của hệ thống MYERP (Viện IDEAS).\n"
-            . "Nhiệm vụ: Phân tích câu hỏi/yêu cầu của người dùng để phân loại Ý định (Intent) và Phân hệ nghiệp vụ (Domain).\n"
-            . "11 Phân hệ nghiệp vụ chuyên trách:\n"
-            . "- 'sales': Quản lý Lead, CRM, tư vấn tuyển sinh, phân bổ lead, vòng xoay chia số, bù data cho Sale, trùng lead, lịch hẹn gọi lại, chốt deal, xuất file / export danh sách lead theo pipeline, giới tính, ngày tháng, chương trình đào tạo, lọc dữ liệu CRM đa tầng nhiều cấp (query_crm_leads_multitier).\n"
-            . "- 'finance': Thu chi, học phí, công nợ học viên, phiếu thu, phiếu chi, đặt cọc, tạm ứng, dòng tiền, SO/PO, phân tích chi phí & ngân sách đa tầng theo phòng ban và hạng mục (query_finance_multitier_analytics).\n"
-            . "- 'hrm': Nhân sự, chấm công, đi trễ, về sớm, tăng ca OT, WFH làm việc từ xa, nghỉ phép, giải trình, bảng lương, phiếu lương, danh bạ nhân sự, xuất bảng công, duyệt đơn từ.\n"
-            . "- 'tasks': Công việc cá nhân, tiến độ, deadline, checklist, giao việc, dự án.\n"
-            . "- 'academic': Chương trình đào tạo (EMBA, MBA, MSc AI, DBA), môn học, thời khóa biểu, lịch khai giảng, giảng viên.\n"
-            . "- 'records_legal': Hồ sơ nhập học (CCCD, bằng cấp, bảng điểm), tính hợp lệ, pháp lý, hợp đồng đào tạo.\n"
-            . "- 'assets_inventory': Tồn kho, ấn phẩm, quà tặng, balo, áo polo, tài sản, laptop thiết bị bàn giao.\n"
-            . "- 'b2b_partner': Khách hàng doanh nghiệp, đối tác B2B, thỏa thuận hợp tác, đào tạo in-house.\n"
-            . "- 'marketing_campaigns': Chiến dịch tiếp thị, quảng cáo Ads, CPL, CAC, nguồn lead tuyển sinh.\n"
-            . "- 'executive_bi': Báo cáo tổng hợp P&L, dòng tiền ròng, KPI toàn viện, sức khỏe tài chính Ban Giám Đốc, phân tích đa chiều chuyên sâu.\n"
-            . "- 'system_it': Lỗi phần mềm, ticket CNTT, giám sát SLA vi phạm, hạ tầng kỹ thuật.\n\n"
-            . "Phân loại intent_type:\n"
-            . "- 'conversational': Lời chào, cảm ơn, khen ngợi, tạm biệt, trò chuyện xã giao.\n"
-            . "- 'knowledge_qa': Hỏi thông tin chung, quy chế, chính sách, học phí niêm yết, kiến thức đào tạo (không yêu cầu tra cứu dữ liệu động người cụ thể).\n"
-            . "- 'database_action': Tra cứu hoặc thao tác dữ liệu cụ thể (khách hàng, học viên, nhân sự, phiếu thu, task cụ thể), lọc dữ liệu đa tầng đa cấp, tạo đơn từ, đề xuất hành động.\n"
-            . "- 'cross_domain': Yêu cầu phức tạp đan xen nhiều phân hệ khác nhau.\n\n"
-            . "QUY TẮC:\n"
-            . "- Khi người dùng yêu cầu lọc, tìm kiếm, thống kê hoặc bóc tách dữ liệu theo nhiều điều kiện lồng nhau (nhiều chương trình, nguồn, giai đoạn, chi nhánh, tiền cọc, ngày tháng, phòng ban, hạng mục chi): BẮT BUỘC chọn intent_type='database_action' hoặc 'cross_domain' và requires_tools=true.\n"
-            . "- Nếu có [NGỮ CẢNH TRÌNH DUYỆT] đi kèm (đang mở trang hoặc drawer hồ sơ) và câu hỏi ngắn/dùng đại từ ('tóm tắt', 'kiểm tra bạn này', 'xem hồ sơ', 'đã cọc chưa', 'phiếu này', 'task này'): BẮT BUỘC gán primary_domain tương ứng với đối tượng/màn hình đang mở (contact/crm -> 'sales', expense/deposit -> 'finance', approval/hrm -> 'hrm', task -> 'tasks') và chọn intent_type='database_action', requires_tools=true.\n"
-            . "- requires_tools: false nếu là 'conversational' hoặc 'knowledge_qa' thuần túy; true nếu là 'database_action' hoặc 'cross_domain'.\n"
-            . "- is_multi_domain: true nếu câu hỏi liên quan từ 2 phân hệ trở lên.\n"
-            . "Trả về duy nhất 1 JSON object chuẩn, không kèm markdown backticks:\n"
-            . "{\"intent_type\": \"conversational\"|\"knowledge_qa\"|\"database_action\"|\"cross_domain\", \"primary_domain\": \"sales\"|\"finance\"|\"hrm\"|\"tasks\"|\"academic\"|\"records_legal\"|\"assets_inventory\"|\"b2b_partner\"|\"marketing_campaigns\"|\"executive_bi\"|\"system_it\"|\"none\", \"requires_tools\": boolean, \"is_multi_domain\": boolean, \"reasoning\": \"lý do ngắn gọn\"}";
-
-        $payload = [
-            'systemInstruction' => [
-                'parts' => [
-                    ['text' => $systemPrompt]
-                ]
+        // 3. Multi-Domain Keyword Scoring Matrix (Accented + Unaccented)
+        $domainKeywords = [
+            'sales' => [
+                'lead', 'khach hang', 'hoc vien', 'tu van', 'crm', 'pipeline', 'pheu', 'chia so', 'vong xoay',
+                'bu data', 'trung lead', 'cham soc', 'ngam lead', 'stale', 'chot sale', 'chot deal', 'lich hen',
+                'goi lai', 'sale', 'tuyen sinh', 'nguon lead', 'chua coc', 'da coc', 'trang thai lead', 'phan bo'
             ],
-            'contents' => [
-                [
-                    'role' => 'user',
-                    'parts' => [
-                        ['text' => "Yêu cầu cần phân loại: \"" . mb_substr($userQuery, 0, 500) . "\"" . $contextHint]
-                    ]
-                ]
+            'finance' => [
+                'thu chi', 'chi phi', 'phieu chi', 'phieu thu', 'po', 'purchase order', 'so', 'sales order',
+                'dat coc', 'tien coc', 'hoc phi', 'cong no', 'phai thu', 'tam ung', 'dong tien', 'ngan sach',
+                'hoa don', 'doanh thu', 'giai ngan', 'thanh toan', 'so quy', 'ke toan', 'duyet chi'
             ],
-            'generationConfig' => [
-                'temperature' => 0.1,
-                'maxOutputTokens' => 180,
-                'responseMimeType' => 'application/json'
+            'hrm' => [
+                'nhan su', 'nhan vien', 'cham cong', 'di tre', 've som', 'tang ca', 'ot', 'wfh', 'nghi phep',
+                'phep nam', 'giai trinh', 'quen cham', 'bo sung cong', 'doi ca', 'bang luong', 'phieu luong',
+                'luong', 'danh ba', 'so do phong ban', 'truong phong', 'quan ly', 'nghi viec', 'vang mat',
+                'ai nghi', 'ai off', 'ket don', 'giu don', 'phe duyet', 'duyet don', 'hop dong lao dong'
+            ],
+            'tasks' => [
+                'task', 'cong viec', 'viec con', 'subtask', 'tien do', 'deadline', 'qua han', 'overdue',
+                'checklist', 'giao viec', 'du an', 'project', 'ban lam viec', 'ke hoach'
+            ],
+            'academic' => [
+                'emba', 'mba', 'msc', 'dba', 'istec', 'umef', 'thuy si', 'phap', 'tin chi', 'ects',
+                'luan van', 'capstone', 'khoa hoc', 'chuong trinh dao tao', 'lich khai giang', 'thoi khoa bieu',
+                'giang vien', 'hoc vu', 'kiem dinh'
+            ],
+            'records_legal' => [
+                'ho so nhap hoc', 'bang cap', 'bang dai hoc', 'bang diem', 'dich thuat', 'cong chung',
+                'cccd', 'ho chieu', 'cv tieng anh', 'chung chi', 'hop dong dao tao', 'phap ly', 'thieu giay to',
+                'xet tuyen', 'tham dinh ho so'
+            ],
+            'assets_inventory' => [
+                'ton kho', 'an pham', 'qua tang', 'tui qua', 'balo', 'ao polo', 'so tay', 'but ky',
+                'giao trinh', 'tai san', 'cap phat', 'ban giao', 'thu hoi', 'laptop', 'thiet bi', 'nhap kho'
+            ],
+            'b2b_partner' => [
+                'b2b', 'doi tac', 'doanh nghiep', 'in-house', 'inhouse', 'hop tac', 'khach hang doanh nghiep',
+                'deal b2b', 'hop dong b2b'
+            ],
+            'marketing_campaigns' => [
+                'marketing', 'chien dich', 'quang cao', 'ads', 'facebook ads', 'google ads', 'tiktok',
+                'cpl', 'cac', 'edufair', 'workshop', 'hoi thao', 'su kien', 'broadcast', 'zalo zns', 'sms'
+            ],
+            'executive_bi' => [
+                'p&l', 'loi nhuan', 'dong tien rong', 'ban giam doc', 'giam doc', 'ceo', 'suc khoe tai chinh',
+                'kpi toan vien', 'bao cao tong hop', 'buc tranh toan dien', 'toan vien', 'da chieu', 'so sanh',
+                'ty le chuyen doi', 'burn rate', ' Z-score', 'bat thuong'
+            ],
+            'system_it' => [
+                'ticket', 'sla', 'khieu nai', 'su co', 'loi he thong', 'webhook', 'cronjob', 'sync sheet',
+                'audit log', 'ky thuat', 'it support'
             ]
         ];
 
-        $routerUrl = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key=" . urlencode($apiKey);
-
-        $ch = curl_init($routerUrl);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload, JSON_UNESCAPED_UNICODE));
-        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-
-        $resp = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
-        if ($httpCode === 200 && $resp) {
-            $json = json_decode($resp, true);
-            $rawText = $json['candidates'][0]['content']['parts'][0]['text'] ?? '';
-            if (!empty($rawText)) {
-                $cleanJson = trim(preg_replace('/^```(?:json)?|```$/m', '', $rawText));
-                $parsed = json_decode($cleanJson, true);
-                if (is_array($parsed) && isset($parsed['intent_type'])) {
-                    return $parsed;
+        $scores = [];
+        foreach ($domainKeywords as $domain => $keywords) {
+            $score = 0;
+            foreach ($keywords as $kw) {
+                if (strpos($qAscii, $kw) !== false) {
+                    $score += (strpos($kw, ' ') !== false) ? 2 : 1;
                 }
+            }
+            if ($score > 0) {
+                $scores[$domain] = $score;
             }
         }
 
-        error_log("AI Semantic Micro-Router fallback activated (HTTP $httpCode)");
-        return $safeFallback;
+        if ($contextDomain !== null && (empty($scores) || preg_match('/\b(ban nay|anh nay|chi nay|ho so nay|phieu nay|don nay|task nay|khach nay|hoc vien nay|tom tat|kiem tra)\b/u', $qAscii))) {
+            $scores[$contextDomain] = ($scores[$contextDomain] ?? 0) + 3;
+        }
+
+        arsort($scores);
+        $matchedDomains = array_keys($scores);
+
+        // 4. Cross-domain / Executive Synthesis detection
+        $isCrossDomainSignal = (bool)preg_match('/\b(ket hop|lien phong ban|so sanh|ty le|chi phi tren moi|cpl|cac|p&l|dong tien rong|buc tranh|toan dien|tong hop toan vien|vua .* vua)\b/u', $qAscii);
+        if ($isCrossDomainSignal && !in_array('executive_bi', $matchedDomains, true)) {
+            $matchedDomains[] = 'executive_bi';
+        }
+
+        $isMultiDomain = count($matchedDomains) >= 2 || $isCrossDomainSignal;
+        $primaryDomain = $matchedDomains[0] ?? $contextDomain ?? null;
+
+        return [
+            'intent_type' => $isMultiDomain ? 'cross_domain' : 'database_action',
+            'primary_domain' => $primaryDomain,
+            'matched_domains' => array_slice($matchedDomains, 0, 3),
+            'requires_tools' => true,
+            'is_multi_domain' => $isMultiDomain,
+            'reasoning' => 'Instant deterministic PHP router (' . implode(',', array_slice($matchedDomains, 0, 3)) . ')'
+        ];
     }
 
     /**
@@ -5257,18 +5298,28 @@ class ChatController {
             require_once __DIR__ . '/AgentToolRegistry.php';
 
             $agentToolMap = [
-                'sales' => ['query_crm_leads_multitier', 'query_deposits_and_revenue_multitier', 'query_deals_and_b2b_multitier', 'get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_sales_leaderboard', 'check_lead_duplicate_and_fairshare_status', 'schedule_contact_activity', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'manage_lead_round_distribution', 'lookup_recent_cash_receipts_and_deposits', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'quick_log_crm_activity', 'reassign_lead_owner', 'get_company_staff_directory', 'draft_action_proposal', 'get_system_navigation'],
-                'finance' => ['query_finance_multitier_analytics', 'query_deposits_and_revenue_multitier', 'filter_expenses_advanced', 'get_sales_leaderboard', 'get_contact_financial_summary', 'lookup_recent_cash_receipts_and_deposits', 'get_my_payment_proposals', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'approve_or_reject_erp_ticket', 'draft_action_proposal', 'get_system_navigation'],
+                'sales' => ['query_crm_leads_multitier', 'query_deposits_and_revenue_multitier', 'query_deals_and_b2b_multitier', 'query_cross_domain_executive_synthesis', 'get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_sales_leaderboard', 'check_lead_duplicate_and_fairshare_status', 'schedule_contact_activity', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'manage_lead_round_distribution', 'lookup_recent_cash_receipts_and_deposits', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'quick_log_crm_activity', 'reassign_lead_owner', 'get_company_staff_directory', 'draft_action_proposal', 'get_system_navigation'],
+                'finance' => ['query_finance_multitier_analytics', 'query_deposits_and_revenue_multitier', 'query_cross_domain_executive_synthesis', 'filter_expenses_advanced', 'get_sales_leaderboard', 'get_contact_financial_summary', 'lookup_recent_cash_receipts_and_deposits', 'get_my_payment_proposals', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'approve_or_reject_erp_ticket', 'draft_action_proposal', 'get_system_navigation'],
                 'hrm' => ['query_hrm_workforce_and_payroll_multitier', 'get_staff_directory_advanced', 'query_company_attendance_and_work_hours', 'get_company_staff_directory', 'get_company_leave_and_absence', 'get_my_attendance_summary', 'get_my_payslip', 'get_pending_approvals', 'trace_approval_blocker', 'approve_or_reject_erp_ticket', 'update_task_progress_and_status', 'draft_action_proposal', 'get_system_navigation'],
                 'tasks' => ['query_tasks_and_projects_multitier', 'get_my_tasks', 'get_task_detail', 'get_company_staff_directory', 'schedule_contact_activity', 'update_task_progress_and_status', 'complete_task_checklist_item', 'draft_action_proposal', 'get_system_navigation'],
                 'academic' => ['query_crm_leads_multitier', 'get_academic_students_filter', 'get_program_details', 'get_academic_schedule_and_intakes', 'get_active_projects_and_campaigns', 'search_contacts', 'export_crm_leads_advanced', 'search_ideas_knowledge', 'draft_action_proposal', 'get_system_navigation'],
                 'records_legal' => ['check_student_admission_records', 'get_academic_students_filter', 'get_contact_360_profile', 'attach_files_to_contact', 'draft_action_proposal', 'get_system_navigation'],
                 'assets_inventory' => ['query_inventory_and_assets_multitier', 'get_inventory_health_check', 'get_inventory_and_asset_status', 'draft_action_proposal', 'get_system_navigation'],
                 'b2b_partner' => ['query_deals_and_b2b_multitier', 'get_b2b_partner_and_contract_summary', 'draft_action_proposal', 'get_system_navigation'],
-                'marketing_campaigns' => ['query_crm_leads_multitier', 'query_deposits_and_revenue_multitier', 'query_deals_and_b2b_multitier', 'get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_sales_leaderboard', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'check_lead_duplicate_and_fairshare_status', 'get_campaign_marketing_stats', 'get_active_projects_and_campaigns', 'get_company_staff_directory', 'draft_action_proposal', 'get_system_navigation'],
-                'executive_bi' => ['query_crm_leads_multitier', 'query_finance_multitier_analytics', 'query_deposits_and_revenue_multitier', 'query_tasks_and_projects_multitier', 'query_deals_and_b2b_multitier', 'query_tickets_and_sla_multitier', 'query_hrm_workforce_and_payroll_multitier', 'query_inventory_and_assets_multitier', 'get_executive_morning_brief', 'get_sales_leaderboard', 'filter_expenses_advanced', 'get_staff_directory_advanced', 'get_inventory_health_check', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'query_company_attendance_and_work_hours', 'get_executive_financial_pulse', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'lookup_recent_cash_receipts_and_deposits', 'get_my_tasks', 'get_system_health_status', 'manage_lead_round_distribution', 'approve_or_reject_erp_ticket', 'update_task_progress_and_status', 'reassign_lead_owner', 'draft_action_proposal', 'get_system_navigation'],
+                'marketing_campaigns' => ['query_crm_leads_multitier', 'query_deposits_and_revenue_multitier', 'query_deals_and_b2b_multitier', 'query_cross_domain_executive_synthesis', 'get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_sales_leaderboard', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'check_lead_duplicate_and_fairshare_status', 'get_campaign_marketing_stats', 'get_active_projects_and_campaigns', 'get_company_staff_directory', 'draft_action_proposal', 'get_system_navigation'],
+                'executive_bi' => ['query_cross_domain_executive_synthesis', 'query_crm_leads_multitier', 'query_finance_multitier_analytics', 'query_deposits_and_revenue_multitier', 'query_tasks_and_projects_multitier', 'query_deals_and_b2b_multitier', 'query_tickets_and_sla_multitier', 'query_hrm_workforce_and_payroll_multitier', 'query_inventory_and_assets_multitier', 'get_executive_morning_brief', 'get_sales_leaderboard', 'filter_expenses_advanced', 'get_staff_directory_advanced', 'get_inventory_health_check', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'query_company_attendance_and_work_hours', 'get_executive_financial_pulse', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'lookup_recent_cash_receipts_and_deposits', 'get_my_tasks', 'get_system_health_status', 'manage_lead_round_distribution', 'approve_or_reject_erp_ticket', 'update_task_progress_and_status', 'reassign_lead_owner', 'draft_action_proposal', 'get_system_navigation'],
                 'system_it' => ['query_tickets_and_sla_multitier', 'get_system_health_status', 'get_ticket_status_and_sla_breaches', 'draft_action_proposal', 'get_system_navigation']
             ];
+
+            // Extract last user message
+            $lastMsgText = '';
+            foreach ($contents as $c) {
+                if (($c['role'] ?? '') === 'user') {
+                    foreach ($c['parts'] ?? [] as $p) {
+                        if (!empty($p['text'])) $lastMsgText = $p['text'];
+                    }
+                }
+            }
 
             // 1. Check if user explicitly chose a sub-agent persona in UI tabs
             $explicitAgentId = $authContext['metadata']['active_agent_id'] ?? null;
@@ -5279,44 +5330,34 @@ class ChatController {
                 // Scoped directly to the UI-selected sub-agent
                 $tools = AgentToolRegistry::getGeminiToolsDeclaration($agentToolMap[$explicitAgentId]);
             } else {
-                // Extract last user message for AI Semantic Micro-Routing
-                $lastMsgText = '';
-                foreach ($contents as $c) {
-                    if (($c['role'] ?? '') === 'user') {
-                        foreach ($c['parts'] ?? [] as $p) {
-                            if (!empty($p['text'])) $lastMsgText = $p['text'];
+                // 2. Instant Deterministic Multi-Domain Router (<1ms)
+                $currentContext = $authContext['metadata']['current_context'] ?? null;
+                $routeDecision = $this->routeQueryWithAiMicroRouter($lastMsgText, $apiKey, $model, $currentContext);
+                $intentType = $routeDecision['intent_type'] ?? 'database_action';
+                $primaryDomain = $routeDecision['primary_domain'] ?? null;
+                $matchedDomains = $routeDecision['matched_domains'] ?? [];
+                $requiresTools = (bool)($routeDecision['requires_tools'] ?? true);
+
+                if ($intentType === 'conversational' || !$requiresTools) {
+                    $isPureConversational = ($intentType === 'conversational');
+                    $tools = null;
+                } elseif (!empty($matchedDomains)) {
+                    $scopedToolNames = [];
+                    foreach ($matchedDomains as $dom) {
+                        if (isset($agentToolMap[$dom])) {
+                            $scopedToolNames = array_merge($scopedToolNames, $agentToolMap[$dom]);
                         }
                     }
-                }
-
-                // 2. Zero-latency pre-check for trivial 1-word greetings/acknowledgments
-                $trimmedMsg = mb_strtolower(trim($lastMsgText));
-                if (empty($attachedFile) && count($contents) <= 2 && in_array($trimmedMsg, ['chào', 'chào bạn', 'chào em', 'hello', 'hi', 'hi bạn', 'xin chào', 'cảm ơn', 'cảm ơn em', 'cảm ơn bạn', 'thanks', 'tks', 'thank you', 'bye', 'tạm biệt', 'ok', 'oke', 'ok em', 'ok bạn', 'tuyệt vời', 'tuyệt'], true)) {
-                    $isPureConversational = true;
-                    $tools = null;
-                } else {
-                    // 3. AI SEMANTIC MICRO-ROUTER (ZERO REGEX / 100% LLM INTENT PARSER)
-                    $currentContext = $authContext['metadata']['current_context'] ?? null;
-                    $routeDecision = $this->routeQueryWithAiMicroRouter($lastMsgText, $apiKey, $model, $currentContext);
-                    $intentType = $routeDecision['intent_type'] ?? 'database_action';
-                    $primaryDomain = $routeDecision['primary_domain'] ?? null;
-                    $isMultiDomain = (bool)($routeDecision['is_multi_domain'] ?? false);
-                    $requiresTools = (bool)($routeDecision['requires_tools'] ?? true);
-
-                    if ($intentType === 'conversational' || !$requiresTools) {
-                        // Conversational or pure General Policy/Training Q&A: answered directly from System Prompt / RAG without tools
-                        $isPureConversational = ($intentType === 'conversational');
-                        $tools = null;
-                    } elseif ($isMultiDomain || $intentType === 'cross_domain' || empty($primaryDomain) || $primaryDomain === 'none') {
-                        // Cross-departmental multi-domain request: Full Swarm tools
-                        $tools = AgentToolRegistry::getGeminiToolsDeclaration(null);
-                    } elseif (isset($agentToolMap[$primaryDomain])) {
-                        // Single-domain focused: Prune to specialized agent tools
-                        $tools = AgentToolRegistry::getGeminiToolsDeclaration($agentToolMap[$primaryDomain]);
-                    } else {
-                        // Safe fallback: Full Swarm tools
-                        $tools = AgentToolRegistry::getGeminiToolsDeclaration(null);
+                    if (count($matchedDomains) >= 2 || $intentType === 'cross_domain') {
+                        $scopedToolNames[] = 'query_cross_domain_executive_synthesis';
                     }
+                    $scopedToolNames = array_values(array_unique($scopedToolNames));
+                    $tools = AgentToolRegistry::getGeminiToolsDeclaration($scopedToolNames);
+                } elseif (!empty($primaryDomain) && isset($agentToolMap[$primaryDomain])) {
+                    $tools = AgentToolRegistry::getGeminiToolsDeclaration($agentToolMap[$primaryDomain]);
+                } else {
+                    // Safe fallback: Essential Swarm tools
+                    $tools = AgentToolRegistry::getGeminiToolsDeclaration(null);
                 }
             }
 
@@ -5343,13 +5384,18 @@ class ChatController {
                 ];
             }
 
+            // Detect whether user is asking to mutate state or draft an action proposal (which may need search -> draft 2-step chain)
+            $lastMsgAscii = AgentToolRegistry::removeVietnameseAccents(mb_strtolower($lastMsgText, 'UTF-8'));
+            $isMutationOrProposalIntent = (bool)preg_match('/\b(tao|lap|them|sua|cap nhat|chuyen|chia|bu|duyet|tu choi|xin nghi|nghi phep|giai trinh|doi ca|dat lich|hen goi|ghi chu|note|dinh kem|ban giao|nhap kho|de xuat)\b/u', $lastMsgAscii);
+
             // ==========================================
             // AUTONOMOUS MULTI-TURN TOOL LOOP (UP TO 6 TURNS + PARALLEL TOOL EXECUTION)
-            // Supports Chained Multi-Agent Execution: Planner -> Parallel Lookups -> Self-Reflection/Disambiguation -> Action Proposal -> Natural Synthesis
             // ==========================================
             $maxToolTurns = 6;
             $toolTurn = 0;
             $generateUrl = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key=" . urlencode($apiKey);
+            $collectedExportMarkdowns = [];
+            $collectedStructuredTags = [];
 
             while ($toolTurn < $maxToolTurns) {
                 $toolTurn++;
@@ -5412,6 +5458,7 @@ class ChatController {
                 // If Gemini didn't call any tool, we have our final text answer!
                 if (empty($functionCalls)) {
                     $finalText = trim($directText);
+                    $finalText = $this->appendMissingDeterministicArtifacts($finalText, $collectedExportMarkdowns, $collectedStructuredTags);
                     if ($isStream && is_callable($onChunk)) {
                         $onChunk($finalText);
                     }
@@ -5423,6 +5470,7 @@ class ChatController {
 
                 $functionResponseParts = [];
                 $hasTerminalActionSuccess = false;
+                $allToolsInTurnAreTerminalOrReadOnly = true;
                 $requiresDisambiguationSynthesis = false;
                 $ctxUid = (int)($authContext['user_id'] ?? 0);
                 $ctxTid = (int)($authContext['tenant_id'] ?? 1);
@@ -5451,6 +5499,22 @@ class ChatController {
 
                     if ($ctxUid > 0 && is_array($toolResult)) {
                         $this->autoRecordEntityFromTool($ctxUid, $ctxTid, $toolName, $toolArgs, $toolResult);
+                    }
+
+                    // Collect deterministic export markdown links & structured widget tags from tool result
+                    if (is_array($toolResult)) {
+                        if (!empty($toolResult['export_link_markdown']) && is_string($toolResult['export_link_markdown'])) {
+                            $collectedExportMarkdowns[] = trim($toolResult['export_link_markdown']);
+                        }
+                        foreach (['voice_summary_hint', 'instruction_for_ai', 'message', 'proposal_block'] as $strField) {
+                            if (!empty($toolResult[$strField]) && is_string($toolResult[$strField])) {
+                                if (preg_match_all('/<<<(?:DYNAMIC_CHART|ACTION_PROPOSAL|ERP_CARD):\s*[\s\S]*?>>>/', $toolResult[$strField], $tagMatches)) {
+                                    foreach ($tagMatches[0] as $tagBlock) {
+                                        $collectedStructuredTags[] = trim($tagBlock);
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     $isDisambig = is_array($toolResult) && (!empty($toolResult['requires_disambiguation']) || ($toolResult['status'] ?? '') === 'DISAMBIGUATION_REQUIRED' || ($toolResult['status'] ?? '') === 'MISSING_INFO_REQUIRED');
@@ -5485,6 +5549,26 @@ class ChatController {
                     }
 
                     $compactResult = $this->compactToolResultForModel($toolResult);
+                    if (is_array($compactResult)) {
+                        $lockFacts = [];
+                        foreach (['total_matching', 'total_leads', 'total_Filtered_Records', 'total_records', 'total_expenses_vnd', 'total_deposit_vnd', 'net_cashflow_vnd', 'total_headcount'] as $k) {
+                            if (isset($compactResult[$k])) {
+                                $lockFacts[$k] = $compactResult[$k];
+                            }
+                        }
+                        if (isset($compactResult['summary']) && is_array($compactResult['summary'])) {
+                            foreach (['total_matching', 'total_leads', 'total_deposit_revenue_vnd', 'total_approved_expense_vnd', 'net_operating_cashflow_vnd', 'leads_with_deposit_count', 'active_headcount'] as $sk) {
+                                if (isset($compactResult['summary'][$sk])) {
+                                    $lockFacts[$sk] = $compactResult['summary'][$sk];
+                                }
+                            }
+                        }
+                        $compactResult['_ground_truth_lock'] = [
+                            'mandate' => 'STRICT_DATABASE_GROUND_TRUTH: Bắt buộc dùng chính xác 100% con số từ kết quả SQL này. Tuyệt đối không tự cộng nhẩm lại từ preview_top_15 hay bịa số liệu. Giữ nguyên link [Tải file Excel...](/export?...) và các thẻ <<<DYNAMIC_CHART:...>>> / <<<ACTION_PROPOSAL:...>>> / <<<ERP_CARD:...>>>.',
+                            'verified_metrics' => $lockFacts
+                        ];
+                    }
+
                     $functionResponseData = [
                         'name' => $toolName,
                         'response' => (object)$compactResult
@@ -5496,7 +5580,7 @@ class ChatController {
                         'functionResponse' => $functionResponseData
                     ];
 
-                    $isTerminalTool = in_array($toolName, [
+                    $isActionTerminalTool = in_array($toolName, [
                         'draft_action_proposal',
                         'approve_or_reject_erp_ticket',
                         'update_task_progress_and_status',
@@ -5506,6 +5590,7 @@ class ChatController {
                         'distribute_lead',
                         'compensate_consultant',
                         'toggle_consultant_shift',
+                        'manage_lead_round_distribution',
                         'update_contact_pipeline',
                         'add_contact_consultation_note',
                         'attach_files_to_contact',
@@ -5513,9 +5598,49 @@ class ChatController {
                         'schedule_contact_activity'
                     ], true);
 
+                    $isReadOnlyAnalyticsTerminalTool = !$isMutationOrProposalIntent && in_array($toolName, [
+                        'query_crm_leads_multitier',
+                        'query_finance_multitier_analytics',
+                        'query_deposits_and_revenue_multitier',
+                        'query_tasks_and_projects_multitier',
+                        'query_deals_and_b2b_multitier',
+                        'query_tickets_and_sla_multitier',
+                        'query_hrm_workforce_and_payroll_multitier',
+                        'query_inventory_and_assets_multitier',
+                        'query_cross_domain_executive_synthesis',
+                        'get_executive_morning_brief',
+                        'get_executive_financial_pulse',
+                        'get_sales_leaderboard',
+                        'filter_expenses_advanced',
+                        'export_crm_leads_advanced',
+                        'analyze_leads_demographics_and_job_titles',
+                        'get_staff_directory_advanced',
+                        'query_company_attendance_and_work_hours',
+                        'get_contact_360_profile',
+                        'get_financial_overview',
+                        'get_my_attendance_summary',
+                        'get_my_payslip',
+                        'get_pending_approvals',
+                        'trace_approval_blocker',
+                        'get_my_tasks',
+                        'get_inventory_health_check',
+                        'get_system_health_status',
+                        'search_ideas_knowledge',
+                        'get_program_details'
+                    ], true);
+
+                    $isTerminalTool = $isActionTerminalTool || $isReadOnlyAnalyticsTerminalTool;
+                    if (!$isTerminalTool) {
+                        $allToolsInTurnAreTerminalOrReadOnly = false;
+                    }
+
                     if ($isTerminalTool && !$isDisambig && (!is_array($toolResult) || ($toolResult['success'] ?? true) !== false)) {
                         $hasTerminalActionSuccess = true;
                     }
+                }
+
+                if (!$allToolsInTurnAreTerminalOrReadOnly) {
+                    $hasTerminalActionSuccess = false;
                 }
 
                 $contents[] = [
@@ -5525,8 +5650,8 @@ class ChatController {
 
                 $payload['contents'] = $contents;
 
-                // Force final synthesis when:
-                // 1) A terminal action succeeded cleanly, OR
+                // Force final synthesis (with real-time SSE streaming) when:
+                // 1) All tools in this turn are terminal action or read-only analytics tools that succeeded cleanly, OR
                 // 2) A tool returned requires_disambiguation (so the AI asks the clarifying question right away), OR
                 // 3) We reached the max turns limit ($maxToolTurns - 1)
                 if ($hasTerminalActionSuccess || $requiresDisambiguationSynthesis || $toolTurn >= ($maxToolTurns - 1)) {
@@ -5623,7 +5748,15 @@ class ChatController {
                                 return $fallback;
                             }
                         }
-                        return trim($accumulatedText);
+
+                        $withArtifacts = $this->appendMissingDeterministicArtifacts($accumulatedText, $collectedExportMarkdowns, $collectedStructuredTags);
+                        if ($withArtifacts !== $accumulatedText) {
+                            $suffix = substr($withArtifacts, strlen($accumulatedText));
+                            if ($suffix !== '') {
+                                $onChunk($suffix);
+                            }
+                        }
+                        return trim($withArtifacts);
                     }
 
                     // Non-stream final synthesis
@@ -5648,7 +5781,11 @@ class ChatController {
 
                     $resFinalJson = json_decode($respFinal, true);
                     $textFinal = $resFinalJson['candidates'][0]['content']['parts'][0]['text'] ?? null;
-                    return $textFinal ? trim($textFinal) : null;
+                    if (!$textFinal) {
+                        return null;
+                    }
+                    $textFinal = $this->appendMissingDeterministicArtifacts(trim($textFinal), $collectedExportMarkdowns, $collectedStructuredTags);
+                    return trim($textFinal);
                 }
             }
 
@@ -5657,6 +5794,37 @@ class ChatController {
             error_log("Call Gemini Exception: " . $e->getMessage());
             return null;
         }
+    }
+
+    /**
+     * Deterministically preserve /export links and <<<DYNAMIC_CHART:...>>> / <<<ACTION_PROPOSAL:...>>> / <<<ERP_CARD:...>>> tags
+     * if the LLM omitted them during Turn 2 synthesis.
+     */
+    private function appendMissingDeterministicArtifacts(string $text, array $exportMarkdowns, array $structuredTags): string {
+        if ($text === '') {
+            return $text;
+        }
+        $appendParts = [];
+        $uniqueExports = array_values(array_unique(array_filter($exportMarkdowns)));
+        if (!empty($uniqueExports) && strpos($text, '/export?') === false) {
+            foreach ($uniqueExports as $expMd) {
+                $appendParts[] = $expMd;
+            }
+        }
+        $uniqueTags = array_values(array_unique(array_filter($structuredTags)));
+        foreach ($uniqueTags as $tagBlock) {
+            if (strpos($tagBlock, '<<<DYNAMIC_CHART:') === 0 && strpos($text, '<<<DYNAMIC_CHART:') === false) {
+                $appendParts[] = $tagBlock;
+            } elseif (strpos($tagBlock, '<<<ACTION_PROPOSAL:') === 0 && strpos($text, '<<<ACTION_PROPOSAL:') === false) {
+                $appendParts[] = $tagBlock;
+            } elseif (strpos($tagBlock, '<<<ERP_CARD:') === 0 && strpos($text, '<<<ERP_CARD:') === false) {
+                $appendParts[] = $tagBlock;
+            }
+        }
+        if (!empty($appendParts)) {
+            $text = rtrim($text) . "\n\n" . implode("\n\n", $appendParts);
+        }
+        return $text;
     }
 
     /**

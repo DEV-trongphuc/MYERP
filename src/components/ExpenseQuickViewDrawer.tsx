@@ -150,8 +150,12 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
     return null;
   }, [viewItem?.notes]);
 
+  const updateExpenseDateInFlightRef = useRef(false);
+  const refundConfirmInFlightRef = useRef(false);
+
   const handleUpdateExpenseDate = async (newDateStr: string) => {
-    if (!viewItem?.id || !newDateStr) return;
+    if (!viewItem?.id || !newDateStr || savingExpenseDate || updateExpenseDateInFlightRef.current) return;
+    updateExpenseDateInFlightRef.current = true;
     setSavingExpenseDate(true);
     try {
       const res = await api.patch(`/expenses/${viewItem.id}`, { date: newDateStr });
@@ -166,6 +170,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
     } catch (err: any) {
       addToast(err?.response?.data?.message || err?.message || 'Lỗi khi cập nhật ngày chi', 'error');
     } finally {
+      updateExpenseDateInFlightRef.current = false;
       setSavingExpenseDate(false);
     }
   };
@@ -1380,7 +1385,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                   </button>
                 </div>
               )}
-              {viewItem.status !== 'approved' && onEditClick && Number(user?.id) === Number(viewItem.created_by || viewItem.user_id) && (
+              {viewItem.status !== 'approved' && onEditClick && (Number(user?.id) === Number(viewItem.created_by || viewItem.user_id) || ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'accountant'].includes(String(user?.role || '').toLowerCase())) && (
                 <button 
                   className="btn secondary sm" 
                   style={{ 
@@ -2509,6 +2514,8 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                         className="btn success" 
                         disabled={submittingRefund || !refundImgUrl}
                         onClick={async () => {
+                          if (submittingRefund || refundConfirmInFlightRef.current) return;
+                          refundConfirmInFlightRef.current = true;
                           setSubmittingRefund(true);
                           try {
                             await api.put(`/expenses/${viewItem.id}`, { 
@@ -2521,6 +2528,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                           } catch (e: any) {
                             addToast('Lỗi khi cập nhật thanh toán: ' + (e.response?.data?.message || e.message), 'error');
                           } finally {
+                            refundConfirmInFlightRef.current = false;
                             setSubmittingRefund(false);
                           }
                         }}

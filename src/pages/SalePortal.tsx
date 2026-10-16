@@ -9,7 +9,7 @@ import {
   Sun, Moon, ChevronDown, ChevronUp, AlertTriangle, ChevronLeft, ChevronRight,
   LayoutDashboard, Database, Ticket, Calendar, RefreshCw, Menu, Tag, Server, Scale, Settings, Info, Cpu,
   Camera, Video, Layers, Plus, Receipt, CreditCard, Building2, Users, User, UserCheck, UserPlus, Trash2, CheckSquare, Square, X, Paperclip, LifeBuoy, Fingerprint, LayoutGrid, Monitor, Tv, Phone, Save, Award, Ban, RotateCcw, MoreHorizontal, Check, KeyRound, Loader2, Shield, Mail, ShieldCheck, Lock as LockIcon, Bell,
-  Play, Sparkles, ArrowRight, Eye, EyeOff, MapPin, Pin, Palette, BarChart3
+  Play, Sparkles, ArrowRight, Eye, EyeOff, MapPin, Pin, Palette, BarChart3, Lightbulb, Flame, DollarSign
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createPortal } from 'react-dom';
@@ -6627,46 +6627,46 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
   const getStatusBadge = (status: string, reportStatus?: string, aiScreenerStatus?: string, createdAt?: string, takers?: any[]) => {
     if (status === 'assigned' && reportStatus === 'pending') {
-      return <span className="badge" style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#4338ca', border: '1px solid rgba(99, 102, 241, 0.2)' }}>{t('Ticket Review')}</span>;
+      return <span className="badge" style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#4338ca' }}>{t('Ticket Review')}</span>;
     }
     if (reportStatus === 'approved_no_comp') {
-      return <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#1d4ed8', border: '1px solid rgba(59, 130, 246, 0.2)' }}>{t('Lỗi không bù')}</span>;
+      return <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#1d4ed8' }}>{t('Lỗi không bù')}</span>;
     }
     if (status === 'error' && reportStatus === 'approved') {
-      return <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#b91c1c', border: '1px solid rgba(239, 68, 68, 0.2)' }}>{t('Ticket')}</span>;
+      return <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#b91c1c' }}>{t('Ticket')}</span>;
     }
     if (status === 'pending_approval' && aiScreenerStatus === 'pending') {
       const nowTime = new Date();
       const created = createdAt ? parseServerDate(createdAt) : nowTime;
       const diffMins = (nowTime.getTime() - created.getTime()) / 60000;
       if (diffMins >= -2 && diffMins < 5) {
-        return <span className="badge" style={{ background: 'rgba(236, 72, 153, 0.1)', color: '#be185d', border: '1px solid rgba(236, 72, 153, 0.2)' }}>{t('Chờ AI đánh giá')}</span>;
+        return <span className="badge" style={{ background: 'rgba(236, 72, 153, 0.1)', color: '#be185d' }}>{t('Chờ AI đánh giá')}</span>;
       }
     }
     switch (status) {
-      case 'assigned': return <span className="badge" style={{ background: 'rgba(13, 148, 136, 0.1)', color: '#0f766e', border: '1px solid rgba(13, 148, 136, 0.2)' }}>{t('Đã chia')}</span>;
-      case 'compensation': return <span className="badge" style={{ background: 'rgba(139, 92, 246, 0.1)', color: '#6d28d9', border: '1px solid rgba(139, 92, 246, 0.2)' }}>{t('Data Bù')}</span>;
-      case 'pending_work_hours': return <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#b45309', border: '1px solid rgba(245, 158, 11, 0.2)' }}>{t('Chờ giờ làm')}</span>;
-      case 'error': return <span className="badge" style={{ background: 'rgba(244, 63, 94, 0.1)', color: '#be123c', border: '1px solid rgba(244, 63, 94, 0.2)' }}>{t('Ticket')}</span>;
-      case 'pending': return <span className="badge" style={{ background: 'rgba(234, 179, 8, 0.1)', color: '#a16207', border: '1px solid rgba(234, 179, 8, 0.2)' }}>{t('Chờ chia')}</span>;
-      case 'reminder': return <span className="badge" style={{ background: 'rgba(236, 72, 153, 0.1)', color: '#be185d', border: '1px solid rgba(236, 72, 153, 0.2)' }}>{t('Nhắc lại')}</span>;
-      case 'duplicate': return <span className="badge" style={{ background: 'rgba(220, 38, 38, 0.1)', color: '#991b1b', border: '1px solid rgba(220, 38, 38, 0.2)' }}>{t('Trùng lặp')}</span>;
-      case 'rule_6_month': return <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#1d4ed8', border: '1px solid rgba(59, 130, 246, 0.2)' }}>{t('Quy định 6 tháng')}</span>;
-      case 'silent': return <span className="badge" style={{ background: 'rgba(79, 70, 229, 0.1)', color: '#3730a3', border: '1px solid rgba(79, 70, 229, 0.2)' }}>{t('Chỉ đồng bộ')}</span>;
-      case 'blacklisted': return <span className="badge" style={{ background: 'rgba(31, 41, 55, 0.1)', color: '#111827', border: '1px solid rgba(31, 41, 55, 0.2)' }}>{t('Blacklist')}</span>;
-      case 'pending_approval': return <span className="badge" style={{ background: 'rgba(234, 88, 12, 0.1)', color: '#c2410c', border: '1px solid rgba(234, 88, 12, 0.2)' }}>{t('Tạm giữ')}</span>;
-      case 'rejected': return <span className="badge" style={{ background: 'rgba(120, 53, 4, 0.1)', color: '#78350f', border: '1px solid rgba(120, 53, 4, 0.2)' }}>{t('Dưới chuẩn')}</span>;
-      case 'fallback': return <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#b45309', border: '1px solid rgba(245, 158, 11, 0.2)' }}>{t('Fallback')}</span>;
-      case 'databank_claim': return <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#047857', border: '1px solid rgba(16, 185, 129, 0.2)' }}>{t('Đã nhận (Kho)')}</span>;
+      case 'assigned': return <span className="badge" style={{ background: 'rgba(13, 148, 136, 0.1)', color: '#0f766e' }}>{t('Đã chia')}</span>;
+      case 'compensation': return <span className="badge" style={{ background: 'rgba(139, 92, 246, 0.1)', color: '#6d28d9' }}>{t('Data Bù')}</span>;
+      case 'pending_work_hours': return <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#b45309' }}>{t('Chờ giờ làm')}</span>;
+      case 'error': return <span className="badge" style={{ background: 'rgba(244, 63, 94, 0.1)', color: '#be123c' }}>{t('Ticket')}</span>;
+      case 'pending': return <span className="badge" style={{ background: 'rgba(234, 179, 8, 0.1)', color: '#a16207' }}>{t('Chờ chia')}</span>;
+      case 'reminder': return <span className="badge" style={{ background: 'rgba(236, 72, 153, 0.1)', color: '#be185d' }}>{t('Nhắc lại')}</span>;
+      case 'duplicate': return <span className="badge" style={{ background: 'rgba(220, 38, 38, 0.1)', color: '#991b1b' }}>{t('Trùng lặp')}</span>;
+      case 'rule_6_month': return <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#1d4ed8' }}>{t('Quy định 6 tháng')}</span>;
+      case 'silent': return <span className="badge" style={{ background: 'rgba(79, 70, 229, 0.1)', color: '#3730a3' }}>{t('Chỉ đồng bộ')}</span>;
+      case 'blacklisted': return <span className="badge" style={{ background: 'rgba(31, 41, 55, 0.1)', color: '#111827' }}>{t('Blacklist')}</span>;
+      case 'pending_approval': return <span className="badge" style={{ background: 'rgba(234, 88, 12, 0.1)', color: '#c2410c' }}>{t('Tạm giữ')}</span>;
+      case 'rejected': return <span className="badge" style={{ background: 'rgba(120, 53, 4, 0.1)', color: '#78350f' }}>{t('Dưới chuẩn')}</span>;
+      case 'fallback': return <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#b45309' }}>{t('Fallback')}</span>;
+      case 'databank_claim': return <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#047857' }}>{t('Đã nhận (Kho)')}</span>;
       case 'released_to_kho':
       case 'databank': {
         const cnt = takers && takers.length ? takers.length : 0;
         if (cnt === 0) {
-          return <span className="badge" style={{ background: 'rgba(16,185,129,0.1)', color: '#047857', border: '1px solid rgba(16,185,129,0.2)' }}>{t('Public (2/2)')}</span>;
+          return <span className="badge" style={{ background: 'rgba(16,185,129,0.1)', color: '#047857' }}>{t('Public (2/2)')}</span>;
         } else if (cnt >= 2) {
-          return <span className="badge" style={{ background: 'rgba(107, 114, 128, 0.1)', color: '#4b5563', border: '1px solid rgba(107, 114, 128, 0.2)' }}>{t('Giới hạn (0/2)')}</span>;
+          return <span className="badge" style={{ background: 'rgba(107, 114, 128, 0.1)', color: '#4b5563' }}>{t('Giới hạn (0/2)')}</span>;
         } else {
-          return <span className="badge" style={{ background: 'rgba(59,130,246,0.1)', color: '#1d4ed8', border: '1px solid rgba(59,130,246,0.2)' }}>{t(`Public (1/2)`)}</span>;
+          return <span className="badge" style={{ background: 'rgba(59,130,246,0.1)', color: '#1d4ed8' }}>{t(`Public (1/2)`)}</span>;
         }
       }
       default: return null;
@@ -10036,7 +10036,6 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                             gap: '4px',
                             background: 'rgba(245, 158, 11, 0.22)',
                             color: '#ffe066',
-                            border: '1px solid rgba(245, 158, 11, 0.35)',
                             padding: '3px 10px',
                             borderRadius: '12px',
                             fontWeight: 800,
@@ -10055,7 +10054,6 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                             gap: '4px',
                             background: 'rgba(239, 68, 68, 0.22)',
                             color: '#ffa3a3',
-                            border: '1px solid rgba(239, 68, 68, 0.35)',
                             padding: '3px 10px',
                             borderRadius: '12px',
                             fontWeight: 800,
@@ -10102,7 +10100,6 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                               gap: '4px',
                               background: 'rgba(245, 158, 11, 0.22)',
                               color: '#ffe066',
-                              border: '1px solid rgba(245, 158, 11, 0.35)',
                               padding: '3px 10px',
                               borderRadius: '12px',
                               fontWeight: 800
@@ -10120,7 +10117,6 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                               gap: '4px',
                               background: 'rgba(239, 68, 68, 0.22)',
                               color: '#ffa3a3',
-                              border: '1px solid rgba(239, 68, 68, 0.35)',
                               padding: '3px 10px',
                               borderRadius: '12px',
                               fontWeight: 800
@@ -11504,19 +11500,19 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
                             <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                               {Number(lead.is_won) === 1 ? (
-                                <span className="badge" style={{ background: '#ffe3e8', color: '#8a0f1b', border: '1px solid #ffe3e8', fontWeight: 700 }}>
+                                <span className="badge" style={{ background: '#ffe3e8', color: '#8a0f1b', fontWeight: 700 }}>
                                   {t('Đặt cọc')}
                                 </span>
                               ) : (
                                 getStatusBadge('databank', undefined, undefined, undefined, lead.takers)
                               )}
                               {Number(lead.deleted_from_databank) === 1 && (
-                                <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                                <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444' }}>
                                   {t('Đã ẩn/xóa')}
                                 </span>
                               )}
                               {Number(lead.is_blocked) === 1 && (
-                                <span className="badge" style={{ background: 'rgba(17, 24, 39, 0.1)', color: '#111827', border: '1px solid rgba(17, 24, 39, 0.2)' }}>
+                                <span className="badge" style={{ background: 'rgba(17, 24, 39, 0.1)', color: '#111827' }}>
                                   {t('Đã chặn')}
                                 </span>
                               )}
@@ -13918,7 +13914,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       <div className="form-group" onClick={handleManagerOnlyFieldClick} style={{ cursor: !canEditUserAssets ? 'pointer' : 'default' }}>
                         <label className="form-label" style={{ fontWeight: 600, fontSize: isMobile ? '0.75rem' : '0.875rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                           <span>{t('Mã nhân viên')}</span>
-                          {!canEditUserAssets && <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 400 }}>🔒 {t('Chỉ Quản lý / HR')}</span>}
+                          {!canEditUserAssets && <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 400, display: 'inline-flex', alignItems: 'center', gap: '3px' }}><LockIcon size={11} /> {t('Chỉ Quản lý / HR')}</span>}
                         </label>
                         <input
                           type="text"
@@ -13933,7 +13929,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       <div className="form-group" onClick={handleManagerOnlyFieldClick} style={{ cursor: !canEditUserAssets ? 'pointer' : 'default' }}>
                         <label className="form-label" style={{ fontWeight: 600, fontSize: isMobile ? '0.75rem' : '0.875rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                           <span>{t('Bộ phận / Phòng ban')}</span>
-                          {!canEditUserAssets && <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 400 }}>🔒 {t('Chỉ Quản lý / HR')}</span>}
+                          {!canEditUserAssets && <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 400, display: 'inline-flex', alignItems: 'center', gap: '3px' }}><LockIcon size={11} /> {t('Chỉ Quản lý / HR')}</span>}
                         </label>
                         <input
                           type="text"
@@ -13951,7 +13947,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       <div className="form-group" onClick={handleManagerOnlyFieldClick} style={{ cursor: !canEditUserAssets ? 'pointer' : 'default' }}>
                         <label className="form-label" style={{ fontWeight: 600, fontSize: isMobile ? '0.75rem' : '0.875rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                           <span>{t('Chức danh / Vị trí')}</span>
-                          {!canEditUserAssets && <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 400 }}>🔒 {t('Chỉ Quản lý / HR')}</span>}
+                          {!canEditUserAssets && <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 400, display: 'inline-flex', alignItems: 'center', gap: '3px' }}><LockIcon size={11} /> {t('Chỉ Quản lý / HR')}</span>}
                         </label>
                         <input
                           type="text"
@@ -13966,7 +13962,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       <div className="form-group" onClick={handleManagerOnlyFieldClick} style={{ cursor: !canEditUserAssets ? 'pointer' : 'default' }}>
                         <label className="form-label" style={{ fontWeight: 600, fontSize: isMobile ? '0.75rem' : '0.875rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                           <span>{t('Loại hợp đồng')}</span>
-                          {!canEditUserAssets && <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 400 }}>🔒 {t('Chỉ Quản lý / HR')}</span>}
+                          {!canEditUserAssets && <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 400, display: 'inline-flex', alignItems: 'center', gap: '3px' }}><LockIcon size={11} /> {t('Chỉ Quản lý / HR')}</span>}
                         </label>
                         <div style={{ pointerEvents: !canEditUserAssets ? 'none' : 'auto' }}>
                           <CustomSelect
@@ -13990,7 +13986,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       <div className="form-group" onClick={handleManagerOnlyFieldClick} style={{ cursor: !canEditUserAssets ? 'pointer' : 'default' }}>
                         <label className="form-label" style={{ fontWeight: 600, fontSize: isMobile ? '0.75rem' : '0.875rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                           <span>{t('Ngày vào làm')}</span>
-                          {!canEditUserAssets && <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 400 }}>🔒 {t('Chỉ Quản lý / HR')}</span>}
+                          {!canEditUserAssets && <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 400, display: 'inline-flex', alignItems: 'center', gap: '3px' }}><LockIcon size={11} /> {t('Chỉ Quản lý / HR')}</span>}
                         </label>
                         <VietnameseDateInput
                           value={editDateJoined}
@@ -14002,7 +13998,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       <div className="form-group" onClick={handleManagerOnlyFieldClick} style={{ cursor: !canEditUserAssets ? 'pointer' : 'default' }}>
                         <label className="form-label" style={{ fontWeight: 600, fontSize: isMobile ? '0.75rem' : '0.875rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                           <span>{t('Người quản lý trực tiếp')}</span>
-                          {!canEditUserAssets && <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 400 }}>🔒 {t('Chỉ Quản lý / HR')}</span>}
+                          {!canEditUserAssets && <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 400, display: 'inline-flex', alignItems: 'center', gap: '3px' }}><LockIcon size={11} /> {t('Chỉ Quản lý / HR')}</span>}
                         </label>
                         <div style={{ pointerEvents: !canEditUserAssets ? 'none' : 'auto' }}>
                           <CustomSelect
@@ -14652,7 +14648,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       gap: '6px'
                     }}
                   >
-                    <span>🎉</span>
+                    <Award size={14} />
                     <span>{t('Khen thưởng')}</span>
                     <span style={{ 
                       fontSize: '0.7rem', 
@@ -14685,7 +14681,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       gap: '6px'
                     }}
                   >
-                    <span>⚠️</span>
+                    <AlertTriangle size={14} />
                     <span>{t('Cảnh cáo')}</span>
                     <span style={{ 
                       fontSize: '0.7rem', 
@@ -14718,7 +14714,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       gap: '6px'
                     }}
                   >
-                    <span>🚫</span>
+                    <Ban size={14} />
                     <span>{t('Kỷ luật')}</span>
                     <span style={{ 
                       fontSize: '0.7rem', 
@@ -14738,8 +14734,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                   /* --- VIEW MODE --- */
                   profileHRRecords.filter(r => r.type === activeHRSubTab).length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '3rem 2rem', background: 'var(--color-bg)', borderRadius: '16px', border: '1px dashed var(--color-border-light)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-                      <span style={{ fontSize: '1.5rem' }}>
-                        {activeHRSubTab === 'award' ? '🏆' : (activeHRSubTab === 'warning' ? '🔔' : '🛡️')}
+                      <span style={{ color: 'var(--color-text-muted)', display: 'inline-flex' }}>
+                        {activeHRSubTab === 'award' ? <Award size={28} /> : (activeHRSubTab === 'warning' ? <Bell size={28} /> : <Shield size={28} />)}
                       </span>
                       <span style={{ fontSize: '0.825rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
                         {activeHRSubTab === 'award' ? t('Chưa có ghi nhận khen thưởng nào.') : (activeHRSubTab === 'warning' ? t('Không có ghi nhận cảnh cáo nào.') : t('Không có ghi nhận kỷ luật nào.'))}
@@ -14812,7 +14808,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
                               {record.amount && (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                  <span>💰</span>
+                                  <DollarSign size={13} />
                                   <span>{t('Giá trị:')} <strong style={{ color: isAward ? 'var(--color-success)' : 'var(--color-danger)' }}>{record.amount}</strong></span>
                                 </div>
                               )}
@@ -18148,7 +18144,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                   cursor: 'pointer'
                 }}>
                   <summary style={{ fontWeight: 700, color: 'var(--color-text-light)', outline: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>💡 {t("Xem hướng dẫn quy định báo cáo lỗi")}</span>
+                    <Lightbulb size={14} style={{ flexShrink: 0 }} />
+                    <span>{t("Xem hướng dẫn quy định báo cáo lỗi")}</span>
                   </summary>
                   <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px', cursor: 'default' }}>
                     {rList.map((item: any, idx: number) => {
@@ -20054,7 +20051,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                                    )}
                                    {isUrgent && (
                                      <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.15)', color: '#dc2626', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                                       🔥 {t('Khẩn cấp')}
+                                       <Flame size={10} /> {t('Khẩn cấp')}
                                      </span>
                                    )}
                                    <span className={`badge ${colorClass}`} style={{ fontSize: '0.65rem', padding: '2px 8px' }}>

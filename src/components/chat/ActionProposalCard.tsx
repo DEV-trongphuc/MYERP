@@ -898,7 +898,7 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
         marginTop: '8px',
         marginBottom: '6px',
         background: '#ffffff',
-        border: `1px solid ${theme.border}`,
+        border: '1px solid #e2e8f0',
         borderRadius: '12px',
         padding: '10px 12px',
         boxShadow: '0 3px 10px rgba(0, 0, 0, 0.06)',
@@ -931,7 +931,7 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
             borderRadius: '4px',
             background: theme.bg,
             color: theme.text,
-            border: `1px solid ${theme.border}`,
+            border: 'none',
             whiteSpace: 'nowrap'
           }}>
             {theme.icon}

@@ -10,16 +10,17 @@ import { Keyboard, ShieldAlert } from 'lucide-react';
 import { CustomModal } from './components/ui/CustomModal';
 import { getDefaultDateFilter } from './utils/api';
 import { GlobalConfirmModal } from './components/ui/GlobalConfirmModal';
-import { QRCodeCallModal } from './components/ui/QRCodeCallModal';
-import { ProfileModal } from './components/ProfileModal';
 import { hasModuleApprovalAccess } from './utils/approvalPermissions';
 import { isMarketing, isAcademic } from './utils/roleUtils';
 import { AutoUpdateChecker } from './components/AutoUpdateChecker';
 import { NetworkStatusIndicator } from './components/ui/NetworkStatusIndicator';
-import { CommandPalette } from './components/ui/CommandPalette';
 import { GlobalEntityDrawers } from './components/ui/GlobalEntityDrawers';
 import { ChatFloatingLauncher } from './components/chat/ChatFloatingLauncher';
 import { popAndCloseTopOverlay, hasOpenOverlays } from './utils/overlayStack';
+
+const QRCodeCallModal = lazy(() => import('./components/ui/QRCodeCallModal').then(m => ({ default: m.QRCodeCallModal })));
+const ProfileModal = lazy(() => import('./components/ProfileModal').then(m => ({ default: m.ProfileModal })));
+const CommandPalette = lazy(() => import('./components/ui/CommandPalette').then(m => ({ default: m.CommandPalette })));
 
 
 // Lazy load all pages for Code Splitting (including Enterprise Social Feed)
@@ -729,11 +730,17 @@ export default function App() {
                 </Routes>
                 <KeyboardShortcutsController />
                 <GlobalConfirmModal />
-                <QRCodeCallModal />
-                <ProfileModal />
+                <Suspense fallback={null}>
+                  <QRCodeCallModal />
+                </Suspense>
+                <Suspense fallback={null}>
+                  <ProfileModal />
+                </Suspense>
                 <AutoUpdateChecker />
                 <NetworkStatusIndicator />
-                <CommandPalette />
+                <Suspense fallback={null}>
+                  <CommandPalette />
+                </Suspense>
                 <GlobalEntityDrawers />
                 <ChatFloatingLauncher />
               </Suspense>

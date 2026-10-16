@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Building2, FileText, FileBadge, Tag as TagIcon, Phone, Mail, MapPin, Search, Calendar, Users, Briefcase, Plus, HelpCircle, Globe, Settings, Download, Trash2, Edit, Pencil, Loader2, History, ChevronLeft, ChevronRight, ChevronDown, Camera, Save, TrendingUp, DollarSign, BookOpen, List, GitBranch, CheckCircle2, Clock, RefreshCw, XCircle, Filter, ArrowRight, User, UserPlus } from 'lucide-react';
+import { X, Building2, FileText, FileBadge, Tag as TagIcon, Phone, Mail, MapPin, Search, Calendar, Users, Briefcase, Plus, HelpCircle, Globe, Settings, Download, Trash2, Edit, Pencil, Loader2, History, ChevronLeft, ChevronRight, ChevronDown, Camera, Save, TrendingUp, DollarSign, BookOpen, List, GitBranch, CheckCircle2, Clock, RefreshCw, XCircle, Filter, ArrowRight, User, UserPlus, CreditCard } from 'lucide-react';
 import { CustomerProfileDrawer } from './CustomerProfileDrawer';
 import { Avatar } from '../components/ui/Avatar';
 import { CustomSelect } from '../components/ui/CustomSelect';
@@ -193,7 +193,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
-      const unregisterOverlay = pushOverlay('company-drawer', () => escapeHandlerRef.current(), 2147483640);
+      const unregisterOverlay = pushOverlay('company-drawer', () => escapeHandlerRef.current(), 90);
       fetchUsers();
       fetchAllCompanies();
       fetchCampaigns();
@@ -624,6 +624,11 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
   }, [entity, fetchPipelineStats, fetchSubContacts]);
 
   escapeHandlerRef.current = () => {
+    if (isCustomerDrawerOpen) {
+      setIsCustomerDrawerOpen(false);
+      setSelectedCustomerContact(null);
+      return;
+    }
     if (helpModal) {
       setHelpModal(null);
     } else if (showDealModal) {
@@ -1934,8 +1939,9 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                           gap: '12px',
                           gridColumn: '1 / -1'
                         }}>
-                          <h4 style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--color-text, #1e293b)', margin: 0 }}>
-                            📌 THÔNG TIN THANH TOÁN (BANKING)
+                          <h4 style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--color-text, #1e293b)', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <CreditCard size={15} style={{ color: 'var(--color-primary)' }} />
+                            <span>THÔNG TIN THANH TOÁN (BANKING)</span>
                           </h4>
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
                             <div className="form-group" style={{ marginBottom: 0 }}>
@@ -2617,8 +2623,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                                         fontSize: '0.72rem',
                                         fontWeight: 700,
                                         background: (sc.stage_color || '#3b82f6') + '15',
-                                        color: sc.stage_color || '#3b82f6',
-                                        border: `1px solid ${(sc.stage_color || '#3b82f6')}35`
+                                        color: sc.stage_color || '#3b82f6'
                                       }}>
                                         <span style={{ width: 6, height: 6, borderRadius: '50%', background: sc.stage_color || '#3b82f6' }} />
                                         {sc.stage_name}
@@ -2646,7 +2651,6 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                                         alignItems: 'center', 
                                         gap: '6px',
                                         background: 'rgba(139, 92, 246, 0.08)',
-                                        border: '1px solid rgba(139, 92, 246, 0.2)',
                                         borderRadius: '14px',
                                         padding: '2px 8px',
                                         fontSize: '0.75rem'
@@ -2806,7 +2810,8 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                                     </button>
                                   ) : (
                                     <span style={{ fontSize: '0.75rem', color: 'var(--color-success)', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                      ✓ Chính
+                                      <CheckCircle2 size={13} />
+                                      <span>Chính</span>
                                     </span>
                                   )}
                                   <button 

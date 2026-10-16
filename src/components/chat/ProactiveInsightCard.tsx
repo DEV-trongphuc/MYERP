@@ -73,14 +73,14 @@ export const ProactiveInsightCard: React.FC<ProactiveInsightCardProps> = ({ insi
         marginTop: '8px',
         marginBottom: '8px',
         borderRadius: '12px',
-        border: `1px solid ${typeConfig.borderColor}`,
+        border: 'none',
         background: typeConfig.bgGradient,
         padding: '11px 13px',
         boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)',
         position: 'relative',
         transition: 'all 0.2s ease',
       }}
-      className="dark:!bg-slate-900/90 dark:!border-slate-700"
+      className="dark:!bg-slate-900/90"
     >
       {/* Dismiss Button */}
       <button
@@ -128,6 +128,7 @@ export const ProactiveInsightCard: React.FC<ProactiveInsightCardProps> = ({ insi
                 borderRadius: '4px',
                 background: typeConfig.badgeBg,
                 color: typeConfig.badgeText,
+                border: 'none',
               }}
               className="dark:!bg-slate-800 dark:!text-slate-200"
             >
@@ -170,7 +171,7 @@ export const ProactiveInsightCard: React.FC<ProactiveInsightCardProps> = ({ insi
                   fontSize: '11px',
                   fontWeight: 600,
                   borderRadius: '6px',
-                  border: `1px solid ${typeConfig.borderColor}`,
+                  border: 'none',
                   background: '#ffffff',
                   color: typeConfig.badgeText,
                   cursor: 'pointer',

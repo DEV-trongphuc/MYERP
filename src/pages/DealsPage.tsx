@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef, lazy, Suspense } from 'rea
 import { useNavigate, useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { Pagination } from '../components/ui/Pagination';
-import { Plus, GripVertical, Pencil, Trash2, Calendar, Target, DollarSign, MessageSquare, Building2, Loader2, Search, Filter, Users, User, CheckCircle2, Phone, Mail, LayoutGrid, List, Clock, Download, Upload, RefreshCw, X, AlertCircle, AlertTriangle, ShieldAlert, ChevronRight, ChevronLeft, ChevronDown, MoreHorizontal, Columns, ArrowDownUp, GraduationCap, Tag as TagIcon, SlidersHorizontal } from 'lucide-react';
+import { Plus, GripVertical, Pencil, Trash2, Calendar, Target, DollarSign, MessageSquare, Building2, Loader2, Search, Filter, Users, User, CheckCircle2, Phone, Mail, LayoutGrid, List, Clock, Download, Upload, RefreshCw, X, AlertCircle, AlertTriangle, ShieldAlert, ChevronRight, ChevronLeft, ChevronDown, MoreHorizontal, Columns, ArrowDownUp, GraduationCap, Tag as TagIcon, SlidersHorizontal, ArrowRight, Flag } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar } from '../components/ui/Avatar';
 import { triggerFullConfetti } from '../utils/confettiHelper';
@@ -144,6 +144,239 @@ const DEFAULT_PIPELINE_COLUMNS: ColumnDef[] = [
 
 const PIPELINE_COLS_STORAGE_KEY = 'myerp_pipeline_columns_v2';
 
+interface HoveredDealCardData {
+  item: any;
+  stage: any;
+  rect: DOMRect;
+}
+
+const DealsFloatingTooltip = React.memo<{
+  triggerRef: React.MutableRefObject<((data: HoveredDealCardData | null) => void) | null>;
+  pipelineView: 'deals' | 'contacts' | 'companies';
+  stages: any[];
+}>(({ triggerRef, pipelineView, stages }) => {
+  const [hoveredCard, setHoveredCard] = useState<HoveredDealCardData | null>(null);
+
+  useEffect(() => {
+    triggerRef.current = setHoveredCard;
+    return () => {
+      triggerRef.current = null;
+    };
+  }, [triggerRef]);
+
+  if (!hoveredCard) return null;
+
+  const { item, stage, rect } = hoveredCard;
+  const itemName = pipelineView === 'contacts'
+    ? (item.full_name || '').trim()
+    : (pipelineView === 'companies' ? item.name : item.title);
+  const stageObj = stage || stages.find(s => String(s.id) === String(item.stage_id));
+  const isNewLead = isNewLeadStage(stageObj) || /^01\b|new\s*lead/i.test(String(item.stage_name || ''));
+  const stageName = stageObj?.name || item.stage_name || '01 – New Lead';
+  const prog = (item.program || item.project_name || '').trim();
+  const admDate = formatAdmissionDate(item.admission_date);
+  const tags = parseCardTags(item.tags);
+  const interactionNote = cleanNoteText(item.last_interaction);
+  const initialNote = cleanNoteText(item.notes);
+  const expectedRev = Number(item.expected_revenue) || Number(item.value) || 0;
+  const totalDep = Number(item.total_deposit) || Number(item.actual_revenue) || 0;
+
+  const tooltipWidth = 360;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  let left = rect.right + 12;
+  if (left + tooltipWidth > vw - 16) {
+    left = Math.max(16, rect.left - tooltipWidth - 12);
+  }
+  const top = Math.max(16, Math.min(rect.top, vh - 340));
+
+  return createPortal(
+    <div
+      style={{
+        position: 'fixed',
+        top,
+        left,
+        width: tooltipWidth,
+        zIndex: 9999,
+        pointerEvents: 'none',
+        background: '#ffffff',
+        color: '#0f172a',
+        border: '1px solid #e2e8f0',
+        borderRadius: '14px',
+        boxShadow: '0 14px 34px rgba(15, 23, 42, 0.14)',
+        padding: '0.95rem 1.05rem',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.6rem',
+        fontSize: '0.78rem'
+      }}
+    >
+      {/* Header: Name + Stage Badge + Owner */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.5rem' }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#0f172a', lineHeight: 1.25 }}>
+            {itemName || 'Khách hàng'}
+          </div>
+          <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '3px' }}>
+            Sale phụ trách: <strong style={{ color: '#0f172a' }}>{item.owner_name || 'Chưa phân bổ'}</strong>
+          </div>
+        </div>
+        <span style={isNewLead ? {
+          background: '#dc2626',
+          color: '#ffffff',
+          fontWeight: 700,
+          padding: '2px 8px',
+          borderRadius: 99,
+          fontSize: 11,
+          whiteSpace: 'nowrap',
+          flexShrink: 0
+        } : {
+          background: stageObj?.color ? `${stageObj.color}18` : '#f1f5f9',
+          color: stageObj?.color || '#2563eb',
+          fontWeight: 700,
+          padding: '2px 8px',
+          borderRadius: 99,
+          fontSize: 11,
+          whiteSpace: 'nowrap',
+          flexShrink: 0
+        }}>
+          {stageName}
+        </span>
+      </div>
+
+      {/* Contact: Phone & Email */}
+      {(item.phone || item.email) && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', fontSize: '0.76rem', color: '#0f172a' }}>
+          {item.phone && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <Phone size={12} style={{ color: '#64748b' }} />
+              <strong>{item.phone}</strong>
+            </span>
+          )}
+          {item.email && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#64748b' }}>
+              <Mail size={12} style={{ color: '#64748b' }} />
+              <span>{item.email}</span>
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Program & Admission Date */}
+      {(prog || admDate) && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+          {prog && (
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '3px 8px',
+              borderRadius: '6px',
+              fontSize: '0.73rem',
+              fontWeight: 700,
+              background: 'rgba(37, 99, 235, 0.1)',
+              color: '#2563eb'
+            }}>
+              <GraduationCap size={12} style={{ flexShrink: 0 }} />
+              <span>Chương trình: {prog}</span>
+            </span>
+          )}
+          {admDate && (
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '3px 8px',
+              borderRadius: '6px',
+              fontSize: '0.73rem',
+              fontWeight: 700,
+              background: 'rgba(16, 185, 129, 0.1)',
+              color: '#059669'
+            }}>
+              <Calendar size={12} style={{ flexShrink: 0 }} />
+              <span>Nhập học: {admDate}</span>
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* All Tags & Source / Campaign */}
+      {(tags.length > 0 || item.source || item.campaign_name || item.utm_campaign) && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          {tags.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+              {tags.map((tg, idx) => (
+                <span key={idx} style={{
+                  padding: '2px 7px',
+                  borderRadius: '6px',
+                  fontSize: '0.68rem',
+                  fontWeight: 600,
+                  background: '#f1f5f9',
+                  color: '#334155'
+                }}>
+                  #{tg}
+                </span>
+              ))}
+            </div>
+          )}
+          {(item.source || item.campaign_name || item.utm_campaign) && (
+            <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
+              {item.source && <span>Nguồn: <strong style={{ color: '#0f172a' }}>{item.source}</strong></span>}
+              {(item.campaign_name || item.utm_campaign) && (
+                <span> · Chiến dịch: <strong style={{ color: '#0f172a' }}>{item.campaign_name || item.utm_campaign}</strong></span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Full Multi-line Interaction Note & Initial Note */}
+      <div style={{
+        background: '#f8fafc',
+        borderRadius: '8px',
+        padding: '8px 10px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '6px'
+      }}>
+        <div>
+          <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#2563eb', marginBottom: '2px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <MessageSquare size={12} style={{ flexShrink: 0 }} />
+              <span>Tương tác gần nhất</span>
+            </span>
+            {(item.last_interaction_at || item.last_contact) && (
+              <span style={{ fontWeight: 500, color: '#64748b' }}>
+                {String(item.last_interaction_at || item.last_contact).slice(0, 16)}
+              </span>
+            )}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#0f172a', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.4, maxHeight: '140px', overflow: 'hidden' }}>
+            {interactionNote || 'Chưa có ghi chú tương tác'}
+          </div>
+        </div>
+        {initialNote && initialNote !== interactionNote && (
+          <div style={{ borderTop: '1px dashed #e2e8f0', paddingTop: '5px' }}>
+            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b', marginBottom: '2px' }}>
+              Ghi chú hồ sơ:
+            </div>
+            <div style={{ fontSize: '0.74rem', color: '#334155', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.35, maxHeight: '90px', overflow: 'hidden' }}>
+              {initialNote}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Footer: Expected Revenue & Total Deposit */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #f1f5f9', paddingTop: '0.45rem', fontSize: '0.74rem', color: '#64748b' }}>
+        <span>Dự kiến: <strong style={{ color: 'var(--color-primary)' }}>{FMT_VND(expectedRev)}</strong></span>
+        <span>Đã cọc: <strong style={{ color: '#059669' }}>{FMT_VND(totalDep)}</strong></span>
+      </div>
+    </div>,
+    document.body
+  );
+});
+
 export const DealsPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -162,7 +395,10 @@ export const DealsPage: React.FC = () => {
   const [stageRevenues, setStageRevenues] = useState<Record<number, number>>({});
   const [totalExpectedRevenue, setTotalExpectedRevenue] = useState<number>(0);
   const [loadingMoreStage, setLoadingMoreStage] = useState<Record<number, boolean>>({});
-  const [hoveredCard, setHoveredCard] = useState<{ item: any; stage: any; rect: DOMRect } | null>(null);
+  const tooltipTriggerRef = useRef<((data: HoveredDealCardData | null) => void) | null>(null);
+  const setHoveredCard = (data: HoveredDealCardData | null) => {
+    tooltipTriggerRef.current?.(data);
+  };
 
   const [columns, setColumns] = useState<ColumnDef[]>(() => {
     try {
@@ -895,17 +1131,19 @@ export const DealsPage: React.FC = () => {
             }
             setSelectedDeal(deal);
             setShowDealDrawer(true);
-            
-            const newParams = new URLSearchParams(location.search);
+          }
+        }).catch(err => {
+          if (err?.name === 'AbortError' || err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return;
+          console.error("Error loading deep link deal:", err);
+        }).finally(() => {
+          if (!controller.signal.aborted) {
+            const newParams = new URLSearchParams(window.location.search);
             newParams.delete('id');
             newParams.delete('deal_id');
             newParams.delete('open_deal_id');
             const cleanUrl = window.location.pathname + (newParams.toString() ? '?' + newParams.toString() : '');
             window.history.replaceState({}, '', cleanUrl);
           }
-        }).catch(err => {
-          if (err?.name === 'AbortError' || err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return;
-          console.error("Error loading deep link deal:", err);
         });
       }
     }
@@ -987,11 +1225,13 @@ export const DealsPage: React.FC = () => {
   useEffect(() => {
     setPage(1);
     setStageVisibleLimits({});
+    setSelected(new Set());
   }, [
     debouncedSearch,
     filterLeadStatus,
     filterAssignee,
     filterStage,
+    activeStageFilter,
     filterProject,
     filterCampaign,
     filterSource,
@@ -1006,6 +1246,10 @@ export const DealsPage: React.FC = () => {
     sortBy,
     pipelineView
   ]);
+
+  useEffect(() => {
+    setSelected(new Set());
+  }, [page]);
 
   const hasLocalModalOpen = Boolean(transitionModal?.isOpen || showBulkMove || stagePickerItem !== null || showFilterPanel);
   const escapeHandlerRef = useRef<() => void>(() => {});
@@ -1163,11 +1407,11 @@ export const DealsPage: React.FC = () => {
     }
   };
 
-  const handleSaveDeal = async (formData: any) => {
+  const handleSaveDeal = async (formData?: any) => {
     if (saveDealInFlightRef.current) return;
     saveDealInFlightRef.current = true;
     try {
-      if (selectedDeal) {
+      if (selectedDeal && formData) {
         await api.put(`/deals/${selectedDeal.id}`, formData);
         addToast('Đã cập nhật cơ hội thành công', 'success');
       }
@@ -1937,7 +2181,7 @@ export const DealsPage: React.FC = () => {
                       marginLeft: 'auto',
                       padding: '2px 8px',
                       borderRadius: '6px',
-                      border: '1px solid rgba(220, 38, 38, 0.25)',
+                      border: 'none',
                       background: 'rgba(220, 38, 38, 0.06)',
                       color: '#dc2626',
                       fontSize: '0.74rem',
@@ -2308,7 +2552,7 @@ export const DealsPage: React.FC = () => {
             ref={kanbanScrollRef}
             onScroll={() => {
               updateScrollState();
-              if (hoveredCard) setHoveredCard(null);
+              setHoveredCard(null);
             }}
             className="card custom-scrollbar"
             style={{ 
@@ -2432,7 +2676,7 @@ export const DealsPage: React.FC = () => {
                   <div
                     style={{ padding: '0.875rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.85rem' }}
                     onScroll={(e) => {
-                      if (hoveredCard) setHoveredCard(null);
+                      setHoveredCard(null);
                       const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
                       if (scrollHeight - scrollTop - clientHeight < 60 && hasMore && !loadingMoreStage[stage.id]) {
                         handleLoadMoreStage(stage.id);
@@ -2991,219 +3235,7 @@ export const DealsPage: React.FC = () => {
       )}
 
       {/* Single Floating Hover Tooltip for Kanban Cards & List Rows (Light Surface, No Badge Border, Lucide Icons) */}
-      {hoveredCard && createPortal(
-        (() => {
-          const { item, stage, rect } = hoveredCard;
-          const itemName = pipelineView === 'contacts'
-            ? (item.full_name || '').trim()
-            : (pipelineView === 'companies' ? item.name : item.title);
-          const stageObj = stage || stages.find(s => String(s.id) === String(item.stage_id));
-          const isNewLead = isNewLeadStage(stageObj) || /^01\b|new\s*lead/i.test(String(item.stage_name || ''));
-          const stageName = stageObj?.name || item.stage_name || '01 – New Lead';
-          const prog = (item.program || item.project_name || '').trim();
-          const admDate = formatAdmissionDate(item.admission_date);
-          const tags = parseCardTags(item.tags);
-          const interactionNote = cleanNoteText(item.last_interaction);
-          const initialNote = cleanNoteText(item.notes);
-          const expectedRev = Number(item.expected_revenue) || Number(item.value) || 0;
-          const totalDep = Number(item.total_deposit) || Number(item.actual_revenue) || 0;
-
-          const tooltipWidth = 360;
-          const vw = window.innerWidth;
-          const vh = window.innerHeight;
-          let left = rect.right + 12;
-          if (left + tooltipWidth > vw - 16) {
-            left = Math.max(16, rect.left - tooltipWidth - 12);
-          }
-          let top = Math.max(16, Math.min(rect.top, vh - 340));
-
-          return (
-            <div
-              style={{
-                position: 'fixed',
-                top,
-                left,
-                width: tooltipWidth,
-                zIndex: 9999,
-                pointerEvents: 'none',
-                background: '#ffffff',
-                color: '#0f172a',
-                border: '1px solid #e2e8f0',
-                borderRadius: '14px',
-                boxShadow: '0 14px 34px rgba(15, 23, 42, 0.14)',
-                padding: '0.95rem 1.05rem',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '0.6rem',
-                fontSize: '0.78rem'
-              }}
-            >
-              {/* Header: Name + Stage Badge + Owner */}
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.5rem' }}>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#0f172a', lineHeight: 1.25 }}>
-                    {itemName || 'Khách hàng'}
-                  </div>
-                  <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '3px' }}>
-                    Sale phụ trách: <strong style={{ color: '#0f172a' }}>{item.owner_name || 'Chưa phân bổ'}</strong>
-                  </div>
-                </div>
-                <span style={isNewLead ? {
-                  background: '#dc2626',
-                  color: '#ffffff',
-                  fontWeight: 700,
-                  padding: '2px 8px',
-                  borderRadius: 99,
-                  fontSize: 11,
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0
-                } : {
-                  background: stageObj?.color ? `${stageObj.color}18` : '#f1f5f9',
-                  color: stageObj?.color || '#2563eb',
-                  fontWeight: 700,
-                  padding: '2px 8px',
-                  borderRadius: 99,
-                  fontSize: 11,
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0
-                }}>
-                  {stageName}
-                </span>
-              </div>
-
-              {/* Contact: Phone & Email */}
-              {(item.phone || item.email) && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', fontSize: '0.76rem', color: '#0f172a' }}>
-                  {item.phone && (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                      <Phone size={12} style={{ color: '#64748b' }} />
-                      <strong>{item.phone}</strong>
-                    </span>
-                  )}
-                  {item.email && (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#64748b' }}>
-                      <Mail size={12} style={{ color: '#64748b' }} />
-                      <span>{item.email}</span>
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {/* Program & Admission Date */}
-              {(prog || admDate) && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                  {prog && (
-                    <span style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      padding: '3px 8px',
-                      borderRadius: '6px',
-                      fontSize: '0.73rem',
-                      fontWeight: 700,
-                      background: 'rgba(37, 99, 235, 0.1)',
-                      color: '#2563eb'
-                    }}>
-                      <GraduationCap size={12} style={{ flexShrink: 0 }} />
-                      <span>Chương trình: {prog}</span>
-                    </span>
-                  )}
-                  {admDate && (
-                    <span style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      padding: '3px 8px',
-                      borderRadius: '6px',
-                      fontSize: '0.73rem',
-                      fontWeight: 700,
-                      background: 'rgba(16, 185, 129, 0.1)',
-                      color: '#059669'
-                    }}>
-                      <Calendar size={12} style={{ flexShrink: 0 }} />
-                      <span>Nhập học: {admDate}</span>
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {/* All Tags & Source / Campaign */}
-              {(tags.length > 0 || item.source || item.campaign_name || item.utm_campaign) && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  {tags.length > 0 && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                      {tags.map((tg, idx) => (
-                        <span key={idx} style={{
-                          padding: '2px 7px',
-                          borderRadius: '6px',
-                          fontSize: '0.68rem',
-                          fontWeight: 600,
-                          background: '#f1f5f9',
-                          color: '#334155'
-                        }}>
-                          #{tg}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {(item.source || item.campaign_name || item.utm_campaign) && (
-                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                      {item.source && <span>Nguồn: <strong style={{ color: '#0f172a' }}>{item.source}</strong></span>}
-                      {(item.campaign_name || item.utm_campaign) && (
-                        <span> · Chiến dịch: <strong style={{ color: '#0f172a' }}>{item.campaign_name || item.utm_campaign}</strong></span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Full Multi-line Interaction Note & Initial Note */}
-              <div style={{
-                background: '#f8fafc',
-                borderRadius: '8px',
-                padding: '8px 10px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '6px'
-              }}>
-                <div>
-                  <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#2563eb', marginBottom: '2px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                      <MessageSquare size={12} style={{ flexShrink: 0 }} />
-                      <span>Tương tác gần nhất</span>
-                    </span>
-                    {(item.last_interaction_at || item.last_contact) && (
-                      <span style={{ fontWeight: 500, color: '#64748b' }}>
-                        {String(item.last_interaction_at || item.last_contact).slice(0, 16)}
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ fontSize: '0.75rem', color: '#0f172a', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.4, maxHeight: '140px', overflow: 'hidden' }}>
-                    {interactionNote || 'Chưa có ghi chú tương tác'}
-                  </div>
-                </div>
-                {initialNote && initialNote !== interactionNote && (
-                  <div style={{ borderTop: '1px dashed #e2e8f0', paddingTop: '5px' }}>
-                    <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b', marginBottom: '2px' }}>
-                      Ghi chú hồ sơ:
-                    </div>
-                    <div style={{ fontSize: '0.74rem', color: '#334155', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.35, maxHeight: '90px', overflow: 'hidden' }}>
-                      {initialNote}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Footer: Expected Revenue & Total Deposit */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #f1f5f9', paddingTop: '0.45rem', fontSize: '0.74rem', color: '#64748b' }}>
-                <span>Dự kiến: <strong style={{ color: 'var(--color-primary)' }}>{FMT_VND(expectedRev)}</strong></span>
-                <span>Đã cọc: <strong style={{ color: '#059669' }}>{FMT_VND(totalDep)}</strong></span>
-              </div>
-            </div>
-          );
-        })(),
-        document.body
-      )}
+      <DealsFloatingTooltip triggerRef={tooltipTriggerRef} pipelineView={pipelineView} stages={stages} />
 
       {showContactDrawer && (
         <Suspense fallback={null}>
@@ -3376,23 +3408,31 @@ export const DealsPage: React.FC = () => {
                       return (
                         <>
                           <h3 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '0.5rem' }}>Cập nhật Pipeline Deal</h3>
-                          <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1.25rem' }}>
-                            Từ <strong>{stages.find(s => s.id === transitionModal.fromStage)?.name}</strong> 
-                            {' '}➔{' '}
+                          <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            <span>Từ</span>
+                            <strong>{stages.find(s => s.id === transitionModal.fromStage)?.name}</strong>
+                            <ArrowRight size={14} />
                             <strong style={{ color: toStageObj?.color || 'var(--color-primary)' }}>{toStageObj?.name}</strong>
                           </p>
 
                           {(toStageObj?.definition || toStageObj?.exit_criteria) && (
                             <div style={{ background: 'var(--color-bg-alt)', border: '1px solid var(--color-border-light)', borderRadius: '10px', padding: '10px 14px', marginBottom: '1.25rem', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                               {toStageObj.definition && (
-                                <div style={{ fontSize: '0.8125rem' }}>
-                                  <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>📌 Milestone: </span>
+                                <div style={{ fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                  <span style={{ fontWeight: 700, color: 'var(--color-text)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    <Flag size={13} />
+                                    <span>Milestone:</span>
+                                  </span>
                                   <span style={{ color: 'var(--color-text-muted)' }}>{toStageObj.definition}</span>
                                 </div>
                               )}
                               {toStageObj.exit_criteria && (
-                                <div style={{ fontSize: '0.8125rem', color: '#059669', background: 'rgba(16, 185, 129, 0.08)', padding: '6px 8px', borderRadius: '6px', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
-                                  <strong>✅ Exit Criteria: </strong>{toStageObj.exit_criteria}
+                                <div style={{ fontSize: '0.8125rem', color: '#059669', background: 'rgba(16, 185, 129, 0.08)', padding: '6px 8px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                  <strong style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    <CheckCircle2 size={13} />
+                                    <span>Exit Criteria:</span>
+                                  </strong>
+                                  <span>{toStageObj.exit_criteria}</span>
                                 </div>
                               )}
                             </div>

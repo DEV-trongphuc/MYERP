@@ -1715,6 +1715,44 @@ class AgentToolRegistry {
                                 ]
                             ]
                         ]
+                    ],
+                    [
+                        'name' => 'query_cross_domain_executive_synthesis',
+                        'description' => 'SIÊU CÔNG CỤ TỔNG HỢP ĐIỀU HÀNH ĐA PHÂN HỆ (CROSS-DOMAIN EXECUTIVE SYNTHESIS - CEO / DIRECTOR / BI): Phân tích liên thông 4 trụ cột trong 1 lần gọi: (1) Phễu Tuyển sinh & CRM Leads (Tổng lead, Lead mới, Đang chăm sóc, Nhập học, phân rã theo nguồn & chương trình), (2) Đặt cọc & Doanh thu (Approved vs Pending Deposits, Open/Won Deals B2B), (3) Chi phí Marketing & Vận hành (Tính CPL thực tế = Chi phí MKT / Tổng Lead và ROAS = Doanh thu Cọc / Chi phí MKT), (4) Tốc độ Đội ngũ Sales & Sẵn sàng Nhân sự HRM (Top tư vấn viên chuyển đổi, mật độ tương tác activities/notes, quân số đi làm/đi trễ/nghỉ phép). Tự động sinh biểu đồ tổng hợp và gợi ý hành động điều hành.',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'period' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['today', 'this_week', 'this_month', 'last_month', 'this_quarter', 'this_year', 'custom'],
+                                    'description' => 'Kỳ báo cáo tổng hợp (mặc định: this_month).'
+                                ],
+                                'from_date' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Ngày bắt đầu YYYY-MM-DD (nếu chọn custom hoặc chỉ định khoảng ngày cụ thể).'
+                                ],
+                                'to_date' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Ngày kết thúc YYYY-MM-DD (nếu chọn custom hoặc chỉ định khoảng ngày cụ thể).'
+                                ],
+                                'program' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Lọc theo chương trình đào tạo (EMBA, MBA, DBA, BBA, MSc AI... cách nhau dấu phẩy).'
+                                ],
+                                'source' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Lọc theo nguồn Lead / kênh Marketing (Facebook, Google, Zalo, TikTok, Referral...).'
+                                ],
+                                'team_id' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'ID đội nhóm kinh doanh / phòng ban cần phân tích.'
+                                ],
+                                'owner_name' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tên chuyên viên tư vấn (Sale) cụ thể nếu muốn bóc tách hiệu suất cá nhân.'
+                                ]
+                            ]
+                        ]
                     ]
                 ];
 
@@ -1738,7 +1776,8 @@ class AgentToolRegistry {
                 'query_deals_and_b2b_multitier',
                 'query_tickets_and_sla_multitier',
                 'query_hrm_workforce_and_payroll_multitier',
-                'query_inventory_and_assets_multitier'
+                'query_inventory_and_assets_multitier',
+                'query_cross_domain_executive_synthesis'
             ];
             $effectiveAllowed = array_unique(array_merge($allowedToolNames, $essential));
 
@@ -2028,6 +2067,128 @@ class AgentToolRegistry {
     }
 
     /**
+     * Strip Vietnamese accents/diacritics for accent-insensitive search & scoring
+     */
+    public static function removeVietnameseAccents(string $str): string {
+        $str = preg_replace('/[àáạảãâầấậẩẫăằắặẳẵ]/u', 'a', $str);
+        $str = preg_replace('/[ÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴ]/u', 'A', $str);
+        $str = preg_replace('/[èéẹẻẽêềếệểễ]/u', 'e', $str);
+        $str = preg_replace('/[ÈÉẸẺẼÊỀẾỆỂỄ]/u', 'E', $str);
+        $str = preg_replace('/[ìíịỉĩ]/u', 'i', $str);
+        $str = preg_replace('/[ÌÍỊỈĨ]/u', 'I', $str);
+        $str = preg_replace('/[òóọỏõôồốộổỗơờớợởỡ]/u', 'o', $str);
+        $str = preg_replace('/[ÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠ]/u', 'O', $str);
+        $str = preg_replace('/[ùúụủũưừứựửữ]/u', 'u', $str);
+        $str = preg_replace('/[ÙÚỤỦŨƯỪỨỰỬỮ]/u', 'U', $str);
+        $str = preg_replace('/[ỳýỵỷỹ]/u', 'y', $str);
+        $str = preg_replace('/[ỲÝỴỶỸ]/u', 'Y', $str);
+        $str = preg_replace('/[đ]/u', 'd', $str);
+        $str = preg_replace('/[Đ]/u', 'D', $str);
+        // Also strip combining diacritical marks if NFC/NFD decomposed
+        $str = preg_replace('/[\x{0300}-\x{036f}]/u', '', $str);
+        return $str;
+    }
+
+    /**
+     * Build SQL WHERE clause for Vietnamese accent-insensitive & multi-token fuzzy name retrieval
+     */
+    public static function buildVietnameseFuzzyNameWhere(string $column, string $rawQuery, array &$params): string {
+        $tokens = preg_split('/\s+/u', trim($rawQuery), -1, PREG_SPLIT_NO_EMPTY);
+        if (empty($tokens)) {
+            $params[] = '%' . trim($rawQuery) . '%';
+            return "{$column} LIKE ?";
+        }
+        $tokenPattern = '%' . implode('%', $tokens) . '%';
+        $unaccentedPattern = '%' . implode('%', array_map([self::class, 'removeVietnameseAccents'], $tokens)) . '%';
+        $params[] = $tokenPattern;
+        $params[] = $unaccentedPattern;
+        return "(CONVERT({$column} USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE ? OR CONVERT({$column} USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE ?)";
+    }
+
+    /**
+     * Score fuzzy name match (0-100) to prioritize exact accented/unaccented matches over partial token matches
+     */
+    public static function scoreFuzzyNameMatch(string $candidateName, string $rawQuery): int {
+        $candClean = mb_strtolower(trim(preg_replace('/\s+/u', ' ', $candidateName)));
+        $queryClean = mb_strtolower(trim(preg_replace('/\s+/u', ' ', $rawQuery)));
+        if ($candClean === '' || $queryClean === '') {
+            return 0;
+        }
+        if ($candClean === $queryClean) {
+            return 100;
+        }
+        $candUnaccented = mb_strtolower(self::removeVietnameseAccents($candClean));
+        $queryUnaccented = mb_strtolower(self::removeVietnameseAccents($queryClean));
+        if ($candUnaccented === $queryUnaccented) {
+            return 95;
+        }
+        $qTokens = preg_split('/\s+/u', $queryUnaccented, -1, PREG_SPLIT_NO_EMPTY);
+        $cTokens = preg_split('/\s+/u', $candUnaccented, -1, PREG_SPLIT_NO_EMPTY);
+        if (!empty($qTokens) && !empty($cTokens)) {
+            // Check ordered whole-word token match (e.g. "nguyen hung" in "nguyen quang hung")
+            $cIdx = 0;
+            $matchedCount = 0;
+            foreach ($qTokens as $qt) {
+                while ($cIdx < count($cTokens)) {
+                    if ($cTokens[$cIdx] === $qt) {
+                        $matchedCount++;
+                        $cIdx++;
+                        break;
+                    }
+                    $cIdx++;
+                }
+            }
+            if ($matchedCount === count($qTokens)) {
+                $firstLastBonus = ($qTokens[0] === $cTokens[0] && end($qTokens) === end($cTokens)) ? 5 : 0;
+                return 80 + $firstLastBonus;
+            }
+        }
+        if (mb_strpos($candUnaccented, $queryUnaccented) !== false) {
+            return 60;
+        }
+        return 40;
+    }
+
+    /**
+     * Static helper for Contact RBAC isolation (respects can_view_all_leads and can_view_team_leads)
+     */
+    public static function getContactRbacClause(string $alias, array $leadRbac, int $uid, bool $allowExtraAll = false): array {
+        if (!empty($leadRbac['can_view_all_leads']) || $allowExtraAll) {
+            return [0 => '1=1', 1 => [], 'clause' => '1=1', 'params' => []];
+        }
+        $prefix = $alias ? "{$alias}." : "";
+        if (!empty($leadRbac['can_view_team_leads'])) {
+            $teamId = (int)($leadRbac['team_id'] ?? 0);
+            $clause = "({$prefix}owner_id = ? OR FIND_IN_SET(?, IFNULL({$prefix}collaborator_ids, '')) OR {$prefix}owner_id IN (
+                SELECT id FROM users WHERE team_id IN (
+                    SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))
+                ) OR (? > 0 AND team_id = ?)
+            ) OR {$prefix}id IN (
+                SELECT contact_id FROM cooperation_slips 
+                WHERE JSON_CONTAINS(JSON_KEYS(CASE WHEN (shares_json IS NOT NULL AND JSON_VALID(shares_json)) THEN shares_json ELSE '{}' END), JSON_QUOTE(CAST(? AS CHAR)))
+            ))";
+            $params = [$uid, (string)$uid, $uid, $teamId, $teamId, (string)$uid];
+            return [
+                0 => $clause,
+                1 => $params,
+                'clause' => $clause,
+                'params' => $params
+            ];
+        }
+        $clause = "({$prefix}owner_id = ? OR FIND_IN_SET(?, IFNULL({$prefix}collaborator_ids, '')) OR {$prefix}id IN (
+            SELECT contact_id FROM cooperation_slips 
+            WHERE JSON_CONTAINS(JSON_KEYS(CASE WHEN (shares_json IS NOT NULL AND JSON_VALID(shares_json)) THEN shares_json ELSE '{}' END), JSON_QUOTE(CAST(? AS CHAR)))
+        ))";
+        $params = [$uid, (string)$uid, (string)$uid];
+        return [
+            0 => $clause,
+            1 => $params,
+            'clause' => $clause,
+            'params' => $params
+        ];
+    }
+
+    /**
      * Resolve a contact with Smart Disambiguation ("Biết tự hỏi khi gặp nhiều lựa chọn") and Zero-Trust RBAC
      */
     private static function resolveContactWithDisambiguation(
@@ -2042,21 +2203,13 @@ class AgentToolRegistry {
         $uid = (int)($auth['user_id'] ?? 0);
         $leadRbac = self::evaluateLeadReadScope($db, $auth);
         $role = $leadRbac['role'];
-        $isGlobalAdmin = $leadRbac['is_global_admin'];
-        $isManager = $leadRbac['is_manager'];
         $isAccountant = in_array($role, ['accountant', 'ke_toan'], true);
         $isAcademic = $leadRbac['is_academic'];
-        $canAccessAll = $leadRbac['can_view_all_leads'] || $isManager || ($allowAccountantAcademic && ($isAccountant || $isAcademic));
+        $allowExtraAll = $allowAccountantAcademic && ($isAccountant || $isAcademic);
 
-        $rbacClause = '1=1';
-        $rbacParams = [];
-        if (!$canAccessAll) {
-            $rbacClause = "(c.owner_id = ? OR FIND_IN_SET(?, IFNULL(c.collaborator_ids, '')) OR c.id IN (
-                SELECT contact_id FROM cooperation_slips 
-                WHERE JSON_CONTAINS(JSON_KEYS(CASE WHEN (shares_json IS NOT NULL AND JSON_VALID(shares_json)) THEN shares_json ELSE '{}' END), JSON_QUOTE(CAST(? AS CHAR)))
-            ))";
-            $rbacParams = [$uid, (string)$uid, (string)$uid];
-        }
+        $rbacInfo = self::getContactRbacClause('c', $leadRbac, $uid, $allowExtraAll);
+        $rbacClause = $rbacInfo['clause'];
+        $rbacParams = $rbacInfo['params'];
 
         $selectSql = "SELECT c.*,
                              c.full_name as name,
@@ -2103,10 +2256,13 @@ class AgentToolRegistry {
             ];
         }
 
-        // 2. Search by student_code, phone, full_name, email (LIMIT 6 to detect ambiguity)
+        // 2. Search by tokenized/accent-insensitive full_name, student_code, phone, email (LIMIT 6 to detect ambiguity)
         $cleanPhone = preg_replace('/[^0-9]/', '', $query);
-        $sWhere = ["c.full_name LIKE ?", "c.email LIKE ?", "c.student_code LIKE ?"];
-        $sParams = [$tid, '%' . $query . '%', '%' . $query . '%', '%' . $query . '%'];
+        $sParams = [$tid];
+        $fuzzyNameClause = self::buildVietnameseFuzzyNameWhere('c.full_name', $query, $sParams);
+        $sWhere = [$fuzzyNameClause, "c.email LIKE ?", "c.student_code LIKE ?"];
+        $sParams[] = '%' . $query . '%';
+        $sParams[] = '%' . $query . '%';
         if (!empty($cleanPhone) && strlen($cleanPhone) >= 6) {
             $sWhere[] = "c.phone LIKE ?";
             $sParams[] = '%' . $cleanPhone . '%';
@@ -2154,6 +2310,18 @@ class AgentToolRegistry {
             return ['status' => 'resolved', 'contact' => $exactCodeMatches[0]];
         }
 
+        // Score candidates with scoreFuzzyNameMatch; if 1 candidate has an exact full-name match (accented or unaccented), select it
+        foreach ($rows as &$rItem) {
+            $rItem['_fuzzy_score'] = self::scoreFuzzyNameMatch((string)($rItem['full_name'] ?? ''), $query);
+        }
+        unset($rItem);
+        usort($rows, fn($a, $b) => ($b['_fuzzy_score'] <=> $a['_fuzzy_score']) ?: ((int)$b['id'] <=> (int)$a['id']));
+
+        $exactFullMatches = array_values(array_filter($rows, fn($r) => ($r['_fuzzy_score'] ?? 0) >= 95));
+        if (count($exactFullMatches) === 1) {
+            return ['status' => 'resolved', 'contact' => $exactFullMatches[0]];
+        }
+
         return [
             'status' => 'ambiguous',
             'candidates' => $rows,
@@ -2181,33 +2349,11 @@ class AgentToolRegistry {
         $isHR = in_array($role, ['hr', 'nhan_su'], true);
         $isAcademic = $leadRbac['is_academic'];
         $isSale = in_array($role, ['sales', 'sale', 'kinh_doanh', 'sale_admin', 'saleadmin', 'consultant', 'tu_van'], true);
-        $canAccessAllContacts = $canViewAllLeads || $isManager;
+        $canAccessAllContacts = $canViewAllLeads;
 
         // Zero-Trust Contact RBAC Condition: if not authorized for all/team contacts, strictly isolate to owner, collaborator, or cooperation slip
-        $getContactRbacClause = function(string $alias = 'c') use ($canViewAllLeads, $canViewTeamLeads, $uid) {
-            if ($canViewAllLeads) {
-                return ['clause' => '1=1', 'params' => []];
-            }
-            $prefix = $alias ? "{$alias}." : "";
-            if ($canViewTeamLeads) {
-                $clause = "({$prefix}owner_id = ? OR FIND_IN_SET(?, IFNULL({$prefix}collaborator_ids, '')) OR {$prefix}owner_id IN (
-                    SELECT id FROM users WHERE team_id IN (
-                        SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))
-                    )
-                ))";
-                return [
-                    'clause' => $clause,
-                    'params' => [$uid, (string)$uid, $uid]
-                ];
-            }
-            $clause = "({$prefix}owner_id = ? OR FIND_IN_SET(?, IFNULL({$prefix}collaborator_ids, '')) OR {$prefix}id IN (
-                SELECT contact_id FROM cooperation_slips 
-                WHERE JSON_CONTAINS(JSON_KEYS(CASE WHEN (shares_json IS NOT NULL AND JSON_VALID(shares_json)) THEN shares_json ELSE '{}' END), JSON_QUOTE(CAST(? AS CHAR)))
-            ))";
-            return [
-                'clause' => $clause,
-                'params' => [$uid, (string)$uid, (string)$uid]
-            ];
+        $getContactRbacClause = function(string $alias = 'c') use ($leadRbac, $uid) {
+            return self::getContactRbacClause($alias, $leadRbac, $uid, false);
         };
 
         try {
@@ -2350,7 +2496,7 @@ class AgentToolRegistry {
 
                         $start = $t['start_date'] ? date('d/m/Y H:i', strtotime($t['start_date'])) : null;
                         $due = $t['due_date'] ? date('d/m/Y H:i', strtotime($t['due_date'])) : 'Không đặt hạn';
-                        $isOverdue = (!empty($t['due_date']) && strtotime($t['due_date']) < time() && !in_array($statusRaw, ['done', 'completed'], true) && (int)($t['progress'] ?? 0) < 100) ? ' (⚠️ ĐÃ QUÁ HẠN)' : '';
+                        $isOverdue = (!empty($t['due_date']) && strtotime($t['due_date']) < time() && !in_array($statusRaw, ['done', 'completed'], true) && (int)($t['progress'] ?? 0) < 100) ? ' ([ĐÃ QUÁ HẠN])' : '';
 
                         // Resolve collaborators
                         $collabs = [];
@@ -2376,7 +2522,7 @@ class AgentToolRegistry {
                             'priority' => $prioText,
                             'progress' => (int)($t['progress'] ?? 0) . '%',
                             'direct_url' => $directUrl,
-                            'open_tab_markdown' => "[👉 Bấm để mở việc #{$tId}]({$directUrl})",
+                            'open_tab_markdown' => "[Bấm để mở việc #{$tId}]({$directUrl})",
                             'smart_tag' => $smartTag,
                             'group' => $t['task_group_name'] ?: 'Chưa phân nhóm',
                             'start_date' => $start,
@@ -2597,7 +2743,7 @@ class AgentToolRegistry {
 
                     $start = $task['start_date'] ? date('d/m/Y H:i', strtotime($task['start_date'])) : null;
                     $due = $task['due_date'] ? date('d/m/Y H:i', strtotime($task['due_date'])) : 'Không đặt hạn';
-                    $isOverdue = (!empty($task['due_date']) && strtotime($task['due_date']) < time() && !in_array($statusRaw, ['done', 'completed'], true) && (int)($task['progress'] ?? 0) < 100) ? ' (⚠️ ĐÃ QUÁ HẠN)' : '';
+                    $isOverdue = (!empty($task['due_date']) && strtotime($task['due_date']) < time() && !in_array($statusRaw, ['done', 'completed'], true) && (int)($task['progress'] ?? 0) < 100) ? ' ([ĐÃ QUÁ HẠN])' : '';
                     $doneAt = $task['done_at'] ? date('d/m/Y H:i', strtotime($task['done_at'])) : null;
 
                     return [
@@ -2658,11 +2804,14 @@ class AgentToolRegistry {
 
                     // Resolve owner by name if owner_id not given
                     if ($ownerId <= 0 && !empty($ownerName)) {
-                        $uStmt = $db->prepare("SELECT id, full_name FROM users WHERE tenant_id = ? AND full_name LIKE ? LIMIT 1");
-                        $uStmt->execute([$tid, '%' . $ownerName . '%']);
-                        $foundUser = $uStmt->fetch(PDO::FETCH_ASSOC);
-                        if ($foundUser) {
-                            $ownerId = (int)$foundUser['id'];
+                        $uParams = [$tid];
+                        $uFuzzyWhere = self::buildVietnameseFuzzyNameWhere('full_name', $ownerName, $uParams);
+                        $uStmt = $db->prepare("SELECT id, full_name FROM users WHERE tenant_id = ? AND {$uFuzzyWhere} LIMIT 5");
+                        $uStmt->execute($uParams);
+                        $foundUsers = $uStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                        if (!empty($foundUsers)) {
+                            usort($foundUsers, fn($a, $b) => self::scoreFuzzyNameMatch((string)$b['full_name'], $ownerName) <=> self::scoreFuzzyNameMatch((string)$a['full_name'], $ownerName));
+                            $ownerId = (int)$foundUsers[0]['id'];
                         }
                     }
 
@@ -2670,8 +2819,7 @@ class AgentToolRegistry {
                         $where[] = "c.owner_id = ?";
                         $params[] = $ownerId;
                     } elseif (!empty($ownerName)) {
-                        $where[] = "u.full_name LIKE ?";
-                        $params[] = '%' . $ownerName . '%';
+                        $where[] = self::buildVietnameseFuzzyNameWhere('u.full_name', $ownerName, $params);
                     }
 
                     if (!empty($q)) {
@@ -2680,9 +2828,9 @@ class AgentToolRegistry {
                             $params[] = (int)$q;
                             $params[] = '%' . $q . '%';
                         } else {
-                            $where[] = "(c.full_name LIKE ? OR c.phone LIKE ? OR c.email LIKE ?)";
+                            $fuzzyQClause = self::buildVietnameseFuzzyNameWhere('c.full_name', $q, $params);
+                            $where[] = "({$fuzzyQClause} OR c.phone LIKE ? OR c.email LIKE ?)";
                             $like = '%' . $q . '%';
-                            $params[] = $like;
                             $params[] = $like;
                             $params[] = $like;
                         }
@@ -2797,7 +2945,7 @@ class AgentToolRegistry {
                         'total_matching' => $totalMatching,
                         'count' => count($contacts),
                         'export_url' => $exportUrl,
-                        'export_markdown' => "[📥 Bấm vào đây để tải danh sách Excel/CSV ({$totalMatching} học viên/lead)]({$exportUrl})",
+                        'export_markdown' => "[Tải danh sách Excel/CSV ({$totalMatching} học viên/lead)]({$exportUrl})",
                         'contacts' => array_map(function($c) {
                             $stageOrder = !empty($c['stage_order']) ? (int)$c['stage_order'] : 1;
                             $isReadyForSo = ($stageOrder >= 13);
@@ -2817,7 +2965,7 @@ class AgentToolRegistry {
                                 'stage_order' => $stageOrder,
                                 'last_contact' => $c['last_contact'] ? date('d/m/Y H:i', strtotime($c['last_contact'])) : 'Chưa có tương tác',
                                 'direct_url' => $directUrl,
-                                'open_tab_markdown' => "[👉 Bấm để mở hồ sơ {$c['full_name']}]({$directUrl})",
+                                'open_tab_markdown' => "[Mở hồ sơ {$c['full_name']}]({$directUrl})",
                                 'smart_tag' => $smartTag,
                                 'is_ready_for_so' => $isReadyForSo,
                                 'so_readiness_notice' => $isReadyForSo 
@@ -3360,10 +3508,19 @@ class AgentToolRegistry {
                             $targetUser = $stmtU->fetch(PDO::FETCH_ASSOC);
                         }
                         if (!$targetUser) {
-                            $stmtU = $db->prepare("SELECT u.id, u.full_name, u.email, u.phone, u.job_title, u.role, u.team_id, t.name as team_name FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.tenant_id = ? AND (u.full_name LIKE ? OR u.username LIKE ? OR u.email LIKE ?) ORDER BY (u.full_name = ?) DESC, u.id ASC LIMIT 1");
+                            $uParams = [$tid];
+                            $uFuzzy = self::buildVietnameseFuzzyNameWhere('u.full_name', $userQuery, $uParams);
                             $pSearch = "%$userQuery%";
-                            $stmtU->execute([$tid, $pSearch, $pSearch, $pSearch, $userQuery]);
-                            $targetUser = $stmtU->fetch(PDO::FETCH_ASSOC);
+                            $uParams[] = $pSearch;
+                            $uParams[] = $pSearch;
+                            $uParams[] = $userQuery;
+                            $stmtU = $db->prepare("SELECT u.id, u.full_name, u.email, u.phone, u.job_title, u.role, u.team_id, t.name as team_name FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.tenant_id = ? AND ({$uFuzzy} OR u.username LIKE ? OR u.email LIKE ?) ORDER BY (u.full_name = ?) DESC, u.id ASC LIMIT 5");
+                            $stmtU->execute($uParams);
+                            $candUsers = $stmtU->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                            if (!empty($candUsers)) {
+                                usort($candUsers, fn($a, $b) => self::scoreFuzzyNameMatch((string)$b['full_name'], $userQuery) <=> self::scoreFuzzyNameMatch((string)$a['full_name'], $userQuery));
+                                $targetUser = $candUsers[0];
+                            }
                         }
                     }
 
@@ -3504,7 +3661,7 @@ class AgentToolRegistry {
                         'daily_logs' => array_slice($empCiRows, 0, 31),
                         'leave_requests' => $empLRows,
                         'export_download_url' => "/api/export?type=attendance&user_id={$targetUid}&month={$month}&year={$year}",
-                        'instruction' => 'BẮT BUỘC: 1. Nêu tóm tắt bảng công nhân sự ' . $targetUser['full_name'] . ' (Số công thực tế, số lần trễ, tổng phút trễ, tăng ca OT, WFH, phép còn lại). 2. Trình bày chi tiết từng ngày dưới dạng BẢNG MARKDOWN chuẩn (| Ngày | Giờ vào | Giờ ra | Trễ/Sớm | Trạng thái |). 3. Đính kèm link tải file: `[📥 Bấm vào đây để tải Bảng công file Excel/CSV](/api/export?type=attendance&user_id=' . $targetUid . '&month=' . $month . '&year=' . $year . ')`. TUYỆT ĐỐI KHÔNG sinh thẻ Lead/Học viên CRM. TUYỆT ĐỐI KHÔNG dùng từ "(Zero-Trust)".'
+                        'instruction' => 'BẮT BUỘC: 1. Nêu tóm tắt bảng công nhân sự ' . $targetUser['full_name'] . ' (Số công thực tế, số lần trễ, tổng phút trễ, tăng ca OT, WFH, phép còn lại). 2. Trình bày chi tiết từng ngày dưới dạng BẢNG MARKDOWN chuẩn (| Ngày | Giờ vào | Giờ ra | Trễ/Sớm | Trạng thái |). 3. Đính kèm link tải file: `[Bấm vào đây để tải Bảng công file Excel/CSV](/api/export?type=attendance&user_id=' . $targetUid . '&month=' . $month . '&year=' . $year . ')`. TUYỆT ĐỐI KHÔNG sinh thẻ Lead/Học viên CRM. TUYỆT ĐỐI KHÔNG dùng từ "(Zero-Trust)".'
                     ];
                 }
 
@@ -3771,7 +3928,8 @@ class AgentToolRegistry {
                         'preview_samples' => $maskedSamples,
                         'download_url' => $exportUrl,
                         'direct_download_link' => "https://myerp.ideas.edu.vn{$exportUrl}",
-                        'instruction' => 'BẮT BUỘC: 1. Thông báo rõ ràng: Hệ thống đã lọc và ghi nhận **' . $scopeDesc . '** trong ' . $stageFullDesc . '. 2. BẢNG XEM TRƯỚC (Preview) BẮT BUỘC ĐẦY ĐỦ CÁC CỘT: (| ID | HỌ VÀ TÊN | CHỨC VỤ | CÔNG TY | SĐT | GIAI ĐOẠN | SALE PHỤ TRÁCH | NGÀY TẠO |). Cột HỌ VÀ TÊN BẮT BUỘC dùng link `[Tên](/contact/ID)`. BẮT BUỘC hiển thị rõ cột CHỨC VỤ của từng lead. 3. Đính kèm nút hoặc link tải file: `[📥 Bấm vào đây để tải ' . ($limit > 0 ? "danh sách {$limit} Lead gần đây" : "danh sách Lead") . ' kèm chức vụ (File Excel/CSV)](' . $exportUrl . ')`. TUYỆT ĐỐI KHÔNG dùng từ "(Zero-Trust)".'
+                        'export_link_markdown' => "[Bấm vào đây để tải " . ($limit > 0 ? "danh sách {$limit} Lead gần đây" : "danh sách Lead") . " kèm chức vụ (File Excel/CSV)]({$exportUrl})",
+                        'instruction' => 'BẮT BUỘC: 1. Thông báo rõ ràng: Hệ thống đã lọc và ghi nhận **' . $scopeDesc . '** trong ' . $stageFullDesc . '. 2. BẢNG XEM TRƯỚC (Preview) BẮT BUỘC ĐẦY ĐỦ CÁC CỘT: (| ID | HỌ VÀ TÊN | CHỨC VỤ | CÔNG TY | SĐT | GIAI ĐOẠN | SALE PHỤ TRÁCH | NGÀY TẠO |). Cột HỌ VÀ TÊN BẮT BUỘC dùng link `[Tên](/contact/ID)`. BẮT BUỘC hiển thị rõ cột CHỨC VỤ của từng lead. 3. Đính kèm nút hoặc link tải file: `[Bấm vào đây để tải ' . ($limit > 0 ? "danh sách {$limit} Lead gần đây" : "danh sách Lead") . ' kèm chức vụ (File Excel/CSV)](' . $exportUrl . ')`. TUYỆT ĐỐI KHÔNG dùng từ "(Zero-Trust)".'
                     ];
                 }
 
@@ -4057,7 +4215,8 @@ class AgentToolRegistry {
                             'actionable_advice' => $fillRateJobPercent < 20 ? "Tỷ lệ điền chức vụ còn thấp ({$fillRateJobPercent}%). Kiến nghị Marketing bổ sung trường 'Chức vụ' và 'Công ty' trên Landing Page/Facebook Ads, và Sale cần ưu tiên cập nhật chức danh trong cuộc gọi đầu tiên (TTL1)." : "Dữ liệu chức vụ ổn định, khuyến nghị phân bổ lead C-Level ưu tiên cho tư vấn chương trình Tiến sĩ DBA / EMBA."
                         ],
                         'download_export_url' => $exportUrl,
-                        'instruction' => 'BẮT BUỘC TRÌNH BÀY ĐẦY ĐỦ 4 PHẦN CHUYÊN NGHIỆP:\n1. BẢNG TỔNG QUAN ĐỘ ĐẦY ĐỦ DỮ LIỆU (Tổng lead phân tích | Có chức vụ | Chưa có chức vụ | Tỷ lệ %).\n2. BẢNG PHÂN BỔ THÁP CẤP BẬC QUẢN LÝ (C-Level, Quản lý cấp trung, Chuyên gia, Khác kèm số lượng, % và ví dụ chức danh).\n3. BẢNG TOP NGÀNH NGHỀ PHỔ BIẾN.\n4. ĐÍNH KÈM THẺ BIỂU ĐỒ TRỰC QUAN: `<<<DYNAMIC_CHART: {"type": "bar", "title": "Cơ Cấu Cấp Bậc Quản Lý Lead CRM", "xAxisKey": "name", "data": [{"name": "C-Level/Lãnh đạo", "value": ' . $levelCounts['c_level']['count'] . '}, {"name": "Quản lý cấp trung", "value": ' . $levelCounts['manager']['count'] . '}, {"name": "Chuyên gia/Kỹ sư", "value": ' . $levelCounts['specialist']['count'] . '}, {"name": "Chưa cập nhật", "value": ' . $levelCounts['unspecified']['count'] . '}], "series": [{"dataKey": "value", "label": "Số lượng", "color": "#3b82f6"}]}>>>`.\n5. Đính kèm link tải file: `[📥 Bấm vào đây để tải tệp dữ liệu chi tiết kèm chức vụ](' . $exportUrl . ')`.'
+                        'export_link_markdown' => "[Bấm vào đây để tải tệp dữ liệu chi tiết kèm chức vụ]({$exportUrl})",
+                        'instruction' => 'BẮT BUỘC TRÌNH BÀY ĐẦY ĐỦ 4 PHẦN CHUYÊN NGHIỆP:\n1. BẢNG TỔNG QUAN ĐỘ ĐẦY ĐỦ DỮ LIỆU (Tổng lead phân tích | Có chức vụ | Chưa có chức vụ | Tỷ lệ %).\n2. BẢNG PHÂN BỔ THÁP CẤP BẬC QUẢN LÝ (C-Level, Quản lý cấp trung, Chuyên gia, Khác kèm số lượng, % và ví dụ chức danh).\n3. BẢNG TOP NGÀNH NGHỀ PHỔ BIẾN.\n4. ĐÍNH KÈM THẺ BIỂU ĐỒ TRỰC QUAN: `<<<DYNAMIC_CHART: {"type": "bar", "title": "Cơ Cấu Cấp Bậc Quản Lý Lead CRM", "xAxisKey": "name", "data": [{"name": "C-Level/Lãnh đạo", "value": ' . $levelCounts['c_level']['count'] . '}, {"name": "Quản lý cấp trung", "value": ' . $levelCounts['manager']['count'] . '}, {"name": "Chuyên gia/Kỹ sư", "value": ' . $levelCounts['specialist']['count'] . '}, {"name": "Chưa cập nhật", "value": ' . $levelCounts['unspecified']['count'] . '}], "series": [{"dataKey": "value", "label": "Số lượng", "color": "#3b82f6"}]}>>>`.\n5. Đính kèm link tải file: `[Bấm vào đây để tải tệp dữ liệu chi tiết kèm chức vụ](' . $exportUrl . ')`.'
                     ];
                 }
 
@@ -4661,7 +4820,7 @@ class AgentToolRegistry {
                                 'title' => "Phiếu chi PO: {$poTitle}",
                                 'direct_url' => $directUrl,
                                 'relative_url' => "/expenses?id={$poId}",
-                                'open_tab_markdown' => "[👉 Bấm để mở phiếu chi #{$poId}]({$directUrl})",
+                                'open_tab_markdown' => "[Bấm để mở phiếu chi #{$poId}]({$directUrl})",
                                 'smart_tag' => $smartTag,
                                 'description' => "Đã mở sẵn phiếu chi PO #{$poId} ({$poTitle}). Bấm đường dẫn trực tiếp hoặc thẻ ERP để mở modal chi tiết."
                             ];
@@ -4707,7 +4866,7 @@ class AgentToolRegistry {
                                 'title' => "Công việc: {$tSub}",
                                 'direct_url' => $directUrl,
                                 'relative_url' => "/workspace?task_id={$tId}",
-                                'open_tab_markdown' => "[👉 Bấm để mở công việc #{$tId}]({$directUrl})",
+                                'open_tab_markdown' => "[Bấm để mở công việc #{$tId}]({$directUrl})",
                                 'smart_tag' => $smartTag,
                                 'description' => "Đã mở sẵn công việc #{$tId} ({$tSub}). Bấm đường dẫn trực tiếp hoặc thẻ ERP để mở drawer."
                             ];
@@ -4774,7 +4933,7 @@ class AgentToolRegistry {
                                     'title' => "Hồ sơ học viên/khách hàng: {$cName}",
                                     'direct_url' => $directUrl,
                                     'relative_url' => $relativeUrl,
-                                    'open_tab_markdown' => "[👉 Bấm để mở hồ sơ {$cName}]({$directUrl})",
+                                    'open_tab_markdown' => "[Bấm để mở hồ sơ {$cName}]({$directUrl})",
                                     'smart_tag' => $smartTag,
                                     'description' => "Đã mở sẵn hồ sơ của học viên {$cName} (SĐT: {$cPhone}, Trạng thái: {$cStage}). Bấm đường dẫn trực tiếp hoặc thẻ ERP bên dưới để xem chi tiết."
                                 ];
@@ -4821,7 +4980,7 @@ class AgentToolRegistry {
                                     'title' => "Đơn cọc SO: {$soTitle}",
                                     'direct_url' => $directUrl,
                                     'relative_url' => "/deposits?id={$soId}",
-                                    'open_tab_markdown' => "[👉 Bấm để mở đơn cọc SO #{$soId}]({$directUrl})",
+                                    'open_tab_markdown' => "[Bấm để mở đơn cọc SO #{$soId}]({$directUrl})",
                                     'smart_tag' => $smartTag,
                                     'description' => "Đã mở sẵn đơn đặt cọc SO #{$soId}. Bấm đường dẫn trực tiếp hoặc thẻ ERP để mở chi tiết."
                                 ];
@@ -4937,7 +5096,7 @@ class AgentToolRegistry {
                         'title' => $matched['title'],
                         'url' => $matched['url'],
                         'direct_url' => $directUrl,
-                        'open_tab_markdown' => "[👉 Bấm để mở {$matched['title']}]({$directUrl})",
+                        'open_tab_markdown' => "[Bấm để mở {$matched['title']}]({$directUrl})",
                         'description' => $matched['desc'],
                         'guide' => "Bạn có thể truy cập trực tiếp tại: [{$matched['title']}]({$directUrl}) hoặc nhấp vào thanh Menu điều hướng bên trái."
                     ];
@@ -5154,17 +5313,31 @@ class AgentToolRegistry {
                         // Smart assignee lookup with Disambiguation
                         $targetAssignee = trim($params['assignee_name'] ?? ($params['assignee'] ?? ($params['user_name'] ?? '')));
                         if (empty($params['user_id']) && !empty($targetAssignee)) {
+                            $uParams = [$tid];
+                            $uFuzzy = self::buildVietnameseFuzzyNameWhere('full_name', $targetAssignee, $uParams);
+                            $uParams[] = '%' . $targetAssignee . '%';
                             $stmtU = $db->prepare("
                                 SELECT id, full_name, email, role, job_title, department 
                                 FROM users 
                                 WHERE tenant_id = ? 
-                                  AND (full_name LIKE ? OR username LIKE ?) 
+                                  AND ({$uFuzzy} OR username LIKE ?) 
                                   AND status != 'inactive' 
                                   AND deleted_at IS NULL
                                 LIMIT 6
                             ");
-                            $stmtU->execute([$tid, '%' . $targetAssignee . '%', '%' . $targetAssignee . '%']);
+                            $stmtU->execute($uParams);
                             $matchedStaff = $stmtU->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                            if (count($matchedStaff) > 1) {
+                                foreach ($matchedStaff as &$msItem) {
+                                    $msItem['_fuzzy_score'] = self::scoreFuzzyNameMatch((string)($msItem['full_name'] ?? ''), $targetAssignee);
+                                }
+                                unset($msItem);
+                                usort($matchedStaff, fn($a, $b) => ($b['_fuzzy_score'] <=> $a['_fuzzy_score']) ?: ((int)$a['id'] <=> (int)$b['id']));
+                                $exactStaffMatches = array_values(array_filter($matchedStaff, fn($ms) => ($ms['_fuzzy_score'] ?? 0) >= 95));
+                                if (count($exactStaffMatches) === 1) {
+                                    $matchedStaff = [$exactStaffMatches[0]];
+                                }
+                            }
                             if (count($matchedStaff) === 1) {
                                 $params['user_id'] = (int)$matchedStaff[0]['id'];
                                 $params['assignee_name'] = $matchedStaff[0]['full_name'];
@@ -6818,8 +6991,8 @@ class AgentToolRegistry {
                     }
 
                     $readiness = ($completedCount === $totalRequired)
-                        ? "✅ ĐỦ ĐIỀU KIỆN NHẬP HỌC (Đã nộp đầy đủ {$completedCount}/{$totalRequired} hồ sơ)"
-                        : "⚠️ CHƯA ĐỦ ĐIỀU KIỆN (Đã nộp {$completedCount}/{$totalRequired} - Còn thiếu: " . implode(', ', $missingItems) . ")";
+                        ? "[ĐỦ ĐIỀU KIỆN NHẬP HỌC] (Đã nộp đầy đủ {$completedCount}/{$totalRequired} hồ sơ)"
+                        : "[CHƯA ĐỦ ĐIỀU KIỆN] (Đã nộp {$completedCount}/{$totalRequired} - Còn thiếu: " . implode(', ', $missingItems) . ")";
 
                     return [
                         'success' => true,
@@ -7077,7 +7250,7 @@ class AgentToolRegistry {
                         'net_cashflow_VND' => ($netCashflow >= 0 ? '+' : '') . number_format($netCashflow, 0, ',', '.') . ' đ',
                         'pending_approvals_count' => $pendingCount,
                         'pending_approvals_amount_VND' => number_format($pendingAmount, 0, ',', '.') . ' đ',
-                        'health_assessment' => $netCashflow >= 0 ? '🟢 Dòng tiền ròng dương - Sức khỏe tài chính tốt' : '🟡 Dòng tiền ròng âm trong kỳ - Cần thúc đẩy thu hồi công nợ các đợt cọc'
+                        'health_assessment' => $netCashflow >= 0 ? '[TÍCH CỰC] Dòng tiền ròng dương - Sức khỏe tài chính tốt' : '[CẦN LƯU Ý] Dòng tiền ròng âm trong kỳ - Cần thúc đẩy thu hồi công nợ các đợt cọc'
                     ];
                 }
 
@@ -7110,7 +7283,7 @@ class AgentToolRegistry {
 
                     return [
                         'success' => true,
-                        'system_status' => '🟢 Hoạt động bình thường (All Systems Operational)',
+                        'system_status' => 'Hoạt động bình thường (All Systems Operational)',
                         'online_staff_count' => $onlineUsers,
                         'ai_interactions_today' => $todayQ,
                         'action_proposals_generated' => $actionQ,
@@ -7325,8 +7498,8 @@ class AgentToolRegistry {
 
                     $isDossierReady = ($completedCount === $totalRequired);
                     $readinessVerdict = $isDossierReady
-                        ? "✅ CHUẨN HOÀN TOÀN: Đã nộp đủ {$completedCount}/{$totalRequired} giấy tờ bắt buộc theo chuẩn tuyển sinh quốc tế ({$programCode}). Sẵn sàng cấp Letter of Acceptance."
-                        : "⚠️ CHƯA CHUẨN (Thiếu " . count($missingItems) . " giấy tờ): Đã nộp {$completedCount}/{$totalRequired}. Còn thiếu bắt buộc: " . implode(', ', $missingItems) . ".";
+                        ? "[ĐẠT CHUẨN] Đã nộp đủ {$completedCount}/{$totalRequired} giấy tờ bắt buộc theo chuẩn tuyển sinh quốc tế ({$programCode}). Sẵn sàng cấp Letter of Acceptance."
+                        : "[CHƯA ĐỦ HỒ SƠ] (Thiếu " . count($missingItems) . " giấy tờ): Đã nộp {$completedCount}/{$totalRequired}. Còn thiếu bắt buộc: " . implode(', ', $missingItems) . ".";
 
                     // 6. Financial Deposits (Cọc & Học phí)
                     $dStmt = $db->prepare("
@@ -9241,7 +9414,7 @@ class AgentToolRegistry {
                             'due_date' => $r['due_date'] ? date('d/m/Y', strtotime($r['due_date'])) : 'Không đặt hạn chót',
                             'is_overdue' => (!empty($r['due_date']) && strtotime($r['due_date']) < strtotime('today')),
                             'direct_url' => $directUrl,
-                            'open_link_markdown' => "[👉 Bấm xem Phiếu chi #{$eId}]({$directUrl})",
+                            'open_link_markdown' => "[Bấm xem Phiếu chi #{$eId}]({$directUrl})",
                             'smart_tag' => $smartTag
                         ];
                     }, $rows);
@@ -9263,7 +9436,8 @@ class AgentToolRegistry {
                         'count' => count($items),
                         'expenses' => $items,
                         'export_url' => $expExportUrl,
-                        'export_markdown' => "[📥 Bấm vào đây để tải danh sách {$totalCount} phiếu chi (File Excel/CSV)]({$expExportUrl})"
+                        'export_link_markdown' => "[Bấm vào đây để tải danh sách {$totalCount} phiếu chi (File Excel/CSV)]({$expExportUrl})",
+                        'export_markdown' => "[Bấm vào đây để tải danh sách {$totalCount} phiếu chi (File Excel/CSV)]({$expExportUrl})"
                     ];
                 }
 
@@ -9314,7 +9488,8 @@ class AgentToolRegistry {
                                COUNT(DISTINCT CASE WHEN ps.is_won = 1 THEN d.id ELSE NULL END) as won_count,
                                COALESCE((
                                    SELECT SUM(dep.price) FROM deposits dep 
-                                   WHERE dep.created_by = u.id AND dep.status = 'approved' AND dep.created_at BETWEEN ? AND ?
+                                   WHERE (dep.created_by = u.id OR EXISTS (SELECT 1 FROM contacts c_dep WHERE c_dep.id = dep.contact_id AND c_dep.owner_id = u.id))
+                                     AND dep.status = 'approved' AND dep.created_at BETWEEN ? AND ?
                                ), 0) as total_deposit_collected
                         FROM users u
                         LEFT JOIN deals d ON d.owner_id = u.id AND d.deleted_at IS NULL AND d.tenant_id = ? AND d.created_at BETWEEN ? AND ?
@@ -9594,7 +9769,7 @@ class AgentToolRegistry {
                         'count' => count($results),
                         'students' => $results,
                         'export_url' => $studentExportUrl,
-                        'export_markdown' => "[📥 Bấm vào đây để tải danh sách học viên (File Excel/CSV)]({$studentExportUrl})",
+                        'export_markdown' => "[Tải danh sách học viên (File Excel/CSV)]({$studentExportUrl})",
                         'summary' => count($results) > 0 ? "Tìm thấy " . count($results) . " học viên phù hợp." : "Không có học viên nào phù hợp với điều kiện hồ sơ tra cứu."
                     ];
                 }
@@ -9646,11 +9821,11 @@ class AgentToolRegistry {
                     $items = array_map(function($r) {
                         $qty = (int)$r['total_qty'];
                         if ($qty <= 0) {
-                            $health = '🚨 HẾT HÀNG';
+                            $health = '[HẾT HÀNG]';
                         } elseif ($qty <= 10) {
-                            $health = '⚠️ CẢNH BÁO: SẮP HẾT (<= 10)';
+                            $health = '[CẢNH BÁO: SẮP HẾT (<= 10)]';
                         } else {
-                            $health = '✅ AN TOÀN';
+                            $health = '[AN TOÀN]';
                         }
 
                         return [
@@ -9840,7 +10015,7 @@ class AgentToolRegistry {
                         $where[] = "(LOWER(TRIM(COALESCE(c.gender, ''))) IN ('female', 'nu', '0') OR c.gender = 'Nữ')";
                     }
 
-                    // 6. Owners Multi-Filter (matches owner_id or collaborator_ids by name/ID)
+                    // 6. Owners Multi-Filter (matches owner_id or collaborator_ids by name/ID with Vietnamese accent-insensitive matching)
                     if (!empty($ownersParam) && $ownersParam !== 'all') {
                         $ownerList = array_filter(array_map('trim', explode(',', $ownersParam)));
                         $ownerOrs = [];
@@ -9850,8 +10025,8 @@ class AgentToolRegistry {
                                 $params[] = (int)$own;
                                 $params[] = (string)(int)$own;
                             } else {
-                                $ownerOrs[] = "EXISTS (SELECT 1 FROM users u_own WHERE (u_own.id = c.owner_id OR FIND_IN_SET(u_own.id, COALESCE(c.collaborator_ids, ''))) AND (u_own.full_name LIKE ? OR u_own.email LIKE ?))";
-                                $params[] = '%' . $own . '%';
+                                $ownFuzzyWhere = self::buildVietnameseFuzzyNameWhere('u_own.full_name', $own, $params);
+                                $ownerOrs[] = "EXISTS (SELECT 1 FROM users u_own WHERE (u_own.id = c.owner_id OR FIND_IN_SET(u_own.id, COALESCE(c.collaborator_ids, ''))) AND ({$ownFuzzyWhere} OR u_own.email LIKE ?))";
                                 $params[] = '%' . $own . '%';
                             }
                         }
@@ -9958,32 +10133,37 @@ class AgentToolRegistry {
                         }
                     }
 
-                    // 11. Search Query Keyword
+                    // 11. Search Query Keyword (Accent-Insensitive & Tokenized Fuzzy Name Matching)
                     if (!empty($searchQuery)) {
-                        $where[] = "(c.full_name LIKE ? OR c.phone LIKE ? OR c.email LIKE ? OR c.company LIKE ? OR c.job_title LIKE ? OR c.notes LIKE ?)";
+                        $fuzzySearchName = self::buildVietnameseFuzzyNameWhere('c.full_name', $searchQuery, $params);
                         $likeQ = '%' . $searchQuery . '%';
-                        $params[] = $likeQ;
-                        $params[] = $likeQ;
-                        $params[] = $likeQ;
-                        $params[] = $likeQ;
-                        $params[] = $likeQ;
-                        $params[] = $likeQ;
-                        $whereWithoutDate[] = "(c.full_name LIKE ? OR c.phone LIKE ? OR c.email LIKE ? OR c.company LIKE ? OR c.job_title LIKE ? OR c.notes LIKE ?)";
-                        array_push($paramsWithoutDate, $likeQ, $likeQ, $likeQ, $likeQ, $likeQ, $likeQ);
+                        $where[] = "({$fuzzySearchName} OR c.phone LIKE ? OR c.email LIKE ? OR c.company LIKE ? OR c.job_title LIKE ? OR c.notes LIKE ?)";
+                        array_push($params, $likeQ, $likeQ, $likeQ, $likeQ, $likeQ);
+
+                        $fuzzySearchNameNoDate = self::buildVietnameseFuzzyNameWhere('c.full_name', $searchQuery, $paramsWithoutDate);
+                        $whereWithoutDate[] = "({$fuzzySearchNameNoDate} OR c.phone LIKE ? OR c.email LIKE ? OR c.company LIKE ? OR c.job_title LIKE ? OR c.notes LIKE ?)";
+                        array_push($paramsWithoutDate, $likeQ, $likeQ, $likeQ, $likeQ, $likeQ);
                     }
 
                     $whereSql = implode(" AND ", $where);
 
                     // ==========================================
-                    // 1. TOTAL MATCHING COUNT & OVERALL ROLLUP
+                    // 1. TOTAL MATCHING COUNT & OVERALL ROLLUP (Single-Pass Consolidated SQL)
                     // ==========================================
-                    $countSql = "SELECT COUNT(DISTINCT c.id) as total_matching FROM contacts c
-                                 LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
-                                 LEFT JOIN users u ON c.owner_id = u.id
-                                 WHERE {$whereSql}";
-                    $countStmt = $db->prepare($countSql);
-                    $countStmt->execute($params);
-                    $totalMatching = (int)$countStmt->fetchColumn();
+                    $countRollupSql = "SELECT 
+                                         COUNT(DISTINCT c.id) as total_matching,
+                                         COUNT(DISTINCT dep.id) as deposit_count,
+                                         COUNT(DISTINCT dep.contact_id) as deposited_lead_count,
+                                         COALESCE(SUM(dep.price), 0) as total_deposit_amount
+                                       FROM contacts c
+                                       LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
+                                       LEFT JOIN users u ON c.owner_id = u.id
+                                       LEFT JOIN deposits dep ON dep.contact_id = c.id AND dep.status NOT IN ('cancelled', 'rejected')
+                                       WHERE {$whereSql}";
+                    $countRollupStmt = $db->prepare($countRollupSql);
+                    $countRollupStmt->execute($params);
+                    $rollupData = $countRollupStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+                    $totalMatching = (int)($rollupData['total_matching'] ?? 0);
 
                     if ($totalMatching === 0) {
                         $zeroResultPayload = [
@@ -10048,19 +10228,6 @@ class AgentToolRegistry {
                         return $zeroResultPayload;
                     }
 
-                    // Financial Rollup (Deposits count, distinct deposited leads & sum)
-                    $rollupSql = "SELECT 
-                                    COUNT(DISTINCT dep.id) as deposit_count,
-                                    COUNT(DISTINCT dep.contact_id) as deposited_lead_count,
-                                    COALESCE(SUM(dep.price), 0) as total_deposit_amount
-                                  FROM contacts c
-                                  LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
-                                  LEFT JOIN users u ON c.owner_id = u.id
-                                  JOIN deposits dep ON dep.contact_id = c.id AND dep.status NOT IN ('cancelled', 'rejected')
-                                  WHERE {$whereSql}";
-                    $rollupStmt = $db->prepare($rollupSql);
-                    $rollupStmt->execute($params);
-                    $rollupData = $rollupStmt->fetch(PDO::FETCH_ASSOC);
                     $depositCount = (int)($rollupData['deposit_count'] ?? 0);
                     $depositedLeadCount = (int)($rollupData['deposited_lead_count'] ?? 0);
                     $totalDepositAmount = (float)($rollupData['total_deposit_amount'] ?? 0);
@@ -10071,7 +10238,7 @@ class AgentToolRegistry {
                     // 2. MULTI-TIER FACETED AGGREGATIONS (GROUP BY)
                     // ==========================================
 
-                    // Facet A: By Program
+                    // Facet A: By Program (100% Parity: dep.status NOT IN ('cancelled', 'rejected'))
                     $progSql = "SELECT 
                                   COALESCE(NULLIF(TRIM(c.program), ''), 'Chưa phân loại') as program_name,
                                   COUNT(DISTINCT c.id) as lead_count,
@@ -10080,7 +10247,7 @@ class AgentToolRegistry {
                                 FROM contacts c
                                 LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
                                 LEFT JOIN users u ON c.owner_id = u.id
-                                LEFT JOIN deposits dep ON dep.contact_id = c.id AND dep.status != 'cancelled'
+                                LEFT JOIN deposits dep ON dep.contact_id = c.id AND dep.status NOT IN ('cancelled', 'rejected')
                                 WHERE {$whereSql}
                                 GROUP BY program_name
                                 ORDER BY lead_count DESC
@@ -10105,7 +10272,7 @@ class AgentToolRegistry {
                     $stageStmt->execute($params);
                     $stageFacets = $stageStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-                    // Facet C: By Source
+                    // Facet C: By Source (100% Parity: dep.status NOT IN ('cancelled', 'rejected'))
                     $srcSql = "SELECT 
                                  COALESCE(NULLIF(TRIM(c.source), ''), 'Chưa rõ nguồn') as source_name,
                                  COUNT(DISTINCT c.id) as lead_count,
@@ -10113,7 +10280,7 @@ class AgentToolRegistry {
                                FROM contacts c
                                LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
                                LEFT JOIN users u ON c.owner_id = u.id
-                               LEFT JOIN deposits dep ON dep.contact_id = c.id AND dep.status != 'cancelled'
+                               LEFT JOIN deposits dep ON dep.contact_id = c.id AND dep.status NOT IN ('cancelled', 'rejected')
                                WHERE {$whereSql}
                                GROUP BY source_name
                                ORDER BY lead_count DESC
@@ -10122,7 +10289,7 @@ class AgentToolRegistry {
                     $srcStmt->execute($params);
                     $srcFacets = $srcStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-                    // Facet D: By Owner / Consultant
+                    // Facet D: By Owner / Consultant (100% Parity: dep.status NOT IN ('cancelled', 'rejected'))
                     $ownerSql = "SELECT 
                                    COALESCE(u.full_name, 'Chưa phân công') as owner_name,
                                    COUNT(DISTINCT c.id) as lead_count,
@@ -10131,7 +10298,7 @@ class AgentToolRegistry {
                                  FROM contacts c
                                  LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
                                  LEFT JOIN users u ON c.owner_id = u.id
-                                 LEFT JOIN deposits dep ON dep.contact_id = c.id AND dep.status != 'cancelled'
+                                 LEFT JOIN deposits dep ON dep.contact_id = c.id AND dep.status NOT IN ('cancelled', 'rejected')
                                  WHERE {$whereSql}
                                  GROUP BY owner_name
                                  ORDER BY lead_count DESC
@@ -10180,7 +10347,7 @@ class AgentToolRegistry {
                                           COALESCE(ps.name, c.status, 'Mới') as stage_name,
                                           COALESCE(ps.order_index, 0) as stage_order,
                                           COALESCE(u.full_name, 'Chưa phân công') as owner_name,
-                                          (SELECT SUM(price) FROM deposits WHERE contact_id = c.id AND status != 'cancelled') as total_deposit,
+                                          (SELECT SUM(price) FROM deposits WHERE contact_id = c.id AND status NOT IN ('cancelled', 'rejected')) as total_deposit,
                                           (
                                             SELECT CONCAT('[', DATE_FORMAT(act.created_at, '%d/%m/%Y'), '] ', act.type, ': ', COALESCE(NULLIF(TRIM(act.body), ''), act.subject, ''))
                                             FROM activities act
@@ -10272,7 +10439,7 @@ class AgentToolRegistry {
                         ] : null,
                         'preview_leads' => $formattedPreviews,
                         'export_url' => $exportUrl,
-                        'export_markdown' => "[📥 Bấm vào đây để tải toàn bộ {$totalMatching} học viên/lead (File Excel/CSV)]({$exportUrl})"
+                        'export_markdown' => "[Bấm vào đây để tải toàn bộ {$totalMatching} học viên/lead (File Excel/CSV)]({$exportUrl})"
                     ];
                 }
 
@@ -10521,7 +10688,7 @@ class AgentToolRegistry {
                         ] : null,
                         'top_expenses' => $formattedTop,
                         'export_url' => $expExportUrl,
-                        'export_markdown' => "[📥 Bấm vào đây để tải báo cáo chi phí ({$totalCount} phiếu chi)]({$expExportUrl})"
+                        'export_markdown' => "[Bấm vào đây để tải báo cáo chi phí ({$totalCount} phiếu chi)]({$expExportUrl})"
                     ];
                 }
 
@@ -10554,10 +10721,10 @@ class AgentToolRegistry {
                     $isManager  = in_array($role, ['manager', 'truong_phong', 'leader', 'team_lead'], true);
                     if (!$isFinAdmin) {
                         if ($isManager) {
-                            $where[] = "(d.sale_id = ? OR c.owner_id = ? OR d.sale_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))) OR c.owner_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))))";
+                            $where[] = "(d.created_by = ? OR c.owner_id = ? OR d.created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))) OR c.owner_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))))";
                             array_push($params, $uid, $uid, $uid, $uid);
                         } else {
-                            $where[] = "(d.sale_id = ? OR c.owner_id = ? OR FIND_IN_SET(?, IFNULL(c.collaborator_ids, '')))";
+                            $where[] = "(d.created_by = ? OR c.owner_id = ? OR FIND_IN_SET(?, IFNULL(c.collaborator_ids, '')))";
                             array_push($params, $uid, $uid, (string)$uid);
                         }
                     }
@@ -10617,13 +10784,13 @@ class AgentToolRegistry {
                             $ownOrs = [];
                             foreach ($ownList as $own) {
                                 if (is_numeric($own)) {
-                                    $ownOrs[] = "(d.sale_id = ? OR c.owner_id = ?)";
+                                    $ownOrs[] = "(d.created_by = ? OR c.owner_id = ?)";
                                     $params[] = (int)$own;
                                     $params[] = (int)$own;
                                 } else {
-                                    $ownOrs[] = "(u.full_name LIKE ? OR u_c.full_name LIKE ?)";
-                                    $params[] = '%' . $own . '%';
-                                    $params[] = '%' . $own . '%';
+                                    $fzU = self::buildVietnameseFuzzyNameWhere('u.full_name', $own, $params);
+                                    $fzUc = self::buildVietnameseFuzzyNameWhere('u_c.full_name', $own, $params);
+                                    $ownOrs[] = "({$fzU} OR {$fzUc})";
                                 }
                             }
                             $where[] = "(" . implode(' OR ', $ownOrs) . ")";
@@ -10685,29 +10852,41 @@ class AgentToolRegistry {
                     } elseif ($period === 'yesterday') {
                         $where[] = "d.created_at >= DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND d.created_at < CURDATE()";
                     } elseif ($period === 'this_week') {
-                        $where[] = "YEARWEEK(d.created_at, 1) = YEARWEEK(CURDATE(), 1)";
+                        $where[] = "d.created_at BETWEEN ? AND ?";
+                        $params[] = date('Y-m-d 00:00:00', strtotime('monday this week'));
+                        $params[] = date('Y-m-d 23:59:59', strtotime('sunday this week'));
                     } elseif ($period === 'this_month') {
                         $where[] = "d.created_at >= DATE_FORMAT(NOW(), '%Y-%m-01 00:00:00') AND d.created_at <= CONCAT(LAST_DAY(NOW()), ' 23:59:59')";
                     } elseif ($period === 'last_month') {
                         $where[] = "d.created_at >= DATE_FORMAT(DATE_SUB(NOW(), INTERVAL 1 MONTH), '%Y-%m-01 00:00:00') AND d.created_at <= CONCAT(LAST_DAY(DATE_SUB(NOW(), INTERVAL 1 MONTH)), ' 23:59:59')";
                     } elseif ($period === 'this_quarter') {
-                        $where[] = "QUARTER(d.created_at) = QUARTER(NOW()) AND YEAR(d.created_at) = YEAR(NOW())";
+                        $curMonth = (int)date('n');
+                        $qStartMonth = (floor(($curMonth - 1) / 3) * 3) + 1;
+                        $qEndMonth   = $qStartMonth + 2;
+                        $qStart      = date('Y-' . str_pad((string)$qStartMonth, 2, '0', STR_PAD_LEFT) . '-01 00:00:00');
+                        $qEnd        = date('Y-m-t 23:59:59', strtotime(date('Y-' . str_pad((string)$qEndMonth, 2, '0', STR_PAD_LEFT) . '-01')));
+                        $where[]     = "d.created_at BETWEEN ? AND ?";
+                        $params[]    = $qStart;
+                        $params[]    = $qEnd;
                     } elseif ($period === 'this_year') {
-                        $where[] = "YEAR(d.created_at) = YEAR(NOW())";
+                        $where[] = "d.created_at BETWEEN ? AND ?";
+                        $params[] = date('Y-01-01 00:00:00');
+                        $params[] = date('Y-12-31 23:59:59');
                     }
 
                     // 8. Search Keyword
                     if ($search !== '') {
+                        $fzCust = self::buildVietnameseFuzzyNameWhere('c.full_name', $search, $params);
                         $like = "%{$search}%";
-                        $where[] = "(c.full_name LIKE ? OR c.phone LIKE ? OR p.name LIKE ? OR d.unit_code LIKE ? OR CAST(d.id AS CHAR) LIKE ?)";
-                        array_push($params, $like, $like, $like, $like, $like);
+                        $where[] = "({$fzCust} OR c.phone LIKE ? OR p.name LIKE ? OR d.unit_code LIKE ? OR CAST(d.id AS CHAR) LIKE ?)";
+                        array_push($params, $like, $like, $like, $like);
                     }
 
                     $whereSql = implode(' AND ', $where);
                     $baseJoins = "FROM deposits d
                                   LEFT JOIN contacts c ON d.contact_id = c.id
                                   LEFT JOIN projects p ON d.project_id = p.id
-                                  LEFT JOIN users u ON d.sale_id = u.id
+                                  LEFT JOIN users u ON d.created_by = u.id
                                   LEFT JOIN users u_c ON c.owner_id = u_c.id";
 
                     // Aggregate Summary
@@ -10848,7 +11027,7 @@ class AgentToolRegistry {
                         ] : null,
                         'sample_deposits' => $formattedDeposits,
                         'export_url' => $depExportUrl,
-                        'export_markdown' => "[📥 Bấm vào đây để tải danh sách Phiếu thu / Đặt cọc ({$totalCount} bản ghi)]({$depExportUrl})"
+                        'export_markdown' => "[Bấm vào đây để tải danh sách Phiếu thu / Đặt cọc ({$totalCount} bản ghi)]({$depExportUrl})"
                     ];
                 }
 
@@ -10870,7 +11049,7 @@ class AgentToolRegistry {
                     $search           = trim((string)($args['search'] ?? $args['search_query'] ?? ''));
                     $limit            = max(1, min(100, (int)($args['limit'] ?? 20)));
 
-                    $where = ['t.tenant_id = ?'];
+                    $where = ['t.tenant_id = ?', 't.deleted_at IS NULL', "t.type = 'task'"];
                     $params = [$tid];
 
                     // Zero-Trust RBAC
@@ -10878,10 +11057,10 @@ class AgentToolRegistry {
                     $isManager   = in_array($role, ['manager', 'truong_phong', 'leader', 'team_lead'], true);
                     if (!$isTaskAdmin) {
                         if ($isManager) {
-                            $where[] = "(t.assigned_to = ? OR t.created_by = ? OR t.assigned_to IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))) OR t.created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))))";
+                            $where[] = "(t.user_id = ? OR t.created_by = ? OR t.user_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))) OR t.created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))))";
                             array_push($params, $uid, $uid, $uid, $uid);
                         } else {
-                            $where[] = "(t.assigned_to = ? OR t.created_by = ?)";
+                            $where[] = "(t.user_id = ? OR t.created_by = ?)";
                             array_push($params, $uid, $uid);
                         }
                     }
@@ -10928,11 +11107,10 @@ class AgentToolRegistry {
                             $assOrs = [];
                             foreach ($assList as $a) {
                                 if (is_numeric($a)) {
-                                    $assOrs[] = "t.assigned_to = ?";
+                                    $assOrs[] = "t.user_id = ?";
                                     $params[] = (int)$a;
                                 } else {
-                                    $assOrs[] = "u_ass.full_name LIKE ?";
-                                    $params[] = '%' . $a . '%';
+                                    $assOrs[] = self::buildVietnameseFuzzyNameWhere('u_ass.full_name', $a, $params);
                                 }
                             }
                             $where[] = "(" . implode(' OR ', $assOrs) . ")";
@@ -10949,8 +11127,7 @@ class AgentToolRegistry {
                                     $crOrs[] = "t.created_by = ?";
                                     $params[] = (int)$cr;
                                 } else {
-                                    $crOrs[] = "u_cr.full_name LIKE ?";
-                                    $params[] = '%' . $cr . '%';
+                                    $crOrs[] = self::buildVietnameseFuzzyNameWhere('u_cr.full_name', $cr, $params);
                                 }
                             }
                             $where[] = "(" . implode(' OR ', $crOrs) . ")";
@@ -10983,7 +11160,13 @@ class AgentToolRegistry {
                     }
 
                     // 7. Date Range / Period Filter
-                    $colDate = in_array($dateField, ['due_date', 'created_at', 'completed_at'], true) ? "t.{$dateField}" : "t.due_date";
+                    $colDateMap = [
+                        'due_date'     => 't.due_date',
+                        'created_at'   => 't.created_at',
+                        'completed_at' => 't.done_at',
+                        'done_at'      => 't.done_at',
+                    ];
+                    $colDate = $colDateMap[$dateField] ?? 't.due_date';
                     if ($fromDate !== '' && $toDate !== '') {
                         $where[] = "{$colDate} BETWEEN ? AND ?";
                         $params[] = $fromDate . ' 00:00:00';
@@ -10997,7 +11180,9 @@ class AgentToolRegistry {
                     } elseif ($period === 'today') {
                         $where[] = "{$colDate} >= CURDATE() AND {$colDate} <= CONCAT(CURDATE(), ' 23:59:59')";
                     } elseif ($period === 'this_week') {
-                        $where[] = "YEARWEEK({$colDate}, 1) = YEARWEEK(CURDATE(), 1)";
+                        $where[] = "{$colDate} BETWEEN ? AND ?";
+                        $params[] = date('Y-m-d 00:00:00', strtotime('monday this week'));
+                        $params[] = date('Y-m-d 23:59:59', strtotime('sunday this week'));
                     } elseif ($period === 'this_month') {
                         $where[] = "{$colDate} >= DATE_FORMAT(NOW(), '%Y-%m-01 00:00:00') AND {$colDate} <= CONCAT(LAST_DAY(NOW()), ' 23:59:59')";
                     } elseif ($period === 'last_month') {
@@ -11007,17 +11192,17 @@ class AgentToolRegistry {
                     // 8. Search Keyword
                     if ($search !== '') {
                         $like = "%{$search}%";
-                        $where[] = "(t.title LIKE ? OR t.description LIKE ? OR u_ass.full_name LIKE ? OR p.name LIKE ? OR c.full_name LIKE ?)";
+                        $where[] = "(t.subject LIKE ? OR t.body LIKE ? OR u_ass.full_name LIKE ? OR p.name LIKE ? OR c.full_name LIKE ?)";
                         array_push($params, $like, $like, $like, $like, $like);
                     }
 
                     $whereSql = implode(' AND ', $where);
-                    $baseJoins = "FROM tasks t
-                                  LEFT JOIN users u_ass ON t.assigned_to = u_ass.id
+                    $baseJoins = "FROM activities t
+                                  LEFT JOIN users u_ass ON t.user_id = u_ass.id
                                   LEFT JOIN teams tm_ass ON u_ass.team_id = tm_ass.id
                                   LEFT JOIN users u_cr ON t.created_by = u_cr.id
                                   LEFT JOIN projects p ON (t.related_type = 'project' AND t.related_id = p.id)
-                                  LEFT JOIN contacts c ON (t.related_type IN ('contact', 'lead') AND t.related_id = c.id AND c.deleted_at IS NULL)";
+                                  LEFT JOIN contacts c ON ((t.related_type IN ('contact', 'lead') AND t.related_id = c.id) OR t.contact_id = c.id) AND c.deleted_at IS NULL";
 
                     // Aggregate Summary
                     $stmtAgg = $db->prepare("
@@ -11061,7 +11246,7 @@ class AgentToolRegistry {
 
                     // Sample rows
                     $stmtRows = $db->prepare("
-                        SELECT t.id, t.title, t.description, t.status, t.priority, t.due_date, t.completed_at, t.created_at,
+                        SELECT t.id, t.subject as title, t.body as description, t.status, t.priority, t.due_date, t.done_at as completed_at, t.created_at,
                                t.related_type, t.related_id,
                                COALESCE(u_ass.full_name, 'Chưa phân công') as assignee_name,
                                COALESCE(u_cr.full_name, 'Hệ thống') as creator_name,
@@ -11140,7 +11325,7 @@ class AgentToolRegistry {
                         ] : null,
                         'sample_tasks' => $formattedTasks,
                         'export_url' => $taskExportUrl,
-                        'export_markdown' => "[📥 Bấm vào đây để tải danh sách Công việc ({$totalCount} bản ghi)]({$taskExportUrl})"
+                        'export_markdown' => "[Bấm vào đây để tải danh sách Công việc ({$totalCount} bản ghi)]({$taskExportUrl})"
                     ];
                 }
 
@@ -11392,7 +11577,7 @@ class AgentToolRegistry {
                         ] : null,
                         'sample_deals' => $formattedDeals,
                         'export_url' => $dealExportUrl,
-                        'export_markdown' => "[📥 Bấm vào đây để tải danh sách Cơ hội kinh doanh / Deals ({$totalCount} bản ghi)]({$dealExportUrl})"
+                        'export_markdown' => "[Bấm vào đây để tải danh sách Cơ hội kinh doanh / Deals ({$totalCount} bản ghi)]({$dealExportUrl})"
                     ];
                 }
 
@@ -11473,8 +11658,7 @@ class AgentToolRegistry {
                                     $assOrs[] = "t.assignee_id = ?";
                                     $params[] = (int)$a;
                                 } else {
-                                    $assOrs[] = "u_ass.full_name LIKE ?";
-                                    $params[] = '%' . $a . '%';
+                                    $assOrs[] = self::buildVietnameseFuzzyNameWhere('u_ass.full_name', $a, $params);
                                 }
                             }
                             $where[] = "(" . implode(' OR ', $assOrs) . ")";
@@ -11490,8 +11674,7 @@ class AgentToolRegistry {
                                     $crOrs[] = "t.created_by = ?";
                                     $params[] = (int)$cr;
                                 } else {
-                                    $crOrs[] = "u_cr.full_name LIKE ?";
-                                    $params[] = '%' . $cr . '%';
+                                    $crOrs[] = self::buildVietnameseFuzzyNameWhere('u_cr.full_name', $cr, $params);
                                 }
                             }
                             $where[] = "(" . implode(' OR ', $crOrs) . ")";
@@ -11625,7 +11808,7 @@ class AgentToolRegistry {
                         ] : null,
                         'sample_tickets' => $formattedTickets,
                         'export_url' => $ticketExportUrl,
-                        'export_markdown' => "[📥 Bấm vào đây để tải danh sách Ticket & SLA ({$totalCount} bản ghi)]({$ticketExportUrl})"
+                        'export_markdown' => "[Bấm vào đây để tải danh sách Ticket & SLA ({$totalCount} bản ghi)]({$ticketExportUrl})"
                     ];
                 }
 
@@ -11641,7 +11824,7 @@ class AgentToolRegistry {
                     $search           = trim((string)($args['search'] ?? $args['search_query'] ?? ''));
                     $limit            = max(1, min(100, (int)($args['limit'] ?? 20)));
 
-                    $where = ['u.tenant_id = ?', 'u.deleted_at IS NULL'];
+                    $where = ['u.tenant_id = ?', "u.role NOT IN ('superadmin', 'super_admin')"];
                     $params = [$monthYear, $tid];
 
                     // Zero-Trust RBAC for HRM & Payroll
@@ -11658,9 +11841,9 @@ class AgentToolRegistry {
                     }
 
                     if ($statusParam === 'active') {
-                        $where[] = "(u.status = 'active' AND COALESCE(u.is_active, 1) = 1)";
+                        $where[] = "COALESCE(u.is_active, 1) = 1";
                     } elseif ($statusParam === 'inactive') {
-                        $where[] = "(u.status != 'active' OR COALESCE(u.is_active, 1) = 0)";
+                        $where[] = "COALESCE(u.is_active, 1) = 0";
                     }
 
                     if ($departmentsParam !== '' && $departmentsParam !== 'all') {
@@ -11696,9 +11879,10 @@ class AgentToolRegistry {
                     }
 
                     if ($search !== '') {
+                        $fzStaff = self::buildVietnameseFuzzyNameWhere('u.full_name', $search, $params);
                         $like = "%{$search}%";
-                        $where[] = "(u.full_name LIKE ? OR u.email LIKE ? OR u.phone LIKE ? OR u.job_title LIKE ?)";
-                        array_push($params, $like, $like, $like, $like);
+                        $where[] = "({$fzStaff} OR u.email LIKE ? OR u.phone LIKE ? OR u.job_title LIKE ?)";
+                        array_push($params, $like, $like, $like);
                     }
 
                     $whereSql = implode(' AND ', $where);
@@ -11709,7 +11893,7 @@ class AgentToolRegistry {
 
                     $stmtAgg = $db->prepare("
                         SELECT COUNT(DISTINCT u.id) as total_staff,
-                               SUM(CASE WHEN u.status = 'active' AND COALESCE(u.is_active, 1) = 1 THEN 1 ELSE 0 END) as active_staff,
+                               SUM(CASE WHEN COALESCE(u.is_active, 1) = 1 THEN 1 ELSE 0 END) as active_staff,
                                SUM(CASE WHEN hp.has_insurance = 1 THEN 1 ELSE 0 END) as insured_staff,
                                COALESCE(SUM(hp.base_salary), 0) as total_base_salary,
                                COALESCE(SUM(mp.net_salary), 0) as total_net_payslip
@@ -11732,7 +11916,7 @@ class AgentToolRegistry {
                     $deptFacets = $stmtDept->fetchAll(PDO::FETCH_ASSOC);
 
                     $stmtRows = $db->prepare("
-                        SELECT u.id, u.full_name, u.email, u.phone, u.role, u.job_title, u.department, u.status,
+                        SELECT u.id, u.full_name, u.email, u.phone, u.role, u.job_title, u.department, COALESCE(u.is_active, 1) as is_active,
                                COALESCE(tm.name, '') as team_name,
                                hp.joined_date, hp.base_salary, hp.has_insurance,
                                hp.annual_leave_total, hp.annual_leave_used,
@@ -11750,6 +11934,7 @@ class AgentToolRegistry {
                         $canSeeSalary = $canViewFullHrm || $sid === $uid;
                         $dept = $r['department'] ?: ($r['team_name'] ?: 'Chưa phân phòng');
                         $leaveRem = max(0, (float)($r['annual_leave_total'] ?? 12) - (float)($r['annual_leave_used'] ?? 0));
+                        $isActive = (int)($r['is_active'] ?? 1) === 1;
                         return [
                             'id' => $sid,
                             'full_name' => $r['full_name'],
@@ -11766,7 +11951,7 @@ class AgentToolRegistry {
                                 'id' => $sid,
                                 'name' => $r['full_name'],
                                 'subtitle' => ($r['job_title'] ?: $r['role']) . ' • ' . $dept,
-                                'status' => $r['status'] === 'active' ? 'Đang làm việc' : 'Ngừng hoạt động',
+                                'status' => $isActive ? 'Đang làm việc' : 'Ngừng hoạt động',
                                 'meta' => "Phép còn: {$leaveRem} ngày",
                                 'link' => "/hrm?user_id={$sid}"
                             ])
@@ -11813,7 +11998,7 @@ class AgentToolRegistry {
                         ] : null,
                         'sample_staff' => $formattedStaff,
                         'export_url' => $staffExportUrl,
-                        'export_markdown' => "[📥 Bấm vào đây để tải danh sách Nhân sự & Bảng lương ({$totalCount} nhân sự)]({$staffExportUrl})"
+                        'export_markdown' => "[Bấm vào đây để tải danh sách Nhân sự & Bảng lương ({$totalCount} nhân sự)]({$staffExportUrl})"
                     ];
                 }
 
@@ -11934,7 +12119,257 @@ class AgentToolRegistry {
                         'sample_products' => $prodRows,
                         'sample_assets' => $assetRows,
                         'export_url' => $invExportUrl,
-                        'export_markdown' => "[📥 Bấm vào đây để tải báo cáo Kho vật tư & Tài sản]({$invExportUrl})"
+                        'export_markdown' => "[Bấm vào đây để tải báo cáo Kho vật tư & Tài sản]({$invExportUrl})"
+                    ];
+                }
+
+                // =========================================================================
+                // TOOL: query_cross_domain_executive_synthesis (CROSS-DOMAIN 360° EXECUTIVE ENGINE)
+                // =========================================================================
+                case 'query_cross_domain_executive_synthesis': {
+                    $period      = strtolower(trim((string)($args['period'] ?? 'this_month')));
+                    $fromDate    = trim((string)($args['from_date'] ?? $args['from'] ?? ''));
+                    $toDate      = trim((string)($args['to_date'] ?? $args['to'] ?? ''));
+                    $citiesParam = trim((string)($args['branches_or_cities'] ?? $args['city'] ?? ''));
+                    $progsParam  = trim((string)($args['programs'] ?? $args['program'] ?? ''));
+
+                    if ($fromDate === '' && $toDate === '') {
+                        if ($period === 'today') {
+                            $fromDate = date('Y-m-d');
+                            $toDate   = date('Y-m-d');
+                        } elseif ($period === 'this_week') {
+                            $fromDate = date('Y-m-d', strtotime('monday this week'));
+                            $toDate   = date('Y-m-d');
+                        } elseif ($period === 'last_month') {
+                            $fromDate = date('Y-m-01', strtotime('first day of last month'));
+                            $toDate   = date('Y-m-t', strtotime('last day of last month'));
+                        } elseif ($period === 'this_quarter') {
+                            $curMonth = (int)date('n');
+                            $qStartMonth = (floor(($curMonth - 1) / 3) * 3) + 1;
+                            $fromDate = date('Y-' . str_pad((string)$qStartMonth, 2, '0', STR_PAD_LEFT) . '-01');
+                            $toDate   = date('Y-m-d');
+                        } elseif ($period === 'this_year') {
+                            $fromDate = date('Y-01-01');
+                            $toDate   = date('Y-m-d');
+                        } elseif ($period !== 'all_time') {
+                            $fromDate = date('Y-m-01');
+                            $toDate   = date('Y-m-t');
+                        }
+                    }
+
+                    // 1. CRM & Lead Funnel Synthesis (RBAC-aware)
+                    $crmWhere = ['c.tenant_id = ?', 'c.deleted_at IS NULL'];
+                    $crmParams = [$tid];
+                    [$rbacSqlCrm, $rbacParamsCrm] = self::getContactRbacClause('c', $leadRbac, $uid);
+                    if ($rbacSqlCrm !== '') {
+                        $crmWhere[] = $rbacSqlCrm;
+                        $crmParams = array_merge($crmParams, $rbacParamsCrm);
+                    }
+                    if ($fromDate !== '' && $toDate !== '') {
+                        $crmWhere[] = "c.created_at BETWEEN ? AND ?";
+                        $crmParams[] = $fromDate . ' 00:00:00';
+                        $crmParams[] = $toDate . ' 23:59:59';
+                    }
+                    if ($citiesParam !== '' && $citiesParam !== 'all') {
+                        $cList = array_filter(array_map('trim', explode(',', $citiesParam)));
+                        if (!empty($cList)) {
+                            $cOrs = [];
+                            foreach ($cList as $ci) {
+                                $cOrs[] = "(c.city LIKE ? OR c.district LIKE ? OR c.address LIKE ?)";
+                                array_push($crmParams, "%{$ci}%", "%{$ci}%", "%{$ci}%");
+                            }
+                            $crmWhere[] = "(" . implode(' OR ', $cOrs) . ")";
+                        }
+                    }
+                    if ($progsParam !== '' && $progsParam !== 'all') {
+                        $pList = array_filter(array_map('trim', explode(',', $progsParam)));
+                        if (!empty($pList)) {
+                            $pOrs = [];
+                            foreach ($pList as $pi) {
+                                $pOrs[] = "c.program LIKE ?";
+                                $crmParams[] = "%{$pi}%";
+                            }
+                            $crmWhere[] = "(" . implode(' OR ', $pOrs) . ")";
+                        }
+                    }
+                    $crmWhereSql = implode(' AND ', $crmWhere);
+                    $stmtCrm = $db->prepare("
+                        SELECT COUNT(DISTINCT c.id) as total_leads,
+                               COUNT(DISTINCT dep.contact_id) as deposited_leads,
+                               COUNT(DISTINCT dep.id) as deposit_count,
+                               COALESCE(SUM(dep.price), 0) as crm_deposit_amount,
+                               SUM(CASE WHEN (c.last_contact IS NULL OR c.last_contact = '') AND NOT EXISTS (SELECT 1 FROM activities act_x WHERE (act_x.contact_id = c.id OR (act_x.related_id = c.id AND act_x.related_type IN ('contact', 'lead'))) AND act_x.deleted_at IS NULL) THEN 1 ELSE 0 END) as uncontacted_leads
+                        FROM contacts c
+                        LEFT JOIN deposits dep ON dep.contact_id = c.id AND dep.status NOT IN ('cancelled', 'rejected')
+                        WHERE {$crmWhereSql}
+                    ");
+                    $stmtCrm->execute($crmParams);
+                    $crmAgg = $stmtCrm->fetch(PDO::FETCH_ASSOC) ?: [];
+                    $totalLeads = (int)($crmAgg['total_leads'] ?? 0);
+                    $depositedLeads = (int)($crmAgg['deposited_leads'] ?? 0);
+                    $convRate = $totalLeads > 0 ? round(($depositedLeads / $totalLeads) * 100, 1) : 0.0;
+
+                    // 2. Revenue & Deposits Synthesis (by deposit date)
+                    $depWhere = ['(c.tenant_id = ? OR p.tenant_id = ? OR u.tenant_id = ?)', '(c.id IS NULL OR c.deleted_at IS NULL)'];
+                    $depParams = [$tid, $tid, $tid];
+                    $isFinExec = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'accountant', 'ke_toan', 'sale_admin', 'saleadmin'], true);
+                    if (!$isFinExec) {
+                        [$rbacSqlDep, $rbacParamsDep] = self::getContactRbacClause('c', $leadRbac, $uid);
+                        if ($rbacSqlDep !== '') {
+                            $depWhere[] = "(d.created_by = ? OR {$rbacSqlDep})";
+                            $depParams[] = $uid;
+                            $depParams = array_merge($depParams, $rbacParamsDep);
+                        }
+                    }
+                    if ($fromDate !== '' && $toDate !== '') {
+                        $depWhere[] = "d.created_at BETWEEN ? AND ?";
+                        $depParams[] = $fromDate . ' 00:00:00';
+                        $depParams[] = $toDate . ' 23:59:59';
+                    }
+                    $depWhereSql = implode(' AND ', $depWhere);
+                    $stmtDep = $db->prepare("
+                        SELECT COUNT(DISTINCT d.id) as total_deposits,
+                               COALESCE(SUM(CASE WHEN d.status IN ('approved', 'completed') THEN d.price ELSE 0 END), 0) as approved_revenue,
+                               COALESCE(SUM(CASE WHEN d.status = 'pending' THEN d.price ELSE 0 END), 0) as pending_revenue,
+                               COALESCE(SUM(CASE WHEN d.status NOT IN ('cancelled', 'rejected') THEN d.price ELSE 0 END), 0) as active_revenue
+                        FROM deposits d
+                        LEFT JOIN contacts c ON d.contact_id = c.id
+                        LEFT JOIN projects p ON d.project_id = p.id
+                        LEFT JOIN users u ON d.created_by = u.id
+                        WHERE {$depWhereSql}
+                    ");
+                    $stmtDep->execute($depParams);
+                    $depAgg = $stmtDep->fetch(PDO::FETCH_ASSOC) ?: [];
+                    $approvedRev = (float)($depAgg['approved_revenue'] ?? 0);
+                    $pendingRev  = (float)($depAgg['pending_revenue'] ?? 0);
+                    $activeRev   = (float)($depAgg['active_revenue'] ?? 0);
+
+                    // 3. Expenses & Operating Cashflow Synthesis
+                    $expWhere = ['e.tenant_id = ?', 'e.deleted_at IS NULL'];
+                    $expParams = [$tid];
+                    if (!$isFinExec) {
+                        $expWhere[] = "e.created_by = ?";
+                        $expParams[] = $uid;
+                    }
+                    if ($fromDate !== '' && $toDate !== '') {
+                        $expWhere[] = "e.created_at BETWEEN ? AND ?";
+                        $expParams[] = $fromDate . ' 00:00:00';
+                        $expParams[] = $toDate . ' 23:59:59';
+                    }
+                    $expWhereSql = implode(' AND ', $expWhere);
+                    $stmtExp = $db->prepare("
+                        SELECT COUNT(DISTINCT e.id) as expense_count,
+                               COALESCE(SUM(CASE WHEN e.status IN ('approved', 'paid', 'completed') THEN e.amount ELSE 0 END), 0) as approved_expense,
+                               COALESCE(SUM(CASE WHEN e.status = 'pending' THEN e.amount ELSE 0 END), 0) as pending_expense
+                        FROM expenses e
+                        WHERE {$expWhereSql}
+                    ");
+                    $stmtExp->execute($expParams);
+                    $expAgg = $stmtExp->fetch(PDO::FETCH_ASSOC) ?: [];
+                    $approvedExp = (float)($expAgg['approved_expense'] ?? 0);
+                    $pendingExp  = (float)($expAgg['pending_expense'] ?? 0);
+                    $netCashflow = $approvedRev - $approvedExp;
+
+                    // 4. Consolidated HRM, Tasks & Tickets Pulse (Single Multi-Subquery SELECT)
+                    $canViewFullHrm = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'hr', 'nhan_su', 'accountant', 'ke_toan'], true);
+                    $stmtOps = $db->prepare("
+                        SELECT
+                            (SELECT COUNT(*) FROM users u WHERE u.tenant_id = ? AND COALESCE(u.is_active, 1) = 1 AND u.role NOT IN ('superadmin', 'super_admin')) as active_staff,
+                            (SELECT COUNT(DISTINCT ci.user_id) FROM check_ins ci JOIN users u_ci ON ci.user_id = u_ci.id WHERE u_ci.tenant_id = ? AND ci.check_in_date = CURDATE() AND ci.check_in_time IS NOT NULL) as present_today,
+                            (SELECT COALESCE(SUM(hp.base_salary), 0) FROM users u2 JOIN hrm_profiles hp ON hp.user_id = u2.id WHERE u2.tenant_id = ? AND COALESCE(u2.is_active, 1) = 1 AND u2.role NOT IN ('superadmin', 'super_admin')) as base_salary_fund,
+                            (SELECT COUNT(*) FROM activities t WHERE t.tenant_id = ? AND t.deleted_at IS NULL AND t.type = 'task' AND t.status NOT IN ('done', 'completed', 'cancelled')) as open_tasks,
+                            (SELECT COUNT(*) FROM activities t2 WHERE t2.tenant_id = ? AND t2.deleted_at IS NULL AND t2.type = 'task' AND t2.due_date IS NOT NULL AND t2.due_date < NOW() AND t2.status NOT IN ('done', 'completed', 'cancelled')) as overdue_tasks,
+                            (SELECT COUNT(*) FROM tickets tk WHERE tk.tenant_id = ? AND tk.status NOT IN ('resolved', 'closed')) as open_tickets,
+                            (SELECT COUNT(*) FROM tickets tk2 WHERE tk2.tenant_id = ? AND tk2.status NOT IN ('resolved', 'closed') AND tk2.created_at < DATE_SUB(NOW(), INTERVAL 48 HOUR)) as sla_breach_tickets
+                    ");
+                    $stmtOps->execute([$tid, $tid, $tid, $tid, $tid, $tid, $tid]);
+                    $opsAgg = $stmtOps->fetch(PDO::FETCH_ASSOC) ?: [];
+
+                    $chartData = [
+                        [
+                            'name' => 'Doanh thu Đã duyệt',
+                            'amount' => round($approvedRev / 1000000, 2)
+                        ],
+                        [
+                            'name' => 'Doanh thu Chờ duyệt',
+                            'amount' => round($pendingRev / 1000000, 2)
+                        ],
+                        [
+                            'name' => 'Chi phí Đã duyệt',
+                            'amount' => round($approvedExp / 1000000, 2)
+                        ],
+                        [
+                            'name' => 'Dòng tiền Ròng (Net)',
+                            'amount' => round($netCashflow / 1000000, 2)
+                        ]
+                    ];
+
+                    $crmExportUrl = '/export?' . http_build_query(array_filter([
+                        'type' => 'contact',
+                        'export_mode' => 'full',
+                        'from' => $fromDate,
+                        'to' => $toDate,
+                        'city' => $citiesParam ?: null,
+                        'program' => $progsParam ?: null
+                    ]));
+                    $depExportUrl = '/export?' . http_build_query(array_filter([
+                        'type' => 'deposit',
+                        'from' => $fromDate,
+                        'to' => $toDate
+                    ]));
+                    $expExportUrl = '/export?' . http_build_query(array_filter([
+                        'type' => 'expense',
+                        'from' => $fromDate,
+                        'to' => $toDate
+                    ]));
+
+                    return [
+                        'success' => true,
+                        'period_applied' => [
+                            'period' => $period,
+                            'from_date' => $fromDate,
+                            'to_date' => $toDate
+                        ],
+                        'crm_and_funnel' => [
+                            'total_leads' => $totalLeads,
+                            'deposited_leads' => $depositedLeads,
+                            'conversion_rate_pct' => $convRate . '%',
+                            'uncontacted_leads' => (int)($crmAgg['uncontacted_leads'] ?? 0)
+                        ],
+                        'revenue_and_deposits' => [
+                            'deposit_count' => (int)($depAgg['total_deposits'] ?? 0),
+                            'active_revenue' => number_format($activeRev, 0, ',', '.') . ' VNĐ',
+                            'approved_revenue' => number_format($approvedRev, 0, ',', '.') . ' VNĐ',
+                            'pending_revenue' => number_format($pendingRev, 0, ',', '.') . ' VNĐ'
+                        ],
+                        'expenses_and_cashflow' => [
+                            'expense_count' => (int)($expAgg['expense_count'] ?? 0),
+                            'approved_expense' => number_format($approvedExp, 0, ',', '.') . ' VNĐ',
+                            'pending_expense' => number_format($pendingExp, 0, ',', '.') . ' VNĐ',
+                            'net_operating_cashflow' => number_format($netCashflow, 0, ',', '.') . ' VNĐ'
+                        ],
+                        'hrm_and_workforce' => [
+                            'active_staff' => (int)($opsAgg['active_staff'] ?? 0),
+                            'present_today' => (int)($opsAgg['present_today'] ?? 0),
+                            'base_salary_fund' => $canViewFullHrm ? number_format((float)($opsAgg['base_salary_fund'] ?? 0), 0, ',', '.') . ' VNĐ' : 'Bảo mật theo phân quyền'
+                        ],
+                        'operations_and_sla' => [
+                            'open_tasks' => (int)($opsAgg['open_tasks'] ?? 0),
+                            'overdue_tasks' => (int)($opsAgg['overdue_tasks'] ?? 0),
+                            'open_tickets' => (int)($opsAgg['open_tickets'] ?? 0),
+                            'sla_breach_tickets' => (int)($opsAgg['sla_breach_tickets'] ?? 0)
+                        ],
+                        'dynamic_chart' => [
+                            'type' => 'bar',
+                            'title' => 'Tổng hợp Doanh thu - Chi phí - Dòng tiền ròng (Triệu VNĐ)',
+                            'xAxisKey' => 'name',
+                            'data' => $chartData,
+                            'series' => [
+                                ['dataKey' => 'amount', 'name' => 'Giá trị (Tr. VNĐ)', 'color' => '#10b981']
+                            ]
+                        ],
+                        'export_url' => $crmExportUrl,
+                        'export_markdown' => "[Bấm vào đây để tải dữ liệu CRM ({$totalLeads} hồ sơ)]({$crmExportUrl}) | [Tải danh sách Đặt cọc]({$depExportUrl}) | [Tải danh sách Chi phí]({$expExportUrl})"
                     ];
                 }
 

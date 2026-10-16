@@ -158,7 +158,7 @@ export const ChatSmartErpCard: React.FC<Props> = ({ card, onOpen }) => {
         marginBottom: '6px',
         background: '#ffffff',
         borderRadius: '12px',
-        border: `1.5px solid ${themeConfig.border}`,
+        border: '1px solid #e2e8f0',
         boxShadow: '0 3px 12px rgba(0, 0, 0, 0.05)',
         padding: '11px 13px',
         cursor: 'pointer',
@@ -171,12 +171,12 @@ export const ChatSmartErpCard: React.FC<Props> = ({ card, onOpen }) => {
         overflow: 'hidden'
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = themeConfig.accent;
+        e.currentTarget.style.borderColor = '#cbd5e1';
         e.currentTarget.style.boxShadow = '0 6px 18px rgba(0, 0, 0, 0.09)';
         e.currentTarget.style.transform = 'translateY(-1px)';
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = themeConfig.border;
+        e.currentTarget.style.borderColor = '#e2e8f0';
         e.currentTarget.style.boxShadow = '0 3px 12px rgba(0, 0, 0, 0.05)';
         e.currentTarget.style.transform = 'none';
       }}
@@ -191,6 +191,7 @@ export const ChatSmartErpCard: React.FC<Props> = ({ card, onOpen }) => {
           borderRadius: '5px',
           background: themeConfig.badgeBg,
           color: themeConfig.badgeText,
+          border: 'none',
           fontSize: '0.68rem',
           fontWeight: 800,
           letterSpacing: '0.3px',
@@ -286,8 +287,8 @@ export const ChatSmartErpCard: React.FC<Props> = ({ card, onOpen }) => {
           e.currentTarget.style.filter = 'none';
         }}
       >
-        <span>👉 {card.action_label || 'Bấm để mở hồ sơ'}</span>
-        <ArrowRight size={13} strokeWidth={2.4} />
+        <span>{card.action_label || 'Bấm để mở hồ sơ'}</span>
+        <ArrowRight size={12} strokeWidth={2.4} />
       </button>
     </div>
   );

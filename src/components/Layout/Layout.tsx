@@ -1,23 +1,27 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { Sidebar, SIDEBAR_GROUPS } from './Sidebar';
 import { Header } from './Header';
-import { QuickAddLeadModal } from '../QuickAddLeadModal';
-import { ProfileModal } from '../ProfileModal';
 import { CustomModal } from '../ui/CustomModal';
-import { SmartCheckInModal, prewarmSmartCheckInGPS } from '../ui/SmartCheckInModal';
 import { CustomSelect } from '../ui/CustomSelect';
 import { Avatar } from '../ui/Avatar';
-import { AIChatbot } from '../ui/AIChatbot';
 import { useAuth } from '../../contexts/AuthContext';
 import { fetchAPI } from '../../utils/api';
 import { useUIStore } from '../../store/uiStore';
-import { DepositCreateDrawer } from '../DepositCreateDrawer';
 import { AlertToast } from '../ui/AlertToast';
 import { StatRowSkeleton } from '../ui/Skeleton';
 import { WorkspaceStickyPomodoro } from '../WorkspaceStickyPomodoro';
+
+const QuickAddLeadModal = React.lazy(() => import('../QuickAddLeadModal').then(m => ({ default: m.QuickAddLeadModal })));
+const ProfileModal = React.lazy(() => import('../ProfileModal').then(m => ({ default: m.ProfileModal })));
+const SmartCheckInModal = React.lazy(() => import('../ui/SmartCheckInModal').then(m => ({ default: m.SmartCheckInModal })));
+const AIChatbot = React.lazy(() => import('../ui/AIChatbot').then(m => ({ default: m.AIChatbot })));
+const DepositCreateDrawer = React.lazy(() => import('../DepositCreateDrawer').then(m => ({ default: m.DepositCreateDrawer })));
+const prewarmSmartCheckInGPS = () => {
+  import('../ui/SmartCheckInModal').then(m => m.prewarmSmartCheckInGPS());
+};
 import { 
   Ticket as TicketIcon, 
   Activity, 
@@ -900,19 +904,23 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
         );
       })()}
       <AlertToast />
-      <QuickAddLeadModal />
+      <Suspense fallback={null}>
+        <QuickAddLeadModal />
+      </Suspense>
 
       {/* Workspace Sticky Pomodoro Timer - only on Bàn làm việc (/workspace, /portal) */}
       {(location.pathname === '/workspace' || location.pathname === '/portal') && (
         <WorkspaceStickyPomodoro />
       )}
       {showPOS && (
-        <DepositCreateDrawer 
-          isOpen={!!showPOS}
-          onClose={() => setShowPOS(false)} 
-          defaultContact={typeof showPOS === 'object' ? showPOS : null}
-          zIndex={2147483640}
-        />
+        <Suspense fallback={null}>
+          <DepositCreateDrawer 
+            isOpen={!!showPOS}
+            onClose={() => setShowPOS(false)} 
+            defaultContact={typeof showPOS === 'object' ? showPOS : null}
+            zIndex={2147483640}
+          />
+        </Suspense>
       )}
 
       {/* Unified Approvals Inbox Modal */}
@@ -2341,18 +2349,20 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
 
 
       {checkInModalOpen && (
-        <SmartCheckInModal
-          isOpen={checkInModalOpen}
-          onClose={() => setCheckInModalOpen(false)}
-          todayCheckIn={todayCheckIn}
-          consultantProfile={consultantProfile}
-          user={user}
-          requireCheckout={sysSettings?.require_checkout === '1' || sysSettings?.require_checkout === 1}
-          onCheckInSuccess={() => {
-            loadCheckInStatus();
-            window.dispatchEvent(new CustomEvent('checkin-status-changed'));
-          }}
-        />
+        <Suspense fallback={null}>
+          <SmartCheckInModal
+            isOpen={checkInModalOpen}
+            onClose={() => setCheckInModalOpen(false)}
+            todayCheckIn={todayCheckIn}
+            consultantProfile={consultantProfile}
+            user={user}
+            requireCheckout={sysSettings?.require_checkout === '1' || sysSettings?.require_checkout === 1}
+            onCheckInSuccess={() => {
+              loadCheckInStatus();
+              window.dispatchEvent(new CustomEvent('checkin-status-changed'));
+            }}
+          />
+        </Suspense>
       )}
 
       {isTelegramModalOpen && (

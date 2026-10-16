@@ -211,6 +211,13 @@ class HRMController {
             respond(400, null, 'Thiếu thông tin user_id hoặc ngày vào làm', false);
         }
 
+        $targetUserId = (int)$b['user_id'];
+        $chkUser = $this->db->prepare("SELECT id FROM users WHERE id = ? AND tenant_id = ? LIMIT 1");
+        $chkUser->execute([$targetUserId, $auth['tenant_id']]);
+        if (!$chkUser->fetchColumn()) {
+            respond(404, null, 'Nhân sự không tồn tại trong hệ thống', false);
+        }
+
         $stmt = $this->db->prepare("
             INSERT INTO hrm_profiles (user_id, joined_date, base_salary, deal_salary, has_insurance, allowance_meal, allowance_meal_type, allowance_travel, allowance_phone, kpi_target, kpi_multiplier_rules, custom_fields_json,
                                       annual_leave_total, annual_leave_used, compensatory_leave_total, compensatory_leave_used,
@@ -238,7 +245,7 @@ class HRMController {
         ");
 
         $stmt->execute([
-            (int)$b['user_id'],
+            $targetUserId,
             $b['joined_date'],
             (float)($b['base_salary'] ?? 0),
             (float)($b['deal_salary'] ?? 0),
@@ -292,7 +299,24 @@ class HRMController {
     }
 
     public function getUserBalance(array $auth): void {
-        $targetUserId = isset($_GET['user_id']) ? (int)$_GET['user_id'] : (int)$auth['user_id'];
+        $callerId = (int)($auth['user_id'] ?? $auth['id'] ?? 0);
+        $targetUserId = isset($_GET['user_id']) ? (int)$_GET['user_id'] : $callerId;
+
+        $chkUser = $this->db->prepare("SELECT id, team_id FROM users WHERE id = ? AND tenant_id = ? LIMIT 1");
+        $chkUser->execute([$targetUserId, $auth['tenant_id']]);
+        $targetUser = $chkUser->fetch(PDO::FETCH_ASSOC);
+        if (!$targetUser) {
+            respond(404, null, 'Nhân sự không tồn tại trong hệ thống', false);
+        }
+
+        if ($targetUserId !== $callerId && !$this->isAdmin($auth)) {
+            $role = strtolower((string)($auth['role'] ?? ''));
+            $isManager = in_array($role, ['manager', 'truong_phong', 'leader', 'team_lead', 'accountant', 'ke_toan'], true);
+            if (!$isManager) {
+                respond(403, null, 'Không có quyền xem số dư phép của nhân sự khác', false);
+            }
+        }
+
         $stmt = $this->db->prepare("
             SELECT annual_leave_total, annual_leave_used, compensatory_leave_total, compensatory_leave_used 
             FROM hrm_profiles 
@@ -359,13 +383,15 @@ class HRMController {
         if ($leaveId > 0) {
             $where .= " AND l.id = ?";
             $params[] = $leaveId;
-        } elseif (!$this->isAdmin($auth)) {
-            $where .= " AND (l.user_id = ? OR l.approver_id = ? OR l.approver_id_2 = ? OR l.related_user_ids LIKE ? OR l.related_user_ids LIKE ?)";
+        }
+        if (!$this->isAdmin($auth)) {
+            $where .= " AND (l.user_id = ? OR l.approver_id = ? OR l.approver_id_2 = ? OR l.related_user_ids LIKE ? OR l.related_user_ids LIKE ? OR u.team_id IN (SELECT id FROM teams WHERE leader_id = ?))";
             $params[] = $userId;
             $params[] = $userId;
             $params[] = $userId;
             $params[] = '%"' . $userId . '"%';
             $params[] = '%' . $userId . '%';
+            $params[] = $userId;
         }
 
         $stmt = $this->db->prepare("
@@ -448,6 +474,14 @@ class HRMController {
     }
 
     public function showLeave(array $auth, int $id): void {
+        $userId = (int)($auth['user_id'] ?? $auth['id'] ?? 0);
+        $where = "l.id = ? AND u.tenant_id = ? AND (l.status != 'draft' OR l.user_id = ?)";
+        $params = [$id, $auth['tenant_id'], $userId];
+        if (!$this->isAdmin($auth)) {
+            $where .= " AND (l.user_id = ? OR l.approver_id = ? OR l.approver_id_2 = ? OR l.related_user_ids LIKE ? OR l.related_user_ids LIKE ? OR u.team_id IN (SELECT id FROM teams WHERE leader_id = ?))";
+            array_push($params, $userId, $userId, $userId, '%"' . $userId . '"%', '%' . $userId . '%', $userId);
+        }
+
         $stmt = $this->db->prepare("
             SELECT l.*, u.full_name as employee_name, u.email as employee_email,
                    u.avatar_url as employee_avatar, u.avatar_url, u.department, u.job_title,
@@ -466,13 +500,13 @@ class HRMController {
             LEFT JOIN users apby ON l.approved_by = apby.id
             LEFT JOIN users apby2 ON l.approved_by_2 = apby2.id
             LEFT JOIN hrm_profiles p ON l.user_id = p.user_id
-            WHERE l.id = ? AND u.tenant_id = ?
+            WHERE $where
             LIMIT 1
         ");
-        $stmt->execute([$id, $auth['tenant_id']]);
+        $stmt->execute($params);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$row) {
-            respond(404, null, 'Không tìm thấy đơn xin nghỉ phép', false);
+            respond(404, null, 'Không tìm thấy đơn xin nghỉ phép hoặc không có quyền xem', false);
             return;
         }
 
@@ -577,15 +611,17 @@ class HRMController {
         } elseif ($leaveType === 'remote_work') {
             // Quy định WFH: 2 ngày đầu tiên trong tháng hưởng 100% lương, từ ngày thứ 3 trở đi hưởng 50% lương
             $targetMonth = substr($startDate, 0, 7); // 'YYYY-MM'
+            $targetMonthStart = $targetMonth . '-01 00:00:00';
+            $targetMonthEnd   = date('Y-m-t 23:59:59', strtotime($targetMonth . '-01'));
             $stmtWfhMonth = $this->db->prepare("
                 SELECT COALESCE(SUM(total_days), 0) as used_days
                 FROM hrm_leave_requests
                 WHERE user_id = ? 
                   AND leave_type = 'remote_work' 
                   AND status IN ('approved', 'pending')
-                  AND DATE_FORMAT(start_date, '%Y-%m') = ?
+                  AND start_date >= ? AND start_date <= ?
             ");
-            $stmtWfhMonth->execute([(int)$auth['user_id'], $targetMonth]);
+            $stmtWfhMonth->execute([(int)$auth['user_id'], $targetMonthStart, $targetMonthEnd]);
             $usedWfhDays = (float)$stmtWfhMonth->fetchColumn();
 
             // Nếu người dùng không chỉ định tỷ lệ riêng, tự động áp dụng: <= 2 ngày thì 100%, > 2 ngày thì 50%
@@ -1337,6 +1373,16 @@ class HRMController {
     }
 
     public function showAdvance(array $auth, int $id): void {
+        $userId = (int)($auth['user_id'] ?? $auth['id'] ?? 0);
+        $role = strtolower((string)($auth['role'] ?? ''));
+        $isFinOrAdmin = $this->isAdmin($auth) || in_array($role, ['accountant', 'ke_toan'], true);
+        $where = "a.id = ? AND u.tenant_id = ? AND (a.status != 'draft' OR a.user_id = ?)";
+        $params = [$id, $auth['tenant_id'], $userId];
+        if (!$isFinOrAdmin) {
+            $where .= " AND (a.user_id = ? OR a.approver_id = ? OR a.approver_id_2 = ? OR a.related_user_ids LIKE ? OR a.related_user_ids LIKE ? OR u.team_id IN (SELECT id FROM teams WHERE leader_id = ?))";
+            array_push($params, $userId, $userId, $userId, '%"' . $userId . '"%', '%' . $userId . '%', $userId);
+        }
+
         $stmt = $this->db->prepare("
             SELECT a.*, u.full_name as employee_name, u.email as employee_email,
                    u.avatar_url as employee_avatar, u.avatar_url, u.department, u.job_title,
@@ -1350,13 +1396,13 @@ class HRMController {
             LEFT JOIN users app2 ON a.approver_id_2 = app2.id
             LEFT JOIN users apby ON a.approved_by = apby.id
             LEFT JOIN users apby2 ON a.approved_by_2 = apby2.id
-            WHERE a.id = ? AND u.tenant_id = ?
+            WHERE $where
             LIMIT 1
         ");
-        $stmt->execute([$id, $auth['tenant_id']]);
+        $stmt->execute($params);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$row) {
-            respond(404, null, 'Không tìm thấy đề nghị tạm ứng', false);
+            respond(404, null, 'Không tìm thấy đề nghị tạm ứng hoặc không có quyền xem', false);
             return;
         }
 
@@ -1865,14 +1911,19 @@ class HRMController {
         // Pre-fetch all approved deposit milestones for YYYY-MM and their associated cooperation slips
         $milestonesList = [];
         $coopSlipsMap = [];
+        $startDateOfMonth = !$isSpecialPeriod ? ($monthYear . '-01') : date('Y-m-01');
+        $endDateOfMonth   = !$isSpecialPeriod ? date('Y-m-t', strtotime($startDateOfMonth)) : date('Y-m-t');
+        $monthStartTs     = $startDateOfMonth . ' 00:00:00';
+        $monthEndTs       = $endDateOfMonth . ' 23:59:59';
+
         if (!$isSpecialPeriod) {
             $milestonesStmt = $this->db->prepare("
                 SELECT m.expected_amount, d.contact_id, d.created_by
                 FROM deposit_milestones m
                 JOIN deposits d ON m.deposit_id = d.id
-                WHERE d.tenant_id = ? AND m.status = 'approved' AND DATE_FORMAT(m.approval_date, '%Y-%m') = ?
+                WHERE d.tenant_id = ? AND m.status = 'approved' AND m.approval_date >= ? AND m.approval_date <= ?
             ");
-            $milestonesStmt->execute([$auth['tenant_id'], $monthYear]);
+            $milestonesStmt->execute([$auth['tenant_id'], $monthStartTs, $monthEndTs]);
             $milestonesList = $milestonesStmt->fetchAll(PDO::FETCH_ASSOC);
 
             $contactIds = array_values(array_unique(array_filter(array_column($milestonesList, 'contact_id'))));
@@ -1904,6 +1955,10 @@ class HRMController {
 
             // Batch pre-fetch: Paid approved leaves per employee for this month (Anti N+1 bottleneck)
             $paidLeavesMap = [];
+            $waivedDatesMap = [];
+            $checkinsByUserMap = [];
+            $leaveDaysByUserMap = [];
+            $overtimeByUserMap = [];
             if (!$isSpecialPeriod) {
                 $lvBatchStmt = $this->db->prepare("
                     SELECT user_id, SUM(
@@ -1914,11 +1969,67 @@ class HRMController {
                     ) as paid_days
                     FROM hrm_leave_requests
                     WHERE tenant_id = ? AND status = 'approved' AND leave_type IN ('annual', 'sick', 'compensatory', 'remote_work', 'special_paid', 'maternity', 'paternity', 'marriage', 'funeral', 'business_trip')
-                      AND DATE_FORMAT(start_date, '%Y-%m') = ?
+                      AND start_date >= ? AND start_date <= ?
                     GROUP BY user_id
                 ");
-                $lvBatchStmt->execute([$auth['tenant_id'], $monthYear]);
+                $lvBatchStmt->execute([$auth['tenant_id'], $monthStartTs, $monthEndTs]);
                 $paidLeavesMap = $lvBatchStmt->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
+
+                // Batch pre-fetch: late_early waivers per employee
+                $leBatchStmt = $this->db->prepare("
+                    SELECT l.user_id, DATE(l.start_date) as le_date
+                    FROM hrm_leave_requests l
+                    JOIN users u ON l.user_id = u.id
+                    WHERE u.tenant_id = ? AND l.status = 'approved' AND l.leave_type = 'late_early'
+                      AND l.start_date BETWEEN ? AND ?
+                ");
+                $leBatchStmt->execute([$auth['tenant_id'], $monthStartTs, $monthEndTs]);
+                while ($rLe = $leBatchStmt->fetch(PDO::FETCH_ASSOC)) {
+                    $waivedDatesMap[(int)$rLe['user_id']][] = $rLe['le_date'];
+                }
+
+                // Batch pre-fetch: approved check-ins per employee
+                $attBatchStmt = $this->db->prepare("
+                    SELECT ci.user_id, ci.check_in_date, ci.late_minutes
+                    FROM check_ins ci
+                    JOIN users u ON ci.user_id = u.id
+                    WHERE u.tenant_id = ? AND ci.status = 'approved' AND ci.check_in_date BETWEEN ? AND ?
+                ");
+                $attBatchStmt->execute([$auth['tenant_id'], $startDateOfMonth, $endDateOfMonth]);
+                while ($rAtt = $attBatchStmt->fetch(PDO::FETCH_ASSOC)) {
+                    $checkinsByUserMap[(int)$rAtt['user_id']][] = $rAtt;
+                }
+
+                // Batch pre-fetch: approved daily leaves per employee to deduct overlapping days from check-in workdays
+                $lvDailyBatchStmt = $this->db->prepare("
+                    SELECT l.user_id, DATE(l.start_date) as leave_date, SUM(l.total_days) as leave_days
+                    FROM hrm_leave_requests l
+                    JOIN users u ON l.user_id = u.id
+                    WHERE u.tenant_id = ? AND l.status = 'approved' AND l.leave_type IN ('annual', 'sick', 'compensatory', 'unpaid', 'remote_work', 'special_paid')
+                      AND l.start_date BETWEEN ? AND ?
+                    GROUP BY l.user_id, DATE(l.start_date)
+                ");
+                $lvDailyBatchStmt->execute([$auth['tenant_id'], $monthStartTs, $monthEndTs]);
+                while ($rLvD = $lvDailyBatchStmt->fetch(PDO::FETCH_ASSOC)) {
+                    $leaveDaysByUserMap[(int)$rLvD['user_id']][$rLvD['leave_date']] = (float)$rLvD['leave_days'];
+                }
+
+                // Batch pre-fetch: approved overtime per employee
+                $otBatchStmt = $this->db->prepare("
+                    SELECT l.user_id,
+                           SUM(l.total_days) as ot_days,
+                           SUM(l.total_days * COALESCE(l.ot_rate, 1.5)) as weighted_ot_days
+                    FROM hrm_leave_requests l
+                    JOIN users u ON l.user_id = u.id
+                    WHERE u.tenant_id = ? AND l.status = 'approved' AND l.leave_type = 'overtime'
+                      AND (l.ot_type = 'salary' OR l.ot_type IS NULL OR l.ot_type = '')
+                      AND l.start_date >= ? AND l.start_date <= ?
+                    GROUP BY l.user_id
+                ");
+                $otBatchStmt->execute([$auth['tenant_id'], $monthStartTs, $monthEndTs]);
+                while ($rOt = $otBatchStmt->fetch(PDO::FETCH_ASSOC)) {
+                    $overtimeByUserMap[(int)$rOt['user_id']] = $rOt;
+                }
             }
 
             // Batch pre-fetch: Approved advances per employee (Anti N+1 bottleneck)
@@ -1959,9 +2070,6 @@ class HRMController {
             $userRole = strtolower($emp['role'] ?? '');
             $isDirector = in_array($userRole, ['director', 'superadmin', 'super_admin'], true);
 
-            $startDateOfMonth = $monthYear . '-01';
-            $endDateOfMonth = date('Y-m-t', strtotime($startDateOfMonth));
-
             if ($isSpecialPeriod) {
                 $actualWorkedDays = $isThang13 ? $workDaysRequired : 0;
                 $paidLeaveDays = 0;
@@ -1978,34 +2086,10 @@ class HRMController {
                 $waivedDates = [];
                 $checkinsList = [];
             } else {
-                // 1. Calculate Actual Work Days from check_ins & apply late_early waivers
-                $leStmt = $this->db->prepare("
-                    SELECT DATE(start_date) as le_date
-                    FROM hrm_leave_requests
-                    WHERE user_id = ? AND status = 'approved' AND leave_type = 'late_early'
-                      AND start_date BETWEEN ? AND ?
-                ");
-                $leStmt->execute([$userId, $startDateOfMonth . ' 00:00:00', $endDateOfMonth . ' 23:59:59']);
-                $waivedDates = $leStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
-
-                $attStmt = $this->db->prepare("
-                    SELECT check_in_date, late_minutes
-                    FROM check_ins
-                    WHERE user_id = ? AND status = 'approved' AND check_in_date BETWEEN ? AND ?
-                ");
-                $attStmt->execute([$userId, $startDateOfMonth, $endDateOfMonth]);
-                $checkinsList = $attStmt->fetchAll(PDO::FETCH_ASSOC);
-
-                // Query all approved leave requests per day to deduct overlapping days from actual check-in workdays
-                $lvListStmt = $this->db->prepare("
-                    SELECT DATE(start_date) as leave_date, SUM(total_days) as leave_days
-                    FROM hrm_leave_requests
-                    WHERE user_id = ? AND status = 'approved' AND leave_type IN ('annual', 'sick', 'compensatory', 'unpaid', 'remote_work', 'special_paid')
-                      AND start_date BETWEEN ? AND ?
-                    GROUP BY DATE(start_date)
-                ");
-                $lvListStmt->execute([$userId, $startDateOfMonth . ' 00:00:00', $endDateOfMonth . ' 23:59:59']);
-                $leaveDaysMap = $lvListStmt->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
+                // 1. Calculate Actual Work Days from pre-fetched check_ins & apply late_early waivers
+                $waivedDates = $waivedDatesMap[$userId] ?? [];
+                $checkinsList = $checkinsByUserMap[$userId] ?? [];
+                $leaveDaysMap = $leaveDaysByUserMap[$userId] ?? [];
 
                 $actualWorkedDays = 0.0;
                 $totalLateMinutes = 0;
@@ -2223,20 +2307,11 @@ class HRMController {
                 $advanceDeduction = (float)($advancesMap[$userId] ?? 0.0);
             }
 
-            // 6b. Overtime calculation (Sum up approved leave requests of type 'overtime' in this month)
+            // 6b. Overtime calculation (from pre-fetched approved leave requests of type 'overtime' in this month)
             $overtimeDays = 0.0;
             $overtimeSalary = 0.0;
             if (!$isSpecialPeriod) {
-                $otStmt = $this->db->prepare("
-                    SELECT SUM(total_days) as ot_days,
-                           SUM(total_days * COALESCE(ot_rate, 1.5)) as weighted_ot_days
-                    FROM hrm_leave_requests
-                    WHERE user_id = ? AND status = 'approved' AND leave_type = 'overtime'
-                      AND (ot_type = 'salary' OR ot_type IS NULL OR ot_type = '')
-                      AND DATE_FORMAT(start_date, '%Y-%m') = ?
-                ");
-                $otStmt->execute([$userId, $monthYear]);
-                $otRow = $otStmt->fetch(PDO::FETCH_ASSOC);
+                $otRow = $overtimeByUserMap[$userId] ?? null;
                 $overtimeDays = (float)($otRow['ot_days'] ?? 0);
                 $weightedOtDays = (float)($otRow['weighted_ot_days'] ?? 0);
 
@@ -2639,7 +2714,7 @@ class HRMController {
         $deadlineSql = date('Y-m-d H:i:s', $deadlineTs);
 
         $tenantId = (int)($auth['tenant_id'] ?? 1);
-        $creatorId = (int)($auth['id'] ?? 0);
+        $creatorId = (int)($auth['user_id'] ?? $auth['id'] ?? 0);
 
         try {
             $this->db->beginTransaction();
@@ -2869,10 +2944,10 @@ class HRMController {
             FROM hrm_leave_requests
             WHERE user_id = ? 
               AND status = 'approved'
-              AND DATE(start_date) <= ? AND DATE(end_date) >= ?
+              AND start_date <= ? AND end_date >= ?
             ORDER BY start_date ASC
         ");
-        $stmtLeaves->execute([$userId, $toDate, $fromDate]);
+        $stmtLeaves->execute([$userId, $toDate . ' 23:59:59', $fromDate . ' 00:00:00']);
         $leaves = $stmtLeaves->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
         $annualDays = 0.0;
@@ -2987,9 +3062,9 @@ class HRMController {
             $stmtOt = $db->prepare("
                 SELECT COALESCE(SUM(total_days * 8), 0.0) FROM hrm_leave_requests 
                 WHERE user_id = ? AND leave_type = 'overtime' AND status = 'approved'
-                  AND DATE(start_date) >= ? AND DATE(start_date) <= ?
+                  AND start_date >= ? AND start_date <= ?
             ");
-            $stmtOt->execute([$userId, $fromDate, $toDate]);
+            $stmtOt->execute([$userId, $fromDate . ' 00:00:00', $toDate . ' 23:59:59']);
             $otHours = (float)($stmtOt->fetchColumn() ?: 0.0);
         } catch (\Throwable $eShifts) {
             error_log('Error querying shifts in getAttendanceConfirmationOverview: ' . $eShifts->getMessage());
@@ -3045,7 +3120,7 @@ class HRMController {
      */
     public function getMyPendingAttendanceConfirmation(array $auth): void {
         $tenantId = (int)($auth['tenant_id'] ?? 1);
-        $userId = (int)($auth['id'] ?? 0);
+        $userId = (int)($auth['user_id'] ?? $auth['id'] ?? 0);
         if ($userId <= 0) respond(401, null, 'Vui lòng đăng nhập', false);
 
         self::autoConfirmExpiredAttendance($this->db, $tenantId);
@@ -3084,7 +3159,7 @@ class HRMController {
      */
     public function confirmMyAttendance(array $auth): void {
         $tenantId = (int)($auth['tenant_id'] ?? 1);
-        $userId = (int)($auth['id'] ?? 0);
+        $userId = (int)($auth['user_id'] ?? $auth['id'] ?? 0);
         if ($userId <= 0) respond(401, null, 'Vui lòng đăng nhập', false);
 
         $b = getBody();

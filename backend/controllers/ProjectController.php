@@ -959,40 +959,41 @@ class ProjectController {
         // Count total deals (contacts at or after opportunity status)
         if (!empty($oppStages)) {
             $placeholders = implode(',', array_fill(0, count($oppStages), '?'));
-            $stmtDeals = $this->db->prepare("SELECT COUNT(*) FROM contacts WHERE project_id = ? AND pipeline_status IN ($placeholders) AND deleted_at IS NULL");
-            $stmtDeals->execute(array_merge([$projectId], $oppStages));
+            $stmtDeals = $this->db->prepare("SELECT COUNT(*) FROM contacts WHERE project_id = ? AND tenant_id = ? AND pipeline_status IN ($placeholders) AND deleted_at IS NULL");
+            $stmtDeals->execute(array_merge([$projectId, $auth['tenant_id']], $oppStages));
             $totalDeals = (int)$stmtDeals->fetchColumn();
         } else {
             $totalDeals = 0;
         }
         
         // Count won deals (configured won status)
-        $stmtWon = $this->db->prepare("SELECT COUNT(*) FROM contacts WHERE project_id = ? AND pipeline_status = ? AND deleted_at IS NULL");
-        $stmtWon->execute([$projectId, $wonStatus]);
+        $stmtWon = $this->db->prepare("SELECT COUNT(*) FROM contacts WHERE project_id = ? AND tenant_id = ? AND pipeline_status = ? AND deleted_at IS NULL");
+        $stmtWon->execute([$projectId, $auth['tenant_id'], $wonStatus]);
         $wonDeals = (int)$stmtWon->fetchColumn();
         
         // Win rate
         $winRate = $totalDeals > 0 ? round(($wonDeals / $totalDeals) * 100) : 0;
         
         // Expected revenue
-        $stmtExpRev = $this->db->prepare("SELECT COALESCE(SUM(expected_revenue), 0) FROM contacts WHERE project_id = ? AND deleted_at IS NULL");
-        $stmtExpRev->execute([$projectId]);
+        $stmtExpRev = $this->db->prepare("SELECT COALESCE(SUM(expected_revenue), 0) FROM contacts WHERE project_id = ? AND tenant_id = ? AND deleted_at IS NULL");
+        $stmtExpRev->execute([$projectId, $auth['tenant_id']]);
         $expectedRevenue = (float)$stmtExpRev->fetchColumn();
         
         // Actual revenue (paid invoices)
         $stmtActRev = $this->db->prepare("
             SELECT COALESCE(SUM(total), 0) 
             FROM invoices 
-            WHERE contact_id IN (SELECT id FROM contacts WHERE project_id = ? AND deleted_at IS NULL)
+            WHERE contact_id IN (SELECT id FROM contacts WHERE project_id = ? AND tenant_id = ? AND deleted_at IS NULL)
+              AND tenant_id = ?
               AND status = 'paid' 
               AND deleted_at IS NULL
         ");
-        $stmtActRev->execute([$projectId]);
+        $stmtActRev->execute([$projectId, $auth['tenant_id'], $auth['tenant_id']]);
         $actualRevenue = (float)$stmtActRev->fetchColumn();
         
         // Total leads (all non-deleted contacts under this project)
-        $stmtLeads = $this->db->prepare("SELECT COUNT(*) FROM contacts WHERE project_id = ? AND deleted_at IS NULL");
-        $stmtLeads->execute([$projectId]);
+        $stmtLeads = $this->db->prepare("SELECT COUNT(*) FROM contacts WHERE project_id = ? AND tenant_id = ? AND deleted_at IS NULL");
+        $stmtLeads->execute([$projectId, $auth['tenant_id']]);
         $totalLeads = (int)$stmtLeads->fetchColumn();
         
         // Audit changelog trail: last 100 actions

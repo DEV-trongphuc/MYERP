@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 319;
+$targetVersion = 320;
 $currentVersion = 186;
 
 // Query current DB version
@@ -3539,9 +3539,9 @@ try {
             $safeAddIndex('activities', 'idx_act_contact_type_status', '`contact_id`, `type`, `status`');
 
             // 2. Contacts (Leads, customers, students)
-            $safeAddIndex('contacts', 'idx_contacts_fast_filter', '`status`, `is_deleted`, `created_at`');
+            $safeAddIndex('contacts', 'idx_contacts_fast_filter', '`status`, `deleted_at`, `created_at`');
             $safeAddIndex('contacts', 'idx_contacts_phone_idx', '`phone`');
-            $safeAddIndex('contacts', 'idx_contacts_assigned_created', '`assigned_to`, `status`, `created_at`');
+            $safeAddIndex('contacts', 'idx_contacts_assigned_created', '`owner_id`, `status`, `created_at`');
 
             // 3. Deposits & Milestones (Sales Orders)
             $safeAddIndex('deposits', 'idx_deposits_status_accountant', '`status`, `accountant_id`, `created_at`');
@@ -3550,14 +3550,14 @@ try {
 
             // 4. Expenses (Purchase Orders & Advances)
             $safeAddIndex('expenses', 'idx_expenses_status_approver', '`status`, `approver_id`, `created_at`');
-            $safeAddIndex('expenses', 'idx_expenses_user_date_cat', '`user_id`, `date`, `category`');
+            $safeAddIndex('expenses', 'idx_expenses_user_date_cat', '`created_by`, `date`, `category`');
 
             // 5. Deals & Pipelines
             $safeAddIndex('deals', 'idx_deals_pipe_stage_status', '`pipeline_id`, `stage_id`, `status`');
             $safeAddIndex('deals', 'idx_deals_owner_created', '`owner_id`, `created_at`');
 
             // 6. Check-ins & Attendance
-            $safeAddIndex('check_ins', 'idx_checkins_user_date_status', '`user_id`, `date`, `status`');
+            $safeAddIndex('check_ins', 'idx_checkins_user_date_status', '`user_id`, `check_in_date`, `status`');
 
             // 7. Notifications
             $safeAddIndex('notifications', 'idx_notif_user_read_created', '`user_id`, `is_read`, `created_at`');
@@ -3604,7 +3604,7 @@ try {
             $safeAddIndex('workspace_tasks', 'idx_wtasks_assignee_status', '`assigned_to`, `status`, `priority`');
 
             // 2. HR Leave & Overtime Requests
-            $safeAddIndex('leave_requests', 'idx_leave_user_status_date', '`user_id`, `status`, `start_date`, `end_date`');
+            $safeAddIndex('hrm_leave_requests', 'idx_leave_user_status_date', '`user_id`, `status`, `start_date`, `end_date`');
             $safeAddIndex('overtime_requests', 'idx_ot_user_status_date', '`user_id`, `status`, `date`');
 
             // 3. Inventory Transactions & Product Catalog
@@ -3691,11 +3691,11 @@ try {
             };
 
             // 1. Attendance logs & Time tracking
-            $safeAddIndex('hrm_attendance_logs', 'idx_att_user_date_status', '`user_id`, `date`, `status`');
-            $safeAddIndex('hrm_attendance_logs', 'idx_att_date_created', '`date`, `created_at`');
+            $safeAddIndex('check_ins', 'idx_att_user_date_status', '`user_id`, `check_in_date`, `status`');
+            $safeAddIndex('check_ins', 'idx_att_date_created', '`check_in_date`, `check_in_time`');
 
             // 2. Activities & Interaction logs
-            $safeAddIndex('activities', 'idx_act_entity_created', '`entity_type`, `entity_id`, `created_at`');
+            $safeAddIndex('activities', 'idx_act_entity_created', '`contact_id`, `deleted_at`, `created_at`');
             $safeAddIndex('activities', 'idx_act_user_created', '`user_id`, `created_at`');
 
             // 3. FairShare Rounds & Allocation
@@ -3713,7 +3713,7 @@ try {
             $safeAddIndex('company_documents', 'idx_comp_doc_entity', '`entity_type`, `entity_id`, `created_at`');
 
             // 7. High-Volume Notifications & System Activity
-            $safeAddIndex('system_notifications', 'idx_notif_user_read_created', '`user_id`, `is_read`, `created_at`');
+            $safeAddIndex('notifications', 'idx_notif_user_read_created', '`user_id`, `is_read`, `created_at`');
 
             // 8. Financial Expenses & POs
             $safeAddIndex('expenses', 'idx_exp_status_created', '`status`, `created_at`');
@@ -3721,7 +3721,7 @@ try {
 
             // 9. Deals & Customer Pipeline
             $safeAddIndex('deals', 'idx_deals_stage_status_created', '`stage_id`, `status`, `created_at`');
-            $safeAddIndex('deals', 'idx_deals_user_stage', '`user_id`, `stage_id`');
+            $safeAddIndex('deals', 'idx_deals_user_stage', '`owner_id`, `stage_id`');
 
             $logMsg("Nâng cấp lên phiên bản 291 hoàn tất: Toàn bộ Composite Indexes giai đoạn 3 đã sẵn sàng!", "success");
         } catch (Throwable $e) {
@@ -3759,14 +3759,14 @@ try {
             $safeAddIndex('notes', 'idx_notes_tenant_entity_id', '`tenant_id`, `entity_type`, `entity_id`, `id`');
 
             // 3. Activities Subquery Index
-            $safeAddIndex('activities', 'idx_activities_tenant_related_del', '`tenant_id`, `related_type`, `related_id`, `deleted_at`, `id`');
+            $safeAddIndex('activities', 'idx_activities_tenant_related_del', '`tenant_id`, `contact_id`, `deleted_at`, `id`');
 
             // 4. HRM Leave Requests / Approvals Index
             $safeAddIndex('hrm_leave_requests', 'idx_leave_requests_pending_eval', '`status`, `user_id`, `created_at`');
             $safeAddIndex('hrm_leave_requests', 'idx_leave_requests_approver_lookup', '`approver_id`, `approver_id_2`, `status_level_1`, `status_level_2`');
 
             // 5. Expenses / Financial Records Index
-            $safeAddIndex('expenses', 'idx_expenses_tenant_status_date', '`tenant_id`, `deleted_at`, `status`, `expense_date`');
+            $safeAddIndex('expenses', 'idx_expenses_tenant_status_date', '`tenant_id`, `deleted_at`, `status`, `date`');
 
             // 6. Audit Logs Lookup Index
             $safeAddIndex('audit_logs', 'idx_audit_logs_resource_fast', '`resource`, `resource_id`, `action`, `created_at`');
@@ -4607,10 +4607,22 @@ try {
         $logMsg("Nâng cấp lên phiên bản 319 hoàn tất.", "success");
     }
 
-    // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '319') ON DUPLICATE KEY UPDATE setting_value = '319'");
+    // --- PHIÊN BẢN 320: TỐI ƯU COMPOSITE INDEXES ĐA CẤP CHO TOÀN BỘ PHÂN HỆ ERP ---
+    if ($currentVersion < 320 || $isForce) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 320: Tối ưu Composite Indexes đa cấp cho toàn bộ phân hệ ERP...", "info");
+        try {
+            require_once __DIR__ . '/migrations/320_optimize_composite_indexes.php';
+            $logMsg("Bổ sung Composite Indexes phiên bản 320 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi chạy migration 320: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 320 hoàn tất.", "success");
+    }
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 319", "success");
+    // Update DB version in system_settings
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '320') ON DUPLICATE KEY UPDATE setting_value = '320'");
+
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 320", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");

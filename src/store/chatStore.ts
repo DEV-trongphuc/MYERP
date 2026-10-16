@@ -951,6 +951,58 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               let buffer = '';
               let serverUserMsg: ChatMessage | null = null;
               let finalizedAiMsg: ChatMessage | null = null;
+              let lastStreamFlushTime = 0;
+              let streamFlushTimer: ReturnType<typeof setTimeout> | null = null;
+              const streamingCreatedAt = new Date().toISOString();
+
+              const flushStreamingChunk = () => {
+                if (streamFlushTimer) {
+                  clearTimeout(streamFlushTimer);
+                  streamFlushTimer = null;
+                }
+                lastStreamFlushTime = Date.now();
+                const snapshotText = accumulatedAiText;
+                const latestAgentSteps = [...streamedSteps];
+                set((state) => {
+                  const currentAgent = state.activeAgentByConvId[activeConversationId] || SPECIALIZED_AGENTS[0];
+                  const currentList = state.messagesByConvId[activeConversationId] || [];
+                  const streamingMsg: ChatMessage & Record<string, any> = {
+                    id: aiTempId,
+                    conversation_id: activeConversationId,
+                    sender_id: 9000001,
+                    sender_name: currentAgent.name || 'SI IDEAS',
+                    sender_avatar: currentAgent.avatar || '/stickers/ideas/ideas_3.webp',
+                    sender_title: currentAgent.roleTitle,
+                    message_type: 'text' as const,
+                    is_ai: 1,
+                    is_mine: false,
+                    is_streaming: true,
+                    status: 'streaming',
+                    content: snapshotText,
+                    created_at: streamingCreatedAt,
+                    agent_steps: latestAgentSteps,
+                    metadata: {
+                      specialist: currentAgent,
+                      streamed_steps: latestAgentSteps
+                    },
+                    reactions: []
+                  };
+                  const hasTemp = currentList.some((m) => m.id === aiTempId);
+                  const nextList = hasTemp
+                    ? currentList.map((m) => (m.id === aiTempId ? streamingMsg : m))
+                    : [...currentList, streamingMsg];
+
+                  return {
+                    isAiThinkingByConvId: { ...state.isAiThinkingByConvId, [activeConversationId]: false },
+                    isAiTypingByConvId: { ...state.isAiTypingByConvId, [activeConversationId]: true },
+                    orchestratorPhaseByConvId: { ...state.orchestratorPhaseByConvId, [activeConversationId]: 'active' },
+                    messagesByConvId: {
+                      ...state.messagesByConvId,
+                      [activeConversationId]: nextList
+                    }
+                  };
+                });
+              };
 
               while (true) {
                 const { done, value } = await reader.read();
@@ -1022,16 +1074,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                               }
                             }));
                           } else if (event.type === 'chunk' && event.delta) {
+                            const isFirstChunk = accumulatedAiText.length === 0;
                             accumulatedAiText += event.delta;
-                            // Buffering text silently without updating message list on every token
-                            // Transition indicator: "Đang suy nghĩ..." -> "Đang soạn tin nhắn..."
-                            set((state) => {
-                              return {
-                                isAiThinkingByConvId: { ...state.isAiThinkingByConvId, [activeConversationId]: false },
-                                isAiTypingByConvId: { ...state.isAiTypingByConvId, [activeConversationId]: true },
-                                orchestratorPhaseByConvId: { ...state.orchestratorPhaseByConvId, [activeConversationId]: 'active' }
-                              };
-                            });
+                            const now = Date.now();
+                            if (isFirstChunk || now - lastStreamFlushTime >= 50) {
+                              flushStreamingChunk();
+                            } else if (!streamFlushTimer) {
+                              streamFlushTimer = setTimeout(() => {
+                                flushStreamingChunk();
+                              }, Math.max(10, 50 - (now - lastStreamFlushTime)));
+                            }
                           } else if (event.type === 'done' && event.ai_message) {
                             finalizedAiMsg = event.ai_message;
                           }
@@ -1044,6 +1096,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 }
 
                 if (done) break;
+              }
+
+              if (streamFlushTimer) {
+                clearTimeout(streamFlushTimer);
+                streamFlushTimer = null;
               }
 
               // Finalize streaming
@@ -1072,7 +1129,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 if (targetAiMsg) {
                   const hasTemp = list.some((m) => m.id === aiTempId);
                   if (hasTemp) {
-                    list = list.map((m) => m.id === aiTempId ? { ...targetAiMsg, is_mine: false, is_streaming: false } : m);
+                    list = list
+                      .filter((m) => m.id === aiTempId || m.id !== targetAiMsg.id)
+                      .map((m) => m.id === aiTempId ? { ...targetAiMsg, is_mine: false, is_streaming: false } : m);
                   } else if (!list.some((m) => m.id === targetAiMsg.id)) {
                     list.push({ ...targetAiMsg, is_mine: false, is_streaming: false });
                   }
@@ -1243,9 +1302,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           if (abortController?.signal?.aborted || err?.name === 'AbortError' || err?.code === 'ERR_CANCELED') {
             set((state) => {
               const currentAgent = state.activeAgentByConvId[activeConversationId] || SPECIALIZED_AGENTS[0];
-              let list = (state.messagesByConvId[activeConversationId] || []).map((m) =>
-                m.id === tempId ? { ...m, is_sending: false } : m
-              );
+              let list = (state.messagesByConvId[activeConversationId] || []).map((m) => {
+                if (m.id === tempId) return { ...m, is_sending: false };
+                if (m.id === aiTempId) {
+                  return {
+                    ...m,
+                    content: `${accumulatedAiText}\n\n*(Đã dừng tạo phản hồi)*`,
+                    is_streaming: false
+                  };
+                }
+                return m;
+              });
               if (accumulatedAiText.trim().length > 0 && !list.some((m) => m.id === aiTempId)) {
                 list = [
                   ...list,

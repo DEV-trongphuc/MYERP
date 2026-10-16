@@ -1873,8 +1873,32 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     fetchMyPendingConfirmation();
   }, [user?.id]);
 
+  const confirmAttendanceInFlightRef = useRef(false);
+  const sendDisputeInFlightRef = useRef(false);
+  const remindPendingInFlightRef = useRef(false);
+  const createConfirmationBatchInFlightRef = useRef(false);
+  const saveAdminCheckInInFlightRef = useRef(false);
+  const submitBulkRequestInFlightRef = useRef(false);
+  const actionRegistrationInFlightRef = useRef(false);
+  const updateStatusInFlightRef = useRef(false);
+  const deleteCheckInInFlightRef = useRef(false);
+  const subSupplementaryInFlightRef = useRef(false);
+
+  const clearAttendanceCalendarCache = () => {
+    try {
+      Object.keys(sessionStorage).forEach(k => {
+        if (k.startsWith('cached_att_cal_')) {
+          sessionStorage.removeItem(k);
+        }
+      });
+    } catch {
+      // ignore storage errors
+    }
+  };
+
   const handleConfirmAttendance = async () => {
-    if (!myConfirmation) return;
+    if (!myConfirmation || confirmingAttendance || confirmAttendanceInFlightRef.current) return;
+    confirmAttendanceInFlightRef.current = true;
     try {
       setConfirmingAttendance(true);
       const res = await api.post('/hrm/attendance-confirmations/confirm', {
@@ -1891,16 +1915,18 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     } catch (e: any) {
       toast.error(e.response?.data?.message || e.message || t('Lỗi khi xác nhận bảng công'));
     } finally {
+      confirmAttendanceInFlightRef.current = false;
       setConfirmingAttendance(false);
     }
   };
 
   const handleSendDispute = async () => {
-    if (!myConfirmation) return;
+    if (!myConfirmation || submittingDispute || sendDisputeInFlightRef.current) return;
     if (!disputeReason.trim()) {
       toast.error(t('Vui lòng nhập chi tiết nội dung khiếu nại hoặc ngày sai lệch'));
       return;
     }
+    sendDisputeInFlightRef.current = true;
     try {
       setSubmittingDispute(true);
       const res = await api.post('/hrm/attendance-confirmations/confirm', {
@@ -1920,6 +1946,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     } catch (e: any) {
       toast.error(e.response?.data?.message || e.message || t('Lỗi khi gửi khiếu nại'));
     } finally {
+      sendDisputeInFlightRef.current = false;
       setSubmittingDispute(false);
     }
   };
@@ -1954,6 +1981,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   };
 
   const handleRemindPending = async (batchId: number) => {
+    if (remindingBatchId !== null || remindPendingInFlightRef.current) return;
+    remindPendingInFlightRef.current = true;
     try {
       setRemindingBatchId(batchId);
       const res = await api.post('/hrm/attendance-confirmations/remind', { batch_id: batchId });
@@ -1966,6 +1995,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     } catch (e: any) {
       toast.error(e.response?.data?.message || e.message || t('Lỗi gửi nhắc nhở'));
     } finally {
+      remindPendingInFlightRef.current = false;
       setRemindingBatchId(null);
     }
   };
@@ -1983,6 +2013,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   };
 
   const handleCreateConfirmationBatch = async () => {
+    if (isCreatingBatch || createConfirmationBatchInFlightRef.current) return;
     let startDate = '';
     let endDate = '';
     if (confPeriodMode === 'month') {
@@ -2018,6 +2049,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       return;
     }
 
+    createConfirmationBatchInFlightRef.current = true;
     setIsCreatingBatch(true);
     const toastId = toast.loading(t('Đang tổng hợp dữ liệu chấm công và tạo đợt đối soát...'));
 
@@ -2098,6 +2130,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     } catch (e: any) {
       toast.error(e.response?.data?.message || e.message || t('Lỗi khi khởi tạo đợt đối soát'), { id: toastId });
     } finally {
+      createConfirmationBatchInFlightRef.current = false;
       setIsCreatingBatch(false);
     }
   };
@@ -2238,7 +2271,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   };
 
   const handleSaveAdminCheckIn = async () => {
-    if (!adminEditModalRow || !selectedDateForDetail) return;
+    if (!adminEditModalRow || !selectedDateForDetail || adminEditSaving || saveAdminCheckInInFlightRef.current) return;
     const row = adminEditModalRow;
 
     if (row.isLockedByLeave) {
@@ -2283,6 +2316,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       return;
     }
 
+    saveAdminCheckInInFlightRef.current = true;
     setAdminEditSaving(true);
     try {
       const res = await api.post('/check-ins/admin-upsert', {
@@ -2298,13 +2332,16 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       if (res.data?.success || res.status === 200) {
         toast.success(t('Đã cập nhật công thành công!'));
         setAdminEditModalRow(null);
+        clearAttendanceCalendarCache();
         fetchCalendarCheckIns();
+        fetchCheckInsList();
       } else {
         toast.error(res.data?.message || t('Lỗi khi cập nhật công'));
       }
     } catch (err: any) {
       toast.error(err.response?.data?.message || err.message || t('Lỗi cập nhật công'));
     } finally {
+      saveAdminCheckInInFlightRef.current = false;
       setAdminEditSaving(false);
     }
   };
@@ -2497,6 +2534,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   };
 
   const handleSubmitBulkRequest = async () => {
+    if (bulkSubmitting || submitBulkRequestInFlightRef.current) return;
     const validDays = suggestedDays.filter(d => !d.is_on_leave && !d.disabled);
     if (validDays.length === 0) {
       toast.error(t('Không có ngày thiếu công hợp lệ nào cần bổ sung (các ngày quét được đều đã có đơn nghỉ phép hoặc đã đủ công).'));
@@ -2507,6 +2545,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       toast.error(t('Vui lòng điền lý do bổ sung cho tất cả các ngày'));
       return;
     }
+    submitBulkRequestInFlightRef.current = true;
     setBulkSubmitting(true);
     try {
       const res = await fetchAPI('check-ins/bulk-request', {
@@ -2528,8 +2567,10 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         toast.success(t('Đã gửi phiếu đề xuất bổ sung công thành công!'));
         setShowBulkCreateModal(false);
         setSuggestedDays([]);
+        clearAttendanceCalendarCache();
         fetchBulkRequests();
         fetchCalendarCheckIns();
+        fetchCheckInsList();
       } else {
         toast.error(res?.message || t('Lỗi gửi phiếu đề xuất'));
       }
@@ -2537,6 +2578,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       console.error(err);
       toast.error(t('Lỗi kết nối máy chủ'));
     } finally {
+      submitBulkRequestInFlightRef.current = false;
       setBulkSubmitting(false);
     }
   };
@@ -2560,7 +2602,10 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         setSelectedBulkRequest(null);
         setBulkAdminNote('');
         setSelectedDetailIds([]);
+        clearAttendanceCalendarCache();
         fetchBulkRequests();
+        fetchCalendarCheckIns();
+        fetchCheckInsList();
       } else {
         toast.error(res?.message || t('Lỗi xử lý phê duyệt'));
       }
@@ -3063,6 +3108,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   }, [showLeaveDrawer]);
 
   const handleApproveRegistration = async (id: number, shiftType: string) => {
+    if (actioningRegId !== null || actionRegistrationInFlightRef.current) return;
+    actionRegistrationInFlightRef.current = true;
     setActioningRegId(id);
     try {
       const res = await fetchAPI('approve_shift_registration', {
@@ -3079,11 +3126,14 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     } catch (err: any) {
       toast.error(t('Lỗi: ') + err.message);
     } finally {
+      actionRegistrationInFlightRef.current = false;
       setActioningRegId(null);
     }
   };
 
   const handleRejectRegistration = async (id: number, shiftType: string) => {
+    if (actioningRegId !== null || actionRegistrationInFlightRef.current) return;
+    actionRegistrationInFlightRef.current = true;
     setActioningRegId(id);
     try {
       const res = await fetchAPI('reject_shift_registration', {
@@ -3100,16 +3150,20 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     } catch (err: any) {
       toast.error(t('Lỗi: ') + err.message);
     } finally {
+      actionRegistrationInFlightRef.current = false;
       setActioningRegId(null);
     }
   };
 
   const handleUpdateStatus = async (id: number, status: 'approved' | 'rejected', reason?: string) => {
+    if (actionSubmittingId !== null || updateStatusInFlightRef.current) return;
+    updateStatusInFlightRef.current = true;
     setActionSubmittingId(id);
     try {
       const res = await api.put(`/check-ins/${id}`, { status, reason });
       if (res.data && (res.data.success || res.status === 200)) {
         toast.success(status === 'approved' ? t('Đã duyệt chấm công thành công') : t('Đã từ chối chấm công'));
+        clearAttendanceCalendarCache();
         fetchCheckInsList();
         if (viewMode === 'calendar') {
           fetchCalendarCheckIns();
@@ -3121,6 +3175,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     } catch (err: any) {
       toast.error(err.response?.data?.message || t('Lỗi: ') + err.message);
     } finally {
+      updateStatusInFlightRef.current = false;
       setActionSubmittingId(null);
     }
   };
@@ -3137,6 +3192,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       });
       if (res && (res.success || res.status === 200 || !res.error)) {
         toast.success(status === 'approved' ? t('Đã duyệt đơn xin phép thành công!') : t('Đã từ chối đơn xin phép.'));
+        clearAttendanceCalendarCache();
         fetchLeaves();
         fetchCalendarCheckIns();
         fetchCheckInsList();
@@ -3157,7 +3213,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   };
 
   const handleDeleteCheckIn = async () => {
-    if (!deleteId || isDeleting) return;
+    if (!deleteId || isDeleting || deleteCheckInInFlightRef.current) return;
+    deleteCheckInInFlightRef.current = true;
     setIsDeleting(true);
     try {
       const res = await fetchAPI(`check-ins/${deleteId}`, {
@@ -3166,6 +3223,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       if (res.success) {
         toast.success(t('Đã xóa bản ghi chấm công thành công!'));
         setConfirmDeleteOpen(false);
+        clearAttendanceCalendarCache();
         fetchCheckInsList();
         if (viewMode === 'calendar') {
           fetchCalendarCheckIns();
@@ -3176,16 +3234,19 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     } catch (err: any) {
       toast.error(t('Lỗi kết nối: ') + err.message);
     } finally {
+      deleteCheckInInFlightRef.current = false;
       setIsDeleting(false);
       setDeleteId(null);
     }
   };
 
   const handleSubSupplementary = async () => {
+    if (suppSubmitting || subSupplementaryInFlightRef.current) return;
     if (!suppReason.trim()) {
       toast.error(t('Vui lòng điền lý do/ghi chú bổ sung'));
       return;
     }
+    subSupplementaryInFlightRef.current = true;
     setSuppSubmitting(true);
     try {
       const res = await fetchAPI('check-ins', {
@@ -3200,6 +3261,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       if (res.success) {
         toast.success(t('Đã gửi yêu cầu chấm công bổ sung thành công! Đang chờ admin duyệt.'));
         setSuppReason('');
+        clearAttendanceCalendarCache();
         fetchCalendarCheckIns();
         fetchCheckInsList();
         fetchMyPendingConfirmation();
@@ -3209,6 +3271,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     } catch (err: any) {
       toast.error(t('Lỗi: ') + err.message);
     } finally {
+      subSupplementaryInFlightRef.current = false;
       setSuppSubmitting(false);
     }
   };

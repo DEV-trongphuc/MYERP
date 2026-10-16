@@ -16,9 +16,8 @@ if ($conn->connect_error) {
 }
 
 $conn->set_charset("utf8mb4");
-$conn->query("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci");
-// BUG-FIX: Đảm bảo MySQL chạy cùng múi giờ với PHP để hàm NOW(), CURDATE() thống kê chính xác
-$conn->query("SET time_zone = '+07:00'");
+// BUG-FIX: Đảm bảo MySQL chạy cùng múi giờ với PHP và collation chuẩn trong 1 round-trip duy nhất
+$conn->query("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci, time_zone = '+07:00'");
 
 // Global helper: Log Zalo/Email/Telegram communications to database
 if (!function_exists('log_communication')) {

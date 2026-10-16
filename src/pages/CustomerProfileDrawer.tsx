@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense, useRe
 import toast from 'react-hot-toast';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, User, Users, UserPlus, Phone, PhoneOff, Mail, MapPin, Briefcase, Plus, Search, Send, History, CheckSquare, DollarSign, HelpCircle, FileText, ShoppingCart, Tag as TagIcon, Target, Pencil, Trash2, LifeBuoy, AlertCircle, AlertTriangle, Clock, UserCheck, Activity, Calendar, CheckCircle2, ChevronLeft, ChevronRight, ChevronDown, Check, Camera, Loader2, MessageSquare, PenTool, Lightbulb, Upload, Paperclip, CreditCard, Ban, ShieldAlert, Copy, Folder, FolderPlus, ArrowRightLeft, List, LayoutGrid, RotateCcw, RefreshCw, Layers, Save, LogOut, XCircle, Eye, TrendingUp, Wallet, Lock, Zap, Link2, BookOpen, ExternalLink, Archive, Download, GraduationCap, Bell, Sparkles } from 'lucide-react';
+import { X, User, Users, UserPlus, Phone, PhoneOff, Mail, MapPin, Briefcase, Plus, Search, Send, History, CheckSquare, DollarSign, HelpCircle, FileText, ShoppingCart, Tag as TagIcon, Target, Pencil, Trash2, LifeBuoy, AlertCircle, AlertTriangle, Clock, UserCheck, Activity, Calendar, CheckCircle2, ChevronLeft, ChevronRight, ChevronDown, Check, Camera, Loader2, MessageSquare, PenTool, Lightbulb, Upload, Paperclip, CreditCard, Ban, ShieldAlert, Copy, Folder, FolderPlus, ArrowRightLeft, ArrowRight, Star, Thermometer, List, LayoutGrid, RotateCcw, RefreshCw, Layers, Save, LogOut, XCircle, Eye, TrendingUp, Wallet, Lock, Zap, Link2, BookOpen, ExternalLink, Archive, Download, GraduationCap, Bell, Sparkles } from 'lucide-react';
 import JSZip from 'jszip';
 import { triggerFullConfetti } from '../utils/confettiHelper';
 import { LeadScoreRing } from '../components/ui/LeadScoreRing';
@@ -3792,6 +3792,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && previewDocImage) {
+        e.stopImmediatePropagation();
         setPreviewDocImage(null);
       }
     };
@@ -4928,7 +4929,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                   fontWeight: 600,
                   color: '#1e40af',
                   background: '#eff6ff',
-                  border: '1px solid #bfdbfe',
                   padding: '1px 8px',
                   borderRadius: '10px',
                   maxWidth: '220px',
@@ -5550,12 +5550,28 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       reschedulingMeeting ||
       cancellingMeeting ||
       editingNote ||
-      editingActivity
+      editingActivity ||
+      pipelineModal.isOpen ||
+      requiredDocsUploadModal.isOpen ||
+      isSignModalOpen ||
+      Boolean(viewExpense) ||
+      Boolean(rejectingExpense) ||
+      showMobilePipelineSelector ||
+      Boolean(selectedTaskForDetails) ||
+      Boolean(selectedTicketDetail)
     );
 
     if (isAnySubModalOpen) {
       return pushOverlay('customer-profile-submodal', () => {
         if (previewDocImage) { setPreviewDocImage(null); return; }
+        if (rejectingExpense) { setRejectingExpense(null); return; }
+        if (viewExpense) { setViewExpense(null); return; }
+        if (isSignModalOpen) { setIsSignModalOpen(false); return; }
+        if (requiredDocsUploadModal.isOpen) { setRequiredDocsUploadModal(prev => ({ ...prev, isOpen: false })); return; }
+        if (pipelineModal.isOpen) { setPipelineModal(prev => ({ ...prev, isOpen: false })); return; }
+        if (showMobilePipelineSelector) { setShowMobilePipelineSelector(false); return; }
+        if (selectedTaskForDetails) { setSelectedTaskForDetails(null); return; }
+        if (selectedTicketDetail) { setSelectedTicketDetail(null); return; }
         if (showQuoteEditor) { setShowQuoteEditor(false); return; }
         if (showExpenseModal) { setShowExpenseModal(false); return; }
         if (showExtractIdModal) { setShowExtractIdModal(false); return; }
@@ -5598,7 +5614,15 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     reschedulingMeeting,
     cancellingMeeting,
     editingNote,
-    editingActivity
+    editingActivity,
+    pipelineModal.isOpen,
+    requiredDocsUploadModal.isOpen,
+    isSignModalOpen,
+    viewExpense,
+    rejectingExpense,
+    showMobilePipelineSelector,
+    selectedTaskForDetails,
+    selectedTicketDetail
   ]);
 
   useEffect(() => {
@@ -7141,7 +7165,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
             <Clock size={16} />
             <span>ĐANG TRONG LUỒNG NUÔI DƯỠNG (NURTURE)</span>
             {formData.next_followup_date && (
-              <span style={{ fontWeight: 600, color: 'var(--color-text)', background: 'var(--color-surface)', padding: '2px 8px', borderRadius: '6px', border: '1px solid rgba(245, 158, 11, 0.3)' }}>
+              <span style={{ fontWeight: 600, color: 'var(--color-text)', background: 'var(--color-surface)', padding: '2px 8px', borderRadius: '6px' }}>
                 Hẹn follow-up: {new Date(formData.next_followup_date).toLocaleDateString('vi-VN')} {new Date(formData.next_followup_date).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
               </span>
             )}
@@ -8500,8 +8524,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                       <Users size={15} />
                     </div>
                     <div>
-                      <span style={{ fontWeight: 800, color: '#78350f', letterSpacing: '0.2px' }}>
-                        ⚠️ CẢNH BÁO TRÙNG LẶP CHĂM SÓC:
+                      <span style={{ fontWeight: 800, color: '#78350f', letterSpacing: '0.2px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <AlertTriangle size={14} style={{ flexShrink: 0 }} />
+                        <span>CẢNH BÁO TRÙNG LẶP CHĂM SÓC:</span>
                       </span>{' '}
                       <span>
                         Đồng nghiệp <strong style={{ color: '#1e293b' }}>{activeViewers.map(v => v.full_name).join(', ')}</strong> cũng đang cùng mở xem hồ sơ này.
@@ -8518,11 +8543,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                     background: 'rgba(255, 255, 255, 0.85)', 
                     padding: '4px 12px', 
                     borderRadius: '20px', 
-                    border: '1px solid rgba(245, 158, 11, 0.3)', 
                     whiteSpace: 'nowrap',
                     boxShadow: '0 1px 2px rgba(0, 0, 0, 0.04)'
                   }}>
-                    <span>💡 Lưu ý: Tránh gọi điện hoặc sửa đè dữ liệu cùng lúc</span>
+                    <Lightbulb size={13} style={{ flexShrink: 0 }} />
+                    <span>Lưu ý: Tránh gọi điện hoặc sửa đè dữ liệu cùng lúc</span>
                   </div>
                 </div>
               )}
@@ -11119,8 +11144,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                               padding: '2px 6px', 
                                               borderRadius: '4px',
                                               textTransform: 'uppercase',
-                                              letterSpacing: '0.02em',
-                                              border: '1px solid #fed7aa'
+                                              letterSpacing: '0.02em'
                                             }}>
                                               7 ngày tới
                                             </span>
@@ -11814,29 +11838,29 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                         {(n.channel || n.stuck_tag || n.sale_temperature || n.note_type === 'quality' || n.documents_sent) && (
                                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px', marginBottom: '4px' }}>
                                             {n.channel && (
-                                              <span style={{ fontSize: '0.6875rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border-light)', color: 'var(--color-text-muted)' }}>
-                                                {n.channel === 'noi_dat' ? '🟫 Nồi Đất' : n.channel === 'noi_dong' ? '🟨 Nồi Đồng' : '🟥 Nồi Áp Suất'}
+                                              <span style={{ fontSize: '0.6875rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', background: 'var(--color-bg)', color: 'var(--color-text-muted)' }}>
+                                                {n.channel === 'noi_dat' ? 'Nồi Đất' : n.channel === 'noi_dong' ? 'Nồi Đồng' : 'Nồi Áp Suất'}
                                                 {n.channel === 'noi_dong' && n.duration_minutes ? ` (${n.duration_minutes}m)` : ''}
                                               </span>
                                             )}
                                             {n.note_type === 'quality' && (
-                                              <span style={{ fontSize: '0.6875rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', background: 'rgba(16, 185, 129, 0.1)', color: 'var(--color-success)', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
-                                                ⭐ Chất lượng
+                                              <span style={{ fontSize: '0.6875rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', background: 'rgba(16, 185, 129, 0.1)', color: 'var(--color-success)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                <Star size={11} /> Chất lượng
                                               </span>
                                             )}
                                             {n.stuck_tag && (
-                                              <span style={{ fontSize: '0.6875rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--color-danger)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
-                                                📍 Vướng: {n.stuck_tag === 'sales' ? 'Sales' : n.stuck_tag === 'project' ? 'Chương trình' : n.stuck_tag === 'unit' ? 'Căn' : n.stuck_tag === 'smooth' ? 'Đang xuôi' : n.stuck_tag}
+                                              <span style={{ fontSize: '0.6875rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--color-danger)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                <MapPin size={11} /> Vướng: {n.stuck_tag === 'sales' ? 'Sales' : n.stuck_tag === 'project' ? 'Chương trình' : n.stuck_tag === 'unit' ? 'Căn' : n.stuck_tag === 'smooth' ? 'Đang xuôi' : n.stuck_tag}
                                               </span>
                                             )}
                                             {n.sale_temperature && tempLabels[n.sale_temperature] && (
-                                              <span style={{ fontSize: '0.6875rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', background: tempLabels[n.sale_temperature].bg, color: tempLabels[n.sale_temperature].color, border: `1px solid ${tempLabels[n.sale_temperature].color}33` }}>
-                                                🌡️ {tempLabels[n.sale_temperature].label}
+                                              <span style={{ fontSize: '0.6875rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', background: tempLabels[n.sale_temperature].bg, color: tempLabels[n.sale_temperature].color, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                <Thermometer size={11} /> {tempLabels[n.sale_temperature].label}
                                               </span>
                                             )}
                                             {n.documents_sent && (
-                                              <span style={{ fontSize: '0.6875rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.2)' }} title={n.documents_sent}>
-                                                📁 Đã gửi tài liệu
+                                              <span style={{ fontSize: '0.6875rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', display: 'inline-flex', alignItems: 'center', gap: '4px' }} title={n.documents_sent}>
+                                                <Folder size={11} /> Đã gửi tài liệu
                                               </span>
                                             )}
                                           </div>
@@ -12386,11 +12410,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                       
                                       {/* Status Badge */}
                                       {sh.signed ? (
-                                        <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.08)', color: 'var(--color-success)', border: '1px solid rgba(16, 185, 129, 0.2)', padding: '4px 10px', borderRadius: '30px', fontSize: '0.7rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
+                                        <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.08)', color: 'var(--color-success)', padding: '4px 10px', borderRadius: '30px', fontSize: '0.7rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
                                           <CheckCircle2 size={12} /> Đã ký
                                         </span>
                                       ) : (
-                                        <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.08)', color: 'var(--color-warning)', border: '1px solid rgba(245, 158, 11, 0.2)', padding: '4px 10px', borderRadius: '30px', fontSize: '0.7rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
+                                        <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.08)', color: 'var(--color-warning)', padding: '4px 10px', borderRadius: '30px', fontSize: '0.7rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
                                           <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: 'var(--color-warning)' }} /> Chờ ký
                                         </span>
                                       )}
@@ -13298,8 +13322,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                           padding: '2px 6px',
                                           borderRadius: '6px',
                                           background: item.type === 'Demographic' ? 'rgba(59, 130, 246, 0.08)' : item.type === 'Behavioral' ? 'rgba(16, 185, 129, 0.08)' : item.type === 'Decay' ? 'rgba(239, 68, 68, 0.08)' : 'rgba(107, 114, 128, 0.08)',
-                                          color: item.type === 'Demographic' ? '#2563eb' : item.type === 'Behavioral' ? '#059669' : item.type === 'Decay' ? '#dc2626' : '#4b5563',
-                                          border: `1px solid ${item.type === 'Demographic' ? 'rgba(59, 130, 246, 0.15)' : item.type === 'Behavioral' ? 'rgba(16, 185, 129, 0.15)' : item.type === 'Decay' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(107, 114, 128, 0.15)'}`
+                                          color: item.type === 'Demographic' ? '#2563eb' : item.type === 'Behavioral' ? '#059669' : item.type === 'Decay' ? '#dc2626' : '#4b5563'
                                         }}>{item.type}</span>
                                       </td>
                                       <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 800, color: item.pts > 0 ? '#10b981' : '#ef4444' }}>
@@ -16109,11 +16132,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           Chuyển giai đoạn Pipeline
                         </h3>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem' }}>
-                          <span style={{ padding: '1px 6px', borderRadius: '4px', background: 'var(--color-bg)', color: 'var(--color-text-muted)', fontWeight: 600, border: '1px solid var(--color-border)' }}>
+                          <span style={{ padding: '1px 6px', borderRadius: '4px', background: 'var(--color-bg)', color: 'var(--color-text-muted)', fontWeight: 600 }}>
                             {currentStage?.name || 'Hiện tại'}
                           </span>
-                          <span style={{ color: 'var(--color-text-muted)' }}>→</span>
-                          <span style={{ padding: '1px 8px', borderRadius: '4px', background: `${targetColor}18`, color: targetColor, fontWeight: 700, border: `1px solid ${targetColor}40` }}>
+                          <span style={{ color: 'var(--color-text-muted)', display: 'inline-flex', alignItems: 'center' }}><ArrowRight size={14} /></span>
+                          <span style={{ padding: '1px 8px', borderRadius: '4px', background: `${targetColor}18`, color: targetColor, fontWeight: 700 }}>
                             {targetStage.name}
                           </span>
                         </div>
@@ -17550,7 +17573,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'block' }}>{u.email}</span>
                               </div>
                             </div>
-                            <span className="badge warning" style={{ fontSize: '0.65rem' }}>💡 Trùng khách</span>
+                            <span className="badge warning" style={{ fontSize: '0.65rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Lightbulb size={11} /> Trùng khách</span>
                           </div>
                         );
                       })}
@@ -18258,8 +18281,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                   </span>
                 )}
               </div>
-              <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '4px', display: 'block' }}>
-                💡 Nhấn <strong>Enter</strong> để lưu nhanh, phần mở rộng ({renameDocModal.ext || 'gốc'}) được tự động giữ nguyên.
+              <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Lightbulb size={12} style={{ flexShrink: 0 }} />
+                <span>Nhấn <strong>Enter</strong> để lưu nhanh, phần mở rộng ({renameDocModal.ext || 'gốc'}) được tự động giữ nguyên.</span>
               </span>
             </div>
 
@@ -18743,7 +18767,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         <CustomModal
           isOpen={showAcademicEmailModal}
           onClose={() => setShowAcademicEmailModal(false)}
-          title="✉️ Gửi Email Tiếp nhận học viên & Hướng dẫn học tập"
+          title="Gửi Email Tiếp nhận học viên & Hướng dẫn học tập"
           width="780px"
           zIndex={effectiveZIndex + 25}
         >
@@ -18769,7 +18793,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
             {/* Program Selection Dropdown */}
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label" style={{ fontWeight: 700, fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                🎓 Chương trình đào tạo áp dụng mẫu email <span style={{ color: 'var(--color-danger)' }}>*</span>
+                <GraduationCap size={14} /> Chương trình đào tạo áp dụng mẫu email <span style={{ color: 'var(--color-danger)' }}>*</span>
               </label>
               <CustomSelect
                 options={ACADEMIC_PROGRAM_OPTIONS.map(opt => ({
@@ -19034,7 +19058,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         <CustomModal
           isOpen={studyStatusModal.isOpen}
           onClose={() => !isSubmittingStudyStatus && setStudyStatusModal(prev => ({ ...prev, isOpen: false }))}
-          title="🎓 Chuyển trạng thái học tập của học viên"
+          title="Chuyển trạng thái học tập của học viên"
           width="560px"
           zIndex={effectiveZIndex + 25}
         >
@@ -19069,12 +19093,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                       fontSize: '0.78rem',
                       fontWeight: 700,
                       background: cur.bg,
-                      color: cur.color,
-                      border: `1px solid ${cur.color}40`
+                      color: cur.color
                     }}>
                       {cur.label}
                     </span>
-                    <span style={{ color: 'var(--color-text-muted)', fontWeight: 700 }}>➔</span>
+                    <span style={{ color: 'var(--color-text-muted)', fontWeight: 700, display: 'inline-flex', alignItems: 'center' }}><ArrowRight size={14} /></span>
                     <span style={{
                       padding: '3px 12px',
                       borderRadius: '12px',
@@ -19082,7 +19105,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                       fontWeight: 800,
                       background: target.bg,
                       color: target.color,
-                      border: `1px solid ${target.color}60`,
                       boxShadow: `0 2px 6px ${target.color}20`
                     }}>
                       {target.label}

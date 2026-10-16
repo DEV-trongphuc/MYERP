@@ -141,7 +141,7 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
                   borderRadius: '6px',
                   background: THEME_BG_LIGHT,
                   color: THEME_ACCENT,
-                  border: `1px solid ${THEME_BORDER_LIGHT}`
+                  border: 'none'
                 }}>
                   {currentAgent.badge}
                 </span>

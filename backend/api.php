@@ -4607,7 +4607,7 @@ switch ($action) {
                 LEFT JOIN consultants c ON dl.assigned_to = c.id
                 LEFT JOIN distribution_rounds dr ON dl.round_id = dr.id
                 LEFT JOIN data_reports rep ON rep.lead_id = l.id AND rep.consultant_id = c.id
-                WHERE DATE(dl.received_at) = '$escapedDate' 
+                WHERE dl.received_at >= '$escapedDate 00:00:00' AND dl.received_at <= '$escapedDate 23:59:59'
                   AND dl.lead_id IS NOT NULL 
                   AND dl.status IN ('assigned', 'compensation', 'rule_6_month', 'pending_work_hours', 'databank_claim', 'fallback', 'success')
                   AND l.is_accepted = 1
@@ -4643,7 +4643,7 @@ switch ($action) {
                 LEFT JOIN consultants c ON dl.assigned_to = c.id
                 LEFT JOIN distribution_rounds dr ON dl.round_id = dr.id
                 LEFT JOIN leads l ON dl.lead_id = l.id
-                WHERE DATE(dl.received_at) = '$escapedDate' 
+                WHERE dl.received_at >= '$escapedDate 00:00:00' AND dl.received_at <= '$escapedDate 23:59:59'
                   AND dl.lead_id IS NOT NULL 
                   AND dl.status IN ('assigned', 'compensation', 'rule_6_month', 'pending_work_hours', 'databank_claim', 'fallback', 'success')
                   AND l.is_accepted = 1
@@ -4679,7 +4679,7 @@ switch ($action) {
             FROM data_reports r
             LEFT JOIN leads l ON r.lead_id = l.id
             LEFT JOIN consultants c ON r.consultant_id = c.id
-            WHERE DATE(r.created_at) = '$escapedDate' $ticketFilter
+            WHERE r.created_at >= '$escapedDate 00:00:00' AND r.created_at <= '$escapedDate 23:59:59' $ticketFilter
         ");
 
         $tickets = [];
@@ -4720,7 +4720,7 @@ switch ($action) {
             FROM distribution_logs dl
             LEFT JOIN leads l ON dl.lead_id = l.id
             $blacklistJoin
-            WHERE DATE(dl.received_at) = '$escapedDate' AND dl.status IN ('blacklisted', 'error', 'no_consultant', 'reminder', 'duplicate') $blacklistFilter
+            WHERE dl.received_at >= '$escapedDate 00:00:00' AND dl.received_at <= '$escapedDate 23:59:59' AND dl.status IN ('blacklisted', 'error', 'no_consultant', 'reminder', 'duplicate') $blacklistFilter
         ");
 
         $blacklistLogs = [];
@@ -4752,7 +4752,7 @@ switch ($action) {
                 SELECT i.id, i.invoice_number, i.total, i.status, i.issue_date, ct.full_name, i.deal_id, ct.avatar_url
                 FROM invoices i
                 LEFT JOIN contacts ct ON i.contact_id = ct.id
-                WHERE DATE(i.issue_date) = '$escapedDate' AND i.deleted_at IS NULL $pendingFilterSO
+                WHERE i.issue_date >= '$escapedDate 00:00:00' AND i.issue_date <= '$escapedDate 23:59:59' AND i.deleted_at IS NULL $pendingFilterSO
                 ORDER BY i.id DESC
             ");
             if ($invRes) {
@@ -4783,7 +4783,7 @@ switch ($action) {
                 FROM deposit_milestones dm
                 JOIN deposits d ON dm.deposit_id = d.id
                 LEFT JOIN contacts ct ON d.contact_id = ct.id
-                WHERE DATE(dm.expected_pay_date) = '$escapedDate' 
+                WHERE dm.expected_pay_date >= '$escapedDate 00:00:00' AND dm.expected_pay_date <= '$escapedDate 23:59:59'
                   AND dm.status = 'pending' 
                   AND d.status != 'cancelled'
                 ORDER BY dm.id DESC
@@ -13195,23 +13195,6 @@ switch ($action) {
 
 
     case 'get_accounts':
-        // Auto-sync accounts to users table safely
-        @$conn->query("
-            INSERT INTO users (id, tenant_id, email, full_name, role, phone, avatar_url, job_title, is_active, status, created_at)
-            SELECT a.id, 1, a.email, a.name, a.role, a.phone, a.avatar, NULLIF(JSON_UNQUOTE(JSON_EXTRACT(a.address, '$.erp_profile.job_title')), ''), a.is_active, IF(a.is_active = 1, 'active', 'inactive'), a.created_at
-            FROM accounts a
-            ON DUPLICATE KEY UPDATE
-              email = VALUES(email),
-              full_name = VALUES(full_name),
-              role = VALUES(role),
-              phone = VALUES(phone),
-              avatar_url = COALESCE(users.avatar_url, VALUES(avatar_url)),
-              job_title = COALESCE(NULLIF(VALUES(job_title), ''), users.job_title),
-              is_active = VALUES(is_active),
-              status = VALUES(status)
-        ");
-        @$conn->query("DELETE FROM purchase_order_items WHERE po_id IN (SELECT id FROM purchase_orders WHERE po_number LIKE 'PO-TEST-%' OR notes LIKE '%Test PO Audit%')");
-        @$conn->query("DELETE FROM purchase_orders WHERE po_number LIKE 'PO-TEST-%' OR notes LIKE '%Test PO Audit%'");
         $res = $conn->query("SELECT id, username, name, email, role, created_at, zalo_chat_id, telegram_chat_id, is_confirmed, last_login, avatar, signature_url, dob, gender, citizen_id, address, bank_name, bank_account, phone, is_active, team_id FROM accounts ORDER BY created_at DESC");
         $data = [];
         while ($row = $res->fetch_assoc()) {

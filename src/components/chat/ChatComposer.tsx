@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useImperativeHandle, forwardRef, useMemo } from 'react';
 import { 
   Smile, Sparkles, Image as ImageIcon, Paperclip, Briefcase, 
-  Send, X, Loader2, Film, CornerDownRight, ExternalLink, Globe, Square
+  Send, X, Loader2, Film, CornerDownRight, ExternalLink, Globe, Square,
+  Target, DollarSign, Clock, ClipboardList, PenTool, Trophy, Package
 } from 'lucide-react';
 import { useChatStore } from '../../store/chatStore';
 import { Avatar } from '../ui/Avatar';
@@ -17,7 +18,7 @@ interface SlashCommand {
   command: string;
   label: string;
   description: string;
-  icon: string;
+  icon: React.ReactNode;
   template: string;
   category: 'crm' | 'finance' | 'hrm' | 'tasks' | 'system';
 }
@@ -27,7 +28,7 @@ const AI_SLASH_COMMANDS: SlashCommand[] = [
     command: '/lead',
     label: 'Truy vấn CRM Leads đa tầng',
     description: 'Lọc học viên theo chương trình, giai đoạn, tiền cọc & nguồn',
-    icon: '🎯',
+    icon: <Target size={15} />,
     template: 'Lọc dữ liệu học viên chương trình MBA theo giai đoạn và tiền cọc',
     category: 'crm'
   },
@@ -35,7 +36,7 @@ const AI_SLASH_COMMANDS: SlashCommand[] = [
     command: '/po',
     label: 'Phân tích Chi phí & PO',
     description: 'Bóc tách chi phí, đề xuất PO, trễ hạn & ngân sách phòng ban',
-    icon: '💰',
+    icon: <DollarSign size={15} />,
     template: 'Phân tích chi phí và đề xuất ngân sách tháng này, kiểm tra khoản trễ hạn',
     category: 'finance'
   },
@@ -43,7 +44,7 @@ const AI_SLASH_COMMANDS: SlashCommand[] = [
     command: '/chamcong',
     label: 'Tình hình chấm công hôm nay',
     description: 'Xem ai có mặt tại văn phòng, ai WFH, ai chưa check-in',
-    icon: '⏰',
+    icon: <Clock size={15} />,
     template: 'Tình hình đi làm và chấm công hôm nay thế nào?',
     category: 'hrm'
   },
@@ -51,7 +52,7 @@ const AI_SLASH_COMMANDS: SlashCommand[] = [
     command: '/viec',
     label: 'Công việc & Deadline của tôi',
     description: 'Xem các task đang mở, việc trễ hạn hoặc sắp tới hạn',
-    icon: '📋',
+    icon: <ClipboardList size={15} />,
     template: 'Xem các công việc của tôi đang mở hoặc sắp trễ hạn',
     category: 'tasks'
   },
@@ -59,7 +60,7 @@ const AI_SLASH_COMMANDS: SlashCommand[] = [
     command: '/duyet',
     label: 'Đơn từ & Đề xuất chờ duyệt',
     description: 'Kiểm tra phiếu nghỉ phép, tạm ứng, PO đang chờ tôi duyệt',
-    icon: '✍️',
+    icon: <PenTool size={15} />,
     template: 'Kiểm tra các đơn và đề xuất đang chờ tôi phê duyệt',
     category: 'hrm'
   },
@@ -67,7 +68,7 @@ const AI_SLASH_COMMANDS: SlashCommand[] = [
     command: '/leaderboard',
     label: 'Bảng xếp hạng Doanh số Sale',
     description: 'Xem xếp hạng doanh số tư vấn tuyển sinh tháng này',
-    icon: '🏆',
+    icon: <Trophy size={15} />,
     template: 'Bảng xếp hạng doanh số sale tháng này',
     category: 'crm'
   },
@@ -75,7 +76,7 @@ const AI_SLASH_COMMANDS: SlashCommand[] = [
     command: '/kho',
     label: 'Cảnh báo tồn kho & Quà tặng',
     description: 'Kiểm tra vật phẩm tuyển sinh sắp hết hàng',
-    icon: '📦',
+    icon: <Package size={15} />,
     template: 'Kiểm tra cảnh báo tồn kho và quà phẩm tuyển sinh',
     category: 'system'
   },
@@ -83,7 +84,7 @@ const AI_SLASH_COMMANDS: SlashCommand[] = [
     command: '/clear',
     label: 'Làm sạch cửa sổ trò chuyện',
     description: 'Xóa lịch sử tin nhắn tạm thời để bắt đầu chủ đề mới',
-    icon: '🧹',
+    icon: <Sparkles size={15} />,
     template: 'CLEAR_ACTION',
     category: 'system'
   }
@@ -125,13 +126,14 @@ const ComposerLinkPreview: React.FC<{ url: string; onDismiss: () => void }> = ({
         marginBottom: '8px',
         padding: '8px 12px',
         borderRadius: '10px',
-        background: '#1e293b',
-        color: '#94a3b8',
+        background: '#ffffff',
+        color: '#64748b',
+        border: '1px solid #e2e8f0',
         fontSize: '0.74rem',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+        boxShadow: '0 8px 24px -4px rgba(15, 23, 42, 0.10)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} />
@@ -140,7 +142,7 @@ const ComposerLinkPreview: React.FC<{ url: string; onDismiss: () => void }> = ({
         <button
           type="button"
           onClick={onDismiss}
-          style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 0 }}
+          style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', padding: 0 }}
         >
           <X size={14} />
         </button>
@@ -156,10 +158,11 @@ const ComposerLinkPreview: React.FC<{ url: string; onDismiss: () => void }> = ({
       marginBottom: '8px',
       padding: '10px 14px',
       borderRadius: '10px',
-      background: '#1e293b',
-      borderLeft: '3.5px solid #38bdf8',
-      color: '#ffffff',
-      boxShadow: '0 4px 14px rgba(0,0,0,0.2)',
+      background: '#ffffff',
+      border: '1px solid #e2e8f0',
+      borderLeft: '3.5px solid #0284c7',
+      color: '#0f172a',
+      boxShadow: '0 8px 24px -4px rgba(15, 23, 42, 0.10)',
       display: 'flex',
       flexDirection: 'column',
       gap: '3px'
@@ -171,7 +174,7 @@ const ComposerLinkPreview: React.FC<{ url: string; onDismiss: () => void }> = ({
           position: 'absolute',
           top: 8,
           right: 8,
-          background: 'rgba(255, 255, 255, 0.1)',
+          background: '#f1f5f9',
           border: 'none',
           borderRadius: '50%',
           width: 20,
@@ -180,30 +183,30 @@ const ComposerLinkPreview: React.FC<{ url: string; onDismiss: () => void }> = ({
           alignItems: 'center',
           justifyContent: 'center',
           cursor: 'pointer',
-          color: '#94a3b8',
+          color: '#64748b',
           transition: 'all 0.15s ease'
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+          e.currentTarget.style.background = '#fee2e2';
           e.currentTarget.style.color = '#ef4444';
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
-          e.currentTarget.style.color = '#94a3b8';
+          e.currentTarget.style.background = '#f1f5f9';
+          e.currentTarget.style.color = '#64748b';
         }}
         title="Tắt xem trước"
       >
         <X size={12} />
       </button>
 
-      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#ffffff', paddingRight: '22px' }}>
+      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f172a', paddingRight: '22px' }}>
         {data.title || domain}
       </div>
 
       {data.description && (
         <div style={{
           fontSize: '0.74rem',
-          color: '#cbd5e1',
+          color: '#64748b',
           lineHeight: 1.35,
           display: '-webkit-box',
           WebkitLineClamp: 2,
@@ -215,7 +218,7 @@ const ComposerLinkPreview: React.FC<{ url: string; onDismiss: () => void }> = ({
       )}
 
       {domain && (
-        <div style={{ fontSize: '0.72rem', color: '#38bdf8', fontWeight: 650, marginTop: '2px' }}>
+        <div style={{ fontSize: '0.72rem', color: '#0284c7', fontWeight: 650, marginTop: '2px' }}>
           {domain}
         </div>
       )}
@@ -790,7 +793,7 @@ export const ChatComposer = forwardRef<ChatComposerRef, ChatComposerProps>(({
                   }}
                   onMouseEnter={() => setSelectedSlashIndex(idx)}
                 >
-                  <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>{cmd.icon}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: isSelected ? '#7c3aed' : '#64748b', flexShrink: 0 }}>{cmd.icon}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{

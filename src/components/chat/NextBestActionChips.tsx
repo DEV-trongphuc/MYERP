@@ -55,7 +55,7 @@ export const NextBestActionChips: React.FC<NextBestActionChipsProps> = ({
             marginBottom: hasActions ? '10px' : '0px',
             padding: '10px 12px',
             borderRadius: '12px',
-            border: '1px solid rgba(245, 158, 11, 0.35)',
+            border: '1px solid #e2e8f0',
             background: 'linear-gradient(135deg, rgba(255, 251, 235, 0.95) 0%, rgba(254, 243, 199, 0.75) 100%)',
             boxShadow: '0 2px 8px rgba(245, 158, 11, 0.08)',
           }}
@@ -72,7 +72,7 @@ export const NextBestActionChips: React.FC<NextBestActionChipsProps> = ({
             }}
           >
             <Target size={14} style={{ color: '#d97706', flexShrink: 0 }} />
-            <span>🎯 Vui lòng chọn chính xác đối tượng bạn muốn thao tác:</span>
+            <span>Vui lòng chọn chính xác đối tượng bạn muốn thao tác:</span>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -93,7 +93,7 @@ export const NextBestActionChips: React.FC<NextBestActionChipsProps> = ({
                     width: '100%',
                     padding: '8px 12px',
                     borderRadius: '10px',
-                    border: isLoading ? '1.5px solid #d97706' : '1px solid rgba(217, 119, 6, 0.28)',
+                    border: '1px solid #e2e8f0',
                     background: '#ffffff',
                     color: '#1e293b',
                     cursor: isDisabled ? 'not-allowed' : 'pointer',
@@ -142,10 +142,14 @@ export const NextBestActionChips: React.FC<NextBestActionChipsProps> = ({
             }}
             className="dark:!text-slate-400"
           >
-            <Sparkles size={13} style={{ color: isDisambiguation ? '#d97706' : '#8b5cf6' }} />
+            {isDisambiguation && !hasClarify ? (
+              <Target size={14} style={{ color: '#d97706', flexShrink: 0 }} />
+            ) : (
+              <Sparkles size={13} style={{ color: isDisambiguation ? '#d97706' : '#8b5cf6' }} />
+            )}
             <span>
               {isDisambiguation && !hasClarify
-                ? '🎯 Vui lòng chọn chính xác đối tượng bạn muốn thao tác:'
+                ? 'Vui lòng chọn chính xác đối tượng bạn muốn thao tác:'
                 : 'Gợi ý bước tiếp theo:'}
             </span>
           </div>
@@ -161,9 +165,7 @@ export const NextBestActionChips: React.FC<NextBestActionChipsProps> = ({
                     display: 'inline-flex',
                     alignItems: 'center',
                     borderRadius: '20px',
-                    border: isLoading
-                      ? '1px solid #8b5cf6'
-                      : '1px solid rgba(139, 92, 246, 0.3)',
+                    border: 'none',
                     background: isLoading
                       ? 'linear-gradient(135deg, rgba(238, 242, 255, 1) 0%, rgba(224, 231, 255, 1) 100%)'
                       : 'linear-gradient(135deg, rgba(245, 243, 255, 0.9) 0%, rgba(238, 242, 255, 0.9) 100%)',
@@ -172,7 +174,7 @@ export const NextBestActionChips: React.FC<NextBestActionChipsProps> = ({
                     overflow: 'hidden',
                     transition: 'all 0.2s ease',
                   }}
-                  className="hover:!border-purple-500 hover:!bg-purple-100 hover:!shadow-sm dark:!bg-purple-950/40 dark:!border-purple-800 dark:hover:!bg-purple-900/60"
+                  className="hover:!bg-purple-100 hover:!shadow-sm dark:!bg-purple-950/40 dark:hover:!bg-purple-900/60"
                 >
                   <button
                     type="button"

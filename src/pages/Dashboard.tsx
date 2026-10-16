@@ -383,73 +383,73 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
     }
   }, [dateFilter, isActive]);
 
+  const fetchBadgeCounts = () => {
+    fetchAPI('get_reports&status=pending&date=all&pageSize=1')
+      .then(res => { if (res.success) setPendingTicketsCount(res.total_count ?? 0); })
+      .catch(e => console.error(e));
+      
+    fetchAPI('get_held_leads&pageSize=1&date=all')
+      .then(res => { if (res.success) setHeldLeadsCount(res.total_count ?? 0); })
+      .catch(e => console.error(e));
+
+    fetchAPI('check-ins&status=pending_approval')
+      .then(res => { if (res.success && Array.isArray(res.data)) setPendingCheckInsCount(res.data.length); })
+      .catch(e => console.error(e));
+
+    fetchAPI('cooperation-slips')
+      .then(res => {
+        if (res.success && Array.isArray(res.data)) {
+          const pending = res.data.filter((c: any) => c.status === 'pending_manager_approval');
+          setPendingCoopsCount(pending.length);
+        }
+      })
+      .catch(e => console.error(e));
+
+    fetchAPI('expenses?status=pending&limit=1')
+      .then(res => { if (res.success) setPendingExpensesCount(res.data?.total ?? 0); })
+      .catch(e => console.error(e));
+
+    if (currentViewRole === 'accountant' || activeSubTab === 'accountant' || user?.role === 'admin' || user?.role === 'director' || user?.role === 'superadmin') {
+      Promise.all([
+        api.get('/expenses', { params: { limit: 50 } }).catch(() => ({ data: { data: { items: [] } } })),
+        fetchAPI('deposits').catch(() => ({ data: [] })),
+        api.get('/users').catch(() => ({ data: { data: [] } }))
+      ]).then(([expRes, soRes, usersRes]) => {
+        const rawPos = expRes?.data?.data?.items || expRes?.data?.data || [];
+        const pos = Array.isArray(rawPos) ? rawPos : [];
+        const rawSos = soRes?.data || soRes || [];
+        const sos = Array.isArray(rawSos) ? rawSos : (Array.isArray(rawSos?.orders) ? rawSos.orders : []);
+        setPoList(pos);
+        setSoList(sos);
+        const uData = usersRes?.data?.data || usersRes?.data || [];
+        if (Array.isArray(uData)) setUsersList(uData);
+
+        if (!hasInitializedOrderTypeRef.current) {
+          hasInitializedOrderTypeRef.current = true;
+          if (pos.length > 0 && sos.length > 0) {
+            setActiveOrderType('po');
+          } else if (pos.length > 0) {
+            setActiveOrderType('po');
+          } else if (sos.length > 0) {
+            setActiveOrderType('so');
+          } else {
+            setActiveOrderType('po');
+          }
+        }
+      }).catch(e => console.error(e));
+    }
+
+    if (currentViewRole === 'marketing') {
+      fetchAPI('campaigns')
+        .then(res => {
+          setCampaignsList(Array.isArray(res) ? res : res?.data || []);
+        })
+        .catch(e => console.error(e));
+    }
+  };
+
   useEffect(() => {
     if (isActive) {
-      const fetchBadgeCounts = () => {
-        fetchAPI('get_reports&status=pending&date=all&pageSize=1')
-          .then(res => { if (res.success) setPendingTicketsCount(res.total_count ?? 0); })
-          .catch(e => console.error(e));
-          
-        fetchAPI('get_held_leads&pageSize=1&date=all')
-          .then(res => { if (res.success) setHeldLeadsCount(res.total_count ?? 0); })
-          .catch(e => console.error(e));
-
-        fetchAPI('check-ins&status=pending_approval')
-          .then(res => { if (res.success && Array.isArray(res.data)) setPendingCheckInsCount(res.data.length); })
-          .catch(e => console.error(e));
-
-        fetchAPI('cooperation-slips')
-          .then(res => {
-            if (res.success && Array.isArray(res.data)) {
-              const pending = res.data.filter((c: any) => c.status === 'pending_manager_approval');
-              setPendingCoopsCount(pending.length);
-            }
-          })
-          .catch(e => console.error(e));
-
-        fetchAPI('expenses?status=pending&limit=1')
-          .then(res => { if (res.success) setPendingExpensesCount(res.data?.total ?? 0); })
-          .catch(e => console.error(e));
-
-        if (currentViewRole === 'accountant' || activeSubTab === 'accountant' || user?.role === 'admin' || user?.role === 'director' || user?.role === 'superadmin') {
-          Promise.all([
-            api.get('/expenses', { params: { limit: 50 } }).catch(() => ({ data: { data: { items: [] } } })),
-            fetchAPI('deposits').catch(() => ({ data: [] })),
-            api.get('/users').catch(() => ({ data: { data: [] } }))
-          ]).then(([expRes, soRes, usersRes]) => {
-            const rawPos = expRes?.data?.data?.items || expRes?.data?.data || [];
-            const pos = Array.isArray(rawPos) ? rawPos : [];
-            const rawSos = soRes?.data || soRes || [];
-            const sos = Array.isArray(rawSos) ? rawSos : (Array.isArray(rawSos?.orders) ? rawSos.orders : []);
-            setPoList(pos);
-            setSoList(sos);
-            const uData = usersRes?.data?.data || usersRes?.data || [];
-            if (Array.isArray(uData)) setUsersList(uData);
-
-            if (!hasInitializedOrderTypeRef.current) {
-              hasInitializedOrderTypeRef.current = true;
-              if (pos.length > 0 && sos.length > 0) {
-                setActiveOrderType('po');
-              } else if (pos.length > 0) {
-                setActiveOrderType('po');
-              } else if (sos.length > 0) {
-                setActiveOrderType('so');
-              } else {
-                setActiveOrderType('po');
-              }
-            }
-          }).catch(e => console.error(e));
-        }
-
-        if (currentViewRole === 'marketing') {
-          fetchAPI('campaigns')
-            .then(res => {
-              setCampaignsList(Array.isArray(res) ? res : res?.data || []);
-            })
-            .catch(e => console.error(e));
-        }
-      };
-
       fetchBadgeCounts();
 
       const intervalId = setInterval(fetchBadgeCounts, 60000);
@@ -540,7 +540,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
         fetchAPI('hrm/profiles').catch(() => ({ data: [] })),
         fetchAPI('hrm/leaves').catch(() => ({ data: [] })),
         fetchAPI('hrm/advances').catch(() => ({ data: [] })),
-        fetchAPI('hrm/teams').catch(() => ({ data: [] })),
+        fetchAPI('teams').catch(() => ({ data: [] })),
         fetchAPI(`check-ins?date=${todayStr}`).catch(() => ({ data: [] })),
         fetchAPI(`check-ins?from=${mondayStr}&to=${saturdayStr}`).catch(() => ({ data: [] })),
         fetchAPI(`check-ins?month=${m}&year=${y}&include_shifts=1`).catch(() => ({ data: [] })),
@@ -1908,6 +1908,8 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                     if (Array.isArray(rawPos)) setPoList(rawPos);
                   })
                   .catch(console.error);
+                fetchDashboard();
+                fetchBadgeCounts();
               }}
             />
           )}
@@ -1926,6 +1928,8 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                     setSoList(sos);
                   })
                   .catch(console.error);
+                fetchDashboard();
+                fetchBadgeCounts();
               }}
             />
           )}
@@ -4984,8 +4988,11 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                   <div className="custom-scrollbar" style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem', maxHeight: 190, overflowY: 'auto', paddingRight: 4 }}>
                     {stats?.roundRatio && stats.roundRatio.length > 0 ? (
                       stats.roundRatio.slice(0, 10).map((r: any, idx: number) => {
-                        const isEven = idx % 2 === 0;
-                        const individualFairness = Math.max(85, Math.min(100, parseFloat(stats?.fair_share_equity || '96.5') + (isEven ? 1.5 : -2.0) - (idx * 0.5)));
+                        const individualFairness = r.fairness_score !== undefined
+                          ? Math.max(0, Math.min(100, Number(r.fairness_score)))
+                          : r.fairness !== undefined
+                            ? Math.max(0, Math.min(100, Number(r.fairness)))
+                            : Math.max(0, Math.min(100, parseFloat(stats?.fair_share_equity || '0')));
 
                         let trackColor = 'linear-gradient(90deg, var(--color-primary) 0%, #e05e6b 100%)';
                         let badgeBg = 'var(--color-primary-light)';

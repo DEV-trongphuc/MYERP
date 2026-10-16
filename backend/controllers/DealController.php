@@ -25,22 +25,31 @@ class DealController {
         } else {
             $roleFilter = " AND 1=0";
         }
-        $p = ['tid1' => $tid, 'tid2' => $tid, 'tid3' => $tid];
+        $stmtStages = $this->db->prepare("SELECT * FROM pipeline_stages WHERE tenant_id = ? ORDER BY order_index");
+        $stmtStages->execute([$tid]);
+        $stages = $stmtStages->fetchAll(PDO::FETCH_ASSOC);
 
-        $sql = "
-            SELECT ps.*, 
-                   (
-                     (SELECT COUNT(*) FROM contacts WHERE stage_id = ps.id AND deleted_at IS NULL AND tenant_id = :tid1 $roleFilter) +
-                     (SELECT COUNT(*) FROM companies WHERE stage_id = ps.id AND deleted_at IS NULL AND tenant_id = :tid2 $roleFilter)
-                   ) as deals
-            FROM pipeline_stages ps
-            WHERE ps.tenant_id = :tid3
-            ORDER BY ps.order_index
-        ";
-        
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute($p);
-        respond(200, $stmt->fetchAll());
+        $contactCounts = [];
+        $stmtContacts = $this->db->prepare("SELECT stage_id, COUNT(*) as cnt FROM contacts WHERE deleted_at IS NULL AND tenant_id = :tid AND stage_id IS NOT NULL $roleFilter GROUP BY stage_id");
+        $stmtContacts->execute(['tid' => $tid]);
+        while ($r = $stmtContacts->fetch(PDO::FETCH_ASSOC)) {
+            $contactCounts[(int)$r['stage_id']] = (int)$r['cnt'];
+        }
+
+        $companyCounts = [];
+        $stmtCompanies = $this->db->prepare("SELECT stage_id, COUNT(*) as cnt FROM companies WHERE deleted_at IS NULL AND tenant_id = :tid AND stage_id IS NOT NULL $roleFilter GROUP BY stage_id");
+        $stmtCompanies->execute(['tid' => $tid]);
+        while ($r = $stmtCompanies->fetch(PDO::FETCH_ASSOC)) {
+            $companyCounts[(int)$r['stage_id']] = (int)$r['cnt'];
+        }
+
+        foreach ($stages as &$st) {
+            $sid = (int)$st['id'];
+            $st['deals'] = ($contactCounts[$sid] ?? 0) + ($companyCounts[$sid] ?? 0);
+        }
+        unset($st);
+
+        respond(200, $stages);
     }
 
     public function storeStage(array $auth): void {

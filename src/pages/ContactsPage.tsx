@@ -32,6 +32,7 @@ import { calculateLeadScore, getLeadHeatTier } from '../utils/leadScoring';
 import { SalesLeadPerformanceDeck } from '../components/Dashboard/SalesLeadPerformanceDeck';
 import { ReportDataModal } from '../components/ui/ReportDataModal';
 import { TableContextMenu } from '../components/ui/TableContextMenu';
+import { pushOverlay, removeOverlay } from '../utils/overlayStack';
 
 const PAGE_SIZE = 10;
 
@@ -162,7 +163,6 @@ const renderInteractionInfo = (c: any, onReportClick?: (c: any) => void) => {
           background: 'rgba(239, 68, 68, 0.15)', 
           color: '#dc2626',
           lineHeight: '1.2',
-          border: '1px solid rgba(239, 68, 68, 0.25)',
           display: 'inline-flex',
           alignItems: 'center',
           gap: '2px'
@@ -176,7 +176,7 @@ const renderInteractionInfo = (c: any, onReportClick?: (c: any) => void) => {
 
 const getContactStage = (c: any, stages: any[]) => {
   if (c.lost_reason || c.status === 'lost') {
-    return { isLost: true, isNewLead: false, color: '#dc2626', bgColor: 'rgba(239, 68, 68, 0.08)', borderColor: 'rgba(239, 68, 68, 0.22)' };
+    return { isLost: true, isNewLead: false, color: '#dc2626', bgColor: 'rgba(239, 68, 68, 0.08)' };
   }
 
   const stagesToUse = (stages && stages.length > 0) ? stages : DEFAULT_PIPELINE_STAGES;
@@ -209,7 +209,6 @@ const getContactStage = (c: any, stages: any[]) => {
       name: c.stage_name || targetStage?.name || '14 – Enrolled',
       color: '#db2777',
       bgColor: '#db277712',
-      borderColor: '#db27772c',
       isEnrolled: true,
       isNewLead: false
     };
@@ -220,7 +219,6 @@ const getContactStage = (c: any, stages: any[]) => {
       name: 'Đã rời',
       color: '#dc2626',
       bgColor: 'rgba(239, 68, 68, 0.08)',
-      borderColor: 'rgba(239, 68, 68, 0.22)',
       isEnrolled: false,
       isNewLead: false
     };
@@ -239,7 +237,6 @@ const getContactStage = (c: any, stages: any[]) => {
     name,
     color,
     bgColor: `${color}12`,
-    borderColor: `${color}2c`,
     isEnrolled: false,
     isNewLead
   };
@@ -309,6 +306,178 @@ const DEFAULT_PIPELINE_STAGES = [
   { id: '43', name: '13 – Deposit / Tuition Payment', system_slug: 'deposit_tuition_payment', color: '#059669', order_index: 13 },
   { id: '44', name: '14 – Enrolled', system_slug: 'enrolled', color: '#db2777', order_index: 14 }
 ];
+
+const ContactsFloatingTooltip = React.memo(({
+  triggerRef,
+  pipelineStages
+}: {
+  triggerRef: React.MutableRefObject<((val: { contact: any; rect: DOMRect } | null) => void) | null>;
+  pipelineStages: any[];
+}) => {
+  const [hoveredCell, setHoveredCell] = useState<{ contact: any; rect: DOMRect } | null>(null);
+  triggerRef.current = setHoveredCell;
+
+  if (typeof document === 'undefined' || !hoveredCell) return null;
+
+  const hc = hoveredCell.contact;
+  const rect = hoveredCell.rect;
+  const stageInfo = getContactStage(hc, pipelineStages);
+  const lastNote = cleanInteractionText(hc.last_interaction || '');
+  const initialNote = cleanInteractionText(hc.notes || '');
+  const rawTags = typeof hc.tags === 'string'
+    ? hc.tags.split(',').map((t: string) => t.replace(/^\d+\.\s*(status\s*-\s*)?/i, '').trim()).filter(Boolean)
+    : (Array.isArray(hc.tags) ? hc.tags : []);
+  const uniqueTags = Array.from(new Set(rawTags)) as string[];
+  let displayProg = (hc.program || hc.project_name || '').trim();
+  if (!displayProg && uniqueTags.length > 0) {
+    const progTag = uniqueTags.find((t: string) => {
+      const lt = t.toLowerCase();
+      return lt.includes('mba') || lt.includes('bba') || lt.includes('dba') || lt.includes('msc') || lt.includes('umef') || lt.includes('emba');
+    });
+    if (progTag) displayProg = progTag;
+  }
+  const admDateStr = hc.admission_date ? (() => {
+    const d = new Date(hc.admission_date);
+    if (isNaN(d.getTime())) return String(hc.admission_date).slice(0, 10);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+  })() : '';
+
+  const tooltipWidth = 350;
+  let left = rect.left + rect.width / 2 - tooltipWidth / 2;
+  if (left < 12) left = 12;
+  if (typeof window !== 'undefined' && left + tooltipWidth > window.innerWidth - 12) {
+    left = window.innerWidth - tooltipWidth - 12;
+  }
+  const showAbove = typeof window !== 'undefined' && rect.bottom + 240 > window.innerHeight;
+  const top = showAbove ? Math.max(12, rect.top - 10) : rect.bottom + 8;
+
+  return createPortal(
+    <div
+      style={{
+        position: 'fixed',
+        top,
+        left,
+        transform: showAbove ? 'translateY(-100%)' : 'none',
+        width: tooltipWidth,
+        zIndex: 99999,
+        pointerEvents: 'none',
+        background: '#ffffff',
+        color: '#0f172a',
+        borderRadius: '14px',
+        padding: '12px 14px',
+        boxShadow: '0 14px 34px rgba(15, 23, 42, 0.14)',
+        border: '1px solid #e2e8f0',
+        fontSize: '0.75rem',
+        lineHeight: 1.45
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '8px', paddingBottom: '6px', borderBottom: '1px solid #f1f5f9' }}>
+        <div style={{ fontWeight: 800, fontSize: '0.84rem', color: '#0f172a' }}>
+          {hc.full_name || hc.name || 'Khách hàng'}
+        </div>
+        <span
+          style={{
+            fontSize: '0.68rem',
+            fontWeight: 700,
+            padding: '2px 8px',
+            borderRadius: '999px',
+            background: stageInfo.isNewLead ? '#dc2626' : `${stageInfo.color}18`,
+            color: stageInfo.isNewLead ? '#ffffff' : stageInfo.color,
+            whiteSpace: 'nowrap'
+          }}
+        >
+          {stageInfo.name}
+        </span>
+      </div>
+
+      {(displayProg || admDateStr) && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+          {displayProg && (
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '2px 8px',
+              borderRadius: '6px',
+              fontSize: '0.7rem',
+              fontWeight: 700,
+              background: 'rgba(37, 99, 235, 0.1)',
+              color: '#2563eb'
+            }}>
+              <GraduationCap size={12} style={{ flexShrink: 0 }} />
+              <span>{displayProg}</span>
+            </span>
+          )}
+          {admDateStr && (
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '2px 8px',
+              borderRadius: '6px',
+              fontSize: '0.7rem',
+              fontWeight: 700,
+              background: 'rgba(16, 185, 129, 0.1)',
+              color: '#059669'
+            }}>
+              <Calendar size={12} style={{ flexShrink: 0 }} />
+              <span>{admDateStr}</span>
+            </span>
+          )}
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 10px', marginBottom: '8px' }}>
+        <div>
+          <span style={{ color: '#64748b', fontSize: '0.68rem' }}>Phụ trách: </span>
+          <strong style={{ color: '#0f172a' }}>{hc.owner_name || 'Chưa giao'}</strong>
+        </div>
+        <div>
+          <span style={{ color: '#64748b', fontSize: '0.68rem' }}>Nguồn: </span>
+          <strong style={{ color: '#0f172a' }}>{hc.source || '—'}</strong>
+        </div>
+      </div>
+
+      {uniqueTags.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '8px' }}>
+          {uniqueTags.map((t, idx) => (
+            <span
+              key={idx}
+              style={{
+                fontSize: '0.65rem',
+                fontWeight: 600,
+                padding: '2px 7px',
+                borderRadius: '6px',
+                background: '#f1f5f9',
+                color: '#334155'
+              }}
+            >
+              #{t}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '8px 10px' }}>
+        <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#2563eb', marginBottom: '3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <MessageSquare size={12} style={{ flexShrink: 0 }} />
+          <span>Tương tác / Ghi chú gần nhất</span>
+        </div>
+        <div style={{ color: '#0f172a', whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '140px', overflow: 'hidden' }}>
+          {lastNote || initialNote || 'Chưa có ghi chú tương tác'}
+        </div>
+        {lastNote && initialNote && initialNote !== lastNote && (
+          <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #e2e8f0', fontSize: '0.7rem', color: '#334155' }}>
+            <span style={{ color: '#64748b', fontWeight: 600 }}>Ghi chú gốc: </span>
+            {initialNote}
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body
+  );
+});
 
 interface ContactsPageProps {
   defaultSegment?: string;
@@ -430,13 +599,11 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
             useUIStore.getState().closeCustomerDrawer();
             setProfileContact(res.data.data);
           }
-          const newParams = new URLSearchParams(searchParams);
-          newParams.delete('open_contact_id');
-          newParams.delete('id');
-          setSearchParams(newParams, { replace: true });
         }).catch(err => {
           if (err?.name === 'AbortError' || err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return;
           console.error("Error loading auto-open contact:", err);
+        }).finally(() => {
+          if (ctrl.signal.aborted) return;
           const newParams = new URLSearchParams(searchParams);
           newParams.delete('open_contact_id');
           newParams.delete('id');
@@ -538,6 +705,18 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
   // Advanced Filter state
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
+  useEffect(() => {
+    if (!showAdvancedFilters) {
+      removeOverlay('contacts-advanced-filters');
+      return;
+    }
+    pushOverlay('contacts-advanced-filters', () => setShowAdvancedFilters(false), 120);
+    return () => {
+      removeOverlay('contacts-advanced-filters');
+    };
+  }, [showAdvancedFilters]);
+
   const [filterStatus, setFilterStatus] = useState('');
   const [filterStageOp, setFilterStageOp] = useState<'in' | 'not_in'>('in');
   const [filterLeadStatus, setFilterLeadStatus] = useState('');
@@ -943,7 +1122,10 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   }, [columns, storageKey]);
 
   const [showColumns, setShowColumns] = useState(false);
-  const [hoveredCell, setHoveredCell] = useState<{ contact: any; rect: DOMRect } | null>(null);
+  const hoveredCellTriggerRef = useRef<((val: { contact: any; rect: DOMRect } | null) => void) | null>(null);
+  const setHoveredCell = React.useCallback((val: { contact: any; rect: DOMRect } | null) => {
+    hoveredCellTriggerRef.current?.(val);
+  }, []);
   const [dbTags, setDbTags] = useState<any[]>([]);
 
   const visibleColsMap = useMemo(() => Object.fromEntries(columns.map(c => [c.id, c.visible])), [columns]);
@@ -1352,11 +1534,14 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     return 'Đang lọc';
   };
 
+  const toLocalYMD = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
   const applyQuickTimelinePreset = (preset: string) => {
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth();
-    const todayStr = now.toISOString().split('T')[0];
+    const todayStr = toLocalYMD(now);
 
     let from = '';
     let to = todayStr;
@@ -1365,15 +1550,14 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       from = todayStr;
     } else if (preset === 'last_7_days') {
       const d7 = new Date(now.getTime() - 7 * 86400000);
-      from = d7.toISOString().split('T')[0];
+      from = toLocalYMD(d7);
     } else if (preset === 'this_month') {
-      const start = new Date(year, month, 1);
       const end = new Date(year, month + 1, 0);
       from = `${year}-${String(month + 1).padStart(2, '0')}-01`;
       to = `${year}-${String(month + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`;
     } else if (preset === 'last_30_days') {
       const d30 = new Date(now.getTime() - 30 * 86400000);
-      from = d30.toISOString().split('T')[0];
+      from = toLocalYMD(d30);
     }
 
     setFilterFromDate(from);
@@ -1686,64 +1870,72 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     bulkExportInFlightRef.current = true;
     setIsExporting(true);
     const isStudent = segment === 'customer';
+    const isSearching = mode === 'filtered' && Boolean(debouncedSearch);
     const params: Record<string, any> = {
       type: 'contact',
       export_mode: mode,
-      segment: segment || 'all',
-      ...(isStudent && studentSubTab ? { student_sub_tab: studentSubTab } : {})
+      ...(!isSearching ? {
+        segment: segment || 'all',
+        ...(isStudent && studentSubTab ? { student_sub_tab: studentSubTab } : {})
+      } : {})
     };
 
     if (mode === 'filtered') {
-      if (debouncedSearch) {
+      if (isSearching) {
         params.search = debouncedSearch;
         params.all_pipeline = 1;
         params.show_lost = 1;
         params.include_lost = 1;
-      }
-      if (quickPipelineStage && quickPipelineStage !== 'all') {
-        if (quickPipelineStage === 'nurture') {
-          params.lead_status = 'nurture';
-        } else if (quickPipelineStage === 'lost') {
-          params.lead_status = 'lost';
-          params.show_lost = 1;
-          params.include_lost = 1;
-        } else {
-          params.stage_id = quickPipelineStage;
-          params.stage = quickPipelineStage;
-          const stagesToUse = (pipelineStages && pipelineStages.length > 0) ? pipelineStages : DEFAULT_PIPELINE_STAGES;
-          const stObj = stagesToUse.find(s => String(s.id) === String(quickPipelineStage) || s.system_slug === quickPipelineStage);
-          if (stObj?.system_slug) {
-            params.stage_slug = stObj.system_slug;
+      } else {
+        if (quickPipelineStage && quickPipelineStage !== 'all') {
+          if (quickPipelineStage === 'nurture') {
+            params.lead_status = 'nurture';
+          } else if (quickPipelineStage === 'lost') {
+            params.lead_status = 'lost';
+            params.show_lost = 1;
+            params.include_lost = 1;
+          } else {
+            params.stage_id = quickPipelineStage;
+            params.stage = quickPipelineStage;
+            const stagesToUse = (pipelineStages && pipelineStages.length > 0) ? pipelineStages : DEFAULT_PIPELINE_STAGES;
+            const stObj = stagesToUse.find(s => String(s.id) === String(quickPipelineStage) || s.system_slug === quickPipelineStage);
+            if (stObj?.system_slug) {
+              params.stage_slug = stObj.system_slug;
+            }
           }
         }
-      }
-      if (filterUncontacted) {
-        params.uncontacted = 1;
-      }
-      if (activeFilters.status) {
-        if (/^\d+(,\d+)*$/.test(activeFilters.status)) {
-          params.stage_id = activeFilters.status;
-          params.stages = activeFilters.status;
-          if (activeFilters.stageOp) params.stage_op = activeFilters.stageOp;
-        } else {
-          params.status = activeFilters.status;
-          params.stage = activeFilters.status;
-          if (activeFilters.stageOp) params.status_op = activeFilters.stageOp;
+        if (filterUncontacted) {
+          params.uncontacted = 1;
+        }
+        if (activeFilters.multiProgram) {
+          params.multi_program = 1;
+        }
+        if (activeFilters.status) {
+          if (/^\d+(,\d+)*$/.test(activeFilters.status)) {
+            params.stage_id = activeFilters.status;
+            params.stages = activeFilters.status;
+            if (activeFilters.stageOp) params.stage_op = activeFilters.stageOp;
+          } else {
+            params.status = activeFilters.status;
+            params.stage = activeFilters.status;
+            if (activeFilters.stageOp) params.status_op = activeFilters.stageOp;
+          }
+        }
+
+        const effectiveLeadStatus = quickLeadStatus || activeFilters.leadStatus;
+        const effectiveLeadStatusOp = quickLeadStatus ? 'in' : (activeFilters.leadStatusOp || 'in');
+
+        if (effectiveLeadStatus) {
+          params.lead_status = effectiveLeadStatus;
+          params.lead_status_op = effectiveLeadStatusOp;
+        }
+
+        if (showLost || activeFilters.showLost || effectiveLeadStatus === 'lost' || quickPipelineStage === 'lost') {
+          params.show_lost = 1;
+          params.include_lost = 1;
         }
       }
 
-      const effectiveLeadStatus = quickLeadStatus || activeFilters.leadStatus;
-      const effectiveLeadStatusOp = quickLeadStatus ? 'in' : (activeFilters.leadStatusOp || 'in');
-
-      if (effectiveLeadStatus) {
-        params.lead_status = effectiveLeadStatus;
-        params.lead_status_op = effectiveLeadStatusOp;
-      }
-
-      if (showLost || activeFilters.showLost || effectiveLeadStatus === 'lost' || quickPipelineStage === 'lost') {
-        params.show_lost = 1;
-        params.include_lost = 1;
-      }
       if (activeFilters.source) {
         params.source = activeFilters.source;
         params.source_type = activeFilters.source;
@@ -1773,9 +1965,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       if (activeFilters.admissionActive) {
         if (activeFilters.admissionFrom) params.admission_from = activeFilters.admissionFrom;
         if (activeFilters.admissionTo) params.admission_to = activeFilters.admissionTo;
-      }
-      if (activeFilters.multiProgram) {
-        params.multi_program = 1;
       }
       const teamId = getEffectiveTeamId();
       if (teamId) {
@@ -3340,7 +3529,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
           {/* Admission date tag */}
           {activeFilters.admissionActive && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(37, 99, 235, 0.1)', color: 'var(--color-primary, #2563eb)', fontWeight: 600, fontSize: '0.75rem', border: '1px solid rgba(37, 99, 235, 0.25)' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(37, 99, 235, 0.1)', color: 'var(--color-primary, #2563eb)', fontWeight: 600, fontSize: '0.75rem' }}>
               <GraduationCap size={13} />
               <span>Nhập học: {getAdmissionDisplayLabel()}</span>
               <button type="button" onClick={() => removeActiveFilterTag('admission')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: 'var(--color-primary, #2563eb)' }}><X size={12} /></button>
@@ -3349,7 +3538,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
           {/* Date (Timeline) tag */}
           {activeFilters.dateActive && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.1)', color: '#059669', fontWeight: 600, fontSize: '0.75rem', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.1)', color: '#059669', fontWeight: 600, fontSize: '0.75rem' }}>
               <Calendar size={13} />
               <span>{activeFilters.dateField === 'created_at' ? 'Ngày tạo' : (activeFilters.dateField === 'updated_at' ? 'Ngày cập nhật' : 'Tương tác cuối')}: {getTimelineDisplayLabel()}</span>
               <button type="button" onClick={() => removeActiveFilterTag('date')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#059669' }}><X size={12} /></button>
@@ -3358,7 +3547,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
           {/* Stage tag */}
           {activeFilters.status && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(139, 92, 246, 0.1)', color: '#7c3aed', fontWeight: 600, fontSize: '0.75rem', border: '1px solid rgba(139, 92, 246, 0.25)' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(139, 92, 246, 0.1)', color: '#7c3aed', fontWeight: 600, fontSize: '0.75rem' }}>
               <span>{activeFilters.stageOp === 'not_in' ? 'Trừ giai đoạn: ' : 'Giai đoạn: '} {getStageName(activeFilters.status)}</span>
               <button type="button" onClick={() => removeActiveFilterTag('status')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#7c3aed' }}><X size={12} /></button>
             </span>
@@ -3366,7 +3555,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
           {/* Lead status tag */}
           {activeFilters.leadStatus && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.1)', color: '#d97706', fontWeight: 600, fontSize: '0.75rem', border: '1px solid rgba(245, 158, 11, 0.25)' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.1)', color: '#d97706', fontWeight: 600, fontSize: '0.75rem' }}>
               <span>Trạng thái: {activeFilters.leadStatus === 'active' ? 'Đang hoạt động' : (activeFilters.leadStatus === 'nurture' ? 'Nuôi dưỡng' : 'Lost')}</span>
               <button type="button" onClick={() => removeActiveFilterTag('leadStatus')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#d97706' }}><X size={12} /></button>
             </span>
@@ -3374,7 +3563,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
           {/* Sales owner tag */}
           {activeFilters.ownerId && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(14, 165, 233, 0.1)', color: '#0284c7', fontWeight: 600, fontSize: '0.75rem', border: '1px solid rgba(14, 165, 233, 0.25)' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(14, 165, 233, 0.1)', color: '#0284c7', fontWeight: 600, fontSize: '0.75rem' }}>
               <User size={13} />
               <span>Phụ trách: {users.find(u => String(u.id) === String(activeFilters.ownerId))?.full_name || activeFilters.ownerId}</span>
               <button type="button" onClick={() => removeActiveFilterTag('ownerId')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#0284c7' }}><X size={12} /></button>
@@ -3383,7 +3572,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
           {/* Project tag */}
           {activeFilters.projectId && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(236, 72, 153, 0.1)', color: '#db2777', fontWeight: 600, fontSize: '0.75rem', border: '1px solid rgba(236, 72, 153, 0.25)' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(236, 72, 153, 0.1)', color: '#db2777', fontWeight: 600, fontSize: '0.75rem' }}>
               <Building2 size={13} />
               <span>Dự án: {projects.find(p => String(p.id) === String(activeFilters.projectId))?.name || activeFilters.projectId}</span>
               <button type="button" onClick={() => removeActiveFilterTag('projectId')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#db2777' }}><X size={12} /></button>
@@ -3392,7 +3581,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
           {/* Campaign tag */}
           {activeFilters.campaignId && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(236, 72, 153, 0.1)', color: '#db2777', fontWeight: 600, fontSize: '0.75rem', border: '1px solid rgba(236, 72, 153, 0.25)' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(236, 72, 153, 0.1)', color: '#db2777', fontWeight: 600, fontSize: '0.75rem' }}>
               <span>Chiến dịch: {campaigns.find(c => String(c.id) === String(activeFilters.campaignId))?.name || activeFilters.campaignId}</span>
               <button type="button" onClick={() => removeActiveFilterTag('campaignId')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#db2777' }}><X size={12} /></button>
             </span>
@@ -3400,7 +3589,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
           {/* Source tag */}
           {activeFilters.source && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(100, 116, 139, 0.1)', color: '#475569', fontWeight: 600, fontSize: '0.75rem', border: '1px solid rgba(100, 116, 139, 0.25)' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(100, 116, 139, 0.1)', color: '#475569', fontWeight: 600, fontSize: '0.75rem' }}>
               <span>Nguồn: {SOURCE_OPTIONS.find(s => s.value === activeFilters.source)?.label || activeFilters.source}</span>
               <button type="button" onClick={() => removeActiveFilterTag('source')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#475569' }}><X size={12} /></button>
             </span>
@@ -3408,7 +3597,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
           {/* Tag filter */}
           {activeFilters.tag && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(100, 116, 139, 0.1)', color: '#475569', fontWeight: 600, fontSize: '0.75rem', border: '1px solid rgba(100, 116, 139, 0.25)' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(100, 116, 139, 0.1)', color: '#475569', fontWeight: 600, fontSize: '0.75rem' }}>
               <TagIcon size={12} />
               <span>Tag: &ldquo;{activeFilters.tag}&rdquo;</span>
               <button type="button" onClick={() => removeActiveFilterTag('tag')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#475569' }}><X size={12} /></button>
@@ -3417,7 +3606,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
           {/* Data type tag */}
           {activeFilters.dataType && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(100, 116, 139, 0.1)', color: '#475569', fontWeight: 600, fontSize: '0.75rem', border: '1px solid rgba(100, 116, 139, 0.25)' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(100, 116, 139, 0.1)', color: '#475569', fontWeight: 600, fontSize: '0.75rem' }}>
               <span>Loại data: {activeFilters.dataType === 'distributed' ? 'Được chia' : (activeFilters.dataType === 'personal' ? 'Cá nhân' : 'Lỗi/Ticket')}</span>
               <button type="button" onClick={() => removeActiveFilterTag('dataType')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#475569' }}><X size={12} /></button>
             </span>
@@ -3425,7 +3614,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
           {/* Multi program tag */}
           {activeFilters.multiProgram && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(99, 102, 241, 0.1)', color: '#4f46e5', fontWeight: 600, fontSize: '0.75rem', border: '1px solid rgba(99, 102, 241, 0.25)' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(99, 102, 241, 0.1)', color: '#4f46e5', fontWeight: 600, fontSize: '0.75rem' }}>
               <Layers size={13} />
               <span>Đa chương trình (≥2)</span>
               <button type="button" onClick={() => removeActiveFilterTag('multiProgram')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#4f46e5' }}><X size={12} /></button>
@@ -3434,14 +3623,21 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
           {/* Show lost tag */}
           {activeFilters.showLost && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', color: '#dc2626', fontWeight: 600, fontSize: '0.75rem', border: '1px solid rgba(239, 68, 68, 0.25)' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', color: '#dc2626', fontWeight: 600, fontSize: '0.75rem' }}>
               <Eye size={13} />
               <span>Bao gồm data Lost</span>
               <button type="button" onClick={() => removeActiveFilterTag('showLost')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#dc2626' }}><X size={12} /></button>
             </span>
           )}
 
-
+          {/* Uncontacted tag */}
+          {filterUncontacted && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', color: '#dc2626', fontWeight: 600, fontSize: '0.75rem' }}>
+              <PhoneOff size={13} />
+              <span>Chưa tương tác</span>
+              <button type="button" onClick={() => removeActiveFilterTag('uncontacted')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#dc2626' }}><X size={12} /></button>
+            </span>
+          )}
 
           {/* Clear all button */}
           <button
@@ -3719,15 +3915,15 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                               const now = new Date();
                               const year = now.getFullYear();
                               const month = now.getMonth();
-                              const todayStr = now.toISOString().split('T')[0];
+                              const todayStr = toLocalYMD(now);
                               let from = '';
                               let to = todayStr;
                               if (p.id === 'today') from = todayStr;
-                              else if (p.id === 'last_7_days') from = new Date(now.getTime() - 7 * 86400000).toISOString().split('T')[0];
+                              else if (p.id === 'last_7_days') from = toLocalYMD(new Date(now.getTime() - 7 * 86400000));
                               else if (p.id === 'this_month') {
                                 from = `${year}-${String(month + 1).padStart(2, '0')}-01`;
                                 to = `${year}-${String(month + 1).padStart(2, '0')}-${String(new Date(year, month + 1, 0).getDate()).padStart(2, '0')}`;
-                              } else if (p.id === 'last_30_days') from = new Date(now.getTime() - 30 * 86400000).toISOString().split('T')[0];
+                              } else if (p.id === 'last_30_days') from = toLocalYMD(new Date(now.getTime() - 30 * 86400000));
                               setFilterFromDate(from);
                               setFilterToDate(to);
                             }}
@@ -4379,7 +4575,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                         borderRadius: '4px', 
                                         background: 'rgba(139, 92, 246, 0.12)', 
                                         color: '#7c3aed', 
-                                        border: '1px solid rgba(139, 92, 246, 0.25)', 
                                         fontSize: '0.625rem', 
                                         fontWeight: 700, 
                                         flexShrink: 0,
@@ -4439,7 +4634,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                       padding: '1px 6px 1px 2px',
                                       borderRadius: '12px',
                                       background: `${refColor}12`,
-                                      border: `1px solid ${refColor}33`,
                                       width: 'fit-content',
                                       maxWidth: '100%',
                                       boxSizing: 'border-box'
@@ -4911,7 +5105,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                     {c.round_name || 'Chia data'}
                                   </span>
                                   {c.is_error_ticket || c.report_status === 'pending' || c.report_status === 'approved' ? (
-                                    <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.15)', color: '#dc2626', border: '1px solid rgba(239, 68, 68, 0.25)' }}>
+                                    <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.15)', color: '#dc2626' }}>
                                       {c.report_status === 'approved' ? 'Đã bù' : 'Đã báo lỗi'}
                                     </span>
                                   ) : (
@@ -4966,7 +5160,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                   </span>
                                 )}
                                 {c.report_status === 'approved_no_comp' && (
-                                  <span className="badge" style={{ background: '#dbeafe', color: '#2563eb', border: '1px solid rgba(37, 99, 235, 0.2)' }} title="Ticket duyệt lỗi không bù">
+                                  <span className="badge" style={{ background: '#dbeafe', color: '#2563eb' }} title="Ticket duyệt lỗi không bù">
                                     Lỗi không bù
                                   </span>
                                 )}
@@ -5166,7 +5360,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                       borderRadius: '4px', 
                                       background: 'rgba(139, 92, 246, 0.12)', 
                                       color: '#7c3aed', 
-                                      border: '1px solid rgba(139, 92, 246, 0.25)', 
                                       fontSize: '0.625rem', 
                                       fontWeight: 700, 
                                       lineHeight: 1.2
@@ -5231,7 +5424,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                           borderRadius: '4px', 
                                           background: 'rgba(139, 92, 246, 0.12)', 
                                           color: '#7c3aed', 
-                                          border: '1px solid rgba(139, 92, 246, 0.25)', 
                                           fontSize: '0.625rem', 
                                           fontWeight: 700, 
                                           lineHeight: 1.2
@@ -5740,166 +5932,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       />
 
       {/* Rich Floating Hover Tooltip for Interaction Note, Program, Admission Date & Tags (Light Surface, No Badge Border, Lucide Icons) */}
-      {typeof document !== 'undefined' && hoveredCell && (() => {
-        const hc = hoveredCell.contact;
-        const rect = hoveredCell.rect;
-        const stageInfo = getContactStage(hc, pipelineStages);
-        const lastNote = cleanInteractionText(hc.last_interaction || '');
-        const initialNote = cleanInteractionText(hc.notes || '');
-        const rawTags = typeof hc.tags === 'string'
-          ? hc.tags.split(',').map((t: string) => t.replace(/^\d+\.\s*(status\s*-\s*)?/i, '').trim()).filter(Boolean)
-          : (Array.isArray(hc.tags) ? hc.tags : []);
-        const uniqueTags = Array.from(new Set(rawTags)) as string[];
-        let displayProg = (hc.program || hc.project_name || '').trim();
-        if (!displayProg && uniqueTags.length > 0) {
-          const progTag = uniqueTags.find((t: string) => {
-            const lt = t.toLowerCase();
-            return lt.includes('mba') || lt.includes('bba') || lt.includes('dba') || lt.includes('msc') || lt.includes('umef') || lt.includes('emba');
-          });
-          if (progTag) displayProg = progTag;
-        }
-        const admDateStr = hc.admission_date ? (() => {
-          const d = new Date(hc.admission_date);
-          if (isNaN(d.getTime())) return String(hc.admission_date).slice(0, 10);
-          const pad = (n: number) => String(n).padStart(2, '0');
-          return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
-        })() : '';
-
-        const tooltipWidth = 350;
-        let left = rect.left + rect.width / 2 - tooltipWidth / 2;
-        if (left < 12) left = 12;
-        if (typeof window !== 'undefined' && left + tooltipWidth > window.innerWidth - 12) {
-          left = window.innerWidth - tooltipWidth - 12;
-        }
-        const showAbove = typeof window !== 'undefined' && rect.bottom + 240 > window.innerHeight;
-        const top = showAbove ? Math.max(12, rect.top - 10) : rect.bottom + 8;
-
-        return createPortal(
-          <div
-            style={{
-              position: 'fixed',
-              top,
-              left,
-              transform: showAbove ? 'translateY(-100%)' : 'none',
-              width: tooltipWidth,
-              zIndex: 99999,
-              pointerEvents: 'none',
-              background: '#ffffff',
-              color: '#0f172a',
-              borderRadius: '14px',
-              padding: '12px 14px',
-              boxShadow: '0 14px 34px rgba(15, 23, 42, 0.14)',
-              border: '1px solid #e2e8f0',
-              fontSize: '0.75rem',
-              lineHeight: 1.45
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '8px', paddingBottom: '6px', borderBottom: '1px solid #f1f5f9' }}>
-              <div style={{ fontWeight: 800, fontSize: '0.84rem', color: '#0f172a' }}>
-                {hc.full_name || hc.name || 'Khách hàng'}
-              </div>
-              <span
-                style={{
-                  fontSize: '0.68rem',
-                  fontWeight: 700,
-                  padding: '2px 8px',
-                  borderRadius: '999px',
-                  background: stageInfo.isNewLead ? '#dc2626' : `${stageInfo.color}18`,
-                  color: stageInfo.isNewLead ? '#ffffff' : stageInfo.color,
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                {stageInfo.name}
-              </span>
-            </div>
-
-            {(displayProg || admDateStr) && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
-                {displayProg && (
-                  <span style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    padding: '2px 8px',
-                    borderRadius: '6px',
-                    fontSize: '0.7rem',
-                    fontWeight: 700,
-                    background: 'rgba(37, 99, 235, 0.1)',
-                    color: '#2563eb'
-                  }}>
-                    <GraduationCap size={12} style={{ flexShrink: 0 }} />
-                    <span>{displayProg}</span>
-                  </span>
-                )}
-                {admDateStr && (
-                  <span style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    padding: '2px 8px',
-                    borderRadius: '6px',
-                    fontSize: '0.7rem',
-                    fontWeight: 700,
-                    background: 'rgba(16, 185, 129, 0.1)',
-                    color: '#059669'
-                  }}>
-                    <Calendar size={12} style={{ flexShrink: 0 }} />
-                    <span>{admDateStr}</span>
-                  </span>
-                )}
-              </div>
-            )}
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 10px', marginBottom: '8px' }}>
-              <div>
-                <span style={{ color: '#64748b', fontSize: '0.68rem' }}>Phụ trách: </span>
-                <strong style={{ color: '#0f172a' }}>{hc.owner_name || 'Chưa giao'}</strong>
-              </div>
-              <div>
-                <span style={{ color: '#64748b', fontSize: '0.68rem' }}>Nguồn: </span>
-                <strong style={{ color: '#0f172a' }}>{hc.source || '—'}</strong>
-              </div>
-            </div>
-
-            {uniqueTags.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '8px' }}>
-                {uniqueTags.map((t, idx) => (
-                  <span
-                    key={idx}
-                    style={{
-                      fontSize: '0.65rem',
-                      fontWeight: 600,
-                      padding: '2px 7px',
-                      borderRadius: '6px',
-                      background: '#f1f5f9',
-                      color: '#334155'
-                    }}
-                  >
-                    #{t}
-                  </span>
-                ))}
-              </div>
-            )}
-
-            <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '8px 10px' }}>
-              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#2563eb', marginBottom: '3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <MessageSquare size={12} style={{ flexShrink: 0 }} />
-                <span>Tương tác / Ghi chú gần nhất</span>
-              </div>
-              <div style={{ color: '#0f172a', whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '140px', overflow: 'hidden' }}>
-                {lastNote || initialNote || 'Chưa có ghi chú tương tác'}
-              </div>
-              {lastNote && initialNote && initialNote !== lastNote && (
-                <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #e2e8f0', fontSize: '0.7rem', color: '#334155' }}>
-                  <span style={{ color: '#64748b', fontWeight: 600 }}>Ghi chú gốc: </span>
-                  {initialNote}
-                </div>
-              )}
-            </div>
-          </div>,
-          document.body
-        );
-      })()}
+      <ContactsFloatingTooltip triggerRef={hoveredCellTriggerRef} pipelineStages={pipelineStages} />
     </div>
   );
 };

@@ -419,12 +419,6 @@ export default function HRM() {
         finalUser = profilesByNameMap.get(String(finalApproverName).toLowerCase().trim());
       }
 
-      if (!finalUser) {
-        if (type === 'leave' || item.type === 'leave') {
-          finalUser = profilesByNameMap.get('phuongntd') || profilesByNameMap.get('nguyễn thị duy phương');
-        }
-      }
-
       const displayName = finalUser?.full_name || finalUser?.name || finalApproverName || t('Đã phê duyệt');
       const avatarUrl = finalUser?.avatar_url || finalUser?.avatar;
 
@@ -482,12 +476,6 @@ export default function HRM() {
     }
     if (!approverUser && targetApproverName) {
       approverUser = profilesByNameMap.get(targetApproverName.toLowerCase().trim());
-    }
-
-    if (!approverUser) {
-      if (type === 'leave' || item.type === 'leave') {
-        approverUser = profilesByNameMap.get('phuongntd') || profilesByNameMap.get('nguyễn thị duy phương');
-      }
     }
 
     const displayName = approverUser?.full_name || approverUser?.name || targetApproverName || t('Chờ phân công');
@@ -803,7 +791,7 @@ export default function HRM() {
               value: 0
             };
           }
-          const addVal = actualLate > 0 ? actualLate : 15;
+          const addVal = actualLate > 0 ? actualLate : 0;
           map[uid].count += 1;
           map[uid].value += addVal;
         }
@@ -1070,13 +1058,17 @@ export default function HRM() {
   const [sendingPayslipId, setSendingPayslipId] = useState<number | null>(null);
   const approveLeaveInFlightRef = useRef(false);
   const approveAdvanceInFlightRef = useRef(false);
+  const saveProfileInFlightRef = useRef(false);
+  const sendSinglePayslipInFlightRef = useRef(false);
+  const savePayrollInFlightRef = useRef(false);
   const runPayrollInFlightRef = useRef(false);
   const publishPayrollInFlightRef = useRef(false);
   const lockPayrollInFlightRef = useRef(false);
   const unlockPayrollInFlightRef = useRef(false);
 
   const handleSaveProfile = async () => {
-    if (!selectedUser || isSavingProfile) return;
+    if (!selectedUser || isSavingProfile || saveProfileInFlightRef.current) return;
+    saveProfileInFlightRef.current = true;
     setIsSavingProfile(true);
     try {
       await fetchAPI('hrm/profiles', {
@@ -1105,6 +1097,7 @@ export default function HRM() {
     } catch (err: any) {
       toast.error(err?.message || t('Lỗi khi lưu thông tin'));
     } finally {
+      saveProfileInFlightRef.current = false;
       setIsSavingProfile(false);
     }
   };
@@ -1239,7 +1232,8 @@ export default function HRM() {
   };
 
   const handleSendSinglePayslip = async (ps: any) => {
-    if (sendingPayslipId === ps.id) return;
+    if (sendingPayslipId === ps.id || sendSinglePayslipInFlightRef.current) return;
+    sendSinglePayslipInFlightRef.current = true;
     setSendingPayslipId(ps.id);
     try {
       await fetchAPI('hrm/payroll/send', {
@@ -1249,14 +1243,18 @@ export default function HRM() {
       });
       toast.success(t(`Đã gửi yêu cầu ký xác nhận lương cho ${ps.employee_name}!`));
       setPayslips(prev => prev.map(item => item.id === ps.id ? { ...item, status: 'sent', signature_url: null, confirmed_at: null, note: null } : item));
+      loadAllPayslips();
     } catch (err: any) {
       toast.error(err?.message || t('Lỗi gửi yêu cầu xác nhận'));
     } finally {
+      sendSinglePayslipInFlightRef.current = false;
       setSendingPayslipId(null);
     }
   };
 
   const handleSavePayroll = async () => {
+    if (saving || savePayrollInFlightRef.current) return;
+    savePayrollInFlightRef.current = true;
     setSaving(true);
     try {
       await fetchAPI('hrm/payroll/save', {
@@ -1266,9 +1264,11 @@ export default function HRM() {
       });
       toast.success(t('Đã lưu bảng lương thành công!'));
       loadPayslips();
+      loadAllPayslips();
     } catch (err: any) {
       toast.error(err?.message || t('Lỗi khi lưu bảng lương'));
     } finally {
+      savePayrollInFlightRef.current = false;
       setSaving(false);
     }
   };
@@ -1288,6 +1288,7 @@ export default function HRM() {
       });
       toast.success(t('Tính lương hoàn tất!'));
       loadPayslips();
+      loadAllPayslips();
     } catch (err: any) {
       toast.error(err?.message || t('Lỗi tính lương'));
     } finally {
@@ -1308,6 +1309,7 @@ export default function HRM() {
       });
       toast.success(t('Đã gửi phiếu lương yêu cầu xác thực đến toàn bộ nhân sự!'));
       loadPayslips();
+      loadAllPayslips();
     } catch (err: any) {
       toast.error(err?.message || t('Lỗi phát hành'));
     } finally {
@@ -1534,10 +1536,10 @@ export default function HRM() {
           const totalPendingRequests = pendingLeaves + pendingAdvances;
 
           // Attendance stats today
-          const presentToday = todayCheckIns.length > 0 ? todayCheckIns.length : Math.round(totalHeadcount * 0.85) || 28;
+          const presentToday = todayCheckIns.length > 0 ? todayCheckIns.length : 0;
           const lateToday = todayCheckIns.length > 0 
             ? todayCheckIns.filter(c => c.status === 'late' || Number(c.lateness_minutes || 0) > 0).length 
-            : Math.round(totalHeadcount * 0.12) || 4;
+            : 0;
 
           const deptMap: Record<string, number> = {};
           profiles.forEach(p => {
@@ -1557,14 +1559,35 @@ export default function HRM() {
             .map(([name, value]) => ({ name, value }))
             .sort((a, b) => b.value - a.value);
 
-          const weeklyAttendanceData = [
-            { name: t('Thứ 2'), rate: 95, count: Math.round(totalHeadcount * 0.95) },
-            { name: t('Thứ 3'), rate: 88, count: Math.round(totalHeadcount * 0.88) },
-            { name: t('Thứ 4'), rate: 90, count: Math.round(totalHeadcount * 0.90) },
-            { name: t('Thứ 5'), rate: 85, count: Math.round(totalHeadcount * 0.85) },
-            { name: t('Thứ 6'), rate: 95, count: Math.round(totalHeadcount * 0.95) },
-            { name: t('Thứ 7'), rate: 82, count: Math.round(totalHeadcount * 0.82) }
-          ];
+          const weeklyAttendanceData = (() => {
+            const now = new Date();
+            const dayOfWeek = now.getDay();
+            const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+            const monday = new Date(now);
+            monday.setDate(now.getDate() + diffToMonday);
+            monday.setHours(0, 0, 0, 0);
+
+            const daysLabels = [t('Thứ 2'), t('Thứ 3'), t('Thứ 4'), t('Thứ 5'), t('Thứ 6'), t('Thứ 7')];
+            const sourceCheckIns = dashboardCheckIns.length > 0 ? dashboardCheckIns : todayCheckIns;
+
+            return daysLabels.map((label, idx) => {
+              const targetDate = new Date(monday);
+              targetDate.setDate(monday.getDate() + idx);
+              const dateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`;
+              const uniqueUsers = new Set(
+                sourceCheckIns
+                  .filter(c => String(c.date || c.check_in_time || '').startsWith(dateStr))
+                  .map(c => c.user_id)
+              );
+              const count = uniqueUsers.size;
+              const rate = totalHeadcount > 0 ? Math.min(100, Math.round((count / totalHeadcount) * 100)) : 0;
+              return { name: label, rate, count };
+            });
+          })();
+          const activeWeekDays = weeklyAttendanceData.filter(d => d.count > 0);
+          const weeklyAvgRate = activeWeekDays.length > 0
+            ? Number((activeWeekDays.reduce((acc, d) => acc + d.rate, 0) / activeWeekDays.length).toFixed(1))
+            : 0;
 
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', animation: 'slideUp 0.3s ease-out both' }}>
@@ -1762,7 +1785,7 @@ export default function HRM() {
                       {t('TỶ LỆ ĐI LÀM TUẦN NÀY (%)')}
                     </h3>
                     <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
-                      TB: 89.5%
+                      {t('TB')}: {weeklyAvgRate}%
                     </span>
                   </div>
                   <div style={{ height: 260 }}>
@@ -2029,7 +2052,6 @@ export default function HRM() {
         {/* TAB 2: LEAVES (Phong cách Quy trình Approvals) */}
         {activeTab === 'leaves' && (() => {
           const filteredList = leaves.filter(req => {
-            if ([6, 7, 8, 21].includes(Number(req.id))) return false;
             if (showOnlyMyPending && !(req.status === 'pending' && isMyPendingRequest(req))) return false;
             if (!searchTerm) return true;
             const term = searchTerm.toLowerCase();

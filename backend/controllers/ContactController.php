@@ -129,7 +129,7 @@ class ContactController {
         if (!in_array(strtoupper($order), ['ASC', 'DESC'], true)) $order = 'DESC';
 
         if ($sortBy === 'created_at') {
-            $orderByClause = "GREATEST(c.created_at, IFNULL(c.updated_at, c.created_at)) $order, c.id $order";
+            $orderByClause = "c.created_at $order, c.id $order";
         } elseif ($sortBy === 'last_contact') {
             $orderByClause = "c.last_contact $order, c.id $order";
         } elseif ($sortBy === 'updated_at') {
@@ -220,8 +220,9 @@ class ContactController {
         if ($source) { $where[] = 'c.source = ?'; $params[] = $source; }
         if ($owner)  { $where[] = 'c.owner_id = ?'; $params[] = (int)$owner; }
         if ($teamId !== '' && $teamId !== 'all') {
-            $where[] = 'c.owner_id IN (SELECT id FROM users WHERE team_id = ?)';
+            $where[] = 'c.owner_id IN (SELECT id FROM users WHERE team_id = ? AND tenant_id = ?)';
             $params[] = (int)$teamId;
+            $params[] = $tid;
         }
         if ($companyId) { $where[] = 'c.company_id = ?'; $params[] = (int)$companyId; }
         if ($projectId !== '') { $where[] = 'c.project_id = ?'; $params[] = (int)$projectId; }
@@ -1275,17 +1276,14 @@ class ContactController {
                     END as closed_date,
                     (SELECT COUNT(*) FROM activities a WHERE a.tenant_id = c.tenant_id AND a.deleted_at IS NULL AND ((a.related_type IN ('contact', 'lead') AND a.related_id = c.id) OR a.contact_id = c.id)) as activity_count,
                     (SELECT COUNT(*) FROM activities a WHERE a.tenant_id = c.tenant_id AND a.deleted_at IS NULL AND a.type IN ('task', 'meeting') AND (a.status NOT IN ('done', 'cancelled', 'completed') AND (a.progress < 100 OR a.progress IS NULL)) AND ((a.related_type IN ('contact', 'lead') AND a.related_id = c.id) OR a.contact_id = c.id)) as pending_task_count,
-                    (SELECT COALESCE(SUM(total),0) FROM invoices WHERE contact_id=c.id AND status='paid' AND deleted_at IS NULL) as actual_revenue,
-                    (SELECT COUNT(*) FROM invoices WHERE contact_id=c.id AND status='paid' AND deleted_at IS NULL) as paid_invoice_count,
-                    (SELECT COALESCE(SUM(ee.amount),0) FROM expense_entities ee JOIN expenses e ON ee.expense_id = e.id WHERE ee.entity_type = 'contact' AND ee.entity_id = c.id AND e.status = 'approved' AND e.deleted_at IS NULL) as total_spent,
-                    (SELECT COUNT(*) FROM expense_entities ee JOIN expenses e ON ee.expense_id = e.id WHERE ee.entity_type = 'contact' AND ee.entity_id = c.id AND e.status = 'approved' AND e.deleted_at IS NULL) as expense_count,
-                    (
-                        SELECT MAX(dt) FROM (
-                            SELECT contact_id as cid, paid_at as dt FROM invoices WHERE status='paid' AND deleted_at IS NULL
-                            UNION ALL
-                            SELECT ee.entity_id as cid, e.approved_at as dt FROM expense_entities ee JOIN expenses e ON ee.expense_id = e.id WHERE ee.entity_type = 'contact' AND e.status = 'approved' AND e.deleted_at IS NULL
-                        ) as t WHERE t.cid = c.id
-                    ) as last_order_at,
+                    ((SELECT COALESCE(SUM(total), 0) FROM invoices WHERE contact_id = c.id AND tenant_id = c.tenant_id AND status = 'paid' AND deleted_at IS NULL) + (SELECT COALESCE(SUM(e.amount), 0) FROM expense_entities ee JOIN expenses e ON ee.expense_id = e.id WHERE ee.entity_type = 'contact' AND ee.entity_id = c.id AND e.tenant_id = c.tenant_id AND e.status IN ('approved', 'paid') AND e.deleted_at IS NULL)) as actual_revenue,
+                    (SELECT COUNT(*) FROM invoices WHERE contact_id=c.id AND tenant_id=c.tenant_id AND status='paid' AND deleted_at IS NULL) as paid_invoice_count,
+                    (SELECT COALESCE(SUM(ee.amount),0) FROM expense_entities ee JOIN expenses e ON ee.expense_id = e.id WHERE ee.entity_type = 'contact' AND ee.entity_id = c.id AND e.tenant_id = c.tenant_id AND e.status = 'approved' AND e.deleted_at IS NULL) as total_spent,
+                    (SELECT COUNT(*) FROM expense_entities ee JOIN expenses e ON ee.expense_id = e.id WHERE ee.entity_type = 'contact' AND ee.entity_id = c.id AND e.tenant_id = c.tenant_id AND e.status = 'approved' AND e.deleted_at IS NULL) as expense_count,
+                    NULLIF(GREATEST(
+                        COALESCE((SELECT MAX(paid_at) FROM invoices WHERE contact_id = c.id AND tenant_id = c.tenant_id AND status = 'paid' AND deleted_at IS NULL), ''),
+                        COALESCE((SELECT MAX(e.approved_at) FROM expense_entities ee JOIN expenses e ON ee.expense_id = e.id WHERE ee.entity_type = 'contact' AND ee.entity_id = c.id AND e.tenant_id = c.tenant_id AND e.status IN ('approved', 'paid') AND e.deleted_at IS NULL), '')
+                    ), '') as last_order_at,
                     l.id as lead_id,
                     dl.round_id as dl_round_id,
                     dl.status as dl_status,
@@ -1354,7 +1352,7 @@ class ContactController {
         if ($auth['role'] === 'viewer') respond(403, null, 'Bạn không có quyền cập nhật', false);
         $b = getBody();
         // 1. Pre-fetch current contact state for lifecycle validation
-        $stmtCurr = $this->db->prepare("SELECT stage_id, pipeline_status, ttl1_completed, owner_id, full_name, person_id, email, phone, mobile, collaborator_ids FROM contacts WHERE id = ? AND tenant_id = ?");
+        $stmtCurr = $this->db->prepare("SELECT stage_id, pipeline_status, ttl1_completed, owner_id, full_name, person_id, email, phone, mobile, collaborator_ids FROM contacts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
         $stmtCurr->execute([$id, $auth['tenant_id']]);
         $currentContact = $stmtCurr->fetch();
         if (!$currentContact) respond(404, null, 'Không tìm thấy liên hệ', false);
@@ -1879,17 +1877,14 @@ class ContactController {
                         ELSE comp.name 
                     END as company_name, 
                     u.full_name as owner_name, u.avatar_url as owner_avatar, ps.name as stage_name, ps.color as stage_color,
-                    (SELECT COALESCE(SUM(total),0) FROM invoices WHERE contact_id=c.id AND status='paid' AND deleted_at IS NULL) as actual_revenue,
-                    (SELECT COUNT(*) FROM invoices WHERE contact_id=c.id AND status='paid' AND deleted_at IS NULL) as paid_invoice_count,
-                    (SELECT COALESCE(SUM(ee.amount),0) FROM expense_entities ee JOIN expenses e ON ee.expense_id = e.id WHERE ee.entity_type = 'contact' AND ee.entity_id = c.id AND e.status = 'approved' AND e.deleted_at IS NULL) as total_spent,
-                    (SELECT COUNT(*) FROM expense_entities ee JOIN expenses e ON ee.expense_id = e.id WHERE ee.entity_type = 'contact' AND ee.entity_id = c.id AND e.status = 'approved' AND e.deleted_at IS NULL) as expense_count,
-                    (
-                        SELECT MAX(dt) FROM (
-                            SELECT contact_id as cid, paid_at as dt FROM invoices WHERE status='paid' AND deleted_at IS NULL
-                            UNION ALL
-                            SELECT ee.entity_id as cid, e.approved_at as dt FROM expense_entities ee JOIN expenses e ON ee.expense_id = e.id WHERE ee.entity_type = 'contact' AND e.status = 'approved' AND e.deleted_at IS NULL
-                        ) as t WHERE t.cid = c.id
-                    ) as last_order_at,
+                    ((SELECT COALESCE(SUM(total), 0) FROM invoices WHERE contact_id = c.id AND tenant_id = c.tenant_id AND status = 'paid' AND deleted_at IS NULL) + (SELECT COALESCE(SUM(e.amount), 0) FROM expense_entities ee JOIN expenses e ON ee.expense_id = e.id WHERE ee.entity_type = 'contact' AND ee.entity_id = c.id AND e.tenant_id = c.tenant_id AND e.status IN ('approved', 'paid') AND e.deleted_at IS NULL)) as actual_revenue,
+                    (SELECT COUNT(*) FROM invoices WHERE contact_id=c.id AND tenant_id=c.tenant_id AND status='paid' AND deleted_at IS NULL) as paid_invoice_count,
+                    (SELECT COALESCE(SUM(ee.amount),0) FROM expense_entities ee JOIN expenses e ON ee.expense_id = e.id WHERE ee.entity_type = 'contact' AND ee.entity_id = c.id AND e.tenant_id = c.tenant_id AND e.status = 'approved' AND e.deleted_at IS NULL) as total_spent,
+                    (SELECT COUNT(*) FROM expense_entities ee JOIN expenses e ON ee.expense_id = e.id WHERE ee.entity_type = 'contact' AND ee.entity_id = c.id AND e.tenant_id = c.tenant_id AND e.status = 'approved' AND e.deleted_at IS NULL) as expense_count,
+                    NULLIF(GREATEST(
+                        COALESCE((SELECT MAX(paid_at) FROM invoices WHERE contact_id = c.id AND tenant_id = c.tenant_id AND status = 'paid' AND deleted_at IS NULL), ''),
+                        COALESCE((SELECT MAX(e.approved_at) FROM expense_entities ee JOIN expenses e ON ee.expense_id = e.id WHERE ee.entity_type = 'contact' AND ee.entity_id = c.id AND e.tenant_id = c.tenant_id AND e.status IN ('approved', 'paid') AND e.deleted_at IS NULL), '')
+                    ), '') as last_order_at,
                     comp.tier as company_tier,
                     CASE 
                         WHEN comp.tier = 'referrer' THEN comp.name
@@ -1960,7 +1955,7 @@ class ContactController {
         }
 
         // Check current status for CAPI/Timer trigger
-        $stmtC = $this->db->prepare("SELECT pipeline_status, stage_id, owner_id, full_name, ttl1_completed, lead_status FROM contacts WHERE id = ? AND tenant_id = ?");
+        $stmtC = $this->db->prepare("SELECT pipeline_status, stage_id, owner_id, full_name, ttl1_completed, lead_status FROM contacts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
         $stmtC->execute([$id, $auth['tenant_id']]);
         $currentContact = $stmtC->fetch();
         if (!$currentContact) respond(404, null, 'Không tìm thấy liên hệ', false);
@@ -3644,6 +3639,7 @@ class ContactController {
         $sql = "SELECT id, full_name, phone, mobile, avatar_url, pipeline_status, stage_id
                 FROM contacts
                 WHERE tenant_id = ? 
+                  AND deleted_at IS NULL
                   AND (stage_id >= 9 OR pipeline_status IN ($placeholders))
                   AND ((phone IS NOT NULL AND phone != '') OR (mobile IS NOT NULL AND mobile != ''))";
         
@@ -3689,6 +3685,15 @@ class ContactController {
      * - Tải ảnh về lưu trữ nội bộ máy chủ để tránh link Zalo bị chặn hotlink
      */
     public function silentAvatarSync(array $auth): void {
+        if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+            header('Content-Type: image/gif');
+            header('Cache-Control: no-cache, no-store, must-revalidate');
+            echo base64_decode('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');
+            exit;
+        }
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            respond(405, null, 'Chỉ hỗ trợ phương thức POST để cập nhật', false);
+        }
         if (!in_array($auth['role'], ['admin', 'superadmin', 'manager'], true)) {
             respond(403, null, 'Không có quyền thực hiện', false);
         }
@@ -3699,11 +3704,6 @@ class ContactController {
         $zaloName = trim($b['zalo_name'] ?? $_GET['zalo_name'] ?? '');
 
         if (!$id || empty($avatarUrl)) {
-            if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-                header('Content-Type: image/gif');
-                echo base64_decode('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');
-                exit;
-            }
             respond(400, null, 'Thiếu contact_id hoặc avatar_url', false);
         }
 
@@ -3739,15 +3739,8 @@ class ContactController {
         }
 
         // Cập nhật âm thầm: updated_at = updated_at
-        $stmt = $this->db->prepare("UPDATE contacts SET avatar_url = ?, updated_at = updated_at WHERE id = ? AND tenant_id = ?");
+        $stmt = $this->db->prepare("UPDATE contacts SET avatar_url = ?, updated_at = updated_at WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
         $stmt->execute([$savedUrl, $id, $tid]);
-
-        if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-            header('Content-Type: image/gif');
-            header('Cache-Control: no-cache, no-store, must-revalidate');
-            echo base64_decode('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');
-            exit;
-        }
 
         respond(200, [
             'id' => $id,

@@ -1219,6 +1219,8 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
   const isManagerOrAbove = Boolean(user && ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'accountant', 'ketoan', 'leader', 'truongphong', 'head_of_department'].includes(String(user.role).toLowerCase()));
   const isAutoApprove = Boolean(isManagerOrAbove && form.approver_id !== null && user?.id !== undefined && Number(form.approver_id) === Number(user.id));
 
+  const multiUploadInFlightRef = useRef(false);
+
   // Handle Save
   const handleSave = async (isSaveDraft = false) => {
     if (saveInFlightRef.current) return;
@@ -1228,7 +1230,8 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
       if (isEditMode) {
         const creatorId = Number(editItem.created_by || editItem.user_id);
         const currentUserId = Number(user?.id);
-        if (creatorId && currentUserId && creatorId !== currentUserId) {
+        const isAdminOrMgr = Boolean(user && ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'accountant'].includes(String(user.role).toLowerCase()));
+        if (creatorId && currentUserId && creatorId !== currentUserId && !isAdminOrMgr) {
           addToast('Chỉ người tạo phiếu mới có quyền chỉnh sửa', 'error');
           return;
         }
@@ -2989,6 +2992,8 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                       onChange={async (e) => {
                         const files = e.target.files;
                         if (!files || files.length === 0) return;
+                        if (multiUploadInFlightRef.current) return;
+                        multiUploadInFlightRef.current = true;
                         setUploadingImg(true);
                         let successCount = 0;
                         try {
@@ -3032,6 +3037,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                         } catch (err: any) {
                           addToast('Lỗi khi tải tệp: ' + (err.message || err), 'error');
                         } finally {
+                          multiUploadInFlightRef.current = false;
                           setUploadingImg(false);
                           if (fileInputMultiRef.current) fileInputMultiRef.current.value = '';
                         }

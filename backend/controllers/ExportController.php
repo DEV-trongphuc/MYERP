@@ -1048,17 +1048,32 @@ class ExportController {
                 $where[] = 't.created_at <= ?';
                 $params[] = $to . ' 23:59:59';
             } elseif ($period === 'today') {
-                $where[] = "t.created_at >= CURDATE() AND t.created_at <= CONCAT(CURDATE(), ' 23:59:59')";
+                $where[] = 't.created_at BETWEEN ? AND ?';
+                $params[] = date('Y-m-d 00:00:00');
+                $params[] = date('Y-m-d 23:59:59');
             } elseif ($period === 'this_week') {
-                $where[] = "YEARWEEK(t.created_at, 1) = YEARWEEK(CURDATE(), 1)";
+                $where[] = 't.created_at BETWEEN ? AND ?';
+                $params[] = date('Y-m-d 00:00:00', strtotime('monday this week'));
+                $params[] = date('Y-m-d 23:59:59', strtotime('sunday this week'));
             } elseif ($period === 'this_month') {
-                $where[] = "t.created_at >= DATE_FORMAT(NOW(), '%Y-%m-01 00:00:00') AND t.created_at <= CONCAT(LAST_DAY(NOW()), ' 23:59:59')";
+                $where[] = 't.created_at BETWEEN ? AND ?';
+                $params[] = date('Y-m-01 00:00:00');
+                $params[] = date('Y-m-t 23:59:59');
             } elseif ($period === 'last_month') {
-                $where[] = "t.created_at >= DATE_FORMAT(DATE_SUB(NOW(), INTERVAL 1 MONTH), '%Y-%m-01 00:00:00') AND t.created_at <= CONCAT(LAST_DAY(DATE_SUB(NOW(), INTERVAL 1 MONTH)), ' 23:59:59')";
+                $where[] = 't.created_at BETWEEN ? AND ?';
+                $params[] = date('Y-m-01 00:00:00', strtotime('first day of last month'));
+                $params[] = date('Y-m-t 23:59:59', strtotime('last day of last month'));
             } elseif ($period === 'this_quarter') {
-                $where[] = "QUARTER(t.created_at) = QUARTER(NOW()) AND YEAR(t.created_at) = YEAR(NOW())";
+                $curQ = (int)ceil((int)date('n') / 3);
+                $qStartMonth = ($curQ - 1) * 3 + 1;
+                $qEndMonth = $curQ * 3;
+                $where[] = 't.created_at BETWEEN ? AND ?';
+                $params[] = sprintf('%s-%02d-01 00:00:00', date('Y'), $qStartMonth);
+                $params[] = date('Y-m-t 23:59:59', strtotime(sprintf('%s-%02d-01', date('Y'), $qEndMonth)));
             } elseif ($period === 'this_year') {
-                $where[] = "YEAR(t.created_at) = YEAR(NOW())";
+                $where[] = 't.created_at BETWEEN ? AND ?';
+                $params[] = date('Y-01-01 00:00:00');
+                $params[] = date('Y-12-31 23:59:59');
             }
 
             $whereStr = implode(' AND ', $where);
@@ -1707,13 +1722,21 @@ class ExportController {
         $params = [$tid];
 
         // Zero-Trust Finance RBAC Isolation
-        if (!$isGlobalAdmin && !$isAccountant && !$isManager) {
-            $where[] = "(e.created_by = ? OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ? OR FIND_IN_SET(?, IFNULL(e.related_user_ids, '')))";
-            $params[] = $uid;
-            $params[] = $uid;
-            $params[] = $uid;
-            $params[] = $uid;
-            $params[] = (string)$uid;
+        if (!$isGlobalAdmin && !$isAccountant) {
+            if ($isManager) {
+                $stmtMgrTeam = $this->db->prepare("SELECT team_id FROM users WHERE id = ? LIMIT 1");
+                $stmtMgrTeam->execute([$uid]);
+                $mgrTeamId = (int)($stmtMgrTeam->fetchColumn() ?: 0);
+                $where[] = "(e.created_by IN (SELECT id FROM users WHERE (team_id > 0 AND team_id = ?) OR team_id IN (SELECT id FROM teams WHERE leader_id = ?) OR id = ?) OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ? OR FIND_IN_SET(?, IFNULL(e.related_user_ids, '')))";
+                array_push($params, $mgrTeamId, $uid, $uid, $uid, $uid, $uid, (string)$uid);
+            } else {
+                $where[] = "(e.created_by = ? OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ? OR FIND_IN_SET(?, IFNULL(e.related_user_ids, '')))";
+                $params[] = $uid;
+                $params[] = $uid;
+                $params[] = $uid;
+                $params[] = $uid;
+                $params[] = (string)$uid;
+            }
         }
 
         $departmentsParam = trim((string)($_GET['departments'] ?? ''));
@@ -1804,15 +1827,37 @@ class ExportController {
             $where[] = "e.date <= ?";
             $params[] = $toDate;
         } elseif ($period === 'this_month') {
-            $where[] = "e.date >= DATE_FORMAT(NOW(), '%Y-%m-01') AND e.date <= LAST_DAY(NOW())";
+            $where[] = "e.date BETWEEN ? AND ?";
+            $params[] = date('Y-m-01');
+            $params[] = date('Y-m-t');
         } elseif ($period === 'last_month') {
-            $where[] = "e.date >= DATE_FORMAT(DATE_SUB(NOW(), INTERVAL 1 MONTH), '%Y-%m-01') AND e.date <= LAST_DAY(DATE_SUB(NOW(), INTERVAL 1 MONTH))";
+            $where[] = "e.date BETWEEN ? AND ?";
+            $params[] = date('Y-m-01', strtotime('first day of last month'));
+            $params[] = date('Y-m-t', strtotime('last day of last month'));
         } elseif ($period === 'this_quarter') {
-            $where[] = "QUARTER(e.date) = QUARTER(NOW()) AND YEAR(e.date) = YEAR(NOW())";
+            $curQ = (int)ceil((int)date('n') / 3);
+            $qStartMonth = ($curQ - 1) * 3 + 1;
+            $qEndMonth = $curQ * 3;
+            $where[] = "e.date BETWEEN ? AND ?";
+            $params[] = sprintf('%s-%02d-01', date('Y'), $qStartMonth);
+            $params[] = date('Y-m-t', strtotime(sprintf('%s-%02d-01', date('Y'), $qEndMonth)));
         } elseif ($period === 'last_quarter') {
-            $where[] = "QUARTER(e.date) = QUARTER(DATE_SUB(NOW(), INTERVAL 3 MONTH)) AND YEAR(e.date) = YEAR(DATE_SUB(NOW(), INTERVAL 3 MONTH))";
+            $curQ = (int)ceil((int)date('n') / 3);
+            $lastQYear = (int)date('Y');
+            $lastQ = $curQ - 1;
+            if ($lastQ < 1) {
+                $lastQ = 4;
+                $lastQYear--;
+            }
+            $lqStartMonth = ($lastQ - 1) * 3 + 1;
+            $lqEndMonth = $lastQ * 3;
+            $where[] = "e.date BETWEEN ? AND ?";
+            $params[] = sprintf('%04d-%02d-01', $lastQYear, $lqStartMonth);
+            $params[] = date('Y-m-t', strtotime(sprintf('%04d-%02d-01', $lastQYear, $lqEndMonth)));
         } elseif ($period === 'this_year') {
-            $where[] = "YEAR(e.date) = YEAR(NOW())";
+            $where[] = "e.date BETWEEN ? AND ?";
+            $params[] = date('Y-01-01');
+            $params[] = date('Y-12-31');
         }
 
         if ($minAmount > 0) {
@@ -1950,10 +1995,10 @@ class ExportController {
         $isManager  = in_array($role, ['manager', 'truong_phong', 'leader', 'team_lead'], true);
         if (!$isFinAdmin) {
             if ($isManager) {
-                $where[] = "(d.sale_id = ? OR c.owner_id = ? OR d.sale_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))) OR c.owner_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))))";
+                $where[] = "(d.created_by = ? OR c.owner_id = ? OR d.created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))) OR c.owner_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))))";
                 array_push($params, $uid, $uid, $uid, $uid);
             } else {
-                $where[] = "(d.sale_id = ? OR c.owner_id = ? OR FIND_IN_SET(?, IFNULL(c.collaborator_ids, '')))";
+                $where[] = "(d.created_by = ? OR c.owner_id = ? OR FIND_IN_SET(?, IFNULL(c.collaborator_ids, '')))";
                 array_push($params, $uid, $uid, (string)$uid);
             }
         }
@@ -2009,7 +2054,7 @@ class ExportController {
                 $ownOrs = [];
                 foreach ($ownList as $own) {
                     if (is_numeric($own)) {
-                        $ownOrs[] = "(d.sale_id = ? OR c.owner_id = ?)";
+                        $ownOrs[] = "(d.created_by = ? OR c.owner_id = ?)";
                         $params[] = (int)$own;
                         $params[] = (int)$own;
                     } else {
@@ -2073,15 +2118,25 @@ class ExportController {
         } elseif ($period === 'yesterday') {
             $where[] = "d.created_at >= DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND d.created_at < CURDATE()";
         } elseif ($period === 'this_week') {
-            $where[] = "YEARWEEK(d.created_at, 1) = YEARWEEK(CURDATE(), 1)";
+            $where[] = "d.created_at BETWEEN ? AND ?";
+            $params[] = date('Y-m-d 00:00:00', strtotime('monday this week'));
+            $params[] = date('Y-m-d 23:59:59', strtotime('sunday this week'));
         } elseif ($period === 'this_month') {
             $where[] = "d.created_at >= DATE_FORMAT(NOW(), '%Y-%m-01 00:00:00') AND d.created_at <= CONCAT(LAST_DAY(NOW()), ' 23:59:59')";
         } elseif ($period === 'last_month') {
             $where[] = "d.created_at >= DATE_FORMAT(DATE_SUB(NOW(), INTERVAL 1 MONTH), '%Y-%m-01 00:00:00') AND d.created_at <= CONCAT(LAST_DAY(DATE_SUB(NOW(), INTERVAL 1 MONTH)), ' 23:59:59')";
         } elseif ($period === 'this_quarter') {
-            $where[] = "QUARTER(d.created_at) = QUARTER(NOW()) AND YEAR(d.created_at) = YEAR(NOW())";
+            $curMonth = (int)date('n');
+            $qStartMonth = (int)(floor(($curMonth - 1) / 3) * 3 + 1);
+            $qEndMonth = $qStartMonth + 2;
+            $qYear = (int)date('Y');
+            $where[] = "d.created_at BETWEEN ? AND ?";
+            $params[] = sprintf('%04d-%02d-01 00:00:00', $qYear, $qStartMonth);
+            $params[] = date('Y-m-t 23:59:59', strtotime(sprintf('%04d-%02d-01', $qYear, $qEndMonth)));
         } elseif ($period === 'this_year') {
-            $where[] = "YEAR(d.created_at) = YEAR(NOW())";
+            $where[] = "d.created_at BETWEEN ? AND ?";
+            $params[] = date('Y-01-01 00:00:00');
+            $params[] = date('Y-12-31 23:59:59');
         }
 
         if ($search !== '') {
@@ -2098,7 +2153,7 @@ class ExportController {
                 FROM deposits d
                 LEFT JOIN contacts c ON d.contact_id = c.id
                 LEFT JOIN projects p ON d.project_id = p.id
-                LEFT JOIN users u ON d.sale_id = u.id
+                LEFT JOIN users u ON COALESCE(d.created_by, c.owner_id) = u.id
                 LEFT JOIN users u_c ON c.owner_id = u_c.id
                 WHERE " . implode(' AND ', $where) . "
                 ORDER BY d.created_at DESC, d.id DESC";
@@ -2194,17 +2249,17 @@ class ExportController {
         $toDate           = trim((string)($_GET['to'] ?? $_GET['to_date'] ?? ''));
         $search           = trim((string)($_GET['search'] ?? $_GET['search_query'] ?? ''));
 
-        $where = ['t.tenant_id = ?'];
+        $where = ['t.tenant_id = ?', 't.deleted_at IS NULL', "t.type = 'task'"];
         $params = [$tid];
 
         $isTaskAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'hr', 'sale_admin', 'saleadmin'], true);
         $isManager   = in_array($role, ['manager', 'truong_phong', 'leader', 'team_lead'], true);
         if (!$isTaskAdmin) {
             if ($isManager) {
-                $where[] = "(t.assigned_to = ? OR t.created_by = ? OR t.assigned_to IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))) OR t.created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))))";
+                $where[] = "(t.user_id = ? OR t.created_by = ? OR t.user_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))) OR t.created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))))";
                 array_push($params, $uid, $uid, $uid, $uid);
             } else {
-                $where[] = "(t.assigned_to = ? OR t.created_by = ?)";
+                $where[] = "(t.user_id = ? OR t.created_by = ?)";
                 array_push($params, $uid, $uid);
             }
         }
@@ -2248,7 +2303,7 @@ class ExportController {
                 $assOrs = [];
                 foreach ($assList as $a) {
                     if (is_numeric($a)) {
-                        $assOrs[] = "t.assigned_to = ?";
+                        $assOrs[] = "t.user_id = ?";
                         $params[] = (int)$a;
                     } else {
                         $assOrs[] = "u_ass.full_name LIKE ?";
@@ -2298,7 +2353,13 @@ class ExportController {
             $where[] = "t.due_date IS NOT NULL AND t.due_date < NOW() AND t.status NOT IN ('done', 'completed', 'cancelled')";
         }
 
-        $colDate = in_array($dateField, ['due_date', 'created_at', 'completed_at'], true) ? "t.{$dateField}" : "t.due_date";
+        $colDateMap = [
+            'due_date'     => 't.due_date',
+            'created_at'   => 't.created_at',
+            'completed_at' => 't.done_at',
+            'done_at'      => 't.done_at',
+        ];
+        $colDate = $colDateMap[$dateField] ?? 't.due_date';
         if ($fromDate !== '' && $toDate !== '') {
             $where[] = "{$colDate} BETWEEN ? AND ?";
             $params[] = $fromDate . ' 00:00:00';
@@ -2312,7 +2373,9 @@ class ExportController {
         } elseif ($period === 'today') {
             $where[] = "{$colDate} >= CURDATE() AND {$colDate} <= CONCAT(CURDATE(), ' 23:59:59')";
         } elseif ($period === 'this_week') {
-            $where[] = "YEARWEEK({$colDate}, 1) = YEARWEEK(CURDATE(), 1)";
+            $where[] = "{$colDate} BETWEEN ? AND ?";
+            $params[] = date('Y-m-d 00:00:00', strtotime('monday this week'));
+            $params[] = date('Y-m-d 23:59:59', strtotime('sunday this week'));
         } elseif ($period === 'this_month') {
             $where[] = "{$colDate} >= DATE_FORMAT(NOW(), '%Y-%m-01 00:00:00') AND {$colDate} <= CONCAT(LAST_DAY(NOW()), ' 23:59:59')";
         } elseif ($period === 'last_month') {
@@ -2321,20 +2384,20 @@ class ExportController {
 
         if ($search !== '') {
             $like = "%{$search}%";
-            $where[] = "(t.title LIKE ? OR t.description LIKE ? OR u_ass.full_name LIKE ? OR p.name LIKE ? OR c.full_name LIKE ?)";
+            $where[] = "(t.subject LIKE ? OR t.body LIKE ? OR u_ass.full_name LIKE ? OR p.name LIKE ? OR c.full_name LIKE ?)";
             array_push($params, $like, $like, $like, $like, $like);
         }
 
-        $sql = "SELECT t.id, t.title, t.description, t.status, t.priority, t.due_date, t.completed_at, t.created_at,
+        $sql = "SELECT t.id, t.subject as title, t.body as description, t.status, t.priority, t.due_date, t.done_at as completed_at, t.created_at,
                        COALESCE(u_ass.full_name, 'Chưa phân công') as assignee_name,
                        COALESCE(u_cr.full_name, 'Hệ thống') as creator_name,
                        COALESCE(p.name, c.full_name, '') as related_name
-                FROM tasks t
-                LEFT JOIN users u_ass ON t.assigned_to = u_ass.id
+                FROM activities t
+                LEFT JOIN users u_ass ON t.user_id = u_ass.id
                 LEFT JOIN teams tm_ass ON u_ass.team_id = tm_ass.id
                 LEFT JOIN users u_cr ON t.created_by = u_cr.id
                 LEFT JOIN projects p ON (t.related_type = 'project' AND t.related_id = p.id)
-                LEFT JOIN contacts c ON (t.related_type IN ('contact', 'lead') AND t.related_id = c.id AND c.deleted_at IS NULL)
+                LEFT JOIN contacts c ON ((t.related_type IN ('contact', 'lead') AND t.related_id = c.id) OR t.contact_id = c.id) AND c.deleted_at IS NULL
                 WHERE " . implode(' AND ', $where) . "
                 ORDER BY t.due_date ASC, t.id DESC";
 
@@ -2514,7 +2577,9 @@ class ExportController {
         } elseif ($period === 'today') {
             $where[] = "t.created_at >= CURDATE() AND t.created_at <= CONCAT(CURDATE(), ' 23:59:59')";
         } elseif ($period === 'this_week') {
-            $where[] = "YEARWEEK(t.created_at, 1) = YEARWEEK(CURDATE(), 1)";
+            $where[] = "t.created_at BETWEEN ? AND ?";
+            $params[] = date('Y-m-d 00:00:00', strtotime('monday this week'));
+            $params[] = date('Y-m-d 23:59:59', strtotime('sunday this week'));
         } elseif ($period === 'this_month') {
             $where[] = "t.created_at >= DATE_FORMAT(NOW(), '%Y-%m-01 00:00:00') AND t.created_at <= CONCAT(LAST_DAY(NOW()), ' 23:59:59')";
         } elseif ($period === 'last_month') {
@@ -2607,7 +2672,7 @@ class ExportController {
         $monthYear        = trim((string)($_GET['month_year'] ?? date('Y-m')));
         $search           = trim((string)($_GET['search'] ?? $_GET['search_query'] ?? ''));
 
-        $where = ['u.tenant_id = ?', 'u.deleted_at IS NULL'];
+        $where = ['u.tenant_id = ?', "u.role NOT IN ('superadmin', 'super_admin')"];
         $params = [$monthYear, $tid];
 
         $canViewFullHrm = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'hr', 'nhan_su', 'accountant', 'ke_toan'], true);
@@ -2623,9 +2688,9 @@ class ExportController {
         }
 
         if ($statusParam === 'active') {
-            $where[] = "(u.status = 'active' AND COALESCE(u.is_active, 1) = 1)";
+            $where[] = "COALESCE(u.is_active, 1) = 1";
         } elseif ($statusParam === 'inactive') {
-            $where[] = "(u.status != 'active' OR COALESCE(u.is_active, 1) = 0)";
+            $where[] = "COALESCE(u.is_active, 1) = 0";
         }
 
         if ($departmentsParam !== '' && $departmentsParam !== 'all') {
@@ -2666,7 +2731,7 @@ class ExportController {
             array_push($params, $like, $like, $like, $like);
         }
 
-        $sql = "SELECT u.id, u.full_name, u.email, u.phone, u.role, u.job_title, u.department, u.status,
+        $sql = "SELECT u.id, u.full_name, u.email, u.phone, u.role, u.job_title, u.department, COALESCE(u.is_active, 1) as is_active,
                        COALESCE(tm.name, '') as team_name,
                        hp.joined_date, hp.base_salary, hp.has_insurance,
                        hp.annual_leave_total, hp.annual_leave_used,
@@ -2701,7 +2766,7 @@ class ExportController {
                 $leaveRem,
                 $canSeeSalary ? number_format((float)($r['base_salary'] ?? 0), 0, ',', '.') : 'Bảo mật',
                 $canSeeSalary && $r['net_salary'] !== null ? number_format((float)$r['net_salary'], 0, ',', '.') : ($canSeeSalary ? 'Chưa chốt' : 'Bảo mật'),
-                $r['status'] === 'active' ? 'Đang làm việc' : 'Ngừng hoạt động'
+                (int)($r['is_active'] ?? 1) === 1 ? 'Đang làm việc' : 'Ngừng hoạt động'
             ]);
         }
 
@@ -2713,7 +2778,9 @@ class ExportController {
      * Export HRM Allocated Assets with 100% Filter Parity
      */
     private function exportAssets(array $auth): void {
-        $tid = (int)($auth['tenant_id'] ?? 1);
+        $tid  = (int)($auth['tenant_id'] ?? 1);
+        $uid  = (int)($auth['user_id'] ?? ($auth['id'] ?? 0));
+        $role = strtolower(trim((string)($auth['role'] ?? 'user')));
 
         while (ob_get_level() > 0) {
             @ob_end_clean();
@@ -2740,6 +2807,13 @@ class ExportController {
         $search = trim((string)($_GET['search'] ?? $_GET['search_query'] ?? ''));
         $where = ['a.tenant_id = ?'];
         $params = [$tid];
+
+        $canViewAllAssets = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'hr', 'nhan_su', 'accountant', 'ke_toan', 'manager', 'truong_phong', 'leader', 'team_lead'], true);
+        if (!$canViewAllAssets) {
+            $where[] = 'a.user_id = ?';
+            $params[] = $uid;
+        }
+
         if ($search !== '') {
             $like = "%{$search}%";
             $where[] = "(a.asset_name LIKE ? OR a.asset_code LIKE ? OR u.full_name LIKE ?)";

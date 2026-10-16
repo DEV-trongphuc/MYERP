@@ -4,7 +4,13 @@ AddType image/webp .webp
 AddType image/svg+xml .svg
 AddType font/woff2 .woff2
 
-# 1. Server-level Gzip / Deflate Compression
+# 1. Server-level Brotli & Gzip / Deflate Compression
+<IfModule mod_brotli.c>
+  AddOutputFilterByType BROTLI_COMPRESS text/html text/plain text/xml text/css
+  AddOutputFilterByType BROTLI_COMPRESS application/javascript application/x-javascript application/json
+  AddOutputFilterByType BROTLI_COMPRESS image/svg+xml application/xml font/woff2
+</IfModule>
+
 <IfModule mod_deflate.c>
   AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css
   AddOutputFilterByType DEFLATE application/javascript application/x-javascript application/json
@@ -13,13 +19,15 @@ AddType font/woff2 .woff2
 
 # 2. Browser Cache-Control Headers
 <IfModule mod_headers.c>
+  Header append Vary Accept-Encoding
+
   # Immutable long-term cache for Vite hashed bundles & assets
   <FilesMatch "\.(js|mjs|css|webp|png|jpg|jpeg|gif|svg|woff2|woff|ttf|ico)$">
     Header set Cache-Control "public, max-age=31536000, immutable"
   </FilesMatch>
 
-  # Prevent caching of entry point & version manifest for instant live updates
-  <FilesMatch "(index\.html|version\.json)$">
+  # Prevent caching of entry point, Service Worker & version manifest for instant live updates
+  <FilesMatch "(index\.html|version\.json|sw\.js|registerSW\.js|manifest\.json|manifest\.webmanifest)$">
     Header set Cache-Control "no-cache, no-store, must-revalidate"
     Header set Pragma "no-cache"
     Header set Expires 0

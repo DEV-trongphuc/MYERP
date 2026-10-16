@@ -1151,13 +1151,8 @@ export default function Approvals() {
     setPssReqEmployeeId(user ? String(user.id) : '');
     setPssReqDate(new Date().toISOString().split('T')[0]);
     if (users && users.length > 0) {
-      const phuong = users.find(u => u.full_name?.includes('Nguyễn Thị Duy Phương') || u.name?.includes('Nguyễn Thị Duy Phương'));
-      if (phuong) {
-        setPssExecutorId(String(phuong.id));
-      } else {
-        const anyHr = users.find(u => u.role?.toLowerCase() === 'hr' || u.job_title?.toLowerCase()?.includes('hành chính'));
-        setPssExecutorId(anyHr ? String(anyHr.id) : '');
-      }
+      const anyHr = users.find(u => u.role?.toLowerCase() === 'hr' || u.job_title?.toLowerCase()?.includes('hành chính') || u.job_title?.toLowerCase()?.includes('nhân sự'));
+      setPssExecutorId(anyHr ? String(anyHr.id) : '');
     } else {
       setPssExecutorId('');
     }
@@ -1185,13 +1180,8 @@ export default function Approvals() {
 
   useEffect(() => {
     if (users && users.length > 0 && !pssExecutorId) {
-      const phuong = users.find(u => u.full_name?.includes('Nguyễn Thị Duy Phương') || u.name?.includes('Nguyễn Thị Duy Phương'));
-      if (phuong) {
-        setPssExecutorId(String(phuong.id));
-      } else {
-        const anyHr = users.find(u => u.role?.toLowerCase() === 'hr' || u.job_title?.toLowerCase()?.includes('hành chính'));
-        if (anyHr) setPssExecutorId(String(anyHr.id));
-      }
+      const anyHr = users.find(u => u.role?.toLowerCase() === 'hr' || u.job_title?.toLowerCase()?.includes('hành chính') || u.job_title?.toLowerCase()?.includes('nhân sự'));
+      if (anyHr) setPssExecutorId(String(anyHr.id));
     }
   }, [users]);
 
@@ -2524,20 +2514,11 @@ export default function Approvals() {
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, [showRelatedDropdown]);
 
-  // Helper to find default HR Leader / Trưởng phòng HR (Duy Phương)
+  // Helper to find default HR Leader / Trưởng phòng HR dynamically
   const getDefaultHrLeader = () => {
     if (!users || users.length === 0) return null;
 
-    // 1. Specific known HR Lead (Nguyễn Thị Duy Phương / phuongntd)
-    const duyPhuong = users.find(u => {
-      const fn = String(u.full_name || u.name || '').toLowerCase();
-      const em = String(u.email || '').toLowerCase();
-      const un = String(u.username || '').toLowerCase();
-      return fn.includes('duy phương') || fn.includes('nguyễn thị duy phương') || un === 'phuongntd' || em.includes('phuongntd');
-    });
-    if (duyPhuong) return duyPhuong;
-
-    // 2. Check HR team in teams list first for its designated leader
+    // 1. Check HR team in teams list first for its designated leader
     const hrTeam = teams.find(t => {
       const name = String(t.name || '').toLowerCase();
       return name.includes('nhân sự') || name.includes('hr') || name.includes('hành chính nhân sự') || name.includes('hcns') || name.includes('human resources');
@@ -2547,7 +2528,7 @@ export default function Approvals() {
       if (leader) return leader;
     }
 
-    // 3. User with HR Manager / Leader / Head job title
+    // 2. User with HR Manager / Leader / Head job title
     const hrLeaderByTitle = users.find(u => {
       const jt = String(u.job_title || '').toLowerCase();
       const r = String(u.role || '').toLowerCase();
@@ -2557,7 +2538,7 @@ export default function Approvals() {
     });
     if (hrLeaderByTitle) return hrLeaderByTitle;
 
-    // 4. Any HR team manager/leader
+    // 3. Any HR team manager/leader
     if (hrTeam) {
       const teamManager = users.find(u => Number(u.team_id) === Number(hrTeam.id) && ['manager', 'leader', 'admin'].includes(String(u.role).toLowerCase()) && !['superadmin', 'super_admin'].includes(String(u.role).toLowerCase()));
       if (teamManager) return teamManager;
@@ -2565,7 +2546,7 @@ export default function Approvals() {
       if (anyHrTeamMember) return anyHrTeamMember;
     }
 
-    // 5. Fallback: Any HR role
+    // 4. Fallback: Any HR role
     return users.find(u => String(u.role || '').toLowerCase() === 'hr') || null;
   };
 
@@ -2612,7 +2593,7 @@ export default function Approvals() {
       if (teamLead) return teamLead;
     }
 
-    // 2. Second priority (if no team leader or proposer is leader): Director (Mai Thị Nữ)
+    // 2. Second priority (if no team leader or proposer is leader): Director
     const director = businessUsers.find(u => ['director'].includes(String(u.role).toLowerCase()) && Number(u.id) !== Number(p.id));
     if (director) return director;
 
@@ -2620,7 +2601,7 @@ export default function Approvals() {
     const admin = businessUsers.find(u => ['admin'].includes(String(u.role).toLowerCase()) && Number(u.id) !== Number(p.id));
     if (admin) return admin;
 
-    // 3. Fallback: HR Leader (Nguyễn Thị Duy Phương)
+    // 3. Fallback: HR Leader
     const hrLead = getDefaultHrLeader();
     if (hrLead && Number(hrLead.id) !== Number(p.id)) return hrLead;
 
@@ -2643,15 +2624,9 @@ export default function Approvals() {
       !['superadmin', 'super_admin'].includes(String(u.role).toLowerCase()) && 
       u.email !== 'turniodev@gmail.com'
     );
-    return businessUsers.find(u => String(u.role).toLowerCase() === 'accountant')
-      || businessUsers.find(u => {
-        const fn = String(u.full_name || u.name || '').toLowerCase();
-        return fn.includes('thu thảo') || u.username === 'thaont';
-      })
-      || businessUsers.find(u => {
-        const fn = String(u.full_name || u.name || '').toLowerCase();
-        return fn.includes('duy phương') || u.username === 'phuongntd';
-      })
+    return businessUsers.find(u => ['accountant', 'ke_toan', 'ketoan'].includes(String(u.role).toLowerCase()))
+      || businessUsers.find(u => String(u.job_title || '').toLowerCase().includes('kế toán'))
+      || getDefaultHrLeader()
       || businessUsers[0]
       || null;
   }, [users, selectedWorkflowDef, formType, otType, defaultApp1]);
@@ -2661,21 +2636,11 @@ export default function Approvals() {
       !['superadmin', 'super_admin'].includes(String(u.role).toLowerCase()) && 
       u.email !== 'turniodev@gmail.com'
     );
-    // Find director Phạm Quang Vinh / Phan Quang Vinh (username: vinhpq, email: vinhpq@ideas.edu.vn)
-    return businessUsers.find(u => {
-      const fn = String(u.full_name || u.name || '').toLowerCase();
-      const un = String(u.username || '').toLowerCase();
-      const em = String(u.email || '').toLowerCase();
-      return fn.includes('quang vinh') || un === 'vinhpq' || em.includes('vinhpq') || fn.includes('phạm quang vinh') || fn.includes('phan quang vinh');
-    })
-    || businessUsers.find(u => String(u.role).toLowerCase() === 'director')
-    || businessUsers.find(u => {
-      const fn = String(u.full_name || u.name || '').toLowerCase();
-      return fn.includes('duy phương') || u.username === 'phuongntd';
-    })
-    || businessUsers.find(u => String(u.role).toLowerCase() === 'admin')
-    || businessUsers[0]
-    || null;
+    return businessUsers.find(u => ['director', 'ceo'].includes(String(u.role).toLowerCase()))
+      || businessUsers.find(u => String(u.job_title || '').toLowerCase().includes('giám đốc'))
+      || businessUsers.find(u => String(u.role).toLowerCase() === 'admin')
+      || businessUsers[0]
+      || null;
   }, [users]);
 
   const app1User = customApprover1 || defaultApp1;
@@ -14743,7 +14708,15 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
     };
   }, [showAddWatcherDropdown]);
 
+  const updateWatchersInFlightRef = useRef(false);
+  const executePayItemInFlightRef = useRef(false);
+  const reminderSendInFlightRef = useRef(false);
+  const addCommentInFlightRef = useRef(false);
+  const deleteCommentInFlightRef = useRef(false);
+
   const handleUpdateWatchers = async (newIds: number[]) => {
+    if (savingWatchers || updateWatchersInFlightRef.current) return;
+    updateWatchersInFlightRef.current = true;
     setSavingWatchers(true);
     try {
       const targetType = ((item as any)?.type === 'commission_payout' || !item.type) ? 'expense' : item.type;
@@ -14775,6 +14748,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
     } catch (err: any) {
       toast.error(err?.response?.data?.message || t('Lỗi khi cập nhật người theo dõi'));
     } finally {
+      updateWatchersInFlightRef.current = false;
       setSavingWatchers(false);
     }
   };
@@ -14858,9 +14832,11 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
   };
 
   const handleExecutePayItem = async (itemIdx: number, uncUrl?: string) => {
+    if (executePayItemInFlightRef.current || payingItemIndex !== null) return;
     const rawItems = detail?.items || (item as any)?.items || [];
     const targetItem = Array.isArray(rawItems) ? rawItems[itemIdx] : null;
     if (!targetItem) return;
+    executePayItemInFlightRef.current = true;
     setPayingItemIndex(itemIdx);
     try {
       const res = await api.post(`/expenses/${detail?.id || item.id}/pay-item`, {
@@ -14890,12 +14866,14 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
             is_refunded: allPaid ? 1 : prev.is_refunded
           };
         });
+        window.dispatchEvent(new CustomEvent('approval-updated'));
       } else {
         toast.error(res.data?.message || t('Có lỗi xảy ra khi xác nhận'));
       }
     } catch (err: any) {
       toast.error(err?.response?.data?.message || err?.message || t('Không thể xác nhận chi trả'));
     } finally {
+      executePayItemInFlightRef.current = false;
       setPayingItemIndex(null);
     }
   };
@@ -15060,6 +15038,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         return `/hrm/comments/${commentId}`;
       case 'checkin':
         return `/check-ins/comments/${commentId}`;
+      case 'attendance_bulk':
+        return `/attendance/bulk-requests/comments/${commentId}`;
       default:
         return null;
     }
@@ -19732,6 +19712,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 type="button"
                 className="btn primary"
                 onClick={async () => {
+                  if (reminderSendInFlightRef.current) return;
+                  reminderSendInFlightRef.current = true;
                   const targetName = reminderTargetUser.full_name || reminderTargetUser.name || '';
                   try {
                     await api.post('/notifications/reminder', {
@@ -19745,6 +19727,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                   } catch (err: any) {
                     toast.error(err?.response?.data?.message || err?.message || t('Lỗi gửi nhắc nhở'));
                   } finally {
+                    reminderSendInFlightRef.current = false;
                     setReminderTargetUser(null);
                     setReminderMessage('');
                   }
@@ -20106,23 +20089,6 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                   (u.full_name || u.name || '').toLowerCase().includes(watcherSearch.toLowerCase())
                 );
 
-                const rawDesc = detail?.notes || detail?.description || detail?.reason || item.description || '';
-                const isHrWorkflow = item.type === 'leave' || item.type === 'checkin' || item.type === 'attendance_bulk' || rawDesc.includes('[Đăng ký làm việc từ xa]') || rawDesc.includes('[Đi muộn/Về sớm]') || rawDesc.includes('[Tăng ca]') || rawDesc.includes('[Nghỉ phép]');
-                const hrLeaderUser = effectiveUsers.find(u => 
-                  (u.username && u.username.toLowerCase() === 'phuongntd') ||
-                  (u.full_name && (u.full_name.toLowerCase().includes('duy phương') || u.full_name.toLowerCase().includes('nguyễn thị duy phương'))) ||
-                  (u.name && (u.name.toLowerCase().includes('duy phương') || u.name.toLowerCase().includes('nguyễn thị duy phương'))) ||
-                  ((u.role === 'hr' || (u.department && u.department.toLowerCase().includes('nhân sự'))) && ['manager', 'leader', 'admin', 'director'].includes(String(u.role).toLowerCase()))
-                );
-
-                // Tự động thêm Trưởng phòng HCNS (Phương) vào Người theo dõi cho các đề xuất HR nếu chưa có
-                if (isHrWorkflow && hrLeaderUser && !relUsers.some(u => Number(u.id) === Number(hrLeaderUser.id))) {
-                  relUsers.push({
-                    ...hrLeaderUser,
-                    role_title: hrLeaderUser.role_title || t('Phòng Hành chính - Nhân sự')
-                  });
-                }
-
                 return (
                   <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--color-border-light)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
@@ -20272,44 +20238,54 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 users={effectiveUsers || users}
                 showAttachments={true}
                 onAddComment={async (text, fileAttachments, parentId) => {
-                  const endpoint = getCommentsEndpoint(item.type, item.id);
-                  if (!endpoint) {
-                    const commentObj = {
-                      id: Date.now(),
-                      author: t('Tôi'),
-                      user_name: t('Tôi'),
-                      time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
-                      text: text,
+                  if (addCommentInFlightRef.current) return;
+                  addCommentInFlightRef.current = true;
+                  try {
+                    const endpoint = getCommentsEndpoint(item.type, item.id);
+                    if (!endpoint) {
+                      const commentObj = {
+                        id: Date.now(),
+                        author: t('Tôi'),
+                        user_name: t('Tôi'),
+                        time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+                        text: text,
+                        body: text,
+                        attachments: fileAttachments || [],
+                        parent_id: parentId || null,
+                        created_at: new Date().toISOString()
+                      };
+                      setLocalComments([...localComments, commentObj]);
+                      toast.success(t('Đăng bình luận thành công!'));
+                      return;
+                    }
+                    await api.post(endpoint, {
                       body: text,
                       attachments: fileAttachments || [],
-                      parent_id: parentId || null,
-                      created_at: new Date().toISOString()
-                    };
-                    setLocalComments([...localComments, commentObj]);
-                    toast.success(t('Đăng bình luận thành công!'));
-                    return;
+                      parent_id: parentId || null
+                    });
+                    toast.success(t('Thêm bình luận thành công'));
+                    fetchComments();
+                  } finally {
+                    addCommentInFlightRef.current = false;
                   }
-                  await api.post(endpoint, {
-                    body: text,
-                    attachments: fileAttachments || [],
-                    parent_id: parentId || null
-                  });
-                  toast.success(t('Thêm bình luận thành công'));
-                  fetchComments();
                 }}
                 onDeleteComment={async (commentId) => {
-                  const endpoint = getDeleteCommentEndpoint(item.type, Number(commentId));
-                  if (!endpoint) {
-                    setLocalComments(localComments.filter((c: any) => c.id !== commentId));
-                    toast.success(t('Đã xóa bình luận'));
-                    return;
-                  }
+                  if (deleteCommentInFlightRef.current) return;
+                  deleteCommentInFlightRef.current = true;
                   try {
+                    const endpoint = getDeleteCommentEndpoint(item.type, Number(commentId));
+                    if (!endpoint) {
+                      setLocalComments(localComments.filter((c: any) => c.id !== commentId));
+                      toast.success(t('Đã xóa bình luận'));
+                      return;
+                    }
                     await api.delete(endpoint);
                     toast.success(t('Đã xóa bình luận'));
                     fetchComments();
                   } catch (err: any) {
                     toast.error(err?.response?.data?.message || t('Lỗi khi xóa bình luận'));
+                  } finally {
+                    deleteCommentInFlightRef.current = false;
                   }
                 }}
               />

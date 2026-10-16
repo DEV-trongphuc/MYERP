@@ -437,7 +437,7 @@ class FinanceController
         $this->db->beginTransaction();
         try {
             // Check permission and current status with FOR UPDATE to prevent race condition
-            $sqlCheck = "SELECT id, status, is_inventory_deducted, invoice_number FROM invoices WHERE id=? AND tenant_id=?";
+            $sqlCheck = "SELECT id, status, is_inventory_deducted, invoice_number FROM invoices WHERE id=? AND tenant_id=? AND deleted_at IS NULL";
             $cp = [$id, $tid];
             if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
                 $sqlCheck .= " AND created_by=?";
@@ -461,7 +461,7 @@ class FinanceController
 
             $params[] = $id;
             $params[] = $auth['tenant_id'];
-            $stmt = $this->db->prepare("UPDATE invoices SET " . implode(',', $sets) . " WHERE id=? AND tenant_id=?");
+            $stmt = $this->db->prepare("UPDATE invoices SET " . implode(',', $sets) . " WHERE id=? AND tenant_id=? AND deleted_at IS NULL");
             $stmt->execute($params);
 
             // Handle stock deduction if status changed to paid and not already deducted
@@ -517,7 +517,7 @@ class FinanceController
         try {
             $this->db->beginTransaction();
 
-            $sql = "UPDATE invoices SET deleted_at = NOW() WHERE id=? AND tenant_id=?";
+            $sql = "UPDATE invoices SET deleted_at = NOW() WHERE id=? AND tenant_id=? AND deleted_at IS NULL";
             $p = [$id, $auth['tenant_id']];
             if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
                 $sql .= " AND created_by=?";
@@ -530,7 +530,7 @@ class FinanceController
             $stmt = $this->db->prepare($sql);
 
             // Get details before deletion for side effects (use FOR UPDATE to lock row)
-            $sqlCheck = "SELECT contact_id, is_inventory_deducted, invoice_number FROM invoices WHERE id=? AND tenant_id=?";
+            $sqlCheck = "SELECT contact_id, is_inventory_deducted, invoice_number FROM invoices WHERE id=? AND tenant_id=? AND deleted_at IS NULL";
             $pCheck = [$id, $auth['tenant_id']];
             if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
                 $sqlCheck .= " AND created_by=?";
@@ -575,7 +575,7 @@ class FinanceController
             $this->db->beginTransaction();
 
             // Check if already deducted or already paid
-            $sqlCheck = "SELECT id, status, is_inventory_deducted, invoice_number FROM invoices WHERE id=? AND tenant_id=?";
+            $sqlCheck = "SELECT id, status, is_inventory_deducted, invoice_number FROM invoices WHERE id=? AND tenant_id=? AND deleted_at IS NULL";
             $cp = [$id, $auth['tenant_id']];
             if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
                 $sqlCheck .= " AND created_by=?";
@@ -598,7 +598,7 @@ class FinanceController
                 respond(400, null, 'Hóa đơn đã được thanh toán', false);
             }
 
-            $sql = "UPDATE invoices SET status='paid', paid_at=NOW(), is_inventory_deducted=1 WHERE id=? AND tenant_id=?";
+            $sql = "UPDATE invoices SET status='paid', paid_at=NOW(), is_inventory_deducted=1 WHERE id=? AND tenant_id=? AND deleted_at IS NULL";
             $p = [$id, $auth['tenant_id']];
             if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
                 $sql .= " AND created_by=?";
@@ -679,7 +679,8 @@ class FinanceController
         if ($specificId > 0) {
             $where[] = 'e.id = ?';
             $params[] = $specificId;
-        } elseif (!$isAdminOrDirectorOrAccountant) {
+        }
+        if (!$isAdminOrDirectorOrAccountant) {
             if ($isManager) {
                 $placeholders = implode(',', array_fill(0, count($userIds), '?'));
                 $where[] = "(e.created_by IN ($placeholders) OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ? OR e.refunder_id = ? OR e.related_user_ids LIKE ? OR e.related_user_ids LIKE ? OR EXISTS (SELECT 1 FROM notes n JOIN note_mentions nm ON nm.note_id = n.id WHERE n.entity_type = 'expense' AND n.entity_id = e.id AND nm.user_id = ?))";
@@ -979,14 +980,41 @@ class FinanceController
 
     public function showExpense(array $auth, int $id): void
     {
-        $sql = "SELECT e.*, u.full_name as creator_name, u.avatar_url as creator_avatar, u2.full_name as approver_name, u2.full_name as approver_name_1, u2.avatar_url as approver_avatar, u3.full_name as refunder_name, u3.avatar_url as refunder_avatar, u4.full_name as approver_name_2, u4.avatar_url as approver_avatar_2, u5.full_name as approver_name_3, u5.avatar_url as approver_avatar_3 FROM expenses e LEFT JOIN users u ON e.created_by=u.id LEFT JOIN users u2 ON e.approver_id=u2.id LEFT JOIN users u3 ON e.refunder_id=u3.id LEFT JOIN users u4 ON e.approver_id_2=u4.id LEFT JOIN users u5 ON e.approver_id_3=u5.id WHERE e.id=? AND e.tenant_id=? AND e.deleted_at IS NULL";
+        $role = $auth['role'] ?? '';
+        $uid = (int)($auth['user_id'] ?? $auth['id'] ?? 0);
+        $isAdminOrDirectorOrAccountant = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'accountant'], true);
+        $isManager = $role === 'manager';
+        $isSaleAdmin = $role === 'sale_admin' || $role === 'saleadmin';
+
+        $where = ['e.id=?', 'e.tenant_id=?', 'e.deleted_at IS NULL'];
         $p = [$id, $auth['tenant_id']];
-        // Allow all users in the same tenant to view expense details (e.g. when shared in WorkChat drawer)
+
+        if (!$isAdminOrDirectorOrAccountant) {
+            if ($isManager) {
+                $stmtTeam = $this->db->prepare("SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)");
+                $stmtTeam->execute([$uid]);
+                $teamMemberIds = $stmtTeam->fetchAll(PDO::FETCH_COLUMN) ?: [];
+                $userIds = array_merge([$uid], array_map('intval', $teamMemberIds));
+                $placeholders = implode(',', array_fill(0, count($userIds), '?'));
+                $where[] = "(e.created_by IN ($placeholders) OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ? OR e.refunder_id = ? OR e.related_user_ids LIKE ? OR e.related_user_ids LIKE ? OR EXISTS (SELECT 1 FROM notes n JOIN note_mentions nm ON nm.note_id = n.id WHERE n.entity_type = 'expense' AND n.entity_id = e.id AND nm.user_id = ?))";
+                $p = array_merge($p, $userIds, [$uid, $uid, $uid, $uid, '%"' . $uid . '"%', '%' . $uid . '%', $uid]);
+            } elseif ($isSaleAdmin) {
+                $where[] = "(e.created_by = ? OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ? OR e.refunder_id = ? OR e.related_user_ids LIKE ? OR e.related_user_ids LIKE ? OR EXISTS (SELECT 1 FROM expense_entities ee JOIN contacts c ON ee.entity_type = 'contact' AND ee.entity_id = c.id WHERE ee.expense_id = e.id AND c.status = 'customer') OR EXISTS (SELECT 1 FROM notes n JOIN note_mentions nm ON nm.note_id = n.id WHERE n.entity_type = 'expense' AND n.entity_id = e.id AND nm.user_id = ?))";
+                array_push($p, $uid, $uid, $uid, $uid, $uid, '%"' . $uid . '"%', '%' . $uid . '%', $uid);
+            } else {
+                $where[] = "(e.created_by = ? OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ? OR e.refunder_id = ? OR e.related_user_ids LIKE ? OR e.related_user_ids LIKE ? OR EXISTS (SELECT 1 FROM notes n JOIN note_mentions nm ON nm.note_id = n.id WHERE n.entity_type = 'expense' AND n.entity_id = e.id AND nm.user_id = ?))";
+                array_push($p, $uid, $uid, $uid, $uid, $uid, '%"' . $uid . '"%', '%' . $uid . '%', $uid);
+            }
+        }
+        $where[] = "(e.status != 'draft' OR e.created_by = ?)";
+        $p[] = $uid;
+
+        $sql = "SELECT e.*, u.full_name as creator_name, u.avatar_url as creator_avatar, u2.full_name as approver_name, u2.full_name as approver_name_1, u2.avatar_url as approver_avatar, u3.full_name as refunder_name, u3.avatar_url as refunder_avatar, u4.full_name as approver_name_2, u4.avatar_url as approver_avatar_2, u5.full_name as approver_name_3, u5.avatar_url as approver_avatar_3 FROM expenses e LEFT JOIN users u ON e.created_by=u.id LEFT JOIN users u2 ON e.approver_id=u2.id LEFT JOIN users u3 ON e.refunder_id=u3.id LEFT JOIN users u4 ON e.approver_id_2=u4.id LEFT JOIN users u5 ON e.approver_id_3=u5.id WHERE " . implode(' AND ', $where);
         $stmt = $this->db->prepare($sql);
         $stmt->execute($p);
         $row = $stmt->fetch();
         if (!$row)
-            respond(404, null, 'Không tìm thấy chi phí', false);
+            respond(404, null, 'Không tìm thấy chi phí hoặc không có quyền xem', false);
 
         // Fetch linked entities with names
         $sEE = $this->db->prepare("SELECT ee.*, c.full_name, c.avatar_url FROM expense_entities ee LEFT JOIN contacts c ON ee.entity_type='contact' AND ee.entity_id=c.id WHERE ee.expense_id=?");
@@ -1720,7 +1748,7 @@ class FinanceController
         $this->db->beginTransaction();
         try {
             // Find creator of the expense WITH row-level lock (FOR UPDATE)
-            $stmtExp = $this->db->prepare("SELECT * FROM expenses WHERE id=? AND tenant_id=? FOR UPDATE");
+            $stmtExp = $this->db->prepare("SELECT * FROM expenses WHERE id=? AND tenant_id=? AND deleted_at IS NULL FOR UPDATE");
             $stmtExp->execute([$id, $auth['tenant_id']]);
             $expenseRow = $stmtExp->fetch();
             

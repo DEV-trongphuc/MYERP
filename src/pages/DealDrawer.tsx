@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, DollarSign, History, Briefcase, Tag as TagIcon, Box, FileText, CheckCircle2, Link2, Paperclip, RefreshCw, Trash2 } from 'lucide-react';
+import { X, DollarSign, History, Briefcase, Tag as TagIcon, Box, FileText, CheckCircle2, Link2, Paperclip, RefreshCw, Trash2, ArrowRight } from 'lucide-react';
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { CustomCheckbox } from '../components/ui/CustomCheckbox';
 import { EmptyCard } from '../components/ui/EmptyCard';
@@ -21,7 +21,7 @@ interface DealDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   deal: any;
-  onSave: (data: any) => void;
+  onSave: (data?: any) => void;
   stages: any[];
 }
 
@@ -85,7 +85,7 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
         setIsSwitchModalOpen(false);
         onClose(); // Close the drawer to refresh the main page
         if (onSave) {
-          onSave(null); // trigger reload on main page
+          onSave(); // trigger reload on main page
         }
       } else {
         addToast(res.data.message || 'Lỗi đổi căn hộ', 'error');
@@ -155,7 +155,6 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
               gap: '4px',
               color: '#dc2626', // Red text
               background: 'rgba(239, 68, 68, 0.08)', // Light red background tint
-              border: '1px solid rgba(239, 68, 68, 0.2)',
               padding: '2px 8px',
               borderRadius: '9999px',
               margin: '0 2px',
@@ -275,6 +274,14 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
   }
 
   useEffect(() => {
+    setActiveTab('info');
+  }, [deal?.id]);
+
+  const companyOptions = useMemo(() => companies.map(c => ({ value: c.id, label: c.name })), [companies]);
+  const contactOptions = useMemo(() => contacts.map(c => ({ value: c.id, label: c.full_name || '', avatar: c.avatar_url || c.avatar })), [contacts]);
+  const projectOptions = useMemo(() => projects.map(p => ({ value: String(p.id), label: p.name })), [projects]);
+
+  useEffect(() => {
     setNotes([]);
     setNewNote('');
     setIsSwitchModalOpen(false);
@@ -358,7 +365,7 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
         const res = await api.post('/upload', fd);
         const fileUrl = res.data?.data?.url || res.data?.url || res.data?.data?.file_path || res.data?.file_path;
         if (fileUrl) {
-          const attLine = `📎 [${noteAttachmentFile.name}](${fileUrl})`;
+          const attLine = `[${noteAttachmentFile.name}](${fileUrl})`;
           finalBody = finalBody ? `${finalBody}\n${attLine}` : attLine;
         }
       }
@@ -702,7 +709,7 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
                         <div className="form-group">
                           <label className="form-label">Công ty</label>
                           <CustomSelect 
-                            options={companies.map(c => ({ value: c.id, label: c.name }))}
+                            options={companyOptions}
                             value={formData?.company_id}
                             onChange={val => {
                               const co = companies.find(x => x.id === Number(val));
@@ -716,7 +723,7 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
                         <div className="form-group">
                           <label className="form-label">Liên hệ chính</label>
                           <CustomSelect 
-                            options={contacts.map(c => ({ value: c.id, label: c.full_name || '', avatar: c.avatar_url || c.avatar }))}
+                            options={contactOptions}
                             value={formData?.contact_id}
                             onChange={val => {
                               const co = contacts.find(x => x.id === Number(val));
@@ -915,7 +922,7 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
                                   <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Deal Cũ (Đã Đóng)</div>
                                   <div style={{ fontSize: '0.8rem', fontWeight: 700 }}>ID: #{linkedId}</div>
                                 </div>
-                                <div style={{ fontSize: '1.5rem', color: 'var(--color-primary)', fontWeight: 'bold' }}>➔</div>
+                                <div style={{ color: 'var(--color-primary)', display: 'flex', alignItems: 'center' }}><ArrowRight size={18} /></div>
                                 <div style={{ border: '1.5px solid var(--color-primary)', borderRadius: '8px', padding: '8px 12px', textAlign: 'center', background: 'var(--color-primary-light)' }}>
                                   <div style={{ fontSize: '0.7rem', color: 'var(--color-primary)', fontWeight: 600 }}>Deal Hiện tại</div>
                                   <div style={{ fontSize: '0.8rem', fontWeight: 800 }}>ID: #{formData.id} ({formData.title})</div>
@@ -927,7 +934,7 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
                                   <div style={{ fontSize: '0.7rem', color: 'var(--color-primary)', fontWeight: 600 }}>Deal Cũ (Đã Đóng)</div>
                                   <div style={{ fontSize: '0.8rem', fontWeight: 800 }}>ID: #{formData.id} ({formData.title})</div>
                                 </div>
-                                <div style={{ fontSize: '1.5rem', color: 'var(--color-primary)', fontWeight: 'bold' }}>➔</div>
+                                <div style={{ color: 'var(--color-primary)', display: 'flex', alignItems: 'center' }}><ArrowRight size={18} /></div>
                                 <div 
                                   style={{ border: '1px dashed var(--color-border)', borderRadius: '8px', padding: '8px 12px', textAlign: 'center', opacity: 0.7, cursor: 'pointer', background: 'var(--color-bg-light)' }}
                                   onClick={async () => {
@@ -1050,7 +1057,8 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
                     setIsSwitchModalOpen(true);
                   }}
                 >
-                  🔄 Đổi Căn
+                  <RefreshCw size={14} />
+                  <span>Đổi Căn</span>
                 </button>
               )}
               <button className="btn ghost" onClick={onClose}>{isViewer ? 'Đóng' : 'Hủy bỏ'}</button>
@@ -1122,7 +1130,7 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
                     <label className="form-label">Chương trình mới (Nếu đổi chương trình)</label>
                     <CustomSelect
                       searchable
-                      options={projects.map(p => ({ value: String(p.id), label: p.name }))}
+                      options={projectOptions}
                       value={switchProjectId}
                       onChange={val => setSwitchProjectId(val.toString())}
                       placeholder="-- Giữ nguyên chương trình cũ --"

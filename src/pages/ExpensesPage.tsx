@@ -70,9 +70,10 @@ const getEmptyForm = () => ({
 export const ExpensesPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const urlStatus = searchParams.get('status') || '';
   const { addToast, showConfirm } = useUIStore();
+  const deleteExpenseInFlightRef = useRef(false);
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth <= 768 : false);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
 
@@ -105,8 +106,11 @@ export const ExpensesPage: React.FC = () => {
       setStatusFilter(s);
       setPeriod('all');
       setDateRange(getDateRange('all'));
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('status');
+      setSearchParams(nextParams, { replace: true });
     }
-  }, [searchParams]);
+  }, [searchParams, setSearchParams]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [showModal, setShowModal] = useState(false);
@@ -1172,7 +1176,34 @@ export const ExpensesPage: React.FC = () => {
               />
             </div>
             {selected.size > 0 && (
-              <button className="btn danger sm" onClick={() => { setItems(prev => prev.filter((e: any) => !selected.has(e.id))); setSelected(new Set()); addToast(`Đã xóa ${selected.size} khoản`, 'success'); }}>
+              <button
+                className="btn danger sm"
+                onClick={async () => {
+                  if (deleteExpenseInFlightRef.current) return;
+                  const idsToDelete = Array.from(selected);
+                  showConfirm({
+                    title: 'Xóa các khoản chi đã chọn?',
+                    message: `Bạn có chắc chắn muốn xóa ${idsToDelete.length} khoản chi đã chọn khỏi hệ thống? Thao tác này không thể hoàn tác.`,
+                    confirmText: 'Xóa ngay',
+                    cancelText: 'Hủy',
+                    isDanger: true,
+                    onConfirm: async () => {
+                      if (deleteExpenseInFlightRef.current) return;
+                      deleteExpenseInFlightRef.current = true;
+                      try {
+                        await Promise.all(idsToDelete.map(id => api.delete(`/expenses/${id}`)));
+                        setSelected(new Set());
+                        addToast(`Đã xóa ${idsToDelete.length} khoản`, 'success');
+                        fetchExpenses();
+                      } catch (error: any) {
+                        addToast(error?.response?.data?.message || 'Lỗi khi xóa khoản chi', 'error');
+                      } finally {
+                        deleteExpenseInFlightRef.current = false;
+                      }
+                    }
+                  });
+                }}
+              >
                 <Trash2 size={14} /> Xóa {selected.size} đã chọn
               </button>
             )}
@@ -1297,6 +1328,7 @@ export const ExpensesPage: React.FC = () => {
                               )}
                               <button className="btn-icon sm text-danger" title="Xóa" onClick={(e) => {
                                 e.stopPropagation();
+                                if (deleteExpenseInFlightRef.current) return;
                                 showConfirm({
                                   title: 'Xóa khoản chi phí?',
                                   message: `Khoản chi "${exp.title}" sẽ bị xóa vĩnh viễn khỏi hệ thống. Thao tác này không thể hoàn tác.`,
@@ -1304,12 +1336,17 @@ export const ExpensesPage: React.FC = () => {
                                   cancelText: 'Hủy',
                                   isDanger: true,
                                   onConfirm: async () => {
+                                    if (deleteExpenseInFlightRef.current) return;
+                                    deleteExpenseInFlightRef.current = true;
                                     try {
                                       await api.delete(`/expenses/${exp.id}`);
                                       setItems(prev => prev.filter(item => item.id !== exp.id));
                                       addToast('Đã xóa chi phí', 'success');
+                                      fetchExpenses();
                                     } catch (error: any) {
                                       addToast(error.response?.data?.message || 'Lỗi khi xóa chi phí', 'error');
+                                    } finally {
+                                      deleteExpenseInFlightRef.current = false;
                                     }
                                   }
                                 });

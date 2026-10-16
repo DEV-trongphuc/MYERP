@@ -64,16 +64,6 @@ if (!empty($feUrl)) {
     }
 }
 
-if (isset($_GET['action']) && $_GET['action'] === 'get_user_role') {
-    header('Content-Type: application/json');
-    $db = Database::getInstance();
-    $res = $db->query("SELECT id, role, full_name, email, team_id, permissions_json FROM users WHERE email LIKE '%haidang%' OR full_name LIKE '%Đăng%'");
-    $users = $res->fetchAll(PDO::FETCH_ASSOC);
-    echo json_encode($users);
-    exit;
-}
-
-
 // Also allow any localhost origin (any port) for local dev, and zalo.me for browser console sync
 $isLocalhost = (bool) preg_match('#^https?://localhost(:\d+)?$#', $origin);
 $isVercel = (bool) preg_match('#^https?://.*\.vercel\.app$#', $origin);
@@ -657,206 +647,224 @@ $subResource   = $segments[2] ?? null;
 
 $db = Database::getInstance();
 
-// ── Auto-Migrate Database schema ───────────────────────────────
-try {
-    $db->exec("CREATE TABLE IF NOT EXISTS schema_migrations (
-        migration VARCHAR(255) PRIMARY KEY,
-        applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-
-    $applied = $db->query("SELECT migration FROM schema_migrations")->fetchAll(PDO::FETCH_COLUMN) ?: [];
-    $sqlFiles = ['migrate_2026_05_06_v3_files.sql', 'migrate_activity_comments.sql', 'migrate_fractional_quantities.sql', 'migrate_pipeline_stage_slugs.sql', 'migrate_citizen_id_varchar.sql'];
-    
-    foreach ($sqlFiles as $file) {
-        if (!in_array($file, $applied, true)) {
-            $path = __DIR__ . '/' . $file;
-            if (file_exists($path)) {
-                $sql = file_get_contents($path);
-                $stmts = array_filter(array_map('trim', explode(';', $sql)));
-                foreach ($stmts as $s) {
-                    if ($s !== '') {
-                        $db->exec($s);
-                    }
-                }
-                $stmtInsert = $db->prepare("INSERT INTO schema_migrations (migration) VALUES (?)");
-                $stmtInsert->execute([$file]);
-            }
-        }
-    }
-
-    // One-time schema check (guarded to avoid table metadata lock on every request)
-    if (!in_array('runtime_schema_v302', $applied, true)) {
-        try {
-            $cols = $db->query("SHOW COLUMNS FROM attendance_bulk_requests")->fetchAll(PDO::FETCH_COLUMN) ?: [];
-            if (!in_array('approved_at', $cols, true)) {
-                $db->exec("ALTER TABLE attendance_bulk_requests ADD COLUMN approved_at TIMESTAMP NULL DEFAULT NULL AFTER admin_note");
-            }
-            if (!in_array('approved_by', $cols, true)) {
-                $db->exec("ALTER TABLE attendance_bulk_requests ADD COLUMN approved_by INT NULL DEFAULT NULL AFTER approved_at");
-            }
-            if (!in_array('related_user_ids', $cols, true)) {
-                $db->exec("ALTER TABLE attendance_bulk_requests ADD COLUMN related_user_ids LONGTEXT NULL DEFAULT NULL AFTER manager_id");
-            }
-            if (!in_array('approver2_id', $cols, true)) {
-                $db->exec("ALTER TABLE attendance_bulk_requests ADD COLUMN approver2_id INT NULL DEFAULT NULL AFTER manager_id");
-            }
-            if (!in_array('updated_at', $cols, true)) {
-                $db->exec("ALTER TABLE attendance_bulk_requests ADD COLUMN updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at");
-            }
-
-            // Ensure contacts table has avatar_url column
-            $contactCols = $db->query("SHOW COLUMNS FROM contacts")->fetchAll(PDO::FETCH_COLUMN) ?: [];
-            if (!in_array('avatar_url', $contactCols, true)) {
-                $db->exec("ALTER TABLE contacts ADD COLUMN avatar_url TEXT NULL DEFAULT NULL AFTER full_name");
-            }
-
-            // Ensure salary_rate exists on hrm_leave_requests
-            $hlrCols = $db->query("SHOW COLUMNS FROM hrm_leave_requests")->fetchAll(PDO::FETCH_COLUMN) ?: [];
-            if (!in_array('salary_rate', $hlrCols, true)) {
-                $db->exec("ALTER TABLE hrm_leave_requests ADD COLUMN salary_rate DECIMAL(5,2) DEFAULT 100.00 COMMENT 'Tỷ lệ % hưởng lương (0-100). WFH mặc định 50%' AFTER ot_rate");
-            }
-
-            $depositCols = $db->query("SHOW COLUMNS FROM deposits")->fetchAll(PDO::FETCH_COLUMN) ?: [];
-            if (!in_array('company_id', $depositCols, true)) {
-                $db->exec("ALTER TABLE deposits ADD COLUMN company_id INT NULL DEFAULT NULL AFTER contact_id");
-            }
-            if (!in_array('supplier_id', $depositCols, true)) {
-                $db->exec("ALTER TABLE deposits ADD COLUMN supplier_id INT NULL DEFAULT NULL AFTER company_id");
-            }
-            try { $db->exec("ALTER TABLE deposits MODIFY COLUMN contact_id INT NULL DEFAULT NULL"); } catch (\Throwable $e) {}
-
-            $db->prepare("INSERT INTO schema_migrations (migration) VALUES (?)")->execute(['runtime_schema_v302']);
-        } catch (\Throwable $e) {}
-    }
-
-    // Migration: restore_exp_19_and_audit_cleanup_v3
-    if (!in_array('restore_exp_19_and_audit_cleanup_v3', $applied, true)) {
-        try {
-            // 1. Delete invalid delete logs for expense 19
-            $db->exec("DELETE FROM audit_logs WHERE resource = 'expense' AND resource_id = 19 AND (action = 'DELETE' OR action LIKE '%Xóa%')");
-
-            // 2. Resolve users for Mai Thị Nữ, Nguyễn Thu Thảo, Trịnh Đình Thanh
-            $stUsers = $db->query("SELECT id, full_name FROM users WHERE full_name LIKE '%Mai Thị Nữ%' OR full_name LIKE '%Nguyễn Thu Thảo%' OR full_name LIKE '%Trịnh Đình Thanh%'");
-            $uRows = $stUsers ? $stUsers->fetchAll(PDO::FETCH_ASSOC) : [];
-            $maiThiNuId = null;
-            $nguyenThuThaoId = null;
-            $trinhDinhThanhId = null;
-            foreach ($uRows as $ur) {
-                if (stripos($ur['full_name'], 'Mai Thị Nữ') !== false && !$maiThiNuId) $maiThiNuId = (int)$ur['id'];
-                if (stripos($ur['full_name'], 'Nguyễn Thu Thảo') !== false && !$nguyenThuThaoId) $nguyenThuThaoId = (int)$ur['id'];
-                if (stripos($ur['full_name'], 'Trịnh Đình Thanh') !== false && !$trinhDinhThanhId) $trinhDinhThanhId = (int)$ur['id'];
-            }
-            if (!$maiThiNuId) $maiThiNuId = 1003;
-            if (!$nguyenThuThaoId) $nguyenThuThaoId = 1004;
-            if (!$trinhDinhThanhId) $trinhDinhThanhId = 1002;
-
-            $expNotes = "[Hồ sơ chi phí]: Danh mục: Chi phí nghiệp vụ khác - Chứng từ: Hóa đơn điện tử VAT 10%\nPhòng ban: Marketing\nĐối tượng: Đối tác\nThụ hưởng (Đối tác / Vendor): CÔNG TY TNHH THIẾT KẾ IN ẤN QUẢNG CÁO XUÂN PHƯỚC THỊNH (MST: 0313195766)\nChi tiết: Thanh toán tiền in ấn, thi công Lễ tốt nghiệp\n\n[Thông tin chuyển khoản]: Ngân hàng TMCP Ngoại Thương Việt Nam - STK: 0441000684888 - Chủ TK: CÔNG TY TNHH THIẾT KẾ IN ẤN QUẢNG CÁO XUÂN PHƯỚC THỊNH - Chi nhánh: Tân Bình\n[Tài liệu đính kèm (1 tệp)]:\n• img_6aa3590f3ef572.83332019.pdf (https://myerp.ideas.edu.vn/backend/uploads/tenant_1/img_6aa3590f3ef572.83332019.pdf)";
-
-            $chkExp = $db->query("SELECT id FROM expenses WHERE id = 19")->fetch();
-            if ($chkExp) {
-                $updStmt = $db->prepare("
-                    UPDATE expenses SET
-                        title = 'Đề nghị thanh toán',
-                        amount = 9644875.00,
-                        vat_amount = 714435.00,
-                        has_vat_invoice = 1,
-                        is_vat_inclusive = 1,
-                        vendor_name = 'CÔNG TY TNHH THIẾT KẾ IN ẤN QUẢNG CÁO XUÂN PHƯỚC THỊNH',
-                        category = 'Khác',
-                        date = '2026-09-11',
-                        status = 'pending',
-                        approval_status = 'pending',
-                        status_level_1 = 'approved',
-                        status_level_2 = 'approved',
-                        status_level_3 = 'pending',
-                        approver_id = ?,
-                        approver_id_2 = ?,
-                        approver_id_3 = ?,
-                        created_by = ?,
-                        created_at = '2026-09-11 08:30:30',
-                        approved_at = '2026-09-11 11:28:43',
-                        notes = ?,
-                        image_url = 'uploads/tenant_1/img_6aa3590f3ef572.83332019.pdf',
-                        deleted_at = NULL
-                    WHERE id = 19
-                ");
-                $updStmt->execute([$maiThiNuId, $nguyenThuThaoId, $trinhDinhThanhId, $maiThiNuId, $expNotes]);
-            }
-
-            // Restore any accidental soft delete on 247 express
-            $db->exec("UPDATE expenses SET deleted_at = NULL WHERE title LIKE '%247 express%' AND deleted_at IS NOT NULL");
-
-            $db->prepare("INSERT INTO schema_migrations (migration) VALUES ('restore_exp_19_and_audit_cleanup_v3')")->execute();
-        } catch (\Throwable $ex) {
-            error_log("Restore EXP 19 Migration Error: " . $ex->getMessage());
-        }
-    }
-
-    // Migration: clear_test_approvals_6_7_8_21
-    if (!in_array('clear_test_approvals_6_7_8_21', $applied, true)) {
-        try {
-            // 1. Delete test requests from hrm_leave_requests (including #21, #8, #7, #6)
-            $db->exec("DELETE FROM hrm_leave_requests WHERE id IN (6, 7, 8, 21)");
-            try { $db->exec("DELETE FROM hrm_leave_comments WHERE leave_id IN (6, 7, 8, 21)"); } catch (\Throwable $e) {}
-
-            // 2. Delete test requests from workflow_requests if table exists
-            try {
-                $db->exec("DELETE FROM workflow_requests WHERE id IN (6, 7, 8, 21)");
-                $db->exec("DELETE FROM workflow_approvals WHERE request_id IN (6, 7, 8, 21) OR workflow_request_id IN (6, 7, 8, 21)");
-                $db->exec("DELETE FROM workflow_step_logs WHERE request_id IN (6, 7, 8, 21) OR workflow_request_id IN (6, 7, 8, 21)");
-            } catch (\Throwable $e) {}
-
-            // 3. Clean audit_logs and notifications for these test requests
-            try {
-                $db->exec("DELETE FROM audit_logs WHERE resource IN ('hrm_leave_requests', 'leave', 'leave_request', 'workflow_requests', 'workflow') AND resource_id IN (6, 7, 8, 21)");
-                $db->exec("DELETE FROM notifications WHERE (link LIKE '%leave%' OR link LIKE '%approval%') AND (link LIKE '%/21' OR link LIKE '%/8' OR link LIKE '%/7' OR link LIKE '%/6')");
-            } catch (\Throwable $e) {}
-
-            $db->prepare("INSERT INTO schema_migrations (migration) VALUES ('clear_test_approvals_6_7_8_21')")->execute();
-        } catch (\Throwable $ex) {
-            error_log("Clear Test Approvals Migration Error: " . $ex->getMessage());
-        }
-    }
-} catch (Exception $e) {
-    error_log("Auto Migration Error: " . $e->getMessage());
-}
-
-// ── Auto-wipe expired shift registrations ────────────────
-try {
-    $nightShiftEnd = '06:00';
-    $resEnd = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'night_shift_end_time' LIMIT 1");
-    if ($resEnd) {
-        $sRow = $resEnd->fetch(PDO::FETCH_ASSOC);
-        if ($sRow && !empty($sRow['setting_value'])) {
-            $nightShiftEnd = $sRow['setting_value'];
-        }
-    }
-    $endHour = (int)explode(':', $nightShiftEnd)[0];
-    $currentHour = (int)date('H');
-    $activeNightShiftDate = ($currentHour < $endHour) ? date('Y-m-d', strtotime('-1 day')) : date('Y-m-d');
-    
-    // Preserve historical registrations for attendance calendar & audit history according to system_settings retention (default 90 days, or 0 for permanent)
-    $retentionDays = 90;
+// ── Auto-Migrate Database schema & Shift Retention (Daily Lock) ───────────────
+$dailyMaintLock = sys_get_temp_dir() . '/myerp_daily_maint_' . md5(__DIR__) . '_' . date('Y-m-d') . '.lock';
+if (!file_exists($dailyMaintLock)) {
+    @file_put_contents($dailyMaintLock, (string)time());
     try {
-        $retentionRow = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'shift_history_retention_days' LIMIT 1")->fetch(PDO::FETCH_ASSOC);
-        if ($retentionRow && isset($retentionRow['setting_value'])) {
-            $retentionDays = (int)$retentionRow['setting_value'];
+        $db->exec("CREATE TABLE IF NOT EXISTS schema_migrations (
+            migration VARCHAR(255) PRIMARY KEY,
+            applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        $applied = $db->query("SELECT migration FROM schema_migrations")->fetchAll(PDO::FETCH_COLUMN) ?: [];
+        $sqlFiles = ['migrate_2026_05_06_v3_files.sql', 'migrate_activity_comments.sql', 'migrate_fractional_quantities.sql', 'migrate_pipeline_stage_slugs.sql', 'migrate_citizen_id_varchar.sql'];
+        
+        foreach ($sqlFiles as $file) {
+            if (!in_array($file, $applied, true)) {
+                $path = __DIR__ . '/' . $file;
+                if (file_exists($path)) {
+                    $sql = file_get_contents($path);
+                    $stmts = array_filter(array_map('trim', explode(';', $sql)));
+                    foreach ($stmts as $s) {
+                        if ($s !== '') {
+                            $db->exec($s);
+                        }
+                    }
+                    $stmtInsert = $db->prepare("INSERT INTO schema_migrations (migration) VALUES (?)");
+                    $stmtInsert->execute([$file]);
+                }
+            }
+        }
+
+        // One-time schema check (guarded to avoid table metadata lock on every request)
+        if (!in_array('runtime_schema_v302', $applied, true)) {
+            try {
+                $cols = $db->query("SHOW COLUMNS FROM attendance_bulk_requests")->fetchAll(PDO::FETCH_COLUMN) ?: [];
+                if (!in_array('approved_at', $cols, true)) {
+                    $db->exec("ALTER TABLE attendance_bulk_requests ADD COLUMN approved_at TIMESTAMP NULL DEFAULT NULL AFTER admin_note");
+                }
+                if (!in_array('approved_by', $cols, true)) {
+                    $db->exec("ALTER TABLE attendance_bulk_requests ADD COLUMN approved_by INT NULL DEFAULT NULL AFTER approved_at");
+                }
+                if (!in_array('related_user_ids', $cols, true)) {
+                    $db->exec("ALTER TABLE attendance_bulk_requests ADD COLUMN related_user_ids LONGTEXT NULL DEFAULT NULL AFTER manager_id");
+                }
+                if (!in_array('approver2_id', $cols, true)) {
+                    $db->exec("ALTER TABLE attendance_bulk_requests ADD COLUMN approver2_id INT NULL DEFAULT NULL AFTER manager_id");
+                }
+                if (!in_array('updated_at', $cols, true)) {
+                    $db->exec("ALTER TABLE attendance_bulk_requests ADD COLUMN updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at");
+                }
+
+                // Ensure contacts table has avatar_url column
+                $contactCols = $db->query("SHOW COLUMNS FROM contacts")->fetchAll(PDO::FETCH_COLUMN) ?: [];
+                if (!in_array('avatar_url', $contactCols, true)) {
+                    $db->exec("ALTER TABLE contacts ADD COLUMN avatar_url TEXT NULL DEFAULT NULL AFTER full_name");
+                }
+
+                // Ensure salary_rate exists on hrm_leave_requests
+                $hlrCols = $db->query("SHOW COLUMNS FROM hrm_leave_requests")->fetchAll(PDO::FETCH_COLUMN) ?: [];
+                if (!in_array('salary_rate', $hlrCols, true)) {
+                    $db->exec("ALTER TABLE hrm_leave_requests ADD COLUMN salary_rate DECIMAL(5,2) DEFAULT 100.00 COMMENT 'Tỷ lệ % hưởng lương (0-100). WFH mặc định 50%' AFTER ot_rate");
+                }
+
+                $depositCols = $db->query("SHOW COLUMNS FROM deposits")->fetchAll(PDO::FETCH_COLUMN) ?: [];
+                if (!in_array('company_id', $depositCols, true)) {
+                    $db->exec("ALTER TABLE deposits ADD COLUMN company_id INT NULL DEFAULT NULL AFTER contact_id");
+                }
+                if (!in_array('supplier_id', $depositCols, true)) {
+                    $db->exec("ALTER TABLE deposits ADD COLUMN supplier_id INT NULL DEFAULT NULL AFTER company_id");
+                }
+                try { $db->exec("ALTER TABLE deposits MODIFY COLUMN contact_id INT NULL DEFAULT NULL"); } catch (\Throwable $e) {}
+
+                $db->prepare("INSERT INTO schema_migrations (migration) VALUES (?)")->execute(['runtime_schema_v302']);
+            } catch (\Throwable $e) {}
+        }
+
+        // Migration: restore_exp_19_and_audit_cleanup_v3
+        if (!in_array('restore_exp_19_and_audit_cleanup_v3', $applied, true)) {
+            try {
+                // 1. Delete invalid delete logs for expense 19
+                $db->exec("DELETE FROM audit_logs WHERE resource = 'expense' AND resource_id = 19 AND (action = 'DELETE' OR action LIKE '%Xóa%')");
+
+                // 2. Resolve users for Mai Thị Nữ, Nguyễn Thu Thảo, Trịnh Đình Thanh
+                $stUsers = $db->query("SELECT id, full_name FROM users WHERE full_name LIKE '%Mai Thị Nữ%' OR full_name LIKE '%Nguyễn Thu Thảo%' OR full_name LIKE '%Trịnh Đình Thanh%'");
+                $uRows = $stUsers ? $stUsers->fetchAll(PDO::FETCH_ASSOC) : [];
+                $maiThiNuId = null;
+                $nguyenThuThaoId = null;
+                $trinhDinhThanhId = null;
+                foreach ($uRows as $ur) {
+                    if (stripos($ur['full_name'], 'Mai Thị Nữ') !== false && !$maiThiNuId) $maiThiNuId = (int)$ur['id'];
+                    if (stripos($ur['full_name'], 'Nguyễn Thu Thảo') !== false && !$nguyenThuThaoId) $nguyenThuThaoId = (int)$ur['id'];
+                    if (stripos($ur['full_name'], 'Trịnh Đình Thanh') !== false && !$trinhDinhThanhId) $trinhDinhThanhId = (int)$ur['id'];
+                }
+                if (!$maiThiNuId) $maiThiNuId = 1003;
+                if (!$nguyenThuThaoId) $nguyenThuThaoId = 1004;
+                if (!$trinhDinhThanhId) $trinhDinhThanhId = 1002;
+
+                $expNotes = "[Hồ sơ chi phí]: Danh mục: Chi phí nghiệp vụ khác - Chứng từ: Hóa đơn điện tử VAT 10%\nPhòng ban: Marketing\nĐối tượng: Đối tác\nThụ hưởng (Đối tác / Vendor): CÔNG TY TNHH THIẾT KẾ IN ẤN QUẢNG CÁO XUÂN PHƯỚC THỊNH (MST: 0313195766)\nChi tiết: Thanh toán tiền in ấn, thi công Lễ tốt nghiệp\n\n[Thông tin chuyển khoản]: Ngân hàng TMCP Ngoại Thương Việt Nam - STK: 0441000684888 - Chủ TK: CÔNG TY TNHH THIẾT KẾ IN ẤN QUẢNG CÁO XUÂN PHƯỚC THỊNH - Chi nhánh: Tân Bình\n[Tài liệu đính kèm (1 tệp)]:\n• img_6aa3590f3ef572.83332019.pdf (https://myerp.ideas.edu.vn/backend/uploads/tenant_1/img_6aa3590f3ef572.83332019.pdf)";
+
+                $chkExp = $db->query("SELECT id FROM expenses WHERE id = 19")->fetch();
+                if ($chkExp) {
+                    $updStmt = $db->prepare("
+                        UPDATE expenses SET
+                            title = 'Đề nghị thanh toán',
+                            amount = 9644875.00,
+                            vat_amount = 714435.00,
+                            has_vat_invoice = 1,
+                            is_vat_inclusive = 1,
+                            vendor_name = 'CÔNG TY TNHH THIẾT KẾ IN ẤN QUẢNG CÁO XUÂN PHƯỚC THỊNH',
+                            category = 'Khác',
+                            date = '2026-09-11',
+                            status = 'pending',
+                            approval_status = 'pending',
+                            status_level_1 = 'approved',
+                            status_level_2 = 'approved',
+                            status_level_3 = 'pending',
+                            approver_id = ?,
+                            approver_id_2 = ?,
+                            approver_id_3 = ?,
+                            created_by = ?,
+                            created_at = '2026-09-11 08:30:30',
+                            approved_at = '2026-09-11 11:28:43',
+                            notes = ?,
+                            image_url = 'uploads/tenant_1/img_6aa3590f3ef572.83332019.pdf',
+                            deleted_at = NULL
+                        WHERE id = 19
+                    ");
+                    $updStmt->execute([$maiThiNuId, $nguyenThuThaoId, $trinhDinhThanhId, $maiThiNuId, $expNotes]);
+                }
+
+                // Restore any accidental soft delete on 247 express
+                $db->exec("UPDATE expenses SET deleted_at = NULL WHERE title LIKE '%247 express%' AND deleted_at IS NOT NULL");
+
+                $db->prepare("INSERT INTO schema_migrations (migration) VALUES ('restore_exp_19_and_audit_cleanup_v3')")->execute();
+            } catch (\Throwable $ex) {
+                error_log("Restore EXP 19 Migration Error: " . $ex->getMessage());
+            }
+        }
+
+        // Migration: clear_test_approvals_6_7_8_21
+        if (!in_array('clear_test_approvals_6_7_8_21', $applied, true)) {
+            try {
+                // 1. Delete test requests from hrm_leave_requests (including #21, #8, #7, #6)
+                $db->exec("DELETE FROM hrm_leave_requests WHERE id IN (6, 7, 8, 21)");
+                try { $db->exec("DELETE FROM hrm_leave_comments WHERE leave_id IN (6, 7, 8, 21)"); } catch (\Throwable $e) {}
+
+                // 2. Delete test requests from workflow_requests if table exists
+                try {
+                    $db->exec("DELETE FROM workflow_requests WHERE id IN (6, 7, 8, 21)");
+                    $db->exec("DELETE FROM workflow_approvals WHERE request_id IN (6, 7, 8, 21) OR workflow_request_id IN (6, 7, 8, 21)");
+                    $db->exec("DELETE FROM workflow_step_logs WHERE request_id IN (6, 7, 8, 21) OR workflow_request_id IN (6, 7, 8, 21)");
+                } catch (\Throwable $e) {}
+
+                // 3. Clean audit_logs and notifications for these test requests
+                try {
+                    $db->exec("DELETE FROM audit_logs WHERE resource IN ('hrm_leave_requests', 'leave', 'leave_request', 'workflow_requests', 'workflow') AND resource_id IN (6, 7, 8, 21)");
+                    $db->exec("DELETE FROM notifications WHERE (link LIKE '%leave%' OR link LIKE '%approval%') AND (link LIKE '%/21' OR link LIKE '%/8' OR link LIKE '%/7' OR link LIKE '%/6')");
+                } catch (\Throwable $e) {}
+
+                $db->prepare("INSERT INTO schema_migrations (migration) VALUES ('clear_test_approvals_6_7_8_21')")->execute();
+            } catch (\Throwable $ex) {
+                error_log("Clear Test Approvals Migration Error: " . $ex->getMessage());
+            }
         }
     } catch (Exception $e) {
-        $retentionDays = 90;
+        error_log("Auto Migration Error: " . $e->getMessage());
     }
 
-    if ($retentionDays > 0) {
-        $stmt1 = $db->prepare("DELETE FROM night_shift_registrations WHERE shift_date < DATE_SUB(CURDATE(), INTERVAL ? DAY)");
-        $stmt1->execute([$retentionDays]);
-        $stmt2 = $db->prepare("DELETE FROM weekend_shift_registrations WHERE shift_date < DATE_SUB(CURDATE(), INTERVAL ? DAY)");
-        $stmt2->execute([$retentionDays]);
-        $stmt3 = $db->prepare("DELETE FROM holiday_shift_registrations WHERE shift_date < DATE_SUB(CURDATE(), INTERVAL ? DAY)");
-        $stmt3->execute([$retentionDays]);
+    // ── Auto-wipe expired shift registrations (once per day) ────────────────
+    try {
+        // Preserve historical registrations for attendance calendar & audit history according to system_settings retention (default 90 days, or 0 for permanent)
+        $retentionDays = 90;
+        try {
+            $retentionRow = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'shift_history_retention_days' LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+            if ($retentionRow && isset($retentionRow['setting_value'])) {
+                $retentionDays = (int)$retentionRow['setting_value'];
+            }
+        } catch (Exception $e) {
+            $retentionDays = 90;
+        }
+
+        if ($retentionDays > 0) {
+            $stmt1 = $db->prepare("DELETE FROM night_shift_registrations WHERE shift_date < DATE_SUB(CURDATE(), INTERVAL ? DAY)");
+            $stmt1->execute([$retentionDays]);
+            $stmt2 = $db->prepare("DELETE FROM weekend_shift_registrations WHERE shift_date < DATE_SUB(CURDATE(), INTERVAL ? DAY)");
+            $stmt2->execute([$retentionDays]);
+            $stmt3 = $db->prepare("DELETE FROM holiday_shift_registrations WHERE shift_date < DATE_SUB(CURDATE(), INTERVAL ? DAY)");
+            $stmt3->execute([$retentionDays]);
+        }
+    } catch (Exception $e) {
+        error_log("Shift Cleanup Error: " . $e->getMessage());
     }
-} catch (Exception $e) {
-    error_log("Shift Cleanup Error: " . $e->getMessage());
 }
+
+// ── Active Night Shift Date Resolution (300s cached setting) ────────────────
+$nightShiftEnd = '06:00';
+$nightShiftCacheFile = sys_get_temp_dir() . '/myerp_night_shift_end_' . md5(__DIR__) . '.cache';
+if (file_exists($nightShiftCacheFile) && (time() - filemtime($nightShiftCacheFile) < 300)) {
+    $cachedEnd = trim((string)@file_get_contents($nightShiftCacheFile));
+    if ($cachedEnd !== '') {
+        $nightShiftEnd = $cachedEnd;
+    }
+} else {
+    try {
+        $resEnd = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'night_shift_end_time' LIMIT 1");
+        if ($resEnd) {
+            $sRow = $resEnd->fetch(PDO::FETCH_ASSOC);
+            if ($sRow && !empty($sRow['setting_value'])) {
+                $nightShiftEnd = $sRow['setting_value'];
+            }
+        }
+        @file_put_contents($nightShiftCacheFile, $nightShiftEnd);
+    } catch (Exception $e) {
+        error_log("Night Shift Setting Error: " . $e->getMessage());
+    }
+}
+$endHour = (int)explode(':', $nightShiftEnd)[0];
+$currentHour = (int)date('H');
+$activeNightShiftDate = ($currentHour < $endHour) ? date('Y-m-d', strtotime('-1 day')) : date('Y-m-d');
 
 if ($resource === 'check') {
     require_once __DIR__ . '/check_data.php';
@@ -935,7 +943,7 @@ switch ($resource) {
 
     // CONTACTS
     case 'contacts':
-        if ($resourceId === 'silent-avatar-sync' && in_array($method, ['POST', 'GET'], true)) {
+        if ($resourceId === 'silent-avatar-sync' && $method === 'POST') {
             $secretKey = trim($_GET['secret_key'] ?? '');
             if ($secretKey === 'MYERP_ZALO_SYNC_SECURE_2026') {
                 $ctrl = new ContactController($db);
@@ -949,7 +957,7 @@ switch ($resource) {
         elseif ($resourceId === 'programs' && $method === 'GET') $ctrl->getPrograms($auth);
         elseif ($resourceId === 'bulk-delete' && $method === 'POST') $ctrl->bulkDelete($auth);
         elseif ($resourceId === 'pipeline-phones' && $method === 'GET') $ctrl->getPipelinePhones($auth);
-        elseif ($resourceId === 'silent-avatar-sync' && in_array($method, ['POST', 'GET'], true)) $ctrl->silentAvatarSync($auth);
+        elseif ($resourceId === 'silent-avatar-sync' && $method === 'POST') $ctrl->silentAvatarSync($auth);
         elseif (!$resourceId && $method === 'GET')    $ctrl->index($auth);
         elseif (!$resourceId && $method === 'POST')   $ctrl->store($auth);
         elseif ($resourceId  && $subResource === 'clone' && $method === 'POST') $ctrl->cloneContact($auth, (int)$resourceId);

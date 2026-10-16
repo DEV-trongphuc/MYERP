@@ -172,6 +172,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
           related_user_ids: newIds
         }));
         addToast(t('Đã cập nhật danh sách người theo dõi'), 'success');
+        onSaveSuccess?.();
       } else {
         addToast(res.message || t('Lỗi khi cập nhật người theo dõi'), 'error');
       }
@@ -264,7 +265,8 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
       if (res.success) {
         addToast('Cập nhật thông tin đơn hàng thành công!', 'success');
         const projName = availableProjects.find(p => String(p.id) === String(editProjectId))?.name || selectedDepForManage.project_name;
-        const creatorName = availableUsers.find(u => String(u.id) === String(editCreatedBy))?.name || selectedDepForManage.creator_name;
+        const selectedCreator = availableUsers.find(u => String(u.id) === String(editCreatedBy));
+        const creatorName = selectedCreator?.full_name || selectedCreator?.name || selectedDepForManage.creator_name;
         
         setSelectedDepForManage((prev: any) => ({
           ...prev,

@@ -406,18 +406,6 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
       setRemindDaysBeforeManage(Number(selectedDepForManage.remind_days_before) || 3);
       setRemindAtHourManage(Number(selectedDepForManage.remind_at_hour) || 8);
       setRemindTargetManage(Number(selectedDepForManage.remind_target) || 2);
-      fetchAPI(`cooperation-slips?contact_id=${selectedDepForManage.contact_id}`)
-        .then(res => {
-          const slips = res.data || res || [];
-          if (slips.length > 0) {
-            const matchedSlip = slips.find((s: any) => Number(s.deposit_slip_id) === Number(selectedDepForManage.id));
-            if (matchedSlip && matchedSlip.shareholders) {
-              setSharesData(matchedSlip.shareholders);
-              setTempSharesData(matchedSlip.shareholders.map((sh: any) => ({ ...sh })));
-            }
-          }
-        })
-        .catch(err => console.error("Error loading cooperation shares:", err));
     }
   }, [selectedDepForManage]);
 
@@ -524,7 +512,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
       window.removeEventListener('deposit-updated', handleRefresh);
       window.removeEventListener('refresh-deposits', handleRefresh);
     };
-  }, []);
+  }, [activeViewTab]);
 
   const loadComments = async () => {
     if (!selectedDepForManage?.id) return;
@@ -556,13 +544,6 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
       setLoadingHistory(false);
     }
   };
-
-  useEffect(() => {
-    if (showManageModal && selectedDepForManage?.id) {
-      loadComments();
-      loadHistory();
-    }
-  }, [showManageModal, selectedDepForManage?.id]);
 
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -686,8 +667,14 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
     setMilestonesInput(prev => prev.filter((_, i) => i !== index));
   };
 
+  const createDepositInFlightRef = useRef(false);
+  const uploadUncInFlightRef = useRef(false);
+  const confirmCancelInFlightRef = useRef(false);
+  const sendReminderInFlightRef = useRef(false);
+
   const handleCreateDeposit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSaving || createDepositInFlightRef.current) return;
     if (!selectedContactId || !selectedProjectId || !price) {
       addToast('Vui lòng điền đầy đủ thông tin khách hàng, chương trình, giá bán', 'error');
       return;
@@ -716,8 +703,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
       }
     }
 
-    if (isSaving) return;
-
+    createDepositInFlightRef.current = true;
     try {
       setIsSaving(true);
       const res = await fetchAPI('deposits', {
@@ -811,12 +797,15 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
     } catch (e: any) {
       addToast(e.message || 'Lỗi kết nối', 'error');
     } finally {
+      createDepositInFlightRef.current = false;
       setIsSaving(false);
     }
   };
 
   const handleUploadUnc = async (e: React.ChangeEvent<HTMLInputElement>, depositId: number, milestoneId: number) => {
     if (!e.target.files || e.target.files.length === 0) return;
+    if (uploadUncInFlightRef.current) return;
+    uploadUncInFlightRef.current = true;
     const file = e.target.files[0];
 
     try {
@@ -851,6 +840,8 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
       }
     } catch (e: any) {
       addToast(e.message || 'Lỗi kết nối', 'error');
+    } finally {
+      uploadUncInFlightRef.current = false;
     }
   };
 
@@ -913,8 +904,8 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
   };
 
   const handleConfirmCancel = async () => {
-    if (!cancelDepositId || !cancelReason || isSaving) return;
-
+    if (!cancelDepositId || !cancelReason || isSaving || confirmCancelInFlightRef.current) return;
+    confirmCancelInFlightRef.current = true;
     try {
       setIsSaving(true);
       const res = await fetchAPI(`deposits/${cancelDepositId}/cancel`, {
@@ -933,6 +924,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
     } catch (e: any) {
       addToast(e.message || 'Lỗi kết nối', 'error');
     } finally {
+      confirmCancelInFlightRef.current = false;
       setIsSaving(false);
     }
   };
@@ -1138,7 +1130,8 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
   };
 
   const handleSendManualReminder = async (milestoneId: number) => {
-    if (!selectedDepForManage || sendingReminderId !== null) return;
+    if (!selectedDepForManage || sendingReminderId !== null || sendReminderInFlightRef.current) return;
+    sendReminderInFlightRef.current = true;
     try {
       setSendingReminderId(milestoneId);
       const res = await fetchAPI(`deposits/${selectedDepForManage.id}/milestones/${milestoneId}/remind`, {
@@ -1152,6 +1145,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
     } catch (e: any) {
       addToast(e.message || 'Lỗi kết nối', 'error');
     } finally {
+      sendReminderInFlightRef.current = false;
       setSendingReminderId(null);
     }
   };

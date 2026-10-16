@@ -1,11 +1,12 @@
-import React, { useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 import { Sparkles } from 'lucide-react';
 import { useChatStore } from '../../store/chatStore';
 import { useAuth } from '../../contexts/AuthContext';
-import { WorkChatModal } from './WorkChatModal';
 import { BrandChatIcon } from './BrandChatIcon';
+
+const WorkChatModal = React.lazy(() => import('./WorkChatModal').then(m => ({ default: m.WorkChatModal })));
 
 export const ChatFloatingLauncher: React.FC = () => {
   const location = useLocation();
@@ -22,6 +23,14 @@ export const ChatFloatingLauncher: React.FC = () => {
     disconnectRealtimeSSE,
     isRealtimeConnected
   } = useChatStore();
+
+  const [hasOpened, setHasOpened] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setHasOpened(true);
+    }
+  }, [isOpen]);
 
   // 1. Establish On-Demand Real-time SSE Stream ONLY when Chat Modal is open (< 50ms latency)
   // When chat modal is closed, immediately disconnect SSE to free up PHP-FPM workers for the server
@@ -110,7 +119,11 @@ export const ChatFloatingLauncher: React.FC = () => {
 
   // When chat modal is open, hide launcher button so it doesn't overlap the input bar or send button
   if (isOpen) {
-    return <WorkChatModal />;
+    return (
+      <React.Suspense fallback={null}>
+        <WorkChatModal />
+      </React.Suspense>
+    );
   }
 
   const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
@@ -256,8 +269,12 @@ export const ChatFloatingLauncher: React.FC = () => {
         )}
       </button>
 
-      {/* The Master Chat Window Modal */}
-      <WorkChatModal />
+      {/* The Master Chat Window Modal - Lazy mounted only after first open */}
+      {(isOpen || hasOpened) && (
+        <React.Suspense fallback={null}>
+          <WorkChatModal />
+        </React.Suspense>
+      )}
     </>
   );
 

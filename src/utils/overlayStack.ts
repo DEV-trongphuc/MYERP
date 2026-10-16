@@ -53,7 +53,7 @@ export function removeOverlay(id: string): void {
  */
 export function popAndCloseTopOverlay(): boolean {
   if (overlayStack.length === 0) return false;
-  const top = overlayStack.pop();
+  const top = overlayStack[overlayStack.length - 1];
   if (top && typeof top.close === 'function') {
     top.close();
     return true;

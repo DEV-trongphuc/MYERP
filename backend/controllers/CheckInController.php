@@ -12,33 +12,46 @@ class CheckInController {
 
     public function index(array $auth): void {
         // Option to check only today's check-in for the logged-in user (useful for dashboard/buttons)
+        $globalWorkStart = '08:00';
+        $globalWorkEnd = '17:00';
+        try {
+            $stmtSys = $this->db->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('global_work_start_time', 'global_work_end_time')");
+            while ($sysRow = $stmtSys->fetch(PDO::FETCH_ASSOC)) {
+                if ($sysRow['setting_key'] === 'global_work_start_time' && !empty($sysRow['setting_value'])) {
+                    $globalWorkStart = $sysRow['setting_value'];
+                } elseif ($sysRow['setting_key'] === 'global_work_end_time' && !empty($sysRow['setting_value'])) {
+                    $globalWorkEnd = $sysRow['setting_value'];
+                }
+            }
+        } catch (\Throwable $eSys) {}
+
         if (isset($_GET['today_only']) && $_GET['today_only'] == '1') {
             $today = date('Y-m-d');
             $row = null;
             try {
                 $stmt = $this->db->prepare("
                     SELECT c.*, 
-                           IF(COALESCE(u.use_custom_work_hours, 0) = 1, u.work_start_time, (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_start_time' LIMIT 1)) AS work_start_time,
-                           IF(COALESCE(u.use_custom_work_hours, 0) = 1, u.work_end_time, (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_end_time' LIMIT 1)) AS work_end_time,
+                           IF(COALESCE(u.use_custom_work_hours, 0) = 1, u.work_start_time, ?) AS work_start_time,
+                           IF(COALESCE(u.use_custom_work_hours, 0) = 1, u.work_end_time, ?) AS work_end_time,
                            u.full_name as user_name
                     FROM check_ins c
                     JOIN users u ON c.user_id = u.id
                     WHERE c.user_id = ? AND c.check_in_date = ?
                 ");
-                $stmt->execute([$auth['user_id'], $today]);
+                $stmt->execute([$globalWorkStart, $globalWorkEnd, $auth['user_id'], $today]);
                 $row = $stmt->fetch(PDO::FETCH_ASSOC);
             } catch (\Throwable $e) {
                 try {
                     $stmt = $this->db->prepare("
                         SELECT c.*, 
-                               (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_start_time' LIMIT 1) AS work_start_time,
-                               (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_end_time' LIMIT 1) AS work_end_time,
+                               ? AS work_start_time,
+                               ? AS work_end_time,
                                u.full_name as user_name
                         FROM check_ins c
                         JOIN users u ON c.user_id = u.id
                         WHERE c.user_id = ? AND c.check_in_date = ?
                     ");
-                    $stmt->execute([$auth['user_id'], $today]);
+                    $stmt->execute([$globalWorkStart, $globalWorkEnd, $auth['user_id'], $today]);
                     $row = $stmt->fetch(PDO::FETCH_ASSOC);
                 } catch (\Throwable $e2) {}
             }
@@ -68,8 +81,8 @@ class CheckInController {
                             'pending_explanation_today' => true,
                             'is_bulk_pending' => true,
                             'bulk_request_id' => $bulkDetail['request_id'],
-                            'work_start_time' => '08:00',
-                            'work_end_time' => '17:00',
+                            'work_start_time' => $globalWorkStart,
+                            'work_end_time' => $globalWorkEnd,
                             'user_name' => $auth['full_name'] ?? ''
                         ];
                     }
@@ -83,21 +96,21 @@ class CheckInController {
         
         try {
             $sql = "SELECT c.*, u.full_name as user_name, u.email as user_email, u.avatar_url as user_avatar, 
-                           IF(COALESCE(u.use_custom_work_hours, 0) = 1, u.work_start_time, (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_start_time' LIMIT 1)) AS work_start_time,
-                           IF(COALESCE(u.use_custom_work_hours, 0) = 1, u.work_end_time, (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_end_time' LIMIT 1)) AS work_end_time
+                           IF(COALESCE(u.use_custom_work_hours, 0) = 1, u.work_start_time, ?) AS work_start_time,
+                           IF(COALESCE(u.use_custom_work_hours, 0) = 1, u.work_end_time, ?) AS work_end_time
                     FROM check_ins c
                     JOIN users u ON c.user_id = u.id
                     WHERE u.tenant_id = ?";
         } catch (\Throwable $e) {
             $sql = "SELECT c.*, u.full_name as user_name, u.email as user_email, u.avatar_url as user_avatar, 
-                           (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_start_time' LIMIT 1) AS work_start_time,
-                           (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_end_time' LIMIT 1) AS work_end_time
+                           ? AS work_start_time,
+                           ? AS work_end_time
                     FROM check_ins c
                     JOIN users u ON c.user_id = u.id
                     WHERE u.tenant_id = ?";
         }
         
-        $params = [$auth['tenant_id']];
+        $params = [$globalWorkStart, $globalWorkEnd, $auth['tenant_id']];
 
         // RLS: Sales can only see their own check-ins. Managers see their team's (where they are leader or belong to).
         if ($auth['role'] === 'manager') {
@@ -224,8 +237,8 @@ class CheckInController {
                               JOIN users u ON r.user_id = u.id 
                               LEFT JOIN users app1 ON r.approver_id = app1.id
                               LEFT JOIN users app2 ON r.approver_id_2 = app2.id
-                              WHERE u.tenant_id = ? AND r.leave_type = 'overtime' AND r.status != 'rejected' AND YEAR(r.start_date) = ? AND MONTH(r.start_date) = ?";
-                    $otParams = [$tid, $year, $month];
+                              WHERE u.tenant_id = ? AND r.leave_type = 'overtime' AND r.status != 'rejected' AND r.start_date BETWEEN ? AND ?";
+                    $otParams = [$tid, $startDate . ' 00:00:00', $endDate . ' 23:59:59'];
                     if ($userIdFilter !== null) {
                         $otSql .= " AND r.user_id = ?";
                         $otParams[] = $userIdFilter;
@@ -251,8 +264,8 @@ class CheckInController {
                               LEFT JOIN users app1 ON r.approver_id = app1.id
                               LEFT JOIN users app2 ON r.approver_id_2 = app2.id
                               WHERE u.tenant_id = ? AND r.leave_type != 'overtime' AND r.status != 'rejected' 
-                                AND (YEAR(r.start_date) = ? AND MONTH(r.start_date) = ? OR YEAR(r.end_date) = ? AND MONTH(r.end_date) = ?)";
-                    $lvParams = [$tid, $year, $month, $year, $month];
+                                AND (r.start_date <= ? AND r.end_date >= ?)";
+                    $lvParams = [$tid, $endDate . ' 23:59:59', $startDate . ' 00:00:00'];
                     if ($userIdFilter !== null) {
                         $lvSql .= " AND r.user_id = ?";
                         $lvParams[] = $userIdFilter;
@@ -327,8 +340,8 @@ class CheckInController {
                               JOIN users u ON r.user_id = u.id 
                               LEFT JOIN users app1 ON r.approver_id = app1.id
                               LEFT JOIN users app2 ON r.approver_id_2 = app2.id
-                              WHERE u.tenant_id = ? AND r.leave_type = 'overtime' AND r.status != 'rejected' AND DATE(r.start_date) BETWEEN ? AND ?";
-                    $otParams = [$tid, $from, $to];
+                              WHERE u.tenant_id = ? AND r.leave_type = 'overtime' AND r.status != 'rejected' AND r.start_date BETWEEN ? AND ?";
+                    $otParams = [$tid, $from . ' 00:00:00', $to . ' 23:59:59'];
                     if ($userIdFilter !== null) {
                         $otSql .= " AND r.user_id = ?";
                         $otParams[] = $userIdFilter;
@@ -354,8 +367,8 @@ class CheckInController {
                               LEFT JOIN users app1 ON r.approver_id = app1.id
                               LEFT JOIN users app2 ON r.approver_id_2 = app2.id
                               WHERE u.tenant_id = ? AND r.leave_type != 'overtime' AND r.status != 'rejected' 
-                                AND (DATE(r.start_date) <= ? AND DATE(r.end_date) >= ?)";
-                    $lvParams = [$tid, $to, $from];
+                                AND (r.start_date <= ? AND r.end_date >= ?)";
+                    $lvParams = [$tid, $to . ' 23:59:59', $from . ' 00:00:00'];
                     if ($userIdFilter !== null) {
                         $lvSql .= " AND r.user_id = ?";
                         $lvParams[] = $userIdFilter;
@@ -411,10 +424,10 @@ class CheckInController {
                     SELECT id, leave_type, start_date, end_date, total_days, unpaid_days, reason
                     FROM hrm_leave_requests
                     WHERE user_id = ? AND status = 'approved'
-                      AND ? BETWEEN DATE(start_date) AND DATE(end_date)
+                      AND start_date <= ? AND end_date >= ?
                       AND leave_type IN ('annual', 'compensatory', 'special_paid', 'unpaid', 'sick')
                 ");
-                $stmtActiveLeave->execute([$auth['user_id'], $today]);
+                $stmtActiveLeave->execute([$auth['user_id'], $today . ' 23:59:59', $today . ' 00:00:00']);
                 $activeLeaves = $stmtActiveLeave->fetchAll(PDO::FETCH_ASSOC);
 
                 if (!empty($activeLeaves)) {
@@ -465,7 +478,7 @@ class CheckInController {
                             $upLv = $this->db->prepare("
                                 UPDATE hrm_leave_requests 
                                 SET status = 'cancelled', 
-                                    reason = CONCAT(COALESCE(reason, ''), '\n[Tự động hủy đơn & hoàn trả ', ?, ' ngày phép do nhân viên đã đi làm và check-in ngày ', ?, ']')
+                                     reason = CONCAT(COALESCE(reason, ''), '\n[Tự động hủy đơn & hoàn trả ', ?, ' ngày phép do nhân viên đã đi làm và check-in ngày ', ?, ']')
                                 WHERE id = ?
                             ");
                             $upLv->execute([$refundDays, $today, $lvId]);
@@ -571,12 +584,12 @@ class CheckInController {
                 $afternoonLeaveStmt = $this->db->prepare("
                     SELECT id 
                     FROM hrm_leave_requests 
-                    WHERE user_id = ? AND status = 'approved' AND DATE(start_date) = ?
+                    WHERE user_id = ? AND status = 'approved' AND start_date >= ? AND start_date <= ?
                       AND leave_type IN ('annual', 'sick', 'compensatory', 'unpaid')
                       AND HOUR(start_date) >= 12
                     LIMIT 1
                 ");
-                $afternoonLeaveStmt->execute([$auth['user_id'], $today]);
+                $afternoonLeaveStmt->execute([$auth['user_id'], $today . ' 00:00:00', $today . ' 23:59:59']);
                 $afternoonLeave = $afternoonLeaveStmt->fetch(PDO::FETCH_ASSOC);
 
                 if ($afternoonLeave) {
@@ -1114,10 +1127,10 @@ class CheckInController {
               AND status = 'approved'
               AND leave_type NOT IN ('remote_work', 'late_early', 'overtime')
               AND total_days >= 1
-              AND (DATE(start_date) <= ? AND DATE(end_date) >= ?)
+              AND (start_date <= ? AND end_date >= ?)
             LIMIT 1
         ");
-        $stmtLeave->execute([$targetUserId, $date, $date]);
+        $stmtLeave->execute([$targetUserId, $date . ' 23:59:59', $date . ' 00:00:00']);
         $fullLeave = $stmtLeave->fetch();
 
         if ($fullLeave && $action !== 'delete') {
@@ -1235,9 +1248,9 @@ class CheckInController {
                 $stmtLeaves = $this->db->prepare("
                     SELECT DATE(start_date) as s_date, DATE(end_date) as e_date, status, reason, leave_type
                     FROM hrm_leave_requests 
-                    WHERE user_id = ? AND status IN ('approved', 'pending') AND DATE(start_date) <= ? AND DATE(end_date) >= ?
+                    WHERE user_id = ? AND status IN ('approved', 'pending') AND start_date <= ? AND end_date >= ?
                 ");
-                $stmtLeaves->execute([$userId, $endDate, $startDate]);
+                $stmtLeaves->execute([$userId, $endDate . ' 23:59:59', $startDate . ' 00:00:00']);
                 $hrmLeaves = $stmtLeaves->fetchAll(PDO::FETCH_ASSOC) ?: [];
             } catch (\Throwable $e) {
                 $hrmLeaves = [];
@@ -2331,8 +2344,13 @@ class CheckInController {
     }
 
     public function deleteBulkRequest(array $auth, int $id): void {
-        $stmt = $this->db->prepare("SELECT * FROM attendance_bulk_requests WHERE id = ?");
-        $stmt->execute([$id]);
+        $stmt = $this->db->prepare("
+            SELECT r.*
+            FROM attendance_bulk_requests r
+            JOIN users u ON r.user_id = u.id
+            WHERE r.id = ? AND u.tenant_id = ?
+        ");
+        $stmt->execute([$id, $auth['tenant_id']]);
         $req = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$req) {
