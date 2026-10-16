@@ -182,8 +182,8 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
   const getPipelineStageInfo = (status?: string) => {
     const s = String(status || '').trim();
     const stages: Record<string, { name: string; color: string }> = {
-      'new_lead': { name: '01 – New Lead', color: '#f97316' },
-      '01': { name: '01 – New Lead', color: '#f97316' },
+      'new_lead': { name: '01 – New Lead', color: '#dc2626' },
+      '01': { name: '01 – New Lead', color: '#dc2626' },
       'contact_attempted': { name: '02 – Contact Attempted', color: '#eab308' },
       '02': { name: '02 – Contact Attempted', color: '#eab308' },
       'connected': { name: '03 – Connected', color: '#8b5cf6' },
@@ -231,7 +231,7 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
     if (s.startsWith('13')) return stages['13'];
     if (s.startsWith('14')) return stages['14'];
 
-    return { name: s || '01 – New Lead', color: '#f97316' };
+    return { name: s || '01 – New Lead', color: '#dc2626' };
   };
 
   const formatRelativeTime = (dateStr?: string) => {
@@ -1303,22 +1303,27 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
 
                             {/* Col 4: TRẠNG THÁI (Pill dot) */}
                             <div style={{ width: 180, flexShrink: 0, paddingRight: '10px' }}>
-                              <span style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                padding: '3px 10px',
-                                borderRadius: '9999px',
-                                background: `${stageInfo.color}14`,
-                                border: `1px solid ${stageInfo.color}33`,
-                                color: stageInfo.color,
-                                fontSize: '0.74rem',
-                                fontWeight: 750,
-                                whiteSpace: 'nowrap'
-                              }}>
-                                <span style={{ width: 6, height: 6, borderRadius: '50%', background: stageInfo.color, flexShrink: 0 }} />
-                                <span>{stageInfo.name}</span>
-                              </span>
+                              {(() => {
+                                const isNewLeadStage = stageInfo.name === '01 – New Lead' || /^01\b|new\s*lead/i.test(stageInfo.name || '');
+                                return (
+                                  <span style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    padding: '3px 10px',
+                                    borderRadius: '9999px',
+                                    backgroundColor: isNewLeadStage ? '#dc2626' : `${stageInfo.color}14`,
+                                    border: isNewLeadStage ? '1px solid #b91c1c' : `1px solid ${stageInfo.color}33`,
+                                    color: isNewLeadStage ? '#ffffff' : stageInfo.color,
+                                    fontSize: '0.74rem',
+                                    fontWeight: isNewLeadStage ? 700 : 750,
+                                    whiteSpace: 'nowrap'
+                                  }}>
+                                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: isNewLeadStage ? '#ffffff' : stageInfo.color, flexShrink: 0 }} />
+                                    <span>{stageInfo.name}</span>
+                                  </span>
+                                );
+                              })()}
                             </div>
 
                             {/* Col 5: SALE PHỤ TRÁCH */}

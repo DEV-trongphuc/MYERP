@@ -727,6 +727,9 @@ class FinanceController
                 $params[] = $uid;
             }
         }
+        $where[] = "(e.status != 'draft' OR e.created_by = ?)";
+        $params[] = $uid;
+
         if ($status) {
             if ($status === 'unpaid' || $status === 'approved_unpaid') {
                 $where[] = "e.status = 'approved' AND (e.is_refunded IS NULL OR e.is_refunded = 0)";
@@ -746,12 +749,14 @@ class FinanceController
             $params[] = (int)$creatorId;
         }
 
-        if ($role === 'accountant') {
-            $where[] = 'e.amount > 0';
+        if (($_GET['is_po'] ?? '') === '1') {
+            $where[] = "(COALESCE(e.amount, 0) > 0 OR e.status = 'draft')";
+        } elseif ($role === 'accountant') {
+            $where[] = "(COALESCE(e.amount, 0) > 0 OR e.created_by = $uid)";
         } else {
             $includeZeroAdmin = ($_GET['include_zero_admin'] ?? '') === '1';
             if (!$includeZeroAdmin) {
-                $where[] = '(e.amount > 0 OR (
+                $where[] = '(e.amount > 0 OR e.status = "draft" OR (
                     e.title NOT LIKE "%IN ĐÓNG DẤU%"
                     AND e.title NOT LIKE "%in, đóng dấu%"
                     AND e.title NOT LIKE "%In, đóng dấu%"
@@ -974,7 +979,7 @@ class FinanceController
 
     public function showExpense(array $auth, int $id): void
     {
-        $sql = "SELECT e.*, u.full_name as creator_name, u.avatar_url as creator_avatar, u2.full_name as approver_name, u2.avatar_url as approver_avatar, u3.full_name as refunder_name, u3.avatar_url as refunder_avatar, u4.full_name as approver_name_2, u4.avatar_url as approver_avatar_2, u5.full_name as approver_name_3, u5.avatar_url as approver_avatar_3 FROM expenses e LEFT JOIN users u ON e.created_by=u.id LEFT JOIN users u2 ON e.approver_id=u2.id LEFT JOIN users u3 ON e.refunder_id=u3.id LEFT JOIN users u4 ON e.approver_id_2=u4.id LEFT JOIN users u5 ON e.approver_id_3=u5.id WHERE e.id=? AND e.tenant_id=? AND e.deleted_at IS NULL";
+        $sql = "SELECT e.*, u.full_name as creator_name, u.avatar_url as creator_avatar, u2.full_name as approver_name, u2.full_name as approver_name_1, u2.avatar_url as approver_avatar, u3.full_name as refunder_name, u3.avatar_url as refunder_avatar, u4.full_name as approver_name_2, u4.avatar_url as approver_avatar_2, u5.full_name as approver_name_3, u5.avatar_url as approver_avatar_3 FROM expenses e LEFT JOIN users u ON e.created_by=u.id LEFT JOIN users u2 ON e.approver_id=u2.id LEFT JOIN users u3 ON e.refunder_id=u3.id LEFT JOIN users u4 ON e.approver_id_2=u4.id LEFT JOIN users u5 ON e.approver_id_3=u5.id WHERE e.id=? AND e.tenant_id=? AND e.deleted_at IS NULL";
         $p = [$id, $auth['tenant_id']];
         // Allow all users in the same tenant to view expense details (e.g. when shared in WorkChat drawer)
         $stmt = $this->db->prepare($sql);
@@ -991,6 +996,11 @@ class FinanceController
             $ee['name'] = trim($ee['full_name'] ?? '');
         }
         $row['entities'] = $entities;
+        if (class_exists('HRMController')) {
+            $row['related_users'] = (new HRMController($this->db))->resolveRelatedUsers($row['related_user_ids'] ?? null);
+        } else {
+            $row['related_users'] = [];
+        }
         if (!empty($row['approval_steps']) && is_string($row['approval_steps'])) {
             $row['approval_steps'] = json_decode($row['approval_steps'], true);
         }
@@ -1002,7 +1012,18 @@ class FinanceController
     {
         if ($auth['role'] === 'viewer') respond(403, null, 'Bạn không có quyền tạo chi phí', false);
         $data = getBody();
-        if (empty($data['title']))
+
+        // Cấp Quản lý trở lên toàn quyền tạo phiếu chi approved; nhân sự cấp dưới bắt buộc pending chờ duyệt (hoặc draft)
+        $isManagerOrAbove = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager'], true);
+        $statusVal = $data['status'] ?? 'pending';
+        if ($statusVal !== 'draft' && !$isManagerOrAbove) {
+            $statusVal = 'pending';
+        }
+
+        if ($statusVal === 'draft' && empty(trim($data['title'] ?? ''))) {
+            $data['title'] = '[Bản nháp] Chưa có tiêu đề';
+        }
+        if (empty(trim($data['title'] ?? '')))
             respond(400, null, 'Thiếu tiêu đề', false);
 
         $totalAmount = isset($data['amount']) && $data['amount'] !== '' ? (float) $data['amount'] : 0.0;
@@ -1015,13 +1036,6 @@ class FinanceController
             if ($totalAmount > 0 && $splitSum > $totalAmount) {
                 respond(422, null, 'Tổng số tiền phân bổ không được lớn hơn tổng số tiền chi phí', false);
             }
-        }
-
-        // Cấp Quản lý trở lên toàn quyền tạo phiếu chi approved; nhân sự cấp dưới bắt buộc pending chờ duyệt
-        $isManagerOrAbove = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager'], true);
-        $statusVal = $data['status'] ?? 'pending';
-        if (!$isManagerOrAbove) {
-            $statusVal = 'pending';
         }
 
         $approver_id = !empty($data['approver_id']) ? (int)$data['approver_id'] : null;
@@ -1050,7 +1064,7 @@ class FinanceController
             }
         }
 
-        if ($statusVal === 'pending') {
+        if ($statusVal !== 'draft' && $statusVal === 'pending') {
             if (empty($approver_id)) {
                 $stmtLeader = $this->db->prepare("SELECT t.leader_id FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ?");
                 $stmtLeader->execute([$auth['user_id']]);
@@ -1071,15 +1085,21 @@ class FinanceController
 
         $relatedUserIds = !empty($data['related_user_ids']) ? (is_array($data['related_user_ids']) ? json_encode($data['related_user_ids']) : $data['related_user_ids']) : null;
 
-        $status_level_1 = $approver_id ? 'pending' : 'none';
-        $status_level_2 = $approver_id_2 ? 'pending' : 'none';
-        $status_level_3 = $approver_id_3 ? 'pending' : 'none';
-        $approval_status = $approver_id ? 'pending' : 'approved';
-        if ($statusVal === 'approved') {
+        if ($statusVal === 'draft') {
+            $status_level_1 = 'none';
+            $status_level_2 = 'none';
+            $status_level_3 = 'none';
+            $approval_status = 'draft';
+        } elseif ($statusVal === 'approved') {
             $status_level_1 = 'approved';
             $status_level_2 = $approver_id_2 ? 'approved' : 'none';
             $status_level_3 = $approver_id_3 ? 'approved' : 'none';
             $approval_status = 'approved';
+        } else {
+            $status_level_1 = $approver_id ? 'pending' : 'none';
+            $status_level_2 = $approver_id_2 ? 'pending' : 'none';
+            $status_level_3 = $approver_id_3 ? 'pending' : 'none';
+            $approval_status = $approver_id ? 'pending' : 'approved';
         }
 
         $currency = !empty($data['currency']) ? trim($data['currency']) : null;
@@ -1094,7 +1114,9 @@ class FinanceController
         $dueDate = !empty($data['due_date']) ? trim($data['due_date']) : null;
         // Auto-detect deadline date from notes if user didn't specify custom deadline
         if (empty($dueDate) && !empty($data['notes'])) {
-            if (preg_match('/(?:deadline|hạn)\s*(?:thanh\s*toán|chi)?\s*[:\s-]*(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/iu', $data['notes'], $dMatch)) {
+            if (preg_match('/Hạn thanh toán:\s*([0-9]{4}-[0-9]{2}-[0-9]{2})/iu', $data['notes'], $dMatchIso)) {
+                $dueDate = $dMatchIso[1];
+            } elseif (preg_match('/(?:deadline|hạn)\s*(?:thanh\s*toán|chi)?\s*[:\s-]*(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/iu', $data['notes'], $dMatch)) {
                 $dDay = str_pad($dMatch[1], 2, '0', STR_PAD_LEFT);
                 $dMonth = str_pad($dMatch[2], 2, '0', STR_PAD_LEFT);
                 $dYear = $dMatch[3];
@@ -1189,8 +1211,7 @@ class FinanceController
 
             logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'CREATE', 'expense', $expId, json_encode(['title' => $data['title'], 'amount' => $totalAmount]));
 
-            $statusVal = $data['status'] ?? 'pending';
-            if ($statusVal === 'pending') {
+            if ($statusVal !== 'draft' && $statusVal === 'pending') {
                 require_once __DIR__ . '/../NotificationService.php';
                 if ($approver_id && $approver_id !== (int)$auth['user_id']) {
                     NotificationService::send($this->db, $auth['tenant_id'], 'EXPENSE_REQUEST', [
@@ -1232,7 +1253,9 @@ class FinanceController
 
             $this->showExpense($auth, $expId);
         } catch (Exception $e) {
-            $this->db->rollBack();
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             respond(500, null, $e->getMessage(), false);
         }
     }
@@ -1262,7 +1285,7 @@ class FinanceController
             'related_user_ids'
         ];
         if ($isAdminOrFinance) {
-            $fields = array_merge($fields, ['status', 'approval_status', 'status_level_1', 'status_level_2', 'status_level_3']);
+            $fields = array_merge($fields, ['status', 'approval_status', 'status_level_1', 'status_level_2', 'status_level_3', 'reject_reason']);
         }
         if (array_key_exists('items', $data) && is_array($data['items'])) {
             $data['items'] = json_encode($data['items'], JSON_UNESCAPED_UNICODE);
@@ -1296,31 +1319,10 @@ class FinanceController
             }
         }
 
-        $sets = [];
-        $params = [];
-        foreach ($fields as $f) {
-            if (array_key_exists($f, $data)) {
-                $sets[] = "$f=?";
-                $params[] = $data[$f];
-            }
-        }
-        if ($canUpdateRefund && array_key_exists('is_refunded', $data)) {
-            $sets[] = "is_refunded=?";
-            $params[] = $data['is_refunded'] ? 1 : 0;
-            if ($data['is_refunded']) {
-                $sets[] = "refunded_at=NOW()";
-                $sets[] = "refunder_id=?";
-                $params[] = $auth['user_id'];
-            } else {
-                $sets[] = "refunded_at=NULL";
-                $sets[] = "refunder_id=NULL";
-            }
-        }
-
         $this->db->beginTransaction();
         try {
-            // Check permission and get current amount if not provided
-            $sqlCheck = "SELECT id, amount, created_by, title, status, approval_status, is_refunded, approver_id, approver_id_2, approver_id_3 FROM expenses WHERE id=? AND tenant_id=?";
+            // Check permission and get current state
+            $sqlCheck = "SELECT id, amount, currency, due_date, notes, items, created_by, title, status, approval_status, status_level_1, status_level_2, status_level_3, is_refunded, approver_id, approver_id_2, approver_id_3, related_user_ids FROM expenses WHERE id=? AND tenant_id=? AND deleted_at IS NULL FOR UPDATE";
             $cp = [$id, $auth['tenant_id']];
             if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
                 $sqlCheck .= " AND created_by=?";
@@ -1336,12 +1338,24 @@ class FinanceController
             $check = $this->db->prepare($sqlCheck);
             $check->execute($cp);
             $row = $check->fetch();
-            if (!$row)
+            if (!$row) {
+                $this->db->rollBack();
                 respond(404, null, 'Không tìm thấy hoặc không có quyền', false);
+            }
 
+            $oldStatus = $row['status'] ?? 'pending';
             $isCreator = (int)($row['created_by'] ?? 0) === (int)$auth['user_id'];
-            $updatingGeneralFields = !empty(array_intersect(array_keys($data), ['title', 'category', 'amount', 'currency', 'items', 'vat_amount', 'date', 'notes', 'vendor_name', 'entities']));
-            if (!$isAdminOrFinance && ($row['status'] === 'approved' || $row['approval_status'] === 'approved' || !empty($row['is_refunded'])) && $updatingGeneralFields) {
+            $updatingGeneralFields = !empty(array_intersect(array_keys($data), [
+                'title', 'category', 'amount', 'currency', 'items', 'vat_amount', 'date', 'due_date',
+                'notes', 'vendor_name', 'has_vat_invoice', 'is_vat_inclusive', 'image_url',
+                'approver_id', 'approver_id_2', 'approver_id_3', 'related_user_ids', 'entities'
+            ]));
+
+            $canCreatorEditState = in_array($oldStatus, ['draft', 'pending', 'rejected'], true)
+                && (($row['status_level_1'] ?? '') !== 'approved' || in_array($oldStatus, ['rejected', 'draft'], true));
+
+            if (!$isAdminOrFinance && ($row['status'] === 'approved' || $row['approval_status'] === 'approved' || !empty($row['is_refunded']) || ($isCreator && !$canCreatorEditState)) && $updatingGeneralFields) {
+                $this->db->rollBack();
                 respond(422, null, 'Đề xuất chi phí/tạm ứng đã được phê duyệt hoặc hoàn tất thanh toán, không thể chỉnh sửa thông tin', false);
             }
             $isApprover = in_array((int)$auth['user_id'], array_filter([
@@ -1349,14 +1363,140 @@ class FinanceController
                 (int)($row['approver_id_2'] ?? 0),
                 (int)($row['approver_id_3'] ?? 0)
             ]), true);
-            $onlyUpdatingDate = count(array_intersect(array_keys($data), ['title', 'category', 'amount', 'currency', 'items', 'vat_amount', 'notes', 'vendor_name', 'entities'])) === 0 && array_key_exists('date', $data);
+            $onlyUpdatingDate = count(array_intersect(array_keys($data), [
+                'title', 'category', 'amount', 'currency', 'items', 'vat_amount', 'due_date',
+                'notes', 'vendor_name', 'has_vat_invoice', 'is_vat_inclusive', 'image_url',
+                'approver_id', 'approver_id_2', 'approver_id_3', 'related_user_ids', 'entities'
+            ])) === 0 && array_key_exists('date', $data);
 
             if (!$isAdminOrFinance && !$isCreator && !($isApprover && $onlyUpdatingDate) && $updatingGeneralFields) {
+                $this->db->rollBack();
                 respond(403, null, 'Chỉ người tạo phiếu, cấp duyệt hoặc ban quản trị/kế toán mới có quyền chỉnh sửa chi phí', false);
             }
 
-            $currentTotal = (float) ($data['amount'] ?? $row['amount'] ?? 0);
-            if ($currentTotal < 0) respond(422, null, 'Số tiền chi phí không được âm', false);
+            // Auto-parse currency & due_date from notes when notes is updated (unless explicitly passed)
+            if (array_key_exists('notes', $data) && !empty($data['notes'])) {
+                if (empty($data['currency'])) {
+                    if (preg_match('/Loại tiền tệ:\s*([A-Z]{3})/u', (string)$data['notes'], $cMatch)) {
+                        $data['currency'] = $cMatch[1];
+                    } elseif (class_exists('HRMController')) {
+                        $data['currency'] = HRMController::detectExpenseCurrency(
+                            $data['title'] ?? $row['title'] ?? '',
+                            (string)$data['notes'],
+                            $data['items'] ?? $row['items'] ?? null,
+                            $row['currency'] ?? 'VND'
+                        );
+                    }
+                }
+                if (!array_key_exists('due_date', $data) || empty($data['due_date'])) {
+                    if (preg_match('/Hạn thanh toán:\s*([0-9]{4}-[0-9]{2}-[0-9]{2})/iu', (string)$data['notes'], $dMatchIso)) {
+                        $data['due_date'] = $dMatchIso[1];
+                    } elseif (preg_match('/(?:deadline|hạn)\s*(?:thanh\s*toán|chi)?\s*[:\s-]*(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/iu', (string)$data['notes'], $dMatch)) {
+                        $dDay = str_pad($dMatch[1], 2, '0', STR_PAD_LEFT);
+                        $dMonth = str_pad($dMatch[2], 2, '0', STR_PAD_LEFT);
+                        $dYear = $dMatch[3];
+                        if (checkdate((int)$dMonth, (int)$dDay, (int)$dYear)) {
+                            $data['due_date'] = "$dYear-$dMonth-$dDay";
+                        }
+                    }
+                }
+            }
+
+            // Allow creator to pass status as 'pending' or 'draft' when oldStatus is draft, pending, or rejected
+            $newStatus = $oldStatus;
+            if ($isCreator && in_array($oldStatus, ['draft', 'pending', 'rejected'], true)) {
+                if (isset($data['status']) && in_array($data['status'], ['pending', 'draft'], true)) {
+                    $newStatus = $data['status'];
+                    $fields = array_values(array_unique(array_merge($fields, ['status', 'approval_status', 'status_level_1', 'status_level_2', 'status_level_3', 'reject_reason'])));
+                } elseif ($oldStatus === 'rejected' && !$isAdminOrFinance && $updatingGeneralFields) {
+                    $newStatus = 'pending';
+                    $data['status'] = 'pending';
+                    $fields = array_values(array_unique(array_merge($fields, ['status', 'approval_status', 'status_level_1', 'status_level_2', 'status_level_3', 'reject_reason'])));
+                }
+            } elseif ($isAdminOrFinance && isset($data['status'])) {
+                $newStatus = $data['status'];
+            }
+
+            if ($newStatus === 'draft' && array_key_exists('title', $data) && empty(trim((string)$data['title']))) {
+                $data['title'] = '[Bản nháp] Chưa có tiêu đề';
+            }
+
+            $newAmount = array_key_exists('amount', $data) ? (float)$data['amount'] : (float)($row['amount'] ?? 0);
+            if ($newAmount < 0) {
+                $this->db->rollBack();
+                respond(422, null, 'Số tiền chi phí không được âm', false);
+            }
+
+            $newApprover1 = array_key_exists('approver_id', $data) ? (!empty($data['approver_id']) ? (int)$data['approver_id'] : null) : (!empty($row['approver_id']) ? (int)$row['approver_id'] : null);
+            $newApprover2 = array_key_exists('approver_id_2', $data) ? (!empty($data['approver_id_2']) ? (int)$data['approver_id_2'] : null) : (!empty($row['approver_id_2']) ? (int)$row['approver_id_2'] : null);
+            $newApprover3 = array_key_exists('approver_id_3', $data) ? (!empty($data['approver_id_3']) ? (int)$data['approver_id_3'] : null) : (!empty($row['approver_id_3']) ? (int)$row['approver_id_3'] : null);
+
+            $isTransitionToPending = in_array($oldStatus, ['draft', 'rejected'], true) && $newStatus === 'pending';
+            $isUpdatingApprovalChain = $isCreator && $newStatus === 'pending' && !empty(array_intersect(array_keys($data), ['amount', 'approver_id', 'approver_id_2', 'approver_id_3']));
+
+            if ($newStatus === 'draft' && ($oldStatus !== 'draft' || isset($data['status']))) {
+                $fields = array_values(array_unique(array_merge($fields, ['status', 'approval_status', 'status_level_1', 'status_level_2', 'status_level_3'])));
+                $data['status'] = 'draft';
+                $data['approval_status'] = 'draft';
+                $data['status_level_1'] = 'none';
+                $data['status_level_2'] = 'none';
+                $data['status_level_3'] = 'none';
+            } elseif ($isTransitionToPending || $isUpdatingApprovalChain) {
+                $threshold = 5000000;
+                $thQuery = $this->db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'po_three_level_threshold' LIMIT 1");
+                if ($thQuery) {
+                    $thRow = $thQuery->fetch();
+                    if ($thRow && is_numeric($thRow['setting_value'])) {
+                        $threshold = (float)$thRow['setting_value'];
+                    }
+                }
+                if (empty($newApprover1)) {
+                    $stmtLeader = $this->db->prepare("SELECT t.leader_id FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ?");
+                    $stmtLeader->execute([$row['created_by'] ?? $auth['user_id']]);
+                    $leadId = $stmtLeader->fetchColumn();
+                    if (!empty($leadId) && (int)$leadId !== (int)($row['created_by'] ?? $auth['user_id'])) {
+                        $newApprover1 = (int)$leadId;
+                    } else {
+                        $stmtDir = $this->db->query("SELECT id FROM users WHERE LOWER(role) IN ('director', 'superadmin', 'super_admin') AND id != " . (int)($row['created_by'] ?? $auth['user_id']) . " LIMIT 1");
+                        $newApprover1 = (int)($stmtDir->fetchColumn() ?: 1003);
+                    }
+                    $data['approver_id'] = $newApprover1;
+                }
+                if ($newAmount >= $threshold && empty($newApprover2) && empty($newApprover3)) {
+                    $this->db->rollBack();
+                    respond(422, null, 'Chi phí từ ' . number_format($threshold, 0, ',', '.') . ' VND trở lên bắt buộc phải phê duyệt 2 cấp, vui lòng chọn người duyệt Cấp 2.', false);
+                }
+                $fields = array_values(array_unique(array_merge($fields, ['status', 'approval_status', 'status_level_1', 'status_level_2', 'status_level_3', 'reject_reason', 'approver_id'])));
+                $data['status'] = 'pending';
+                $data['approval_status'] = 'pending';
+                $data['status_level_1'] = $newApprover1 ? 'pending' : 'none';
+                $data['status_level_2'] = $newApprover2 ? 'pending' : 'none';
+                $data['status_level_3'] = $newApprover3 ? 'pending' : 'none';
+                $data['reject_reason'] = null;
+            }
+
+            $sets = [];
+            $params = [];
+            foreach ($fields as $f) {
+                if (array_key_exists($f, $data)) {
+                    $sets[] = "$f=?";
+                    $params[] = $data[$f];
+                }
+            }
+            if ($canUpdateRefund && array_key_exists('is_refunded', $data)) {
+                $sets[] = "is_refunded=?";
+                $params[] = $data['is_refunded'] ? 1 : 0;
+                if ($data['is_refunded']) {
+                    $sets[] = "refunded_at=NOW()";
+                    $sets[] = "refunder_id=?";
+                    $params[] = $auth['user_id'];
+                } else {
+                    $sets[] = "refunded_at=NULL";
+                    $sets[] = "refunder_id=NULL";
+                }
+            }
+
+            $currentTotal = $newAmount;
 
             if ($sets) {
                 $params[] = $id;
@@ -1444,6 +1584,21 @@ class FinanceController
             }
 
             $this->db->commit();
+
+            if ($isTransitionToPending && $newApprover1 && $newApprover1 !== (int)$auth['user_id']) {
+                require_once __DIR__ . '/../NotificationService.php';
+                NotificationService::send($this->db, $auth['tenant_id'], 'EXPENSE_REQUEST', [
+                    'approver_id' => $newApprover1,
+                    'user_id' => $newApprover1,
+                    'target_user_id' => $newApprover1,
+                    'user_name' => $auth['full_name'] ?? 'Nhân viên',
+                    'title' => $data['title'] ?? $row['title'] ?? '',
+                    'amount' => $currentTotal,
+                    'reason' => $data['notes'] ?? $row['notes'] ?? 'Không có',
+                    'ref_id' => $id
+                ]);
+            }
+
             $this->showExpense($auth, $id);
         } catch (Exception $e) {
             if ($this->db->inTransaction())
@@ -1454,7 +1609,7 @@ class FinanceController
 
     public function listEntityExpenses(array $auth, string $type, int $id): void
     {
-        $where = "ee.entity_type=? AND ee.entity_id=? AND e.tenant_id=?";
+        $where = "ee.entity_type=? AND ee.entity_id=? AND e.tenant_id=? AND e.deleted_at IS NULL";
         $p = [$type, $id, $auth['tenant_id']];
         $role = $auth['role'] ?? '';
         $uid = (int)($auth['user_id'] ?? 0);
@@ -1967,8 +2122,42 @@ class FinanceController
         $stmt->execute([$auth['tenant_id'], $id, $auth['user_id'], $body, $attachments, $parentId]);
         $newId = $this->db->lastInsertId();
 
-        // logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'ADD_COMMENT', 'expense', $id, "Thêm bình luận cho khoản chi #" . $id);
-        $this->parseAndNotifyMentions($body, $id, 'expense', $auth);
+        $mentionedIds = $this->parseAndNotifyMentions($body, $id, 'expense', $auth, (int)$newId);
+
+        try {
+            $stmtExp = $this->db->prepare("SELECT title, created_by, approver_id, approver_id_2, approver_id_3 FROM expenses WHERE id = ? AND tenant_id = ?");
+            $stmtExp->execute([$id, $auth['tenant_id']]);
+            $expRow = $stmtExp->fetch(PDO::FETCH_ASSOC);
+            if ($expRow) {
+                $uid = (int)$auth['user_id'];
+                $commenterName = $auth['full_name'] ?? 'Đồng nghiệp';
+                $expTitle = $expRow['title'] ?? "Phiếu đề xuất #{$id}";
+                $targetLink = "/approvals?open_id={$id}&open_type=expense&highlight_comment_id={$newId}";
+                $recipients = array_unique(array_filter([
+                    (int)($expRow['created_by'] ?? 0),
+                    (int)($expRow['approver_id'] ?? 0),
+                    (int)($expRow['approver_id_2'] ?? 0),
+                    (int)($expRow['approver_id_3'] ?? 0),
+                ]));
+                $insNotif = $this->db->prepare("
+                    INSERT INTO notifications (user_id, tenant_id, title, body, type, link, is_read, created_at)
+                    VALUES (?, ?, ?, ?, 'comment', ?, 0, NOW())
+                ");
+                foreach ($recipients as $rUid) {
+                    if ($rUid > 0 && $rUid !== $uid && !in_array($rUid, $mentionedIds, true)) {
+                        $insNotif->execute([
+                            $rUid,
+                            $auth['tenant_id'],
+                            "Bình luận mới trong đề xuất: {$expTitle}",
+                            "{$commenterName} vừa bình luận: \"" . mb_substr(strip_tags($body), 0, 120) . "\"",
+                            $targetLink
+                        ]);
+                    }
+                }
+            }
+        } catch (Throwable $e) {
+            // Keep resilient
+        }
 
         respond(200, ['id' => $newId], 'Thêm bình luận thành công');
     }
@@ -2001,7 +2190,7 @@ class FinanceController
         respond(200, $logs, 'Lấy lịch sử chỉnh sửa thành công');
     }
 
-    private function parseAndNotifyMentions(string $body, int $id, string $type, array $auth): void {
+    private function parseAndNotifyMentions(string $body, int $id, string $type, array $auth, ?int $commentId = null): array {
         $mentions = [];
         if (preg_match_all('/data-user-id=(?:&quot;|["\']|\\\\+["\'])?(\d+)/i', (string)$body, $matches)) {
             $uids = array_filter(array_map('intval', $matches[1]));
@@ -2070,15 +2259,17 @@ class FinanceController
 
             // 2. Dispatch notifications
             require_once __DIR__ . '/../NotificationService.php';
+            $link = "/approvals?open_id={$id}&open_type={$type}" . ($commentId ? "&highlight_comment_id={$commentId}" : "");
             foreach ($mentions as $uid => $userRow) {
                 NotificationService::send($this->db, $auth['tenant_id'], 'MENTION_TAGGED', [
                     'user_id' => $uid,
                     'author_name' => $auth['full_name'] ?? 'Đồng nghiệp',
                     'comment' => $body,
-                    'link' => "/approvals?open_id={$id}&open_type={$type}"
+                    'link' => $link
                 ]);
             }
         }
+        return array_map('intval', array_keys($mentions));
     }
 
     public function payCommissionItem(array $auth, int $id): void

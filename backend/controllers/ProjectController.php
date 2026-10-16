@@ -156,8 +156,8 @@ class ProjectController {
     public function show(array $auth, int $id): void {
         $tenantId = $auth['tenant_id'] ?? 1;
 
-        $stmt = $this->db->prepare("SELECT p.* FROM projects p WHERE p.id = ?");
-        $stmt->execute([$id]);
+        $stmt = $this->db->prepare("SELECT p.* FROM projects p WHERE p.id = ? AND p.tenant_id = ?");
+        $stmt->execute([$id, $tenantId]);
         $project = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$project) {
@@ -254,8 +254,8 @@ class ProjectController {
         }
 
         // Check unique code
-        $stmtCheck = $this->db->prepare("SELECT id FROM projects WHERE code = ?");
-        $stmtCheck->execute([$code]);
+        $stmtCheck = $this->db->prepare("SELECT id FROM projects WHERE code = ? AND tenant_id = ?");
+        $stmtCheck->execute([$code, $auth['tenant_id']]);
         if ($stmtCheck->fetch()) {
             respond(400, null, 'Mã dự án đã tồn tại', false);
         }
@@ -286,16 +286,16 @@ class ProjectController {
             $campNames = array_filter(array_map('trim', explode(',', $campaign_ids)));
             if (!empty($campNames)) {
                 $inClause = implode(',', array_fill(0, count($campNames), '?'));
-                $stmtC = $this->db->prepare("SELECT id FROM marketing_campaigns WHERE name IN ($inClause)");
-                $stmtC->execute($campNames);
+                $stmtC = $this->db->prepare("SELECT id FROM marketing_campaigns WHERE tenant_id = ? AND name IN ($inClause)");
+                $stmtC->execute(array_merge([$auth['tenant_id']], $campNames));
                 $campaignIdsArray = $stmtC->fetchAll(PDO::FETCH_COLUMN) ?: [];
             }
         }
 
         if (!empty($campaignIdsArray)) {
             $inClause = implode(',', array_fill(0, count($campaignIdsArray), '?'));
-            $stmtSet = $this->db->prepare("UPDATE marketing_campaigns SET project_id = ? WHERE id IN ($inClause)");
-            $stmtSet->execute(array_merge([$newId], $campaignIdsArray));
+            $stmtSet = $this->db->prepare("UPDATE marketing_campaigns SET project_id = ? WHERE tenant_id = ? AND id IN ($inClause)");
+            $stmtSet->execute(array_merge([$newId, $auth['tenant_id']], $campaignIdsArray));
         }
 
         respond(200, ['id' => $newId, 'code' => $code], 'Tạo dự án thành công');
@@ -330,8 +330,8 @@ class ProjectController {
         }
 
         // Check unique code excluding this project
-        $stmtCheck = $this->db->prepare("SELECT id FROM projects WHERE code = ? AND id != ?");
-        $stmtCheck->execute([$code, $id]);
+        $stmtCheck = $this->db->prepare("SELECT id FROM projects WHERE code = ? AND id != ? AND tenant_id = ?");
+        $stmtCheck->execute([$code, $id, $auth['tenant_id']]);
         if ($stmtCheck->fetch()) {
             respond(400, null, 'Mã dự án đã bị trùng với dự án khác', false);
         }
@@ -362,20 +362,20 @@ class ProjectController {
             $campNames = array_filter(array_map('trim', explode(',', $campaign_ids)));
             if (!empty($campNames)) {
                 $inClause = implode(',', array_fill(0, count($campNames), '?'));
-                $stmtC = $this->db->prepare("SELECT id FROM marketing_campaigns WHERE name IN ($inClause)");
-                $stmtC->execute($campNames);
+                $stmtC = $this->db->prepare("SELECT id FROM marketing_campaigns WHERE tenant_id = ? AND name IN ($inClause)");
+                $stmtC->execute(array_merge([$auth['tenant_id']], $campNames));
                 $campaignIdsArray = $stmtC->fetchAll(PDO::FETCH_COLUMN) ?: [];
             }
         }
 
         // Clear previous campaigns project_id association
-        $stmtClear = $this->db->prepare("UPDATE marketing_campaigns SET project_id = NULL WHERE project_id = ?");
-        $stmtClear->execute([$id]);
+        $stmtClear = $this->db->prepare("UPDATE marketing_campaigns SET project_id = NULL WHERE project_id = ? AND tenant_id = ?");
+        $stmtClear->execute([$id, $auth['tenant_id']]);
 
         if (!empty($campaignIdsArray)) {
             $inClause = implode(',', array_fill(0, count($campaignIdsArray), '?'));
-            $stmtSet = $this->db->prepare("UPDATE marketing_campaigns SET project_id = ? WHERE id IN ($inClause)");
-            $stmtSet->execute(array_merge([$id], $campaignIdsArray));
+            $stmtSet = $this->db->prepare("UPDATE marketing_campaigns SET project_id = ? WHERE tenant_id = ? AND id IN ($inClause)");
+            $stmtSet->execute(array_merge([$id, $auth['tenant_id']], $campaignIdsArray));
         }
 
         respond(200, null, 'Cập nhật dự án thành công');
@@ -483,10 +483,12 @@ class ProjectController {
             respond(422, null, 'Danh sách user_ids không hợp lệ', false);
         }
 
+        $addedUserIds = [];
+        $projectName = "Dự án mới";
         $this->db->beginTransaction();
         try {
             // Get current roster before delete
-            $stmtCurrent = $this->db->prepare("SELECT user_id FROM project_roster WHERE project_id = ?");
+            $stmtCurrent = $this->db->prepare("SELECT user_id FROM project_roster WHERE project_id = ? FOR UPDATE");
             $stmtCurrent->execute([$projectId]);
             $oldUserIds = $stmtCurrent->fetchAll(PDO::FETCH_COLUMN) ?: [];
 
@@ -504,29 +506,38 @@ class ProjectController {
 
             // Find newly added users
             $addedUserIds = array_diff($userIds, $oldUserIds);
-
             if (!empty($addedUserIds)) {
-                // Get project name
-                $stmtName = $this->db->prepare("SELECT name FROM projects WHERE id = ?");
-                $stmtName->execute([$projectId]);
+                $stmtName = $this->db->prepare("SELECT name FROM projects WHERE id = ? AND tenant_id = ?");
+                $stmtName->execute([$projectId, $auth['tenant_id']]);
                 $projectName = $stmtName->fetchColumn() ?: "Dự án mới";
+            }
 
+            $this->db->commit();
+        } catch (Exception $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            respond(500, null, 'Lỗi cập nhật roster: ' . $e->getMessage(), false);
+        }
+
+        // Send notifications outside the transaction so external I/O never holds DB locks
+        if (!empty($addedUserIds)) {
+            try {
                 require_once __DIR__ . '/../NotificationService.php';
                 foreach ($addedUserIds as $newUid) {
                     NotificationService::send($this->db, $auth['tenant_id'], 'PROJECT_ROSTER_UPDATE', [
                         'user_id' => (int)$newUid,
+                        'project_id' => $projectId,
                         'project_name' => $projectName
                     ]);
                 }
+            } catch (\Throwable $notifEx) {
+                error_log("Project roster notification error: " . $notifEx->getMessage());
             }
-
-            $this->db->commit();
-            logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'UPDATE_PROJECT_ROSTER', 'project', $projectId, "Cập nhật roster dự án ID: $projectId, số lượng: " . count($userIds));
-            respond(200, null, 'Cập nhật roster thành công');
-        } catch (Exception $e) {
-            $this->db->rollBack();
-            respond(500, null, 'Lỗi cập nhật roster: ' . $e->getMessage(), false);
         }
+
+        logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'UPDATE_PROJECT_ROSTER', 'project', $projectId, "Cập nhật roster dự án ID: $projectId, số lượng: " . count($userIds));
+        respond(200, null, 'Cập nhật roster thành công');
     }
 
     public function getDocuments(array $auth, int $projectId): void {
@@ -621,7 +632,7 @@ class ProjectController {
             $notifyUids = array_unique($notifyUids);
 
             if (!empty($notifyUids)) {
-                $link = "/projects?id=" . $projectId;
+                $link = "/projects?id=" . $projectId . "&tab=documents";
                 $uploaderName = $auth['full_name'] ?? 'Hệ thống';
                 foreach ($notifyUids as $nUid) {
                     $chkStmt = $this->db->prepare("
@@ -790,7 +801,7 @@ class ProjectController {
                 $title = "Bạn có phản hồi mới trong thảo luận dự án";
                 $bodyText = ($auth['full_name'] ?? 'Đồng nghiệp') . " đã trả lời bình luận của bạn trong dự án";
                 $type = "info";
-                $link = "/projects?id=" . $projectId . "&highlight_comment_id=" . $newId;
+                $link = "/projects?id=" . $projectId . "&tab=comments&highlight_comment_id=" . $newId;
 
                 $insertNotif = $this->db->prepare("
                     INSERT INTO notifications (user_id, tenant_id, title, body, type, link)
@@ -886,7 +897,7 @@ class ProjectController {
                     'user_id' => (int)$mUid,
                     'author_name' => $auth['full_name'] ?? 'Đồng nghiệp',
                     'comment' => $body,
-                    'link' => "/projects?id=" . $projectId . "&highlight_comment_id=" . $newId
+                    'link' => "/projects?id=" . $projectId . "&tab=comments&highlight_comment_id=" . $newId
                 ]);
             }
         }
@@ -898,7 +909,7 @@ class ProjectController {
                     'user_id' => (int)$nUid,
                     'author_name' => $auth['full_name'] ?? 'Đồng nghiệp',
                     'comment' => $body,
-                    'link' => "/projects?id=" . $projectId . "&highlight_comment_id=" . $newId
+                    'link' => "/projects?id=" . $projectId . "&tab=comments&highlight_comment_id=" . $newId
                 ]);
             }
         }

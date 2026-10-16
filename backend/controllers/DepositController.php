@@ -33,7 +33,7 @@ class DepositController {
                 OR (d.company_id IS NOT NULL AND comp.tenant_id = ?) 
                 OR (d.supplier_id IS NOT NULL AND sup.tenant_id = ?)
                 OR (p.tenant_id = ?)
-            )
+            ) AND (c.id IS NULL OR c.deleted_at IS NULL)
         ";
         $params = [$tid, $tid, $tid, $tid];
 
@@ -228,7 +228,7 @@ class DepositController {
                 OR (d.company_id IS NOT NULL AND comp.tenant_id = ?) 
                 OR (d.supplier_id IS NOT NULL AND sup.tenant_id = ?)
                 OR (p.tenant_id = ?)
-            )
+            ) AND (c.id IS NULL OR c.deleted_at IS NULL)
         ";
         $stmt = $this->db->prepare($sql);
         $stmt->execute([$id, $tid, $tid, $tid, $tid]);
@@ -544,9 +544,9 @@ class DepositController {
                         // Send notification to accountant
                         $stmtNotif = $this->db->prepare("
                             INSERT INTO notifications (user_id, tenant_id, title, body, type, link)
-                            VALUES (?, ?, 'Yêu cầu phê duyệt phiếu thanh toán', ?, 'mention', ?)
+                            VALUES (?, ?, 'Yêu cầu phê duyệt phiếu thanh toán', ?, 'deposit', ?)
                         ");
-                        $acctTargetLink = "/approvals?open_id=$depositId&open_type=deposit";
+                        $acctTargetLink = "/deposits?open_id=$depositId";
                         $stmtNotif->execute([
                             $accountantId,
                             $auth['tenant_id'],
@@ -571,7 +571,7 @@ class DepositController {
                         INSERT INTO notifications (user_id, tenant_id, title, body, type, link)
                         VALUES (?, ?, 'Bạn được gắn thẻ liên quan trong phiếu thanh toán', ?, 'mention', ?)
                     ");
-                    $partTargetLink = $contactId ? "/contacts/$contactId?tab=deals&open_deposit_id=$depositId" : "/deposits?open_id=$depositId";
+                    $partTargetLink = $contactId ? "/contacts?open_contact_id=$contactId&tab=deals&open_deposit_id=$depositId" : "/deposits?open_id=$depositId";
                     foreach ($participantIds as $pId) {
                         if ($pId !== (int)$auth['user_id']) {
                             $stmtNotif->execute([
@@ -600,21 +600,6 @@ class DepositController {
 
                 // Notify assigned salesperson if created by another user/admin
                 if ($contactOwnerId !== (int)$auth['user_id']) {
-                    try {
-                        $stmtSaleNotif = $this->db->prepare("
-                            INSERT INTO notifications (user_id, tenant_id, title, body, type, link)
-                            VALUES (?, ?, 'Đơn thanh toán mới cho khách hàng của bạn', ?, 'deposit', ?)
-                        ");
-                        $stmtSaleNotif->execute([
-                            $contactOwnerId,
-                            $auth['tenant_id'],
-                            "$creatorName vừa tạo phiếu thanh toán mới (#$depositId) cho khách hàng $customerName ($priceFormatted).",
-                            "/contacts/$contactId"
-                        ]);
-                    } catch (\Throwable $sNotifErr) {
-                        error_log("Failed to send sale in-app notification: " . $sNotifErr->getMessage());
-                    }
-
                     try {
                         require_once __DIR__ . '/../NotificationService.php';
                         NotificationService::send($this->db, $auth['tenant_id'], 'SO_CREATED_FOR_SALE', [
@@ -663,13 +648,40 @@ class DepositController {
             }
 
             // Update contact pipeline stage to deal won status and set temperature to 'hot' (Sôi = xuống tiền)
-            // Also sync the contact's expected_revenue with the actual deposit price
+            // Also sync the contact's expected_revenue with the actual deposit price and keep stage_id + pipeline_status in sync
             $stmtWon = $this->db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'deal_won_status' LIMIT 1");
-            $dealWonStatus = $stmtWon ? $stmtWon->fetchColumn() : 'dat_coc';
-            if (empty($dealWonStatus)) $dealWonStatus = 'dat_coc';
+            $dealWonStatus = $stmtWon ? trim((string)$stmtWon->fetchColumn()) : 'deposit_tuition_payment';
+            if (empty($dealWonStatus)) $dealWonStatus = 'deposit_tuition_payment';
 
-            $stmtUpC = $this->db->prepare("UPDATE contacts SET pipeline_status = ?, status = 'customer', temperature = 'hot', suggested_temperature = 'hot', expected_revenue = ? WHERE id = ? AND tenant_id = ?");
-            $stmtUpC->execute([$dealWonStatus, $price, $contactId, $auth['tenant_id']]);
+            $wonSlugAliases = [
+                'dat_coc' => 'deposit_tuition_payment',
+                'da_coc' => 'deposit_tuition_payment',
+                'coc' => 'deposit_tuition_payment',
+                'dong_le_phi_ho_so' => 'deposit_tuition_payment',
+                'dong_deal' => 'enrolled',
+                'thanh_cong' => 'enrolled',
+                'hoc_vien' => 'enrolled',
+                'nhap_hoc' => 'enrolled',
+            ];
+            $canonicalWonSlug = $wonSlugAliases[strtolower($dealWonStatus)] ?? $dealWonStatus;
+            $stmtWonStage = $this->db->prepare("SELECT id, system_slug FROM pipeline_stages WHERE tenant_id = ? AND (system_slug = ? OR system_slug = ? OR CAST(id AS CHAR) = ?) ORDER BY order_index DESC LIMIT 1");
+            $stmtWonStage->execute([$auth['tenant_id'], $canonicalWonSlug, $dealWonStatus, $dealWonStatus]);
+            $wonStageRow = $stmtWonStage->fetch(PDO::FETCH_ASSOC);
+            if (!$wonStageRow) {
+                $stmtFallbackStage = $this->db->prepare("SELECT id, system_slug FROM pipeline_stages WHERE tenant_id = ? AND (system_slug IN ('deposit_tuition_payment', 'enrolled') OR is_won = 1) ORDER BY order_index ASC LIMIT 1");
+                $stmtFallbackStage->execute([$auth['tenant_id']]);
+                $wonStageRow = $stmtFallbackStage->fetch(PDO::FETCH_ASSOC);
+            }
+            $targetWonStageId = !empty($wonStageRow['id']) ? (int)$wonStageRow['id'] : null;
+            $targetWonSlug = !empty($wonStageRow['system_slug']) ? (string)$wonStageRow['system_slug'] : $canonicalWonSlug;
+
+            if ($targetWonStageId) {
+                $stmtUpC = $this->db->prepare("UPDATE contacts SET stage_id = ?, pipeline_status = ?, status = 'customer', temperature = 'hot', suggested_temperature = 'hot', expected_revenue = ? WHERE id = ? AND tenant_id = ?");
+                $stmtUpC->execute([$targetWonStageId, $targetWonSlug, $price, $contactId, $auth['tenant_id']]);
+            } else {
+                $stmtUpC = $this->db->prepare("UPDATE contacts SET pipeline_status = ?, status = 'customer', temperature = 'hot', suggested_temperature = 'hot', expected_revenue = ? WHERE id = ? AND tenant_id = ?");
+                $stmtUpC->execute([$targetWonSlug, $price, $contactId, $auth['tenant_id']]);
+            }
 
             // Withdraw from databank and terminate other parallel contacts
             require_once __DIR__ . '/../config/ParallelHelper.php';
@@ -882,9 +894,9 @@ class DepositController {
             JOIN contacts c ON d.contact_id = c.id
             LEFT JOIN projects p ON d.project_id = p.id
             LEFT JOIN users u ON c.owner_id = u.id
-            WHERE d.id = ? AND d.tenant_id = ? FOR UPDATE
+            WHERE d.id = ? AND (c.tenant_id = ? OR p.tenant_id = ?) FOR UPDATE
         ");
-        $stmtDep->execute([$id, $auth['tenant_id']]);
+        $stmtDep->execute([$id, $auth['tenant_id'], $auth['tenant_id']]);
         $depositData = $stmtDep->fetch();
 
         if (!$depositData) {
@@ -1840,9 +1852,15 @@ class DepositController {
         }
 
         // Get contact details for deposit
-        $stmtDep = $this->db->prepare("SELECT contact_id FROM deposits WHERE id = ?");
+        $stmtDep = $this->db->prepare("
+            SELECT d.contact_id, d.created_by, d.accountant_id, c.owner_id as contact_owner_id, c.full_name as customer_name
+            FROM deposits d
+            LEFT JOIN contacts c ON d.contact_id = c.id
+            WHERE d.id = ?
+        ");
         $stmtDep->execute([$id]);
-        $contactId = $stmtDep->fetchColumn();
+        $depInfo = $stmtDep->fetch(PDO::FETCH_ASSOC) ?: [];
+        $contactId = $depInfo['contact_id'] ?? null;
 
         if (!empty($mentions)) {
             try {
@@ -1891,6 +1909,34 @@ class DepositController {
             }
         }
 
+        // Also notify deposit creator and contact owner (excluding commenter and already-mentioned users)
+        try {
+            $mentionedIds = array_map('intval', array_keys($mentions));
+            $uid = (int)$auth['user_id'];
+            $commenterName = $auth['full_name'] ?? 'Đồng nghiệp';
+            $targetLink = "/deposits?open_id={$id}&highlight_comment_id={$newId}";
+            $recipients = array_unique(array_filter([
+                (int)($depInfo['created_by'] ?? 0),
+                (int)($depInfo['contact_owner_id'] ?? 0),
+                (int)($depInfo['accountant_id'] ?? 0),
+            ]));
+            $insNotif = $this->db->prepare("
+                INSERT INTO notifications (user_id, tenant_id, title, body, type, link, is_read, created_at)
+                VALUES (?, ?, ?, ?, 'comment', ?, 0, NOW())
+            ");
+            foreach ($recipients as $rUid) {
+                if ($rUid > 0 && $rUid !== $uid && !in_array($rUid, $mentionedIds, true)) {
+                    $insNotif->execute([
+                        $rUid,
+                        $auth['tenant_id'],
+                        "Bình luận mới trong phiếu thanh toán #{$id}",
+                        "{$commenterName} vừa bình luận: \"" . mb_substr(strip_tags($body), 0, 120) . "\"",
+                        $targetLink
+                    ]);
+                }
+            }
+        } catch (Throwable $e) {}
+
         respond(200, ['id' => $newId], 'Thêm bình luận thành công');
     }
 
@@ -1924,8 +1970,14 @@ class DepositController {
 
         $this->db->beginTransaction();
         try {
-            $stmt = $this->db->prepare("SELECT id, status, contact_id, title FROM deposits WHERE id = ? AND tenant_id = ? FOR UPDATE");
-            $stmt->execute([$id, $auth['tenant_id']]);
+            $stmt = $this->db->prepare("
+                SELECT d.id, d.status, d.contact_id, COALESCE(d.unit_code, CONCAT('Đặt cọc #', d.id)) as title
+                FROM deposits d
+                LEFT JOIN contacts c ON d.contact_id = c.id
+                LEFT JOIN projects p ON d.project_id = p.id
+                WHERE d.id = ? AND (c.tenant_id = ? OR p.tenant_id = ?) FOR UPDATE
+            ");
+            $stmt->execute([$id, $auth['tenant_id'], $auth['tenant_id']]);
             $dep = $stmt->fetch();
             if (!$dep) {
                 $this->db->rollBack();
@@ -1936,11 +1988,11 @@ class DepositController {
                 respond(400, null, 'Phiếu đặt cọc đã được xác nhận thanh toán trước đó', false);
             }
 
-            $this->db->prepare("UPDATE deposit_milestones SET status = 'completed', updated_at = NOW() WHERE deposit_id = ?")
+            $this->db->prepare("UPDATE deposit_milestones SET status = 'approved' WHERE deposit_id = ?")
                 ->execute([$id]);
 
-            $this->db->prepare("UPDATE deposits SET status = 'approved', updated_at = NOW() WHERE id = ? AND tenant_id = ?")
-                ->execute([$id, $auth['tenant_id']]);
+            $this->db->prepare("UPDATE deposits SET status = 'approved', updated_at = NOW() WHERE id = ?")
+                ->execute([$id]);
 
             if (function_exists('logActivity')) {
                 logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'CONFIRM_PAYMENT', 'deposit', $id, json_encode(['title' => $dep['title'] ?? '']));
@@ -1961,8 +2013,14 @@ class DepositController {
 
         $this->db->beginTransaction();
         try {
-            $stmt = $this->db->prepare("SELECT id, status, contact_id, title FROM deposits WHERE id = ? AND tenant_id = ? FOR UPDATE");
-            $stmt->execute([$id, $auth['tenant_id']]);
+            $stmt = $this->db->prepare("
+                SELECT d.id, d.status, d.contact_id, COALESCE(d.unit_code, CONCAT('Đặt cọc #', d.id)) as title
+                FROM deposits d
+                LEFT JOIN contacts c ON d.contact_id = c.id
+                LEFT JOIN projects p ON d.project_id = p.id
+                WHERE d.id = ? AND (c.tenant_id = ? OR p.tenant_id = ?) FOR UPDATE
+            ");
+            $stmt->execute([$id, $auth['tenant_id'], $auth['tenant_id']]);
             $dep = $stmt->fetch();
             if (!$dep) {
                 $this->db->rollBack();
@@ -1973,8 +2031,8 @@ class DepositController {
                 respond(400, null, 'Phiếu đặt cọc đã được hủy hoặc hoàn cọc trước đó', false);
             }
 
-            $this->db->prepare("UPDATE deposits SET status = 'cancelled', cancelled_reason = 'Hoàn cọc', updated_at = NOW() WHERE id = ? AND tenant_id = ?")
-                ->execute([$id, $auth['tenant_id']]);
+            $this->db->prepare("UPDATE deposits SET status = 'cancelled', cancelled_reason = 'Hoàn cọc', updated_at = NOW() WHERE id = ?")
+                ->execute([$id]);
 
             if (function_exists('logActivity')) {
                 logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'REFUND_DEPOSIT', 'deposit', $id, json_encode(['title' => $dep['title'] ?? '']));

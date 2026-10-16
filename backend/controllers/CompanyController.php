@@ -118,7 +118,7 @@ class CompanyController {
                    rep.full_name as rep_name, rep.avatar_url as rep_avatar,
                    COUNT(DISTINCT ct.id) as contact_count
             FROM companies c 
-            LEFT JOIN companies parent ON c.parent_id=parent.id
+            LEFT JOIN companies parent ON c.parent_id=parent.id AND parent.deleted_at IS NULL
             LEFT JOIN users u ON c.owner_id=u.id
             LEFT JOIN users rep ON c.dedicated_rep_id=rep.id
             LEFT JOIN pipeline_stages ps ON c.stage_id=ps.id
@@ -233,7 +233,7 @@ class CompanyController {
                    rep.full_name as rep_name, rep.avatar_url as rep_avatar,
                    COUNT(DISTINCT ct.id) as contact_count
             FROM companies c 
-            LEFT JOIN companies parent ON c.parent_id=parent.id
+            LEFT JOIN companies parent ON c.parent_id=parent.id AND parent.deleted_at IS NULL
             LEFT JOIN users u ON c.owner_id=u.id
             LEFT JOIN users rep ON c.dedicated_rep_id=rep.id
             LEFT JOIN pipeline_stages ps ON c.stage_id=ps.id
@@ -365,7 +365,7 @@ class CompanyController {
         try {
             if ($sets) {
                 $params[]=$id; $params[]=$auth['tenant_id'];
-                $stmt = $this->db->prepare("UPDATE companies SET ".implode(',',$sets)." WHERE id=? AND tenant_id=?");
+                $stmt = $this->db->prepare("UPDATE companies SET ".implode(',',$sets)." WHERE id=? AND tenant_id=? AND deleted_at IS NULL");
                 $stmt->execute($params);
             }
             
@@ -400,7 +400,7 @@ class CompanyController {
         }
         $targetStageId = $stageRow ? (int)$stageRow['id'] : (is_numeric($stageParam) ? (int)$stageParam : 0);
 
-        $sql = "UPDATE companies SET stage_id=? WHERE id=? AND tenant_id=?";
+        $sql = "UPDATE companies SET stage_id=? WHERE id=? AND tenant_id=? AND deleted_at IS NULL";
         $p = [$targetStageId, $id, $auth['tenant_id']];
         
         $stmt = $this->db->prepare($sql);
@@ -419,7 +419,7 @@ class CompanyController {
             respond(403, null, 'Bạn không có quyền xóa đại lý/đối tác', false);
         }
 
-        $check = $this->db->prepare("SELECT owner_id, created_by, dedicated_rep_id FROM companies WHERE id=? AND tenant_id=? AND deleted_at IS NULL");
+        $check = $this->db->prepare("SELECT name, owner_id, created_by, dedicated_rep_id FROM companies WHERE id=? AND tenant_id=? AND deleted_at IS NULL");
         $check->execute([$id, $auth['tenant_id']]);
         $oldCompany = $check->fetch();
         if (!$oldCompany) respond(404, null, 'Không tìm thấy đối tác', false);
@@ -443,22 +443,32 @@ class CompanyController {
             }
         }
 
-        // Safely unlink associated contacts & deals
+        $this->db->beginTransaction();
         try {
-            $unlinkContacts = $this->db->prepare("UPDATE contacts SET company_id = NULL WHERE company_id = ? AND tenant_id = ?");
+            // Safely unlink associated contacts & deals
+            $unlinkContacts = $this->db->prepare("UPDATE contacts SET company_id = NULL WHERE company_id = ? AND tenant_id = ? AND deleted_at IS NULL");
             $unlinkContacts->execute([$id, $auth['tenant_id']]);
 
-            $unlinkDeals = $this->db->prepare("UPDATE deals SET company_id = NULL WHERE company_id = ? AND tenant_id = ?");
+            $unlinkDeals = $this->db->prepare("UPDATE deals SET company_id = NULL WHERE company_id = ? AND tenant_id = ? AND deleted_at IS NULL");
             $unlinkDeals->execute([$id, $auth['tenant_id']]);
+
+            $sql = "UPDATE companies SET deleted_at=NOW() WHERE id=? AND tenant_id=? AND deleted_at IS NULL";
+            $p = [$id, $auth['tenant_id']];
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute($p);
+            if (!$stmt->rowCount()) {
+                $this->db->rollBack();
+                respond(404, null, 'Không tìm thấy đối tác hoặc đối tác đã bị xóa', false);
+            }
+            $this->db->commit();
         } catch (Exception $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             error_log("Error unlinking company relations on destroy: " . $e->getMessage());
+            respond(500, null, 'Lỗi khi xóa đối tác: ' . $e->getMessage(), false);
         }
 
-        $sql = "UPDATE companies SET deleted_at=NOW() WHERE id=? AND tenant_id=?";
-        $p = [$id, $auth['tenant_id']];
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute($p);
-        if (!$stmt->rowCount()) respond(404, null, 'Không tìm thấy đối tác hoặc đối tác đã bị xóa', false);
         logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'DELETE', 'company', $id, json_encode(['id' => $id, 'name' => $oldCompany['name'] ?? '']));
         logInteraction($this->db, $auth['tenant_id'], $auth['user_id'], 'note', 'Xóa Đối tác', "Đại lý/Đối tác đã bị xóa.", 'company', $id);
         respond(200, null, 'Đã xóa đối tác thành công');
@@ -506,7 +516,7 @@ class CompanyController {
         }
 
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
-        $sql = "UPDATE companies SET deleted_at=NOW() WHERE tenant_id=? AND id IN ($placeholders)";
+        $sql = "UPDATE companies SET deleted_at=NOW() WHERE tenant_id=? AND id IN ($placeholders) AND deleted_at IS NULL";
         $p = array_merge([$auth['tenant_id']], $ids);
         
         $stmt = $this->db->prepare($sql);

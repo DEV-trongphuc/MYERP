@@ -62,37 +62,64 @@ export interface ErpCardTagData {
   extra_info?: string;
 }
 
+export interface ClarifyOptionItem {
+  id?: string | number;
+  label: string;
+  sub?: string;
+  prompt: string;
+  entity_type?: string;
+}
+
 export interface ParsedChatTags {
   cleanContent: string;
   proposal: ActionProposal | null;
+  proposals: ActionProposal[];
   chart: DynamicChartData | null;
   nextBestActions: string[] | null;
+  clarifyOptions: ClarifyOptionItem[] | null;
   proactiveInsight: ProactiveInsightData | null;
   erpCard: ErpCardTagData | null;
+  erpCards: ErpCardTagData[];
 }
+
+export type ParsedChatMessageTags = ParsedChatTags;
+
+const PARSE_TAG_CACHE = new Map<string, ParsedChatTags>();
 
 export function parseAllChatTags(rawContent: string): ParsedChatTags {
   if (!rawContent || typeof rawContent !== 'string') {
     return {
       cleanContent: '',
       proposal: null,
+      proposals: [],
       chart: null,
       nextBestActions: null,
+      clarifyOptions: null,
       proactiveInsight: null,
       erpCard: null,
+      erpCards: [],
     };
   }
 
+  const cached = PARSE_TAG_CACHE.get(rawContent);
+  if (cached) {
+    return cached;
+  }
+
   let text = rawContent;
-  let proposal: ActionProposal | null = null;
+  const proposals: ActionProposal[] = [];
   let chart: DynamicChartData | null = null;
   let nextBestActions: string[] | null = null;
+  let clarifyOptions: ClarifyOptionItem[] | null = null;
   let proactiveInsight: ProactiveInsightData | null = null;
-  let erpCard: ErpCardTagData | null = null;
+  const erpCards: ErpCardTagData[] = [];
 
-  // 1. Parse & Strip ACTION_PROPOSAL
-  const proposalMatch = text.match(/<<<ACTION_PROPOSAL:\s*({[\s\S]*?})\s*>>>/);
-  if (proposalMatch) {
+  // 1. Parse & Strip ALL ACTION_PROPOSAL tags (<<<ACTION_PROPOSAL:...>>> and [[ACTION_PROPOSAL:...]])
+  const proposalMatches = [
+    ...Array.from(text.matchAll(/<<<ACTION_PROPOSAL:\s*(\{[\s\S]*?\})\s*>>>/g)),
+    ...Array.from(text.matchAll(/\[\[ACTION_PROPOSAL:\s*(\{[\s\S]*?\})\s*\]\]/g)),
+  ];
+  for (const proposalMatch of proposalMatches) {
     text = text.replace(proposalMatch[0], '').trim();
     const raw = safeParseJson<any>(proposalMatch[1]);
     if (raw) {
@@ -107,17 +134,18 @@ export function parseAllChatTags(rawContent: string): ParsedChatTags {
           params = { ...params, ...raw.params_json };
         }
       }
-      proposal = {
+      proposals.push({
         action_type: (raw.action_type || params.action_type || 'leave') as ActionProposal['action_type'],
         title: raw.title || params.title || 'Đề xuất hành động ERP',
         summary: raw.summary || params.summary || 'Đề xuất từ AI IDEAS',
         params,
-      };
+      });
     }
   }
+  const proposal: ActionProposal | null = proposals[0] || null;
 
   // 2. Parse & Strip DYNAMIC_CHART
-  const chartMatch = text.match(/<<<DYNAMIC_CHART:\s*({[\s\S]*?})\s*>>>/);
+  const chartMatch = text.match(/<<<DYNAMIC_CHART:\s*(\{[\s\S]*?\})\s*>>>/);
   if (chartMatch) {
     text = text.replace(chartMatch[0], '').trim();
     const rawChart = safeParseJson<any>(chartMatch[1]);
@@ -136,7 +164,7 @@ export function parseAllChatTags(rawContent: string): ParsedChatTags {
   }
 
   // 3. Parse & Strip PROACTIVE_INSIGHT
-  const insightMatch = text.match(/<<<PROACTIVE_INSIGHT:\s*({[\s\S]*?})\s*>>>/);
+  const insightMatch = text.match(/<<<PROACTIVE_INSIGHT:\s*(\{[\s\S]*?\})\s*>>>/);
   if (insightMatch) {
     text = text.replace(insightMatch[0], '').trim();
     const rawInsight = safeParseJson<any>(insightMatch[1]);
@@ -166,9 +194,44 @@ export function parseAllChatTags(rawContent: string): ParsedChatTags {
     }
   }
 
-  // 5. Parse & Strip ERP_CARD
-  const erpCardMatch = text.match(/<<<ERP_CARD:\s*({[\s\S]*?})\s*>>>/);
-  if (erpCardMatch) {
+  // 4.1 Parse & Strip CLARIFY_OPTIONS
+  const clarifyMatch = text.match(/<<<CLARIFY_OPTIONS:\s*(\[[\s\S]*?\])\s*>>>/) || text.match(/\[\[CLARIFY_OPTIONS:\s*(\[[\s\S]*?\])\s*\]\]/);
+  if (clarifyMatch) {
+    text = text.replace(clarifyMatch[0], '').trim();
+    const rawClarify = safeParseJson<any[]>(clarifyMatch[1]);
+    if (Array.isArray(rawClarify) && rawClarify.length > 0) {
+      const parsedOptions: ClarifyOptionItem[] = rawClarify
+        .map((item): ClarifyOptionItem | null => {
+          if (typeof item === 'string') {
+            return { label: item.trim(), prompt: item.trim() };
+          }
+          if (item && typeof item === 'object') {
+            const label = String(item.label || item.title || item.name || '').trim();
+            const prompt = String(item.prompt || item.action_prompt || label).trim();
+            if (!label) return null;
+            return {
+              id: item.id ?? item.entity_id,
+              label,
+              sub: item.sub || item.subtitle || item.extra_info || undefined,
+              prompt,
+              entity_type: item.entity_type || undefined,
+            };
+          }
+          return null;
+        })
+        .filter((opt): opt is ClarifyOptionItem => opt !== null);
+      if (parsedOptions.length > 0) {
+        clarifyOptions = parsedOptions;
+      }
+    }
+  }
+
+  // 5. Parse & Strip ALL ERP_CARD tags (<<<ERP_CARD:...>>> and [[ERP_CARD:...]])
+  const erpCardMatches = [
+    ...Array.from(text.matchAll(/<<<ERP_CARD:\s*(\{[\s\S]*?\})\s*>>>/g)),
+    ...Array.from(text.matchAll(/\[\[ERP_CARD:\s*(\{[\s\S]*?\})\s*\]\]/g)),
+  ];
+  for (const erpCardMatch of erpCardMatches) {
     text = text.replace(erpCardMatch[0], '').trim();
     const rawCard = safeParseJson<any>(erpCardMatch[1]);
     if (rawCard && rawCard.title) {
@@ -176,7 +239,7 @@ export function parseAllChatTags(rawContent: string): ParsedChatTags {
       // If entity_type is contact, but title or subtitle mentions staff/employee/nhân viên, suppress displaying as Lead card
       const isStaffContext = /nhân viên|nhân sự|digital marketing|marketing|sale admin|kế toán|công nghệ|hr|developer/i.test(rawCard.subtitle || '') ||
                              /nhân viên|nhân sự/i.test(rawCard.title || '');
-      erpCard = {
+      erpCards.push({
         entity_type: isStaffContext && eType === 'contact' ? 'employee' : (rawCard.entity_type || 'contact'),
         entity_id: rawCard.entity_id,
         title: rawCard.title,
@@ -186,12 +249,13 @@ export function parseAllChatTags(rawContent: string): ParsedChatTags {
         relative_url: rawCard.relative_url || '',
         action_label: rawCard.action_label || (isStaffContext ? 'Mở hồ sơ nhân sự' : 'Mở xem chi tiết'),
         extra_info: rawCard.extra_info || '',
-      };
+      });
     }
   }
+  const erpCard: ErpCardTagData | null = erpCards[0] || null;
 
   // 6. Clean any residual <<<SAVE_MEMORY:...>>> tags if present
-  text = text.replace(/<<<SAVE_MEMORY:\s*({[\s\S]*?})\s*>>>/g, '').trim();
+  text = text.replace(/<<<SAVE_MEMORY:\s*(\{[\s\S]*?\})\s*>>>/g, '').trim();
 
   // 6.1 Clean any machine phrases like '(Zero-Trust)' or 'Zero-Trust'
   text = text.replace(/\s*\((?:Zero-Trust|Zero Trust)\)/gi, '');
@@ -200,12 +264,25 @@ export function parseAllChatTags(rawContent: string): ParsedChatTags {
   // 7. Streaming Anti-Flicker Guard: Strip any unclosed <<<TAG: partial content at the very end of stream
   text = text.replace(/<<<[A-Z_]+(?::[\s\S]*)?$/, '').trim();
 
-  return {
+  const parsedResult: ParsedChatTags = {
     cleanContent: text,
     proposal,
+    proposals,
     chart,
     nextBestActions,
+    clarifyOptions,
     proactiveInsight,
     erpCard,
+    erpCards,
   };
+
+  if (PARSE_TAG_CACHE.size >= 500) {
+    const oldestKey = PARSE_TAG_CACHE.keys().next().value;
+    if (oldestKey !== undefined) {
+      PARSE_TAG_CACHE.delete(oldestKey);
+    }
+  }
+  PARSE_TAG_CACHE.set(rawContent, parsedResult);
+
+  return parsedResult;
 }

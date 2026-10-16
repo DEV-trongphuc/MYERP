@@ -4202,7 +4202,7 @@ textarea:not(.chat-input-textarea), .form-textarea, textarea.form-input, textare
   background: rgba(0, 0, 0, 0.6) !important;
   backdrop-filter: blur(6px) !important;
   -webkit-backdrop-filter: blur(6px) !important;
-  z-index: 2147483640 !important;
+  z-index: var(--drawer-backdrop-z, 2147483615);
   cursor: pointer !important;
   will-change: opacity;
   transform: translate3d(0, 0, 0);
@@ -4230,7 +4230,7 @@ textarea:not(.chat-input-textarea), .form-textarea, textarea.form-input, textare
     box-shadow: 0 4px 12px rgba(0,0,0,0.25);
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     pointer-events: none;
-    z-index: 2147483641 !important;
+    z-index: 1;
     will-change: transform, opacity;
   }
   .drawer-backdrop:hover::after {

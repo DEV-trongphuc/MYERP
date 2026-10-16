@@ -1210,6 +1210,7 @@ export const QuickAddLeadModal = () => {
           setShowOverrideSelector(false);
           setCompensateSkipped(true);
           window.dispatchEvent(new CustomEvent('lead-added'));
+          window.dispatchEvent(new CustomEvent('erp-action-completed', { detail: { actionType: 'lead' } }));
         } else {
           toast.error(json.message || t('Thêm thất bại'));
         }
@@ -1235,6 +1236,7 @@ export const QuickAddLeadModal = () => {
           setBulkInputText('');
           setBulkParsedLeads([]);
           window.dispatchEvent(new CustomEvent('lead-added'));
+          window.dispatchEvent(new CustomEvent('erp-action-completed', { detail: { actionType: 'lead' } }));
         } else {
           toast.error(json.message || t('Import thất bại'));
         }

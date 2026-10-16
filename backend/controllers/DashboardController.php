@@ -77,11 +77,11 @@ class DashboardController {
                         FROM invoice_items ii 
                         JOIN products p ON ii.product_id = p.id 
                         JOIN invoices i2 ON ii.invoice_id = i2.id
-                        WHERE i2.tenant_id = ? AND i2.status = 'paid' AND i2.paid_at BETWEEN ? AND ?
+                        WHERE i2.tenant_id = ? AND i2.deleted_at IS NULL AND i2.status = 'paid' AND i2.paid_at BETWEEN ? AND ?
                         $subqueryFilter
                     ) as total_cogs
                 FROM invoices i
-                WHERE i.tenant_id = ? AND i.status = 'paid' AND i.paid_at BETWEEN ? AND ?
+                WHERE i.tenant_id = ? AND i.deleted_at IS NULL AND i.status = 'paid' AND i.paid_at BETWEEN ? AND ?
                 $mainFilter
             ";
             $pInv = array_merge(
@@ -109,7 +109,7 @@ class DashboardController {
             $wonRow = $this->queryRow($qWon, $pWon);
 
             // 7. Expenses
-            $qExp = "SELECT COALESCE(SUM(amount),0) FROM expenses WHERE tenant_id=? AND status='approved' AND date BETWEEN ? AND ?";
+            $qExp = "SELECT COALESCE(SUM(amount),0) FROM expenses WHERE tenant_id=? AND deleted_at IS NULL AND status='approved' AND date BETWEEN ? AND ?";
             $pExp = [$tid, $f, $t];
             if ($isSale) { 
                 $qExp .= " AND created_by=?"; 
@@ -157,7 +157,7 @@ class DashboardController {
 
         // Tasks due counts (Current period only)
         $qTasks = function($cond) use ($tid, $isSale, $isManager, $userIds, $uid) {
-            $q = "SELECT COUNT(*) FROM activities WHERE tenant_id=? AND status='planned' AND $cond";
+            $q = "SELECT COUNT(*) FROM activities WHERE tenant_id=? AND deleted_at IS NULL AND status='planned' AND $cond";
             $p = [$tid];
             if ($isSale) { 
                 $q .= " AND user_id=?"; 
@@ -187,7 +187,7 @@ class DashboardController {
         };
 
         // Today's focus tasks
-        $sqlToday = "SELECT id, subject, type, priority, due_date FROM activities WHERE tenant_id=? AND status='planned' AND due_date BETWEEN CURDATE() AND CONCAT(CURDATE(), ' 23:59:59')";
+        $sqlToday = "SELECT id, subject, type, priority, due_date FROM activities WHERE tenant_id=? AND deleted_at IS NULL AND status='planned' AND due_date BETWEEN CURDATE() AND CONCAT(CURDATE(), ' 23:59:59')";
         $pToday = [$tid];
         if ($isSale) { 
             $sqlToday .= " AND user_id=?"; 
@@ -320,6 +320,7 @@ class DashboardController {
                     SELECT COALESCE(SUM(total), 0) 
                     FROM invoices 
                     WHERE tenant_id = ? 
+                      AND deleted_at IS NULL
                       AND status = 'paid' 
                       AND paid_at BETWEEN DATE_FORMAT(dates.date, '%Y-%m-01 00:00:00') AND CONCAT(LAST_DAY(dates.date), ' 23:59:59')
                       $invoiceFilter
@@ -328,6 +329,7 @@ class DashboardController {
                     (SELECT COALESCE(SUM(amount), 0) 
                      FROM expenses 
                      WHERE tenant_id = ? 
+                       AND deleted_at IS NULL
                        AND status = 'approved' 
                        AND date BETWEEN DATE_FORMAT(dates.date, '%Y-%m-01') AND LAST_DAY(dates.date)
                        $expenseFilter
@@ -337,6 +339,7 @@ class DashboardController {
                      JOIN products p ON ii.product_id = p.id 
                      JOIN invoices i ON ii.invoice_id = i.id
                      WHERE i.tenant_id = ?
+                       AND i.deleted_at IS NULL
                        AND i.status = 'paid'
                        AND i.paid_at BETWEEN DATE_FORMAT(dates.date, '%Y-%m-01 00:00:00') AND CONCAT(LAST_DAY(dates.date), ' 23:59:59')
                        $invoiceSubFilter
@@ -344,6 +347,7 @@ class DashboardController {
                     (SELECT COALESCE(SUM(shipping_fee), 0)
                      FROM invoices
                      WHERE tenant_id = ?
+                       AND deleted_at IS NULL
                        AND status = 'paid'
                        AND shipping_customer_pay = 0
                        AND paid_at BETWEEN DATE_FORMAT(dates.date, '%Y-%m-01 00:00:00') AND CONCAT(LAST_DAY(dates.date), ' 23:59:59')
@@ -388,7 +392,7 @@ class DashboardController {
             LEFT JOIN pipeline_stages ps ON d.stage_id = ps.id
             LEFT JOIN contacts c ON d.contact_id = c.id
             LEFT JOIN users u ON d.owner_id = u.id
-            WHERE d.tenant_id=? AND (ps.is_won=0 OR ps.is_won IS NULL) AND (ps.is_lost=0 OR ps.is_lost IS NULL)";
+            WHERE d.tenant_id=? AND d.deleted_at IS NULL AND (ps.is_won=0 OR ps.is_won IS NULL) AND (ps.is_lost=0 OR ps.is_lost IS NULL)";
         $p = [$tid];
         if ($isSale) {
             $sql .= " AND d.owner_id = ?";
@@ -415,7 +419,7 @@ class DashboardController {
         $sql = "SELECT a.*, u.full_name as user_name, u.avatar_url
             FROM activities a
             LEFT JOIN users u ON a.user_id = u.id
-            WHERE a.tenant_id=?";
+            WHERE a.tenant_id=? AND a.deleted_at IS NULL";
         $p = [$tid];
         if (!in_array($auth['role'] ?? '', ['super_admin', 'superadmin', 'admin'], true)) {
             $sql .= " AND (a.user_id = ? OR a.created_by = ? OR a.approver_id = ? OR FIND_IN_SET(?, a.participant_ids))";
@@ -578,11 +582,11 @@ class DashboardController {
         $s1->execute([$uid, $tid]);
         $myDeals = $s1->fetch();
 
-        $s2 = $this->db->prepare("SELECT COUNT(*) as cnt FROM activities WHERE user_id=? AND tenant_id=? AND status='done' AND done_at BETWEEN ? AND ?");
+        $s2 = $this->db->prepare("SELECT COUNT(*) as cnt FROM activities WHERE user_id=? AND tenant_id=? AND deleted_at IS NULL AND status='done' AND done_at BETWEEN ? AND ?");
         $s2->execute([$uid, $tid, $from, $to]);
         $doneTasks = (int)$s2->fetchColumn();
 
-        $s3 = $this->db->prepare("SELECT COUNT(*) as cnt FROM activities WHERE user_id=? AND tenant_id=? AND status='planned' AND due_date <= CONCAT(CURDATE(), ' 23:59:59')");
+        $s3 = $this->db->prepare("SELECT COUNT(*) as cnt FROM activities WHERE user_id=? AND tenant_id=? AND deleted_at IS NULL AND status='planned' AND due_date <= CONCAT(CURDATE(), ' 23:59:59')");
         $s3->execute([$uid, $tid]);
         $overdue = (int)$s3->fetchColumn();
 

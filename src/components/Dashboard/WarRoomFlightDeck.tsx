@@ -3390,6 +3390,7 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
 
   // Digital Clock
   useEffect(() => {
+    if (!isOpen) return;
     const updateTime = () => {
       const now = new Date();
       setCurrentTime(now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' - ' + now.toLocaleDateString('vi-VN'));
@@ -3397,7 +3398,7 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
     updateTime();
     const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isOpen]);
 
   const lastProcessedLogIdRef = useRef<string | null>(null);
 
@@ -3505,12 +3506,13 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
 
   // Handle ESC close
   useEffect(() => {
+    if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') handleClose();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [isOpen]);
 
   // Auto fullscreen on mount, exit on unmount
   useEffect(() => {

@@ -947,6 +947,10 @@ class ChatController {
                         function($delta) {
                             echo "data: " . json_encode(['type' => 'chunk', 'delta' => $delta], JSON_UNESCAPED_UNICODE) . "\n\n";
                             @flush();
+                        },
+                        function(array $stepEvt) {
+                            echo "data: " . json_encode($stepEvt, JSON_UNESCAPED_UNICODE) . "\n\n";
+                            @flush();
                         }
                     );
 
@@ -1968,11 +1972,11 @@ class ChatController {
                 LEFT JOIN users u ON (a.id = u.id OR (a.email IS NOT NULL AND a.email != '' AND a.email = u.email))
                 LEFT JOIN teams t ON (COALESCE(a.team_id, u.team_id) = t.id)
                 LEFT JOIN chat_user_presence pr ON (pr.user_id = a.id)
-                WHERE a.is_active = 1
+                WHERE a.is_active = 1 AND a.tenant_id = ?
                 GROUP BY a.id
                 ORDER BY (a.id = 9000001) DESC, full_name ASC
             ");
-            $stmt->execute();
+            $stmt->execute([$tid]);
             $users = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
             foreach ($users as &$u) {
@@ -2010,6 +2014,13 @@ class ChatController {
      */
     public function searchErpEntities(array $auth): void {
         $tid = (int)($auth['tenant_id'] ?? 1);
+        $uid = (int)($auth['user_id'] ?? 0);
+        $role = strtolower($auth['role'] ?? 'user');
+        $isGlobalAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director'], true);
+        $isAccountant = in_array($role, ['accountant', 'ke_toan'], true);
+        $isHR = in_array($role, ['hr', 'nhan_su'], true);
+        $isManager = in_array($role, ['manager', 'truong_phong', 'leader'], true);
+
         $q = trim($_GET['q'] ?? '');
         $type = trim($_GET['type'] ?? 'all');
 
@@ -2021,32 +2032,32 @@ class ChatController {
         try {
             // 1. Tasks / Todo (from activities table)
             if (in_array($type, ['all', 'task'], true)) {
-                if ($hasSearch) {
-                    $stmt = $this->db->prepare("
-                        SELECT a.id, a.subject as title, a.status, a.due_date, a.priority, a.progress, a.created_at,
-                               u.full_name as assignee_name, u.avatar_url as assignee_avatar,
-                               cr.full_name as creator_name, cr.avatar_url as creator_avatar
-                        FROM activities a
-                        LEFT JOIN users u ON a.user_id = u.id
-                        LEFT JOIN users cr ON a.created_by = cr.id
-                        WHERE a.tenant_id = ? AND a.deleted_at IS NULL AND a.type IN ('task', 'meeting')
-                          AND (a.subject LIKE ? OR a.id = ? OR u.full_name LIKE ? OR cr.full_name LIKE ?)
-                        ORDER BY a.id DESC LIMIT 15
-                    ");
-                    $stmt->execute([$tid, $searchParam, $idParam, $searchParam, $searchParam]);
-                } else {
-                    $stmt = $this->db->prepare("
-                        SELECT a.id, a.subject as title, a.status, a.due_date, a.priority, a.progress, a.created_at,
-                               u.full_name as assignee_name, u.avatar_url as assignee_avatar,
-                               cr.full_name as creator_name, cr.avatar_url as creator_avatar
-                        FROM activities a
-                        LEFT JOIN users u ON a.user_id = u.id
-                        LEFT JOIN users cr ON a.created_by = cr.id
-                        WHERE a.tenant_id = ? AND a.deleted_at IS NULL AND a.type IN ('task', 'meeting')
-                        ORDER BY a.id DESC LIMIT 15
-                    ");
-                    $stmt->execute([$tid]);
+                $taskSql = "
+                    SELECT a.id, a.subject as title, a.status, a.due_date, a.priority, a.progress, a.created_at,
+                           u.full_name as assignee_name, u.avatar_url as assignee_avatar,
+                           cr.full_name as creator_name, cr.avatar_url as creator_avatar
+                    FROM activities a
+                    LEFT JOIN users u ON a.user_id = u.id
+                    LEFT JOIN users cr ON a.created_by = cr.id
+                    WHERE a.tenant_id = ? AND a.deleted_at IS NULL AND a.type IN ('task', 'meeting')
+                ";
+                $taskParams = [$tid];
+                if (!$isGlobalAdmin && !$isManager) {
+                    $taskSql .= " AND (a.user_id = ? OR a.created_by = ? OR FIND_IN_SET(?, IFNULL(a.participant_ids, '')))";
+                    $taskParams[] = $uid;
+                    $taskParams[] = $uid;
+                    $taskParams[] = (string)$uid;
                 }
+                if ($hasSearch) {
+                    $taskSql .= " AND (a.subject LIKE ? OR a.id = ? OR u.full_name LIKE ? OR cr.full_name LIKE ?)";
+                    $taskParams[] = $searchParam;
+                    $taskParams[] = $idParam;
+                    $taskParams[] = $searchParam;
+                    $taskParams[] = $searchParam;
+                }
+                $taskSql .= " ORDER BY a.id DESC LIMIT 15";
+                $stmt = $this->db->prepare($taskSql);
+                $stmt->execute($taskParams);
                 while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                     $dueDateStr = $row['due_date'] ? date('d/m/Y', strtotime($row['due_date'])) : 'Không thời hạn';
                     $progressVal = (int)($row['progress'] ?? 0);
@@ -2088,9 +2099,17 @@ class ChatController {
                     LEFT JOIN users app1 ON e.approver_id = app1.id
                     LEFT JOIN users app2 ON e.approver_id_2 = app2.id
                     LEFT JOIN users app3 ON e.approver_id_3 = app3.id
-                    WHERE e.tenant_id = ?
+                    WHERE e.tenant_id = ? AND e.deleted_at IS NULL
                 ";
                 $expParams = [$tid];
+                if (!$isGlobalAdmin && !$isAccountant && !$isManager) {
+                    $expSql .= " AND (e.created_by = ? OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ? OR FIND_IN_SET(?, IFNULL(e.related_user_ids, '')))";
+                    $expParams[] = $uid;
+                    $expParams[] = $uid;
+                    $expParams[] = $uid;
+                    $expParams[] = $uid;
+                    $expParams[] = (string)$uid;
+                }
                 if ($hasSearch) {
                     $expSql .= " AND (e.title LIKE ? OR e.category LIKE ? OR e.id = ? OR u.full_name LIKE ?)";
                     $expParams[] = $searchParam;
@@ -2160,6 +2179,12 @@ class ChatController {
                     WHERE u.tenant_id = ?
                 ";
                 $leaveParams = [$tid];
+                if (!$isGlobalAdmin && !$isHR && !$isManager) {
+                    $leaveSql .= " AND (l.user_id = ? OR l.approver_id = ? OR l.approver_id_2 = ?)";
+                    $leaveParams[] = $uid;
+                    $leaveParams[] = $uid;
+                    $leaveParams[] = $uid;
+                }
                 if ($hasSearch) {
                     $leaveSql .= " AND (l.reason LIKE ? OR l.id = ? OR u.full_name LIKE ? OR l.leave_type LIKE ?)";
                     $leaveParams[] = $searchParam;
@@ -2239,36 +2264,43 @@ class ChatController {
 
             // 3. Sales Orders (SO) / Deposits
             if (in_array($type, ['all', 'so'], true)) {
-                if ($hasSearch) {
-                    $stmt = $this->db->prepare("
-                        SELECT d.id, d.unit_code, d.price as amount, d.status, d.contact_id, d.project_id, d.created_at,
-                               c.full_name as contact_name, c.phone as contact_phone,
-                               p.name as project_name,
-                               u.full_name as creator_name, u.avatar_url as creator_avatar
-                        FROM deposits d
-                        LEFT JOIN contacts c ON d.contact_id = c.id
-                        LEFT JOIN projects p ON d.project_id = p.id
-                        LEFT JOIN users u ON d.created_by = u.id
-                        WHERE ((d.contact_id IS NOT NULL AND c.tenant_id = ?) OR (p.tenant_id = ?) OR (u.tenant_id = ?))
-                          AND (d.unit_code LIKE ? OR d.id = ? OR c.full_name LIKE ? OR c.phone LIKE ? OR p.name LIKE ?)
-                        ORDER BY d.id DESC LIMIT 15
-                    ");
-                    $stmt->execute([$tid, $tid, $tid, $searchParam, $idParam, $searchParam, $searchParam, $searchParam]);
-                } else {
-                    $stmt = $this->db->prepare("
-                        SELECT d.id, d.unit_code, d.price as amount, d.status, d.contact_id, d.project_id, d.created_at,
-                               c.full_name as contact_name, c.phone as contact_phone,
-                               p.name as project_name,
-                               u.full_name as creator_name, u.avatar_url as creator_avatar
-                        FROM deposits d
-                        LEFT JOIN contacts c ON d.contact_id = c.id
-                        LEFT JOIN projects p ON d.project_id = p.id
-                        LEFT JOIN users u ON d.created_by = u.id
-                        WHERE ((d.contact_id IS NOT NULL AND c.tenant_id = ?) OR (p.tenant_id = ?) OR (u.tenant_id = ?))
-                        ORDER BY d.id DESC LIMIT 15
-                    ");
-                    $stmt->execute([$tid, $tid, $tid]);
+                $soSql = "
+                    SELECT d.id, d.unit_code, d.price as amount, d.status, d.contact_id, d.project_id, d.created_at,
+                           c.full_name as contact_name, c.phone as contact_phone,
+                           p.name as project_name,
+                           u.full_name as creator_name, u.avatar_url as creator_avatar
+                    FROM deposits d
+                    LEFT JOIN contacts c ON d.contact_id = c.id
+                    LEFT JOIN projects p ON d.project_id = p.id
+                    LEFT JOIN users u ON d.created_by = u.id
+                    WHERE ((d.contact_id IS NOT NULL AND c.tenant_id = ? AND c.deleted_at IS NULL) OR (p.tenant_id = ?) OR (u.tenant_id = ?))
+                ";
+                $soParams = [$tid, $tid, $tid];
+                if (!$isGlobalAdmin && !$isAccountant) {
+                    if ($isManager) {
+                        $soSql .= " AND (d.created_by = ? OR c.owner_id = ? OR c.owner_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))))";
+                        $soParams[] = $uid;
+                        $soParams[] = $uid;
+                        $soParams[] = $uid;
+                    } else {
+                        $soSql .= " AND (d.created_by = ? OR c.owner_id = ? OR FIND_IN_SET(?, IFNULL(c.collaborator_ids, '')) OR FIND_IN_SET(?, IFNULL(d.participant_ids, '')))";
+                        $soParams[] = $uid;
+                        $soParams[] = $uid;
+                        $soParams[] = (string)$uid;
+                        $soParams[] = (string)$uid;
+                    }
                 }
+                if ($hasSearch) {
+                    $soSql .= " AND (d.unit_code LIKE ? OR d.id = ? OR c.full_name LIKE ? OR c.phone LIKE ? OR p.name LIKE ?)";
+                    $soParams[] = $searchParam;
+                    $soParams[] = $idParam;
+                    $soParams[] = $searchParam;
+                    $soParams[] = $searchParam;
+                    $soParams[] = $searchParam;
+                }
+                $soSql .= " ORDER BY d.id DESC LIMIT 15";
+                $stmt = $this->db->prepare($soSql);
+                $stmt->execute($soParams);
                 while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                     $amt = (float)($row['amount'] ?? 0);
                     $title = ($row['project_name'] ? $row['project_name'] : 'Đơn cọc') . (!empty($row['unit_code']) ? ' - ' . $row['unit_code'] : " #{$row['id']}");
@@ -2293,37 +2325,37 @@ class ChatController {
 
             // 4. Purchase Orders (PO) / Expenses
             if (in_array($type, ['all', 'po'], true)) {
-                if ($hasSearch) {
-                    $stmt = $this->db->prepare("
-                        SELECT e.id, e.title, e.amount, e.status, e.vendor_name, e.category, e.created_at,
-                               e.created_by, e.approver_id, e.approver_id_2, e.status_level_1, e.status_level_2,
-                               u.full_name as creator_name, u.avatar_url as creator_avatar,
-                               app.full_name as approver_name, app.avatar_url as approver_avatar,
-                               app2.full_name as approver_name_2, app2.avatar_url as approver_avatar_2
-                        FROM expenses e
-                        LEFT JOIN users u ON e.created_by = u.id
-                        LEFT JOIN users app ON e.approver_id = app.id
-                        LEFT JOIN users app2 ON e.approver_id_2 = app2.id
-                        WHERE e.tenant_id = ? AND (e.title LIKE ? OR e.vendor_name LIKE ? OR e.id = ? OR u.full_name LIKE ?)
-                        ORDER BY e.id DESC LIMIT 15
-                    ");
-                    $stmt->execute([$tid, $searchParam, $searchParam, $idParam, $searchParam]);
-                } else {
-                    $stmt = $this->db->prepare("
-                        SELECT e.id, e.title, e.amount, e.status, e.vendor_name, e.category, e.created_at,
-                               e.created_by, e.approver_id, e.approver_id_2, e.status_level_1, e.status_level_2,
-                               u.full_name as creator_name, u.avatar_url as creator_avatar,
-                               app.full_name as approver_name, app.avatar_url as approver_avatar,
-                               app2.full_name as approver_name_2, app2.avatar_url as approver_avatar_2
-                        FROM expenses e
-                        LEFT JOIN users u ON e.created_by = u.id
-                        LEFT JOIN users app ON e.approver_id = app.id
-                        LEFT JOIN users app2 ON e.approver_id_2 = app2.id
-                        WHERE e.tenant_id = ?
-                        ORDER BY e.id DESC LIMIT 15
-                    ");
-                    $stmt->execute([$tid]);
+                $poSql = "
+                    SELECT e.id, e.title, e.amount, e.status, e.vendor_name, e.category, e.created_at,
+                           e.created_by, e.approver_id, e.approver_id_2, e.status_level_1, e.status_level_2,
+                           u.full_name as creator_name, u.avatar_url as creator_avatar,
+                           app.full_name as approver_name, app.avatar_url as approver_avatar,
+                           app2.full_name as approver_name_2, app2.avatar_url as approver_avatar_2
+                    FROM expenses e
+                    LEFT JOIN users u ON e.created_by = u.id
+                    LEFT JOIN users app ON e.approver_id = app.id
+                    LEFT JOIN users app2 ON e.approver_id_2 = app2.id
+                    WHERE e.tenant_id = ? AND e.deleted_at IS NULL
+                ";
+                $poParams = [$tid];
+                if (!$isGlobalAdmin && !$isAccountant && !$isManager) {
+                    $poSql .= " AND (e.created_by = ? OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ? OR FIND_IN_SET(?, IFNULL(e.related_user_ids, '')))";
+                    $poParams[] = $uid;
+                    $poParams[] = $uid;
+                    $poParams[] = $uid;
+                    $poParams[] = $uid;
+                    $poParams[] = (string)$uid;
                 }
+                if ($hasSearch) {
+                    $poSql .= " AND (e.title LIKE ? OR e.vendor_name LIKE ? OR e.id = ? OR u.full_name LIKE ?)";
+                    $poParams[] = $searchParam;
+                    $poParams[] = $searchParam;
+                    $poParams[] = $idParam;
+                    $poParams[] = $searchParam;
+                }
+                $poSql .= " ORDER BY e.id DESC LIMIT 15";
+                $stmt = $this->db->prepare($poSql);
+                $stmt->execute($poParams);
                 while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                     $amt = (float)($row['amount'] ?? 0);
                     $results[] = [
@@ -2352,29 +2384,44 @@ class ChatController {
                 }
             }
 
-            // 5. Contacts / Leads (Flexible search: name, phone, email)
+            // 5. Contacts / Leads (Flexible search: name, phone, email — synced 100% with ContactController::getScope)
             if (in_array($type, ['all', 'contact'], true)) {
-                if ($hasSearch) {
-                    $stmt = $this->db->prepare("
-                        SELECT c.id, c.full_name, c.phone, c.email, c.pipeline_status, c.created_at, c.tags, c.last_contact, c.source,
-                               u.full_name as owner_name, u.avatar_url as owner_avatar
-                        FROM contacts c
-                        LEFT JOIN users u ON c.owner_id = u.id
-                        WHERE c.tenant_id = ? AND (c.full_name LIKE ? OR c.phone LIKE ? OR c.email LIKE ? OR c.id = ? OR u.full_name LIKE ?)
-                        ORDER BY c.id DESC LIMIT 15
-                    ");
-                    $stmt->execute([$tid, $searchParam, $searchParam, $searchParam, $idParam, $searchParam]);
-                } else {
-                    $stmt = $this->db->prepare("
-                        SELECT c.id, c.full_name, c.phone, c.email, c.pipeline_status, c.created_at, c.tags, c.last_contact, c.source,
-                               u.full_name as owner_name, u.avatar_url as owner_avatar
-                        FROM contacts c
-                        LEFT JOIN users u ON c.owner_id = u.id
-                        WHERE c.tenant_id = ?
-                        ORDER BY c.id DESC LIMIT 15
-                    ");
-                    $stmt->execute([$tid]);
+                require_once __DIR__ . '/AgentToolRegistry.php';
+                $leadRbac = AgentToolRegistry::evaluateLeadReadScope($this->db, $auth);
+                $cSql = "
+                    SELECT c.id, c.full_name, c.phone, c.email, c.pipeline_status, c.created_at, c.tags, c.last_contact, c.source,
+                           u.full_name as owner_name, u.avatar_url as owner_avatar
+                    FROM contacts c
+                    LEFT JOIN users u ON c.owner_id = u.id
+                    WHERE c.tenant_id = ? AND c.deleted_at IS NULL
+                ";
+                $cParams = [$tid];
+                if (!$leadRbac['can_view_all_leads'] && !$isAccountant) {
+                    if ($leadRbac['can_view_team_leads']) {
+                        $teamIdSearch = (int)($leadRbac['team_id'] ?? 0);
+                        $cSql .= " AND (c.owner_id = ? OR FIND_IN_SET(?, IFNULL(c.collaborator_ids, '')) OR c.owner_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))) OR (? > 0 AND team_id = ?)))";
+                        $cParams[] = $uid;
+                        $cParams[] = (string)$uid;
+                        $cParams[] = $uid;
+                        $cParams[] = $teamIdSearch;
+                        $cParams[] = $teamIdSearch;
+                    } else {
+                        $cSql .= " AND (c.owner_id = ? OR FIND_IN_SET(?, IFNULL(c.collaborator_ids, '')))";
+                        $cParams[] = $uid;
+                        $cParams[] = (string)$uid;
+                    }
                 }
+                if ($hasSearch) {
+                    $cSql .= " AND (c.full_name LIKE ? OR c.phone LIKE ? OR c.email LIKE ? OR c.id = ? OR u.full_name LIKE ?)";
+                    $cParams[] = $searchParam;
+                    $cParams[] = $searchParam;
+                    $cParams[] = $searchParam;
+                    $cParams[] = $idParam;
+                    $cParams[] = $searchParam;
+                }
+                $cSql .= " ORDER BY c.id DESC LIMIT 15";
+                $stmt = $this->db->prepare($cSql);
+                $stmt->execute($cParams);
                 while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                     $tags = [];
                     if (!empty($row['tags'])) {
@@ -2719,7 +2766,7 @@ class ChatController {
                   AND cm.sender_id != ?
                   AND cm.id > cp.last_read_message_id
                   AND cm.deleted_at IS NULL
-                  AND UNIX_TIMESTAMP(cm.created_at) >= ?
+                  AND cm.created_at >= FROM_UNIXTIME(?)
                 ORDER BY cm.id DESC
                 LIMIT 5
             ");
@@ -3296,12 +3343,23 @@ class ChatController {
     /**
      * Process IDEAS AI Reply with RAG and Multi-format Attachment Parsing
      */
-    private function processIdeasAiChatReply(int $conversationId, int $senderId, int $tid, string $userMessage, ?array $metadata, int $userMsgId, ?callable $onChunk = null): ?array {
+    private function processIdeasAiChatReply(int $conversationId, int $senderId, int $tid, string $userMessage, ?array $metadata, int $userMsgId, ?callable $onChunk = null, ?callable $onStep = null): ?array {
         try {
             // 0. Fetch user details & clean friendly call name
-            $stmtUser = $this->db->prepare("SELECT id, full_name, email, role, job_title, department, team_id FROM users WHERE id = ?");
+            require_once __DIR__ . '/AgentToolRegistry.php';
+            $stmtUser = $this->db->prepare("
+                SELECT u.id, u.full_name, u.email, u.role, u.job_title, u.department, u.team_id, u.permissions_json,
+                       t.name as team_name
+                FROM users u
+                LEFT JOIN teams t ON u.team_id = t.id
+                WHERE u.id = ?
+            ");
             $stmtUser->execute([$senderId]);
             $userInfo = $stmtUser->fetch(PDO::FETCH_ASSOC) ?: [];
+            $leadRbac = AgentToolRegistry::evaluateLeadReadScope($this->db, array_merge($userInfo, [
+                'user_id' => $senderId,
+                'tenant_id' => $tid
+            ]));
             $rawFullName = trim($userInfo['full_name'] ?? '');
             $nameParts = preg_split('/\s+/', $rawFullName);
             $cleanCallName = !empty($nameParts) ? end($nameParts) : 'bạn';
@@ -3492,6 +3550,38 @@ class ChatController {
             $recentEntityStr = $this->loadRecentEntityContext($senderId, $tid);
             $operationalRisksStr = $this->detectProactiveOperationalRisks($senderId, $tid, $userRole);
 
+            // 3b. Screen & Active Drawer Awareness (Trực giác nhận biết màn hình & hồ sơ đang mở)
+            $screenContextStr = "";
+            $clientContext = $metadata['current_context'] ?? null;
+            if (!empty($clientContext) && is_array($clientContext)) {
+                $pagePath = trim($clientContext['pathname'] ?? '');
+                $pageSearch = trim($clientContext['search'] ?? '');
+                $pageTitle = trim($clientContext['page_title'] ?? '');
+                $activeEntity = $clientContext['active_entity'] ?? null;
+
+                $screenContextStr = "\n--- [TRỰC GIÁC MÀN HÌNH & HỒ SƠ ĐANG MỞ (SCREEN AWARENESS)] ---\n"
+                    . "• Trang người dùng đang xem trực tiếp: {$pagePath}{$pageSearch}" . ($pageTitle ? " ({$pageTitle})" : "") . "\n";
+
+                if (!empty($activeEntity) && is_array($activeEntity) && !empty($activeEntity['id'])) {
+                    $eType = $activeEntity['type'] ?? 'entity';
+                    $eId = (int)$activeEntity['id'];
+                    $eName = trim($activeEntity['name'] ?? '');
+                    $screenContextStr .= "• HỒ SƠ ĐANG MỞ TRÊN DRAWER: [Loại: {$eType}] ID #{$eId}" . ($eName ? " ({$eName})" : "") . "\n"
+                        . "• CHỈ DẪN ƯU TIÊN: Người dùng đang trực tiếp quan sát hồ sơ này trên màn hình! Khi người dùng hỏi đại từ ('bạn này', 'học viên này', 'khách này', 'phiếu này', 'task này', 'ở đây', 'hồ sơ này', 'đã cọc chưa', 'tóm tắt hồ sơ',...), BẮT BUỘC ưu tiên hiểu là đang nói về thực thể ID #{$eId} này và tự động gọi công cụ phù hợp để tra cứu/thực thi ngay mà không cần hỏi lại ID!\n";
+
+                    // Ghi nhận ngay vào ai_entity_context để duy trì anaphora resolution
+                    try {
+                        $insContext = $this->db->prepare("
+                            INSERT INTO ai_entity_context (user_id, tenant_id, entity_type, entity_id, entity_name, last_referenced_at)
+                            VALUES (?, ?, ?, ?, ?, NOW())
+                            ON DUPLICATE KEY UPDATE entity_name = VALUES(entity_name), last_referenced_at = NOW()
+                        ");
+                        $insContext->execute([$senderId, $tid, $eType, $eId, $eName ?: "Thực thể #{$eId}"]);
+                    } catch (\Throwable $eCtx) {}
+                }
+                $screenContextStr .= "--- [HẾT TRỰC GIÁC MÀN HÌNH] ---\n";
+            }
+
             // Grounding Pronoun & Anaphora Disambiguation (Resolves 'bạn ấy', 'học viên đó', 'task này')
             $pronounAnchorStr = "";
             if (preg_match('/\b(bạn ấy|bạn đó|học viên ấy|học viên đó|khách ấy|khách đó|task ấy|task đó|công việc đó|phiếu ấy|phiếu đó|đơn đó)\b/iu', $userMessage)) {
@@ -3523,7 +3613,13 @@ class ChatController {
                 . "TRI THỨC DOANH NGHIỆP (DYNAMIC RAG & VECTOR TRAINING):\n"
                 . "• Toàn bộ kiến thức về chương trình đào tạo, biểu phí, quy chế và kịch bản tư vấn được lấy động từ mục [KIẾN THỨC TỪ HUẤN LUYỆN AI DOANH NGHIỆP] bên dưới (trích xuất từ CSDL tri thức). Tuyệt đối không bịa đặt số liệu ngoài tài liệu.\n\n"
                 . "BẢO MẬT & PHÂN QUYỀN NỘI BỘ (ENTERPRISE RBAC):\n"
-                . "• User ID: {$senderId}, Quyền: {$userRole}. Nhân sự chỉ xem và thao tác dữ liệu được phân công. Tuyệt đối không tiết lộ dữ liệu ngoài quyền hạn (quỹ tiền, lương người khác, khách của Sale khác).\n"
+                . "• User ID: {$senderId}, Quyền: {$userRole}, Phòng ban: " . ($userInfo['department'] ?? '') . ", Team: " . ($userInfo['team_name'] ?? '') . ".\n"
+                . ($leadRbac['can_view_all_leads']
+                    ? "• PHÂN QUYỀN CRM LEADS / HỌC VIÊN: Người dùng hiện tại thuộc nhóm TOÀN QUYỀN XEM TOÀN BỘ LEAD & HỌC VIÊN TRÊN HỆ THỐNG (Marketing / Ban Giám Đốc / Admin / Sale Admin / Học vụ / Trợ lý). Người dùng ĐƯỢC PHÉP tra cứu, thống kê, xem chi tiết và xuất dữ liệu lead/học viên của BẤT KỲ nhân viên tư vấn (Sale) nào (ví dụ: Linh Đan, Thanh Trúc, v.v.). KHI người dùng hỏi về data/lead của một tư vấn viên cụ thể (như 'Linh Đan có data nào hôm nay / 7 ngày qua'), BẮT BUỘC gọi công cụ `query_crm_leads_multitier` với tham số `owners='<tên tư vấn viên>'` và `record_type='all'` để lấy dữ liệu thật, TUYỆT ĐỐI KHÔNG ĐƯỢC nói rằng bị giới hạn quyền xem lead của người khác!\n"
+                    : ($leadRbac['can_view_team_leads']
+                        ? "• PHÂN QUYỀN CRM LEADS / HỌC VIÊN: Người dùng là Quản lý/Leader nhóm, được quyền tra cứu toàn bộ lead/học viên của các thành viên trong team mình quản lý và của chính mình.\n"
+                        : "• PHÂN QUYỀN CRM LEADS / HỌC VIÊN: Nhân sự chỉ xem và thao tác dữ liệu khách hàng được phân công cho mình hoặc đồng phụ trách.\n"))
+                . "• Tuyệt đối không tiết lộ bảng lương cá nhân hoặc quỹ nội bộ ngoài quyền hạn.\n"
                 . "• QUY ĐỊNH GIỜ LÀM VIỆC & CHẤM CÔNG CÔNG TY:\n"
                 . "  - Buổi sáng: 08:00 - 12:00. Nghỉ trưa: 12:00 - 13:00. Buổi chiều: 13:00 - 17:00.\n"
                 . "  - Chuẩn: 1 ngày công = 8.0 tiếng (0.5 công sáng + 0.5 công chiều).\n"
@@ -3582,6 +3678,30 @@ class ChatController {
                 . "• THẺ HÀNH ĐỘNG ĐỀ XUẤT (SMART PROPOSAL): Với thao tác tạo mới / tài chính / hợp đồng / xuất file (tạo việc, tạo đơn nghỉ phép, tạm ứng, đề xuất chi PO, đơn SO đóng cọc, export Excel): Hãy gọi `draft_action_proposal` để điền sẵn 100% dữ liệu vào Thẻ Hành Động `<<<ACTION_PROPOSAL: {...}>>>` chuẩn ERP Tag để người dùng ấn mở và tự tay xác nhận lưu.\n"
                 . "  - Khi giao việc: Người tạo là {$cleanCallName}. Nếu trùng tên nhân sự, hãy hỏi lại để làm rõ.\n"
                 . "  - Khi tạo đơn SO: Kiểm tra pipeline học viên. Nếu chưa tới bước cọc/SO (< 13), hãy gợi ý chuyển pipeline kèm đề xuất đơn.\n\n"
+                . "• GIAO THỨC HỎI LẠI THÔNG MINH KHI GẶP NHIỀU LỰA CHỌN HOẶC THIẾU THÔNG TIN (PROACTIVE HUMAN-LIKE DISAMBIGUATION PROTOCOL):\n"
+                . "  - Khi công cụ trả về `requires_disambiguation: true` (hoặc `status: 'DISAMBIGUATION_REQUIRED'`, `status: 'MISSING_INFO_REQUIRED'`) hoặc khi có từ 2 hồ sơ Khách hàng / Học viên / Nhân viên / Vòng chia Lead / Công việc trùng tên mà {$cleanCallName} chỉ yêu cầu thao tác trên 1 đối tượng:\n"
+                . "    * TUYỆT ĐỐI KHÔNG ĐƯỢC TỰ Ý ĐOÁN MÒ HAY LẤY ĐẠI 1 HỒ SƠ!\n"
+                . "    * Hãy hỏi lại thật tự nhiên, lễ phép như một người trợ lý tận tâm (ví dụ: 'Dạ {$cleanCallName} ơi, em tìm thấy X hồ sơ trùng tên trong hệ thống. {$cleanCallName} muốn em thao tác trên hồ sơ nào dưới đây ạ?').\n"
+                . "    * Trình bày bảng so sánh ngắn gọn các hồ sơ trùng (Mã/ID, Họ tên, SĐT/Phòng ban, Chương trình/Giai đoạn, Người phụ trách).\n"
+                . "    * BẮT BUỘC GIỮ NGUYÊN 100% các thẻ `<<<ERP_CARD: {...}>>>`, `<<<CLARIFY_OPTIONS: [...]>>>` và `<<<NEXT_BEST_ACTIONS: [...]>>>` do công cụ trả về ở cuối câu trả lời để {$cleanCallName} bấm chọn 1 chạm!\n"
+                . "  - Khi kết quả truy vấn lần đầu trả về 0 bản ghi (`total_matching = 0`) do bộ lọc quá hẹp: Hãy chủ động gọi lại công cụ với bộ lọc mở rộng hơn (hoặc dựa vào `zero_result_diagnostics`) và giải thích rõ cho {$cleanCallName}.\n\n"
+                . "• TRUY VẤN DỮ LIỆU ĐA TẦNG, ĐA CẤP & BÓC TÁCH MA TRẬN ĐIỀU HÀNH TOÀN DIỆN 100% DATABASE (MULTI-TIER QUERY & BI FACET MATRIX):\n"
+                . "  - KHI NGƯỜI DÙNG HỎI LỌC DỮ LIỆU ĐA TẦNG / NHIỀU ĐIỀU KIỆN PHỨC TẠP:\n"
+                . "    * Đối với CRM / Học viên / Tuyển sinh / Nguồn / Pipeline / Tiền cọc: BẮT BUỘC gọi `query_crm_leads_multitier`.\n"
+                . "    * Đối với Chi phí / PO / Tạm ứng / Ngân sách phòng ban: BẮT BUỘC gọi `query_finance_multitier_analytics`.\n"
+                . "    * Đối với Đặt cọc / Đơn hàng SO / Doanh thu thu tiền / Đợt đóng học phí (`deposit_milestones`): BẮT BUỘC gọi `query_deposits_and_revenue_multitier`.\n"
+                . "    * Đối với Công việc / Lịch hẹn / Dự án (`activities`, `tasks`, `projects`): BẮT BUỘC gọi `query_tasks_and_projects_multitier`.\n"
+                . "    * Đối với Cơ hội B2B / Deals / Doanh nghiệp đối tác (`deals`, `companies`): BẮT BUỘC gọi `query_deals_and_b2b_multitier`.\n"
+                . "    * Đối với Ticket hỗ trợ / Khiếu nại / Vi phạm SLA (`tickets`): BẮT BUỘC gọi `query_tickets_and_sla_multitier`.\n"
+                . "    * Đối với Nhân sự 360 / Nghỉ phép / Bảng lương (`users`, `hrm_profiles`, `hrm_leave_requests`, `monthly_payslips`): BẮT BUỘC gọi `query_hrm_workforce_and_payroll_multitier`.\n"
+                . "    * Đối với Tồn kho / Sản phẩm / Tài sản cấp phát (`products`, `inventory_items`, `assets`): BẮT BUỘC gọi `query_inventory_and_assets_multitier`.\n"
+                . "  - KHUNG PHẢN HỒI ĐIỀU HÀNH CHUẨN MỰC (EXECUTIVE PRESENTATION FRAMEWORK) — BẮT BUỘC ĐỦ 5 PHẦN:\n"
+                . "    1. 📌 TỔNG QUAN ĐIỀU HÀNH (Executive Metric Strip): Đưa ra ngay các chỉ số cốt lõi ở đầu câu trả lời (Tổng số đối tượng khớp bộ lọc, Tổng tiền / cọc, Tỷ lệ chuyển đổi %, Giá trị trung bình).\n"
+                . "    2. 📊 MA TRẬN BÓC TÁCH ĐA TẦNG (Faceted Breakdown Table): Định dạng BẢNG MARKDOWN 2 chiều thể hiện rõ mối tương quan Cấp 1 ➔ Cấp 2 (vd: Chương trình × Số lượng × Tiền cọc, hoặc Nguồn lead × Tỷ lệ chốt deal). BẮT BUỘC có tỷ lệ % để làm rõ cơ cấu.\n"
+                . "    3. 🔍 CHẨN ĐOÁN ĐIỂM NGHẼN & ĐỘT BIẾN (Diagnostic Insight): Chỉ rõ điểm sáng (top chương trình/kênh hiệu quả nhất) và điểm nghẽn (số lead bị ngâm/bỏ quên, các khoản chi sắp trễ hạn hoặc vượt mức).\n"
+                . "    4. 📈 TRỰC QUAN HÓA MICRO-BI: BẮT BUỘC đính kèm thẻ biểu đồ `<<<DYNAMIC_CHART: {...}>>>` (dùng dữ liệu do công cụ trả về hoặc số liệu từ ma trận bóc tách) để giao diện hiển thị biểu đồ trực quan.\n"
+                . "    5. 📋 XEM TRƯỚC TIÊU BIỂU, THẺ ERP & LINK TẢI EXCEL: Hiển thị bảng xem trước 3-5 đối tượng tiêu biểu với link `[👉 Tên](url)`, đính kèm thẻ `<<<ERP_CARD: {...}>>>` và Link tải toàn bộ dữ liệu UTF-8 BOM: `[📥 Bấm vào đây để tải danh sách (File Excel/CSV)]({export_url})`.\n"
+                . "    6. ⚡ GỢI Ý BƯỚC TIẾP THEO THÔNG MINH: Luôn kèm thẻ `<<<NEXT_BEST_ACTIONS: [...]>>>` chứa 2-3 nút gợi ý đào sâu hơn (vd: [\"Bóc tách riêng nhóm MBA\", \"Xem các lead chưa cọc\", \"Tải file Excel đầy đủ\"]).\n\n"
                 . "ĐIỀU HÀNH THÔNG MINH & ĐỊNH DẠNG ERP TAGS:\n"
                 . "1. GỢI Ý BƯỚC TIẾP THEO (BẮT BUỘC Ở CUỐI MỌI CÂU TRẢ LỜI): Đính kèm `<<<NEXT_BEST_ACTIONS: [\"Gợi ý 1\", \"Gợi ý 2\", \"Gợi ý 3\"]>>>` (2-3 nút ngắn gọn 3-8 từ để user click 1 chạm).\n"
                 . "2. CẢNH BÁO CHỦ ĐỘNG: Khi phát hiện rủi ro (lead bỏ quên, task trễ hạn, đơn kẹt duyệt), đính kèm `<<<PROACTIVE_INSIGHT: {\"type\": \"warning|urgent|opportunity\", \"title\": \"...\", \"description\": \"...\", \"actionPrompt\": \"...\", \"actionLabel\": \"...\"}>>>`.\n"
@@ -3619,6 +3739,7 @@ class ChatController {
 
             $systemPrompt .= $ragContextStr
                 . $ambientSnapshotStr
+                . $screenContextStr
                 . $erpLookupStr
                 . $userMemoriesStr
                 . $recentEntityStr
@@ -3646,12 +3767,15 @@ class ChatController {
                 'job_title' => $userTitle,
                 'department' => $userInfo['department'] ?? '',
                 'team_id' => (int)($userInfo['team_id'] ?? 0),
+                'team_name' => $userInfo['team_name'] ?? '',
+                'permissions_json' => $userInfo['permissions_json'] ?? null,
                 'conversation_id' => $conversationId,
                 'user_msg_id' => $userMsgId,
                 'metadata' => $metadata,
                 'attached_file' => $attachedFile
             ];
-            $aiReplyText = $this->callGeminiFlashLite($history, $systemPrompt, $attachedFile, $onChunk, $authContext);
+            $executedAgentSteps = [];
+            $aiReplyText = $this->callGeminiFlashLite($history, $systemPrompt, $attachedFile, $onChunk, $authContext, $onStep, $executedAgentSteps);
             if (empty($aiReplyText)) {
                 $aiReplyText = "Tôi đã ghi nhận thông tin của bạn. Hiện tại hệ thống đang xử lý tác vụ, vui lòng gửi lại câu hỏi hoặc cung cấp thêm thông tin chi tiết.";
             }
@@ -3680,14 +3804,29 @@ class ChatController {
                 $aiReplyText = trim(str_replace($memMatch[0], '', $aiReplyText));
             }
 
+            $swarmInfo = $this->resolveCollaboratingAgents($userMessage);
+            $activeAgent = $swarmInfo['primaryAgent'] ?? $this->resolveActiveSpecializedAgent($userMessage);
+            $aiMsgMetadata = [
+                'specialist' => [
+                    'id' => $activeAgent['id'] ?? 'orchestrator',
+                    'name' => $activeAgent['name'] ?? 'SI IDEAS',
+                    'role' => $activeAgent['roleTitle'] ?? 'Điều phối viên AI Đa Tác Tử',
+                    'avatar' => $activeAgent['avatar'] ?? null
+                ],
+                'collaborating_agents' => $swarmInfo['collaborators'] ?? [],
+                'is_multi_agent' => (bool)($swarmInfo['is_multi_agent'] ?? false),
+                'agent_steps' => $executedAgentSteps
+            ];
+            $aiMsgMetadataJson = json_encode($aiMsgMetadata, JSON_UNESCAPED_UNICODE);
+
             // 7. Insert AI Reply into chat_messages
             $this->db->beginTransaction();
 
             $stmtIns = $this->db->prepare("
-                INSERT INTO chat_messages (tenant_id, conversation_id, sender_id, message_type, content, reply_to_id, created_at)
-                VALUES (?, ?, 9000001, 'text', ?, ?, NOW())
+                INSERT INTO chat_messages (tenant_id, conversation_id, sender_id, message_type, content, metadata, reply_to_id, created_at)
+                VALUES (?, ?, 9000001, 'text', ?, ?, ?, NOW())
             ");
-            $stmtIns->execute([$tid, $conversationId, $aiReplyText, $userMsgId]);
+            $stmtIns->execute([$tid, $conversationId, $aiReplyText, $aiMsgMetadataJson, $userMsgId]);
             $aiMsgId = (int)$this->db->lastInsertId();
 
             // Update conversation last message
@@ -3721,7 +3860,7 @@ class ChatController {
                 if ($fallbackTriggered) {
                     $needsTraining = 1;
                     $gapCategory = 'unanswered_knowledge';
-                } elseif (empty($ragChunks) && empty($erpLookupStr)) {
+                } elseif (empty($ragChunks) && empty($erpLookupStr) && empty($executedAgentSteps)) {
                     $needsTraining = 1;
                     $gapCategory = 'missing_rag_or_data';
                 }
@@ -3737,7 +3876,7 @@ class ChatController {
                     $userRole,
                     $userMessage,
                     count($ragChunks),
-                    empty($erpLookupStr) ? 0 : 1,
+                    (!empty($erpLookupStr) || !empty($executedAgentSteps)) ? 1 : 0,
                     $hasActionProposal,
                     $fallbackTriggered,
                     $needsTraining,
@@ -3747,14 +3886,13 @@ class ChatController {
                 error_log("Failed to insert ai_query_audit_logs: " . $eAudit->getMessage());
             }
 
-            $activeAgent = $this->resolveActiveSpecializedAgent($userMessage);
-
             return [
                 'id' => $aiMsgId,
                 'conversation_id' => $conversationId,
                 'sender_id' => 9000001,
                 'message_type' => 'text',
                 'content' => $aiReplyText,
+                'metadata' => $aiMsgMetadata,
                 'reply_to_id' => $userMsgId,
                 'sender_name' => $activeAgent['name'],
                 'sender_avatar' => $activeAgent['avatar'],
@@ -4252,10 +4390,13 @@ class ChatController {
     private function autoRecordEntityFromTool(int $uid, int $tid, string $toolName, array $toolArgs, array $toolResult): void {
         try {
             if ($uid <= 0) return;
+            if (!empty($toolResult['requires_disambiguation']) || ($toolResult['status'] ?? '') === 'DISAMBIGUATION_REQUIRED') {
+                return;
+            }
 
             if ($toolName === 'get_contact_360_profile') {
                 $cId = (int)($toolResult['contact_id'] ?? ($toolResult['profile']['id'] ?? ($toolArgs['contact_id'] ?? 0)));
-                $cName = $toolResult['profile']['full_name'] ?? ($toolResult['contact']['full_name'] ?? '');
+                $cName = $toolResult['profile']['full_name'] ?? ($toolResult['contact']['full_name'] ?? ($toolResult['profile']['name'] ?? ''));
                 if ($cId > 0 && !empty($cName)) {
                     $meta = [
                         'phone' => $toolResult['profile']['phone'] ?? '',
@@ -4266,10 +4407,10 @@ class ChatController {
                 }
             } elseif ($toolName === 'search_contacts') {
                 $contacts = $toolResult['contacts'] ?? [];
-                if (!empty($contacts) && is_array($contacts)) {
+                if (!empty($contacts) && is_array($contacts) && count($contacts) === 1) {
                     $top = $contacts[0];
                     $cId = (int)($top['id'] ?? 0);
-                    $cName = $top['full_name'] ?? '';
+                    $cName = $top['full_name'] ?? ($top['name'] ?? '');
                     if ($cId > 0 && !empty($cName)) {
                         $this->recordEntityContext($uid, $tid, 'contact', $cId, $cName, ['phone' => $top['phone'] ?? '']);
                     }
@@ -4349,6 +4490,12 @@ class ChatController {
             $like = '%' . $cleanTerm . '%';
 
             $cleanRole = strtolower($role);
+            require_once __DIR__ . '/AgentToolRegistry.php';
+            $leadRbac = AgentToolRegistry::evaluateLeadReadScope($this->db, [
+                'user_id' => $uid,
+                'tenant_id' => $tid,
+                'role' => $cleanRole
+            ]);
             $isGlobalAdmin = in_array($cleanRole, ['admin', 'superadmin', 'super_admin', 'director'], true);
             $isAccountant = in_array($cleanRole, ['accountant', 'ke_toan'], true);
             $isManager = in_array($cleanRole, ['manager', 'truong_phong'], true);
@@ -4357,7 +4504,7 @@ class ChatController {
 
             $results = [];
 
-            // 1. Lookup Contacts / Leads & Tuition Deposits (Enforce Sales RBAC Isolation)
+            // 1. Lookup Contacts / Leads & Tuition Deposits (Enforce Sales RBAC Isolation synced with ContactController::getScope)
             if (!empty($extractedPhone) || !empty($extractedEmail) || $searchId > 0 || mb_stripos($cleanQ, 'khách') !== false || mb_stripos($cleanQ, 'học viên') !== false || mb_stripos($cleanQ, 'lead') !== false || mb_stripos($cleanQ, 'hợp đồng') !== false || mb_stripos($cleanQ, 'đóng tiền') !== false || mb_stripos($cleanQ, 'học phí') !== false || mb_stripos($cleanQ, 'cọc') !== false) {
                 $cWhere = [];
                 $cParams = [$tid];
@@ -4387,8 +4534,8 @@ class ChatController {
                              LEFT JOIN users u ON c.owner_id = u.id
                              WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND (" . implode(" OR ", $cWhere) . ")";
                     
-                    // Sales & Staff Zero-Trust Isolation: non-admins only see own assigned or collaborated contacts
-                    if (!$isGlobalAdmin && !$isManager) {
+                    // Sales & Staff Zero-Trust Isolation: synced 100% with ContactController::getScope
+                    if (!$leadRbac['can_view_all_leads'] && !$leadRbac['can_view_team_leads']) {
                         $sqlC .= " AND (c.owner_id = ? OR FIND_IN_SET(?, IFNULL(c.collaborator_ids, '')) OR c.id IN (
                             SELECT contact_id FROM cooperation_slips 
                             WHERE JSON_CONTAINS(JSON_KEYS(CASE WHEN (shares_json IS NOT NULL AND JSON_VALID(shares_json)) THEN shares_json ELSE '{}' END), JSON_QUOTE(CAST(? AS CHAR)))
@@ -4396,6 +4543,14 @@ class ChatController {
                         $cParams[] = $uid;
                         $cParams[] = (string)$uid;
                         $cParams[] = (string)$uid;
+                    } elseif (!$leadRbac['can_view_all_leads'] && $leadRbac['can_view_team_leads']) {
+                        $teamIdLookup = (int)($leadRbac['team_id'] ?? 0);
+                        $sqlC .= " AND (c.owner_id = ? OR FIND_IN_SET(?, IFNULL(c.collaborator_ids, '')) OR c.owner_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))) OR (? > 0 AND team_id = ?)))";
+                        $cParams[] = $uid;
+                        $cParams[] = (string)$uid;
+                        $cParams[] = $uid;
+                        $cParams[] = $teamIdLookup;
+                        $cParams[] = $teamIdLookup;
                     }
 
                     $sqlC .= " ORDER BY c.id DESC LIMIT 3";
@@ -4713,7 +4868,9 @@ class ChatController {
             if (mb_strlen($cleanQuery) < 3) return [];
 
             // Boundary check: if 0 trained docs exist, return early without error
-            $count = (int)$this->db->query("SELECT COUNT(*) FROM ai_training_docs WHERE is_active = 1 AND status = 'trained'")->fetchColumn();
+            $stmtCount = $this->db->prepare("SELECT COUNT(*) FROM ai_training_docs d WHERE d.is_active = 1 AND d.status = 'trained' AND d.tenant_id = ?");
+            $stmtCount->execute([$tid]);
+            $count = (int)$stmtCount->fetchColumn();
             if ($count === 0) return [];
 
             // 1. Natural Language Full-Text Search (up to 12 chunks)
@@ -4721,12 +4878,12 @@ class ChatController {
                 SELECT c.id, c.content, d.name AS doc_name, d.tags
                 FROM ai_training_chunks c
                 JOIN ai_training_docs d ON c.doc_id = d.id
-                WHERE d.is_active = 1 AND d.status = 'trained'
+                WHERE d.is_active = 1 AND d.status = 'trained' AND d.tenant_id = ?
                   AND MATCH(c.content) AGAINST(? IN NATURAL LANGUAGE MODE)
                 ORDER BY MATCH(c.content) AGAINST(? IN NATURAL LANGUAGE MODE) DESC
                 LIMIT 12
             ");
-            $stmt->execute([$cleanQuery, $cleanQuery]);
+            $stmt->execute([$tid, $cleanQuery, $cleanQuery]);
             $results = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
             // 2. Complement with Keyword LIKE search if fewer than 12 chunks found
@@ -4745,13 +4902,13 @@ class ChatController {
                         SELECT c.id, c.content, d.name AS doc_name, d.tags
                         FROM ai_training_chunks c
                         JOIN ai_training_docs d ON c.doc_id = d.id
-                        WHERE d.is_active = 1 AND d.status = 'trained'
+                        WHERE d.is_active = 1 AND d.status = 'trained' AND d.tenant_id = ?
                           AND c.id NOT IN ($inPlaceholders)
                           AND (c.content LIKE ? OR d.name LIKE ? OR d.tags LIKE ?)
                         ORDER BY c.id DESC
                         LIMIT " . (int)$needed
                     );
-                    $params = array_merge($existingIds, [$firstWord, $firstWord, $firstWord]);
+                    $params = array_merge([$tid], $existingIds, [$firstWord, $firstWord, $firstWord]);
                     $stmtLike->execute($params);
                     $likeResults = $stmtLike->fetchAll(PDO::FETCH_ASSOC) ?: [];
                     $results = array_merge($results, $likeResults);
@@ -4891,9 +5048,13 @@ class ChatController {
         }
 
         if (is_string($data)) {
-            // Trim excessive text length (over 1000 chars) in tool returns to prevent token bloat
-            if (mb_strlen($data) > 1000) {
-                return mb_substr($data, 0, 1000) . '... [Dữ liệu tiếp theo đã được rút gọn để tối ưu token]';
+            // Never truncate smart UI tags or export markdown/URLs
+            if (strpos($data, '<<<') !== false || strpos($data, '[[') !== false || strpos($data, '/api/export') !== false) {
+                return $data;
+            }
+            // Trim excessive text length (over 2500 chars) in plain text tool returns to prevent token bloat
+            if (mb_strlen($data) > 2500) {
+                return mb_substr($data, 0, 2500) . '... [Dữ liệu tiếp theo đã được rút gọn để tối ưu token]';
             }
             return $data;
         }
@@ -4905,7 +5066,7 @@ class ChatController {
      * AI Semantic Micro-Router for Multi-Agent Swarm (Zero Regex / Pure Agentic)
      * Ultra-fast ~180ms classifier that maps user query intent into domain and tool requirements.
      */
-    private function routeQueryWithAiMicroRouter(string $userQuery, string $apiKey, string $model): array {
+    private function routeQueryWithAiMicroRouter(string $userQuery, string $apiKey, string $model, ?array $currentContext = null): array {
         $safeFallback = [
             'intent_type' => 'database_action',
             'primary_domain' => null,
@@ -4918,11 +5079,31 @@ class ChatController {
             return $safeFallback;
         }
 
+        $contextHint = "";
+        if (!empty($currentContext) && is_array($currentContext)) {
+            $hints = [];
+            $path = trim($currentContext['pathname'] ?? '');
+            $pageTitle = trim($currentContext['page_title'] ?? '');
+            if (!empty($path)) {
+                $hints[] = "Màn hình đang mở: {$path}" . ($pageTitle ? " ({$pageTitle})" : "");
+            }
+            $activeEntity = $currentContext['active_entity'] ?? null;
+            if (!empty($activeEntity) && is_array($activeEntity) && !empty($activeEntity['id'])) {
+                $eType = $activeEntity['type'] ?? 'thực thể';
+                $eId = (int)$activeEntity['id'];
+                $eName = trim($activeEntity['name'] ?? '');
+                $hints[] = "Drawer hồ sơ đang mở: {$eType} ID #{$eId}" . ($eName ? " ({$eName})" : "");
+            }
+            if (!empty($hints)) {
+                $contextHint = "\n[NGỮ CẢNH TRÌNH DUYỆT]: " . implode(' | ', $hints);
+            }
+        }
+
         $systemPrompt = "Bạn là AI Semantic Router tối cao của hệ thống MYERP (Viện IDEAS).\n"
             . "Nhiệm vụ: Phân tích câu hỏi/yêu cầu của người dùng để phân loại Ý định (Intent) và Phân hệ nghiệp vụ (Domain).\n"
             . "11 Phân hệ nghiệp vụ chuyên trách:\n"
-            . "- 'sales': Quản lý Lead, CRM, tư vấn tuyển sinh, phân bổ lead, vòng xoay chia số, bù data cho Sale, trùng lead, lịch hẹn gọi lại, chốt deal, xuất file / export danh sách lead theo pipeline, giới tính, ngày tháng, chương trình đào tạo.\n"
-            . "- 'finance': Thu chi, học phí, công nợ học viên, phiếu thu, phiếu chi, đặt cọc, tạm ứng, dòng tiền, SO/PO.\n"
+            . "- 'sales': Quản lý Lead, CRM, tư vấn tuyển sinh, phân bổ lead, vòng xoay chia số, bù data cho Sale, trùng lead, lịch hẹn gọi lại, chốt deal, xuất file / export danh sách lead theo pipeline, giới tính, ngày tháng, chương trình đào tạo, lọc dữ liệu CRM đa tầng nhiều cấp (query_crm_leads_multitier).\n"
+            . "- 'finance': Thu chi, học phí, công nợ học viên, phiếu thu, phiếu chi, đặt cọc, tạm ứng, dòng tiền, SO/PO, phân tích chi phí & ngân sách đa tầng theo phòng ban và hạng mục (query_finance_multitier_analytics).\n"
             . "- 'hrm': Nhân sự, chấm công, đi trễ, về sớm, tăng ca OT, WFH làm việc từ xa, nghỉ phép, giải trình, bảng lương, phiếu lương, danh bạ nhân sự, xuất bảng công, duyệt đơn từ.\n"
             . "- 'tasks': Công việc cá nhân, tiến độ, deadline, checklist, giao việc, dự án.\n"
             . "- 'academic': Chương trình đào tạo (EMBA, MBA, MSc AI, DBA), môn học, thời khóa biểu, lịch khai giảng, giảng viên.\n"
@@ -4930,14 +5111,16 @@ class ChatController {
             . "- 'assets_inventory': Tồn kho, ấn phẩm, quà tặng, balo, áo polo, tài sản, laptop thiết bị bàn giao.\n"
             . "- 'b2b_partner': Khách hàng doanh nghiệp, đối tác B2B, thỏa thuận hợp tác, đào tạo in-house.\n"
             . "- 'marketing_campaigns': Chiến dịch tiếp thị, quảng cáo Ads, CPL, CAC, nguồn lead tuyển sinh.\n"
-            . "- 'executive_bi': Báo cáo tổng hợp P&L, dòng tiền ròng, KPI toàn viện, sức khỏe tài chính Ban Giám Đốc.\n"
+            . "- 'executive_bi': Báo cáo tổng hợp P&L, dòng tiền ròng, KPI toàn viện, sức khỏe tài chính Ban Giám Đốc, phân tích đa chiều chuyên sâu.\n"
             . "- 'system_it': Lỗi phần mềm, ticket CNTT, giám sát SLA vi phạm, hạ tầng kỹ thuật.\n\n"
             . "Phân loại intent_type:\n"
             . "- 'conversational': Lời chào, cảm ơn, khen ngợi, tạm biệt, trò chuyện xã giao.\n"
             . "- 'knowledge_qa': Hỏi thông tin chung, quy chế, chính sách, học phí niêm yết, kiến thức đào tạo (không yêu cầu tra cứu dữ liệu động người cụ thể).\n"
-            . "- 'database_action': Tra cứu hoặc thao tác dữ liệu cụ thể (khách hàng, học viên, nhân sự, phiếu thu, task cụ thể), tạo đơn từ, đề xuất hành động.\n"
+            . "- 'database_action': Tra cứu hoặc thao tác dữ liệu cụ thể (khách hàng, học viên, nhân sự, phiếu thu, task cụ thể), lọc dữ liệu đa tầng đa cấp, tạo đơn từ, đề xuất hành động.\n"
             . "- 'cross_domain': Yêu cầu phức tạp đan xen nhiều phân hệ khác nhau.\n\n"
             . "QUY TẮC:\n"
+            . "- Khi người dùng yêu cầu lọc, tìm kiếm, thống kê hoặc bóc tách dữ liệu theo nhiều điều kiện lồng nhau (nhiều chương trình, nguồn, giai đoạn, chi nhánh, tiền cọc, ngày tháng, phòng ban, hạng mục chi): BẮT BUỘC chọn intent_type='database_action' hoặc 'cross_domain' và requires_tools=true.\n"
+            . "- Nếu có [NGỮ CẢNH TRÌNH DUYỆT] đi kèm (đang mở trang hoặc drawer hồ sơ) và câu hỏi ngắn/dùng đại từ ('tóm tắt', 'kiểm tra bạn này', 'xem hồ sơ', 'đã cọc chưa', 'phiếu này', 'task này'): BẮT BUỘC gán primary_domain tương ứng với đối tượng/màn hình đang mở (contact/crm -> 'sales', expense/deposit -> 'finance', approval/hrm -> 'hrm', task -> 'tasks') và chọn intent_type='database_action', requires_tools=true.\n"
             . "- requires_tools: false nếu là 'conversational' hoặc 'knowledge_qa' thuần túy; true nếu là 'database_action' hoặc 'cross_domain'.\n"
             . "- is_multi_domain: true nếu câu hỏi liên quan từ 2 phân hệ trở lên.\n"
             . "Trả về duy nhất 1 JSON object chuẩn, không kèm markdown backticks:\n"
@@ -4953,7 +5136,7 @@ class ChatController {
                 [
                     'role' => 'user',
                     'parts' => [
-                        ['text' => "Yêu cầu cần phân loại: \"" . mb_substr($userQuery, 0, 500) . "\""]
+                        ['text' => "Yêu cầu cần phân loại: \"" . mb_substr($userQuery, 0, 500) . "\"" . $contextHint]
                     ]
                 ]
             ],
@@ -4999,7 +5182,7 @@ class ChatController {
      * Call Gemini 3.5 Flash Lite via Google Generative Language REST API
      * Supports Autonomous Two-Way Tool Loop (Function Calling) with Zero-Trust RBAC
      */
-    private function callGeminiFlashLite(array $conversationHistory, string $systemPrompt, ?array $attachedFile = null, ?callable $onChunk = null, ?array $authContext = null): ?string {
+    private function callGeminiFlashLite(array $conversationHistory, string $systemPrompt, ?array $attachedFile = null, ?callable $onChunk = null, ?array $authContext = null, ?callable $onStep = null, array &$executedAgentSteps = []): ?string {
         try {
             $stmtKey = $this->db->prepare("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('gemini_api_key', 'gemini_model')");
             $stmtKey->execute();
@@ -5045,6 +5228,7 @@ class ChatController {
                     $msgText = preg_replace('/<<<DYNAMIC_CHART:\s*[\s\S]*?>>>/', '[Đã hiển thị biểu đồ trực quan]', $msgText);
                     $msgText = preg_replace('/<<<ACTION_PROPOSAL:\s*[\s\S]*?>>>/', '[Đã xuất thẻ hành động điền sẵn]', $msgText);
                     $msgText = preg_replace('/<<<ERP_CARD:\s*[\s\S]*?>>>/', '[Đã hiển thị thẻ hồ sơ ERP]', $msgText);
+                    $msgText = preg_replace('/<<<CLARIFY_OPTIONS:\s*[\s\S]*?>>>/', '', $msgText);
                     $msgText = preg_replace('/<<<PROACTIVE_INSIGHT:\s*[\s\S]*?>>>/', '', $msgText);
                     $msgText = preg_replace('/<<<NEXT_BEST_ACTIONS:\s*[\s\S]*?>>>/', '', $msgText);
                     $msgText = preg_replace('/<<<SAVE_MEMORY:\s*[\s\S]*?>>>/', '', $msgText);
@@ -5073,17 +5257,17 @@ class ChatController {
             require_once __DIR__ . '/AgentToolRegistry.php';
 
             $agentToolMap = [
-                'sales' => ['get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_sales_leaderboard', 'check_lead_duplicate_and_fairshare_status', 'schedule_contact_activity', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'manage_lead_round_distribution', 'lookup_recent_cash_receipts_and_deposits', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'quick_log_crm_activity', 'reassign_lead_owner', 'get_company_staff_directory', 'draft_action_proposal', 'get_system_navigation'],
-                'finance' => ['filter_expenses_advanced', 'get_sales_leaderboard', 'get_contact_financial_summary', 'lookup_recent_cash_receipts_and_deposits', 'get_my_payment_proposals', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'approve_or_reject_erp_ticket', 'draft_action_proposal', 'get_system_navigation'],
-                'hrm' => ['get_staff_directory_advanced', 'query_company_attendance_and_work_hours', 'get_company_staff_directory', 'get_company_leave_and_absence', 'get_my_attendance_summary', 'get_my_payslip', 'get_pending_approvals', 'trace_approval_blocker', 'approve_or_reject_erp_ticket', 'update_task_progress_and_status', 'draft_action_proposal', 'get_system_navigation'],
-                'tasks' => ['get_my_tasks', 'get_task_detail', 'get_company_staff_directory', 'schedule_contact_activity', 'update_task_progress_and_status', 'complete_task_checklist_item', 'draft_action_proposal', 'get_system_navigation'],
-                'academic' => ['get_academic_students_filter', 'get_program_details', 'get_academic_schedule_and_intakes', 'get_active_projects_and_campaigns', 'search_contacts', 'export_crm_leads_advanced', 'search_ideas_knowledge', 'draft_action_proposal', 'get_system_navigation'],
+                'sales' => ['query_crm_leads_multitier', 'query_deposits_and_revenue_multitier', 'query_deals_and_b2b_multitier', 'get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_sales_leaderboard', 'check_lead_duplicate_and_fairshare_status', 'schedule_contact_activity', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'manage_lead_round_distribution', 'lookup_recent_cash_receipts_and_deposits', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'quick_log_crm_activity', 'reassign_lead_owner', 'get_company_staff_directory', 'draft_action_proposal', 'get_system_navigation'],
+                'finance' => ['query_finance_multitier_analytics', 'query_deposits_and_revenue_multitier', 'filter_expenses_advanced', 'get_sales_leaderboard', 'get_contact_financial_summary', 'lookup_recent_cash_receipts_and_deposits', 'get_my_payment_proposals', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'approve_or_reject_erp_ticket', 'draft_action_proposal', 'get_system_navigation'],
+                'hrm' => ['query_hrm_workforce_and_payroll_multitier', 'get_staff_directory_advanced', 'query_company_attendance_and_work_hours', 'get_company_staff_directory', 'get_company_leave_and_absence', 'get_my_attendance_summary', 'get_my_payslip', 'get_pending_approvals', 'trace_approval_blocker', 'approve_or_reject_erp_ticket', 'update_task_progress_and_status', 'draft_action_proposal', 'get_system_navigation'],
+                'tasks' => ['query_tasks_and_projects_multitier', 'get_my_tasks', 'get_task_detail', 'get_company_staff_directory', 'schedule_contact_activity', 'update_task_progress_and_status', 'complete_task_checklist_item', 'draft_action_proposal', 'get_system_navigation'],
+                'academic' => ['query_crm_leads_multitier', 'get_academic_students_filter', 'get_program_details', 'get_academic_schedule_and_intakes', 'get_active_projects_and_campaigns', 'search_contacts', 'export_crm_leads_advanced', 'search_ideas_knowledge', 'draft_action_proposal', 'get_system_navigation'],
                 'records_legal' => ['check_student_admission_records', 'get_academic_students_filter', 'get_contact_360_profile', 'attach_files_to_contact', 'draft_action_proposal', 'get_system_navigation'],
-                'assets_inventory' => ['get_inventory_health_check', 'get_inventory_and_asset_status', 'draft_action_proposal', 'get_system_navigation'],
-                'b2b_partner' => ['get_b2b_partner_and_contract_summary', 'draft_action_proposal', 'get_system_navigation'],
-                'marketing_campaigns' => ['export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_campaign_marketing_stats', 'get_active_projects_and_campaigns', 'draft_action_proposal', 'get_system_navigation'],
-                'executive_bi' => ['get_executive_morning_brief', 'get_sales_leaderboard', 'filter_expenses_advanced', 'get_staff_directory_advanced', 'get_inventory_health_check', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'query_company_attendance_and_work_hours', 'get_executive_financial_pulse', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'lookup_recent_cash_receipts_and_deposits', 'get_my_tasks', 'get_system_health_status', 'manage_lead_round_distribution', 'approve_or_reject_erp_ticket', 'update_task_progress_and_status', 'reassign_lead_owner', 'draft_action_proposal', 'get_system_navigation'],
-                'system_it' => ['get_system_health_status', 'get_ticket_status_and_sla_breaches', 'draft_action_proposal', 'get_system_navigation']
+                'assets_inventory' => ['query_inventory_and_assets_multitier', 'get_inventory_health_check', 'get_inventory_and_asset_status', 'draft_action_proposal', 'get_system_navigation'],
+                'b2b_partner' => ['query_deals_and_b2b_multitier', 'get_b2b_partner_and_contract_summary', 'draft_action_proposal', 'get_system_navigation'],
+                'marketing_campaigns' => ['query_crm_leads_multitier', 'query_deposits_and_revenue_multitier', 'query_deals_and_b2b_multitier', 'get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_sales_leaderboard', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'check_lead_duplicate_and_fairshare_status', 'get_campaign_marketing_stats', 'get_active_projects_and_campaigns', 'get_company_staff_directory', 'draft_action_proposal', 'get_system_navigation'],
+                'executive_bi' => ['query_crm_leads_multitier', 'query_finance_multitier_analytics', 'query_deposits_and_revenue_multitier', 'query_tasks_and_projects_multitier', 'query_deals_and_b2b_multitier', 'query_tickets_and_sla_multitier', 'query_hrm_workforce_and_payroll_multitier', 'query_inventory_and_assets_multitier', 'get_executive_morning_brief', 'get_sales_leaderboard', 'filter_expenses_advanced', 'get_staff_directory_advanced', 'get_inventory_health_check', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'query_company_attendance_and_work_hours', 'get_executive_financial_pulse', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'lookup_recent_cash_receipts_and_deposits', 'get_my_tasks', 'get_system_health_status', 'manage_lead_round_distribution', 'approve_or_reject_erp_ticket', 'update_task_progress_and_status', 'reassign_lead_owner', 'draft_action_proposal', 'get_system_navigation'],
+                'system_it' => ['query_tickets_and_sla_multitier', 'get_system_health_status', 'get_ticket_status_and_sla_breaches', 'draft_action_proposal', 'get_system_navigation']
             ];
 
             // 1. Check if user explicitly chose a sub-agent persona in UI tabs
@@ -5112,7 +5296,8 @@ class ChatController {
                     $tools = null;
                 } else {
                     // 3. AI SEMANTIC MICRO-ROUTER (ZERO REGEX / 100% LLM INTENT PARSER)
-                    $routeDecision = $this->routeQueryWithAiMicroRouter($lastMsgText, $apiKey, $model);
+                    $currentContext = $authContext['metadata']['current_context'] ?? null;
+                    $routeDecision = $this->routeQueryWithAiMicroRouter($lastMsgText, $apiKey, $model, $currentContext);
                     $intentType = $routeDecision['intent_type'] ?? 'database_action';
                     $primaryDomain = $routeDecision['primary_domain'] ?? null;
                     $isMultiDomain = (bool)($routeDecision['is_multi_domain'] ?? false);
@@ -5123,13 +5308,13 @@ class ChatController {
                         $isPureConversational = ($intentType === 'conversational');
                         $tools = null;
                     } elseif ($isMultiDomain || $intentType === 'cross_domain' || empty($primaryDomain) || $primaryDomain === 'none') {
-                        // Cross-departmental multi-domain request: Full Swarm 43 tools
+                        // Cross-departmental multi-domain request: Full Swarm tools
                         $tools = AgentToolRegistry::getGeminiToolsDeclaration(null);
                     } elseif (isset($agentToolMap[$primaryDomain])) {
-                        // Single-domain focused: Prune to specialized agent + 10 essential tools
+                        // Single-domain focused: Prune to specialized agent tools
                         $tools = AgentToolRegistry::getGeminiToolsDeclaration($agentToolMap[$primaryDomain]);
                     } else {
-                        // Safe fallback: Full Swarm 43 tools
+                        // Safe fallback: Full Swarm tools
                         $tools = AgentToolRegistry::getGeminiToolsDeclaration(null);
                     }
                 }
@@ -5159,10 +5344,10 @@ class ChatController {
             }
 
             // ==========================================
-            // AUTONOMOUS MULTI-TURN TOOL LOOP (UP TO 4 TURNS)
-            // Supports Chained Multi-Agent Execution: Lookup Tool -> Second Inspection -> Action Proposal -> Natural Synthesis
+            // AUTONOMOUS MULTI-TURN TOOL LOOP (UP TO 6 TURNS + PARALLEL TOOL EXECUTION)
+            // Supports Chained Multi-Agent Execution: Planner -> Parallel Lookups -> Self-Reflection/Disambiguation -> Action Proposal -> Natural Synthesis
             // ==========================================
-            $maxToolTurns = 4;
+            $maxToolTurns = 6;
             $toolTurn = 0;
             $generateUrl = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key=" . urlencode($apiKey);
 
@@ -5213,12 +5398,11 @@ class ChatController {
                 $candidate = $resJson['candidates'][0] ?? null;
                 $parts = $candidate['content']['parts'] ?? [];
 
-                $functionCallPart = null;
+                $functionCalls = [];
                 $directText = '';
                 foreach ($parts as $p) {
                     if (isset($p['functionCall'])) {
-                        $functionCallPart = $p['functionCall'];
-                        break;
+                        $functionCalls[] = $p['functionCall'];
                     }
                     if (isset($p['text'])) {
                         $directText .= $p['text'];
@@ -5226,7 +5410,7 @@ class ChatController {
                 }
 
                 // If Gemini didn't call any tool, we have our final text answer!
-                if (!$functionCallPart) {
+                if (empty($functionCalls)) {
                     $finalText = trim($directText);
                     if ($isStream && is_callable($onChunk)) {
                         $onChunk($finalText);
@@ -5234,64 +5418,118 @@ class ChatController {
                     return $finalText;
                 }
 
-                // Function Call Detected: Execute via Safe RBAC Registry
-                $toolName = $functionCallPart['name'] ?? '';
-                $toolArgs = $functionCallPart['args'] ?? [];
-                $toolResult = AgentToolRegistry::executeTool($this->db, $toolName, $toolArgs, $authContext ?? []);
-
-                // Auto-record working context entity into ai_entity_context
-                $ctxUid = (int)($authContext['user_id'] ?? 0);
-                $ctxTid = (int)($authContext['tenant_id'] ?? 1);
-                if ($ctxUid > 0 && is_array($toolResult)) {
-                    $this->autoRecordEntityFromTool($ctxUid, $ctxTid, $toolName, $toolArgs, $toolResult);
-                }
-
-                // DTO Slimming & Context Compacting before passing back into Gemini ReAct loop
-                $compactResult = $this->compactToolResultForModel($toolResult);
-
-                // Append Model Function Call Turn
+                // Append Model Function Call Turn once (containing all parallel functionCalls)
                 $contents[] = $candidate['content'];
 
-                // Append User Function Response Turn
-                $functionResponseData = [
-                    'name' => $toolName,
-                    'response' => (object)$compactResult
-                ];
-                if (!empty($functionCallPart['id'])) {
-                    $functionResponseData['id'] = $functionCallPart['id'];
+                $functionResponseParts = [];
+                $hasTerminalActionSuccess = false;
+                $requiresDisambiguationSynthesis = false;
+                $ctxUid = (int)($authContext['user_id'] ?? 0);
+                $ctxTid = (int)($authContext['tenant_id'] ?? 1);
+
+                foreach ($functionCalls as $fcIdx => $functionCallPart) {
+                    $toolName = $functionCallPart['name'] ?? '';
+                    $toolArgs = $functionCallPart['args'] ?? [];
+                    $stepId = "step_{$toolTurn}_{$fcIdx}_" . substr(md5($toolName . microtime(true)), 0, 6);
+
+                    if (is_callable($onStep)) {
+                        $onStep([
+                            'type' => 'agent_step',
+                            'step' => [
+                                'id' => $stepId,
+                                'turn' => $toolTurn,
+                                'tool_name' => $toolName,
+                                'status' => 'running',
+                                'label' => "Đang thực thi công cụ: {$toolName}"
+                            ]
+                        ]);
+                    }
+
+                    $t0 = microtime(true);
+                    $toolResult = AgentToolRegistry::executeTool($this->db, $toolName, $toolArgs, $authContext ?? []);
+                    $durationMs = (int)round((microtime(true) - $t0) * 1000);
+
+                    if ($ctxUid > 0 && is_array($toolResult)) {
+                        $this->autoRecordEntityFromTool($ctxUid, $ctxTid, $toolName, $toolArgs, $toolResult);
+                    }
+
+                    $isDisambig = is_array($toolResult) && (!empty($toolResult['requires_disambiguation']) || ($toolResult['status'] ?? '') === 'DISAMBIGUATION_REQUIRED' || ($toolResult['status'] ?? '') === 'MISSING_INFO_REQUIRED');
+                    if ($isDisambig) {
+                        $requiresDisambiguationSynthesis = true;
+                    }
+
+                    $stepStatus = 'completed';
+                    if ($isDisambig) {
+                        $stepStatus = 'disambiguation';
+                    } elseif (is_array($toolResult) && isset($toolResult['success']) && $toolResult['success'] === false) {
+                        $stepStatus = 'error';
+                    } elseif (is_array($toolResult) && isset($toolResult['total_matching']) && (int)$toolResult['total_matching'] === 0) {
+                        $stepStatus = 'empty';
+                    }
+
+                    $stepEntry = [
+                        'id' => $stepId,
+                        'turn' => $toolTurn,
+                        'tool_name' => $toolName,
+                        'status' => $stepStatus,
+                        'duration_ms' => $durationMs,
+                        'label' => $isDisambig ? "Phát hiện nhiều lựa chọn cần xác nhận ({$toolName})" : "Hoàn tất tra cứu {$toolName} ({$durationMs}ms)"
+                    ];
+                    $executedAgentSteps[] = $stepEntry;
+
+                    if (is_callable($onStep)) {
+                        $onStep([
+                            'type' => 'agent_step',
+                            'step' => $stepEntry
+                        ]);
+                    }
+
+                    $compactResult = $this->compactToolResultForModel($toolResult);
+                    $functionResponseData = [
+                        'name' => $toolName,
+                        'response' => (object)$compactResult
+                    ];
+                    if (!empty($functionCallPart['id'])) {
+                        $functionResponseData['id'] = $functionCallPart['id'];
+                    }
+                    $functionResponseParts[] = [
+                        'functionResponse' => $functionResponseData
+                    ];
+
+                    $isTerminalTool = in_array($toolName, [
+                        'draft_action_proposal',
+                        'approve_or_reject_erp_ticket',
+                        'update_task_progress_and_status',
+                        'complete_task_checklist_item',
+                        'quick_log_crm_activity',
+                        'reassign_lead_owner',
+                        'distribute_lead',
+                        'compensate_consultant',
+                        'toggle_consultant_shift',
+                        'update_contact_pipeline',
+                        'add_contact_consultation_note',
+                        'attach_files_to_contact',
+                        'update_contact_profile',
+                        'schedule_contact_activity'
+                    ], true);
+
+                    if ($isTerminalTool && !$isDisambig && (!is_array($toolResult) || ($toolResult['success'] ?? true) !== false)) {
+                        $hasTerminalActionSuccess = true;
+                    }
                 }
 
                 $contents[] = [
                     'role' => 'user',
-                    'parts' => [
-                        [
-                            'functionResponse' => $functionResponseData
-                        ]
-                    ]
+                    'parts' => $functionResponseParts
                 ];
 
                 $payload['contents'] = $contents;
 
-                // Check if this tool execution completes the chain:
-                // If an action or terminal tool was executed OR we reached the max turns limit, force mode to NONE and stream the final synthesis!
-                $isTerminalAction = in_array($toolName, [
-                    'draft_action_proposal',
-                    'approve_or_reject_erp_ticket',
-                    'update_task_progress_and_status',
-                    'complete_task_checklist_item',
-                    'quick_log_crm_activity',
-                    'reassign_lead_owner',
-                    'distribute_lead',
-                    'compensate_consultant',
-                    'toggle_consultant_shift',
-                    'update_contact_pipeline',
-                    'add_contact_consultation_note',
-                    'attach_files_to_contact',
-                    'update_contact_profile',
-                    'schedule_contact_activity'
-                ], true);
-
-                if ($isTerminalAction || $toolTurn >= ($maxToolTurns - 1)) {
+                // Force final synthesis when:
+                // 1) A terminal action succeeded cleanly, OR
+                // 2) A tool returned requires_disambiguation (so the AI asks the clarifying question right away), OR
+                // 3) We reached the max turns limit ($maxToolTurns - 1)
+                if ($hasTerminalActionSuccess || $requiresDisambiguationSynthesis || $toolTurn >= ($maxToolTurns - 1)) {
                     $payload['toolConfig'] = [
                         'functionCallingConfig' => [
                             'mode' => 'NONE'

@@ -12,7 +12,7 @@ import {
   FileCheck, Settings, ArrowLeft, X, Save, GitBranch, Clock3, Copy, Bell, Edit, Pencil, RefreshCw, Eye, MessageSquare, Info, Loader2,
   UserPlus, Check, MoreHorizontal, Filter, Zap, Download, Upload, Image as ImageIcon, Building2, Truck,
   GraduationCap, Utensils, Phone, Mail, MapPin, Sparkles, AlertCircle, Bookmark, Edit3,
-  Landmark, Wallet, BarChart2, Palmtree, QrCode, Coffee, Tag, Globe, ExternalLink
+  Landmark, Wallet, BarChart2, Palmtree, QrCode, Coffee, Tag, Globe, ExternalLink, Layers
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { DraftExitConfirmModal } from '../components/ui/DraftExitConfirmModal';
@@ -563,6 +563,21 @@ export default function Approvals() {
   }, [location.key]);
 
   const pendingOpenRef = useRef<{ id: number; type?: string; status?: string } | null>(null);
+  const clearApprovalUrlParams = useCallback(() => {
+    const params = new URLSearchParams(location.search || window.location.search);
+    let changed = false;
+    ['id', 'open_id', 'open_type', 'type', 'open_status', 'auto_open', 'open_first'].forEach(k => {
+      if (params.has(k)) {
+        params.delete(k);
+        changed = true;
+      }
+    });
+    if (changed) {
+      const nextSearch = params.toString();
+      navigate({ pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : '' }, { replace: true });
+    }
+  }, [location.pathname, location.search, navigate]);
+
   const [period, setPeriod] = useState<Period>('all');
   const [dateRange, setDateRange] = useState<DateRange>(() => getDateRange('all'));
   const [showMobileFilters, setShowMobileFilters] = useState(false);
@@ -583,28 +598,63 @@ export default function Approvals() {
   // Custom states for timeline details and user listings
   const [users, setUsers] = useState<any[]>([]);
   const [selectedTimelineItem, setSelectedTimelineItem] = useState<ApprovalItem | null>(null);
+  const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(null);
 
   // Auto-open requested approval from URL parameters or global custom event
   useEffect(() => {
     const params = new URLSearchParams(location.search || window.location.search);
+    const hcId = params.get('highlight_comment_id') || params.get('comment_id');
+    if (hcId) {
+      setHighlightedCommentId(hcId);
+    }
     const openId = params.get('open_id') || params.get('id');
     const openType = params.get('open_type') || params.get('type');
+    const openStatus = params.get('open_status');
+    const actionParam = params.get('action');
 
-    if (openId && !isNaN(Number(openId))) {
+    if (openId && !isNaN(Number(openId)) && Number(openId) > 0) {
+      useUIStore.getState().closeApprovalDrawer();
       const numId = Number(openId);
-      pendingOpenRef.current = { id: numId, type: openType || undefined };
+      pendingOpenRef.current = { id: numId, type: openType || undefined, status: openStatus || undefined };
+      clearApprovalUrlParams();
 
       const combined = [...pendingList, ...myRequestsList, ...followingList, ...allList];
       const found = combined.find(it => it.id === numId && (!openType || it.type === openType)) || combined.find(it => it.id === numId);
       if (found) {
-        setSelectedTimelineItem(found);
+        if (actionParam === 'edit' || actionParam === 'duplicate') {
+          handleEditRequest(found, actionParam === 'duplicate');
+        } else {
+          setSelectedTimelineItem(found);
+        }
+        pendingOpenRef.current = null;
       } else {
         // Direct fetch single item if not in list
-        if (openType === 'expense' || openType === 'po' || openType === 'purchase_order' || !openType) {
+        if (openType === 'po' || openType === 'purchase_order') {
+          api.get(`/purchase-orders/${numId}`).then(poRes => {
+            const po = poRes.data?.data || poRes.data;
+            if (po && (po.id || po.po_number)) {
+              setSelectedTimelineItem({
+                id: po.id,
+                type: 'po',
+                title: po.po_number ? `Đơn mua hàng ${po.po_number}` : (po.notes || `Đơn hàng PO #${po.id}`),
+                description: po.notes || '',
+                amount: Number(po.total || po.subtotal || 0),
+                currency: 'VND',
+                status: po.status === 'pending_approval' ? 'pending' : (po.status || 'pending'),
+                created_at: po.created_at || new Date().toISOString(),
+                created_by: po.created_by,
+                user_id: po.created_by,
+                employee_name: po.creator_name || ''
+              } as any);
+              pendingOpenRef.current = null;
+            }
+          }).catch(() => {});
+        } else if (openType === 'expense' || !openType) {
           api.get(`/expenses/${numId}`).then(res => {
             const d = res.data?.data || res.data;
             if (d && d.id) {
-              setSelectedTimelineItem({
+              const itemObj = {
+                ...d,
                 id: d.id,
                 type: 'expense',
                 title: d.title || 'Đề xuất chi phí',
@@ -616,7 +666,13 @@ export default function Approvals() {
                 created_by: d.created_by || d.user_id,
                 user_id: d.user_id || d.created_by,
                 employee_name: d.employee_name || d.user_name || ''
-              } as any);
+              } as any;
+              if (actionParam === 'edit' || actionParam === 'duplicate') {
+                handleEditRequest(itemObj, actionParam === 'duplicate');
+              } else {
+                setSelectedTimelineItem(itemObj);
+              }
+              pendingOpenRef.current = null;
             }
           }).catch(() => {
             // Intelligent fallback: check /purchase-orders/:id if not an expense
@@ -636,6 +692,7 @@ export default function Approvals() {
                   user_id: po.created_by,
                   employee_name: po.creator_name || ''
                 } as any);
+                pendingOpenRef.current = null;
               }
             }).catch(() => {});
           });
@@ -645,6 +702,7 @@ export default function Approvals() {
             const foundLv = Array.isArray(leaves) ? leaves.find((l: any) => Number(l.id) === numId) : null;
             if (foundLv) {
               setSelectedTimelineItem({
+                ...foundLv,
                 id: foundLv.id,
                 type: 'leave',
                 title: 'Đơn nghỉ phép / Đi muộn',
@@ -655,6 +713,7 @@ export default function Approvals() {
                 user_id: foundLv.user_id,
                 employee_name: foundLv.employee_name || ''
               } as any);
+              pendingOpenRef.current = null;
             }
           }).catch(() => {});
         } else if (openType === 'advance') {
@@ -663,6 +722,7 @@ export default function Approvals() {
             const foundAdv = Array.isArray(advances) ? advances.find((a: any) => Number(a.id) === numId) : null;
             if (foundAdv) {
               setSelectedTimelineItem({
+                ...foundAdv,
                 id: foundAdv.id,
                 type: 'advance',
                 title: 'Đề nghị tạm ứng',
@@ -673,6 +733,26 @@ export default function Approvals() {
                 user_id: foundAdv.user_id,
                 employee_name: foundAdv.employee_name || ''
               } as any);
+              pendingOpenRef.current = null;
+            }
+          }).catch(() => {});
+        } else if (openType === 'attendance_bulk' || openType === 'checkin') {
+          const endpoint = openType === 'attendance_bulk' ? `/check-ins/bulk-requests/${numId}` : `/check-ins/${numId}`;
+          api.get(endpoint).then(res => {
+            const d = res.data?.data || res.data;
+            if (d && (d.id || d.details)) {
+              setSelectedTimelineItem({
+                ...d,
+                id: d.id || numId,
+                type: openType as any,
+                title: openType === 'attendance_bulk' ? 'Đề xuất bổ sung công hàng loạt' : 'Đề xuất chấm công',
+                description: d.reason || d.notes || '',
+                status: d.status || 'pending',
+                created_at: d.created_at || new Date().toISOString(),
+                user_id: d.user_id,
+                employee_name: d.employee_name || d.full_name || ''
+              } as any);
+              pendingOpenRef.current = null;
             }
           }).catch(() => {});
         }
@@ -682,9 +762,14 @@ export default function Approvals() {
     const handleCustomOpen = (e: Event) => {
       const customEvent = e as CustomEvent;
       if (customEvent.detail) {
-        const { id, type, raw } = customEvent.detail;
-        if (raw) {
+        useUIStore.getState().closeApprovalDrawer();
+        const { id, type, raw, mode } = customEvent.detail;
+        if (raw && (mode === 'edit' || mode === 'duplicate')) {
+          handleEditRequest(raw, mode === 'duplicate');
+          pendingOpenRef.current = null;
+        } else if (raw) {
           setSelectedTimelineItem(raw);
+          pendingOpenRef.current = null;
         } else if (id) {
           pendingOpenRef.current = { id: Number(id), type };
           loadData();
@@ -694,7 +779,7 @@ export default function Approvals() {
 
     window.addEventListener('open-approval-item', handleCustomOpen);
     return () => window.removeEventListener('open-approval-item', handleCustomOpen);
-  }, [location.search, pendingList.length, myRequestsList.length, allList.length]);
+  }, [location.search, pendingList.length, myRequestsList.length, allList.length, clearApprovalUrlParams]);
 
   // Fast O(1) user lookup maps for optimal table and drawer rendering
   const usersMap = useMemo(() => {
@@ -722,6 +807,7 @@ export default function Approvals() {
   const [directorySearch, setDirectorySearch] = useState('');
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
   const editingItemIdRef = useRef<number | null>(null);
+  const isHydratingEditOrDraftRef = useRef<boolean>(false);
   const [editingItemType, setEditingItemType] = useState<string | null>(null);
   const [editingExpenseItem, setEditingExpenseItem] = useState<any>(null);
   const [isExpenseDrawerOpen, setIsExpenseDrawerOpen] = useState(false);
@@ -1085,10 +1171,11 @@ export default function Approvals() {
   };
 
   useEffect(() => {
+    if (editingItemId || editingItemIdRef.current || currentDraftId || isHydratingEditOrDraftRef.current) return;
     if (selectedWorkflowDef?.id === 'print_stamp_send') {
       resetPssStates();
     }
-  }, [selectedWorkflowDef]);
+  }, [selectedWorkflowDef, editingItemId, currentDraftId]);
 
   useEffect(() => {
     if (user && !pssReqEmployeeId) {
@@ -1422,19 +1509,21 @@ export default function Approvals() {
     inFlightSubmitRef.current = true;
     setSubmitting(true);
     try {
-      if (editingItemId) {
-        if (editingItemType === 'leave') {
-          await fetchAPI(`hrm/leaves/${editingItemId}`, { method: 'DELETE' });
-        } else if (editingItemType === 'advance') {
-          await fetchAPI(`hrm/advances/${editingItemId}`, { method: 'DELETE' });
-        } else if (editingItemType === 'checkin') {
-          await api.delete(`/check-ins/${editingItemId}`);
-        } else if (editingItemType === 'attendance_bulk') {
-          try {
-            await api.delete(`/check-ins/bulk-requests/${editingItemId}`);
-          } catch (e) {}
+      const deletePreviousEditedItemIfNeeded = async () => {
+        if (editingItemId) {
+          if (editingItemType === 'leave') {
+            await fetchAPI(`hrm/leaves/${editingItemId}`, { method: 'DELETE' });
+          } else if (editingItemType === 'advance') {
+            await fetchAPI(`hrm/advances/${editingItemId}`, { method: 'DELETE' });
+          } else if (editingItemType === 'checkin') {
+            await api.delete(`/check-ins/${editingItemId}`);
+          } else if (editingItemType === 'attendance_bulk') {
+            try {
+              await api.delete(`/check-ins/bulk-requests/${editingItemId}`);
+            } catch (e) {}
+          }
         }
-      }
+      };
       // Resolve multi-level approver chain:
       // - Dưới 5tr: Tạo -> Leader -> Kế toán (appVal1 = Leader, appVal2 = Kế toán, appVal3 = null)
       // - Trên 5tr: Tạo -> Leader -> Director Phạm Quang Vinh -> Kế toán (appVal1 = Leader, appVal2 = Director, appVal3 = Kế toán)
@@ -1520,12 +1609,33 @@ export default function Approvals() {
           setSubmitting(false);
           return;
         }
-        await api.post('/check-ins/bulk-request', {
-          month_period: bulkMonth,
-          details: validDays,
-          approver_id: appVal1 || finalApproverId,
-          related_user_ids: finalRelatedUserIds
-        });
+        if (editingItemId) {
+          try {
+            await api.put(`/check-ins/bulk-requests/${editingItemId}`, {
+              id: editingItemId,
+              month_period: bulkMonth,
+              details: validDays,
+              approver_id: appVal1 || finalApproverId,
+              related_user_ids: finalRelatedUserIds,
+              status: 'pending'
+            });
+          } catch {
+            await api.post('/check-ins/bulk-request', {
+              id: editingItemId,
+              month_period: bulkMonth,
+              details: validDays,
+              approver_id: appVal1 || finalApproverId,
+              related_user_ids: finalRelatedUserIds
+            });
+          }
+        } else {
+          await api.post('/check-ins/bulk-request', {
+            month_period: bulkMonth,
+            details: validDays,
+            approver_id: appVal1 || finalApproverId,
+            related_user_ids: finalRelatedUserIds
+          });
+        }
       } else if (formType === 'leave') {
         let fromVal = leaveFrom;
         let toVal = leaveTo;
@@ -1590,20 +1700,26 @@ export default function Approvals() {
         if (isRecurring) {
           leaveReasonStr += ` [Lặp lại định kỳ: ${recurringFrequency} - Hạn: ${recurringEndDate || 'Vô thời hạn'}]`;
         }
-        await fetchAPI('hrm/leaves', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            leave_type: leaveType,
-            reason: leaveReasonStr,
-            from_date: fromVal,
-            to_date: toVal,
-            total_days: daysVal,
-            approver_id: appVal1 || finalApproverId,
-            approver_id_2: appVal2,
-            related_user_ids: finalRelatedUserIds
-          })
-        });
+        const leavePayload = {
+          leave_type: leaveType,
+          reason: leaveReasonStr,
+          from_date: fromVal,
+          to_date: toVal,
+          total_days: daysVal,
+          approver_id: appVal1 || finalApproverId,
+          approver_id_2: appVal2,
+          related_user_ids: finalRelatedUserIds,
+          status: 'pending'
+        };
+        if (editingItemId) {
+          await api.put(`/hrm/leaves/${editingItemId}`, leavePayload);
+        } else {
+          await fetchAPI('hrm/leaves', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(leavePayload)
+          });
+        }
       } else if (formType === 'late_early') {
         if (lateEarlyMinutes > 180) {
           toast.error(t('Thời gian đi muộn/về sớm không được quá 3 tiếng (180 phút). Vui lòng đăng ký nghỉ phép 1 buổi.'));
@@ -1633,19 +1749,25 @@ export default function Approvals() {
         const formattedFrom = `${d} ${startHStr}:${startMStr}:00`;
         const formattedTo = `${d} ${endHStr}:${endMStr}:00`;
 
-        await fetchAPI('hrm/leaves', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            leave_type: 'late_early',
-            reason: effectiveReason,
-            from_date: formattedFrom,
-            to_date: formattedTo,
-            total_days: 0.0,
-            approver_id: appVal1 || finalApproverId,
-            related_user_ids: finalRelatedUserIds
-          })
-        });
+        const lateEarlyPayload = {
+          leave_type: 'late_early',
+          reason: effectiveReason,
+          from_date: formattedFrom,
+          to_date: formattedTo,
+          total_days: 0.0,
+          approver_id: appVal1 || finalApproverId,
+          related_user_ids: finalRelatedUserIds,
+          status: 'pending'
+        };
+        if (editingItemId) {
+          await api.put(`/hrm/leaves/${editingItemId}`, lateEarlyPayload);
+        } else {
+          await fetchAPI('hrm/leaves', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(lateEarlyPayload)
+          });
+        }
       } else if (formType === 'overtime') {
         const effectiveReason = [workflowTitleSuffix?.trim(), leaveReason?.trim()].filter(Boolean).join(' - ') || leaveReason?.trim() || workflowTitleSuffix?.trim() || '';
         if (!effectiveReason) {
@@ -1658,22 +1780,28 @@ export default function Approvals() {
         const hours = diffHours(otStart, otEnd);
         const daysVal = Number((hours / 8).toFixed(2));
 
-        await fetchAPI('hrm/leaves', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            leave_type: 'overtime',
-            ot_type: otType,
-            ot_rate: otRate,
-            reason: effectiveReason,
-            from_date: fromStr,
-            to_date: toStr,
-            total_days: daysVal,
-            approver_id: appVal1 || finalApproverId,
-            approver_id_2: appVal2,
-            related_user_ids: finalRelatedUserIds
-          })
-        });
+        const otPayload = {
+          leave_type: 'overtime',
+          ot_type: otType,
+          ot_rate: otRate,
+          reason: effectiveReason,
+          from_date: fromStr,
+          to_date: toStr,
+          total_days: daysVal,
+          approver_id: appVal1 || finalApproverId,
+          approver_id_2: appVal2,
+          related_user_ids: finalRelatedUserIds,
+          status: 'pending'
+        };
+        if (editingItemId) {
+          await api.put(`/hrm/leaves/${editingItemId}`, otPayload);
+        } else {
+          await fetchAPI('hrm/leaves', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(otPayload)
+          });
+        }
       } else if (formType === 'remote_work') {
         let fromVal = leaveFrom;
         let toVal = leaveTo;
@@ -1712,20 +1840,26 @@ export default function Approvals() {
           return;
         }
 
-        await fetchAPI('hrm/leaves', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            leave_type: 'remote_work',
-            salary_rate: safeSalaryRate,
-            reason: effectiveReason,
-            from_date: fromVal,
-            to_date: toVal,
-            total_days: daysVal,
-            approver_id: appVal1 || finalApproverId,
-            related_user_ids: finalRelatedUserIds
-          })
-        });
+        const wfhPayload = {
+          leave_type: 'remote_work',
+          salary_rate: safeSalaryRate,
+          reason: effectiveReason,
+          from_date: fromVal,
+          to_date: toVal,
+          total_days: daysVal,
+          approver_id: appVal1 || finalApproverId,
+          related_user_ids: finalRelatedUserIds,
+          status: 'pending'
+        };
+        if (editingItemId) {
+          await api.put(`/hrm/leaves/${editingItemId}`, wfhPayload);
+        } else {
+          await fetchAPI('hrm/leaves', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(wfhPayload)
+          });
+        }
       } else if (formType === 'advance') {
         const effectiveAdvReason = [workflowTitleSuffix?.trim(), leaveReason?.trim()].filter(Boolean).join(' - ') || leaveReason?.trim() || workflowTitleSuffix?.trim() || 'Tạm ứng';
         let advReasonStr = effectiveAdvReason;
@@ -1740,18 +1874,24 @@ export default function Approvals() {
           const attsStr = attachments.map(a => `• ${a.name} (${baseUrl}/${a.url})`).join('\n');
           advReasonStr += `\n[Tài liệu đính kèm (${attachments.length} tệp)]:\n${attsStr}`;
         }
-        await fetchAPI('hrm/advances', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            amount: Number(paymentDetails) || 0,
-            reason: advReasonStr,
-            approver_id: appVal1 || finalApproverId,
-            approver_id_2: appVal2,
-            related_user_ids: relatedUserIds,
-            currency: currencyType
-          })
-        });
+        const advPayload = {
+          amount: Number(paymentDetails) || 0,
+          reason: advReasonStr,
+          approver_id: appVal1 || finalApproverId,
+          approver_id_2: appVal2,
+          related_user_ids: relatedUserIds,
+          currency: currencyType,
+          status: 'pending'
+        };
+        if (editingItemId) {
+          await api.put(`/hrm/advances/${editingItemId}`, advPayload);
+        } else {
+          await fetchAPI('hrm/advances', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(advPayload)
+          });
+        }
       } else if (formType === 'recruitment' || selectedWorkflowDef?.id === 'recruitment') {
         const safeTitle = recruitmentJobTitle.trim();
         if (!safeTitle) {
@@ -1830,8 +1970,7 @@ export default function Approvals() {
         ].filter(Boolean).join('\n');
 
         const requestTitle = `Đề xuất tuyển dụng: ${safeTitle} (${safeHeadcount} người)`;
-
-        await api.post('/expenses', {
+        const recPayload = {
           title: requestTitle,
           description: recruitmentNotes,
           notes: recruitmentNotes,
@@ -1843,7 +1982,13 @@ export default function Approvals() {
           approver_id_3: effectiveAppVal3,
           related_user_ids: finalRelatedUserIds,
           image_url: attachments[0]?.url || null
-        });
+        };
+
+        if (editingItemId) {
+          await api.put(`/expenses/${editingItemId}`, recPayload);
+        } else {
+          await api.post('/expenses', recPayload);
+        }
       } else if (formType === 'general') {
         let generalDesc = '';
         let totalStationeryCost = 0;
@@ -1918,10 +2063,11 @@ export default function Approvals() {
             notes: generalDesc,
             amount: totalStationeryCost,
             vat_amount: totalStationeryVat || 0,
+            status: 'pending',
             approver_id: effectiveAppVal1 || finalApproverId,
             approver_id_2: effectiveAppVal2,
             approver_id_3: effectiveAppVal3,
-            related_user_ids: relatedUserIds,
+            related_user_ids: finalRelatedUserIds,
             currency: currencyType,
             image_url: attachments[0]?.url || null,
             bank_name: paymentBankName || null,
@@ -1941,7 +2087,7 @@ export default function Approvals() {
             approver_id: effectiveAppVal1 || finalApproverId,
             approver_id_2: effectiveAppVal2,
             approver_id_3: effectiveAppVal3,
-            related_user_ids: relatedUserIds,
+            related_user_ids: finalRelatedUserIds,
             currency: currencyType,
             image_url: attachments[0]?.url || null,
             bank_name: paymentBankName || null,
@@ -1952,7 +2098,10 @@ export default function Approvals() {
           });
         }
       } else {
-        const totalAmt = expenseItems.reduce((acc, it) => acc + (it.quantity * it.price) * (1 + it.vat / 100), 0);
+        const isCommissionWfCheck = selectedWorkflowDef?.id === 'commission_payout';
+        const totalAmt = isCommissionWfCheck
+          ? commissionItems.reduce((sum, c) => sum + (Number(c.amount) || 0), 0)
+          : expenseItems.reduce((acc, it) => acc + (it.quantity * it.price) * (1 + it.vat / 100), 0);
         if (!appVal1 && !finalApproverId) {
           toast.error(t('Chi phí yêu cầu duyệt bắt buộc phải chọn người duyệt Cấp 1 (Trưởng nhóm / Quản lý).'));
           setSubmitting(false);
@@ -2253,6 +2402,7 @@ export default function Approvals() {
             amount: calcTotalAmt,
             vat_amount: calcVatAmt,
             items: payloadItems,
+            status: 'pending',
             approver_id: appVal1 || finalApproverId,
             approver_id_2: appVal2,
             approver_id_3: appVal3,
@@ -2546,18 +2696,18 @@ export default function Approvals() {
 
   // Auto-fill manager approver whenever proposer, workflow or teams change (CHỈ ÁP DỤNG KHI TẠO MỚI)
   useEffect(() => {
-    if (editingItemId || editingItemIdRef.current) return;
+    if (editingItemId || editingItemIdRef.current || currentDraftId || isHydratingEditOrDraftRef.current) return;
     if (users.length > 0) {
       const leader = getDefaultManagerApprover(proposerUser || user, selectedWorkflowDef);
       if (leader) {
         setCustomApprover1(leader);
       }
     }
-  }, [users, teams, proposerUser, selectedWorkflowDef, editingItemId]);
+  }, [users, teams, proposerUser, selectedWorkflowDef, editingItemId, currentDraftId]);
 
   // Initialize proposer user as current logged in user (CHỈ ÁP DỤNG KHI TẠO MỚI)
   useEffect(() => {
-    if (editingItemId || editingItemIdRef.current) return;
+    if (editingItemId || editingItemIdRef.current || currentDraftId || isHydratingEditOrDraftRef.current) return;
     if (user && users.length > 0) {
       const found = users.find(u => Number(u.id) === Number(user.id));
       if (found) {
@@ -2565,11 +2715,11 @@ export default function Approvals() {
         if (found.role) setJobPosition(found.role);
       }
     }
-  }, [user, users, editingItemId]);
+  }, [user, users, editingItemId, currentDraftId]);
 
   // Set default steps whenever the form type changes
   useEffect(() => {
-    if (editingItemId || editingItemIdRef.current) return;
+    if (editingItemId || editingItemIdRef.current || currentDraftId || isHydratingEditOrDraftRef.current) return;
     if (selectedWorkflowDef?.id === 'print_stamp_send') {
       setShowStepManager(false);
       setShowStepAccountant(false);
@@ -2629,37 +2779,62 @@ export default function Approvals() {
       // expense
       setShowStepManager(true);
       setShowStepAccountant(true);
-      const totalAmt = expenseItems.reduce((acc, it) => acc + (Number(it.quantity) || 0) * (Number(it.price) || 0) * (1 + (Number(it.vat) || 0) / 100), 0);
+      const totalAmt = selectedWorkflowDef?.id === 'commission_payout'
+        ? commissionItems.reduce((sum, c) => sum + (Number(c.amount) || 0), 0)
+        : expenseItems.reduce((acc, it) => acc + (Number(it.quantity) || 0) * (Number(it.price) || 0) * (1 + (Number(it.vat) || 0) / 100), 0);
       setShowStepDirector(totalAmt >= 5000000);
       const defaultApprover = getDefaultManagerApprover(proposerUser || user, selectedWorkflowDef);
       if (defaultApprover) setCustomApprover1(defaultApprover);
       if (defaultAccountant) setCustomApprover2(defaultAccountant);
       if (defaultDirector) setCustomApprover3(defaultDirector);
     }
-  }, [formType, selectedWorkflowDef, users, teams, editingItemId]);
+  }, [formType, selectedWorkflowDef, users, teams, editingItemId, currentDraftId]);
 
-  // Dynamic 5,000,000 VND rule: Dưới 5tr: 2 cấp (Leader -> Kế toán). Từ 5tr trở lên: 3 cấp (Leader -> Director Phạm Quang Vinh -> Kế toán)
+  // Dynamic 5,000,000 VND rule across all monetary workflows:
+  // Dưới 5tr: 2 cấp (Leader -> Kế toán). Từ 5tr trở lên: 3 cấp (Leader -> Director Phạm Quang Vinh -> Kế toán)
   const currentExpenseTotal = useMemo(() => {
+    if (selectedWorkflowDef?.id === 'commission_payout') {
+      return commissionItems.reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
+    }
+    if (selectedWorkflowDef?.id === 'stationery' || selectedWorkflowDef?.id === 'purchase_request' || selectedWorkflowDef?.id === 'it_request' || formType === 'general') {
+      return stationeryItems.reduce((acc, it) => acc + ((Number(it.quantity) || 1) * (Number(it.price) || 0)) * (1 + (Number(it.vat !== undefined ? it.vat : 10) / 100)), 0);
+    }
+    if (formType === 'advance') {
+      return Number(paymentDetails) || 0;
+    }
     return expenseItems.reduce((acc, it) => acc + (Number(it.quantity) || 0) * (Number(it.price) || 0) * (1 + (Number(it.vat) || 0) / 100), 0);
-  }, [expenseItems]);
+  }, [expenseItems, commissionItems, stationeryItems, paymentDetails, selectedWorkflowDef?.id, formType]);
 
   useEffect(() => {
-    if (editingItemId || editingItemIdRef.current) return;
-    if (formType === 'expense' && selectedWorkflowDef?.id !== 'stationery') {
+    if (editingItemId || editingItemIdRef.current || currentDraftId || isHydratingEditOrDraftRef.current) return;
+    if (selectedWorkflowDef?.id === 'print_stamp_send' || formType === 'recruitment' || selectedWorkflowDef?.id === 'recruitment') return;
+    if (formType === 'expense' || formType === 'general' || formType === 'advance') {
       if (currentExpenseTotal >= 5000000) {
         setShowStepDirector(true);
+        setShowStepAccountant(true);
+        if (!customApprover2 && defaultAccountant) {
+          setCustomApprover2(defaultAccountant);
+        }
         if (!customApprover3 && defaultDirector) {
           setCustomApprover3(defaultDirector);
         }
       } else {
         setShowStepDirector(false);
+        if (selectedWorkflowDef?.id === 'stationery' && currentExpenseTotal === 0) {
+          setShowStepAccountant(false);
+        } else if (currentExpenseTotal > 0) {
+          setShowStepAccountant(true);
+          if (!customApprover2 && defaultAccountant) {
+            setCustomApprover2(defaultAccountant);
+          }
+        }
       }
     }
-  }, [currentExpenseTotal, formType, selectedWorkflowDef, defaultDirector, editingItemId]);
+  }, [currentExpenseTotal, formType, selectedWorkflowDef, defaultDirector, defaultAccountant, editingItemId, currentDraftId]);
 
   // Tự động điều chỉnh Người duyệt Cấp 2 khi người dùng chuyển đổi loại OT (Lấy bù -> Nhân sự, Lấy lương -> Kế toán)
   useEffect(() => {
-    if (editingItemId || editingItemIdRef.current) return;
+    if (editingItemId || editingItemIdRef.current || currentDraftId || isHydratingEditOrDraftRef.current) return;
     if (formType === 'overtime') {
       if (otType === 'compensatory') {
         const hrLead = getDefaultHrLeader();
@@ -2668,11 +2843,11 @@ export default function Approvals() {
         if (defaultAccountant) setCustomApprover2(defaultAccountant);
       }
     }
-  }, [otType, formType, users, editingItemId]);
+  }, [otType, formType, users, editingItemId, currentDraftId]);
 
   // Mặc định tự động chọn Leader / Trưởng phòng HR vào danh sách Người liên quan (theo dõi) cho đề xuất công / HR
   useEffect(() => {
-    if (editingItemId || editingItemIdRef.current) return;
+    if (editingItemId || editingItemIdRef.current || currentDraftId || isHydratingEditOrDraftRef.current) return;
     const isHrWf = selectedWorkflowDef?.category === 'hr' || ['leave', 'late_early', 'overtime', 'remote_work', 'attendance_bulk', 'recruitment'].includes(formType);
     const isProposerManagerOrLeader = ['manager', 'director', 'admin', 'superadmin', 'super_admin', 'leader', 'truongphong', 'head_of_department'].includes(String(proposerUser?.role || user?.role).toLowerCase()) || Boolean(proposerUser?.is_team_leader || (user as any)?.is_team_leader);
 
@@ -2695,7 +2870,7 @@ export default function Approvals() {
         setRelatedUserIds(prev => prev.filter(id => id !== hrId));
       }
     }
-  }, [formType, selectedWorkflowDef, proposerUser, customApprover1?.id, users, teams, editingItemId]);
+  }, [formType, selectedWorkflowDef, proposerUser, customApprover1?.id, users, teams, editingItemId, currentDraftId]);
 
   // --- DRAFT & EXIT CONFIRMATION HELPERS ---
   const getFormSnapshot = () => {
@@ -2843,7 +3018,9 @@ export default function Approvals() {
     const draftId = currentDraftId || `draft_${Date.now()}`;
     
     let calcAmount = 0;
-    if (formType === 'general' || formType === 'expense') {
+    if (selectedWorkflowDef.id === 'commission_payout' && commissionItems && commissionItems.length > 0) {
+      calcAmount = commissionItems.reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
+    } else if (formType === 'general' || formType === 'expense') {
       if (stationeryItems && stationeryItems.length > 0) {
         calcAmount = stationeryItems.reduce((acc, it) => acc + ((Number(it.quantity) || 1) * (Number(it.price) || 0)) * (1 + (Number(it.vat !== undefined ? it.vat : 10) / 100)), 0);
       }
@@ -2883,6 +3060,7 @@ export default function Approvals() {
         workflowTitleSuffix,
         expenseItems,
         stationeryItems,
+        commissionItems,
         attachments,
         relatedUserIds,
         jobPosition,
@@ -2893,6 +3071,8 @@ export default function Approvals() {
         paymentSupplierId,
         paymentLecturerId,
         paymentContactId,
+        paymentGovAgencyType,
+        paymentGovDecisionNumber,
         paymentBeneficiaryName,
         paymentBankName,
         paymentBankAccount,
@@ -2929,12 +3109,21 @@ export default function Approvals() {
         lateEarlyMinutes,
         otType,
         otRate,
+        wfhSalaryRate,
         otDate,
         otStart,
         otEnd,
+        bulkMonth,
+        suggestedDays,
+        isPhasedPayment,
+        installments,
         isRecurring,
         recurringFrequency,
+        recurringStartDate,
         recurringEndDate,
+        recurringPayDay,
+        recurringUnlimited,
+        recurringContractNumber,
         meetingTargetType,
         meetingSelectedEntityId,
         meetingClientName,
@@ -2948,6 +3137,7 @@ export default function Approvals() {
         meetingPurpose,
         meetingInternalAttendees,
         meetingReimbursementMethod,
+        meetingInvoiceType,
         pssReqEmployeeId,
         pssReqDate,
         pssExecutorId,
@@ -3044,6 +3234,7 @@ export default function Approvals() {
   const handleResumeDraft = (draft: ApprovalDraft) => {
     const fd = draft.formData;
     if (!fd) return;
+    isHydratingEditOrDraftRef.current = true;
     setCurrentDraftId(draft.id);
     const wfId = draft.workflowDefId || fd.selectedWorkflowDef?.id;
     const baseDef = workflowList.find(w => w.id === wfId) || workflowList[0];
@@ -3078,6 +3269,8 @@ export default function Approvals() {
     if (fd.paymentSupplierId) setPaymentSupplierId(fd.paymentSupplierId);
     if (fd.paymentLecturerId) setPaymentLecturerId(fd.paymentLecturerId);
     if (fd.paymentContactId) setPaymentContactId(fd.paymentContactId);
+    if (fd.paymentGovAgencyType) setPaymentGovAgencyType(fd.paymentGovAgencyType);
+    if (fd.paymentGovDecisionNumber !== undefined) setPaymentGovDecisionNumber(fd.paymentGovDecisionNumber);
     if (fd.paymentBeneficiaryName) setPaymentBeneficiaryName(fd.paymentBeneficiaryName);
     if (fd.paymentBankName) setPaymentBankName(fd.paymentBankName);
     if (fd.paymentBankAccount) setPaymentBankAccount(fd.paymentBankAccount);
@@ -3106,9 +3299,17 @@ export default function Approvals() {
     if (fd.otDate) setOtDate(fd.otDate);
     if (fd.otStart) setOtStart(fd.otStart);
     if (fd.otEnd) setOtEnd(fd.otEnd);
+    if (fd.bulkMonth) setBulkMonth(fd.bulkMonth);
+    if (Array.isArray(fd.suggestedDays)) setSuggestedDays(fd.suggestedDays);
+    if (fd.isPhasedPayment !== undefined) setIsPhasedPayment(fd.isPhasedPayment);
+    if (Array.isArray(fd.installments)) setInstallments(fd.installments);
     if (fd.isRecurring !== undefined) setIsRecurring(fd.isRecurring);
     if (fd.recurringFrequency) setRecurringFrequency(fd.recurringFrequency);
+    if (fd.recurringStartDate) setRecurringStartDate(fd.recurringStartDate);
     if (fd.recurringEndDate) setRecurringEndDate(fd.recurringEndDate);
+    if (fd.recurringPayDay) setRecurringPayDay(fd.recurringPayDay);
+    if (fd.recurringUnlimited !== undefined) setRecurringUnlimited(fd.recurringUnlimited);
+    if (fd.recurringContractNumber !== undefined) setRecurringContractNumber(fd.recurringContractNumber);
     if (fd.meetingTargetType) setMeetingTargetType(fd.meetingTargetType);
     if (fd.meetingSelectedEntityId) setMeetingSelectedEntityId(fd.meetingSelectedEntityId);
     if (fd.meetingClientName) setMeetingClientName(fd.meetingClientName);
@@ -3122,6 +3323,7 @@ export default function Approvals() {
     if (fd.meetingPurpose) setMeetingPurpose(fd.meetingPurpose);
     if (fd.meetingInternalAttendees) setMeetingInternalAttendees(fd.meetingInternalAttendees);
     if (fd.meetingReimbursementMethod) setMeetingReimbursementMethod(fd.meetingReimbursementMethod);
+    if (fd.meetingInvoiceType) setMeetingInvoiceType(fd.meetingInvoiceType);
     if (fd.pssReqEmployeeId) setPssReqEmployeeId(fd.pssReqEmployeeId);
     if (fd.pssReqDate) setPssReqDate(fd.pssReqDate);
     if (fd.pssExecutorId) setPssExecutorId(fd.pssExecutorId);
@@ -3179,6 +3381,7 @@ export default function Approvals() {
         unit: it.unit || '',
         notes: it.notes || ''
       })),
+      commissionItems: (fd.commissionItems || []).map((it: any) => ({ ...it })),
       attachmentsCount: (fd.attachments || []).length,
       attachmentsUrls: (fd.attachments || []).map((a: any) => a.url || a.name),
       relatedUserIds: [...(fd.relatedUserIds || [])].sort(),
@@ -3205,38 +3408,51 @@ export default function Approvals() {
       currencyType: fd.currencyType || 'VND',
       leaveType: fd.leaveType || '',
       leaveReason: fd.leaveReason || '',
-      leaveFrom: leaveFrom || '',
-      leaveTo: leaveTo || '',
-      leaveSession: leaveSession || '',
-      intermittentDates: intermittentDates || [],
-      lateEarlyType: lateEarlyType || '',
-      lateEarlyMinutes: lateEarlyMinutes || 0,
-      otType: otType || '',
-      otRate: otRate || 1.5,
-      wfhSalaryRate: wfhSalaryRate ?? 50,
-      otDate: otDate || '',
-      otStart: otStart || '',
-      otEnd: otEnd || '',
-      isRecurring: isRecurring || false,
-      meetingClientName: meetingClientName || '',
-      meetingPurpose: meetingPurpose || '',
-      pssRecipientName: pssRecipientName || '',
-      pssRecipientAddress: pssRecipientAddress || '',
-      pssRecipientPhone: pssRecipientPhone || '',
-      advanceType: advanceType || '',
-      advanceSettlementDate: advanceSettlementDate || '',
-      paymentDueDate: paymentDueDate || '',
-      expenseCategory: expenseCategory || '',
-      invoiceType: invoiceType || '',
+      leaveFrom: fd.leaveFrom || leaveFrom || '',
+      leaveTo: fd.leaveTo || leaveTo || '',
+      leaveSession: fd.leaveSession || leaveSession || '',
+      intermittentDates: fd.intermittentDates || intermittentDates || [],
+      lateEarlyType: fd.lateEarlyType || lateEarlyType || '',
+      lateEarlyMinutes: fd.lateEarlyMinutes || lateEarlyMinutes || 0,
+      otType: fd.otType || otType || '',
+      otRate: fd.otRate || otRate || 1.5,
+      wfhSalaryRate: fd.wfhSalaryRate ?? wfhSalaryRate ?? 50,
+      otDate: fd.otDate || otDate || '',
+      otStart: fd.otStart || otStart || '',
+      otEnd: fd.otEnd || otEnd || '',
+      isRecurring: fd.isRecurring ?? isRecurring ?? false,
+      meetingClientName: fd.meetingClientName || meetingClientName || '',
+      meetingPurpose: fd.meetingPurpose || meetingPurpose || '',
+      pssRecipientName: fd.pssRecipientName || pssRecipientName || '',
+      pssRecipientAddress: fd.pssRecipientAddress || pssRecipientAddress || '',
+      pssRecipientPhone: fd.pssRecipientPhone || pssRecipientPhone || '',
+      advanceType: fd.advanceType || advanceType || '',
+      advanceSettlementDate: fd.advanceSettlementDate || advanceSettlementDate || '',
+      paymentDueDate: fd.paymentDueDate || paymentDueDate || '',
+      expenseCategory: fd.expenseCategory || expenseCategory || '',
+      invoiceType: fd.invoiceType || invoiceType || '',
       customApprover1Id: fd.customApprover1?.id || defaultApp1?.id || null,
       customApprover2Id: fd.customApprover2?.id || defaultAccountant?.id || null,
       customApprover3Id: fd.customApprover3?.id || defaultDirector?.id || null,
+      recruitmentJobTitle: fd.recruitmentJobTitle || '',
+      recruitmentHeadcount: fd.recruitmentHeadcount || 1,
+      recruitmentDepartment: fd.recruitmentDepartment || '',
+      recruitmentJobType: fd.recruitmentJobType || 'full_time',
+      recruitmentReason: fd.recruitmentReason || 'expansion',
+      recruitmentReplacementWho: fd.recruitmentReplacementWho || '',
+      recruitmentSalaryMin: fd.recruitmentSalaryMin || '',
+      recruitmentSalaryMax: fd.recruitmentSalaryMax || '',
+      recruitmentSalaryNegotiable: fd.recruitmentSalaryNegotiable || false,
+      recruitmentExpectedDate: fd.recruitmentExpectedDate || '',
+      recruitmentRequirements: fd.recruitmentRequirements || '',
+      recruitmentDescription: fd.recruitmentDescription || '',
       showStepManager: fd.showStepManager !== false,
       showStepAccountant: fd.showStepAccountant !== false,
       showStepDirector: Boolean(fd.showStepDirector),
     });
 
     setShowCreateModal(true);
+    setTimeout(() => { isHydratingEditOrDraftRef.current = false; }, 150);
     toast.success(t('Đã mở bản nháp để tiếp tục!'));
   };
 
@@ -3602,6 +3818,7 @@ export default function Approvals() {
 
   // Auto-fill bank information for current user when opening payment request
   useEffect(() => {
+    if (editingItemId || editingItemIdRef.current || currentDraftId || isHydratingEditOrDraftRef.current) return;
     if (showCreateModal && (formType === 'expense' || formType === 'advance' || selectedWorkflowDef?.category === 'finance') && user && !paymentEmployeeId && paymentTarget === 'Nội bộ') {
       const currentEmp = users.find(u => Number(u.id) === Number(user.id)) || user;
       if (currentEmp) {
@@ -3614,7 +3831,7 @@ export default function Approvals() {
         if (currentEmp.phone) setPaymentPhone(currentEmp.phone);
       }
     }
-  }, [showCreateModal, formType, selectedWorkflowDef, user, users, paymentEmployeeId, paymentTarget]);
+  }, [showCreateModal, formType, selectedWorkflowDef, user, users, paymentEmployeeId, paymentTarget, editingItemId, currentDraftId]);
 
   // Event listener for opening approval drawer from global notification clicks
   useEffect(() => {
@@ -3622,12 +3839,11 @@ export default function Approvals() {
       const { id, type, status } = e.detail || {};
       const numId = Number(id);
       if (id && !isNaN(numId) && numId > 0) {
-        pendingOpenRef.current = { id: numId, type: type || undefined, status: status || undefined };
-        
         const combined = [...pendingList, ...myRequestsList, ...followingList, ...allList];
-        const matched = combined.find(it => it.id === numId && (type ? it.type === type : true)) || combined.find(it => it.id === numId);
+        const matchedItem = combined.find(it => it.id === numId && (type ? it.type === type : true)) || combined.find(it => it.id === numId);
+        pendingOpenRef.current = matchedItem ? null : { id: numId, type: type || undefined, status: status || undefined };
 
-        setSelectedTimelineItem(matched || {
+        setSelectedTimelineItem(matchedItem || {
           id: numId,
           type: (type || 'expense') as any,
           title: '',
@@ -3641,6 +3857,7 @@ export default function Approvals() {
         const matched = combined.find(it => it.type === type);
         if (matched) {
           setSelectedTimelineItem(matched);
+          pendingOpenRef.current = null;
         }
       }
     };
@@ -3658,7 +3875,7 @@ export default function Approvals() {
       setActiveTab('pending');
       // Không khóa hasAutoSwitchedTabRef để cho phép loadData tự động fallback nếu pendingList rỗng
     }
-    const openId = params.get('open_id');
+    const openId = params.get('open_id') || params.get('id');
     const openType = params.get('open_type');
     const openStatus = params.get('open_status');
     const createType = params.get('create');
@@ -3698,35 +3915,22 @@ export default function Approvals() {
         setShowCreateModal(true);
       }
       navigate(location.pathname + (tabParam ? `?tab=${tabParam}` : ''), { replace: true });
-    } else if (openId && !isNaN(Number(openId)) && Number(openId) > 0) {
-      const numId = Number(openId);
-      pendingOpenRef.current = { id: numId, type: openType || undefined, status: openStatus || undefined };
-      
-      const combined = [...pendingList, ...myRequestsList, ...followingList, ...allList];
-      const matched = combined.find(it => it.id === numId && (openType ? it.type === openType : true)) || combined.find(it => it.id === numId);
-
-      setSelectedTimelineItem(matched || {
-        id: numId,
-        type: (openType || 'expense') as any,
-        title: '',
-        description: '',
-        status: openStatus || 'pending',
-        created_at: new Date().toISOString()
-      });
-      navigate(location.pathname + (tabParam ? `?tab=${tabParam}` : ''), { replace: true });
-    } else if (openType || (location.state as any)?.openDrawer) {
+    } else if (!openId && (openType || (location.state as any)?.openDrawer)) {
       const targetType = openType || (location.state as any)?.openType;
-      pendingOpenRef.current = { id: 0, type: targetType, status: openStatus || undefined };
       const combined = [...pendingList, ...myRequestsList, ...allList];
       const matched = combined.find(it => targetType ? it.type === targetType : true);
       if (matched) {
         setSelectedTimelineItem(matched);
+        pendingOpenRef.current = null;
+      } else {
+        pendingOpenRef.current = { id: 0, type: targetType, status: openStatus || undefined };
       }
       navigate(location.pathname + (tabParam ? `?tab=${tabParam}` : ''), { replace: true });
-    } else {
+    } else if (!openId) {
       const autoOpen = params.get('auto_open') === '1' || params.get('open_first') === '1';
       if (autoOpen && pendingList.length === 1 && !selectedTimelineItem) {
         setSelectedTimelineItem(pendingList[0]);
+        pendingOpenRef.current = null;
         navigate(location.pathname + (tabParam ? `?tab=${tabParam}` : ''), { replace: true });
       }
     }
@@ -3784,6 +3988,7 @@ export default function Approvals() {
   }, []);
 
   const inFlightOpsRef = useRef<Record<string, boolean>>({});
+  const deleteInFlightRef = useRef(false);
 
   const loadData = useCallback(async (isSilent = false, abortSignal?: AbortSignal) => {
     if (!isSilent) setLoading(true);
@@ -3885,11 +4090,13 @@ export default function Approvals() {
         const matchedItem = combined.find(it => it.id === targetOpenId && (targetType ? it.type === targetType : true)) || combined.find(it => it.id === targetOpenId);
         if (matchedItem) {
           setSelectedTimelineItem(matchedItem);
+          pendingOpenRef.current = null;
         }
       } else if (targetType && !selectedTimelineItem) {
         const matchedItem = (pList.length > 0 ? pList : combined).find(it => it.type === targetType);
         if (matchedItem) {
           setSelectedTimelineItem(matchedItem);
+          pendingOpenRef.current = null;
         }
       }
 
@@ -3901,20 +4108,34 @@ export default function Approvals() {
         } else if (pList.length === 0 && mList.length === 1) {
           setSelectedTimelineItem(mList[0]);
         }
+        pendingOpenRef.current = null;
         window.history.replaceState({}, document.title, window.location.pathname + (params.get('tab') ? `?tab=${params.get('tab')}` : ''));
       }
     } catch (err: any) {
       if (err?.name === 'AbortError') return;
       console.error('Lỗi tải dữ liệu quy trình:', err);
     } finally {
-      setLoading(false);
+      if (!isSilent && !abortSignal?.aborted) {
+        setLoading(false);
+      }
     }
   }, [location.search, selectedTimelineItem, isItemAtMyStepToApprove, user, draftsList]);
 
+  const loadDataRef = useRef(loadData);
+  loadDataRef.current = loadData;
+
+  const hasPopulatedUsersRef = useRef(false);
+  useEffect(() => {
+    if (users.length > 0 && !hasPopulatedUsersRef.current) {
+      hasPopulatedUsersRef.current = true;
+      loadDataRef.current(true);
+    }
+  }, [users.length]);
+
   useEffect(() => {
     const controller = new AbortController();
-    loadData(false, controller.signal);
-    const handleRefresh = () => loadData(true);
+    loadDataRef.current(false, controller.signal);
+    const handleRefresh = () => loadDataRef.current(true);
     window.addEventListener('approval-updated', handleRefresh);
     window.addEventListener('refresh-approvals', handleRefresh);
     return () => {
@@ -4013,6 +4234,8 @@ export default function Approvals() {
       setRejectModalOpen(false);
       setSelectedItem(null);
       setSelectedTimelineItem(null);
+      pendingOpenRef.current = null;
+      clearApprovalUrlParams();
       loadData();
     } catch (err: any) {
       toast.error(err?.response?.data?.message || err?.message || t('Lỗi khi từ chối'));
@@ -4033,6 +4256,8 @@ export default function Approvals() {
       confirmText: t('Xóa yêu cầu'),
       isDanger: true,
       onConfirm: async () => {
+        if (deleteInFlightRef.current) return;
+        deleteInFlightRef.current = true;
         try {
           if (item.type === 'expense') {
             await api.delete(`/expenses/${item.id}`);
@@ -4054,6 +4279,8 @@ export default function Approvals() {
           loadData();
         } catch (err: any) {
           toast.error(err.response?.data?.message || err.message || t('Lỗi khi xóa yêu cầu'));
+        } finally {
+          deleteInFlightRef.current = false;
         }
       }
     });
@@ -4079,28 +4306,81 @@ export default function Approvals() {
     return workflowList.find(w => w.id === item.type) || workflowList[0];
   };
 
-  const handleEditRequest = async (item: ApprovalItem) => {
+  const handleEditRequest = async (item: ApprovalItem, isDuplicate = false) => {
     const isCreator = Number(user?.id) === Number(item.created_by || item.user_id);
-    if (!isCreator) {
+    if (!isDuplicate && !isCreator) {
       toast.error(t('Chỉ người tạo đề xuất mới có quyền chỉnh sửa'));
       return;
     }
     setSelectedTimelineItem(null);
     setSelectedItem(null);
+    pendingOpenRef.current = null;
+    clearApprovalUrlParams();
     lastSavedSnapshotRef.current = null;
-    editingItemIdRef.current = item.id;
-    setEditingItemId(item.id);
-    setEditingItemType(item.type);
+    isHydratingEditOrDraftRef.current = true;
 
-    const creatorId = Number(item.created_by || item.user_id);
-    const creator = users.find(u => Number(u.id) === creatorId);
-    if (creator) {
-      setProposerUser(creator);
+    const finishHydration = () => {
+      setShowCreateModal(true);
+      setTimeout(() => {
+        isHydratingEditOrDraftRef.current = false;
+      }, 150);
+    };
+
+    if (isDuplicate) {
+      editingItemIdRef.current = null;
+      setEditingItemId(null);
+      setEditingItemType(null);
+      setCurrentDraftId(null);
+      if (user) {
+        const myUser = users.find(u => Number(u.id) === Number(user.id)) || user;
+        setProposerUser(myUser);
+      }
+    } else {
+      editingItemIdRef.current = item.id;
+      setEditingItemId(item.id);
+      setEditingItemType(item.type);
+      setCurrentDraftId(null);
+      const creatorId = Number(item.created_by || item.user_id);
+      const creator = users.find(u => Number(u.id) === creatorId);
+      if (creator) {
+        setProposerUser(creator);
+      }
     }
 
+    const parseMultiAttachmentsFromText = (rawText: string, singleImageUrl?: string) => {
+      const parsedAtts: any[] = [];
+      const isDuplicateAtt = (candidateUrl: string, candidateName?: string) => {
+        const norm = normalizeFileUrl(candidateUrl);
+        const name = candidateName || getFileNameFromUrl(candidateUrl);
+        return parsedAtts.some(a => {
+          const aNorm = normalizeFileUrl(a.url);
+          const aName = a.name || getFileNameFromUrl(a.url);
+          return (norm && aNorm && norm === aNorm) || (name && aName && name === aName);
+        });
+      };
+
+      if (rawText) {
+        const attMatches = rawText.matchAll(/(?:•|-|\*)?\s*([^\n\r(]+?)\s*\((https?:\/\/[^\s)]+|\/backend\/[^\s)]+|uploads\/[^\s)]+)\)/gi);
+        for (const m of attMatches) {
+          const aName = m[1].replace(/^Hồ sơ đính kèm:\s*/i, '').trim();
+          const aUrl = m[2].trim();
+          if (aName && aUrl && !isDuplicateAtt(aUrl, aName)) {
+            parsedAtts.push({ name: aName, url: aUrl });
+          }
+        }
+      }
+      if (singleImageUrl && !isDuplicateAtt(singleImageUrl)) {
+        parsedAtts.push({
+          name: getFileNameFromUrl(singleImageUrl) || 'Tài liệu',
+          url: singleImageUrl
+        });
+      }
+      setAttachments(parsedAtts);
+    };
+
     const restoreApproversAndRelated = (data: any) => {
-      const app1Id = data.approver_id ? Number(data.approver_id) : (item.approver_id ? Number(item.approver_id) : null);
-      const app2Id = data.approver_id_2 ? Number(data.approver_id_2) : (item.approver_id_2 ? Number(item.approver_id_2) : null);
+      const app1Id = data.approver_id ? Number(data.approver_id) : (data.manager_id ? Number(data.manager_id) : (item.approver_id ? Number(item.approver_id) : null));
+      const app2Id = data.approver_id_2 ? Number(data.approver_id_2) : (data.hr_id ? Number(data.hr_id) : (item.approver_id_2 ? Number(item.approver_id_2) : null));
       const app3Id = data.approver_id_3 ? Number(data.approver_id_3) : (item.approver_id_3 ? Number(item.approver_id_3) : null);
 
       if (app1Id) {
@@ -4149,36 +4429,68 @@ export default function Approvals() {
     // 1. HR Leave & Specialized HR Requests: leave, late_early, overtime, remote_work
     if (item.type === 'leave') {
       try {
-        const res = await fetchAPI('hrm/leaves');
-        const found = res?.data?.find((l: any) => l.id === item.id);
+        let found: any = null;
+        try {
+          const singleRes = await api.get(`/hrm/leaves/${item.id}`);
+          found = singleRes?.data?.data || singleRes?.data;
+        } catch {
+          const res = await fetchAPI('hrm/leaves');
+          found = res?.data?.find((l: any) => Number(l.id) === Number(item.id));
+        }
+        if (!found) {
+          found = item;
+        }
         if (found) {
-          const lType = found.leave_type;
+          const lType = found.leave_type || (item as any).leave_type || (matchingDef?.id === 'late_early' ? 'late_early' : matchingDef?.id === 'overtime' ? 'overtime' : matchingDef?.id === 'remote_work' ? 'remote_work' : 'annual');
+          const r = String(found.raw_reason || (item as any).raw_reason || found.reason || item.description || '');
+          const cleanR = r.replace(/\[Tài liệu đính kèm[^\]]*\]:[\s\S]*$/i, '').trim();
+
+          const parseIntermittentDates = (text: string, defaultSession: 'full' | 'morning' | 'afternoon' = 'full') => {
+            const detailBracket = text.match(/\[(?:Ngày nghỉ chi tiết|Ngày nghỉ lẻ|Ngày WFH lẻ):\s*([^\]]+)\]/i);
+            if (!detailBracket) return [];
+            const rawParts = detailBracket[1].split(',').map(s => s.trim()).filter(Boolean);
+            const parsed: Array<{ date: string; session: 'full' | 'morning' | 'afternoon' }> = [];
+            for (const part of rawParts) {
+              const dm = part.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})|(\d{4})-(\d{2})-(\d{2})/);
+              if (dm) {
+                const isoDate = dm[4]
+                  ? `${dm[4]}-${dm[5]}-${dm[6]}`
+                  : `${dm[3]}-${dm[2].padStart(2, '0')}-${dm[1].padStart(2, '0')}`;
+                let sess: 'full' | 'morning' | 'afternoon' = defaultSession;
+                if (part.toLowerCase().includes('sáng')) sess = 'morning';
+                else if (part.toLowerCase().includes('chiều')) sess = 'afternoon';
+                parsed.push({ date: isoDate, session: sess });
+              }
+            }
+            return parsed;
+          };
+
           if (lType === 'late_early') {
             const def = workflowList.find(w => w.id === 'late_early') || matchingDef;
             setSelectedWorkflowDef(def);
             setFormType('late_early');
-            setExpenseTitle(def.name);
-            const r = found.reason || '';
-            setLateEarlyType(r.includes('Về sớm') ? 'early' : 'late');
-            const minMatch = r.match(/(\d+)\s*phút/i);
+            setExpenseTitle(found.title || item.title || def.name);
+            setWorkflowTitleSuffix(extractTitleSuffix(found.title || item.title || '', def?.name));
+            setLateEarlyType(cleanR.includes('Về sớm') ? 'early' : 'late');
+            const minMatch = cleanR.match(/(\d+)\s*phút/i);
             if (minMatch) setLateEarlyMinutes(Number(minMatch[1]));
-            const timeMatch = r.match(/Thời gian:\s*(\d{1,2}:\d{2})/i);
+            const timeMatch = cleanR.match(/Thời gian:\s*(\d{1,2}:\d{2})/i);
             if (timeMatch) setOtStart(timeMatch[1]);
-            const startD = (found.from_date || found.start_date || '').split(' ')[0] || getTodayDateString();
+            const startD = String(found.from_date || found.start_date || '').split(/[T ]/)[0] || getTodayDateString();
             setLeaveFrom(startD);
-            const baseReasonMatch = r.match(/Lý do:\s*(.*)$/i);
-            setLeaveReason(baseReasonMatch ? baseReasonMatch[1].trim() : r);
+            const baseReasonMatch = cleanR.match(/Lý do:\s*([\s\S]*)$/i);
+            setLeaveReason(baseReasonMatch ? baseReasonMatch[1].trim() : cleanR);
           } else if (lType === 'overtime') {
             const def = workflowList.find(w => w.id === 'overtime') || matchingDef;
             setSelectedWorkflowDef(def);
             setFormType('overtime');
-            setExpenseTitle(def.name);
-            const r = found.reason || '';
-            setOtType(found.ot_type || (r.includes('Lấy OT bù') ? 'compensatory' : 'salary'));
+            setExpenseTitle(found.title || item.title || def.name);
+            setWorkflowTitleSuffix(extractTitleSuffix(found.title || item.title || '', def?.name));
+            setOtType(found.ot_type || (cleanR.includes('Lấy OT bù') || cleanR.includes('Nghỉ bù') ? 'compensatory' : 'salary'));
             setOtRate(Number(found.ot_rate) || 1.5);
-            const d = (found.from_date || found.start_date || '').split('T')[0] || (found.from_date || found.start_date || '').split(' ')[0] || getTodayDateString();
+            const d = String(found.from_date || found.start_date || '').split(/[T ]/)[0] || getTodayDateString();
             setOtDate(d);
-            const timeRangeMatch = r.match(/Thời gian:\s*(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})/i);
+            const timeRangeMatch = cleanR.match(/Thời gian:\s*(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})/i);
             if (timeRangeMatch) {
               setOtStart(timeRangeMatch[1]);
               setOtEnd(timeRangeMatch[2]);
@@ -4186,36 +4498,86 @@ export default function Approvals() {
               if (found.from_date?.includes('T')) setOtStart(found.from_date.split('T')[1].substring(0, 5));
               if (found.to_date?.includes('T')) setOtEnd(found.to_date.split('T')[1].substring(0, 5));
             }
-            const baseReasonMatch = r.match(/Lý do:\s*(.*)$/i);
-            setLeaveReason(baseReasonMatch ? baseReasonMatch[1].trim() : r);
+            const baseReasonMatch = cleanR.match(/Lý do:\s*([\s\S]*)$/i);
+            setLeaveReason(baseReasonMatch ? baseReasonMatch[1].trim() : cleanR);
           } else if (lType === 'remote_work') {
             const def = workflowList.find(w => w.id === 'remote_work') || matchingDef;
             setSelectedWorkflowDef(def);
             setFormType('remote_work');
-            setExpenseTitle(def.name);
-            setLeaveFrom(found.start_date || found.from_date || '');
-            const r = found.reason || '';
-            const baseReasonMatch = r.match(/Lý do:\s*(.*)$/i);
-            setLeaveReason(baseReasonMatch ? baseReasonMatch[1].trim() : r);
+            setExpenseTitle(found.title || item.title || def.name);
+            setWorkflowTitleSuffix(extractTitleSuffix(found.title || item.title || '', def?.name));
+            const startD = String(found.start_date || found.from_date || '').split(/[T ]/)[0] || getTodayDateString();
+            const endD = String(found.end_date || found.to_date || startD).split(/[T ]/)[0] || startD;
+            setLeaveFrom(startD);
+            setLeaveTo(endD);
+
+            const parsedDates = parseIntermittentDates(cleanR, 'full');
+            if (parsedDates.length > 0 && cleanR.includes('Ngày WFH lẻ')) {
+              setLeaveSession('intermittent');
+              setIntermittentDates(parsedDates);
+            } else if (cleanR.includes('[Làm việc từ xa: Buổi sáng]')) {
+              setLeaveSession('morning');
+            } else if (cleanR.includes('[Làm việc từ xa: Buổi chiều]')) {
+              setLeaveSession('afternoon');
+            } else if (startD !== endD) {
+              setLeaveSession('range');
+            } else {
+              setLeaveSession('full');
+            }
+
             if (found.salary_rate !== undefined && found.salary_rate !== null) {
               setWfhSalaryRate(Number(found.salary_rate));
             } else {
-              const rateMatch = r.match(/Tỷ lệ hưởng lương:\s*(\d+(\.\d+)?)%/i);
+              const rateMatch = cleanR.match(/(?:Tỷ lệ hưởng lương|Hưởng\s*)(\d+(?:\.\d+)?)%/i);
               if (rateMatch) setWfhSalaryRate(Number(rateMatch[1]));
-              else setWfhSalaryRate(50);
+              else setWfhSalaryRate(85);
             }
+
+            const strippedReason = cleanR
+              .replace(/^\[Làm việc từ xa[^\]]*\]\s*/i, '')
+              .replace(/\[Ngày WFH lẻ:[^\]]*\]\s*/gi, '')
+              .replace(/^Lý do:\s*/i, '')
+              .trim();
+            setLeaveReason(strippedReason);
           } else {
             const def = workflowList.find(w => w.id === 'leave_late') || matchingDef;
             setSelectedWorkflowDef(def);
             setFormType('leave');
-            setExpenseTitle(def.name);
+            setExpenseTitle(found.title || item.title || def.name);
+            setWorkflowTitleSuffix(extractTitleSuffix(found.title || item.title || '', def?.name));
             setLeaveType(found.leave_type || 'annual');
-            setLeaveFrom(found.start_date || found.from_date || '');
-            setLeaveTo(found.end_date || found.to_date || '');
-            setLeaveReason(found.reason || '');
+            const startD = String(found.start_date || found.from_date || '').split(/[T ]/)[0] || getTodayDateString();
+            const endD = String(found.end_date || found.to_date || startD).split(/[T ]/)[0] || startD;
+            setLeaveFrom(startD);
+            setLeaveTo(endD);
+
+            const parsedDates = parseIntermittentDates(cleanR, 'full');
+            if (parsedDates.length > 0 && (cleanR.includes('Nghỉ ngắt quãng') || cleanR.includes('Ngày nghỉ lẻ'))) {
+              setLeaveSession('intermittent');
+              setIntermittentDates(parsedDates);
+            } else if (cleanR.includes('Nghỉ buổi sáng')) {
+              setLeaveSession('morning');
+              if (parsedDates.length > 0) setIntermittentDates(parsedDates);
+            } else if (cleanR.includes('Nghỉ buổi chiều')) {
+              setLeaveSession('afternoon');
+              if (parsedDates.length > 0) setIntermittentDates(parsedDates);
+            } else if (startD !== endD || cleanR.includes('Nghỉ nhiều ngày')) {
+              setLeaveSession('range');
+              if (parsedDates.length > 0) setIntermittentDates(parsedDates);
+            } else {
+              setLeaveSession('full');
+              if (parsedDates.length > 0) setIntermittentDates(parsedDates);
+            }
+
+            const strippedReason = cleanR
+              .replace(/^\[(?:Nghỉ buổi sáng|Nghỉ buổi chiều|Nghỉ cả ngày|Nghỉ nhiều ngày|Nghỉ ngắt quãng)[^\]]*\]\s*/i, '')
+              .replace(/\[(?:Ngày nghỉ chi tiết|Ngày nghỉ lẻ):[^\]]*\]\s*/gi, '')
+              .trim();
+            setLeaveReason(strippedReason);
           }
+          parseMultiAttachmentsFromText(r, found.attachment_url || found.image_url);
           restoreApproversAndRelated(found);
-          setShowCreateModal(true);
+          finishHydration();
           return;
         }
       } catch (e) {
@@ -4228,21 +4590,51 @@ export default function Approvals() {
       const def = workflowList.find(w => w.id === 'attendance_bulk') || matchingDef;
       setSelectedWorkflowDef(def);
       setFormType('attendance_bulk');
-      setExpenseTitle(def.name);
+      setExpenseTitle(item.title || def.name);
+      setWorkflowTitleSuffix(extractTitleSuffix(item.title || '', def?.name));
       try {
-        const bulkRes = await api.get(`/check-ins/bulk-requests/${item.id}`);
-        const bulkData = bulkRes?.data?.data || bulkRes?.data;
-        if (bulkData) {
-          setBulkMonth(bulkData.month_period || getDefaultBulkMonth());
-          if (Array.isArray(bulkData.details) && bulkData.details.length > 0) {
-            setSuggestedDays(bulkData.details);
+        if (item.type === 'attendance_bulk') {
+          const bulkRes = await api.get(`/check-ins/bulk-requests/${item.id}`);
+          const bulkData = bulkRes?.data?.data || bulkRes?.data;
+          if (bulkData) {
+            setBulkMonth(bulkData.month_period || getDefaultBulkMonth());
+            let detailsArr = bulkData.details;
+            if (typeof detailsArr === 'string') {
+              try { detailsArr = JSON.parse(detailsArr); } catch { detailsArr = []; }
+            }
+            if (Array.isArray(detailsArr) && detailsArr.length > 0) {
+              setSuggestedDays(detailsArr.map((d: any) => ({
+                ...d,
+                date: String(d.date || d.work_date || '').split(/[T ]/)[0],
+                check_in: String(d.check_in || '08:00').slice(0, 5),
+                check_out: String(d.check_out || '17:30').slice(0, 5),
+                session: d.session || 'full_day',
+                reason: d.reason || d.notes || '',
+                selected: true
+              })));
+            }
+            parseMultiAttachmentsFromText(String(bulkData.notes || item.description || ''), bulkData.attachment_url);
+            restoreApproversAndRelated(bulkData);
           }
-          restoreApproversAndRelated(bulkData);
+        } else {
+          // Single check-in request
+          const singleDate = String((item as any).work_date || (item as any).date || item.created_at || '').split(/[T ]/)[0] || getTodayDateString();
+          setBulkMonth(singleDate.slice(0, 7));
+          setSuggestedDays([{
+            date: singleDate,
+            status_label: 'Giải trình chấm công',
+            check_in: String((item as any).check_in_time || (item as any).check_in || '08:00').slice(0, 5),
+            check_out: String((item as any).check_out_time || (item as any).check_out || '17:30').slice(0, 5),
+            session: (item as any).session || 'full_day',
+            reason: item.description || '',
+            selected: true
+          }]);
+          restoreApproversAndRelated(item);
         }
       } catch (e) {
         console.error('Error fetching bulk attendance for edit:', e);
       }
-      setShowCreateModal(true);
+      finishHydration();
       return;
     }
 
@@ -4251,39 +4643,59 @@ export default function Approvals() {
       const def = workflowList.find(w => w.id === 'advance_money') || matchingDef;
       setSelectedWorkflowDef(def);
       setFormType('advance');
-      setExpenseTitle(def.name);
+      setExpenseTitle(item.title || def.name);
+      setWorkflowTitleSuffix(extractTitleSuffix(item.title || '', def?.name));
       try {
-        const res = await fetchAPI('hrm/advances');
-        const found = res?.data?.find((a: any) => a.id === item.id);
+        let found: any = null;
+        try {
+          const singleRes = await api.get(`/hrm/advances?id=${item.id}`);
+          const listData = singleRes?.data?.data || singleRes?.data;
+          found = Array.isArray(listData) ? listData.find((a: any) => Number(a.id) === Number(item.id)) : listData;
+        } catch {
+          const res = await fetchAPI('hrm/advances');
+          found = res?.data?.find((a: any) => Number(a.id) === Number(item.id));
+        }
+        if (!found) found = item;
         if (found) {
-          setPaymentDetails(String(found.amount || ''));
+          setPaymentDetails(String(found.amount || item.amount || ''));
           setCurrencyType(found.currency || 'VND');
-          const r = found.reason || '';
+          const r = String(found.reason || item.description || '');
           const bMatch = r.match(/\[Thông tin chuyển khoản\]:\s*([^\n]+)/i);
           if (bMatch) setPaymentDestination(bMatch[1].trim());
           const advTypeMatch = r.match(/Mục đích tạm ứng:\s*([^\n]+)/i);
           if (advTypeMatch) {
-            const rawAdvType = advTypeMatch[1].trim();
+            const rawAdvType = advTypeMatch[1].trim().toLowerCase();
             if (rawAdvType.includes('công tác')) setAdvanceType('business_trip');
             else if (rawAdvType.includes('mua sắm')) setAdvanceType('procurement');
-            else if (rawAdvType.includes('sự kiện')) setAdvanceType('event');
-            else if (rawAdvType.includes('giảng viên')) setAdvanceType('lecturer');
+            else if (rawAdvType.includes('sự kiện') || rawAdvType.includes('tiếp khách')) setAdvanceType('event');
+            else if (rawAdvType.includes('giảng viên') || rawAdvType.includes('đối tác')) setAdvanceType('lecturer');
             else if (rawAdvType.includes('lương')) setAdvanceType('salary');
             else setAdvanceType('other');
           }
           const settleMatch = r.match(/Hạn hoàn ứng[^:]*:\s*([^\n]+)/i);
           if (settleMatch) setAdvanceSettlementDate(settleMatch[1].trim());
+          if (r.includes('[Lặp lại định kỳ:')) {
+            setIsRecurring(true);
+            if (r.includes('Hàng tuần')) setRecurringFrequency('weekly');
+            else if (r.includes('Hàng quý')) setRecurringFrequency('quarterly');
+            else if (r.includes('Hàng năm')) setRecurringFrequency('yearly');
+            else setRecurringFrequency('monthly');
+            const endRecMatch = r.match(/đến\s*([0-9\-/]+)/i);
+            if (endRecMatch) setRecurringEndDate(endRecMatch[1].trim());
+          }
           const cleanReason = r.replace(/\[Thông tin chuyển khoản[^\]]*\]:[^\n]*/gi, '')
-                               .replace(/\[Tài liệu đính kèm[^\]]*\]:[^\n]*(\n•[^\n]*)*\s*/gi, '')
+                               .replace(/\[Tài liệu đính kèm[^\]]*\]:[\s\S]*$/gi, '')
                                .replace(/\[Đề nghị tạm ứng[^\]]*\]:[^\n]*(\n•[^\n]*)*\s*/gi, '')
+                               .replace(/\[Lặp lại định kỳ[^\]]*\]\s*/gi, '')
                                .trim();
           setLeaveReason(cleanReason);
+          parseMultiAttachmentsFromText(r, found.image_url);
           restoreApproversAndRelated(found);
         }
       } catch (e) {
         console.error('Error fetching advance for edit:', e);
       }
-      setShowCreateModal(true);
+      finishHydration();
       return;
     }
 
@@ -4291,9 +4703,9 @@ export default function Approvals() {
     if (item.type === 'expense') {
       try {
         const res = await api.get(`/expenses/${item.id}`);
-        const expData = res.data?.data || res.data;
-        const notes = expData?.notes || expData?.description || item.description || '';
-        const lowerTitle = (expData?.title || item.title || '').toLowerCase();
+        const expData = res.data?.data || res.data || item;
+        const notes = String(expData?.notes || expData?.description || item.description || '');
+        const lowerTitle = String(expData?.title || item.title || '').toLowerCase();
 
         // 4.1 Specialized: In, đóng dấu và gửi hồ sơ (print_stamp_send)
         if (lowerTitle.includes('in, đóng dấu') || notes.includes('In, đóng dấu và gửi hồ sơ')) {
@@ -4302,12 +4714,6 @@ export default function Approvals() {
           setFormType('general');
           setExpenseTitle(expData.title || def.name);
           setWorkflowTitleSuffix(extractTitleSuffix(expData.title || '', def?.name));
-          setShowStepManager(false);
-          setShowStepAccountant(false);
-          setShowStepDirector(false);
-          setCustomApprover1(null);
-          setCustomApprover2(null);
-          setCustomApprover3(null);
 
           const extractLine = (prefix: string) => {
             const m = notes.match(new RegExp(`${prefix}:\\s*([^\\n]+)`, 'i'));
@@ -4348,17 +4754,10 @@ export default function Approvals() {
           const sendDate = extractLine('Ngày cần gửi hồ sơ');
           if (sendDate) setPssRequiredSendDate(sendDate);
 
-          const rawAttLine = extractLine('Hồ sơ đính kèm');
-          if (expData.image_url) {
-            setAttachments([{ name: expData.image_url.split('/').pop() || 'Tài liệu', url: expData.image_url }]);
-          } else if (rawAttLine) {
-            const mAtt = rawAttLine.match(/([^\(]+)\s*\((https?:\/\/[^\)]+)\)/);
-            if (mAtt) {
-              setAttachments([{ name: mAtt[1].trim(), url: mAtt[2].trim() }]);
-            }
-          }
+          parseMultiAttachmentsFromText(notes, expData.image_url);
+          restoreApproversAndRelated(expData);
 
-          setShowCreateModal(true);
+          finishHydration();
           return;
         }
 
@@ -4436,7 +4835,6 @@ export default function Approvals() {
           if (rawDesc) setRecruitmentDescription(rawDesc);
 
           restoreApproversAndRelated(expData);
-          // Đối với đề xuất tuyển dụng: Cấp 2 là Ban Giám đốc (customApprover3), không qua Kế toán (customApprover2)
           if (expData.approver_id_2 || (item as any)?.approver_id_2) {
             const dirId = Number(expData.approver_id_2 || (item as any)?.approver_id_2);
             const dirUser = users.find(x => Number(x.id) === dirId);
@@ -4449,19 +4847,18 @@ export default function Approvals() {
           setShowStepAccountant(false);
           setCustomApprover2(null);
 
-          if (expData.image_url) setAttachments([{ name: expData.image_url.split('/').pop() || 'Tài liệu JD', url: expData.image_url }]);
+          parseMultiAttachmentsFromText(notes, expData.image_url);
 
-          setShowCreateModal(true);
+          finishHydration();
           return;
         }
 
+        // 4.2 - 4.4 Specialized Expense Sub-workflows (hydrate specific fields then flow into 4.6 for common payment/bank/items/attachments)
+        let specializedWfDef: any = null;
+
         // 4.2 Specialized: Đề xuất tiếp khách (client_meeting)
         if (lowerTitle.includes('tiếp khách') || notes.includes('[Thông tin tiếp khách]')) {
-          const def = workflowList.find(w => w.id === 'client_meeting') || matchingDef;
-          setSelectedWorkflowDef(def);
-          setFormType('expense');
-          setExpenseTitle(expData.title || def.name);
-          setWorkflowTitleSuffix(extractTitleSuffix(expData.title || '', def?.name));
+          specializedWfDef = workflowList.find(w => w.id === 'client_meeting') || matchingDef;
 
           const extractBullet = (label: string) => {
             const m = notes.match(new RegExp(`•\\s*${label}:\\s*([^\\n]+)`, 'i'));
@@ -4493,10 +4890,11 @@ export default function Approvals() {
             if (timeMatch[2]) setMeetingTime(timeMatch[2].trim());
           }
 
-          const scaleMatch = notes.match(/Quy mô tham gia:\s*Khách mời\s*\((\d+)\s*người\)\s*-\s*Công ty\s*\((\d+)\s*người\)/i);
+          const scaleMatch = notes.match(/Quy mô tham gia:\s*Khách mời\s*\((\d+)\s*người\)\s*-\s*Công ty\s*\((\d+)\s*người\)(?:\s*\(([^\)]+)\))?/i);
           if (scaleMatch) {
             setMeetingClientCount(scaleMatch[1]);
             setMeetingInternalCount(scaleMatch[2]);
+            if (scaleMatch[3]) setMeetingInternalAttendees(scaleMatch[3].split(',').map(s => s.trim()).filter(Boolean));
           }
 
           const purpose = extractBullet('Kế hoạch / Mục đích tiếp đón');
@@ -4508,51 +4906,39 @@ export default function Approvals() {
           else if (reimbStr.includes('tín dụng')) setMeetingReimbursementMethod('corporate_card');
           else if (reimbStr.includes('Tạm ứng')) setMeetingReimbursementMethod('cash_advance');
 
-          const amt = Number(expData.amount) || 0;
-          setExpenseItems([{ id: Date.now(), name: 'Chi phí tiếp khách', quantity: 1, price: amt, vat: 0 }]);
-
-          restoreApproversAndRelated(expData);
-          if (expData.image_url) setAttachments([{ name: expData.image_url.split('/').pop() || 'Tài liệu', url: expData.image_url }]);
-
-          setShowCreateModal(true);
-          return;
+          const invStr = extractBullet('Loại chứng từ');
+          if (invStr.includes('Bảng kê') || invStr.includes('bán lẻ')) setMeetingInvoiceType('retail');
+          else if (invStr.includes('Biên lai') || invStr.includes('Hợp đồng')) setMeetingInvoiceType('receipt');
+          else if (invStr.includes('Không có') || invStr.includes('Chưa có')) setMeetingInvoiceType('pending');
+          else setMeetingInvoiceType('vat');
         }
 
         // 4.3 Specialized: Thanh toán theo đợt (phased_payment)
-        if (notes.includes('[Kế hoạch thanh toán theo đợt') || lowerTitle.includes('theo đợt')) {
-          const def = workflowList.find(w => w.id === 'phased_payment') || matchingDef;
-          setSelectedWorkflowDef(def);
-          setFormType('expense');
-          setExpenseTitle(expData.title || def.name);
+        if (notes.includes('[Kế hoạch thanh toán theo đợt') || notes.includes('[Thanh toán theo đợt]') || lowerTitle.includes('theo đợt')) {
+          if (!specializedWfDef) {
+            specializedWfDef = workflowList.find(w => w.id === 'phased_payment') || matchingDef;
+          }
           setIsPhasedPayment(true);
 
-          const instMatches = [...notes.matchAll(/•\s*([^:]+):\s*([0-9.,]+)[^(\n]*(?:\(Hạn:\s*([^\)]+)\))?/gi)];
+          const instSection = notes.match(/\[Kế hoạch thanh toán theo đợt[^\]]*\]:([\s\S]*?)(?=\n\[|$)/i);
+          const instSource = instSection ? instSection[1] : notes;
+          const instMatches = [...instSource.matchAll(/•\s*([^:]+):\s*([0-9.,]+)[^(\n]*(?:\(Hạn:\s*([^\)]+)\))?/gi)];
           if (instMatches.length > 0) {
-            const parsedInst = instMatches.map(m => ({
-              id: Date.now() + Math.random(),
+            const parsedInst = instMatches.map((m, idx) => ({
+              id: Date.now() + idx,
               title: m[1].trim(),
               amount: Number(m[2].replace(/\D/g, '')) || 0,
               dueDate: m[3] ? m[3].trim() : ''
             }));
             setInstallments(parsedInst);
           }
-          const amt = Number(expData.amount) || 0;
-          setExpenseItems([{ id: Date.now(), name: 'Thanh toán theo đợt', quantity: 1, price: amt, vat: 0 }]);
-
-          restoreApproversAndRelated(expData);
-          if (expData.image_url) setAttachments([{ name: expData.image_url.split('/').pop() || 'Tài liệu', url: expData.image_url }]);
-
-          setShowCreateModal(true);
-          return;
         }
 
         // 4.4 Specialized: Thanh toán định kỳ (recurring_payment)
         if (notes.includes('[Thiết lập định kỳ]:') || notes.includes('[Lặp lại định kỳ') || lowerTitle.includes('định kỳ')) {
-          const def = workflowList.find(w => w.id === 'recurring_payment') || matchingDef;
-          setSelectedWorkflowDef(def);
-          setFormType('expense');
-          setExpenseTitle(expData.title || def.name);
-          setWorkflowTitleSuffix(extractTitleSuffix(expData.title || '', def?.name));
+          if (!specializedWfDef) {
+            specializedWfDef = workflowList.find(w => w.id === 'recurring_payment') || matchingDef;
+          }
           setIsRecurring(true);
 
           if (notes.includes('Hàng tuần')) setRecurringFrequency('weekly');
@@ -4560,27 +4946,35 @@ export default function Approvals() {
           else if (notes.includes('Hàng năm')) setRecurringFrequency('yearly');
           else setRecurringFrequency('monthly');
 
+          const payDayMatch = notes.match(/Ngày\s*(\d{1,2})\s*hàng/i);
+          if (payDayMatch) setRecurringPayDay(payDayMatch[1]);
+
+          const startMatch = notes.match(/Áp dụng từ:\s*([0-9\-/]+)/i);
+          if (startMatch) setRecurringStartDate(startMatch[1].trim());
+
+          const endMatch = notes.match(/đến\s*([0-9\-/]+)/i);
+          if (endMatch) {
+            setRecurringUnlimited(false);
+            setRecurringEndDate(endMatch[1].trim());
+          } else if (notes.includes('Vô thời hạn')) {
+            setRecurringUnlimited(true);
+          }
+
           const contractMatch = notes.match(/Căn cứ Hợp đồng[^:]*:\s*([^\n]+)/i);
           if (contractMatch) setRecurringContractNumber(contractMatch[1].trim());
-
-          const amt = Number(expData.amount) || 0;
-          setExpenseItems([{ id: Date.now(), name: 'Thanh toán định kỳ', quantity: 1, price: amt, vat: 0 }]);
-
-          restoreApproversAndRelated(expData);
-          if (expData.image_url) setAttachments([{ name: expData.image_url.split('/').pop() || 'Tài liệu', url: expData.image_url }]);
-
-          setShowCreateModal(true);
-          return;
         }
 
         // 4.5 Specialized: Văn phòng phẩm, Mua sắm trang thiết bị, Cấp thiết bị IT
-        const isItemized = (
-          notes.includes('DANH SÁCH') ||
+        const isItemized = !specializedWfDef && (
+          notes.includes('DANH SÁCH VĂN PHÒNG PHẨM') ||
+          notes.includes('DANH SÁCH MUA SẮM') ||
+          notes.includes('DANH SÁCH THIẾT BỊ') ||
           notes.includes('Đồ vật đề xuất:') ||
-          lowerTitle.includes('văn phòng phẩm') ||
-          lowerTitle.includes('trang thiết bị') ||
-          lowerTitle.includes('mua sắm') ||
-          lowerTitle.includes('thiết bị it')
+          lowerTitle.startsWith('đề xuất văn phòng phẩm') ||
+          lowerTitle.startsWith('mua sắm trang thiết bị') ||
+          lowerTitle.startsWith('đề xuất mua sắm') ||
+          lowerTitle.startsWith('cấp thiết bị it') ||
+          lowerTitle.startsWith('đề xuất trang thiết bị it')
         );
 
         if (isItemized) {
@@ -4594,6 +4988,7 @@ export default function Approvals() {
           setFormType('general');
           setExpenseTitle(expData.title || itemDef.name);
           setWorkflowTitleSuffix(extractTitleSuffix(expData.title || '', itemDef?.name));
+          setCurrencyType(expData.currency || 'VND');
 
           const lines = notes.split('\n');
           let parsedItems: any[] = [];
@@ -4653,7 +5048,7 @@ export default function Approvals() {
           }
 
           const extractMetaField = (text: string, label: string) => {
-            const reg = new RegExp(`${label}:\\s*([^\\n]+(?:\\n(?!Vị trí:|Phòng ban:|Nội dung đề xuất:|Lý do:|DANH SÁCH|\\[Tài liệu|\\[Lặp lại|\\[Thanh toán)[^\\n]+)*)`, 'i');
+            const reg = new RegExp(`${label}:\\s*([^\\n]+(?:\\n(?!Vị trí:|Phòng ban:|Nội dung đề xuất:|Lý do:|DANH SÁCH|\\[Tài liệu|\\[Lặp lại|\\[Thanh toán|\\[Thông tin)[^\\n]+)*)`, 'i');
             const m = text.match(reg);
             return m ? m[1].trim() : '';
           };
@@ -4668,33 +5063,44 @@ export default function Approvals() {
           if (content) setPaymentDetails(content);
           if (reason) setLeaveReason(reason);
 
-          restoreApproversAndRelated(expData);
-          if (expData.image_url) setAttachments([{ name: expData.image_url.split('/').pop() || 'Tài liệu', url: expData.image_url }]);
+          if (expData.vendor_name) setPaymentBeneficiaryName(expData.vendor_name);
+          if (expData.bank_name) setPaymentBankName(expData.bank_name);
+          if (expData.bank_account_number) setPaymentBankAccount(expData.bank_account_number);
+          if (expData.bank_account_name) setPaymentAccountName(expData.bank_account_name);
+          if (expData.bank_branch) setPaymentBankBranch(expData.bank_branch);
 
-          setShowCreateModal(true);
+          parseMultiAttachmentsFromText(notes, expData.image_url);
+          restoreApproversAndRelated(expData);
+
+          finishHydration();
           return;
         }
 
-        // 4.6 Standard Finance, PO, Expense Claim, Payment Proposals:
-        // Open native Approval Workflow Drawer (showCreateModal) with full structured form & BẢNG CHI TIẾT THANH TOÁN
-        let def = matchingDef?.id && matchingDef.id !== 'general' 
+        // 4.6 Standard Finance, PO, Expense Claim, Payment Proposals (and common hydration for 4.2-4.4):
+        let def = specializedWfDef || (matchingDef?.id && matchingDef.id !== 'general' 
           ? matchingDef 
-          : workflowList.find(w => w.id === 'payment') || workflowList[0];
+          : workflowList.find(w => w.id === 'payment') || workflowList[0]);
 
-        if (lowerTitle.includes('tạm ứng') || notes.includes('[Đề nghị tạm ứng]')) {
-          def = workflowList.find(w => w.id === 'advance_money') || def;
-        } else if (lowerTitle.includes('hoàn ứng') || notes.includes('hoàn ứng')) {
-          def = workflowList.find(w => w.id === 'expense_claim') || def;
-        } else if (lowerTitle.includes('định kỳ') || notes.includes('định kỳ')) {
-          def = workflowList.find(w => w.id === 'recurring_payment') || def;
-        } else if (lowerTitle.includes('theo đợt') || notes.includes('theo đợt')) {
-          def = workflowList.find(w => w.id === 'phased_payment') || def;
+        if (!specializedWfDef) {
+          if (lowerTitle.includes('hoa hồng') || notes.includes('DANH SÁCH CHI HOA HỒNG')) {
+            def = workflowList.find(w => w.id === 'commission_payout') || def;
+          } else if (lowerTitle.includes('tạm ứng') || notes.includes('[Đề nghị tạm ứng]')) {
+            def = workflowList.find(w => w.id === 'advance_money') || def;
+          } else if (lowerTitle.includes('hoàn ứng') || notes.includes('hoàn ứng')) {
+            def = workflowList.find(w => w.id === 'expense_claim') || def;
+          } else if (lowerTitle.includes('định kỳ') || notes.includes('định kỳ')) {
+            def = workflowList.find(w => w.id === 'recurring_payment') || def;
+          } else if (lowerTitle.includes('theo đợt') || notes.includes('theo đợt')) {
+            def = workflowList.find(w => w.id === 'phased_payment') || def;
+          }
         }
 
         setSelectedWorkflowDef(def);
         setFormType('expense');
-        setEditingItemId(item.id);
-        setEditingItemType('expense');
+        setEditingItemId(isDuplicate ? null : item.id);
+        setEditingItemType(isDuplicate ? null : 'expense');
+        setCurrencyType(expData.currency || 'VND');
+        setExpenseCategory(expData.category || 'general');
 
         const fullTitle = expData.title || item.title || def.name;
         setExpenseTitle(fullTitle);
@@ -4706,7 +5112,6 @@ export default function Approvals() {
         }
         setWorkflowTitleSuffix(cleanSuffix);
 
-        // Helper to extract a single line field
         const extractField = (label: string) => {
           const m = notes.match(new RegExp(`${label}:\\s*([^\\n]+)`, 'i'));
           return m ? m[1].trim() : '';
@@ -4730,13 +5135,28 @@ export default function Approvals() {
           setPaymentTarget(expData.vendor_name ? 'Đối tác' : 'Nội bộ');
         }
 
-        // 3. Beneficiary name & employee
+        // 3. Beneficiary name & employee / entity matching
         const benRaw = extractField('Thụ hưởng[^:]*');
-        const benName = benRaw ? benRaw.replace(/\(MST:[^\)]+\)/i, '').trim() : (expData.vendor_name || '');
+        const benName = benRaw
+          ? benRaw.replace(/\(MST:[^\)]+\)/i, '').replace(/\(SĐT:[^\)]+\)/i, '').trim()
+          : (expData.vendor_name || '');
         if (benName) setPaymentBeneficiaryName(benName);
 
         const mstMatch = notes.match(/MST:\s*([0-9A-Za-z\-]+)/i);
         if (mstMatch) setPaymentTaxCode(mstMatch[1].trim());
+
+        const phoneMatch = notes.match(/SĐT:\s*([0-9+\-\s]+)/i);
+        if (phoneMatch) setPaymentPhone(phoneMatch[1].trim());
+
+        const govAgencyMatch = notes.match(/Cơ quan thu:\s*([^\n(]+)(?:\(Số QĐ\/TB:\s*([^\)]+)\))?/i);
+        if (govAgencyMatch) {
+          const rawGov = govAgencyMatch[1].trim().toLowerCase();
+          if (rawGov.includes('thuế')) setPaymentGovAgencyType('tax');
+          else if (rawGov.includes('bảo hiểm')) setPaymentGovAgencyType('social_insurance');
+          else if (rawGov.includes('kho bạc')) setPaymentGovAgencyType('treasury');
+          else setPaymentGovAgencyType('other');
+          if (govAgencyMatch[2]) setPaymentGovDecisionNumber(govAgencyMatch[2].trim());
+        }
 
         const matchedEmp = users.find(u => 
           (u.full_name && benName && u.full_name.toLowerCase() === benName.toLowerCase()) ||
@@ -4745,8 +5165,11 @@ export default function Approvals() {
         if (matchedEmp) {
           setPaymentEmployeeId(String(matchedEmp.id));
         }
+        if (expData.supplier_id) setPaymentSupplierId(String(expData.supplier_id));
+        if (expData.lecturer_id) setPaymentLecturerId(String(expData.lecturer_id));
+        if (expData.contact_id) setPaymentContactId(String(expData.contact_id));
 
-        // 4. Method & Banking
+        // 4. Method & Banking / Wallet / Card
         const methodStr = extractField('Hình thức');
         if (methodStr) {
           if (methodStr.includes('Chuyển khoản')) setPaymentMethod('Chuyển khoản');
@@ -4771,6 +5194,21 @@ export default function Approvals() {
           if (expData.bank_branch) setPaymentBankBranch(expData.bank_branch);
         }
 
+        const walletMatch = notes.match(/\[Ví điện tử\]:\s*([^\-]+)\s*-\s*SĐT\/TK:\s*([^\-\n]+)(?:\s*-\s*Chủ ví:\s*([^\n]+))?/i);
+        if (walletMatch) {
+          const rawWal = walletMatch[1].trim().toLowerCase();
+          if (rawWal.includes('zalo')) setPaymentWalletType('zalopay');
+          else if (rawWal.includes('viettel')) setPaymentWalletType('viettel_money');
+          else setPaymentWalletType('momo');
+          setPaymentWalletPhone(walletMatch[2].trim());
+          if (walletMatch[3]) setPaymentAccountName(walletMatch[3].trim());
+        }
+
+        const cardMatch = notes.match(/\[Thẻ doanh nghiệp\]:\s*([^\n]+)/i);
+        if (cardMatch) {
+          setPaymentCorporateCard(cardMatch[1].trim());
+        }
+
         // 5. Payment details (Chi tiết)
         const details = extractField('Chi tiết');
         if (details) {
@@ -4783,7 +5221,7 @@ export default function Approvals() {
             .replace(/Thụ hưởng[^\n]*/gi, '')
             .replace(/Hình thức:[^\n]*/gi, '')
             .replace(/\[Thông tin chuyển khoản[^\]]*\]:[^\n]*/gi, '')
-            .replace(/\[Tài liệu đính kèm[^\]]*\]:[^\n]*(\n•[^\n]*)*\s*/gi, '')
+            .replace(/\[Tài liệu đính kèm[^\]]*\]:[\s\S]*$/gi, '')
             .trim();
           setPaymentDetails(cleanDesc || cleanSuffix || fullTitle);
         }
@@ -4801,7 +5239,7 @@ export default function Approvals() {
         else setInvoiceType('vat_10');
 
         if (expData.due_date) {
-          setPaymentDueDate(expData.due_date);
+          setPaymentDueDate(String(expData.due_date).split(/[T ]/)[0]);
         } else {
           const dueMatch = notes.match(/Thời hạn thanh toán:\s*([0-9\/\-]+)/i);
           if (dueMatch) setPaymentDueDate(dueMatch[1].trim());
@@ -4816,7 +5254,8 @@ export default function Approvals() {
             content: it.content || it.name || cleanSuffix || 'Nội dung chi tiêu',
             quantity: Number(it.quantity) || 1,
             price: parseMoneyVn(it.unit_price !== undefined ? it.unit_price : it.price),
-            vat: it.vat !== undefined ? Number(it.vat) : 10
+            vat: it.vat !== undefined ? Number(it.vat) : 10,
+            vatType: it.vat === 0 ? '0' : [5, 8, 10].includes(Number(it.vat)) ? String(it.vat) : '10'
           })));
         } else {
           const amt = Math.round(Number(expData.amount) || 0);
@@ -4828,6 +5267,8 @@ export default function Approvals() {
             const calcPct = Math.round((vatAmt / netPrice) * 100);
             vatPct = [0, 5, 8, 10].includes(calcPct) ? calcPct : Math.round((vatAmt / amt) * 100);
             if (![0, 5, 8, 10].includes(vatPct)) vatPct = 8;
+          } else if (vatAmt === 0) {
+            vatPct = 0;
           }
           const itemContent = cleanSuffix || details || fullTitle || 'Nội dung chi tiêu';
           setExpenseItems([
@@ -4836,7 +5277,8 @@ export default function Approvals() {
               content: itemContent,
               quantity: 1,
               price: Math.round(netPrice > 0 ? netPrice : amt),
-              vat: vatPct
+              vat: vatPct,
+              vatType: String(vatPct) as any
             }
           ]);
         }
@@ -4862,47 +5304,20 @@ export default function Approvals() {
             bank_owner: it.bank_owner || it.bank_account_name || '',
             amount: Number(it.amount || it.price || 0),
             note: it.note || '',
-            is_paid: it.is_paid,
-            unc_file_url: it.unc_file_url,
-            paid_at: it.paid_at,
-            paid_by: it.paid_by
+            is_paid: isDuplicate ? false : it.is_paid,
+            unc_file_url: isDuplicate ? undefined : it.unc_file_url,
+            paid_at: isDuplicate ? undefined : it.paid_at,
+            paid_by: isDuplicate ? undefined : it.paid_by
           })));
         }
 
         // 8. Approvers & Related users
         restoreApproversAndRelated(expData);
 
-        // 10. Attachments
-        const parsedAtts: any[] = [];
-        const isDuplicateAtt = (candidateUrl: string, candidateName?: string) => {
-          const norm = normalizeFileUrl(candidateUrl);
-          const name = candidateName || getFileNameFromUrl(candidateUrl);
-          return parsedAtts.some(a => {
-            const aNorm = normalizeFileUrl(a.url);
-            const aName = a.name || getFileNameFromUrl(a.url);
-            return (norm && aNorm && norm === aNorm) || (name && aName && name === aName);
-          });
-        };
+        // 9. Attachments
+        parseMultiAttachmentsFromText(notes, expData.image_url);
 
-        if (notes) {
-          const attMatches = notes.matchAll(/•\s*([^\n\r(]+)\s*\((https?:\/\/[^\s)]+|\/backend\/[^\s)]+|uploads\/[^\s)]+)\)/gi);
-          for (const m of attMatches) {
-            const aName = m[1].trim();
-            const aUrl = m[2].trim();
-            if (!isDuplicateAtt(aUrl, aName)) {
-              parsedAtts.push({ name: aName, url: aUrl });
-            }
-          }
-        }
-        if (expData.image_url && !isDuplicateAtt(expData.image_url)) {
-          parsedAtts.push({
-            name: getFileNameFromUrl(expData.image_url) || 'Tài liệu',
-            url: expData.image_url
-          });
-        }
-        setAttachments(parsedAtts);
-
-        setShowCreateModal(true);
+        finishHydration();
         return;
       } catch (e) {
         console.error('Error fetching expense for edit:', e);
@@ -4910,52 +5325,26 @@ export default function Approvals() {
     }
 
     // Default Fallback
+    setSelectedWorkflowDef(matchingDef);
     setFormType('general');
     setExpenseTitle(item.title);
     setWorkflowTitleSuffix(extractTitleSuffix(item.title || '', matchingDef?.name));
     setPaymentDetails(item.description || '');
-    setShowCreateModal(true);
+    restoreApproversAndRelated(item);
+    finishHydration();
   };
 
-  const handleDuplicate = (item: ApprovalItem) => {
-    setSelectedTimelineItem(null);
-    setSelectedItem(null);
-    
-    const matchingDef = getWorkflowDefFromItem(item);
-    setSelectedWorkflowDef(matchingDef);
-    
-    const isItemized = (
-      (item.description || '').includes('DANH SÁCH') ||
-      (item.description || '').includes('Đồ vật đề xuất:') ||
-      String(item.title).toLowerCase().includes('văn phòng phẩm') ||
-      String(item.title).toLowerCase().includes('trang thiết bị') ||
-      String(item.title).toLowerCase().includes('mua sắm') ||
-      String(item.title).toLowerCase().includes('thiết bị')
-    );
-
-    if (item.type === 'leave') {
-      setFormType('leave');
-    } else if (item.type === 'advance') {
-      setFormType('advance');
-    } else if (isItemized || matchingDef.id === 'stationery' || matchingDef.id === 'purchase_request' || matchingDef.id === 'it_request') {
-      setFormType('general');
-    } else if (matchingDef.category === 'finance' || item.type === 'expense') {
-      setFormType('expense');
-    } else {
-      setFormType('general');
-    }
-    
-    setExpenseTitle(`${t('Nhân bản')} - ${item.title}`);
-    setPaymentDetails(item.description || '');
-    
-    setShowCreateModal(true);
-    toast.success(t('Đã nhân bản thông tin đề xuất! Vui lòng kiểm tra và gửi.'));
+  const handleDuplicate = async (item: ApprovalItem) => {
+    await handleEditRequest(item, true);
+    toast.success(t('Đã nhân bản đầy đủ thông tin đề xuất! Vui lòng kiểm tra và gửi.'));
   };
 
   const formatBadge = (status: string, it?: any) => {
     const s = status ? status.toLowerCase() : 'pending';
     const isPaid = it ? (Boolean(it.is_refunded) || s === 'paid' || s === 'refunded') : false;
-    const isExpense = it?.type === 'expense';
+    const isMonetary = (it?.type === 'expense' || it?.type === 'po' || it?.type === 'purchase_order' || it?.type === 'advance') &&
+      Number(it?.amount || 0) > 0 &&
+      !String(it?.title || '').toLowerCase().includes('tuyển dụng');
 
     if (s === 'draft') {
       return (
@@ -4965,8 +5354,7 @@ export default function Approvals() {
       );
     }
     if (s === 'approved' || s === 'confirmed') {
-      const isZeroCost = Number(it?.amount || 0) === 0 || String(it?.title || '').toLowerCase().includes('tuyển dụng');
-      if (isExpense && !isZeroCost) {
+      if (isMonetary) {
         if (!isPaid) {
           return (
             <span className="badge warning" style={{ fontSize: '0.65rem', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '3px', height: 'auto', borderRadius: '6px', color: '#d97706', background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.25)' }}>
@@ -5021,6 +5409,115 @@ export default function Approvals() {
     }
   };
 
+  const isGenericApproverLabel = useCallback((name?: string | null) => {
+    if (!name) return true;
+    const clean = String(name).toLowerCase().trim();
+    if (!clean) return true;
+    return [
+      'quản lý trực tiếp',
+      'ban giám đốc',
+      'duyệt',
+      'người duyệt',
+      'chờ phân công',
+      'cấp 1',
+      'cấp 2',
+      'cấp 3',
+      'thực hiện',
+      'người duyệt cấp 1',
+      'người duyệt cấp 2',
+      'người duyệt cấp 3'
+    ].includes(clean);
+  }, []);
+
+  const findApproverUserInMaps = useCallback((id?: number | string | null, name?: string | null) => {
+    const numId = Number(id || 0);
+    if (numId > 0) {
+      const byId = usersMap.get(numId);
+      if (byId) return byId;
+    }
+    if (name && !isGenericApproverLabel(name)) {
+      const cleanName = String(name).toLowerCase().trim();
+      const byExact = usersByNameMap.get(cleanName);
+      if (byExact) return byExact;
+      const byFuzzy = Array.from(usersMap.values()).find(u => {
+        const ufn = String(u.full_name || u.name || '').toLowerCase().trim();
+        return ufn && (ufn === cleanName || cleanName.includes(ufn) || ufn.includes(cleanName));
+      });
+      if (byFuzzy) return byFuzzy;
+    }
+    return null;
+  }, [usersMap, usersByNameMap, isGenericApproverLabel]);
+
+  const resolveFallbackApproverForItem = useCallback((item: ApprovalItem) => {
+    const rawNotes = String((item as any).notes || (item as any).description || item.description || '');
+    const isPrintStampSend = item.type === 'expense' && rawNotes.includes('Quy trình: In, đóng dấu và gửi hồ sơ');
+
+    if (isPrintStampSend) {
+      const mExec = rawNotes.match(/Người thực hiện:\s*([^\n]+)/i);
+      const parsedExecName = mExec ? mExec[1].trim() : '';
+      const matchedExec = findApproverUserInMaps(0, parsedExecName);
+      if (matchedExec) return matchedExec;
+      const phuongExec = usersByNameMap.get('phuongntd') || usersByNameMap.get('nguyễn thị duy phương') ||
+        Array.from(usersMap.values()).find(u => (u.full_name || u.name || '').toLowerCase().includes('duy phương') || u.username === 'phuongntd');
+      if (phuongExec) return phuongExec;
+    }
+
+    // 1. Check explicit step 1 / approver / manager / approved_by fields
+    const explicitUser =
+      findApproverUserInMaps((item as any).approver_id, (item as any).approver_name) ||
+      findApproverUserInMaps((item as any).manager_id, (item as any).manager_name) ||
+      findApproverUserInMaps((item as any).approved_by, (item as any).approved_by_name) ||
+      findApproverUserInMaps((item as any).hr_id, null);
+    if (explicitUser) return explicitUser;
+
+    // 2. Check creator's direct team leader / manager
+    const creatorId = Number(item.user_id || item.created_by || 0);
+    const creator = creatorId > 0 ? usersMap.get(creatorId) : null;
+    if (creator?.manager_id && Number(creator.manager_id) !== creatorId) {
+      const mgrById = usersMap.get(Number(creator.manager_id));
+      if (mgrById) return mgrById;
+    }
+    if (creator?.team_id) {
+      const directMgr = Array.from(usersMap.values()).find(u =>
+        Number(u.team_id) === Number(creator.team_id) &&
+        ['manager', 'leader', 'truongphong', 'head_of_department', 'sale_director', 'director'].includes(String(u.role || '').toLowerCase()) &&
+        Number(u.id) !== creatorId
+      );
+      if (directMgr) return directMgr;
+    }
+
+    // 3. Domain-specific fallback (HR / Check-in / Leave / Stationery vs Director / General Director)
+    const phuongUser = usersByNameMap.get('phuongntd') || usersByNameMap.get('nguyễn thị duy phương') ||
+      Array.from(usersMap.values()).find(u => (u.full_name || u.name || '').toLowerCase().includes('duy phương') || u.username === 'phuongntd');
+
+    const directorUser =
+      Array.from(usersMap.values()).find(u =>
+        ['director', 'general_director'].includes(String(u.role || '').toLowerCase()) &&
+        Number(u.id) !== creatorId
+      ) ||
+      Array.from(usersMap.values()).find(u =>
+        ['director', 'general_director', 'admin', 'superadmin', 'super_admin'].includes(String(u.role || '').toLowerCase()) &&
+        Number(u.id) !== creatorId
+      ) ||
+      Array.from(usersMap.values()).find(u =>
+        ['director', 'general_director', 'admin', 'superadmin', 'super_admin', 'manager'].includes(String(u.role || '').toLowerCase())
+      );
+
+    const lowerTitle = String(item.title || '').toLowerCase();
+    const isHrOrStationery =
+      item.type === 'checkin' ||
+      item.type === 'attendance_bulk' ||
+      item.type === 'leave' ||
+      lowerTitle.includes('văn phòng phẩm');
+
+    if (isHrOrStationery) {
+      if (phuongUser && Number(phuongUser.id) !== creatorId) return phuongUser;
+      return directorUser || phuongUser || creator || null;
+    }
+
+    return directorUser || phuongUser || creator || null;
+  }, [usersMap, usersByNameMap, findApproverUserInMaps]);
+
   const renderCurrentApprover = useCallback((item: ApprovalItem) => {
     let approverUser: any = null;
     let stepLabel = '';
@@ -5046,17 +5543,20 @@ export default function Approvals() {
 
     // 0. If overall status is rejected:
     if (overallStatus === 'rejected') {
-      const rejectorName = (item as any).rejected_by_name || (item as any).approver_name;
-      const userObj = rejectorName ? usersByNameMap.get(String(rejectorName).toLowerCase().trim()) : null;
-      const avatarUrl = userObj?.avatar_url || userObj?.avatar;
+      const rejectorNameRaw = (item as any).rejected_by_name || (item as any).approved_by_name || (item as any).approver_name || (item as any).manager_name;
+      const rejectorIdRaw = (item as any).rejected_by || (item as any).approved_by || (item as any).approver_id || (item as any).manager_id;
+      const userObj = findApproverUserInMaps(rejectorIdRaw, rejectorNameRaw) || resolveFallbackApproverForItem(item);
+      const cleanRejectorName = !isGenericApproverLabel(rejectorNameRaw) ? rejectorNameRaw : '';
+      const displayName = userObj?.full_name || userObj?.name || cleanRejectorName || t('Người duyệt');
+      const avatarUrl = userObj?.avatar_url || userObj?.avatar || (item as any).approved_by_avatar || (item as any).approver_avatar;
       return (
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={getAvatarRingStyle('#ef4444')}>
-            <Avatar src={avatarUrl} name={rejectorName || 'Từ chối'} size={24} />
+            <Avatar src={avatarUrl} name={displayName} size={24} />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--color-text)' }}>
-              {rejectorName || t('Người duyệt')}
+              {displayName}
             </span>
             <span className="badge danger" style={{ fontSize: '0.65rem', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '3px', height: 'auto', borderRadius: '6px', marginTop: '2px', width: 'fit-content' }}>
               <XCircle size={10} />
@@ -5091,49 +5591,28 @@ export default function Approvals() {
         finalApproverId = Number((item as any).manager_id);
       }
 
-      if (finalApproverId > 0) {
-        finalUser = usersMap.get(finalApproverId);
-      }
-
       let finalApproverName = '';
-      if ((item as any).approved_by_name) {
+      if ((item as any).approved_by_name && !isGenericApproverLabel((item as any).approved_by_name)) {
         finalApproverName = (item as any).approved_by_name;
-      } else if ((item as any).approver_name_3) {
+      } else if ((item as any).approver_name_3 && !isGenericApproverLabel((item as any).approver_name_3)) {
         finalApproverName = (item as any).approver_name_3;
-      } else if ((item as any).approver_name_2) {
+      } else if ((item as any).approver_name_2 && !isGenericApproverLabel((item as any).approver_name_2)) {
         finalApproverName = (item as any).approver_name_2;
-      } else if ((item as any).approver_name) {
+      } else if ((item as any).approver_name && !isGenericApproverLabel((item as any).approver_name)) {
         finalApproverName = (item as any).approver_name;
-      } else if ((item as any).manager_name) {
+      } else if ((item as any).manager_name && !isGenericApproverLabel((item as any).manager_name)) {
         finalApproverName = (item as any).manager_name;
       }
 
-      if (!finalUser && finalApproverName) {
-        const cleanName = String(finalApproverName).toLowerCase().trim();
-        finalUser = usersByNameMap.get(cleanName) ||
-          Array.from(usersMap.values()).find(u => {
-            const ufn = String(u.full_name || u.name || '').toLowerCase().trim();
-            return ufn && (ufn === cleanName || cleanName.includes(ufn) || ufn.includes(cleanName));
-          });
-      }
-
-      if (!finalUser && (item as any).approved_by) {
-        finalUser = users.find(u => Number(u.id) === Number((item as any).approved_by));
-      }
-
-      if (!finalUser && (item as any).manager_id) {
-        finalUser = users.find(u => Number(u.id) === Number((item as any).manager_id));
-      }
-
-      if (!finalUser && (item as any).approver_id) {
-        finalUser = users.find(u => Number(u.id) === Number((item as any).approver_id));
-      }
+      finalUser = findApproverUserInMaps(finalApproverId, finalApproverName) || resolveFallbackApproverForItem(item);
 
       const displayName = finalUser?.full_name || finalUser?.name || finalApproverName || t('Ban Giám đốc');
-      const avatarUrl = finalUser?.avatar_url || finalUser?.avatar;
+      const avatarUrl = finalUser?.avatar_url || finalUser?.avatar || (item as any).approved_by_avatar || (item as any).approver_avatar;
 
       const isPaid = Boolean((item as any).is_refunded) || item.status === 'paid' || item.status === 'refunded';
-      const isExpense = item.type === 'expense';
+      const isMonetary = (item.type === 'expense' || item.type === 'po' || item.type === 'purchase_order' || item.type === 'advance') &&
+        Number(item.amount || 0) > 0 &&
+        !String(item.title || '').toLowerCase().includes('tuyển dụng');
       
       let badgeRingColor = '#10b981';
       let badgeClass = 'badge success';
@@ -5141,8 +5620,7 @@ export default function Approvals() {
       let badgeIcon = <CheckCircle2 size={10} />;
       let badgeCustomStyle: React.CSSProperties = {};
 
-      const isZeroCost = Number(item.amount || 0) === 0 || String(item.title || '').toLowerCase().includes('tuyển dụng');
-      if (isExpense && !isZeroCost) {
+      if (isMonetary) {
         if (isPaid) {
           badgeLabel = t('Đã hoàn tất');
         } else {
@@ -5196,82 +5674,48 @@ export default function Approvals() {
 
     if (status1 === 'approved' && hasLevel2 && !isPrintStampSendRow && status2 !== 'approved' && status2 !== 'rejected') {
       targetApproverId = Number((item as any).approver_id_2 || 0);
-      targetApproverName = (item as any).approver_name_2 || '';
+      targetApproverName = !isGenericApproverLabel((item as any).approver_name_2) ? ((item as any).approver_name_2 || '') : '';
       stepLabel = t('Chờ duyệt Cấp 2');
       badgeClass = 'badge warning';
       icon = <Clock size={10} />;
     } else if (status1 === 'approved' && (!hasLevel2 || status2 === 'approved') && hasLevel3 && !isPrintStampSendRow && status3 !== 'approved' && status3 !== 'rejected') {
       targetApproverId = Number((item as any).approver_id_3 || 0);
-      targetApproverName = (item as any).approver_name_3 || '';
+      targetApproverName = !isGenericApproverLabel((item as any).approver_name_3) ? ((item as any).approver_name_3 || '') : '';
       stepLabel = t('Chờ duyệt Cấp 3');
       badgeClass = 'badge warning';
       icon = <Clock size={10} />;
     } else if (status1 === 'pending' || overallStatus === 'pending') {
       targetApproverId = Number((item as any).approver_id || (item as any).manager_id || 0);
-      targetApproverName = (item as any).approver_name || '';
+      const rawName1 = (item as any).approver_name || (item as any).manager_name || '';
+      targetApproverName = !isGenericApproverLabel(rawName1) ? rawName1 : '';
       stepLabel = isPrintStampSendRow ? t('Chờ xác nhận') : (hasLevel2 ? t('Chờ duyệt Cấp 1') : t('Chờ duyệt'));
       badgeClass = 'badge warning';
       icon = <Clock size={10} />;
     } else {
-      targetApproverId = Number((item as any).approver_id || 0);
-      targetApproverName = (item as any).approver_name || '';
+      targetApproverId = Number((item as any).approver_id || (item as any).manager_id || 0);
+      const rawName1 = (item as any).approver_name || (item as any).manager_name || '';
+      targetApproverName = !isGenericApproverLabel(rawName1) ? rawName1 : '';
       stepLabel = isPrintStampSendRow ? t('Chờ xác nhận') : t('Chờ duyệt');
       badgeClass = 'badge warning';
       icon = <Clock size={10} />;
     }
 
     if (isPrintStampSendRow) {
-      const mExec = rawNotesForApprover.match(/Người thực hiện:\s*([^\n]+)/i);
-      const parsedExecName = mExec ? mExec[1].trim() : '';
-      let matchedExecUser = null;
-      if (parsedExecName) {
-        matchedExecUser = usersByNameMap.get(parsedExecName.toLowerCase()) || 
-                          Array.from(usersMap.values()).find(u => 
-                            u.full_name?.toLowerCase() === parsedExecName.toLowerCase() || 
-                            u.name?.toLowerCase() === parsedExecName.toLowerCase() ||
-                            u.full_name?.toLowerCase().includes(parsedExecName.toLowerCase())
-                          );
-      }
-      if (!matchedExecUser) {
-        matchedExecUser = usersByNameMap.get('phuongntd') || 
-                          Array.from(usersMap.values()).find(u => (u.full_name || u.name || '').toLowerCase().includes('duy phương'));
-      }
-      if (matchedExecUser) {
-        approverUser = matchedExecUser;
-        targetApproverId = Number(matchedExecUser.id);
-        targetApproverName = matchedExecUser.full_name || matchedExecUser.name;
+      approverUser = resolveFallbackApproverForItem(item);
+      if (approverUser) {
+        targetApproverId = Number(approverUser.id);
+        targetApproverName = approverUser.full_name || approverUser.name;
       }
     } else {
-      if (targetApproverId > 0) {
-        approverUser = usersMap.get(targetApproverId);
-      }
-      if (!approverUser && targetApproverName) {
-        approverUser = usersByNameMap.get(targetApproverName.toLowerCase().trim());
-      }
+      approverUser = findApproverUserInMaps(targetApproverId, targetApproverName);
     }
 
     if (!approverUser) {
-      if (item.type === 'checkin' || item.type === 'attendance_bulk') {
-        const creatorId = Number(item.user_id || item.created_by || 0);
-        const creator = creatorId > 0 ? usersMap.get(creatorId) : null;
-        let directMgr = null;
-        if (creator?.team_id) {
-          directMgr = Array.from(usersMap.values()).find(u => 
-            Number(u.team_id) === Number(creator.team_id) && 
-            ['manager', 'leader', 'truongphong'].includes(String(u.role).toLowerCase()) && 
-            Number(u.id) !== Number(creator.id)
-          );
-        }
-        approverUser = directMgr || usersByNameMap.get('phuongntd') || usersByNameMap.get('nguyễn thị duy phương') ||
-          Array.from(usersMap.values()).find(u => (u.full_name || u.name || '').toLowerCase().includes('duy phương') || u.username === 'phuongntd');
-      } else if (item.type === 'expense' && (item as any).title?.toLowerCase().includes('văn phòng phẩm')) {
-        approverUser = usersByNameMap.get('phuongntd') || usersByNameMap.get('nguyễn thị duy phương') ||
-          Array.from(usersMap.values()).find(u => (u.full_name || u.name || '').toLowerCase().includes('duy phương') || u.username === 'phuongntd');
-      }
+      approverUser = resolveFallbackApproverForItem(item);
     }
 
     const displayName = approverUser?.full_name || approverUser?.name || targetApproverName || t('Chờ phân công');
-    const avatarUrl = approverUser?.avatar_url || approverUser?.avatar;
+    const avatarUrl = approverUser?.avatar_url || approverUser?.avatar || (item as any).approver_avatar;
 
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -5291,7 +5735,7 @@ export default function Approvals() {
         </div>
       </div>
     );
-  }, [usersMap, usersByNameMap, t]);
+  }, [usersMap, usersByNameMap, findApproverUserInMaps, resolveFallbackApproverForItem, isGenericApproverLabel, t]);
 
   const renderWorkflowStepsAndWatchers = useCallback((item: ApprovalItem) => {
     interface StepInfo {
@@ -5313,44 +5757,15 @@ export default function Approvals() {
     const isPrintStampSendItem = item.type === 'expense' && rawRowNotes.includes('Quy trình: In, đóng dấu và gửi hồ sơ');
 
     // Step 1
-    let app1Id = Number((item as any).approver_id || (item as any).manager_id || 0);
-    let app1Name = (item as any).approver_name || '';
+    let app1Id = Number((item as any).approver_id || (item as any).manager_id || (item as any).approved_by || 0);
+    const rawApp1Name = (item as any).approver_name || (item as any).manager_name || (item as any).approved_by_name || '';
+    let app1Name = !isGenericApproverLabel(rawApp1Name) ? rawApp1Name : '';
 
-    if (!app1Id && !app1Name && (item.type === 'checkin' || item.type === 'attendance_bulk')) {
-      const creatorId = Number(item.user_id || item.created_by || 0);
-      const creator = creatorId > 0 ? usersMap.get(creatorId) : null;
-      if (creator?.team_id) {
-        const directMgr = Array.from(usersMap.values()).find(u => 
-          Number(u.team_id) === Number(creator.team_id) && 
-          ['manager', 'leader', 'truongphong'].includes(String(u.role).toLowerCase()) && 
-          Number(u.id) !== Number(creator.id)
-        );
-        if (directMgr) {
-          app1Id = Number(directMgr.id);
-          app1Name = directMgr.full_name || directMgr.name;
-        }
-      }
-    }
-
-    if (isPrintStampSendItem) {
-      const mExec = rawRowNotes.match(/Người thực hiện:\s*([^\n]+)/i);
-      const parsedExecName = mExec ? mExec[1].trim() : '';
-      let matchedExecUser = null;
-      if (parsedExecName) {
-        matchedExecUser = usersByNameMap.get(parsedExecName.toLowerCase()) || 
-                          Array.from(usersMap.values()).find(u => 
-                            u.full_name?.toLowerCase() === parsedExecName.toLowerCase() || 
-                            u.name?.toLowerCase() === parsedExecName.toLowerCase() ||
-                            u.full_name?.toLowerCase().includes(parsedExecName.toLowerCase())
-                          );
-      }
-      if (!matchedExecUser) {
-        matchedExecUser = usersByNameMap.get('phuongntd') || 
-                          Array.from(usersMap.values()).find(u => (u.full_name || u.name || '').toLowerCase().includes('duy phương'));
-      }
-      if (matchedExecUser) {
-        app1Id = Number(matchedExecUser.id);
-        app1Name = matchedExecUser.full_name || matchedExecUser.name;
+    if (isPrintStampSendItem || (!app1Id && !app1Name)) {
+      const fallbackStep1User = resolveFallbackApproverForItem(item);
+      if (fallbackStep1User) {
+        app1Id = Number(fallbackStep1User.id || 0);
+        app1Name = fallbackStep1User.full_name || fallbackStep1User.name || '';
       }
     }
 
@@ -5372,7 +5787,8 @@ export default function Approvals() {
 
     // Step 2
     const app2Id = !isPrintStampSendItem ? Number((item as any).approver_id_2 || 0) : 0;
-    const app2Name = !isPrintStampSendItem ? ((item as any).approver_name_2 || '') : '';
+    const rawApp2Name = !isPrintStampSendItem ? ((item as any).approver_name_2 || '') : '';
+    const app2Name = !isGenericApproverLabel(rawApp2Name) ? rawApp2Name : '';
     if (app2Id > 0 || (app2Name && app2Name.trim() !== '')) {
       let stepStatus: StepInfo['status'] = 'waiting';
       if (isDraft) stepStatus = 'waiting';
@@ -5392,7 +5808,8 @@ export default function Approvals() {
 
     // Step 3
     const app3Id = !isPrintStampSendItem ? Number((item as any).approver_id_3 || 0) : 0;
-    const app3Name = !isPrintStampSendItem ? ((item as any).approver_name_3 || '') : '';
+    const rawApp3Name = !isPrintStampSendItem ? ((item as any).approver_name_3 || '') : '';
+    const app3Name = !isGenericApproverLabel(rawApp3Name) ? rawApp3Name : '';
     if (app3Id > 0 || (app3Name && app3Name.trim() !== '')) {
       let stepStatus: StepInfo['status'] = 'waiting';
       if (isDraft) stepStatus = 'waiting';
@@ -5411,11 +5828,12 @@ export default function Approvals() {
     }
 
     if (steps.length === 0) {
+      const fallbackUser = resolveFallbackApproverForItem(item);
       steps.push({
         stepIndex: 1,
-        title: 'Duyệt',
-        userId: Number((item as any).approver_id || 0),
-        userName: (item as any).approver_name || '',
+        title: 'Cấp 1',
+        userId: Number(fallbackUser?.id || (item as any).approver_id || 0),
+        userName: fallbackUser?.full_name || fallbackUser?.name || (!isGenericApproverLabel((item as any).approver_name) ? (item as any).approver_name : '') || '',
         status: isDraft ? 'waiting' : (overall === 'approved' ? 'approved' : overall === 'rejected' ? 'rejected' : 'pending')
       });
     }
@@ -5455,12 +5873,12 @@ export default function Approvals() {
         {/* Step Approvers Chain */}
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
           {steps.map((st, idx) => {
-            let uObj = st.userId ? usersMap.get(st.userId) : null;
-            if (!uObj && st.userName) {
-              uObj = usersByNameMap.get(st.userName.toLowerCase().trim());
+            let uObj = findApproverUserInMaps(st.userId, st.userName);
+            if (!uObj && idx === 0) {
+              uObj = resolveFallbackApproverForItem(item);
             }
-            const displayName = uObj?.full_name || uObj?.name || st.userName || st.title;
-            const avatarUrl = uObj?.avatar_url || uObj?.avatar;
+            const displayName = uObj?.full_name || uObj?.name || (!isGenericApproverLabel(st.userName) ? st.userName : '') || st.title;
+            const avatarUrl = uObj?.avatar_url || uObj?.avatar || (idx === 0 ? ((item as any).approver_avatar || (item as any).approved_by_avatar) : undefined);
 
             const isApproved = !isDraft && st.status === 'approved';
             const isRejected = !isDraft && st.status === 'rejected';
@@ -5593,8 +6011,34 @@ export default function Approvals() {
     return list;
   }, [users, t]);
 
+  const isMonetaryPoItem = useCallback((item: ApprovalItem) => {
+    const lowerTitle = String(item.title || '').toLowerCase();
+    const rawDesc = String(item.description || (item as any).notes || '');
+    const isZeroWf = lowerTitle.includes('tuyển dụng') || rawDesc.includes('Quy trình: In, đóng dấu và gửi hồ sơ');
+    if (isZeroWf) return false;
+    if (item.type === 'po' || item.type === 'purchase_order' || item.type === 'advance') return true;
+    return Number(item.amount || 0) > 0;
+  }, []);
+
+  const categoryCounts = useMemo(() => {
+    let poFinancial = 0;
+    let nonFinancial = 0;
+    for (const it of currentRawList) {
+      if (isMonetaryPoItem(it)) poFinancial++;
+      else nonFinancial++;
+    }
+    return {
+      all: currentRawList.length,
+      po_financial: poFinancial,
+      workflow_non_financial: nonFinancial
+    };
+  }, [currentRawList, isMonetaryPoItem]);
+
   const currentList = useMemo(() => {
     return currentRawList.filter(item => {
+      if (listCategoryFilter === 'po_financial' && !isMonetaryPoItem(item)) return false;
+      if (listCategoryFilter === 'workflow_non_financial' && isMonetaryPoItem(item)) return false;
+
       const searchLower = listSearchText.toLowerCase().trim();
       const displayTitle = getApprovalDisplayTitle(item).toLowerCase();
       const creatorName = String(item.employee_name || (item as any).user_name || (item as any).creator_name || usersMap.get(Number(item.user_id))?.full_name || '').toLowerCase();
@@ -5617,7 +6061,7 @@ export default function Approvals() {
       const isItemApproved = ['approved', 'confirmed'].includes(rawStatus);
       const isItemRejected = ['rejected', 'failed'].includes(rawStatus);
       const isPaid = Boolean((item as any).is_refunded) || rawStatus === 'paid' || rawStatus === 'refunded';
-      const isFinancial = Number(item.amount || 0) > 0 && !String(item.title).toLowerCase().includes('tuyển dụng');
+      const isFinancial = isMonetaryPoItem(item);
       const isUnpaid = isItemApproved && !isPaid && isFinancial;
 
       let matchesStatus = listStatusFilter === 'all';
@@ -5652,7 +6096,11 @@ export default function Approvals() {
 
       return matchesSearch && matchesStatus && matchesDate && matchesCreator;
     });
-  }, [currentRawList, listSearchText, listStatusFilter, listCreatorFilter, dateRange, usersMap]);
+  }, [currentRawList, listCategoryFilter, isMonetaryPoItem, listSearchText, listStatusFilter, listCreatorFilter, dateRange, usersMap, getApprovalDisplayTitle]);
+
+  const paginatedList = useMemo(() => {
+    return currentList.slice((page - 1) * pageSize, page * pageSize);
+  }, [currentList, page, pageSize]);
 
   return (
     <div>
@@ -5740,7 +6188,7 @@ export default function Approvals() {
         border: '1px solid var(--color-border)',
         borderRadius: isMobile ? '12px' : '12px',
         padding: isMobile ? '8px 10px' : '6px 10px',
-        marginBottom: isMobile ? '0.75rem' : '1.25rem',
+        marginBottom: '0.65rem',
         boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)',
         position: 'relative',
         flexWrap: isMobile ? 'wrap' : 'nowrap',
@@ -5960,7 +6408,7 @@ export default function Approvals() {
                   border: '1px solid var(--color-border)',
                   borderRadius: '8px',
                   background: showMobileFilters ? 'var(--color-border-light)' : 'var(--color-surface)',
-                  color: listStatusFilter !== 'all' ? 'var(--color-primary)' : 'var(--color-text)',
+                  color: (listStatusFilter !== 'all' || listCategoryFilter !== 'all') ? 'var(--color-primary)' : 'var(--color-text)',
                   outline: 'none',
                   boxShadow: 'var(--shadow-sm)',
                   flexShrink: 0,
@@ -5969,7 +6417,7 @@ export default function Approvals() {
                 title={t('Bộ lọc & Tùy chọn')}
               >
                 <MoreHorizontal size={18} />
-                {listStatusFilter !== 'all' && (
+                {(listStatusFilter !== 'all' || listCategoryFilter !== 'all') && (
                   <span style={{
                     position: 'absolute',
                     top: '6px',
@@ -6150,10 +6598,10 @@ export default function Approvals() {
                         />
                       </div>
 
-                      {(listStatusFilter !== 'all' || listCreatorFilter !== 'all') && (
+                      {(listStatusFilter !== 'all' || listCreatorFilter !== 'all' || listCategoryFilter !== 'all') && (
                         <button
                           type="button"
-                          onClick={() => { setListStatusFilter('all'); setListCreatorFilter('all'); setShowMobileFilters(false); }}
+                          onClick={() => { setListStatusFilter('all'); setListCreatorFilter('all'); setListCategoryFilter('all'); setShowMobileFilters(false); }}
                           style={{
                             marginTop: '4px',
                             padding: '6px',
@@ -6177,6 +6625,62 @@ export default function Approvals() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Category Filter Pills: PO / Quy trình có tiền vs Quy trình hành chính & Nhân sự (0đ) */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        marginBottom: isMobile ? '0.75rem' : '1rem',
+        flexWrap: 'wrap'
+      }}>
+        {[
+          { id: 'all', label: t('Tất cả phân loại'), count: categoryCounts.all, icon: Layers, activeColor: 'var(--color-primary, #3b82f6)', activeBg: 'rgba(59, 130, 246, 0.1)' },
+          { id: 'po_financial', label: t('PO / Quy trình có tiền'), count: categoryCounts.po_financial, icon: DollarSign, activeColor: '#059669', activeBg: 'rgba(16, 185, 129, 0.12)' },
+          { id: 'workflow_non_financial', label: t('Quy trình hành chính & Nhân sự (0đ)'), count: categoryCounts.workflow_non_financial, icon: Clipboard, activeColor: '#6366f1', activeBg: 'rgba(99, 102, 241, 0.12)' }
+        ].map(cat => {
+          const isSelected = listCategoryFilter === cat.id;
+          const CatIcon = cat.icon;
+          return (
+            <button
+              key={cat.id}
+              type="button"
+              onClick={() => {
+                setListCategoryFilter(cat.id as any);
+                setPage(1);
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: isMobile ? '5px 10px' : '6px 12px',
+                borderRadius: '999px',
+                fontSize: isMobile ? '0.74rem' : '0.78rem',
+                fontWeight: isSelected ? 700 : 600,
+                border: isSelected ? `1.5px solid ${cat.activeColor}` : '1px solid var(--color-border)',
+                background: isSelected ? cat.activeBg : 'var(--color-surface, #ffffff)',
+                color: isSelected ? cat.activeColor : 'var(--color-text-muted)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                boxShadow: isSelected ? '0 1px 4px rgba(0,0,0,0.04)' : 'none'
+              }}
+            >
+              <CatIcon size={13} />
+              <span>{cat.label}</span>
+              <span style={{
+                fontSize: '0.68rem',
+                padding: '1px 6px',
+                borderRadius: '999px',
+                fontWeight: 700,
+                background: isSelected ? cat.activeColor : 'var(--color-bg-secondary, #f1f5f9)',
+                color: isSelected ? '#ffffff' : 'var(--color-text-muted)'
+              }}>
+                {cat.count}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Content */}
@@ -6209,13 +6713,14 @@ export default function Approvals() {
         if (isMobile) {
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {currentList.slice((page - 1) * pageSize, page * pageSize).map(item => {
+              {paginatedList.map(item => {
                 const role = (user?.role || '').toLowerCase();
                 const userId = Number(user?.id || 0);
                 const isSuperAdmin = isExecutive(user);
                 
                 const creatorId = Number(item.user_id || (item as any)?.created_by || 0);
                 const isCreator = creatorId > 0 && creatorId === userId;
+                const canEditItem = isCreator && ['pending', 'pending_approval', 'pending_manager', 'pending_hr', 'rejected', 'draft'].includes(String(item.status || 'pending').toLowerCase());
 
                 const isPendingAction = activeTab === 'pending' && isItemAtMyStepToApprove(item);
                 const creatorKey = String(item.employee_name || user?.name || '').toLowerCase().trim();
@@ -6412,100 +6917,108 @@ export default function Approvals() {
                         </div>
 
                         <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }} onClick={e => e.stopPropagation()}>
-                          {isPendingAction ? (
+                          {item.is_draft ? (
                             <>
                               <button
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setSelectedItem(item);
-                                  setRejectModalOpen(true);
+                                  const d = draftsList.find(x => x.id === item.draft_id);
+                                  if (d) handleResumeDraft(d);
                                 }}
-                                style={{
-                                  display: 'flex', alignItems: 'center', gap: '3px',
-                                  background: '#ef4444', color: 'white', border: 'none',
-                                  borderRadius: '6px', padding: '4px 8px', fontSize: '0.72rem',
-                                  fontWeight: 700, cursor: 'pointer'
-                                }}
+                                className="btn primary"
+                                style={{ height: '26px', padding: '0 8px', display: 'flex', alignItems: 'center', gap: '4px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 600 }}
+                                title={t('Tiếp tục')}
                               >
-                                <XCircle size={12} />
-                                {t('Từ chối')}
+                                <Edit3 size={11} />
+                                <span>{t('Tiếp tục')}</span>
                               </button>
                               <button
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setItemToApprove(item);
-                                  setApproveConfirmOpen(true);
+                                  if (item.draft_id) handleDeleteDraft(item.draft_id);
                                 }}
-                                style={{
-                                  display: 'flex', alignItems: 'center', gap: '3px',
-                                  background: '#10b981', color: 'white', border: 'none',
-                                  borderRadius: '6px', padding: '4px 8px', fontSize: '0.72rem',
-                                  fontWeight: 700, cursor: 'pointer'
-                                }}
+                                className="btn secondary"
+                                style={{ height: '26px', width: '26px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-danger)' }}
+                                title={t('Xóa')}
                               >
-                                <CheckCircle2 size={12} />
-                                {t('Duyệt')}
+                                <Trash2 size={12} />
                               </button>
                             </>
-                          ) : activeTab === 'my_requests' || item.is_draft ? (
+                          ) : (
                             <>
-                              {item.is_draft ? (
+                              {isPendingAction && (
                                 <>
                                   <button
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      const d = draftsList.find(x => x.id === item.draft_id);
-                                      if (d) handleResumeDraft(d);
+                                      setSelectedItem(item);
+                                      setRejectModalOpen(true);
                                     }}
-                                    className="btn primary"
-                                    style={{ height: '26px', padding: '0 8px', display: 'flex', alignItems: 'center', gap: '4px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 600 }}
-                                    title={t('Tiếp tục')}
+                                    style={{
+                                      display: 'flex', alignItems: 'center', gap: '3px',
+                                      background: '#ef4444', color: 'white', border: 'none',
+                                      borderRadius: '6px', padding: '4px 8px', fontSize: '0.72rem',
+                                      fontWeight: 700, cursor: 'pointer'
+                                    }}
                                   >
-                                    <Edit3 size={11} />
-                                    <span>{t('Tiếp tục')}</span>
+                                    <XCircle size={12} />
+                                    {t('Từ chối')}
                                   </button>
                                   <button
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      if (item.draft_id) handleDeleteDraft(item.draft_id);
+                                      setItemToApprove(item);
+                                      setApproveConfirmOpen(true);
                                     }}
-                                    className="btn secondary"
-                                    style={{ height: '26px', width: '26px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-danger)' }}
-                                    title={t('Xóa')}
+                                    style={{
+                                      display: 'flex', alignItems: 'center', gap: '3px',
+                                      background: '#10b981', color: 'white', border: 'none',
+                                      borderRadius: '6px', padding: '4px 8px', fontSize: '0.72rem',
+                                      fontWeight: 700, cursor: 'pointer'
+                                    }}
                                   >
-                                    <Trash2 size={12} />
+                                    <CheckCircle2 size={12} />
+                                    {t('Duyệt')}
                                   </button>
-                                </>
-                              ) : (
-                                <>
-                                  {Number(user?.id) === Number(item.created_by || item.user_id) && ['pending', 'pending_approval', 'pending_manager', 'pending_hr'].includes(item.status) && (
-                                    <button
-                                      onClick={() => handleEditRequest(item)}
-                                      className="btn secondary"
-                                      style={{ height: '26px', width: '26px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-primary)' }}
-                                      title={t('Sửa')}
-                                    >
-                                      <Edit size={12} />
-                                    </button>
-                                  )}
-                                  {item.status !== 'approved' && item.status !== 'completed' && (
-                                    <button
-                                      onClick={() => handleDeleteRequest(item)}
-                                      className="btn secondary"
-                                      style={{ height: '26px', width: '26px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-danger)' }}
-                                      title={t('Xóa')}
-                                    >
-                                      <Trash2 size={12} />
-                                    </button>
-                                  )}
                                 </>
                               )}
+                              {canEditItem && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleEditRequest(item)}
+                                  className="btn secondary"
+                                  style={{ height: '26px', width: '26px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-primary)' }}
+                                  title={t('Chỉnh sửa')}
+                                >
+                                  <Edit size={12} />
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleDuplicate(item)}
+                                className="btn secondary"
+                                style={{ height: '26px', width: '26px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px' }}
+                                title={t('Nhân bản')}
+                              >
+                                <Copy size={12} />
+                              </button>
+                              {(isCreator || isManagement(user) || isHR(user)) && item.status !== 'approved' && item.status !== 'completed' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteRequest(item)}
+                                  className="btn secondary"
+                                  style={{ height: '26px', width: '26px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-danger)' }}
+                                  title={t('Xóa')}
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              )}
                             </>
-                          ) : null}
+                          )}
                         </div>
                       </div>
                     </motion.div>
@@ -6535,17 +7048,18 @@ export default function Approvals() {
                     <th style={{ padding: '14px 16px', fontSize: '0.8125rem', minWidth: '190px', background: '#f8fafc', position: 'sticky', top: 0 }}>{t('Người tạo & Thời gian')}</th>
                     <th style={{ padding: '14px 16px', fontSize: '0.8125rem', minWidth: '220px', background: '#f8fafc', position: 'sticky', top: 0 }}>{t('Các bước & Người liên quan')}</th>
                     <th style={{ padding: '14px 16px', fontSize: '0.8125rem', minWidth: '170px', background: '#f8fafc', position: 'sticky', top: 0 }}>{t('Người duyệt')}</th>
-                    <th style={{ padding: '14px 16px', fontSize: '0.8125rem', textAlign: 'right', minWidth: '80px', background: '#f8fafc', position: 'sticky', top: 0 }}>{t('Thao tác')}</th>
+                    <th style={{ padding: '14px 16px', fontSize: '0.8125rem', textAlign: 'right', minWidth: '110px', background: '#f8fafc', position: 'sticky', top: 0 }}>{t('Thao tác')}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {currentList.slice((page - 1) * pageSize, page * pageSize).map(item => {
+                  {paginatedList.map(item => {
                     const role = (user?.role || '').toLowerCase();
                     const userId = Number(user?.id || 0);
                     const isSuperAdmin = isExecutive(user);
                     
                     const creatorId = Number(item.user_id || (item as any)?.created_by || 0);
                     const isCreator = creatorId > 0 && creatorId === userId;
+                    const canEditItem = isCreator && ['pending', 'pending_approval', 'pending_manager', 'pending_hr', 'rejected', 'draft'].includes(String(item.status || 'pending').toLowerCase());
 
                     const isPendingAction = activeTab === 'pending' && isItemAtMyStepToApprove(item);
 
@@ -6625,141 +7139,112 @@ export default function Approvals() {
                         </td>
                         <td style={{ padding: '14px 16px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
                           <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', alignItems: 'center' }}>
-                            {isPendingAction ? (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedItem(item);
-                                    setRejectModalOpen(true);
-                                  }}
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '4px',
-                                    background: '#ef4444',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '6px',
-                                    padding: '5px 10px',
-                                    fontSize: '0.75rem',
-                                    fontWeight: 700,
-                                    cursor: 'pointer'
-                                  }}
-                                >
-                                  <XCircle size={12} />
-                                  {t('Từ chối')}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setItemToApprove(item);
-                                    setApproveConfirmOpen(true);
-                                  }}
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '4px',
-                                    background: '#10b981',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '6px',
-                                    padding: '5px 10px',
-                                    fontSize: '0.75rem',
-                                    fontWeight: 700,
-                                    cursor: 'pointer'
-                                  }}
-                                >
-                                  <CheckCircle2 size={12} />
-                                  {t('Duyệt')}
-                                </button>
-                                {(Number(item.user_id) === Number(user?.id) || Number(item.created_by) === Number(user?.id)) && item.status !== 'approved' && item.status !== 'completed' && (
-                                  <button
-                                    onClick={() => handleDeleteRequest(item)}
-                                    className="btn secondary"
-                                    style={{ height: '28px', width: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-danger)' }}
-                                    title={t('Xóa')}
-                                  >
-                                    <Trash2 size={12} />
-                                  </button>
-                                )}
-                              </>
-                            ) : activeTab === 'my_requests' || item.is_draft ? (
+                            {item.is_draft ? (
                               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                {item.is_draft ? (
-                                  <>
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        const d = draftsList.find(x => x.id === item.draft_id);
-                                        if (d) handleResumeDraft(d);
-                                      }}
-                                      className="btn primary"
-                                      style={{ height: '28px', padding: '0 10px', display: 'flex', alignItems: 'center', gap: '4px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700 }}
-                                      title={t('Tiếp tục chỉnh sửa')}
-                                    >
-                                      <Edit3 size={12} />
-                                      <span>{t('Tiếp tục')}</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (item.draft_id) handleDeleteDraft(item.draft_id);
-                                      }}
-                                      className="btn secondary"
-                                      style={{ height: '28px', width: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-danger)' }}
-                                      title={t('Xóa bản nháp')}
-                                    >
-                                      <Trash2 size={12} />
-                                    </button>
-                                  </>
-                                ) : (
-                                  <>
-                                    {Number(user?.id) === Number(item.created_by || item.user_id) && ['pending', 'pending_approval', 'pending_manager', 'pending_hr'].includes(item.status) && (
-                                      <button
-                                        onClick={() => handleEditRequest(item)}
-                                        className="btn secondary"
-                                        style={{ height: '28px', width: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-primary)' }}
-                                        title={t('Sửa')}
-                                      >
-                                        <Edit size={12} />
-                                      </button>
-                                    )}
-                                    {item.status !== 'approved' && item.status !== 'completed' && (
-                                      <button
-                                        onClick={() => handleDeleteRequest(item)}
-                                        className="btn secondary"
-                                        style={{ height: '28px', width: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-danger)' }}
-                                        title={t('Xóa')}
-                                      >
-                                        <Trash2 size={12} />
-                                      </button>
-                                    )}
-                                    <button
-                                      onClick={() => handleDuplicate(item)}
-                                      className="btn secondary"
-                                      style={{ height: '28px', width: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px' }}
-                                      title={t('Nhân bản')}
-                                    >
-                                      <Copy size={12} />
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            ) : activeTab === 'following' ? (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span style={{ fontSize: '0.75rem', color: '#3b82f6', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600, background: 'rgba(59, 130, 246, 0.08)', padding: '4px 8px', borderRadius: '6px' }}>
-                                  <Eye size={12} /> {t('Theo dõi')}
-                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const d = draftsList.find(x => x.id === item.draft_id);
+                                    if (d) handleResumeDraft(d);
+                                  }}
+                                  className="btn primary"
+                                  style={{ height: '28px', padding: '0 10px', display: 'flex', alignItems: 'center', gap: '4px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700 }}
+                                  title={t('Tiếp tục chỉnh sửa')}
+                                >
+                                  <Edit3 size={12} />
+                                  <span>{t('Tiếp tục')}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (item.draft_id) handleDeleteDraft(item.draft_id);
+                                  }}
+                                  className="btn secondary"
+                                  style={{ height: '28px', width: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-danger)' }}
+                                  title={t('Xóa bản nháp')}
+                                >
+                                  <Trash2 size={12} />
+                                </button>
                               </div>
                             ) : (
                               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                {(Number(item.user_id) === Number(user?.id) || Number(item.created_by) === Number(user?.id) || (isManagement(user) || isHR(user))) && item.status !== 'approved' && item.status !== 'completed' && (
+                                {isPendingAction && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedItem(item);
+                                        setRejectModalOpen(true);
+                                      }}
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        background: '#ef4444',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        padding: '5px 10px',
+                                        fontSize: '0.75rem',
+                                        fontWeight: 700,
+                                        cursor: 'pointer'
+                                      }}
+                                    >
+                                      <XCircle size={12} />
+                                      {t('Từ chối')}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setItemToApprove(item);
+                                        setApproveConfirmOpen(true);
+                                      }}
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        background: '#10b981',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        padding: '5px 10px',
+                                        fontSize: '0.75rem',
+                                        fontWeight: 700,
+                                        cursor: 'pointer'
+                                      }}
+                                    >
+                                      <CheckCircle2 size={12} />
+                                      {t('Duyệt')}
+                                    </button>
+                                  </>
+                                )}
+                                {canEditItem && (
                                   <button
+                                    type="button"
+                                    onClick={() => handleEditRequest(item)}
+                                    className="btn secondary"
+                                    style={{ height: '28px', width: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-primary)' }}
+                                    title={t('Chỉnh sửa')}
+                                  >
+                                    <Edit size={12} />
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleDuplicate(item)}
+                                  className="btn secondary"
+                                  style={{ height: '28px', width: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px' }}
+                                  title={t('Nhân bản')}
+                                >
+                                  <Copy size={12} />
+                                </button>
+                                {(isCreator || isManagement(user) || isHR(user)) && item.status !== 'approved' && item.status !== 'completed' && (
+                                  <button
+                                    type="button"
                                     onClick={() => handleDeleteRequest(item)}
                                     className="btn secondary"
                                     style={{ height: '28px', width: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-danger)' }}
@@ -7110,7 +7595,9 @@ export default function Approvals() {
           item={selectedTimelineItem}
           onClose={() => {
             setSelectedTimelineItem(null);
+            setHighlightedCommentId(null);
             pendingOpenRef.current = null;
+            clearApprovalUrlParams();
           }}
           users={users}
           t={t}
@@ -7121,6 +7608,7 @@ export default function Approvals() {
           onEdit={handleEditRequest}
           onDelete={handleDeleteRequest}
           zIndex={2147483640}
+          highlightCommentId={highlightedCommentId}
         />
       )}
 
@@ -14182,7 +14670,7 @@ export default function Approvals() {
 }
 
 // Side-Drawer Component detailing step-by-step progress
-export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onReject, isAdmin, onDuplicate, onEdit, onDelete, zIndex }: {
+export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onReject, isAdmin, onDuplicate, onEdit, onDelete, zIndex, highlightCommentId }: {
   item: ApprovalItem;
   onClose: () => void;
   users: any[];
@@ -14194,6 +14682,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
   onEdit?: (item: ApprovalItem) => void;
   onDelete?: (item: ApprovalItem) => void;
   zIndex?: number;
+  highlightCommentId?: string | null;
 }) {
   const [detail, setDetail] = useState<any>(item || null);
   const [senderLeaveBalance, setSenderLeaveBalance] = useState<any>(null);
@@ -14682,8 +15171,11 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
     }
   };
 
+  const commentInFlightRef = useRef(false);
   const handleAddComment = async () => {
     if (!newComment.trim() && commentAttachments.length === 0) return;
+    if (commentInFlightRef.current) return;
+    commentInFlightRef.current = true;
     const endpoint = getCommentsEndpoint(item.type, item.id);
     if (!endpoint) {
       // Fallback local only if type not supported
@@ -14698,6 +15190,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       setNewComment('');
       setCommentAttachments([]);
       toast.success(t('Đăng bình luận thành công!'));
+      commentInFlightRef.current = false;
       return;
     }
 
@@ -14719,6 +15212,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       } else {
         toast.error(t('Lỗi khi đăng bình luận.'));
       }
+    } finally {
+      commentInFlightRef.current = false;
     }
   };
 
@@ -14787,6 +15282,14 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
           const res = await api.get(`/expenses/${item.id}`);
           const found = res?.data?.data || res?.data;
           if (active && found) setDetail((prev: any) => ({ ...(prev || {}), ...found }));
+        } else if ((item.type as any) === 'po' || (item.type as any) === 'purchase_order') {
+          try {
+            const res = await api.get(`/purchase-orders/${item.id}`);
+            const found = res?.data?.data || res?.data;
+            if (active && found && found.id) {
+              setDetail((prev: any) => ({ ...(prev || {}), ...found }));
+            }
+          } catch (err) {}
         } else if (item.type === 'checkin' || item.type === 'attendance_bulk') {
           if (item.type === 'attendance_bulk') {
             try {
@@ -14838,6 +15341,64 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       fetchComments();
     }
   }, [item?.id, item?.type]);
+
+  const feedContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const targetCommentId = highlightCommentId || searchParams.get('highlight_comment_id') || searchParams.get('comment_id');
+    const regularComments = localComments.filter((c: any) => !String(c.id).startsWith('sys-'));
+    if (!targetCommentId || regularComments.length === 0) return;
+
+    const timer = setTimeout(() => {
+      const container = feedContainerRef.current;
+      if (!container) return;
+
+      const targetComment = regularComments.find((c: any) => String(c.id) === String(targetCommentId));
+      const allCommentCards = Array.from(container.querySelectorAll('.custom-scrollbar div[style*="position: relative"]')) as HTMLElement[];
+      let targetEl: HTMLElement | null = document.getElementById(`approval-comment-${targetCommentId}`) || document.getElementById(`comment-${targetCommentId}`);
+
+      if (!targetEl && targetComment) {
+        const snippet = String(targetComment.text || targetComment.body || targetComment.content || '').replace(/<[^>]*>/g, '').trim().slice(0, 40);
+        if (snippet) {
+          targetEl = allCommentCards.find(el => (el.textContent || '').includes(snippet)) || null;
+        }
+      }
+      if (!targetEl && allCommentCards.length > 0) {
+        const idx = regularComments.findIndex((c: any) => String(c.id) === String(targetCommentId));
+        if (idx >= 0 && allCommentCards[idx]) {
+          targetEl = allCommentCards[idx];
+        }
+      }
+
+      const scrollTarget = targetEl || container;
+      scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      if (targetEl) {
+        const bubble = (targetEl.querySelector('div[style*="border-radius"]') as HTMLElement) || targetEl;
+        const origTransition = bubble.style.transition;
+        const origBoxShadow = bubble.style.boxShadow;
+        const origBg = bubble.style.backgroundColor;
+        bubble.style.transition = 'all 0.4s ease';
+        bubble.style.boxShadow = '0 0 0 2px #f59e0b, 0 4px 12px rgba(245, 158, 11, 0.25)';
+        bubble.style.backgroundColor = 'rgba(254, 243, 199, 0.65)';
+        setTimeout(() => {
+          bubble.style.boxShadow = origBoxShadow;
+          bubble.style.backgroundColor = origBg;
+          setTimeout(() => { bubble.style.transition = origTransition; }, 400);
+        }, 2800);
+      }
+
+      if (searchParams.has('highlight_comment_id') || searchParams.has('comment_id')) {
+        searchParams.delete('highlight_comment_id');
+        searchParams.delete('comment_id');
+        const qs = searchParams.toString();
+        window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [highlightCommentId, localComments]);
 
   const creatorUser = useMemo(() => {
     const creatorId = detail?.user_id || detail?.created_by || (item as any)?.user_id || (item as any)?.created_by;
@@ -14973,11 +15534,11 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
     const isPrintStampSend = item.type === 'expense' && rawDesc.includes('Quy trình: In, đóng dấu và gửi hồ sơ');
 
     // Determine actual approver user IDs configured for this proposal
-    const app1Id = detail?.approver_id || detail?.manager_id || (item as any)?.approver_id || (item as any)?.manager_id;
+    const app1Id = detail?.approver_id || detail?.manager_id || (item as any)?.approver_id || (item as any)?.manager_id || detail?.approved_by || (item as any)?.approved_by;
     const app2Id = detail?.approver_id_2 || (item as any)?.approver_id_2;
     const app3Id = detail?.director_id || detail?.approver_id_3 || (item as any)?.approver_id_3;
 
-    const app1Name = detail?.approver_name || (item as any)?.approver_name || detail?.approved_by_name || (item as any)?.approved_by_name;
+    const app1Name = detail?.approver_name || (item as any)?.approver_name || detail?.manager_name || (item as any)?.manager_name || detail?.approved_by_name || (item as any)?.approved_by_name;
     const app2Name = detail?.approver_name_2 || (item as any)?.approver_name_2 || detail?.approved_by_name_2 || (item as any)?.approved_by_name_2;
     const app3Name = detail?.approver_name_3 || (item as any)?.approver_name_3 || detail?.approved_by_name_3 || (item as any)?.approved_by_name_3;
 
@@ -14988,12 +15549,18 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
     // Is it an HR workflow (leave, remote_work, late_early, overtime, attendance_bulk, checkin)?
     const isHrItem = item.type === 'leave' || item.type === 'checkin' || item.type === 'attendance_bulk' || rawDesc.includes('[Đăng ký làm việc từ xa]') || rawDesc.includes('[Đi muộn/Về sớm]') || rawDesc.includes('[Tăng ca]') || rawDesc.includes('[Nghỉ phép]');
 
+    const isGenericLabel = (n: any) => {
+      if (!n || typeof n !== 'string') return true;
+      const cl = n.toLowerCase().trim();
+      return !cl || ['quản lý trực tiếp', 'ban giám đốc', 'duyệt', 'người duyệt', 'chờ phân công', 'cấp 1', 'cấp 2', 'cấp 3', 'thực hiện'].includes(cl);
+    };
+
     const findUserByIdOrName = (id: any, name: any, fallbackRoleTitle?: string, fallbackAvatar?: string) => {
       if (id) {
         const byId = effectiveUsers.find(u => Number(u.id) === Number(id));
         if (byId) return { ...byId, avatar_url: byId.avatar_url || fallbackAvatar };
       }
-      if (name && typeof name === 'string' && name.trim()) {
+      if (name && typeof name === 'string' && name.trim() && !isGenericLabel(name)) {
         const cleanName = name.trim().toLowerCase();
         const byName = effectiveUsers.find(u => {
           const fn = (u.full_name || u.name || '').toLowerCase().trim();
@@ -15011,8 +15578,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       if (id) {
         return {
           id: Number(id) || id,
-          full_name: name || `Người duyệt #${id}`,
-          name: name || `Người duyệt #${id}`,
+          full_name: (!isGenericLabel(name) ? name : '') || `Người duyệt #${id}`,
+          name: (!isGenericLabel(name) ? name : '') || `Người duyệt #${id}`,
           avatar_url: fallbackAvatar,
           role_title: fallbackRoleTitle || ''
         };
@@ -15432,21 +15999,21 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
     const hasInstallments = rawDesc.includes('[Thanh toán theo đợt]');
     const hasRecurring = rawDesc.includes('[Lặp lại định kỳ]');
     const isPrintStampSend = item.type === 'expense' && rawDesc.includes('Quy trình: In, đóng dấu và gửi hồ sơ');
+    const lowerItemTitle = String(detail?.title || item.title || '').toLowerCase();
     const isStationery = (
-      rawDesc.includes('DANH SÁCH') ||
+      rawDesc.includes('DANH SÁCH VĂN PHÒNG PHẨM') ||
+      rawDesc.includes('DANH SÁCH MUA SẮM') ||
+      rawDesc.includes('DANH SÁCH THIẾT BỊ') ||
       rawDesc.includes('Đồ vật đề xuất:') ||
-      String(item.title).toLowerCase().includes('văn phòng phẩm') ||
-      String(item.title).toLowerCase().includes('trang thiết bị') ||
-      String(item.title).toLowerCase().includes('mua sắm') ||
-      String(item.title).toLowerCase().includes('thiết bị') ||
-      String(detail?.title).toLowerCase().includes('văn phòng phẩm') ||
-      String(detail?.title).toLowerCase().includes('trang thiết bị') ||
-      String(detail?.title).toLowerCase().includes('mua sắm') ||
-      String(detail?.title).toLowerCase().includes('thiết bị')
+      lowerItemTitle.startsWith('đề xuất văn phòng phẩm') ||
+      lowerItemTitle.startsWith('mua sắm trang thiết bị') ||
+      lowerItemTitle.startsWith('đề xuất mua sắm') ||
+      lowerItemTitle.startsWith('cấp thiết bị it') ||
+      lowerItemTitle.startsWith('đề xuất trang thiết bị it')
     );
     const isZeroCostWorkflow = (
       item.type === 'expense' &&
-      (Number(detail?.amount || item?.amount || 0) === 0 || isStationery || isPrintStampSend)
+      (Number(detail?.amount || item?.amount || 0) === 0 || isPrintStampSend || lowerItemTitle.includes('tuyển dụng'))
     );
 
     let printStampSendFields: Record<string, string> = {};
@@ -17530,56 +18097,85 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
           <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '14px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)' }}>
             <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Package size={15} />
-              <span>{t('Danh sách văn phòng phẩm đề xuất')} ({parsedStationeryItems.length} {t('loại')})</span>
+              <span>{t('Danh sách vật phẩm / trang thiết bị đề xuất')} ({parsedStationeryItems.length} {t('loại')})</span>
             </div>
 
-            {parsedStationeryItems.length > 0 ? (
-              <div style={{ overflowX: 'auto', borderRadius: '10px', border: '1px solid var(--color-border-light)' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
-                  <thead>
-                    <tr style={{ background: 'var(--color-bg-secondary)', borderBottom: '1px solid var(--color-border-light)', textAlign: 'left' }}>
-                      <th style={{ padding: '10px 12px', width: '40px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>#</th>
-                      <th style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>{t('Tên văn phòng phẩm / Vật phẩm')}</th>
-                      <th style={{ padding: '10px 12px', width: '130px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>{t('Số lượng')}</th>
-                      <th style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>{t('Ghi chú / Mục đích sử dụng')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {parsedStationeryItems.map((st, idx) => (
-                      <tr key={idx} style={{ borderBottom: idx < parsedStationeryItems.length - 1 ? '1px solid var(--color-border-light)' : 'none', background: idx % 2 === 0 ? 'var(--color-surface)' : 'var(--color-bg-secondary)' }}>
-                        <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
-                          {st.index || (idx + 1)}
-                        </td>
-                        <td style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--color-text)' }}>
-                          {st.name}
-                        </td>
-                        <td style={{ padding: '10px 12px' }}>
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            padding: '3px 8px',
-                            borderRadius: '6px',
-                            background: 'rgba(59, 130, 246, 0.1)',
-                            color: '#2563eb',
-                            fontWeight: 700,
-                            fontSize: '0.78rem'
-                          }}>
-                            {st.quantity} {st.unit}
-                          </span>
-                        </td>
-                        <td style={{ padding: '10px 12px' }}>
-                          <NoteCell
-                            notes={st.notes}
-                            itemName={st.name}
-                            onOpenModal={(data) => setActiveNoteModal({ ...data, title: t('Ghi chú / Mục đích sử dụng') })}
-                          />
-                        </td>
+            {parsedStationeryItems.length > 0 ? (() => {
+              const hasMonetaryStationery = parsedStationeryItems.some(st => Number(st.price || 0) > 0);
+              return (
+                <div style={{ overflowX: 'auto', borderRadius: '10px', border: '1px solid var(--color-border-light)' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+                    <thead>
+                      <tr style={{ background: 'var(--color-bg-secondary)', borderBottom: '1px solid var(--color-border-light)', textAlign: 'left' }}>
+                        <th style={{ padding: '10px 12px', width: '40px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>#</th>
+                        <th style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>{t('Tên văn phòng phẩm / Vật phẩm')}</th>
+                        <th style={{ padding: '10px 12px', width: '120px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>{t('Số lượng')}</th>
+                        {hasMonetaryStationery && (
+                          <>
+                            <th style={{ padding: '10px 12px', width: '120px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>{t('Đơn giá')}</th>
+                            <th style={{ padding: '10px 12px', width: '80px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>VAT</th>
+                            <th style={{ padding: '10px 12px', width: '130px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>{t('Thành tiền')}</th>
+                          </>
+                        )}
+                        <th style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>{t('Ghi chú / Mục đích sử dụng')}</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
+                    </thead>
+                    <tbody>
+                      {parsedStationeryItems.map((st, idx) => {
+                        const unitPrice = Number(st.price || 0);
+                        const qty = Number(st.quantity || 1);
+                        const vatPct = Number(st.vat || 0);
+                        const calcTotal = st.lineTotal || Math.round(unitPrice * qty * (1 + vatPct / 100));
+                        return (
+                          <tr key={idx} style={{ borderBottom: idx < parsedStationeryItems.length - 1 ? '1px solid var(--color-border-light)' : 'none', background: idx % 2 === 0 ? 'var(--color-surface)' : 'var(--color-bg-secondary)' }}>
+                            <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+                              {st.index || (idx + 1)}
+                            </td>
+                            <td style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--color-text)' }}>
+                              {st.name}
+                            </td>
+                            <td style={{ padding: '10px 12px' }}>
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                background: 'rgba(59, 130, 246, 0.1)',
+                                color: '#2563eb',
+                                fontWeight: 700,
+                                fontSize: '0.78rem'
+                              }}>
+                                {st.quantity} {st.unit}
+                              </span>
+                            </td>
+                            {hasMonetaryStationery && (
+                              <>
+                                <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, color: 'var(--color-text)' }}>
+                                  {unitPrice > 0 ? `${unitPrice.toLocaleString('vi-VN')}đ` : '—'}
+                                </td>
+                                <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+                                  {unitPrice > 0 ? `${vatPct}%` : '—'}
+                                </td>
+                                <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#059669' }}>
+                                  {calcTotal > 0 ? `${calcTotal.toLocaleString('vi-VN')}đ` : '—'}
+                                </td>
+                              </>
+                            )}
+                            <td style={{ padding: '10px 12px' }}>
+                              <NoteCell
+                                notes={st.notes}
+                                itemName={st.name}
+                                onOpenModal={(data) => setActiveNoteModal({ ...data, title: t('Ghi chú / Mục đích sử dụng') })}
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })() : (
               <div style={{ padding: '12px', background: 'var(--color-bg-secondary)', borderRadius: '8px', fontSize: '0.8rem', color: 'var(--color-text)' }}>
                 {renderLinkifiedText(cleanNoteText)}
               </div>
@@ -19666,7 +20262,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
             </div>
 
             {/* Unified Discussion & Activity Feed */}
-            <div style={{ marginTop: '0.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--color-border-light)', display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, overflow: 'hidden' }}>
+            <div ref={feedContainerRef} style={{ marginTop: '0.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--color-border-light)', display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, overflow: 'hidden' }}>
               <ProcessFeed
                 comments={localComments.filter((c: any) => !String(c.id).startsWith('sys-'))}
                 historyLogs={localComments.filter((c: any) => String(c.id).startsWith('sys-'))}

@@ -121,11 +121,42 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
   const [resultId, setResultId] = useState<number | string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string>('');
   const inFlightRef = useRef(false);
+  const proposalInstanceId = `${messageId}_${proposal.action_type}`;
+
+  // Bi-directional event bus: listen for form completions from background Drawers/Modals
+  React.useEffect(() => {
+    const handleActionCompleted = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const detail = customEvent.detail;
+      if (!detail) return;
+
+      const activeProposalId = detail.proposalId || (window as any).__activeErpProposalId;
+      if (!activeProposalId || activeProposalId !== proposalInstanceId) {
+        return;
+      }
+
+      if (
+        detail.actionType === proposal.action_type ||
+        (proposal.action_type === 'advance_payment' && detail.actionType === 'expense') ||
+        (proposal.action_type === 'supplementary' && detail.actionType === 'attendance') ||
+        (proposal.action_type === 'deposit' && detail.actionType === 'deposit')
+      ) {
+        setStatus('success');
+        if (detail.id) setResultId(detail.id);
+        if ((window as any).__activeErpProposalId === proposalInstanceId) {
+          (window as any).__activeErpProposalId = null;
+        }
+      }
+    };
+    window.addEventListener('erp-action-completed', handleActionCompleted);
+    return () => window.removeEventListener('erp-action-completed', handleActionCompleted);
+  }, [proposal.action_type, proposalInstanceId]);
 
   const handleOpenAndPrefill = async () => {
-    if (inFlightRef.current || status !== 'idle') return;
+    if (inFlightRef.current || status === 'submitting' || status === 'success' || status === 'cancelled') return;
     inFlightRef.current = true;
     setErrorMsg('');
+    (window as any).__activeErpProposalId = proposalInstanceId;
 
     try {
       const p = proposal.params || {};
@@ -342,7 +373,8 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
             start_date: p.start_date || p.from_date || new Date().toISOString().split('T')[0],
             end_date: p.end_date || p.to_date || new Date().toISOString().split('T')[0],
             total_days: Number(p.total_days) || 1,
-            reason: p.reason || 'Đăng ký qua trợ lý AI IDEAS'
+            reason: p.reason || 'Đăng ký qua trợ lý AI IDEAS',
+            _draft_created_at: Date.now()
           };
           sessionStorage.setItem('pending_leave_draft', JSON.stringify(leaveDetail));
           window.dispatchEvent(new CustomEvent('open-create-leave-modal', { detail: leaveDetail }));
@@ -362,7 +394,8 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
             date: p.date || new Date().toISOString().split('T')[0],
             in_time: p.in_time || '08:00',
             out_time: p.out_time || '17:00',
-            reason: p.reason || p.notes || 'Quên chấm công (Đề xuất qua AI IDEAS)'
+            reason: p.reason || p.notes || 'Quên chấm công (Đề xuất qua AI IDEAS)',
+            _draft_created_at: Date.now()
           };
           sessionStorage.setItem('pending_leave_draft', JSON.stringify(suppDetail));
           window.dispatchEvent(new CustomEvent('open-create-leave-modal', { detail: suppDetail }));
@@ -395,7 +428,8 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
           const poDraft = {
             notes: p.notes || p.reason || 'Phiếu nhập kho vật tư từ AI IDEAS',
             supplier_name: p.supplier_name || 'Nhà cung cấp',
-            items: p.items || []
+            items: p.items || [],
+            _draft_created_at: Date.now()
           };
           sessionStorage.setItem('pending_po_draft', JSON.stringify(poDraft));
           if (!window.location.pathname.startsWith('/inventory')) {
@@ -413,7 +447,8 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
             start_date: p.date || p.start_date || new Date().toISOString().split('T')[0],
             end_date: p.date || p.end_date || new Date().toISOString().split('T')[0],
             reason: p.reason || p.notes || 'Đề xuất đổi ca trực/lịch làm việc (AI IDEAS)',
-            shift_type: p.shift_type || 'weekend'
+            shift_type: p.shift_type || 'weekend',
+            _draft_created_at: Date.now()
           };
           sessionStorage.setItem('pending_leave_draft', JSON.stringify(swapDetail));
           window.dispatchEvent(new CustomEvent('open-create-leave-modal', { detail: swapDetail }));
@@ -430,18 +465,24 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
         case 'admission_document_request': {
           const cid = p.contact_id || p.id;
           if (cid) {
-            navigate(`/contacts?id=${cid}&tab=documents`);
+            useUIStore.getState().openCustomerDrawer(Number(cid), 'docs');
+            if (useChatStore.getState().isMaximized) {
+              useChatStore.getState().toggleMaximize();
+            }
           } else {
             navigate('/contacts');
           }
-          toast.success('Đã chuyển đến Hồ sơ học viên để kiểm tra và tải tài liệu thẩm định!');
+          toast.success('Đã mở Hồ sơ học viên để kiểm tra và tải tài liệu thẩm định!');
           break;
         }
 
         case 'legal_contract': {
           const cid = p.contact_id || p.id;
           if (cid) {
-            navigate(`/contacts?id=${cid}&tab=contracts`);
+            useUIStore.getState().openCustomerDrawer(Number(cid), 'docs');
+            if (useChatStore.getState().isMaximized) {
+              useChatStore.getState().toggleMaximize();
+            }
           } else {
             navigate('/deposits');
           }
@@ -467,7 +508,8 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
             priority: p.priority || 'medium',
             customer_name: p.customer_name || p.student_name || '',
             contact_id: p.contact_id || null,
-            description: p.description || p.notes || p.body || ''
+            description: p.description || p.notes || p.body || '',
+            _draft_created_at: Date.now()
           };
           sessionStorage.setItem('pending_ticket_draft', JSON.stringify(ticketDraft));
           navigate('/support-tickets?create=1');
@@ -481,7 +523,8 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
             customer_name: p.customer_name || p.contact_name || '',
             contact_id: p.contact_id || null,
             total: p.total || p.amount || 0,
-            notes: p.notes || ''
+            notes: p.notes || '',
+            _draft_created_at: Date.now()
           };
           sessionStorage.setItem('pending_quote_draft', JSON.stringify(quoteDraft));
           navigate('/quotes?create=1');
@@ -510,6 +553,12 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
             expType = 'inventory';
           } else if (['attendance', 'attendances', 'bang_cong', 'cham_cong'].includes(rawType)) {
             expType = 'attendance';
+          } else if (['expense', 'expenses', 'chi_phi', 'phieu_chi', 'po'].includes(rawType)) {
+            expType = 'expense';
+          } else if (['deposit', 'deposits', 'dat_coc', 'so'].includes(rawType)) {
+            expType = 'deposit';
+          } else if (['task', 'tasks', 'cong_viec'].includes(rawType)) {
+            expType = 'task';
           }
 
           toast.loading('Đang trích xuất và tải tệp Excel...', { id: 'export-action-toast' });
@@ -536,23 +585,19 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
               }
             }
           } else {
-            if (p.search) paramsObj.search = p.search;
-            if (p.segment) paramsObj.segment = p.segment;
-            if (p.lead_status) paramsObj.lead_status = p.lead_status;
-            if (p.status) paramsObj.status = p.status;
-            if (p.from) paramsObj.from = p.from;
-            if (p.to) paramsObj.to = p.to;
-            if (p.owner_id) paramsObj.owner_id = p.owner_id;
-            if (p.team_id) paramsObj.team_id = p.team_id;
-            if (p.tag) paramsObj.tag = p.tag;
-            if (p.data_type) paramsObj.data_type = p.data_type;
-            if (p.student_sub_tab) paramsObj.student_sub_tab = p.student_sub_tab;
-            if (p.multi_program) paramsObj.multi_program = String(p.multi_program);
-            if (p.export_mode) paramsObj.export_mode = p.export_mode;
-            if (p.limit) paramsObj.limit = p.limit;
-            if (p.stages) paramsObj.stages = p.stages;
-            if (p.gender) paramsObj.gender = p.gender;
-            if (p.program) paramsObj.program = p.program;
+            const forwardKeys = [
+              'search', 'segment', 'lead_status', 'status', 'from', 'to',
+              'owner_id', 'owners', 'team_id', 'tag', 'data_type', 'student_sub_tab',
+              'multi_program', 'export_mode', 'limit', 'stages', 'gender', 'program',
+              'source', 'city', 'financial_filter', 'min_deposit', 'stale_days',
+              'interaction_status', 'date_field', 'departments', 'category',
+              'period', 'min_amount', 'max_amount', 'overdue_only'
+            ];
+            forwardKeys.forEach((k) => {
+              if (p[k] !== undefined && p[k] !== null && p[k] !== '') {
+                paramsObj[k] = String(p[k]);
+              }
+            });
           }
 
           // Ensure normalized type
@@ -577,7 +622,26 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
           throw new Error('Loại hành động không được hỗ trợ: ' + proposal.action_type);
       }
 
-      setStatus('success');
+      if (proposal.action_type === 'export_data' || proposal.action_type === 'export') {
+        setStatus('success');
+      } else if (
+        proposal.action_type === 'expense' ||
+        ((proposal.action_type === 'admission_document_request' || proposal.action_type === 'legal_contract') && (p.contact_id || p.id))
+      ) {
+        // Global Drawer — dock Chat instead of minimizing completely
+        const chatState = useChatStore.getState();
+        if (chatState.isMaximized) {
+          chatState.toggleMaximize();
+        }
+        if (proposal.action_type === 'expense') {
+          toast('Đã mở phiếu chi bên cạnh cửa sổ Chat để bạn đối chiếu và lưu.', { icon: 'ℹ️' });
+        }
+      } else {
+        // Page-level modals (Leave, Task, Contact, Deposit on page): minimize Chat Modal so the opened Modal in ERP is immediately visible
+        useChatStore.getState().minimizeChat();
+        toast('Đã mở form và thu nhỏ cửa sổ Chat để bạn dễ thao tác.', { icon: 'ℹ️' });
+      }
+
       if (onExecuted) {
         onExecuted(proposal.action_type, proposal.params);
       }
@@ -787,6 +851,22 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
         </>
       );
     }
+    if (status === 'success') {
+      return (
+        <>
+          <Check size={13} />
+          <span>Đã hoàn thành {resultId ? `#${resultId}` : ''}</span>
+        </>
+      );
+    }
+    if (status === 'cancelled') {
+      return (
+        <>
+          <X size={13} />
+          <span>Đã hủy đề xuất</span>
+        </>
+      );
+    }
     if (proposal.action_type === 'export_data' || proposal.action_type === 'export') {
       return (
         <>
@@ -967,7 +1047,7 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
         )}
         <button
           type="button"
-          disabled={status === 'submitting'}
+          disabled={status === 'submitting' || status === 'success' || status === 'cancelled'}
           onClick={(e) => {
             e.stopPropagation();
             handleOpenAndPrefill();
@@ -977,20 +1057,20 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
             padding: '6px 10px',
             borderRadius: '7px',
             border: 'none',
-            background: theme.accent,
+            background: status === 'success' ? '#10b981' : (status === 'cancelled' ? '#94a3b8' : theme.accent),
             color: '#ffffff',
             fontSize: '0.74rem',
             fontWeight: 700,
-            cursor: status === 'submitting' ? 'not-allowed' : 'pointer',
+            cursor: (status === 'submitting' || status === 'success' || status === 'cancelled') ? 'default' : 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             gap: '5px',
-            boxShadow: `0 1.5px 5px ${theme.border}`,
+            boxShadow: status === 'success' ? '0 1.5px 5px rgba(16, 185, 129, 0.3)' : `0 1.5px 5px ${theme.border}`,
             transition: 'opacity 0.15s ease'
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.9'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
+          onMouseEnter={(e) => { if (status === 'idle') e.currentTarget.style.opacity = '0.9'; }}
+          onMouseLeave={(e) => { if (status === 'idle') e.currentTarget.style.opacity = '1'; }}
         >
           {getButtonContent()}
         </button>

@@ -205,6 +205,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   onOpenFocusMode,
   taskGroups
 }) => {
+  const effectiveZIndex = zIndex || 2147483640;
   const navigate = useNavigate();
   const { t } = useLanguage();
   const { startUpload, updateProgress, finishUpload } = useUploadProgress();
@@ -265,13 +266,14 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     }
   }, [isOpen, taskGroups]);
 
+  const escapeHandlerRef = useRef<() => void>(() => onClose());
   useEffect(() => {
     if (isOpen && !embedMode) {
       return pushOverlay('workspace-task-drawer', () => {
-        onClose();
+        escapeHandlerRef.current();
       }, isFromCustomerDrawer ? 110 : 90);
     }
-  }, [isOpen, embedMode, onClose, isFromCustomerDrawer]);
+  }, [isOpen, embedMode, isFromCustomerDrawer]);
 
   const availableTaskGroups = Array.isArray(taskGroups) && taskGroups.length > 0 
     ? taskGroups 
@@ -1039,7 +1041,15 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   taskRef.current = task;
 
   // Load contacts with cache (stable callback)
+  const contactsAbortRef = useRef<AbortController | null>(null);
+  const commentsAbortRef = useRef<AbortController | null>(null);
+  const timelineAbortRef = useRef<AbortController | null>(null);
+  const deleteCommentInFlightRef = useRef(false);
+
   const fetchContactsList = useCallback(async (preferredContactId?: number | string | null, forceFull: boolean = false) => {
+    if (contactsAbortRef.current) contactsAbortRef.current.abort();
+    const abortController = new AbortController();
+    contactsAbortRef.current = abortController;
     const now = Date.now();
     const currentFd = formDataRef.current;
     const currentT = taskRef.current;
@@ -1061,7 +1071,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       }
       setLoadingContacts(true);
       try {
-        const singleRes = await api.get(`/contacts/${activeContactId}`);
+        const singleRes = await api.get(`/contacts/${activeContactId}`, { signal: abortController.signal });
+        if (abortController.signal.aborted) return;
         const cObj = singleRes.data?.data || singleRes.data;
         if (cObj && cObj.id) {
           setContacts(prev => {
@@ -1069,10 +1080,11 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             return [cObj, ...prev];
           });
         }
-      } catch (err) {
+      } catch (err: any) {
+        if (err?.name === 'AbortError' || err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return;
         console.error("Lỗi tải contact chi tiết:", err);
       } finally {
-        setLoadingContacts(false);
+        if (!abortController.signal.aborted) setLoadingContacts(false);
       }
       return;
     }
@@ -1081,18 +1093,22 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       let list = [...initialList];
       if (activeContactId && !list.some((c: any) => Number(c.id) === Number(activeContactId))) {
         try {
-          const singleRes = await api.get(`/contacts/${activeContactId}`);
+          const singleRes = await api.get(`/contacts/${activeContactId}`, { signal: abortController.signal });
+          if (abortController.signal.aborted) return;
           const cObj = singleRes.data?.data || singleRes.data;
           if (cObj && cObj.id) {
             list = [cObj, ...list];
             if (cachedContacts) cachedContacts.data = list;
           }
-        } catch (err) {
+        } catch (err: any) {
+          if (err?.name === 'AbortError' || err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return;
           console.error("Lỗi tải contact chi tiết:", err);
         }
       }
-      setContacts(list);
-      setLoadingContacts(false);
+      if (!abortController.signal.aborted) {
+        setContacts(list);
+        setLoadingContacts(false);
+      }
     };
 
     if (cachedContacts && (now - cachedContacts.timestamp < METADATA_CACHE_TTL) && cachedContacts.data?.length > 0) {
@@ -1102,29 +1118,35 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
     setLoadingContacts(true);
     try {
-      const res = await api.get('/contacts', { params: { limit: 1000 } });
+      const res = await api.get('/contacts', { params: { limit: 1000 }, signal: abortController.signal });
+      if (abortController.signal.aborted) return;
       const rawData = res.data?.data?.items || res.data?.data || (Array.isArray(res.data) ? res.data : []);
       const list = Array.isArray(rawData) ? rawData : [];
       cachedContacts = { data: list, timestamp: Date.now() };
       await applyContacts(list);
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.name === 'AbortError' || err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return;
       console.error("Lỗi tải danh sách contacts:", err);
       if (activeContactId) {
         try {
-          const singleRes = await api.get(`/contacts/${activeContactId}`);
+          const singleRes = await api.get(`/contacts/${activeContactId}`, { signal: abortController.signal });
+          if (abortController.signal.aborted) return;
           const cObj = singleRes.data?.data || singleRes.data;
           if (cObj && cObj.id) {
             setContacts([cObj]);
           }
         } catch {}
       }
-      setLoadingContacts(false);
+      if (!abortController.signal.aborted) setLoadingContacts(false);
     }
   }, []);
 
   useEffect(() => {
     if (!isOpen) {
       prevTaskIdRef.current = null;
+      if (contactsAbortRef.current) contactsAbortRef.current.abort();
+      if (commentsAbortRef.current) commentsAbortRef.current.abort();
+      if (timelineAbortRef.current) timelineAbortRef.current.abort();
       return;
     }
     const hasCust = Boolean(
@@ -1140,22 +1162,29 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
   const loadComments = async (taskId: number) => {
     if (!taskId) return;
+    if (commentsAbortRef.current) commentsAbortRef.current.abort();
+    const abortController = new AbortController();
+    commentsAbortRef.current = abortController;
     setLoadingComments(true);
     try {
-      const res = await api.get(`/activities/${taskId}/comments`);
+      const res = await api.get(`/activities/${taskId}/comments`, { signal: abortController.signal });
+      if (abortController.signal.aborted) return;
       if (res.data) {
         const list = Array.isArray(res.data.data) ? res.data.data : (Array.isArray(res.data) ? res.data : []);
         setComments(list);
       }
-    } catch (e) {
+    } catch (e: any) {
+      if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
       console.error(e);
     } finally {
-      setLoadingComments(false);
+      if (!abortController.signal.aborted) setLoadingComments(false);
     }
   };
 
   const handleDeleteComment = async (commentId: number) => {
     if (!task?.id || task.id === 'new') return;
+    if (deleteCommentInFlightRef.current) return;
+    deleteCommentInFlightRef.current = true;
     try {
       const res = await api.delete(`/activities/comments/${commentId}`);
       if (res.data && (res.data.success || res.status === 200)) {
@@ -1168,14 +1197,20 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       }
     } catch (e: any) {
       toast.error(t('Lỗi khi xóa bình luận: ') + e.message);
+    } finally {
+      deleteCommentInFlightRef.current = false;
     }
   };
 
   const loadTimeline = async (taskId: number) => {
     if (!taskId) return;
+    if (timelineAbortRef.current) timelineAbortRef.current.abort();
+    const abortController = new AbortController();
+    timelineAbortRef.current = abortController;
     setLoadingTimeline(true);
     try {
-      const res = await api.get(`/activities/${taskId}/timeline`);
+      const res = await api.get(`/activities/${taskId}/timeline`, { signal: abortController.signal });
+      if (abortController.signal.aborted) return;
       if (res.data) {
         const list = Array.isArray(res.data.data) ? res.data.data : (Array.isArray(res.data) ? res.data : []);
         const sortedList = [...list].sort((a, b) => {
@@ -1185,10 +1220,11 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         });
         setTimeline(sortedList);
       }
-    } catch (e) {
+    } catch (e: any) {
+      if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
       console.error(e);
     } finally {
-      setLoadingTimeline(false);
+      if (!abortController.signal.aborted) setLoadingTimeline(false);
     }
   };
 
@@ -1219,9 +1255,16 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     }
   }, [selectedSubtask]);
 
+  const lastHighlightedCommentRef = useRef<string>('');
+
   useEffect(() => {
-    if (isOpen && task && erpMeta?.checklist) {
-      const targetSubtaskId = searchParams.get('subtask_id');
+    if (!isOpen) {
+      lastHighlightedCommentRef.current = '';
+      return;
+    }
+    if (task && erpMeta?.checklist) {
+      const urlParams = new URLSearchParams(window.location.search);
+      const targetSubtaskId = searchParams.get('subtask_id') || urlParams.get('subtask_id') || task?.subtaskId;
       if (targetSubtaskId) {
         const found = erpMeta.checklist.find((item: any) => String(item.id) === String(targetSubtaskId));
         if (found) {
@@ -1229,79 +1272,80 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         }
       }
     }
-  }, [isOpen, task, erpMeta?.checklist]);
+  }, [isOpen, task, erpMeta?.checklist, searchParams]);
 
-  // Auto-scroll and pulse highlight comment from notification
+  // Auto-scroll and pulse highlight main task comment from notification
   useEffect(() => {
-    if (isOpen && comments.length > 0) {
-      const params = new URLSearchParams(window.location.search);
-      const highlightCommentId = params.get('highlight_comment_id');
-      if (highlightCommentId) {
-        setActiveTab('comments');
-        setTimeout(() => {
-          const element = document.getElementById(`workspace-comment-${highlightCommentId}`);
-          if (element) {
-            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            element.classList.add('comment-highlight-pulse');
-            setTimeout(() => {
-              element.classList.remove('comment-highlight-pulse');
-            }, 3000);
-          }
-        }, 350);
-      }
-    }
-  }, [isOpen, comments]);
+    if (!isOpen || comments.length === 0) return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetSubtaskId = searchParams.get('subtask_id') || urlParams.get('subtask_id') || task?.subtaskId;
+    const highlightCommentId =
+      searchParams.get('highlight_comment_id') ||
+      searchParams.get('comment_id') ||
+      urlParams.get('highlight_comment_id') ||
+      urlParams.get('comment_id') ||
+      task?.highlightCommentId;
 
+    if (highlightCommentId && !targetSubtaskId) {
+      const highlightKey = `main-${task?.id}-${highlightCommentId}`;
+      if (lastHighlightedCommentRef.current === highlightKey) return;
+      setActiveTab('comments');
+      const timer = setTimeout(() => {
+        const element =
+          document.getElementById(`workspace-comment-${highlightCommentId}`) ||
+          document.getElementById(`task-comment-${highlightCommentId}`) ||
+          document.getElementById(`comment-${highlightCommentId}`);
+        if (element) {
+          lastHighlightedCommentRef.current = highlightKey;
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          element.classList.add('comment-highlight-pulse');
+          const prevBg = element.style.backgroundColor;
+          element.style.backgroundColor = '#fef08a';
+          setTimeout(() => {
+            element.classList.remove('comment-highlight-pulse');
+            element.style.backgroundColor = prevBg || '';
+          }, 3000);
+        }
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, comments, searchParams, task?.id, task?.highlightCommentId, task?.subtaskId]);
+
+  // Auto-scroll and pulse highlight subtask comment from notification
   useEffect(() => {
-    if (subtaskComments.length > 0) {
-      const targetSubtaskId = searchParams.get('subtask_id');
-      const highlightCommentId = searchParams.get('comment_id') || searchParams.get('highlight_comment_id');
-      if (targetSubtaskId && highlightCommentId) {
-        setTimeout(() => {
-          const element = document.getElementById(`workspace-comment-${highlightCommentId}`);
-          if (element) {
-            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            element.style.backgroundColor = 'var(--color-primary-light)';
-            setTimeout(() => {
-              element.style.backgroundColor = 'var(--color-surface)';
-            }, 2500);
+    if (!isOpen || subtaskComments.length === 0) return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetSubtaskId = searchParams.get('subtask_id') || urlParams.get('subtask_id') || task?.subtaskId;
+    const highlightCommentId =
+      searchParams.get('highlight_comment_id') ||
+      searchParams.get('comment_id') ||
+      urlParams.get('highlight_comment_id') ||
+      urlParams.get('comment_id') ||
+      task?.highlightCommentId;
 
-            // Clean URL parameters
-            const newParams = new URLSearchParams(searchParams);
-            newParams.delete('subtask_id');
-            newParams.delete('comment_id');
-            newParams.delete('highlight_comment_id');
-            setSearchParams(newParams, { replace: true });
-          }
-        }, 500);
-      }
+    if (targetSubtaskId && highlightCommentId) {
+      const highlightKey = `sub-${targetSubtaskId}-${highlightCommentId}`;
+      if (lastHighlightedCommentRef.current === highlightKey) return;
+      const timer = setTimeout(() => {
+        const element =
+          document.getElementById(`workspace-comment-${highlightCommentId}`) ||
+          document.getElementById(`task-comment-${highlightCommentId}`) ||
+          document.getElementById(`comment-${highlightCommentId}`);
+        if (element) {
+          lastHighlightedCommentRef.current = highlightKey;
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          element.classList.add('comment-highlight-pulse');
+          const prevBg = element.style.backgroundColor;
+          element.style.backgroundColor = '#fef08a';
+          setTimeout(() => {
+            element.classList.remove('comment-highlight-pulse');
+            element.style.backgroundColor = prevBg || '';
+          }, 3000);
+        }
+      }, 400);
+      return () => clearTimeout(timer);
     }
-  }, [subtaskComments]);
-
-  useEffect(() => {
-    if (comments.length > 0) {
-      const params = new URLSearchParams(window.location.search);
-      const highlightCommentId = params.get('comment_id') || params.get('highlight_comment_id');
-      if (highlightCommentId && !params.get('subtask_id')) {
-        setTimeout(() => {
-          const element = document.getElementById(`workspace-comment-${highlightCommentId}`);
-          if (element) {
-            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            element.style.backgroundColor = '#fef08a'; // yellow-200
-            setTimeout(() => {
-              element.style.backgroundColor = 'rgba(0, 0, 0, 0.01)';
-            }, 2500);
-            
-            // Clean URL parameters
-            const newParams = new URLSearchParams(searchParams);
-            newParams.delete('comment_id');
-            newParams.delete('highlight_comment_id');
-            setSearchParams(newParams, { replace: true });
-          }
-        }, 300);
-      }
-    }
-  }, [comments]);
+  }, [isOpen, subtaskComments, searchParams, task?.highlightCommentId, task?.subtaskId]);
 
   useEffect(() => {
     if (isOpen && !embedMode) {
@@ -1313,24 +1357,6 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       document.body.style.overflow = '';
     };
   }, [isOpen, embedMode]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        if (showUnsavedNewTaskPrompt) {
-          setShowUnsavedNewTaskPrompt(false);
-        } else if (showValidationModal) {
-          setShowValidationModal(false);
-        } else if (showApprovalSuccessModal) {
-          setShowApprovalSuccessModal(null);
-        } else {
-          handleCloseDrawer();
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, showUnsavedNewTaskPrompt, showValidationModal, showApprovalSuccessModal, formData, erpMeta, task]);
 
   useEffect(() => {
     if (task) {
@@ -1581,6 +1607,14 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     });
   };
 
+  const saveMetaInFlightRef = useRef(false);
+  const manualSaveInFlightRef = useRef(false);
+  const deleteTaskInFlightRef = useRef(false);
+  const updateFieldInFlightRef = useRef(false);
+  const inlineApprovalInFlightRef = useRef(false);
+  const completeMeetingInFlightRef = useRef(false);
+  const cancelMeetingInFlightRef = useRef(false);
+
   const handleSaveMeta = async (updatedMeta: any, overrideProgress?: number) => {
     if (!task) return;
 
@@ -1601,6 +1635,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       }
       return;
     }
+    if (saveMetaInFlightRef.current) return;
+    saveMetaInFlightRef.current = true;
     try {
       const payloadObj: any = { erp_task: updatedMeta };
       if (updatedMeta.due_sla_notified || task.due_sla_notified) {
@@ -1695,11 +1731,14 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       }
     } catch (e: any) {
       toast.error(t('Lỗi lưu thay đổi: ') + e.message);
+    } finally {
+      saveMetaInFlightRef.current = false;
     }
   };
 
   const handleManualSave = async () => {
     if (!task) return;
+    if (manualSaveInFlightRef.current) return;
     
     // Validation: Require approval must have an approver selected
     if (formData.require_approval === 1 && !formData.approver_id) {
@@ -1707,6 +1746,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       return;
     }
 
+    manualSaveInFlightRef.current = true;
     setIsSaving(true);
     try {
       const isJustSubmittedForApproval = 
@@ -1875,6 +1915,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       const taskName = formData.subject || t('Không có tiêu đề');
       toast.error(t('Không thể lưu thay đổi cho công việc "{subject}": ').replace('{subject}', taskName) + (e.response?.data?.message || e.message));
     } finally {
+      manualSaveInFlightRef.current = false;
       setIsSaving(false);
     }
   };
@@ -1905,6 +1946,32 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     }, 280);
   };
 
+  escapeHandlerRef.current = () => {
+    if (lightboxState.isOpen) {
+      setLightboxState(prev => ({ ...prev, isOpen: false }));
+    } else if (meetingToComplete) {
+      setMeetingToComplete(null);
+    } else if (cancellingMeeting) {
+      setCancellingMeeting(null);
+    } else if (showMuteConfirmModal) {
+      setShowMuteConfirmModal(false);
+    } else if (showHideConfirmModal) {
+      setShowHideConfirmModal(false);
+    } else if (selectedSubtaskForParticipants) {
+      setSelectedSubtaskForParticipants(null);
+    } else if (showParticipantsModal) {
+      setShowParticipantsModal(false);
+    } else if (showUnsavedNewTaskPrompt) {
+      setShowUnsavedNewTaskPrompt(false);
+    } else if (showValidationModal) {
+      setShowValidationModal(false);
+    } else if (showApprovalSuccessModal) {
+      setShowApprovalSuccessModal(null);
+    } else {
+      handleCloseDrawer();
+    }
+  };
+
   const handleDeleteTask = async () => {
     if (!task?.id || task.id === 'new') return;
     
@@ -1914,6 +1981,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       isDanger: true,
       confirmText: t('Xác nhận xóa'),
       onConfirm: async () => {
+        if (deleteTaskInFlightRef.current) return;
+        deleteTaskInFlightRef.current = true;
         try {
           const res = await api.delete(`/activities/${task.id}`);
           if (res.data.success) {
@@ -1926,6 +1995,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         } catch (err: any) {
           toast.error(err.response?.data?.message || t('Lỗi kết nối server'));
         } finally {
+          deleteTaskInFlightRef.current = false;
           closeConfirm();
         }
       }
@@ -1944,6 +2014,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       setFormData((prev: any) => ({ ...prev, [field]: value }));
       return;
     }
+    if (updateFieldInFlightRef.current) return;
+    updateFieldInFlightRef.current = true;
     try {
       const payload: any = { [field]: value };
       const res = await api.put(`/activities/${task.id}`, payload);
@@ -1976,6 +2048,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       }
     } catch (e: any) {
       toast.error(t('Lỗi cập nhật: ') + e.message);
+    } finally {
+      updateFieldInFlightRef.current = false;
     }
   };
 
@@ -2309,8 +2383,11 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     });
   };
 
+  const postCommentInFlightRef = useRef(false);
   const handlePostComment = async () => {
     if (!newCommentText.trim() && commentAttachments.length === 0) return;
+    if (postCommentInFlightRef.current) return;
+    postCommentInFlightRef.current = true;
     setIsSubmittingComment(true);
     setUploadingFile(true);
 
@@ -2376,6 +2453,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     } catch (e: any) {
       toast.error(t('Không thể gửi bình luận: ') + e.message);
     } finally {
+      postCommentInFlightRef.current = false;
       setIsSubmittingComment(false);
       setUploadingFile(false);
     }
@@ -2926,7 +3004,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         borderRadius: 0,
         overflow: 'hidden',
         boxShadow: isMobileOrTablet ? 'none' : '-10px 0 30px rgba(0,0,0,0.15)',
-        zIndex: zIndex || 2147483645,
+        zIndex: effectiveZIndex,
         display: 'flex',
         flexDirection: 'column',
         position: 'fixed',
@@ -6300,6 +6378,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                       className="btn primary"
                       disabled={isSaving}
                       onClick={async () => {
+                        if (inlineApprovalInFlightRef.current) return;
+                        inlineApprovalInFlightRef.current = true;
                         setIsSaving(true);
                         try {
                           const res = await api.put(`/activities/${task.id}`, { approval_status: 'approved', status: 'done' });
@@ -6312,6 +6392,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                         } catch (e: any) {
                           toast.error(t('Lỗi phê duyệt: ') + e.message);
                         } finally {
+                          inlineApprovalInFlightRef.current = false;
                           setIsSaving(false);
                         }
                       }}
@@ -6323,6 +6404,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                       className="btn outline"
                       disabled={isSaving}
                       onClick={async () => {
+                        if (inlineApprovalInFlightRef.current) return;
+                        inlineApprovalInFlightRef.current = true;
                         setIsSaving(true);
                         try {
                           const res = await api.put(`/activities/${task.id}`, { approval_status: 'rejected', progress: 90 });
@@ -6334,6 +6417,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                         } catch (e: any) {
                           toast.error(t('Lỗi từ chối: ') + e.message);
                         } finally {
+                          inlineApprovalInFlightRef.current = false;
                           setIsSaving(false);
                         }
                       }}
@@ -7715,7 +7799,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                 position: 'fixed',
                 inset: 0,
                 background: 'rgba(0,0,0,0.45)',
-                zIndex: zIndex ? zIndex - 1 : 2147483640,
+                zIndex: effectiveZIndex - 1,
                 backdropFilter: 'blur(8px)',
                 WebkitBackdropFilter: 'blur(8px)'
               }}
@@ -7728,7 +7812,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
           {/* Validation Warning Modal */}
           <AnimatePresence>
             {showValidationModal && (
-              <div className="overlay-backdrop" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: zIndex ? Math.min(zIndex + 5, 2147483647) : 2147483640 }} onClick={() => setShowValidationModal(false)}>
+              <div className="overlay-backdrop" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: Math.min(effectiveZIndex + 5, 2147483646) }} onClick={() => setShowValidationModal(false)}>
                 <motion.div 
                   initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
                   onClick={e => e.stopPropagation()}
@@ -7782,7 +7866,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             {showUnsavedNewTaskPrompt && (
               <div 
                 className="overlay-backdrop" 
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: zIndex ? Math.min(zIndex + 10, 2147483647) : 2147483640 }} 
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: Math.min(effectiveZIndex + 6, 2147483646) }} 
                 onClick={() => setShowUnsavedNewTaskPrompt(false)}
               >
                 <motion.div 
@@ -7915,7 +7999,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
           {/* Approval Success Modal */}
           <AnimatePresence>
             {showApprovalSuccessModal && (
-              <div className="overlay-backdrop" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: zIndex ? Math.min(zIndex + 10, 2147483647) : 2147483640 }} onClick={() => setShowApprovalSuccessModal(null)}>
+              <div className="overlay-backdrop" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: Math.min(effectiveZIndex + 6, 2147483646) }} onClick={() => setShowApprovalSuccessModal(null)}>
                 <motion.div 
                   initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
                   onClick={e => e.stopPropagation()}
@@ -7982,7 +8066,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                   inset: 0,
                   backgroundColor: 'rgba(0, 0, 0, 0.65)',
                   backdropFilter: 'blur(4px)',
-                  zIndex: zIndex ? Math.min(zIndex + 10, 2147483647) : 2147483640,
+                  zIndex: Math.min(effectiveZIndex + 6, 2147483646),
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -8076,6 +8160,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                       disabled={!proofImageFile || completingMeeting} 
                       onClick={async () => {
                         if (!proofImageFile || !meetingToComplete) return;
+                        if (completeMeetingInFlightRef.current) return;
+                        completeMeetingInFlightRef.current = true;
                         setCompletingMeeting(true);
                         try {
                           let fileToUpload = proofImageFile;
@@ -8121,6 +8207,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                         } catch (e: any) {
                           toast.error(e.response?.data?.message || 'Có lỗi xảy ra khi lưu minh chứng');
                         } finally {
+                          completeMeetingInFlightRef.current = false;
                           setCompletingMeeting(false);
                         }
                       }}
@@ -8151,7 +8238,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                   inset: 0,
                   backgroundColor: 'rgba(0, 0, 0, 0.65)',
                   backdropFilter: 'blur(4px)',
-                  zIndex: zIndex ? Math.min(zIndex + 10, 2147483647) : 2147483640,
+                  zIndex: Math.min(effectiveZIndex + 6, 2147483646),
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -8201,6 +8288,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                       onClick={async () => {
                         const reason = cancelReason.trim();
                         if (!reason) return;
+                        if (cancelMeetingInFlightRef.current) return;
+                        cancelMeetingInFlightRef.current = true;
                         setSavingCancel(true);
                         try {
                           await api.put(`/activities/${cancellingMeeting.id}`, { status: 'cancelled', progress: 0 });
@@ -8214,6 +8303,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                         } catch (e: any) {
                           toast.error('Lỗi khi hủy gặp gỡ');
                         } finally {
+                          cancelMeetingInFlightRef.current = false;
                           setSavingCancel(false);
                         }
                       }}
@@ -8244,7 +8334,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                   inset: 0,
                   backgroundColor: 'rgba(0, 0, 0, 0.5)',
                   backdropFilter: 'blur(4px)',
-                  zIndex: zIndex ? Math.min(zIndex + 10, 2147483647) : 2147483640,
+                  zIndex: Math.min(effectiveZIndex + 6, 2147483646),
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',

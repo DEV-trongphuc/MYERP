@@ -2023,11 +2023,21 @@ switch ($action) {
         break;
 
     case 'get_unique_sources':
-        $res = $conn->query("SELECT DISTINCT source FROM leads WHERE source IS NOT NULL AND source != '' ORDER BY source ASC");
+        $onlyContacts = !empty($_GET['only_contacts']) || (isset($_GET['entity']) && $_GET['entity'] === 'contacts');
+        $sqlSources = $onlyContacts
+            ? "SELECT DISTINCT TRIM(source) AS source FROM contacts WHERE deleted_at IS NULL AND source IS NOT NULL AND TRIM(source) != '' ORDER BY source ASC"
+            : "SELECT DISTINCT source FROM (
+                   SELECT DISTINCT TRIM(source) AS source FROM contacts WHERE deleted_at IS NULL AND source IS NOT NULL AND TRIM(source) != ''
+                   UNION
+                   SELECT DISTINCT TRIM(source) AS source FROM leads WHERE source IS NOT NULL AND TRIM(source) != ''
+               ) s WHERE source IS NOT NULL AND source != '' ORDER BY source ASC";
+        $res = $conn->query($sqlSources);
         $sources = [];
         if ($res) {
             while ($row = $res->fetch_assoc()) {
-                $sources[] = $row['source'];
+                if (!empty($row['source'])) {
+                    $sources[] = $row['source'];
+                }
             }
         }
         echo json_encode(['success' => true, 'data' => $sources]);

@@ -716,25 +716,6 @@ export default function HRM() {
   const [compensatoryLeaveTotal, setCompensatoryLeaveTotal] = useState(0.0);
   const [compensatoryLeaveUsed, setCompensatoryLeaveUsed] = useState(0.0);
 
-  useEffect(() => {
-    fetchAPI('teams').then(res => {
-      const list = Array.isArray(res) ? res : (res?.data || []);
-      setTeams(list);
-    }).catch(() => {});
-
-    // Dọn dẹp các đơn test #6, #7, #8, #21 qua API DELETE
-    [21, 8, 7, 6].forEach(id => {
-      fetchAPI(`hrm/leaves/${id}`, { method: 'DELETE' }).catch(() => {});
-    });
-
-    fetchAPI('hrm/leaves').then(res => {
-      setLeaves((res?.data || []).filter((l: any) => ![6, 7, 8, 21].includes(Number(l.id))));
-    }).catch(() => {});
-    fetchAPI('hrm/advances').then(res => {
-      setAdvances(res?.data || []);
-    }).catch(() => {});
-  }, []);
-
   // Edit Profile modal/drawer state
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [joinedDate, setJoinedDate] = useState('');
@@ -811,7 +792,7 @@ export default function HRM() {
         const isLate = actualLate > 0 || c.status === 'late';
         if (isLate) {
           const uid = c.user_id;
-          const prof = profiles.find(x => Number(x.id) === Number(uid));
+          const prof = profilesMap.get(Number(uid));
           if (!map[uid]) {
             map[uid] = {
               id: uid,
@@ -843,7 +824,7 @@ export default function HRM() {
     const fromPayslips = [...dashboardPayslips]
       .filter(p => Number(p.lateness_minutes || 0) > 0)
       .map(p => {
-        const prof = profiles.find(x => Number(x.id) === Number(p.user_id));
+        const prof = profilesMap.get(Number(p.user_id));
         return {
           id: p.user_id || p.id,
           name: p.employee_name,
@@ -864,7 +845,7 @@ export default function HRM() {
     }
 
     return [];
-  }, [dashboardPayslips, dashboardCheckIns, profiles, t]);
+  }, [dashboardPayslips, dashboardCheckIns, profilesMap, t]);
 
   const topOTList = React.useMemo(() => {
     // 1. Ưu tiên tính Realtime từ dashboardShifts và dashboardLeaves (đã duyệt trong tháng được chọn)
@@ -872,7 +853,7 @@ export default function HRM() {
     
     dashboardShifts.filter(s => s.shift_type === 'overtime' && (Number(s.approved) === 1 || s.status === 'approved')).forEach(s => {
       const uid = s.user_id;
-      const prof = profiles.find(x => Number(x.id) === Number(uid));
+      const prof = profilesMap.get(Number(uid));
       if (!map[uid]) {
         map[uid] = {
           id: uid,
@@ -902,7 +883,7 @@ export default function HRM() {
 
     dashboardLeaves.filter(l => l.leave_type === 'overtime' && (Number(l.approved) === 1 || l.status === 'approved')).forEach(l => {
       const uid = l.user_id;
-      const prof = profiles.find(x => Number(x.id) === Number(uid));
+      const prof = profilesMap.get(Number(uid));
       if (!map[uid]) {
         map[uid] = {
           id: uid,
@@ -949,7 +930,7 @@ export default function HRM() {
     const fromPayslips = [...dashboardPayslips]
       .filter(p => Number(p.overtime_days || 0) > 0 || Number(p.overtime_hours || 0) > 0)
       .map(p => {
-        const prof = profiles.find(x => Number(x.id) === Number(p.user_id));
+        const prof = profilesMap.get(Number(p.user_id));
         const hours = Number(p.overtime_hours || 0) > 0 
           ? Number(p.overtime_hours) 
           : Math.round(Number(p.overtime_days || 0) * 8 * 10) / 10;
@@ -974,7 +955,7 @@ export default function HRM() {
     }
 
     return [];
-  }, [dashboardPayslips, dashboardShifts, dashboardLeaves, profiles, t]);
+  }, [dashboardPayslips, dashboardShifts, dashboardLeaves, profilesMap, t]);
 
   const loadData = async () => {
     try {
@@ -996,7 +977,7 @@ export default function HRM() {
           });
         };
         setProfiles(filterNonEmployee(profRes?.data || profRes || []));
-        setLeaves((leaveRes?.data || leaveRes || []).filter((l: any) => ![6, 7, 8, 21].includes(Number(l.id))));
+        setLeaves(leaveRes?.data || leaveRes || []);
         setAdvances(advRes?.data || advRes || []);
         const tList = Array.isArray(teamRes) ? teamRes : (teamRes?.data || []);
         if (tList.length > 0) setTeams(tList);
@@ -1020,12 +1001,10 @@ export default function HRM() {
         if (tList.length > 0) setTeams(tList);
       } else if (activeTab === 'leaves') {
         const res = await fetchAPI('hrm/leaves');
-        setLeaves((res?.data || []).filter((l: any) => ![6, 7, 8, 21].includes(Number(l.id))));
+        setLeaves(res?.data || []);
       } else if (activeTab === 'advances') {
         const res = await fetchAPI('hrm/advances');
         setAdvances(res?.data || []);
-      } else if (activeTab === 'payroll') {
-        loadAllPayslips();
       }
     } catch (err: any) {
       toast.error(err?.message || t('Lỗi tải dữ liệu'));
@@ -1089,6 +1068,12 @@ export default function HRM() {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [actionApprovalId, setActionApprovalId] = useState<number | null>(null);
   const [sendingPayslipId, setSendingPayslipId] = useState<number | null>(null);
+  const approveLeaveInFlightRef = useRef(false);
+  const approveAdvanceInFlightRef = useRef(false);
+  const runPayrollInFlightRef = useRef(false);
+  const publishPayrollInFlightRef = useRef(false);
+  const lockPayrollInFlightRef = useRef(false);
+  const unlockPayrollInFlightRef = useRef(false);
 
   const handleSaveProfile = async () => {
     if (!selectedUser || isSavingProfile) return;
@@ -1125,7 +1110,8 @@ export default function HRM() {
   };
 
   const handleApproveLeave = async (id: number, status: 'approved' | 'rejected') => {
-    if (actionApprovalId === id) return;
+    if (approveLeaveInFlightRef.current || actionApprovalId === id) return;
+    approveLeaveInFlightRef.current = true;
     setActionApprovalId(id);
     try {
       await fetchAPI('hrm/leaves', {
@@ -1138,12 +1124,14 @@ export default function HRM() {
     } catch (err: any) {
       toast.error(err?.message || t('Lỗi xử lý'));
     } finally {
+      approveLeaveInFlightRef.current = false;
       setActionApprovalId(null);
     }
   };
 
   const handleApproveAdvance = async (id: number, status: 'approved' | 'rejected') => {
-    if (actionApprovalId === id) return;
+    if (approveAdvanceInFlightRef.current || actionApprovalId === id) return;
+    approveAdvanceInFlightRef.current = true;
     setActionApprovalId(id);
     try {
       await fetchAPI('hrm/advances', {
@@ -1156,6 +1144,7 @@ export default function HRM() {
     } catch (err: any) {
       toast.error(err?.message || t('Lỗi xử lý'));
     } finally {
+      approveAdvanceInFlightRef.current = false;
       setActionApprovalId(null);
     }
   };
@@ -1190,7 +1179,7 @@ export default function HRM() {
       const updated = { ...ps, [field]: value };
       
       // Look up basic deal_salary from profiles
-      const profile = profiles.find(p => Number(p.id) === Number(ps.user_id));
+      const profile = profilesMap.get(Number(ps.user_id));
       const dealSalary = profile ? Number(profile.deal_salary || 0) : 0;
       
       // 1. Recalculate salary_basic_calculated if work_days_actual or work_days_required changes
@@ -1285,6 +1274,8 @@ export default function HRM() {
   };
 
   const handleRunPayroll = async () => {
+    if (runPayrollInFlightRef.current || calculating) return;
+    runPayrollInFlightRef.current = true;
     setCalculating(true);
     try {
       await fetchAPI('hrm/payroll', {
@@ -1300,11 +1291,14 @@ export default function HRM() {
     } catch (err: any) {
       toast.error(err?.message || t('Lỗi tính lương'));
     } finally {
+      runPayrollInFlightRef.current = false;
       setCalculating(false);
     }
   };
 
   const handlePublishPayroll = async () => {
+    if (publishPayrollInFlightRef.current || publishing) return;
+    publishPayrollInFlightRef.current = true;
     setPublishing(true);
     try {
       await fetchAPI('hrm/payroll/send', {
@@ -1317,11 +1311,14 @@ export default function HRM() {
     } catch (err: any) {
       toast.error(err?.message || t('Lỗi phát hành'));
     } finally {
+      publishPayrollInFlightRef.current = false;
       setPublishing(false);
     }
   };
 
   const handleLockPayroll = async () => {
+    if (lockPayrollInFlightRef.current || locking) return;
+    lockPayrollInFlightRef.current = true;
     setLocking(true);
     try {
       await fetchAPI('hrm/payroll', {
@@ -1335,17 +1332,21 @@ export default function HRM() {
     } catch (err: any) {
       toast.error(err?.message || t('Lỗi khóa sổ'));
     } finally {
+      lockPayrollInFlightRef.current = false;
       setLocking(false);
     }
   };
 
   const handleUnlockPayroll = () => {
+    if (unlockPayrollInFlightRef.current || locking) return;
     showConfirm({
       title: t('Xác nhận mở khóa bảng lương'),
       message: t('Bạn có chắc chắn muốn mở khóa bảng lương kỳ này?\nChữ ký của toàn bộ nhân viên trong kỳ này sẽ bị xóa bỏ.'),
       confirmText: t('Mở khóa'),
       isDanger: true,
       onConfirm: async () => {
+        if (unlockPayrollInFlightRef.current || locking) return;
+        unlockPayrollInFlightRef.current = true;
         setLocking(true);
         try {
           await fetchAPI('hrm/payroll', {
@@ -1359,6 +1360,7 @@ export default function HRM() {
         } catch (err: any) {
           toast.error(err?.message || t('Lỗi mở khóa'));
         } finally {
+          unlockPayrollInFlightRef.current = false;
           setLocking(false);
         }
       }
@@ -2658,11 +2660,11 @@ export default function HRM() {
           <div 
             className="drawer-backdrop" 
             onClick={() => setViewMode('archive')}
-            style={{ zIndex: 99999999 }}
+            style={{ zIndex: 99999999, '--drawer-backdrop-z': 99999999 } as any}
           />
 
           {/* Full Drawer Sheet Container */}
-          <div style={{
+          <div className="drawer-sheet" style={{
             position: 'fixed',
             top: 0,
             left: 0,

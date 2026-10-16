@@ -9,7 +9,7 @@ import {
   FileSpreadsheet, FileArchive, Film, Music, Globe, ExternalLink,
   FolderArchive, MoreHorizontal, Edit3, Trash2, Copy, RotateCcw, GitBranch, Lock,
   Clipboard, Receipt, CreditCard, Clock, Share2, Volume2, VolumeX, UploadCloud, ChevronUp, ChevronDown,
-  Check, CheckCheck, Bell, BellOff, Send, Phone, Mail, Calendar, Palette
+  Check, CheckCheck, Bell, BellOff, Send, Phone, Mail, Calendar, Palette, Minus, Square
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useChatStore } from '../../store/chatStore';
@@ -43,6 +43,7 @@ import { SPECIALIZED_AGENTS, type SpecializedAgent } from '../../constants/aiAge
 import { AgentDetailModal } from './AgentDetailModal';
 import { ActionProposalCard, parseActionProposal } from './ActionProposalCard';
 import { parseAllChatTags } from './chatTagParsers';
+import { copyTextSafely } from '../../utils/clipboard';
 import { ChatDynamicChart } from './ChatDynamicChart';
 import { NextBestActionChips } from './NextBestActionChips';
 import { ProactiveInsightCard } from './ProactiveInsightCard';
@@ -307,6 +308,13 @@ ChatImageBubble.displayName = 'ChatImageBubble';
 // Regex cache cho tin nhắn text tránh split lặp lại khi re-render
 const formattedTextCache = new Map<string, React.ReactNode>();
 
+const dockChatForPeek = () => {
+  const chatState = useChatStore.getState();
+  if (chatState.isMaximized) {
+    chatState.toggleMaximize();
+  }
+};
+
 const handleErpLinkClick = (e: React.MouseEvent, url: string) => {
   if (!url) return;
 
@@ -337,14 +345,32 @@ const handleErpLinkClick = (e: React.MouseEvent, url: string) => {
         params.type = 'inventory';
       } else if (['attendance', 'attendances', 'bang_cong', 'cham_cong'].includes(rawType)) {
         params.type = 'attendance';
+      } else if (['expense', 'expenses', 'chi_phi', 'phieu_chi', 'po'].includes(rawType)) {
+        params.type = 'expense';
+      } else if (['deposit', 'deposits', 'dat_coc', 'so'].includes(rawType)) {
+        params.type = 'deposit';
+      } else if (['task', 'tasks', 'cong_viec'].includes(rawType)) {
+        params.type = 'task';
       } else {
         params.type = 'contact';
       }
 
+      const defaultFileMap: Record<string, string> = {
+        attendance: 'bang_cong.xlsx',
+        expense: 'danh_sach_chi_phi.csv',
+        deposit: 'danh_sach_dat_coc.csv',
+        task: 'danh_sach_cong_viec.csv',
+        company: 'danh_sach_doanh_nghiep.csv',
+        deal: 'danh_sach_co_hoi.csv',
+        product: 'danh_sach_san_pham.csv',
+        inventory: 'danh_sach_ton_kho.csv',
+        contact: 'danh_sach_lead.csv',
+      };
+
       downloadExportFile({
         endpoint,
         params,
-        defaultFilename: params.type === 'attendance' ? 'bang_cong.xlsx' : 'danh_sach_lead.csv',
+        defaultFilename: defaultFileMap[params.type] || 'danh_sach_du_lieu.csv',
         onSuccess: () => {
           toast.success('Tải file dữ liệu thành công!', { id: 'chat-export-loading' });
         },
@@ -368,6 +394,7 @@ const handleErpLinkClick = (e: React.MouseEvent, url: string) => {
   if (contactMatch) {
     e.preventDefault();
     e.stopPropagation();
+    dockChatForPeek();
     const contactId = Number(contactMatch[1]);
     window.dispatchEvent(new CustomEvent('open-global-customer', { detail: { id: contactId, contactId } }));
     return;
@@ -378,6 +405,7 @@ const handleErpLinkClick = (e: React.MouseEvent, url: string) => {
   if (expenseMatch) {
     e.preventDefault();
     e.stopPropagation();
+    dockChatForPeek();
     const expenseId = Number(expenseMatch[1]);
     window.dispatchEvent(new CustomEvent('open-expense-drawer', { detail: { id: expenseId } }));
     return;
@@ -388,6 +416,7 @@ const handleErpLinkClick = (e: React.MouseEvent, url: string) => {
   if (taskMatch) {
     e.preventDefault();
     e.stopPropagation();
+    dockChatForPeek();
     const taskId = Number(taskMatch[1]);
     window.dispatchEvent(new CustomEvent('open-global-task', { detail: { id: taskId } }));
     return;
@@ -398,6 +427,7 @@ const handleErpLinkClick = (e: React.MouseEvent, url: string) => {
   if (approvalMatch) {
     e.preventDefault();
     e.stopPropagation();
+    dockChatForPeek();
     const approvalId = Number(approvalMatch[1]);
     window.dispatchEvent(new CustomEvent('open-global-approval', { detail: { id: approvalId, type: 'leave' } }));
     return;
@@ -408,6 +438,7 @@ const handleErpLinkClick = (e: React.MouseEvent, url: string) => {
   if (depositMatch) {
     e.preventDefault();
     e.stopPropagation();
+    dockChatForPeek();
     const depositId = Number(depositMatch[1]);
     window.dispatchEvent(new CustomEvent('open-deposit-drawer', { detail: { id: depositId, depositId } }));
     return;
@@ -417,6 +448,7 @@ const handleErpLinkClick = (e: React.MouseEvent, url: string) => {
   if (url.startsWith('/') || url.startsWith('https://myerp.ideas.edu.vn/')) {
     e.preventDefault();
     e.stopPropagation();
+    useChatStore.getState().minimizeChat();
     const targetPath = url.replace(/^https:\/\/myerp\.ideas\.edu\.vn/, '') || '/';
     window.history.pushState({}, '', targetPath);
     window.dispatchEvent(new PopStateEvent('popstate'));
@@ -447,6 +479,7 @@ const renderInlineTokens = (rawText: string, isMine?: boolean, keyPrefix: string
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
+            dockChatForPeek();
             if (actionType === 'crm_profile' || actionType === 'contact' || actionType === 'lead') {
               window.dispatchEvent(new CustomEvent('open-global-customer', { detail: { id: Number(entityId), contactId: Number(entityId) } }));
             } else if (actionType === 'task') {
@@ -826,7 +859,9 @@ export const WorkChatModal: React.FC = () => {
     activeAgentByConvId,
     collaboratingAgentsByConvId,
     orchestratorPhaseByConvId,
-    clearConversationHistory
+    clearConversationHistory,
+    minimizeChat,
+    stopGenerating
   } = useChatStore();
 
   const { openCustomerDrawer, openTaskDrawer, openExpenseDrawer, openApprovalDrawer, openDepositDrawer } = useUIStore();
@@ -938,17 +973,30 @@ export const WorkChatModal: React.FC = () => {
 
   const handleJumpToMessage = (targetMsgId: number | null | undefined) => {
     if (!targetMsgId) return;
-    const targetEl = document.getElementById(`chat-msg-${targetMsgId}`);
-    if (targetEl) {
-      targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      targetEl.style.backgroundColor = 'rgba(254, 240, 138, 0.45)';
-      targetEl.style.boxShadow = '0 0 0 2px #f59e0b';
-      setTimeout(() => {
-        targetEl.style.backgroundColor = 'transparent';
-        targetEl.style.boxShadow = 'none';
-      }, 1800);
+    const targetIdx = currentMessages.findIndex((m) => m.id === targetMsgId);
+    if (targetIdx >= 0 && currentMessages.length - targetIdx > visibleCount) {
+      setVisibleCount(currentMessages.length - targetIdx + 20);
+    }
+
+    const scrollAndHighlight = () => {
+      const targetEl = document.getElementById(`chat-msg-${targetMsgId}`);
+      if (targetEl) {
+        targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        targetEl.style.backgroundColor = 'rgba(254, 240, 138, 0.45)';
+        targetEl.style.boxShadow = '0 0 0 2px #f59e0b';
+        setTimeout(() => {
+          targetEl.style.backgroundColor = 'transparent';
+          targetEl.style.boxShadow = 'none';
+        }, 1800);
+      } else if (targetIdx < 0) {
+        toast('Tin nhắn trích dẫn ở xa hơn trong lịch sử hội thoại.', { icon: 'ℹ️' });
+      }
+    };
+
+    if (targetIdx >= 0 && currentMessages.length - targetIdx > visibleCount) {
+      requestAnimationFrame(() => requestAnimationFrame(scrollAndHighlight));
     } else {
-      toast('Tin nhắn trích dẫn ở xa hơn trong lịch sử hội thoại.', { icon: 'ℹ️' });
+      scrollAndHighlight();
     }
   };
 
@@ -1152,7 +1200,14 @@ export const WorkChatModal: React.FC = () => {
 
       if (isMine || isUserAtBottomRef.current) {
         setTimeout(() => {
-          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+          const container = messagesContainerRef.current;
+          const lastEl = (document.getElementById(`chat-msg-${lastMsg.id}`) ||
+            document.querySelector(`[data-msg-id="${lastMsg.id}"]`)) as HTMLElement | null;
+          if (!isMine && lastEl && container && lastEl.offsetHeight > container.clientHeight * 0.6) {
+            lastEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          } else {
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+          }
         }, 40);
       } else {
         setShowScrollBottomBtn(true);
@@ -1257,11 +1312,26 @@ export const WorkChatModal: React.FC = () => {
     const targetId = matchedMessageIds[index];
     setCurrentMatchIndex(index);
     setHighlightedMsgId(targetId);
+
+    const targetIdx = currentMessages.findIndex((m) => m.id === targetId);
+    if (targetIdx >= 0 && currentMessages.length - targetIdx > visibleCount) {
+      setVisibleCount(currentMessages.length - targetIdx + 20);
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          const el = document.getElementById(`chat-msg-${targetId}`);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        })
+      );
+      return;
+    }
+
     const el = document.getElementById(`chat-msg-${targetId}`);
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
-  }, [matchedMessageIds]);
+  }, [matchedMessageIds, currentMessages, visibleCount]);
 
   const handlePrevMatch = () => {
     if (matchedMessageIds.length === 0) return;
@@ -3016,6 +3086,22 @@ export const WorkChatModal: React.FC = () => {
                         )}
                       </div>
 
+                      {/* Minimize to dock button */}
+                      <button
+                        onClick={minimizeChat}
+                        style={{
+                          background: '#f8fafc',
+                          border: '1px solid #e2e8f0',
+                          color: '#64748b',
+                          borderRadius: '8px',
+                          padding: '6px',
+                          cursor: 'pointer'
+                        }}
+                        title="Thu nhỏ cửa sổ Chat"
+                      >
+                        <Minus size={16} />
+                      </button>
+
                       {!isMobile && (
                         <button
                           onClick={toggleMaximize}
@@ -3591,6 +3677,7 @@ export const WorkChatModal: React.FC = () => {
                         <motion.div
                           key={msg.id}
                           id={`chat-msg-${msg.id}`}
+                          data-msg-id={msg.id}
                           className="chat-message-row"
                           initial={{ opacity: 0, y: 8, scale: 0.985 }}
                           animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -3648,14 +3735,78 @@ export const WorkChatModal: React.FC = () => {
                             </div>
                           )}
 
-                          {/* Sender name for group chats */}
-                          {!isMine && activeConversation.type === 'group' && isFirstInBurst && (
-                            <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, marginBottom: '2px', marginLeft: '38px' }}>
-                              {msg.sender_name || 'Đồng nghiệp'}
-                            </span>
-                          )}
+                          {/* Sender name / Specialist Agent Attribution Badge */}
+                          {!isMine && (() => {
+                            const isAiMsg = Boolean(
+                              Number(msg.sender_id) === 9000001 ||
+                              msg.sender_name?.includes('IDEAS') ||
+                              msg.sender_avatar?.includes('ideas_') ||
+                              msg.metadata?.specialist ||
+                              isIdeasBot
+                            );
+                            if (isAiMsg) {
+                              const rawSpec = msg.metadata?.specialist;
+                              const matchedSpec =
+                                SPECIALIZED_AGENTS.find(
+                                  (a) =>
+                                    (rawSpec?.id && a.id === rawSpec.id) ||
+                                    (msg.metadata?.active_agent_id && a.id === msg.metadata.active_agent_id) ||
+                                    (msg.sender_name && a.name.toLowerCase() === msg.sender_name.toLowerCase()) ||
+                                    (msg.sender_avatar && a.avatar === msg.sender_avatar)
+                                ) ||
+                                (rawSpec
+                                  ? {
+                                      ...SPECIALIZED_AGENTS[0],
+                                      ...rawSpec,
+                                      name: rawSpec.name || msg.sender_name || SPECIALIZED_AGENTS[0].name,
+                                      roleTitle: rawSpec.roleTitle || rawSpec.role || (msg as any).sender_title || SPECIALIZED_AGENTS[0].roleTitle,
+                                      avatar: rawSpec.avatar || msg.sender_avatar || SPECIALIZED_AGENTS[0].avatar,
+                                    }
+                                  : SPECIALIZED_AGENTS[0]);
+                              const specName = msg.sender_name || matchedSpec.name || 'SI IDEAS';
+                              const specRole = (msg as any).sender_title || rawSpec?.role || rawSpec?.roleTitle || matchedSpec.roleTitle || 'AI Multi-Agent';
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedAgentForModal(matchedSpec);
+                                  }}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                    marginBottom: '3px',
+                                    marginLeft: '36px',
+                                    padding: '2px 8px 2px 6px',
+                                    borderRadius: '999px',
+                                    border: `1px solid ${matchedSpec.badgeBorder || '#e2e8f0'}`,
+                                    background: matchedSpec.badgeBg || '#f8fafc',
+                                    cursor: 'pointer',
+                                    fontSize: '0.68rem',
+                                    lineHeight: 1.2,
+                                    transition: 'all 0.15s ease',
+                                  }}
+                                  title="Xem hồ sơ năng lực Trợ lý Chuyên gia AI"
+                                >
+                                  <Sparkles size={10} style={{ color: matchedSpec.color || '#dc2626', flexShrink: 0 }} />
+                                  <span style={{ fontWeight: 750, color: '#0f172a' }}>{specName}</span>
+                                  <span style={{ color: '#94a3b8' }}>•</span>
+                                  <span style={{ fontWeight: 650, color: matchedSpec.color || '#64748b' }}>{specRole}</span>
+                                </button>
+                              );
+                            }
+                            if (activeConversation.type === 'group' && isFirstInBurst) {
+                              return (
+                                <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, marginBottom: '2px', marginLeft: '38px' }}>
+                                  {msg.sender_name || 'Đồng nghiệp'}
+                                </span>
+                              );
+                            }
+                            return null;
+                          })()}
 
-                          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', maxWidth: '85%' }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', maxWidth: '85%', minWidth: 0 }}>
                             {!isMine && (() => {
                               const isAiMsg = Boolean(Number(msg.sender_id) === 9000001 || msg.sender_name?.includes('IDEAS') || msg.sender_avatar?.includes('ideas_'));
                               const fallbackAvatar = isAiMsg 
@@ -3676,7 +3827,7 @@ export const WorkChatModal: React.FC = () => {
                               );
                             })()}
 
-                            <div style={{ position: 'relative', paddingTop: '4px' }}>
+                            <div style={{ position: 'relative', paddingTop: '4px', minWidth: 0, maxWidth: '100%' }}>
                               {/* Hover Action Bar */}
                               {(hoveredMsgId === msg.id || activeMenuMsgId === msg.id) && !isRecalled && (
                                 <div 
@@ -3716,6 +3867,27 @@ export const WorkChatModal: React.FC = () => {
                                     title="Trả lời"
                                   >
                                     <CornerDownRight size={13} />
+                                  </button>
+                                  {/* Quick 1-Click Copy button */}
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      const { cleanContent } = parseAllChatTags(msg.content);
+                                      const textToCopy = (cleanContent || msg.content || '').trim();
+                                      if (!textToCopy) return;
+                                      const ok = await copyTextSafely(textToCopy);
+                                      if (ok) {
+                                        toast.success('Đã sao chép nội dung tin nhắn!');
+                                      } else {
+                                        toast.error('Không thể sao chép, vui lòng cấp quyền clipboard cho trình duyệt.');
+                                      }
+                                    }}
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '2px 4px', transition: 'color 0.15s ease' }}
+                                    onMouseEnter={(e) => (e.currentTarget.style.color = '#0284c7')}
+                                    onMouseLeave={(e) => (e.currentTarget.style.color = '#64748b')}
+                                    title="Sao chép nội dung tin nhắn"
+                                  >
+                                    <Copy size={13} />
                                   </button>
                                   {/* Quick Forward button */}
                                   <button
@@ -4281,6 +4453,8 @@ export const WorkChatModal: React.FC = () => {
                                       if (e) e.stopPropagation();
                                       if (isMobile) {
                                         closeChat();
+                                      } else {
+                                        dockChatForPeek();
                                       }
                                       if (eType === 'contact') {
                                         openCustomerDrawer(meta.entity_id);
@@ -4798,15 +4972,18 @@ export const WorkChatModal: React.FC = () => {
                                       </div>
                                     </div>
                                   ) : (() => {
-                                    const { cleanContent, proposal, chart, nextBestActions, proactiveInsight, erpCard } = parseAllChatTags(msg.content);
+                                    const parsedTags = parseAllChatTags(msg.content);
+                                    const { cleanContent, proposal, proposals, chart, nextBestActions, clarifyOptions, proactiveInsight, erpCard, erpCards } = parsedTags;
+                                    const allErpCards = erpCards && erpCards.length > 0 ? erpCards : (erpCard ? [erpCard] : []);
+                                    const allProposals = proposals && proposals.length > 0 ? proposals : (proposal ? [proposal] : []);
                                     const extractedUrl = extractFirstUrl(cleanContent);
                                     return (
-                                      <div style={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap', lineHeight: '1.45' }}>
+                                      <div style={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap', lineHeight: '1.45', minWidth: 0, maxWidth: '100%' }}>
                                         {proactiveInsight && (
                                           <ProactiveInsightCard
                                             insight={proactiveInsight}
                                             onAction={(prompt) => {
-                                              sendMessage({ content: prompt });
+                                              sendMessage({ content: prompt, conversation_id: msg.conversation_id });
                                             }}
                                           />
                                         )}
@@ -4827,47 +5004,79 @@ export const WorkChatModal: React.FC = () => {
                                             />
                                           )}
                                         </div>
-                                        {erpCard && (
-                                          <ChatSmartErpCard
-                                            card={erpCard}
-                                            onOpen={(c) => {
-                                              if (isMobile) closeChat();
-                                              const entityId = Number(c.entity_id);
-                                              const entityType = (c.entity_type || '').toLowerCase();
-                                              if (entityType === 'employee' || entityType === 'staff' || entityType === 'user') {
-                                                window.location.href = `/hrm?user_id=${entityId}`;
-                                              } else if (entityType === 'contact' || entityType === 'customer' || entityType === 'student' || entityType === 'lead') {
-                                                openCustomerDrawer(entityId);
-                                              } else if (entityType === 'expense' || entityType === 'po') {
-                                                openExpenseDrawer(entityId);
-                                              } else if (entityType === 'task') {
-                                                openTaskDrawer(entityId);
-                                              } else if (entityType === 'approval' || entityType === 'workflow' || entityType === 'leave') {
-                                                openApprovalDrawer({ id: entityId, type: 'leave' });
-                                              } else if (entityType === 'deposit' || entityType === 'so') {
-                                                openDepositDrawer(entityId);
-                                              } else if (c.direct_url) {
-                                                window.open(c.direct_url, '_blank');
-                                              }
-                                            }}
-                                          />
+                                        {allErpCards.length > 0 && (
+                                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                            {allErpCards.map((cardItem, cardIdx) => (
+                                              <ChatSmartErpCard
+                                                key={`${cardItem.entity_type}_${cardItem.entity_id ?? cardIdx}_${cardIdx}`}
+                                                card={cardItem}
+                                                onOpen={(c) => {
+                                                  const entityId = Number(c.entity_id);
+                                                  const entityType = (c.entity_type || '').toLowerCase();
+                                                  if (entityType === 'employee' || entityType === 'staff' || entityType === 'user') {
+                                                    if (isMobile) closeChat();
+                                                    else minimizeChat();
+                                                    window.history.pushState({}, '', `/hrm?user_id=${entityId}`);
+                                                    window.dispatchEvent(new PopStateEvent('popstate'));
+                                                    return;
+                                                  }
+                                                  if (isMobile) {
+                                                    closeChat();
+                                                  } else {
+                                                    dockChatForPeek();
+                                                  }
+                                                  if (entityType === 'contact' || entityType === 'customer' || entityType === 'student' || entityType === 'lead') {
+                                                    openCustomerDrawer(entityId);
+                                                  } else if (entityType === 'expense' || entityType === 'po') {
+                                                    openExpenseDrawer(entityId);
+                                                  } else if (entityType === 'task') {
+                                                    openTaskDrawer(entityId);
+                                                  } else if (entityType === 'approval' || entityType === 'workflow' || entityType === 'leave') {
+                                                    openApprovalDrawer({ id: entityId, type: 'leave' });
+                                                  } else if (entityType === 'deposit' || entityType === 'so') {
+                                                    openDepositDrawer(entityId);
+                                                  } else if (c.direct_url) {
+                                                    window.open(c.direct_url, '_blank');
+                                                  }
+                                                }}
+                                              />
+                                            ))}
+                                          </div>
                                         )}
                                         {chart && <ChatDynamicChart chart={chart} />}
-                                        {proposal && (
-                                          <ActionProposalCard 
-                                            proposal={proposal} 
-                                            messageId={msg.id} 
-                                          />
-                                        )}
-                                        {nextBestActions && nextBestActions.length > 0 && (
+                                        {allProposals.length > 0 &&
+                                          allProposals.map((propItem, propIdx) => (
+                                            <ActionProposalCard
+                                              key={`${msg.id}_prop_${propIdx}`}
+                                              proposal={propItem}
+                                              messageId={msg.id}
+                                            />
+                                          ))}
+                                        {((nextBestActions && nextBestActions.length > 0) || (clarifyOptions && clarifyOptions.length > 0)) && (
                                           <NextBestActionChips
                                             actions={nextBestActions}
+                                            clarifyOptions={clarifyOptions}
+                                            isDisambiguation={Boolean(
+                                              (clarifyOptions && clarifyOptions.length > 0) ||
+                                              allErpCards.length > 1 ||
+                                              /vui lòng chọn|chọn chính xác|trùng tên|hồ sơ trùng/i.test(cleanContent)
+                                            )}
+                                            disabled={Boolean(
+                                              displayConv &&
+                                              (isAiThinkingByConvId?.[displayConv.id] ||
+                                                isAiTypingByConvId?.[displayConv.id] ||
+                                                (activeConversationId && (isAiThinkingByConvId?.[activeConversationId] || isAiTypingByConvId?.[activeConversationId])))
+                                            )}
                                             onSelectAction={(prompt) => {
-                                              sendMessage({ content: prompt });
+                                              sendMessage({ content: prompt, conversation_id: msg.conversation_id });
+                                            }}
+                                            onInsertAction={(prompt) => {
+                                              composerRef.current?.setText(prompt);
+                                              composerRef.current?.focus();
                                             }}
                                           />
                                         )}
-                                        {extractedUrl && !erpCard && <LinkPreviewCard url={extractedUrl} isMine={isMine} />}
+                                        {extractedUrl && allErpCards.length === 0 && <LinkPreviewCard url={extractedUrl} isMine={isMine} />}
                                       </div>
                                     );
                                   })()
@@ -5408,6 +5617,36 @@ export const WorkChatModal: React.FC = () => {
                             </span>
                           </>
                         )}
+
+                        {/* Stop generating button */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            stopGenerating(convId);
+                          }}
+                          style={{
+                            marginLeft: '6px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '2.5px 8px',
+                            borderRadius: '6px',
+                            background: '#fee2e2',
+                            border: '1px solid #fca5a5',
+                            color: '#b91c1c',
+                            fontSize: '0.68rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = '#fecaca'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = '#fee2e2'}
+                          title="Dừng tạo câu trả lời"
+                        >
+                          <Square size={10} fill="currentColor" />
+                          <span>Dừng</span>
+                        </button>
                       </motion.div>
                     );
                   })()}
@@ -6910,9 +7149,15 @@ export const WorkChatModal: React.FC = () => {
                     {fMsg.content && (
                       <button
                         type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(fMsg.content);
-                          toast.success('Đã sao chép nội dung');
+                        onClick={async () => {
+                          const { cleanContent } = parseAllChatTags(fMsg.content);
+                          const textToCopy = (cleanContent || fMsg.content || '').trim();
+                          const ok = await copyTextSafely(textToCopy);
+                          if (ok) {
+                            toast.success('Đã sao chép nội dung');
+                          } else {
+                            toast.error('Không thể sao chép nội dung');
+                          }
                           setFloatingMenu(null);
                         }}
                         style={{

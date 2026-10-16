@@ -434,73 +434,87 @@ class CooperationController {
             respond(422, null, 'Tổng tỷ lệ chia sẻ hoa hồng phải bằng đúng 100% (Hiện tại là ' . $sum . '%)', false);
         }
 
-        // Verify slip exists & status is pending_signatures
-        $stmtSlip = $this->db->prepare("
-            SELECT cs.*, c.owner_id 
-            FROM cooperation_slips cs
-            JOIN contacts c ON cs.contact_id = c.id
-            WHERE cs.id = ? AND c.tenant_id = ?
-        ");
-        $stmtSlip->execute([$id, $auth['tenant_id']]);
-        $slip = $stmtSlip->fetch();
+        $this->db->beginTransaction();
+        try {
+            // Verify slip exists & lock row for concurrent updates
+            $stmtSlip = $this->db->prepare("
+                SELECT cs.*, c.owner_id 
+                FROM cooperation_slips cs
+                JOIN contacts c ON cs.contact_id = c.id
+                WHERE cs.id = ? AND c.tenant_id = ?
+                FOR UPDATE
+            ");
+            $stmtSlip->execute([$id, $auth['tenant_id']]);
+            $slip = $stmtSlip->fetch();
 
-        if (!$slip) {
-            respond(404, null, 'Phiếu hợp tác không tồn tại', false);
-        }
+            if (!$slip) {
+                $this->db->rollBack();
+                respond(404, null, 'Phiếu hợp tác không tồn tại', false);
+            }
 
-        if (!$this->checkSlipAccess($auth, $id)) {
-            respond(403, null, 'Bạn không có quyền cập nhật tỷ lệ cho phiếu hợp tác này', false);
-        }
+            if (!$this->checkSlipAccess($auth, $id)) {
+                $this->db->rollBack();
+                respond(403, null, 'Bạn không có quyền cập nhật tỷ lệ cho phiếu hợp tác này', false);
+            }
 
-        $isManagerOrAdmin = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true);
+            $isManagerOrAdmin = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true);
 
-        $allowedStatuses = ['pending_signatures', 'pending_manager_approval', 'approved_pending_signatures'];
-        if (!$isManagerOrAdmin && !in_array($slip['status'], $allowedStatuses)) {
-            respond(400, null, 'Không thể cập nhật tỷ lệ cho phiếu hợp tác đã được phê duyệt hoặc khóa', false);
-        }
+            $allowedStatuses = ['pending_signatures', 'pending_manager_approval', 'approved_pending_signatures'];
+            if (!$isManagerOrAdmin && !in_array($slip['status'], $allowedStatuses)) {
+                $this->db->rollBack();
+                respond(400, null, 'Không thể cập nhật tỷ lệ cho phiếu hợp tác đã được phê duyệt hoặc khóa', false);
+            }
 
-        // Admin updates expected_commission in deposits if present in the body
-        $expectedCommission = isset($b['expected_commission']) ? (int)$b['expected_commission'] : null;
-        if ($expectedCommission !== null && $slip['deposit_slip_id']) {
-            $stmtDep = $this->db->prepare("UPDATE deposits SET expected_commission = ? WHERE id = ?");
-            $stmtDep->execute([$expectedCommission, $slip['deposit_slip_id']]);
-        }
+            // Admin updates expected_commission in deposits if present in the body
+            $expectedCommission = isset($b['expected_commission']) ? (int)$b['expected_commission'] : null;
+            if ($expectedCommission !== null && $slip['deposit_slip_id']) {
+                $stmtDep = $this->db->prepare("UPDATE deposits SET expected_commission = ? WHERE id = ?");
+                $stmtDep->execute([$expectedCommission, $slip['deposit_slip_id']]);
+            }
 
-        $sharesJson = json_encode($shares);
-        $reason = trim($b['reason'] ?? '');
+            $sharesJson = json_encode($shares);
+            $reason = trim($b['reason'] ?? '');
 
-        // If updated by admin/manager directly, set status to approved_pending_signatures and reset signatures to '{}'
-        // Otherwise, reset signatures and request change/approval.
-        if ($isManagerOrAdmin) {
-            $newStatus = 'approved_pending_signatures';
-            $signaturesVal = '{}';
-            
-            // Clear any pending adjustment request because it has been addressed/applied directly.
-            $stmtClearReq = $this->db->prepare("
+            // If updated by admin/manager directly, set status to approved_pending_signatures and reset signatures to '{}'
+            // Otherwise, reset signatures and request change/approval.
+            if ($isManagerOrAdmin) {
+                $newStatus = 'approved_pending_signatures';
+                $signaturesVal = '{}';
+                
+                // Clear any pending adjustment request because it has been addressed/applied directly.
+                $stmtClearReq = $this->db->prepare("
+                    UPDATE cooperation_slips 
+                    SET adjustment_request_user_id = NULL, 
+                        adjustment_request_reason = NULL, 
+                        adjustment_request_at = NULL 
+                    WHERE id = ?
+                ");
+                $stmtClearReq->execute([$id]);
+            } else {
+                $signaturesVal = '{}';
+                $newStatus = 'pending_signatures';
+                if ($slip['status'] === 'approved' || $slip['status'] === 'pending_manager_approval' || $slip['status'] === 'approved_pending_signatures') {
+                    $newStatus = 'pending_manager_approval';
+                }
+            }
+
+            $stmt = $this->db->prepare("
                 UPDATE cooperation_slips 
-                SET adjustment_request_user_id = NULL, 
-                    adjustment_request_reason = NULL, 
-                    adjustment_request_at = NULL 
+                SET shares_json = ?, total_percentage = ?, signatures_json = ?, version = version + 1, status = ?, dispute_details = ?
                 WHERE id = ?
             ");
-            $stmtClearReq->execute([$id]);
-        } else {
-            $signaturesVal = '{}';
-            $newStatus = 'pending_signatures';
-            if ($slip['status'] === 'approved' || $slip['status'] === 'pending_manager_approval' || $slip['status'] === 'approved_pending_signatures') {
-                $newStatus = 'pending_manager_approval';
+            $stmt->execute([$sharesJson, $sum, $signaturesVal, $newStatus, $reason ?: null, $id]);
+
+            // Sync collaborators to contacts table
+            $this->syncCollaboratorsToContact((int)$slip['contact_id'], $sharesJson);
+
+            $this->db->commit();
+        } catch (Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
             }
+            respond(500, null, 'Lỗi cập nhật tỷ lệ chia sẻ hoa hồng: ' . $e->getMessage(), false);
         }
-
-        $stmt = $this->db->prepare("
-            UPDATE cooperation_slips 
-            SET shares_json = ?, total_percentage = ?, signatures_json = ?, version = version + 1, status = ?, dispute_details = ?
-            WHERE id = ?
-        ");
-        $stmt->execute([$sharesJson, $sum, $signaturesVal, $newStatus, $reason ?: null, $id]);
-
-        // Sync collaborators to contacts table
-        $this->syncCollaboratorsToContact((int)$slip['contact_id'], $sharesJson);
 
         if ($isManagerOrAdmin) {
             // Notify all shareholders about direct update
@@ -539,181 +553,201 @@ class CooperationController {
     }
 
     public function signSlip(array $auth, int $id): void {
-        // Slip exists
-        $stmtSlip = $this->db->prepare("
-            SELECT cs.*, c.tenant_id 
-            FROM cooperation_slips cs
-            JOIN contacts c ON cs.contact_id = c.id
-            WHERE cs.id = ? AND c.tenant_id = ?
-        ");
-        $stmtSlip->execute([$id, $auth['tenant_id']]);
-        $slip = $stmtSlip->fetch();
+        $this->db->beginTransaction();
+        try {
+            // Slip exists & lock row to prevent lost updates on concurrent signing
+            $stmtSlip = $this->db->prepare("
+                SELECT cs.*, c.tenant_id 
+                FROM cooperation_slips cs
+                JOIN contacts c ON cs.contact_id = c.id
+                WHERE cs.id = ? AND c.tenant_id = ?
+                FOR UPDATE
+            ");
+            $stmtSlip->execute([$id, $auth['tenant_id']]);
+            $slip = $stmtSlip->fetch();
 
-        if (!$slip) {
-            respond(404, null, 'Phiếu hợp tác không tồn tại', false);
-        }
-
-        $allowedSignStatuses = ['pending_signatures', 'approved', 'pending_manager_approval', 'approved_pending_signatures'];
-        if (!in_array($slip['status'], $allowedSignStatuses)) {
-            respond(400, null, 'Phiếu không trong trạng thái chờ ký', false);
-        }
-
-        $shares = json_decode($slip['shares_json'], true) ?: [];
-        $userId = $auth['user_id'];
-
-        if (!isset($shares[$userId])) {
-            respond(403, null, 'Bạn không nằm trong danh sách phân chia hoa hồng của phiếu này', false);
-        }
-
-        // Backend check for mandatory files before allowing signature
-        $stmtDocs = $this->db->prepare("SELECT name, file_path, category FROM cloud_files WHERE contact_id = ? AND tenant_id = ?");
-        $stmtDocs->execute([$slip['contact_id'], $auth['tenant_id']]);
-        $docs = $stmtDocs->fetchAll(PDO::FETCH_ASSOC) ?: [];
-
-        $stmtMilestones = $this->db->prepare("
-            SELECT dm.milestone_name, dm.unc_file_path 
-            FROM deposit_milestones dm
-            JOIN deposits d ON dm.deposit_id = d.id
-            JOIN contacts c ON d.contact_id = c.id
-            WHERE d.contact_id = ? AND c.tenant_id = ?
-        ");
-        $stmtMilestones->execute([$slip['contact_id'], $auth['tenant_id']]);
-        $milestones = $stmtMilestones->fetchAll(PDO::FETCH_ASSOC) ?: [];
-
-        $checkFileExists = function($fileKeyword) use ($slip, $docs, $milestones) {
-            $cleanKeyword = strtolower(trim(explode('.', $fileKeyword)[0]));
-            if (empty($cleanKeyword)) return false;
-
-            // 1. Check coopSlip attachments
-            $attachments = array_filter(array_map('trim', explode(',', $slip['attachment_url'] ?? '')));
-            foreach ($attachments as $attachment) {
-                $filename = strtolower(basename($attachment));
-                if ($cleanKeyword === 'unc' || $cleanKeyword === 'uy nhiem chi' || $cleanKeyword === 'ủy nhiệm chi') {
-                    if (strpos($filename, 'unc') !== false || strpos($filename, 'uy nhiem chi') !== false || strpos($filename, 'ủy nhiệm chi') !== false || strpos($attachment, 'deposits/') !== false || !empty($attachments)) {
-                        return true;
-                    }
-                } else {
-                    if (strpos($filename, $cleanKeyword) !== false) {
-                        return true;
-                    }
-                }
+            if (!$slip) {
+                $this->db->rollBack();
+                respond(404, null, 'Phiếu hợp tác không tồn tại', false);
             }
 
-            // 2. Check profile docs (cloud_files)
-            foreach ($docs as $doc) {
-                $name = strtolower($doc['name'] ?? '');
-                $cat = strtolower($doc['category'] ?? '');
-                $path = strtolower($doc['file_path'] ?? '');
-                if ($cleanKeyword === 'unc' || $cleanKeyword === 'uy nhiem chi' || $cleanKeyword === 'ủy nhiệm chi') {
-                    if (strpos($name, 'unc') !== false || strpos($name, 'cọc') !== false || strpos($name, 'đặt cọc') !== false || strpos($name, 'uy nhiem chi') !== false || strpos($name, 'ủy nhiệm chi') !== false || strpos($cat, 'đặt cọc') !== false || strpos($cat, 'unc') !== false || strpos($path, 'deposits') !== false) {
-                        return true;
-                    }
-                } else {
-                    if (strpos($name, $cleanKeyword) !== false || strpos($cat, $cleanKeyword) !== false) {
-                        return true;
-                    }
-                }
+            $allowedSignStatuses = ['pending_signatures', 'approved', 'pending_manager_approval', 'approved_pending_signatures'];
+            if (!in_array($slip['status'], $allowedSignStatuses)) {
+                $this->db->rollBack();
+                respond(400, null, 'Phiếu không trong trạng thái chờ ký', false);
             }
 
-            // 3. Check deposit milestones
-            foreach ($milestones as $m) {
-                $uPath = strtolower($m['unc_file_path'] ?? '');
-                $mName = strtolower($m['milestone_name'] ?? '');
-                if ($cleanKeyword === 'unc' || $cleanKeyword === 'uy nhiem chi' || $cleanKeyword === 'ủy nhiệm chi') {
-                    if (!empty($uPath) || strpos($mName, 'cọc') !== false || strpos($mName, 'unc') !== false) {
-                        return true;
-                    }
-                } else {
-                    if (strpos($uPath, $cleanKeyword) !== false || strpos($mName, $cleanKeyword) !== false) {
-                        return true;
-                    }
-                }
+            $shares = json_decode($slip['shares_json'], true) ?: [];
+            $userId = $auth['user_id'];
+
+            if (!isset($shares[$userId])) {
+                $this->db->rollBack();
+                respond(403, null, 'Bạn không nằm trong danh sách phân chia hoa hồng của phiếu này', false);
             }
 
-            return false;
-        };
+            // Backend check for mandatory files before allowing signature
+            $stmtDocs = $this->db->prepare("SELECT name, file_path, category FROM cloud_files WHERE contact_id = ? AND tenant_id = ?");
+            $stmtDocs->execute([$slip['contact_id'], $auth['tenant_id']]);
+            $docs = $stmtDocs->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-        $coopSettingStmt = $this->db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'coop_default_files' LIMIT 1");
-        $coopDefaultFilesSetting = $coopSettingStmt ? $coopSettingStmt->fetchColumn() : null;
-        if ($coopDefaultFilesSetting) {
-            $requiredFiles = array_filter(array_map('trim', explode(',', $coopDefaultFilesSetting)));
-            if (!empty($requiredFiles)) {
-                foreach ($requiredFiles as $requiredFile) {
-                    if (!$checkFileExists($requiredFile)) {
-                        respond(400, null, "Vui lòng upload tài liệu $requiredFile trước khi ký xác nhận!", false);
-                    }
-                }
-            }
-        } else {
-            // Fallback safeguard
-            if (!$checkFileExists('UNC') && !$checkFileExists('Ủy nhiệm chi') && !$checkFileExists('uy nhiem chi')) {
-                respond(400, null, "Vui lòng upload tài liệu UNC (Ủy nhiệm chi) trước khi ký xác nhận!", false);
-            }
-        }
+            $stmtMilestones = $this->db->prepare("
+                SELECT dm.milestone_name, dm.unc_file_path 
+                FROM deposit_milestones dm
+                JOIN deposits d ON dm.deposit_id = d.id
+                JOIN contacts c ON d.contact_id = c.id
+                WHERE d.contact_id = ? AND c.tenant_id = ?
+            ");
+            $stmtMilestones->execute([$slip['contact_id'], $auth['tenant_id']]);
+            $milestones = $stmtMilestones->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-        $signatures = json_decode($slip['signatures_json'], true) ?: [];
-        $body = getBody();
-        
-        $sigImg = $body['signature_img'] ?? null;
-        if ($sigImg && strpos($sigImg, 'data:image') === 0) {
-            try {
-                $sigDir = UPLOAD_DIR . "/signatures";
-                if (!is_dir($sigDir)) {
-                    mkdir($sigDir, 0755, true);
-                }
-                $data = explode(',', $sigImg);
-                if (count($data) > 1) {
-                    $imgData = base64_decode($data[1]);
-                    $filename = "slip_" . $id . "_user_" . $userId . "_" . time() . ".png";
-                    
-                    require_once __DIR__ . '/../config/ImageHelper.php';
-                    if (ImageHelper::saveCleanPngSignature($imgData, $sigDir . "/" . $filename)) {
-                        $sigImg = "uploads/signatures/" . $filename;
+            $checkFileExists = function($fileKeyword) use ($slip, $docs, $milestones) {
+                $cleanKeyword = strtolower(trim(explode('.', $fileKeyword)[0]));
+                if (empty($cleanKeyword)) return false;
+
+                // 1. Check coopSlip attachments
+                $attachments = array_filter(array_map('trim', explode(',', $slip['attachment_url'] ?? '')));
+                foreach ($attachments as $attachment) {
+                    $filename = strtolower(basename($attachment));
+                    if ($cleanKeyword === 'unc' || $cleanKeyword === 'uy nhiem chi' || $cleanKeyword === 'ủy nhiệm chi') {
+                        if (strpos($filename, 'unc') !== false || strpos($filename, 'uy nhiem chi') !== false || strpos($filename, 'ủy nhiệm chi') !== false || strpos($attachment, 'deposits/') !== false || !empty($attachments)) {
+                            return true;
+                        }
                     } else {
-                        respond(400, null, "Định dạng chữ ký không hợp lệ!", false);
+                        if (strpos($filename, $cleanKeyword) !== false) {
+                            return true;
+                        }
                     }
                 }
-            } catch (Throwable $sigEx) {
-                error_log("Error saving base64 signature image: " . $sigEx->getMessage());
-                respond(500, null, "Lỗi khi lưu chữ ký: " . $sigEx->getMessage(), false);
-            }
-        }
 
-        // Add signature
-        $signatures[$userId] = [
-            'time' => date('Y-m-d H:i:s'),
-            'ip' => $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0',
-            'role' => $auth['role'],
-            'signature_img' => $sigImg
-        ];
+                // 2. Check profile docs (cloud_files)
+                foreach ($docs as $doc) {
+                    $name = strtolower($doc['name'] ?? '');
+                    $cat = strtolower($doc['category'] ?? '');
+                    $path = strtolower($doc['file_path'] ?? '');
+                    if ($cleanKeyword === 'unc' || $cleanKeyword === 'uy nhiem chi' || $cleanKeyword === 'ủy nhiệm chi') {
+                        if (strpos($name, 'unc') !== false || strpos($name, 'cọc') !== false || strpos($name, 'đặt cọc') !== false || strpos($name, 'uy nhiem chi') !== false || strpos($name, 'ủy nhiệm chi') !== false || strpos($cat, 'đặt cọc') !== false || strpos($cat, 'unc') !== false || strpos($path, 'deposits') !== false) {
+                            return true;
+                        }
+                    } else {
+                        if (strpos($name, $cleanKeyword) !== false || strpos($cat, $cleanKeyword) !== false) {
+                            return true;
+                        }
+                    }
+                }
 
-        $signaturesJson = json_encode($signatures);
-        
-        // If all shareholders signed, move to pending_manager_approval or approved (if pre-approved by admin/manager)
-        $status = 'pending_signatures';
-        if ($slip['status'] === 'approved_pending_signatures') {
-            $status = 'approved_pending_signatures';
-        }
-        $allSigned = true;
-        foreach ($shares as $uid => $percent) {
-            if (!isset($signatures[$uid])) {
-                $allSigned = false;
-                break;
-            }
-        }
+                // 3. Check deposit milestones
+                foreach ($milestones as $m) {
+                    $uPath = strtolower($m['unc_file_path'] ?? '');
+                    $mName = strtolower($m['milestone_name'] ?? '');
+                    if ($cleanKeyword === 'unc' || $cleanKeyword === 'uy nhiem chi' || $cleanKeyword === 'ủy nhiệm chi') {
+                        if (!empty($uPath) || strpos($mName, 'cọc') !== false || strpos($mName, 'unc') !== false) {
+                            return true;
+                        }
+                    } else {
+                        if (strpos($uPath, $cleanKeyword) !== false || strpos($mName, $cleanKeyword) !== false) {
+                            return true;
+                        }
+                    }
+                }
 
-        if ($allSigned) {
-            if ($slip['status'] === 'approved_pending_signatures') {
-                $status = 'approved';
+                return false;
+            };
+
+            $coopSettingStmt = $this->db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'coop_default_files' LIMIT 1");
+            $coopDefaultFilesSetting = $coopSettingStmt ? $coopSettingStmt->fetchColumn() : null;
+            if ($coopDefaultFilesSetting) {
+                $requiredFiles = array_filter(array_map('trim', explode(',', $coopDefaultFilesSetting)));
+                if (!empty($requiredFiles)) {
+                    foreach ($requiredFiles as $requiredFile) {
+                        if (!$checkFileExists($requiredFile)) {
+                            $this->db->rollBack();
+                            respond(400, null, "Vui lòng upload tài liệu $requiredFile trước khi ký xác nhận!", false);
+                        }
+                    }
+                }
             } else {
-                $status = 'pending_manager_approval';
+                // Fallback safeguard
+                if (!$checkFileExists('UNC') && !$checkFileExists('Ủy nhiệm chi') && !$checkFileExists('uy nhiem chi')) {
+                    $this->db->rollBack();
+                    respond(400, null, "Vui lòng upload tài liệu UNC (Ủy nhiệm chi) trước khi ký xác nhận!", false);
+                }
             }
+
+            $signatures = json_decode($slip['signatures_json'], true) ?: [];
+            $body = getBody();
+            
+            $sigImg = $body['signature_img'] ?? null;
+            if ($sigImg && strpos($sigImg, 'data:image') === 0) {
+                try {
+                    $sigDir = UPLOAD_DIR . "/signatures";
+                    if (!is_dir($sigDir)) {
+                        mkdir($sigDir, 0755, true);
+                    }
+                    $data = explode(',', $sigImg);
+                    if (count($data) > 1) {
+                        $imgData = base64_decode($data[1]);
+                        $filename = "slip_" . $id . "_user_" . $userId . "_" . time() . ".png";
+                        
+                        require_once __DIR__ . '/../config/ImageHelper.php';
+                        if (ImageHelper::saveCleanPngSignature($imgData, $sigDir . "/" . $filename)) {
+                            $sigImg = "uploads/signatures/" . $filename;
+                        } else {
+                            $this->db->rollBack();
+                            respond(400, null, "Định dạng chữ ký không hợp lệ!", false);
+                        }
+                    }
+                } catch (Throwable $sigEx) {
+                    if ($this->db->inTransaction()) {
+                        $this->db->rollBack();
+                    }
+                    error_log("Error saving base64 signature image: " . $sigEx->getMessage());
+                    respond(500, null, "Lỗi khi lưu chữ ký: " . $sigEx->getMessage(), false);
+                }
+            }
+
+            // Add signature
+            $signatures[$userId] = [
+                'time' => date('Y-m-d H:i:s'),
+                'ip' => $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0',
+                'role' => $auth['role'],
+                'signature_img' => $sigImg
+            ];
+
+            $signaturesJson = json_encode($signatures);
+            
+            // If all shareholders signed, move to pending_manager_approval or approved (if pre-approved by admin/manager)
+            $status = 'pending_signatures';
+            if ($slip['status'] === 'approved_pending_signatures') {
+                $status = 'approved_pending_signatures';
+            }
+            $allSigned = true;
+            foreach ($shares as $uid => $percent) {
+                if (!isset($signatures[$uid])) {
+                    $allSigned = false;
+                    break;
+                }
+            }
+
+            if ($allSigned) {
+                if ($slip['status'] === 'approved_pending_signatures') {
+                    $status = 'approved';
+                } else {
+                    $status = 'pending_manager_approval';
+                }
+            }
+
+            $stmt = $this->db->prepare("UPDATE cooperation_slips SET signatures_json = ?, status = ? WHERE id = ?");
+            $stmt->execute([$signaturesJson, $status, $id]);
+
+            $this->db->commit();
+        } catch (Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            respond(500, null, 'Lỗi khi ký xác nhận phiếu hợp tác: ' . $e->getMessage(), false);
         }
 
-        $stmt = $this->db->prepare("UPDATE cooperation_slips SET signatures_json = ?, status = ? WHERE id = ?");
-        $stmt->execute([$signaturesJson, $status, $id]);
-
-        // Email notifications based on signature status
+        // Email notifications based on signature status (after commit)
         if ($allSigned) {
             if ($status === 'approved') {
                 $emailSubject = "[IDEAS] Phiếu hợp tác #" . $id . " đã được phê duyệt và ký kết thành công";
@@ -839,34 +873,52 @@ class CooperationController {
         $b = getBody();
         $details = trim($b['reason'] ?? 'Không đồng ý ký');
 
-        $stmtSlip = $this->db->prepare("
-            SELECT cs.*, c.tenant_id 
-            FROM cooperation_slips cs
-            JOIN contacts c ON cs.contact_id = c.id
-            WHERE cs.id = ? AND c.tenant_id = ?
-        ");
-        $stmtSlip->execute([$id, $auth['tenant_id']]);
-        $slip = $stmtSlip->fetch();
+        $this->db->beginTransaction();
+        try {
+            $stmtSlip = $this->db->prepare("
+                SELECT cs.*, c.tenant_id 
+                FROM cooperation_slips cs
+                JOIN contacts c ON cs.contact_id = c.id
+                WHERE cs.id = ? AND c.tenant_id = ?
+                FOR UPDATE
+            ");
+            $stmtSlip->execute([$id, $auth['tenant_id']]);
+            $slip = $stmtSlip->fetch();
 
-        if (!$slip) {
-            respond(404, null, 'Phiếu hợp tác không tồn tại', false);
+            if (!$slip) {
+                $this->db->rollBack();
+                respond(404, null, 'Phiếu hợp tác không tồn tại', false);
+            }
+
+            if (!$this->checkSlipAccess($auth, $id)) {
+                $this->db->rollBack();
+                respond(403, null, 'Bạn không có quyền từ chối hoặc phản hồi phiếu này', false);
+            }
+
+            if (in_array($slip['status'], ['approved', 'completed', 'rejected'], true)) {
+                $this->db->rollBack();
+                respond(400, null, 'Không thể từ chối phiếu hợp tác đã được phê duyệt hoặc đã bị từ chối', false);
+            }
+
+            $shares = json_decode($slip['shares_json'] ?? '[]', true) ?: [];
+
+            // Return to rejected and reset signatures so sales can update percentages
+            $stmt = $this->db->prepare("
+                UPDATE cooperation_slips 
+                SET status = 'rejected', dispute_details = ?, signatures_json = '{}' 
+                WHERE id = ?
+            ");
+            $stmt->execute([$details, $id]);
+
+            $this->db->commit();
+        } catch (Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            respond(500, null, 'Lỗi khi từ chối phiếu hợp tác: ' . $e->getMessage(), false);
         }
 
-        if (!$this->checkSlipAccess($auth, $id)) {
-            respond(403, null, 'Bạn không có quyền từ chối hoặc phản hồi phiếu này', false);
-        }
-
-        $shares = json_decode($slip['shares_json'] ?? '[]', true) ?: [];
-
-        // Return to pending_signatures so sales can update percentages
-        $stmt = $this->db->prepare("
-            UPDATE cooperation_slips 
-            SET status = 'rejected', dispute_details = ?, signatures_json = '{}' 
-            WHERE id = ?
-        ");
-        $stmt->execute([$details, $id]);
-
-        // Email shareholders about dispute/rejection
+        // Email shareholders about dispute/rejection (after commit)
         $emailSubject = "[IDEAS] Từ chối / Khiếu nại Phiếu hợp tác #" . $id;
         $emailTitle = "KHIẾU NẠI PHIẾU HỢP TÁC";
         $emailContent = "Chào các thành viên,<br/><br/>" .
@@ -907,123 +959,145 @@ class CooperationController {
             respond(422, null, 'ID khách hàng là bắt buộc', false);
         }
 
-        // Check if slip already exists
-        $stmtCheck = $this->db->prepare("SELECT id FROM cooperation_slips WHERE contact_id = ? LIMIT 1");
-        $stmtCheck->execute([$contactId]);
-        if ($stmtCheck->fetchColumn()) {
-            respond(400, null, 'Phiếu hợp tác của khách hàng này đã tồn tại', false);
-        }
-
-        // Find owner of contact and check access
-         $stmtC = $this->db->prepare("SELECT owner_id, tenant_id, pipeline_status, full_name FROM contacts WHERE id = ?");
-        $stmtC->execute([$contactId]);
-        $contactRow = $stmtC->fetch();
-        if (!$contactRow) {
-            respond(404, null, 'Khách hàng không tồn tại', false);
-        }
-        if ((int)$contactRow['tenant_id'] !== (int)$auth['tenant_id']) {
-            respond(403, null, 'Bạn không có quyền truy cập khách hàng này', false);
-        }
-
-        // Validate cooperation eligible status
-        $currentStatus = $contactRow['pipeline_status'] ?: 'chua_xac_dinh';
-        $coopSettingStmt = $this->db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'coop_eligible_statuses' LIMIT 1");
-        $coopSettingVal = $coopSettingStmt ? $coopSettingStmt->fetchColumn() : '';
-        $coopEligibleStatuses = [];
-        if (!empty($coopSettingVal)) {
-            $coopEligibleStatuses = array_map('trim', explode(',', $coopSettingVal));
-        }
-        if (empty($coopEligibleStatuses)) {
-            $coopEligibleStatuses = ['booking', 'da_gap', 'dat_coc']; // Default fallback
-        }
-
-        if (!in_array($currentStatus, $coopEligibleStatuses, true)) {
-            respond(400, null, 'Không thể tạo phiếu hợp tác. Khách hàng phải ở trạng thái quy định (' . implode(', ', $coopEligibleStatuses) . ')', false);
-        }
-        $ownerId = (int)$contactRow['owner_id'];
-        
-        // Check ownership access
-        if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
-            if ($ownerId !== (int)$auth['user_id']) {
-                respond(403, null, 'Bạn chỉ có quyền tạo phiếu hợp tác cho khách hàng thuộc sở hữu của mình', false);
+        $this->db->beginTransaction();
+        try {
+            // Find owner of contact and lock row to prevent duplicate concurrent slip creation
+            $stmtC = $this->db->prepare("SELECT owner_id, tenant_id, pipeline_status, full_name FROM contacts WHERE id = ? AND deleted_at IS NULL FOR UPDATE");
+            $stmtC->execute([$contactId]);
+            $contactRow = $stmtC->fetch();
+            if (!$contactRow) {
+                $this->db->rollBack();
+                respond(404, null, 'Khách hàng không tồn tại', false);
             }
-        } else if ($auth['role'] === 'manager') {
-            // Check if owner belongs to manager's team
-            $stmtUserTeam = $this->db->prepare("SELECT team_id FROM users WHERE id = ?");
-            $stmtUserTeam->execute([$ownerId]);
-            $targetUserTeamId = $stmtUserTeam->fetchColumn();
-
-            $stmtLead = $this->db->prepare("SELECT 1 FROM teams WHERE id = ? AND leader_id = ?");
-            $stmtLead->execute([$targetUserTeamId, $auth['user_id']]);
-            $isTeamMember = $stmtLead->fetch();
-
-            if ($ownerId !== (int)$auth['user_id'] && !$isTeamMember) {
-                respond(403, null, 'Bạn chỉ có quyền tạo phiếu hợp tác cho khách hàng thuộc quản lý của nhóm mình', false);
+            if ((int)$contactRow['tenant_id'] !== (int)$auth['tenant_id']) {
+                $this->db->rollBack();
+                respond(403, null, 'Bạn không có quyền truy cập khách hàng này', false);
             }
-        }
 
-        if ($ownerId <= 0) {
-            $ownerId = $auth['user_id'];
-        }
+            // Check if slip already exists under lock
+            $stmtCheck = $this->db->prepare("SELECT id FROM cooperation_slips WHERE contact_id = ? LIMIT 1 FOR UPDATE");
+            $stmtCheck->execute([$contactId]);
+            if ($stmtCheck->fetchColumn()) {
+                $this->db->rollBack();
+                respond(400, null, 'Phiếu hợp tác của khách hàng này đã tồn tại', false);
+            }
 
-        $collaborators = $b['collaborators'] ?? [];
-        $customSharesInput = $b['shares'] ?? [];
-        $shares = [];
+            // Validate cooperation eligible status
+            $currentStatus = $contactRow['pipeline_status'] ?: 'chua_xac_dinh';
+            $coopSettingStmt = $this->db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'coop_eligible_statuses' LIMIT 1");
+            $coopSettingVal = $coopSettingStmt ? $coopSettingStmt->fetchColumn() : '';
+            $coopEligibleStatuses = [];
+            if (!empty($coopSettingVal)) {
+                $coopEligibleStatuses = array_map('trim', explode(',', $coopSettingVal));
+            }
+            if (empty($coopEligibleStatuses)) {
+                $coopEligibleStatuses = ['booking', 'da_gap', 'dat_coc']; // Default fallback
+            }
 
-        if (!empty($customSharesInput) && is_array($customSharesInput)) {
-            $sum = 0;
-            foreach ($customSharesInput as $uid => $pct) {
-                $uInt = (int)$uid;
-                $pInt = (int)$pct;
-                if ($uInt > 0 && $pInt >= 0) {
-                    $shares[$uInt] = $pInt;
-                    $sum += $pInt;
+            if (!in_array($currentStatus, $coopEligibleStatuses, true)) {
+                $this->db->rollBack();
+                respond(400, null, 'Không thể tạo phiếu hợp tác. Khách hàng phải ở trạng thái quy định (' . implode(', ', $coopEligibleStatuses) . ')', false);
+            }
+            $ownerId = (int)$contactRow['owner_id'];
+            
+            // Check ownership access
+            if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
+                if ($ownerId !== (int)$auth['user_id']) {
+                    $this->db->rollBack();
+                    respond(403, null, 'Bạn chỉ có quyền tạo phiếu hợp tác cho khách hàng thuộc sở hữu của mình', false);
+                }
+            } else if ($auth['role'] === 'manager') {
+                // Check if owner belongs to manager's team
+                $stmtUserTeam = $this->db->prepare("SELECT team_id FROM users WHERE id = ?");
+                $stmtUserTeam->execute([$ownerId]);
+                $targetUserTeamId = $stmtUserTeam->fetchColumn();
+
+                $stmtLead = $this->db->prepare("SELECT 1 FROM teams WHERE id = ? AND leader_id = ?");
+                $stmtLead->execute([$targetUserTeamId, $auth['user_id']]);
+                $isTeamMember = $stmtLead->fetch();
+
+                if ($ownerId !== (int)$auth['user_id'] && !$isTeamMember) {
+                    $this->db->rollBack();
+                    respond(403, null, 'Bạn chỉ có quyền tạo phiếu hợp tác cho khách hàng thuộc quản lý của nhóm mình', false);
                 }
             }
-            if ($sum !== 100) {
-                respond(422, null, 'Tổng tỷ lệ chia sẻ hoa hồng phải bằng đúng 100% (Hiện tại là ' . $sum . '%)', false);
-            }
-        } else if (!empty($collaborators)) {
-            // Validate that collaborators does not include the owner
-            $collaboratorIds = array_map('intval', $collaborators);
-            $collaboratorIds = array_values(array_filter($collaboratorIds, function($id) use ($ownerId) {
-                return $id > 0 && $id !== $ownerId;
-            }));
 
-            if (count($collaboratorIds) > 2) {
-                respond(422, null, 'Hệ thống chỉ hỗ trợ hợp tác tối đa 3 nhân sự (Chủ sở hữu + 2 người hợp tác)', false);
+            if ($ownerId <= 0) {
+                $ownerId = $auth['user_id'];
             }
 
-            if (!empty($collaboratorIds)) {
-                // Auto-split: Owner + N collaborators
-                $totalCount = 1 + count($collaboratorIds);
-                $basePercent = floor(100 / $totalCount);
-                $remainder = 100 - ($basePercent * $totalCount);
+            $collaborators = $b['collaborators'] ?? [];
+            $customSharesInput = $b['shares'] ?? [];
+            $shares = [];
 
-                $shares[$ownerId] = (int)($basePercent + $remainder);
-                foreach ($collaboratorIds as $cid) {
-                    $shares[$cid] = (int)$basePercent;
+            if (!empty($customSharesInput) && is_array($customSharesInput)) {
+                $sum = 0;
+                foreach ($customSharesInput as $uid => $pct) {
+                    $uInt = (int)$uid;
+                    $pInt = (int)$pct;
+                    if ($uInt > 0 && $pInt >= 0) {
+                        $shares[$uInt] = $pInt;
+                        $sum += $pInt;
+                    }
+                }
+                if ($sum !== 100) {
+                    $this->db->rollBack();
+                    respond(422, null, 'Tổng tỷ lệ chia sẻ hoa hồng phải bằng đúng 100% (Hiện tại là ' . $sum . '%)', false);
+                }
+            } else if (!empty($collaborators)) {
+                // Validate that collaborators does not include the owner
+                $collaboratorIds = array_map('intval', $collaborators);
+                $collaboratorIds = array_values(array_filter($collaboratorIds, function($id) use ($ownerId) {
+                    return $id > 0 && $id !== $ownerId;
+                }));
+
+                if (count($collaboratorIds) > 2) {
+                    $this->db->rollBack();
+                    respond(422, null, 'Hệ thống chỉ hỗ trợ hợp tác tối đa 3 nhân sự (Chủ sở hữu + 2 người hợp tác)', false);
+                }
+
+                if (!empty($collaboratorIds)) {
+                    // Auto-split: Owner + N collaborators
+                    $totalCount = 1 + count($collaboratorIds);
+                    $basePercent = floor(100 / $totalCount);
+                    $remainder = 100 - ($basePercent * $totalCount);
+
+                    $shares[$ownerId] = (int)($basePercent + $remainder);
+                    foreach ($collaboratorIds as $cid) {
+                        $shares[$cid] = (int)$basePercent;
+                    }
+                } else {
+                    $shares[$ownerId] = 100;
                 }
             } else {
                 $shares[$ownerId] = 100;
             }
-        } else {
-            $shares[$ownerId] = 100;
+
+            $sharesJson = json_encode($shares);
+
+            $stmtIns = $this->db->prepare("
+                INSERT INTO cooperation_slips (contact_id, deposit_slip_id, version, total_percentage, shares_json, signatures_json, status, created_by)
+                VALUES (?, NULL, 1, 100, ?, '{}', 'pending_signatures', ?)
+            ");
+            $stmtIns->execute([$contactId, $sharesJson, $auth['user_id']]);
+            $slipId = $this->db->lastInsertId();
+
+            // Sync collaborators to contacts table
+            $this->syncCollaboratorsToContact((int)$contactId, $sharesJson);
+
+            // Withdraw from databank and terminate other parallel contacts
+            require_once __DIR__ . '/../config/ParallelHelper.php';
+            ParallelHelper::lockPersonForWinningContact($this->db, (int)$contactId);
+
+            $this->db->commit();
+        } catch (Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            respond(500, null, 'Lỗi khởi tạo phiếu hợp tác: ' . $e->getMessage(), false);
         }
 
-        $sharesJson = json_encode($shares);
-
-        $stmtIns = $this->db->prepare("
-            INSERT INTO cooperation_slips (contact_id, deposit_slip_id, version, total_percentage, shares_json, signatures_json, status, created_by)
-            VALUES (?, NULL, 1, 100, ?, '{}', 'pending_signatures', ?)
-        ");
-        $stmtIns->execute([$contactId, $sharesJson, $auth['user_id']]);
-        $slipId = $this->db->lastInsertId();
-
-        // Sync collaborators to contacts table
-        $this->syncCollaboratorsToContact((int)$contactId, $sharesJson);
-
-        // Email and notify all shareholders that a slip requires their signature
+        // Email and notify all shareholders that a slip requires their signature (after commit)
         $custFullName = trim($contactRow['full_name'] ?? '') ?: 'Khách hàng';
         $emailSubject = "[IDEAS] Yêu cầu ký xác nhận Phiếu hợp tác #" . $slipId;
         $emailTitle = "KÝ XÁC NHẬN PHIẾU HỢP TÁC";
@@ -1031,10 +1105,6 @@ class CooperationController {
                         "Một phiếu hợp tác chia sẻ hoa hồng mới (#" . $slipId . ") đã được khởi tạo trên hệ thống cho khách hàng <strong>" . htmlspecialchars($custFullName) . "</strong>.<br/>" .
                         "Vui lòng đăng nhập hệ thống IDEAS CRM và truy cập mục <strong>Phiếu hợp tác</strong> để xem chi tiết và ký xác nhận.";
         $this->notifyShareholders($slipId, $shares, $emailSubject, $emailTitle, $emailContent);
-
-        // Withdraw from databank and terminate other parallel contacts
-        require_once __DIR__ . '/../config/ParallelHelper.php';
-        ParallelHelper::lockPersonForWinningContact($this->db, (int)$contactId);
 
         respond(201, ['id' => (int)$slipId], 'Khởi tạo phiếu hợp tác thành công');
     }
@@ -1055,7 +1125,7 @@ class CooperationController {
         $isAllowed = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true) || 
                      ($ownerId && (int)$ownerId === (int)$auth['user_id']);
 
-        if (!$this->checkSlipAccess($auth, $id)) {
+        if (!$isAllowed && !$this->checkSlipAccess($auth, $id)) {
             respond(403, null, 'Bạn không có quyền tải lên tài liệu cho phiếu hợp tác này', false);
         }
 
@@ -1127,7 +1197,7 @@ class CooperationController {
         $isAllowed = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true) || 
                      ($ownerId && (int)$ownerId === (int)$auth['user_id']);
 
-        if (!$this->checkSlipAccess($auth, $id)) {
+        if (!$isAllowed || !$this->checkSlipAccess($auth, $id)) {
             respond(403, null, 'Bạn không có quyền xóa tài liệu đính kèm này', false);
         }
 
@@ -1183,7 +1253,7 @@ class CooperationController {
         $isAllowed = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true) || 
                      ((int)$row['owner_id'] === (int)$auth['user_id']);
                      
-        if (!$this->checkSlipAccess($auth, $id)) {
+        if (!$isAllowed || !$this->checkSlipAccess($auth, $id)) {
             respond(403, null, 'Bạn không có quyền đổi tên tài liệu này', false);
         }
 
@@ -1252,7 +1322,11 @@ class CooperationController {
             respond(404, null, 'Không tìm thấy phiếu hợp tác', false);
         }
         
-        if (!$this->checkSlipAccess($auth, $id)) {
+        $isAllowed = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true) ||
+                     ((int)$row['owner_id'] === (int)$auth['user_id']) ||
+                     ((int)$row['created_by'] === (int)$auth['user_id']);
+
+        if (!$isAllowed || !$this->checkSlipAccess($auth, $id)) {
             respond(403, null, 'Bạn không có quyền xóa phiếu hợp tác này', false);
         }
         
@@ -1327,7 +1401,7 @@ class CooperationController {
         }
 
         // Get current contact person_id, phone, and owner_id
-        $stmtC = $this->db->prepare("SELECT person_id, phone, owner_id FROM contacts WHERE id = ? AND tenant_id = ?");
+        $stmtC = $this->db->prepare("SELECT person_id, phone, owner_id FROM contacts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
         $stmtC->execute([$contactId, $tid]);
         $cRow = $stmtC->fetch(PDO::FETCH_ASSOC);
 
@@ -1349,6 +1423,7 @@ class CooperationController {
             FROM contacts c
             JOIN users u ON c.owner_id = u.id
             WHERE c.tenant_id = :tenant_id 
+              AND c.deleted_at IS NULL
               AND c.id != :contact_id
               AND c.owner_id != :owner_id
               AND u.is_active = 1
@@ -1414,41 +1489,64 @@ class CooperationController {
     public function createAdjustmentSlip(array $auth, int $id): void {
         if ($auth['role'] === 'viewer') respond(403, null, 'Bạn không có quyền thực hiện thao tác này', false);
 
-        // 1. Fetch the approved slip to adjust
-        $stmt = $this->db->prepare("SELECT * FROM cooperation_slips WHERE id = ?");
-        $stmt->execute([$id]);
-        $slip = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if (!$slip) {
-            respond(404, null, 'Không tìm thấy phiếu hợp tác', false);
+        if (!$this->checkSlipAccess($auth, $id)) {
+            respond(403, null, 'Bạn không có quyền tạo phiếu điều chỉnh cho phiếu hợp tác này', false);
         }
 
-        if ($slip['status'] !== 'approved') {
-            respond(400, null, 'Chỉ có thể tạo phiếu điều chỉnh từ phiếu hợp tác đã được duyệt', false);
-        }
+        $this->db->beginTransaction();
+        try {
+            // 1. Fetch the approved slip to adjust (with tenant check & lock)
+            $stmt = $this->db->prepare("
+                SELECT cs.* 
+                FROM cooperation_slips cs
+                JOIN contacts c ON cs.contact_id = c.id
+                WHERE cs.id = ? AND c.tenant_id = ?
+                FOR UPDATE
+            ");
+            $stmt->execute([$id, $auth['tenant_id']]);
+            $slip = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        // Check if there is already a pending adjustment slip for this contact
-        $stmtPending = $this->db->prepare("SELECT id FROM cooperation_slips WHERE contact_id = ? AND status IN ('pending_signatures', 'pending_manager_approval', 'approved_pending_signatures') LIMIT 1");
-        $stmtPending->execute([$slip['contact_id']]);
-        if ($stmtPending->fetchColumn()) {
-            respond(400, null, 'Đang có một phiếu hợp tác hoặc phiếu điều chỉnh khác chờ ký duyệt cho khách hàng này', false);
-        }
+            if (!$slip) {
+                $this->db->rollBack();
+                respond(404, null, 'Không tìm thấy phiếu hợp tác', false);
+            }
 
-        // 2. Clone the slip
-        $sharesJson = $slip['shares_json'];
-        
-        $stmtIns = $this->db->prepare("
-            INSERT INTO cooperation_slips (contact_id, deposit_slip_id, version, total_percentage, shares_json, signatures_json, status, created_by, dieu_chinh_tu_id)
-            VALUES (?, ?, 1, 100, ?, '{}', 'pending_signatures', ?, ?)
-        ");
-        $stmtIns->execute([
-            $slip['contact_id'],
-            $slip['deposit_slip_id'],
-            $sharesJson,
-            $auth['user_id'],
-            $id
-        ]);
-        $newSlipId = (int)$this->db->lastInsertId();
+            if ($slip['status'] !== 'approved') {
+                $this->db->rollBack();
+                respond(400, null, 'Chỉ có thể tạo phiếu điều chỉnh từ phiếu hợp tác đã được duyệt', false);
+            }
+
+            // Check if there is already a pending adjustment slip for this contact
+            $stmtPending = $this->db->prepare("SELECT id FROM cooperation_slips WHERE contact_id = ? AND status IN ('pending_signatures', 'pending_manager_approval', 'approved_pending_signatures') LIMIT 1 FOR UPDATE");
+            $stmtPending->execute([$slip['contact_id']]);
+            if ($stmtPending->fetchColumn()) {
+                $this->db->rollBack();
+                respond(400, null, 'Đang có một phiếu hợp tác hoặc phiếu điều chỉnh khác chờ ký duyệt cho khách hàng này', false);
+            }
+
+            // 2. Clone the slip
+            $sharesJson = $slip['shares_json'];
+            
+            $stmtIns = $this->db->prepare("
+                INSERT INTO cooperation_slips (contact_id, deposit_slip_id, version, total_percentage, shares_json, signatures_json, status, created_by, dieu_chinh_tu_id)
+                VALUES (?, ?, 1, 100, ?, '{}', 'pending_signatures', ?, ?)
+            ");
+            $stmtIns->execute([
+                $slip['contact_id'],
+                $slip['deposit_slip_id'],
+                $sharesJson,
+                $auth['user_id'],
+                $id
+            ]);
+            $newSlipId = (int)$this->db->lastInsertId();
+
+            $this->db->commit();
+        } catch (Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            respond(500, null, 'Lỗi tạo phiếu điều chỉnh: ' . $e->getMessage(), false);
+        }
 
         logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'CREATE_ADJUSTMENT_SLIP', 'cooperation_slip', $newSlipId, "Tạo phiếu điều chỉnh ID: $newSlipId cho phiếu hợp tác ID: $id");
 
@@ -1478,13 +1576,17 @@ class CooperationController {
             SELECT cs.*, c.full_name as customer_name, c.owner_id
             FROM cooperation_slips cs
             JOIN contacts c ON cs.contact_id = c.id
-            WHERE cs.id = ?
+            WHERE cs.id = ? AND c.tenant_id = ?
         ");
-        $stmt->execute([$id]);
+        $stmt->execute([$id, $auth['tenant_id']]);
         $slip = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$slip) {
             respond(404, null, 'Không tìm thấy phiếu hợp tác', false);
+        }
+
+        if (!$this->checkSlipAccess($auth, $id)) {
+            respond(403, null, 'Bạn không có quyền gửi yêu cầu chỉnh sửa cho phiếu hợp tác này', false);
         }
 
         if ($slip['status'] !== 'approved') {
@@ -1616,16 +1718,24 @@ class CooperationController {
                 SELECT cs.*, c.full_name as customer_name, c.tenant_id
                 FROM cooperation_slips cs
                 JOIN contacts c ON cs.contact_id = c.id
-                WHERE cs.id = ?
+                WHERE cs.id = ? AND c.tenant_id = ?
+                FOR UPDATE
             ");
-            $stmt->execute([$id]);
+            $stmt->execute([$id, $auth['tenant_id']]);
             $slip = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if (!$slip) {
+                $this->db->rollBack();
                 respond(404, null, 'Không tìm thấy phiếu hợp tác', false);
             }
 
+            if (!$this->checkSlipAccess($auth, $id)) {
+                $this->db->rollBack();
+                respond(403, null, 'Bạn không có quyền xử lý yêu cầu chỉnh sửa cho phiếu hợp tác này', false);
+            }
+
             if (empty($slip['adjustment_request_user_id'])) {
+                $this->db->rollBack();
                 respond(400, null, 'Không có yêu cầu chỉnh sửa nào cần xử lý cho phiếu này', false);
             }
 
@@ -1633,9 +1743,10 @@ class CooperationController {
 
             if ($action === 'approve') {
                 // 1. Check if there is already a pending adjustment slip for this contact
-                $stmtPending = $this->db->prepare("SELECT id FROM cooperation_slips WHERE contact_id = ? AND status IN ('pending_signatures', 'pending_manager_approval', 'approved_pending_signatures') LIMIT 1");
+                $stmtPending = $this->db->prepare("SELECT id FROM cooperation_slips WHERE contact_id = ? AND status IN ('pending_signatures', 'pending_manager_approval', 'approved_pending_signatures') LIMIT 1 FOR UPDATE");
                 $stmtPending->execute([$slip['contact_id']]);
                 if ($stmtPending->fetchColumn()) {
+                    $this->db->rollBack();
                     respond(400, null, 'Đang có một phiếu hợp tác hoặc phiếu điều chỉnh khác chờ ký duyệt cho khách hàng này', false);
                 }
 
@@ -1714,9 +1825,10 @@ class CooperationController {
                                      "Vui lòng liên hệ ban quản lý để biết thêm chi tiết.";
                     
                     require_once __DIR__ . '/../NotificationService.php';
-                    NotificationService::send($this->db, $auth['tenant_id'], 'COOPERATION_PENDING_APPROVAL', [
-                        'user_id' => $requesterId,
+                    NotificationService::send($this->db, $auth['tenant_id'], 'COOP_SLIP_REJECTED', [
+                        'target_user_id' => $requesterId,
                         'slip_id' => $id,
+                        'approver_name' => $actorName,
                         'reason' => "Yêu cầu chỉnh sửa tỷ lệ hoa hồng cho Phiếu hợp tác #$id đã bị từ chối. Ghi chú: " . ($note ?? 'Không có')
                     ]);
                 }
@@ -1725,21 +1837,26 @@ class CooperationController {
             }
 
         } catch (Exception $e) {
-            $this->db->rollBack();
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             respond(500, null, 'Lỗi xử lý yêu cầu chỉnh sửa: ' . $e->getMessage(), false);
         }
     }
 
     public function show(array $auth, int $id): void {
+        if (!$this->checkSlipAccess($auth, $id)) {
+            respond(403, null, 'Bạn không có quyền xem phiếu hợp tác này', false);
+        }
         $stmt = $this->db->prepare("
             SELECT cs.*, c.full_name as contact_name, c.phone as contact_phone, u.full_name as creator_name
             FROM cooperation_slips cs
-            LEFT JOIN contacts c ON cs.contact_id = c.id
+            INNER JOIN contacts c ON cs.contact_id = c.id AND c.tenant_id = ? AND c.deleted_at IS NULL
             LEFT JOIN users u ON cs.created_by = u.id
             WHERE cs.id = ?
             LIMIT 1
         ");
-        $stmt->execute([$id]);
+        $stmt->execute([$auth['tenant_id'], $id]);
         $slip = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$slip) {
             respond(404, null, 'Không tìm thấy phiếu hợp tác', false);
@@ -1748,10 +1865,14 @@ class CooperationController {
     }
 
     public function update(array $auth, int $id): void {
+        if (!$this->checkSlipAccess($auth, $id)) {
+            respond(403, null, 'Bạn không có quyền cập nhật phiếu hợp tác này', false);
+        }
         $b = getBody();
         $updates = [];
         $params = [];
-        foreach (['total_percentage', 'shares_json', 'signatures_json', 'status', 'dispute_details'] as $field) {
+        // Restrict to non-sensitive metadata fields; shares/signatures/status must go through dedicated workflow methods
+        foreach (['dispute_details'] as $field) {
             if (isset($b[$field])) {
                 $updates[] = "$field = ?";
                 $params[] = is_array($b[$field]) ? json_encode($b[$field], JSON_UNESCAPED_UNICODE) : $b[$field];
@@ -1761,8 +1882,13 @@ class CooperationController {
             respond(422, null, 'Không có thông tin cần cập nhật', false);
         }
         $params[] = $id;
-        $this->db->prepare("UPDATE cooperation_slips SET " . implode(', ', $updates) . ", updated_at = NOW() WHERE id = ?")
-            ->execute($params);
+        $params[] = $auth['tenant_id'];
+        $this->db->prepare("
+            UPDATE cooperation_slips cs
+            JOIN contacts c ON cs.contact_id = c.id
+            SET " . implode(', ', array_map(fn($u) => "cs.$u", $updates)) . ", cs.updated_at = NOW()
+            WHERE cs.id = ? AND c.tenant_id = ?
+        ")->execute($params);
         respond(200, ['id' => $id], 'Cập nhật phiếu hợp tác thành công');
     }
 }

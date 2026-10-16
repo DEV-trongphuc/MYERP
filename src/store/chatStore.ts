@@ -16,6 +16,59 @@ import type {
   ParticipantRole 
 } from '../types/chat';
 import { type SpecializedAgent, SPECIALIZED_AGENTS, detectActiveAgent } from '../constants/aiAgents';
+import { useUIStore } from './uiStore';
+
+export const getClientCurrentContext = () => {
+  try {
+    const ui = useUIStore.getState();
+    let activeEntity: { type: string; id: number; name?: string } | null = null;
+
+    if (ui.customerDrawer.isOpen && ui.customerDrawer.contact) {
+      const c = ui.customerDrawer.contact;
+      activeEntity = {
+        type: 'contact',
+        id: Number(c.id || c.contact_id),
+        name: c.full_name || c.name || c.contact_name || ''
+      };
+    } else if (ui.taskDrawer.isOpen && ui.taskDrawer.task) {
+      const t = ui.taskDrawer.task;
+      activeEntity = {
+        type: 'task',
+        id: Number(t.id || t.task_id),
+        name: t.title || t.name || ''
+      };
+    } else if (ui.expenseDrawer.isOpen && ui.expenseDrawer.expenseId) {
+      activeEntity = {
+        type: 'expense',
+        id: Number(ui.expenseDrawer.expenseId),
+        name: `Phiếu chi #${ui.expenseDrawer.expenseId}`
+      };
+    } else if (ui.approvalDrawer.isOpen && ui.approvalDrawer.item) {
+      const a = ui.approvalDrawer.item;
+      activeEntity = {
+        type: 'approval',
+        id: Number(a.id),
+        name: a.title || `Đơn duyệt #${a.id}`
+      };
+    } else if (ui.depositDrawer.isOpen && ui.depositDrawer.deposit) {
+      const d = ui.depositDrawer.deposit;
+      activeEntity = {
+        type: 'deposit',
+        id: Number(d.id || d.deposit_id),
+        name: d.contract_code || `Đặt cọc #${d.id}`
+      };
+    }
+
+    return {
+      pathname: typeof window !== 'undefined' ? window.location.pathname : '',
+      search: typeof window !== 'undefined' ? window.location.search : '',
+      page_title: typeof document !== 'undefined' ? document.title : '',
+      active_entity: activeEntity
+    };
+  } catch (e) {
+    return null;
+  }
+};
 
 let lastSyncTimestamp = Math.floor(Date.now() / 1000) - 30;
 let isSyncDeltaInProgress = false;
@@ -55,6 +108,8 @@ interface ChatStore {
   // Actions
   openChat: (conversationId?: number, tab?: 'chats' | 'staff', options?: { maximized?: boolean }) => void;
   closeChat: () => void;
+  minimizeChat: () => void;
+  stopGenerating: (convId?: number) => void;
   toggleMaximize: () => void;
   setReplyingTo: (msg: ChatMessage | null) => void;
   setShowMediaVault: (show: boolean) => void;
@@ -67,6 +122,7 @@ interface ChatStore {
     message_type?: MessageType;
     metadata?: any;
     reply_to_id?: number | null;
+    conversation_id?: number;
   }) => Promise<ChatMessage | null>;
   sendTyping: (convId: number, isTyping: boolean) => Promise<void>;
   reactMessage: (msgId: number, reactionType: string) => Promise<void>;
@@ -89,6 +145,7 @@ interface ChatStore {
   clearConversationHistory: (convId: number) => Promise<{ success: boolean; freedBytes: number; deletedFiles: number }>;
   isAiThinkingByConvId: Record<number, boolean>;
   isAiTypingByConvId: Record<number, boolean>;
+  aiAbortControllerByConvId: Record<number, AbortController>;
   activeAgentByConvId: Record<number, SpecializedAgent>;
   collaboratingAgentsByConvId: Record<number, SpecializedAgent[]>;
   orchestratorPhaseByConvId: Record<number, 'reasoning' | 'handover' | 'collaborating' | 'active'>;
@@ -105,6 +162,10 @@ interface ChatStore {
     created_at: string;
   }>;
   flushOfflineQueue: () => Promise<void>;
+  composerDraftsByConvId: Record<number, string>;
+  setComposerDraft: (convId: number, draft: string) => void;
+  clearComposerDraft: (convId: number) => void;
+  resetChatState: () => void;
 }
 
 const CACHE_KEY_MESSAGES = 'myerp_chat_msg_cache_v1';
@@ -136,9 +197,56 @@ const loadInitialCachedConversations = (): ChatConversation[] => {
   return [];
 };
 
-// FIFO sequential send queue to guarantee strict chronological ordering even under heavy Enter spam
-let sendQueueChain: Promise<any> = Promise.resolve();
+// Per-conversation FIFO sequential send queue so long AI SSE streams in Conversation A never block sending in Conversation B
+const sendQueueByConvId = new Map<number, Promise<any>>();
 let tempIdCounter = 0;
+
+function getLastPositiveMessageId(msgs: ChatMessage[]): number {
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const id = Number(msgs[i]?.id || 0);
+    if (id > 0) return id;
+  }
+  return 0;
+}
+
+function replaceOptimisticAndDedupe(list: ChatMessage[], tempId: number, serverMsg: ChatMessage): ChatMessage[] {
+  const normalizedServerMsg: ChatMessage = {
+    ...serverMsg,
+    is_sending: false,
+    ...(serverMsg ? { send_error: false } as any : {})
+  };
+  let replaced = false;
+  const result: ChatMessage[] = [];
+  const seenPositiveIds = new Set<number>();
+
+  for (const m of list) {
+    if (m.id === tempId) {
+      if (!seenPositiveIds.has(normalizedServerMsg.id)) {
+        result.push(normalizedServerMsg);
+        if (normalizedServerMsg.id > 0) seenPositiveIds.add(normalizedServerMsg.id);
+      }
+      replaced = true;
+    } else if (m.id === normalizedServerMsg.id && normalizedServerMsg.id > 0) {
+      if (!seenPositiveIds.has(normalizedServerMsg.id)) {
+        result.push({ ...m, ...normalizedServerMsg });
+        seenPositiveIds.add(normalizedServerMsg.id);
+        replaced = true;
+      }
+    } else {
+      if (m.id > 0) {
+        if (seenPositiveIds.has(m.id)) continue;
+        seenPositiveIds.add(m.id);
+      }
+      result.push(m);
+    }
+  }
+
+  if (!replaced && !seenPositiveIds.has(normalizedServerMsg.id)) {
+    result.push(normalizedServerMsg);
+  }
+
+  return result;
+}
 
 let cacheSaveTimeout: any = null;
 const persistMessagesToCache = (messagesByConvId: Record<number, ChatMessage[]>) => {
@@ -189,6 +297,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   typingByConvId: {},
   isAiThinkingByConvId: {},
   isAiTypingByConvId: {},
+  aiAbortControllerByConvId: {},
   activeAgentByConvId: {},
   collaboratingAgentsByConvId: {},
   orchestratorPhaseByConvId: {},
@@ -205,6 +314,55 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   activeSidebarTab: 'chats',
   offlineQueue: [],
   setActiveSidebarTab: (tab) => set({ activeSidebarTab: tab }),
+  composerDraftsByConvId: {},
+  setComposerDraft: (convId, draft) => {
+    set((state) => ({
+      composerDraftsByConvId: {
+        ...state.composerDraftsByConvId,
+        [convId]: draft
+      }
+    }));
+  },
+  clearComposerDraft: (convId) => {
+    set((state) => {
+      const copy = { ...state.composerDraftsByConvId };
+      delete copy[convId];
+      return { composerDraftsByConvId: copy };
+    });
+  },
+  resetChatState: () => {
+    // Abort any ongoing AI streams to prevent memory leaks and zombie sockets
+    Object.values(get().aiAbortControllerByConvId || {}).forEach((ctrl) => {
+      try { ctrl.abort(); } catch {}
+    });
+    set({
+      isOpen: false,
+      isMaximized: false,
+      activeConversationId: null,
+      activeConversation: null,
+      conversations: [],
+      messagesByConvId: {},
+      composerDraftsByConvId: {},
+      hasMoreByConvId: {},
+      typingByConvId: {},
+      unreadTotal: 0,
+      replyingTo: null,
+      showMediaVault: false,
+      vaultItems: [],
+      isAiThinkingByConvId: {},
+      isAiTypingByConvId: {},
+      aiAbortControllerByConvId: {},
+      activeAgentByConvId: {},
+      collaboratingAgentsByConvId: {},
+      orchestratorPhaseByConvId: {},
+      offlineQueue: []
+    });
+    try {
+      localStorage.removeItem(CACHE_KEY_MESSAGES);
+      localStorage.removeItem(CACHE_KEY_CONVS);
+    } catch {}
+    chatDB.clearAll().catch(() => {});
+  },
 
   flushOfflineQueue: async () => {
     const { offlineQueue } = get();
@@ -265,7 +423,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   openChat: (conversationId, tab, options) => {
     const isMobileDevice = typeof window !== 'undefined' && window.innerWidth < 900;
     const willMaximize = !isMobileDevice && options?.maximized !== undefined ? options.maximized : undefined;
-    const initialConvId = conversationId || (willMaximize && get().conversations.length > 0 ? get().conversations[0].id : undefined);
+    const initialConvId = conversationId || get().activeConversationId || (willMaximize && get().conversations.length > 0 ? get().conversations[0].id : undefined);
     set((state) => ({ 
       isOpen: true,
       ...(tab ? { activeSidebarTab: tab } : {}),
@@ -284,6 +442,40 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   closeChat: () => {
     set({ isOpen: false, replyingTo: null, activeConversationId: null, activeConversation: null });
+  },
+
+  minimizeChat: () => {
+    set({ isOpen: false });
+  },
+
+  stopGenerating: (convId) => {
+    const targetId = convId || get().activeConversationId;
+    if (!targetId) return;
+    const ctrl = get().aiAbortControllerByConvId[targetId];
+    if (ctrl) {
+      try {
+        ctrl.abort();
+      } catch {
+        // no-op
+      }
+    }
+    set((state) => {
+      const copy = { ...state.aiAbortControllerByConvId };
+      delete copy[targetId];
+      const existingMsgs = state.messagesByConvId[targetId] || [];
+      const cleanedMsgs = existingMsgs.some((m) => m.is_sending)
+        ? existingMsgs.map((m) => (m.is_sending ? { ...m, is_sending: false } : m))
+        : existingMsgs;
+      return {
+        aiAbortControllerByConvId: copy,
+        isAiThinkingByConvId: { ...state.isAiThinkingByConvId, [targetId]: false },
+        isAiTypingByConvId: { ...state.isAiTypingByConvId, [targetId]: false },
+        orchestratorPhaseByConvId: { ...state.orchestratorPhaseByConvId, [targetId]: 'active' },
+        messagesByConvId: cleanedMsgs !== existingMsgs
+          ? { ...state.messagesByConvId, [targetId]: cleanedMsgs }
+          : state.messagesByConvId
+      };
+    });
   },
 
   toggleMaximize: () => {
@@ -417,7 +609,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const now = Date.now();
     const lastFetched = convLastFetchedAt[id] || 0;
     const isRecentlyFetched = (now - lastFetched) < 20000; // fresh within 20s
-    const latestCachedId = hasCache ? Math.max(...cachedMsgs.map((m) => m.id)) : 0;
+    const latestCachedId = hasCache ? getLastPositiveMessageId(cachedMsgs) : 0;
 
     try {
       // 3. Delta-Sync path: If fresh in RAM with existing messages, do a fast delta fetch
@@ -612,8 +804,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     } catch (err) {}
   },
 
-  sendMessage: async ({ content, message_type = 'text', metadata = null, reply_to_id = null }) => {
-    const { activeConversationId, replyingTo } = get();
+  sendMessage: async ({ content, message_type = 'text', metadata = null, reply_to_id = null, conversation_id }) => {
+    const { replyingTo } = get();
+    const activeConversationId = Number(conversation_id || get().activeConversationId || 0);
     if (!activeConversationId) return null;
 
     const actualReplyId = reply_to_id !== undefined ? reply_to_id : (replyingTo ? replyingTo.id : null);
@@ -688,7 +881,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
 
     return new Promise<ChatMessage | null>((resolve) => {
-      sendQueueChain = sendQueueChain.then(async () => {
+      const prevChain = sendQueueByConvId.get(activeConversationId) || Promise.resolve();
+      const nextChain = prevChain.then(async () => {
+        let abortController: AbortController | null = null;
+        let accumulatedAiText = '';
+        const streamedSteps: any[] = [];
+        const aiTempId = -(Date.now() * 1000 + (++tempIdCounter % 1000) + 1);
+
         try {
           if (isAiInteraction) {
             // Streaming AI Path (SSE)
@@ -717,16 +916,27 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               headers['Authorization'] = `Bearer ${token}`;
             }
 
+            abortController = new AbortController();
+            const currentAbortController = abortController;
+            set((state) => ({
+              aiAbortControllerByConvId: {
+                ...state.aiAbortControllerByConvId,
+                [activeConversationId]: currentAbortController
+              }
+            }));
+
             const response = await fetch(endpoint, {
               method: 'POST',
               headers,
+              signal: currentAbortController.signal,
               body: JSON.stringify({
                 conversation_id: activeConversationId,
                 content,
                 message_type,
                 metadata: {
                   ...(typeof metadata === 'object' && metadata ? metadata : {}),
-                  active_agent_id: initialMatchedAgent?.id || (activeConversationId ? get().activeAgentByConvId[activeConversationId]?.id : undefined)
+                  active_agent_id: initialMatchedAgent?.id || (activeConversationId ? get().activeAgentByConvId[activeConversationId]?.id : undefined),
+                  current_context: getClientCurrentContext()
                 },
                 reply_to_id: actualReplyId,
                 stream: true
@@ -740,8 +950,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               const decoder = new TextDecoder('utf-8');
               let buffer = '';
               let serverUserMsg: ChatMessage | null = null;
-              const aiTempId = -(Date.now() * 1000 + (++tempIdCounter % 1000) + 1);
-              let accumulatedAiText = '';
               let finalizedAiMsg: ChatMessage | null = null;
 
               while (true) {
@@ -762,16 +970,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                           if (event.type === 'user_message' && event.message) {
                             serverUserMsg = event.message;
                             set((state) => {
-                              const list = (state.messagesByConvId[activeConversationId] || []).map((m) =>
-                                m.id === tempId ? {
-                                  ...serverUserMsg!,
-                                  is_mine: true,
-                                  reply_to_id: serverUserMsg!.reply_to_id ?? optimisticMsg.reply_to_id,
-                                  reply_content: serverUserMsg!.reply_content ?? optimisticMsg.reply_content,
-                                  reply_type: serverUserMsg!.reply_type ?? optimisticMsg.reply_type,
-                                  reply_metadata: serverUserMsg!.reply_metadata ?? optimisticMsg.reply_metadata,
-                                  reply_sender_name: serverUserMsg!.reply_sender_name ?? optimisticMsg.reply_sender_name,
-                                } : m
+                              const mergedServerUserMsg: ChatMessage = {
+                                ...serverUserMsg!,
+                                is_mine: true,
+                                reply_to_id: serverUserMsg!.reply_to_id ?? optimisticMsg.reply_to_id,
+                                reply_content: serverUserMsg!.reply_content ?? optimisticMsg.reply_content,
+                                reply_type: serverUserMsg!.reply_type ?? optimisticMsg.reply_type,
+                                reply_metadata: serverUserMsg!.reply_metadata ?? optimisticMsg.reply_metadata,
+                                reply_sender_name: serverUserMsg!.reply_sender_name ?? optimisticMsg.reply_sender_name,
+                              };
+                              const list = replaceOptimisticAndDedupe(
+                                state.messagesByConvId[activeConversationId] || [],
+                                tempId,
+                                mergedServerUserMsg
                               );
                               return {
                                 messagesByConvId: {
@@ -781,6 +992,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                               };
                             });
                           } else if (event.type === 'orchestrator_reasoning') {
+                            streamedSteps.push(event);
                             set((state) => ({
                               orchestratorPhaseByConvId: {
                                 ...state.orchestratorPhaseByConvId,
@@ -788,6 +1000,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                               }
                             }));
                           } else if (event.type === 'agent_active' && event.agent) {
+                            streamedSteps.push(event);
                             const foundAgent = SPECIALIZED_AGENTS.find(a => a.id === event.agent.id) || event.agent;
                             const rawCollabs = Array.isArray(event.collaborators) && event.collaborators.length > 0
                               ? event.collaborators
@@ -908,16 +1121,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             const aiReply = serverMsg.ai_reply;
 
             set((state) => {
-              const list = (state.messagesByConvId[activeConversationId] || []).map((m) =>
-                m.id === tempId ? {
-                  ...serverMsg,
-                  is_mine: true,
-                  reply_to_id: serverMsg.reply_to_id ?? optimisticMsg.reply_to_id,
-                  reply_content: serverMsg.reply_content ?? optimisticMsg.reply_content,
-                  reply_type: serverMsg.reply_type ?? optimisticMsg.reply_type,
-                  reply_metadata: serverMsg.reply_metadata ?? optimisticMsg.reply_metadata,
-                  reply_sender_name: serverMsg.reply_sender_name ?? optimisticMsg.reply_sender_name,
-                } : m
+              const mergedServerMsg: ChatMessage = {
+                ...serverMsg,
+                is_mine: true,
+                reply_to_id: serverMsg.reply_to_id ?? optimisticMsg.reply_to_id,
+                reply_content: serverMsg.reply_content ?? optimisticMsg.reply_content,
+                reply_type: serverMsg.reply_type ?? optimisticMsg.reply_type,
+                reply_metadata: serverMsg.reply_metadata ?? optimisticMsg.reply_metadata,
+                reply_sender_name: serverMsg.reply_sender_name ?? optimisticMsg.reply_sender_name,
+              };
+              const list = replaceOptimisticAndDedupe(
+                state.messagesByConvId[activeConversationId] || [],
+                tempId,
+                mergedServerMsg
               );
               if (aiReply && !list.some((m) => m.id === aiReply.id)) {
                 list.push({ ...aiReply, is_mine: false });
@@ -963,16 +1179,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
           // Replace optimistic message with server message and append AI reply if present
           set((state) => {
-            const list = (state.messagesByConvId[activeConversationId] || []).map((m) =>
-              m.id === tempId ? {
-                ...serverMsg,
-                is_mine: true,
-                reply_to_id: serverMsg.reply_to_id ?? optimisticMsg.reply_to_id,
-                reply_content: serverMsg.reply_content ?? optimisticMsg.reply_content,
-                reply_type: serverMsg.reply_type ?? optimisticMsg.reply_type,
-                reply_metadata: serverMsg.reply_metadata ?? optimisticMsg.reply_metadata,
-                reply_sender_name: serverMsg.reply_sender_name ?? optimisticMsg.reply_sender_name,
-              } : m
+            const mergedServerMsg: ChatMessage = {
+              ...serverMsg,
+              is_mine: true,
+              reply_to_id: serverMsg.reply_to_id ?? optimisticMsg.reply_to_id,
+              reply_content: serverMsg.reply_content ?? optimisticMsg.reply_content,
+              reply_type: serverMsg.reply_type ?? optimisticMsg.reply_type,
+              reply_metadata: serverMsg.reply_metadata ?? optimisticMsg.reply_metadata,
+              reply_sender_name: serverMsg.reply_sender_name ?? optimisticMsg.reply_sender_name,
+            };
+            const list = replaceOptimisticAndDedupe(
+              state.messagesByConvId[activeConversationId] || [],
+              tempId,
+              mergedServerMsg
             );
 
             if (aiReply && !list.some((m) => m.id === aiReply.id)) {
@@ -1020,6 +1239,45 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           persistMessagesToCache(get().messagesByConvId);
           resolve(serverMsg);
         } catch (err: any) {
+          // Graceful handling when user clicked Stop Generating
+          if (abortController?.signal?.aborted || err?.name === 'AbortError' || err?.code === 'ERR_CANCELED') {
+            set((state) => {
+              const currentAgent = state.activeAgentByConvId[activeConversationId] || SPECIALIZED_AGENTS[0];
+              let list = (state.messagesByConvId[activeConversationId] || []).map((m) =>
+                m.id === tempId ? { ...m, is_sending: false } : m
+              );
+              if (accumulatedAiText.trim().length > 0 && !list.some((m) => m.id === aiTempId)) {
+                list = [
+                  ...list,
+                  {
+                    id: aiTempId,
+                    conversation_id: activeConversationId,
+                    sender_id: 9000001,
+                    message_type: 'text' as const,
+                    content: `${accumulatedAiText}\n\n*(Đã dừng tạo phản hồi)*`,
+                    metadata: streamedSteps.length > 0 ? { streamed_steps: streamedSteps } : undefined,
+                    created_at: new Date().toISOString(),
+                    sender_name: currentAgent.name,
+                    sender_avatar: currentAgent.avatar,
+                    sender_title: currentAgent.roleTitle,
+                    is_mine: false,
+                    is_streaming: false,
+                    reactions: []
+                  }
+                ];
+              }
+              return {
+                messagesByConvId: {
+                  ...state.messagesByConvId,
+                  [activeConversationId]: list
+                }
+              };
+            });
+            persistMessagesToCache(get().messagesByConvId);
+            resolve({ ...optimisticMsg, is_sending: false });
+            return;
+          }
+
           // If error was due to network disconnect, queue it instead of discarding
           if (err?.code === 'ERR_NETWORK' || !navigator.onLine) {
             set((state) => ({
@@ -1050,16 +1308,26 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           }
         } finally {
           if (isAiInteraction) {
-            set((state) => ({
-              isAiThinkingByConvId: { ...state.isAiThinkingByConvId, [activeConversationId]: false },
-              isAiTypingByConvId: { ...state.isAiTypingByConvId, [activeConversationId]: false }
-            }));
+            set((state) => {
+              const currentCtrl = state.aiAbortControllerByConvId?.[activeConversationId];
+              if (currentCtrl && abortController && currentCtrl !== abortController) {
+                return state;
+              }
+              const copy = { ...state.aiAbortControllerByConvId };
+              delete copy[activeConversationId];
+              return {
+                aiAbortControllerByConvId: copy,
+                isAiThinkingByConvId: { ...state.isAiThinkingByConvId, [activeConversationId]: false },
+                isAiTypingByConvId: { ...state.isAiTypingByConvId, [activeConversationId]: false }
+              };
+            });
           }
         }
       }).catch((e) => {
         console.error('Send queue chain error:', e);
         resolve(null);
       });
+      sendQueueByConvId.set(activeConversationId, nextChain);
     });
   },
 
@@ -1460,15 +1728,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   fetchVault: async (convId: number, category = 'all') => {
+    const requestedConvId = convId;
     set({ loadingVault: true });
     try {
       const res = await api.get('/chat/vault', {
-        params: { conversation_id: convId, category: category === 'all' ? undefined : category }
+        params: { conversation_id: requestedConvId, category: category === 'all' ? undefined : category }
       });
       const items: ChatVaultItem[] = res.data?.data || res.data || [];
-      set({ vaultItems: items, loadingVault: false });
+      if (get().activeConversationId === requestedConvId) {
+        set({ vaultItems: items, loadingVault: false });
+      }
     } catch (e) {
-      set({ loadingVault: false });
+      if (get().activeConversationId === requestedConvId) {
+        set({ loadingVault: false });
+      }
     }
   },
 
@@ -1476,7 +1749,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     if (!convId) return;
 
     const msgs = get().messagesByConvId[convId] || [];
-    const targetMsgId = specificMsgId || (msgs.length > 0 ? msgs[msgs.length - 1].id : 0);
+    const targetMsgId = (specificMsgId && specificMsgId > 0) ? specificMsgId : getLastPositiveMessageId(msgs);
+    if (!targetMsgId || targetMsgId <= 0) return;
 
     // Debounce per conversation (350ms) to prevent spamming server during fast scrolling / multiple messages
     if (markReadDebounceTimers[convId]) {
@@ -1501,7 +1775,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     const { activeConversationId, messagesByConvId, isOpen } = get();
     const currentMsgs = activeConversationId ? (messagesByConvId[activeConversationId] || []) : [];
-    const lastMsgId = currentMsgs.length > 0 ? currentMsgs[currentMsgs.length - 1].id : 0;
+    const lastMsgId = getLastPositiveMessageId(currentMsgs);
 
     try {
       const res = await api.get('/chat/sync', {

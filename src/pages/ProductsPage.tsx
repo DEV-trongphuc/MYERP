@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Pagination } from '../components/ui/Pagination';
 import { Plus, Package, Pencil, Trash2, X, Loader2, Search, Layers, Download } from 'lucide-react';
@@ -30,6 +30,7 @@ export const ProductsPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search.trim(), 300);
   const [categoryFilter, setCategoryFilter] = useState('');
+  const selectedCat = categoryFilter;
   const [showModal, setShowModal] = useState(false);
   const [showCatModal, setShowCatModal] = useState(false);
   const [newCat, setNewCat] = useState('');
@@ -42,7 +43,17 @@ export const ProductsPage: React.FC = () => {
   const [total, setTotal] = useState(0);
   const [isExporting, setIsExporting] = useState(false);
 
+  const productsAbortRef = useRef<AbortController | null>(null);
+  const inFlightRef = useRef(false);
+
   const fetchProducts = () => {
+    if (productsAbortRef.current) {
+      productsAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    productsAbortRef.current = controller;
+    const { signal } = controller;
+
     setLoading(true);
     const params = {
       page,
@@ -50,8 +61,9 @@ export const ProductsPage: React.FC = () => {
       search: debouncedSearch,
       category_id: categoryFilter
     };
-    api.get('/products', { params })
+    api.get('/products', { params, signal })
       .then(r => { 
+        if (signal.aborted) return;
         const data = r.data.data;
         if (Array.isArray(data)) {
           setProducts(data);
@@ -61,23 +73,32 @@ export const ProductsPage: React.FC = () => {
           setTotal(data.total || 0);
         }
       })
-      .catch(() => {
+      .catch((err: any) => {
+        if (err?.name === 'AbortError' || err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED' || signal.aborted) return;
         setProducts([]);
         setTotal(0);
         addToast('Không thể tải danh sách sản phẩm', 'error');
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!signal.aborted) setLoading(false);
+      });
   };
 
   React.useEffect(() => {
     fetchProducts();
+    return () => {
+      productsAbortRef.current?.abort();
+    };
   }, [page, debouncedSearch, categoryFilter]);
 
   React.useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && (showModal || showCatModal) && !saving) {
-        setShowModal(false);
-        setShowCatModal(false);
+      if (e.key === 'Escape' && !saving) {
+        if (showCatModal) {
+          setShowCatModal(false);
+        } else if (showModal) {
+          setShowModal(false);
+        }
       }
     };
     window.addEventListener('keydown', handleEscape);
@@ -87,7 +108,9 @@ export const ProductsPage: React.FC = () => {
   const filtered = products;
 
   const handleSave = async () => {
+    if (inFlightRef.current || saving) return;
     if (!form.name.trim()) { addToast('Tên sản phẩm là bắt buộc', 'error'); return; }
+    inFlightRef.current = true;
     setSaving(true);
     const payload = { 
       ...form, 
@@ -109,12 +132,14 @@ export const ProductsPage: React.FC = () => {
     } catch (err: any) {
       addToast('Lỗi khi lưu sản phẩm', 'error');
     } finally {
+      inFlightRef.current = false;
       setSaving(false);
     }
   };
 
   const handleExport = async () => {
-    if (isExporting) return;
+    if (isExporting || inFlightRef.current) return;
+    inFlightRef.current = true;
     setIsExporting(true);
     addToast('Đang xuất danh sách sản phẩm theo bộ lọc hiện tại...', 'info');
     try {
@@ -123,6 +148,7 @@ export const ProductsPage: React.FC = () => {
         params: {
           type: 'product',
           search,
+          category_id: selectedCat !== 'all' ? selectedCat : '',
         },
         defaultFilename: `export_products_${Date.now()}.csv`,
         onSuccess: () => {
@@ -132,6 +158,7 @@ export const ProductsPage: React.FC = () => {
     } catch (err: any) {
       addToast(err?.message || 'Xuất danh sách sản phẩm thất bại', 'error');
     } finally {
+      inFlightRef.current = false;
       setIsExporting(false);
     }
   };
@@ -195,6 +222,8 @@ export const ProductsPage: React.FC = () => {
               `Xóa ${selectedIds.length} sản phẩm?`,
               `Tất cả sản phẩm đã chọn sẽ bị xóa vĩnh viễn. Hành động này không thể hoàn tác.`,
               async () => {
+                if (inFlightRef.current) return;
+                inFlightRef.current = true;
                 try {
                   await api.post('/products/bulk-delete', { ids: selectedIds });
                   addToast(`Đã xóa ${selectedIds.length} sản phẩm`, 'success');
@@ -202,8 +231,8 @@ export const ProductsPage: React.FC = () => {
                   fetchProducts();
                 } catch (err: any) { 
                   addToast(err.response?.data?.message || 'Lỗi khi xóa hàng loạt', 'error'); 
-                  setProducts(prev => prev.filter(p => !selectedIds.includes(p.id)));
-                  setSelectedIds([]);
+                } finally {
+                  inFlightRef.current = false;
                 }
               }
             );
@@ -276,13 +305,16 @@ export const ProductsPage: React.FC = () => {
                           'Xóa sản phẩm?',
                           `Bạn có chắc muốn xóa "${p.name}"?`,
                           async () => {
+                            if (inFlightRef.current) return;
+                            inFlightRef.current = true;
                             try {
                               await api.delete(`/products/${p.id}`);
                               addToast('Đã xóa sản phẩm thành công', 'success');
                               fetchProducts();
                             } catch (e: any) { 
-                              addToast('Lỗi khi xóa (Demo Mode)', 'error'); 
-                              setProducts(prev => prev.filter(x => x.id !== p.id));
+                              addToast(e.response?.data?.message || 'Lỗi khi xóa sản phẩm', 'error'); 
+                            } finally {
+                              inFlightRef.current = false;
                             }
                           }
                         );
@@ -469,7 +501,7 @@ export const ProductsPage: React.FC = () => {
               animate={{ opacity: 1 }} 
               exit={{ opacity: 0 }} 
               onClick={() => setShowCatModal(false)} 
-              style={{ zIndex: 1000 }}
+              style={{ zIndex: 1010 }}
             >
             <motion.div className="modal-sheet" style={{ width:'700px', maxWidth:'calc(100vw - 2rem)', zIndex: 1010, margin: 'auto' }}
               initial={{ opacity:0, scale:0.96, y: 20 }} animate={{ opacity:1, scale:1, y: 0 }} exit={{ opacity:0, scale:0.96, y: 20 }}

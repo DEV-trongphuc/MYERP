@@ -755,23 +755,27 @@ export const Header = ({
 
     // 1. Direct link resolution if link is already provided
     if (notif.link) {
-      let targetLink = notif.link;
+      let targetLink = String(notif.link).trim();
 
-      // Note link resolution: /notes/123 -> resolve target entity
-      const noteMatch = targetLink.match(/^\/notes\/(\d+)$/);
+      // Note link resolution: /notes/123 -> resolve target entity while preserving query params
+      const noteMatch = targetLink.match(/^\/notes\/(\d+)(?:\?(.*))?$/);
       if (noteMatch) {
         try {
-          const res = await fetchAPI(`notes/${noteMatch[1]}`);
+          const noteId = noteMatch[1];
+          const existingNoteParams = new URLSearchParams(noteMatch[2] || '');
+          const commentId = existingNoteParams.get('highlight_comment_id') || existingNoteParams.get('comment_id');
+          const commentQuery = commentId ? `&highlight_comment_id=${encodeURIComponent(commentId)}` : '';
+          const res = await fetchAPI(`notes/${noteId}`);
           if (res.success && res.data) {
             const note = res.data;
             if (note.entity_type === 'contact') {
-              targetLink = `/contacts?open_contact_id=${note.entity_id}&tab=timeline&highlight_note_id=${noteMatch[1]}`;
+              targetLink = `/contacts?open_contact_id=${note.entity_id}&tab=timeline&highlight_note_id=${noteId}${commentQuery}`;
             } else if (note.entity_type === 'deal') {
-              targetLink = `/deals?id=${note.entity_id}&highlight_note_id=${noteMatch[1]}`;
+              targetLink = `/deals?open_deal_id=${note.entity_id}&highlight_note_id=${noteId}${commentQuery}`;
             } else if (note.entity_type === 'company') {
-              targetLink = `/companies?id=${note.entity_id}`;
+              targetLink = `/companies?id=${note.entity_id}&highlight_note_id=${noteId}${commentQuery}`;
             } else if (note.entity_type === 'project') {
-              targetLink = `/projects?id=${note.entity_id}`;
+              targetLink = `/projects?open_project_id=${note.entity_id}&highlight_note_id=${noteId}${commentQuery}`;
             }
           }
         } catch (e) {
@@ -779,29 +783,41 @@ export const Header = ({
         }
       }
 
-      // Activity link resolution: /activities/123 -> resolve related contact or task
+      // Activity link resolution: /activities/123 -> resolve task vs related contact/deal
       const activityMatch = targetLink.match(/^\/activities\/(\d+)(?:\?.*)?$/) || targetLink.match(/\/activities\?(?:task_id|id)=(\d+)/);
       if (activityMatch) {
         try {
-          const res = await fetchAPI(`activities/${activityMatch[1]}`);
+          const actId = activityMatch[1];
+          const actUrlObj = new URL(targetLink, window.location.origin);
+          const commentId = actUrlObj.searchParams.get('comment_id') || actUrlObj.searchParams.get('highlight_comment_id');
+          const subtaskId = actUrlObj.searchParams.get('subtask_id');
+          let extraQuery = '';
+          if (commentId) extraQuery += `&highlight_comment_id=${encodeURIComponent(commentId)}`;
+          if (subtaskId) extraQuery += `&subtask_id=${encodeURIComponent(subtaskId)}`;
+
+          const res = await fetchAPI(`activities/${actId}`);
           if (res.success && res.data) {
             const act = res.data;
-            const actUrlObj = new URL(targetLink, window.location.origin);
-            const commentId = actUrlObj.searchParams.get('comment_id') || actUrlObj.searchParams.get('highlight_comment_id');
-            const subtaskId = actUrlObj.searchParams.get('subtask_id');
-            let extraQuery = '';
-            if (commentId) extraQuery += `&highlight_comment_id=${encodeURIComponent(commentId)}`;
-            if (subtaskId) extraQuery += `&subtask_id=${encodeURIComponent(subtaskId)}`;
+            const notifTypeLower = String(notif.type || '').toLowerCase();
+            const isTaskActivity =
+              String(act.type || '').toLowerCase() === 'task' ||
+              notifTypeLower.includes('task') ||
+              Boolean(subtaskId) ||
+              String(act.body || '').includes('[ERP_TASK_META]');
 
-            if (act.contact_id) {
-              targetLink = `/contacts?open_contact_id=${act.contact_id}&tab=timeline&highlight_activity_id=${activityMatch[1]}${extraQuery}`;
-            } else if (act.related_type === 'contact') {
-              targetLink = `/contacts?open_contact_id=${act.related_id}&tab=timeline&highlight_activity_id=${activityMatch[1]}${extraQuery}`;
-            } else if (act.related_type === 'deal') {
-              targetLink = `/deals?id=${act.related_id}&highlight_activity_id=${activityMatch[1]}${extraQuery}`;
+            if (isTaskActivity) {
+              targetLink = `/workspace?task_id=${actId}${extraQuery}`;
+            } else if (act.contact_id) {
+              targetLink = `/contacts?open_contact_id=${act.contact_id}&tab=timeline&highlight_activity_id=${actId}${extraQuery}`;
+            } else if (act.related_type === 'contact' && act.related_id) {
+              targetLink = `/contacts?open_contact_id=${act.related_id}&tab=timeline&highlight_activity_id=${actId}${extraQuery}`;
+            } else if (act.related_type === 'deal' && act.related_id) {
+              targetLink = `/deals?open_deal_id=${act.related_id}&highlight_activity_id=${actId}${extraQuery}`;
             } else {
-              targetLink = `/workspace?task_id=${activityMatch[1]}${extraQuery}`;
+              targetLink = `/workspace?task_id=${actId}${extraQuery}`;
             }
+          } else {
+            targetLink = `/workspace?task_id=${actId}${extraQuery}`;
           }
         } catch (e) {
           console.error("Error resolving activity redirect link:", e);
@@ -810,26 +826,63 @@ export const Header = ({
 
       const urlObj = new URL(targetLink, window.location.origin);
 
+      // Normalize legacy / backend routes while preserving 100% of query params:
+      if (urlObj.pathname.startsWith('/support-tickets')) {
+        urlObj.pathname = '/tickets';
+        targetLink = urlObj.pathname + urlObj.search;
+      } else if (urlObj.pathname.startsWith('/marketing')) {
+        urlObj.pathname = '/projects';
+        if (!urlObj.searchParams.get('sub')) {
+          urlObj.searchParams.set('sub', 'campaigns');
+        }
+        targetLink = urlObj.pathname + '?' + urlObj.searchParams.toString();
+      } else if (urlObj.pathname.startsWith('/inventory/purchase-orders')) {
+        const poId = urlObj.searchParams.get('po_id') || urlObj.searchParams.get('id') || urlObj.searchParams.get('open_id');
+        urlObj.pathname = '/inventory';
+        urlObj.searchParams.set('tab', 'purchase_orders');
+        if (poId) urlObj.searchParams.set('open_id', poId);
+        targetLink = urlObj.pathname + '?' + urlObj.searchParams.toString();
+      }
+
       // Clean all existing global drawers before routing
       useUIStore.getState().closeAllDrawers();
 
-      // Route based strictly on target URL path (NO keyword matching):
-      if (urlObj.pathname.startsWith('/workspace')) {
-        const taskId = urlObj.searchParams.get('task_id') || urlObj.searchParams.get('id');
+      // Route based strictly on target URL path:
+      if (urlObj.pathname.startsWith('/workspace') || urlObj.pathname.startsWith('/tasks')) {
+        const taskId = urlObj.searchParams.get('task_id') || urlObj.searchParams.get('open_task_id') || urlObj.searchParams.get('id');
         const numTaskId = Number(taskId);
-        if (taskId && !isNaN(numTaskId) && numTaskId > 0 && (window.location.pathname.startsWith('/workspace') || window.location.pathname === '/')) {
+        urlObj.pathname = '/workspace';
+        if (taskId && !isNaN(numTaskId) && numTaskId > 0) {
+          urlObj.searchParams.set('task_id', String(numTaskId));
+        }
+        const normalizedWorkspaceLink = urlObj.pathname + (urlObj.searchParams.toString() ? '?' + urlObj.searchParams.toString() : '');
+        const currentFullUrl = window.location.pathname + window.location.search;
+
+        // Only dispatch 'open-task-drawer' manually if already on the exact same URL (otherwise SalePortal's useEffect([loc.search]) handles it)
+        if (
+          taskId &&
+          !isNaN(numTaskId) &&
+          numTaskId > 0 &&
+          currentFullUrl === normalizedWorkspaceLink
+        ) {
           window.dispatchEvent(new CustomEvent('open-task-drawer', {
-            detail: { id: numTaskId, taskId: numTaskId }
+            detail: {
+              id: numTaskId,
+              taskId: numTaskId,
+              highlightCommentId: urlObj.searchParams.get('highlight_comment_id') || urlObj.searchParams.get('comment_id') || undefined,
+              subtaskId: urlObj.searchParams.get('subtask_id') || undefined
+            }
           }));
         }
-        navigate(targetLink, { state: { timestamp: Date.now(), openTaskId: numTaskId || undefined } });
+        navigate(normalizedWorkspaceLink, { state: { timestamp: Date.now(), openTaskId: numTaskId || undefined } });
         return;
       }
 
       if (urlObj.pathname.startsWith('/contacts')) {
-        let idFromParam = urlObj.searchParams.get('open_contact_id') || 
-                            urlObj.searchParams.get('id') || 
-                            urlObj.searchParams.get('contact_id');
+        const idFromParam =
+          urlObj.searchParams.get('open_contact_id') ||
+          urlObj.searchParams.get('id') ||
+          urlObj.searchParams.get('contact_id');
         let contactId: number | null = null;
         if (idFromParam && !isNaN(Number(idFromParam)) && Number(idFromParam) > 0) {
           contactId = Number(idFromParam);
@@ -838,7 +891,6 @@ export const Header = ({
           if (pathMatch) contactId = Number(pathMatch[1]);
         }
 
-        // Fallback: check if notification object carries contact_id or entity_id
         if (!contactId && notif.contact_id && !isNaN(Number(notif.contact_id))) {
           contactId = Number(notif.contact_id);
         }
@@ -847,13 +899,22 @@ export const Header = ({
         }
 
         if (contactId) {
+          urlObj.pathname = '/contacts';
+          urlObj.searchParams.set('open_contact_id', String(contactId));
+          targetLink = urlObj.pathname + '?' + urlObj.searchParams.toString();
+
           if (window.location.pathname.startsWith('/contacts')) {
             window.dispatchEvent(new CustomEvent('open-contact-drawer', {
-              detail: { id: contactId, contactId: contactId }
+              detail: {
+                id: contactId,
+                contactId,
+                tab: urlObj.searchParams.get('tab') || undefined,
+                highlight_note_id: urlObj.searchParams.get('highlight_note_id') || undefined,
+                highlight_activity_id: urlObj.searchParams.get('highlight_activity_id') || undefined,
+                highlight_comment_id: urlObj.searchParams.get('highlight_comment_id') || urlObj.searchParams.get('comment_id') || undefined,
+                open_deposit_id: urlObj.searchParams.get('open_deposit_id') || undefined
+              }
             }));
-          }
-          if (!idFromParam) {
-            targetLink = `/contacts?open_contact_id=${contactId}`;
           }
         }
         navigate(targetLink, { state: { timestamp: Date.now(), openContactId: contactId || undefined } });
@@ -861,46 +922,89 @@ export const Header = ({
       }
 
       if (urlObj.pathname.startsWith('/approvals') || urlObj.pathname.startsWith('/expenses')) {
-        const openId = urlObj.searchParams.get('open_id') || urlObj.searchParams.get('id');
+        const openId = urlObj.searchParams.get('open_id') || urlObj.searchParams.get('id') || urlObj.searchParams.get('expense_id');
         const openType = urlObj.searchParams.get('open_type') || (notif.type === 'leave' ? 'leave' : 'expense');
         const openStatus = urlObj.searchParams.get('open_status');
+        const highlightCommentId = urlObj.searchParams.get('highlight_comment_id') || urlObj.searchParams.get('comment_id');
         const numOpenId = Number(openId);
 
-        navigate(targetLink, { state: { timestamp: Date.now(), openDrawer: true, openId: numOpenId || undefined, openType } });
+        navigate(targetLink, {
+          state: {
+            timestamp: Date.now(),
+            openDrawer: true,
+            openId: numOpenId || undefined,
+            openType,
+            highlightCommentId: highlightCommentId || undefined
+          }
+        });
 
-        if (openId && !isNaN(numOpenId) && numOpenId > 0 && window.location.pathname.startsWith('/approvals')) {
-          window.dispatchEvent(new CustomEvent('open-approval-drawer', {
-            detail: { id: numOpenId, type: openType, status: openStatus || undefined }
-          }));
+        if (openId && !isNaN(numOpenId) && numOpenId > 0) {
+          if (urlObj.pathname.startsWith('/approvals') && window.location.pathname.startsWith('/approvals')) {
+            window.dispatchEvent(new CustomEvent('open-approval-drawer', {
+              detail: {
+                id: numOpenId,
+                type: openType,
+                status: openStatus || undefined,
+                highlight_comment_id: highlightCommentId || undefined
+              }
+            }));
+          } else if (urlObj.pathname.startsWith('/expenses') && window.location.pathname.startsWith('/expenses')) {
+            window.dispatchEvent(new CustomEvent('open-expense-drawer', {
+              detail: {
+                id: numOpenId,
+                expenseId: numOpenId,
+                highlight_comment_id: highlightCommentId || undefined
+              }
+            }));
+          }
         }
         return;
       }
 
       if (urlObj.pathname.startsWith('/deposits')) {
         const openId = urlObj.searchParams.get('open_id') || urlObj.searchParams.get('id') || urlObj.searchParams.get('open_deposit_id');
+        const highlightCommentId = urlObj.searchParams.get('highlight_comment_id') || urlObj.searchParams.get('comment_id');
         const numOpenId = Number(openId);
-        if (openId && !isNaN(numOpenId) && numOpenId > 0 && window.location.pathname.startsWith('/deposits')) {
-          window.dispatchEvent(new CustomEvent('open-deposit-drawer', {
-            detail: { id: numOpenId, depositId: numOpenId }
-          }));
+        if (openId && !isNaN(numOpenId) && numOpenId > 0) {
+          urlObj.searchParams.set('open_id', String(numOpenId));
+          targetLink = urlObj.pathname + '?' + urlObj.searchParams.toString();
+          if (window.location.pathname.startsWith('/deposits')) {
+            window.dispatchEvent(new CustomEvent('open-deposit-drawer', {
+              detail: {
+                id: numOpenId,
+                depositId: numOpenId,
+                highlight_comment_id: highlightCommentId || undefined
+              }
+            }));
+          }
         }
         navigate(targetLink, { state: { timestamp: Date.now(), openDepositId: numOpenId || undefined } });
         return;
       }
 
       if (urlObj.pathname.startsWith('/deals')) {
-        const dealId = urlObj.searchParams.get('id') || urlObj.searchParams.get('open_deal_id') || urlObj.searchParams.get('deal_id');
+        const dealId = urlObj.searchParams.get('open_deal_id') || urlObj.searchParams.get('id') || urlObj.searchParams.get('deal_id');
         const numDealId = Number(dealId);
-        if (dealId && !isNaN(numDealId) && numDealId > 0 && window.location.pathname.startsWith('/deals')) {
-          window.dispatchEvent(new CustomEvent('open-deal-drawer', {
-            detail: { id: numDealId, dealId: numDealId }
-          }));
+        if (dealId && !isNaN(numDealId) && numDealId > 0) {
+          urlObj.searchParams.set('open_deal_id', String(numDealId));
+          targetLink = urlObj.pathname + '?' + urlObj.searchParams.toString();
+          if (window.location.pathname.startsWith('/deals')) {
+            window.dispatchEvent(new CustomEvent('open-deal-drawer', {
+              detail: {
+                id: numDealId,
+                dealId: numDealId,
+                highlight_note_id: urlObj.searchParams.get('highlight_note_id') || undefined,
+                highlight_activity_id: urlObj.searchParams.get('highlight_activity_id') || undefined,
+                highlight_comment_id: urlObj.searchParams.get('highlight_comment_id') || urlObj.searchParams.get('comment_id') || undefined
+              }
+            }));
+          }
         }
         navigate(targetLink, { state: { timestamp: Date.now() } });
         return;
       }
 
-      // Any other link (e.g. /projects, /attendance, /settings)
+      // Any other link (e.g. /projects, /cooperations, /tickets, /attendance, /settings) - keep urlObj.pathname + urlObj.search intact
       navigate(targetLink, { state: { timestamp: Date.now() } });
       return;
     }
@@ -916,12 +1020,13 @@ export const Header = ({
     if (notifType.startsWith('task') || notifType === 'activity' || notifType === 'subtask') {
       const taskId = notif.task_id || notif.activity_id || notif.entity_id;
       if (taskId && !isNaN(Number(taskId))) {
-        if (window.location.pathname.startsWith('/workspace') || window.location.pathname === '/') {
+        const targetUrl = `/workspace?task_id=${taskId}`;
+        if (window.location.pathname + window.location.search === targetUrl) {
           window.dispatchEvent(new CustomEvent('open-task-drawer', {
             detail: { id: Number(taskId), taskId: Number(taskId) }
           }));
         }
-        navigate(`/workspace?task_id=${taskId}`);
+        navigate(targetUrl);
         return;
       }
       navigate('/workspace');
@@ -1423,30 +1528,6 @@ export const Header = ({
   const [leadResults, setLeadResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
 
-  // Listen to Cmd+K or Ctrl+K to trigger Spotlight Command Palette
-  useEffect(() => {
-    const handleSearchKeyDown = (e: KeyboardEvent) => {
-      const activeEl = document.activeElement;
-      const isInputActive = activeEl && (
-        activeEl.tagName === 'INPUT' ||
-        activeEl.tagName === 'TEXTAREA' ||
-        activeEl.tagName === 'SELECT' ||
-        activeEl.hasAttribute('contenteditable')
-      );
-
-      if (isInputActive) {
-        return;
-      }
-
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        window.dispatchEvent(new CustomEvent('open-command-palette'));
-      }
-    };
-    window.addEventListener('keydown', handleSearchKeyDown);
-    return () => window.removeEventListener('keydown', handleSearchKeyDown);
-  }, []);
-
   // Listen to open-quick-menu event from sidebar logo click
   useEffect(() => {
     const handleOpenQuickMenu = () => {
@@ -1463,21 +1544,29 @@ export const Header = ({
       return;
     }
 
+    const controller = new AbortController();
     const delayDebounce = setTimeout(async () => {
       setSearching(true);
       try {
-        const json = await fetchAPI(`get_logs&search=${encodeURIComponent(searchQuery.trim())}&page=1&pageSize=5`);
+        const json = await fetchAPI(`get_logs&search=${encodeURIComponent(searchQuery.trim())}&page=1&pageSize=5`, { signal: controller.signal });
+        if (controller.signal.aborted) return;
         if (json.success && Array.isArray(json.data)) {
           setLeadResults(json.data.slice(0, 5));
         }
-      } catch (err) {
+      } catch (err: any) {
+        if (controller.signal.aborted || err?.name === 'AbortError' || err?.name === 'CanceledError') return;
         console.error(err);
       } finally {
-        setSearching(false);
+        if (!controller.signal.aborted) {
+          setSearching(false);
+        }
       }
     }, 200);
 
-    return () => clearTimeout(delayDebounce);
+    return () => {
+      controller.abort();
+      clearTimeout(delayDebounce);
+    };
   }, [searchQuery]);
 
   const navItems: Array<{ name: string; path: string; description: string; shortcut: string; adminOnly?: boolean; superAdminOnly?: boolean; action?: () => void }> = [

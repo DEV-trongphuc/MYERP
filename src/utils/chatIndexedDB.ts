@@ -159,6 +159,26 @@ class ChatIndexedDB {
       }
     });
   }
+
+  // Clear all cached messages, conversations, and metadata from IndexedDB
+  async clearAll(): Promise<void> {
+    const db = await this.initDB();
+    if (!db) return;
+
+    return new Promise((resolve) => {
+      try {
+        const tx = db.transaction([STORE_MESSAGES, STORE_CONVERSATIONS, STORE_METADATA], 'readwrite');
+        tx.objectStore(STORE_MESSAGES).clear();
+        tx.objectStore(STORE_CONVERSATIONS).clear();
+        tx.objectStore(STORE_METADATA).clear();
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+        tx.onabort = () => resolve();
+      } catch {
+        resolve();
+      }
+    });
+  }
 }
 
 export const chatDB = new ChatIndexedDB();

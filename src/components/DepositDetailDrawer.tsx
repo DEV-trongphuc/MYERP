@@ -151,8 +151,11 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
     }
   }, [isOpen, availableUsers.length]);
 
+  const updateWatchersInFlightRef = useRef(false);
   const handleUpdateWatchers = async (newIds: number[]) => {
     if (!selectedDepForManage?.id) return;
+    if (updateWatchersInFlightRef.current) return;
+    updateWatchersInFlightRef.current = true;
     setSavingWatchers(true);
     try {
       const res = await fetchAPI('hrm/approvals/update-related-users', {
@@ -175,6 +178,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
     } catch (err: any) {
       addToast(err?.message || t('Lỗi khi cập nhật người theo dõi'), 'error');
     } finally {
+      updateWatchersInFlightRef.current = false;
       setSavingWatchers(false);
     }
   };
@@ -225,8 +229,10 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
     setIsEditSOOpen(true);
   };
 
+  const saveSOInfoInFlightRef = useRef(false);
   const handleSaveSOInfo = async () => {
     if (!selectedDepForManage?.id) return;
+    if (saveSOInfoInFlightRef.current) return;
     if (!editFullName.trim()) {
       addToast('Tên học viên/khách hàng không được để trống.', 'error');
       return;
@@ -235,6 +241,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
       addToast('Vui lòng chọn chương trình.', 'error');
       return;
     }
+    saveSOInfoInFlightRef.current = true;
     setIsSavingSOInfo(true);
     try {
       const payload = {
@@ -284,63 +291,99 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
     } catch (err: any) {
       addToast(err.message || 'Lỗi kết nối', 'error');
     } finally {
+      saveSOInfoInFlightRef.current = false;
       setIsSavingSOInfo(false);
     }
   };
 
   // Initialize and load dependencies when deposit changes
   useEffect(() => {
-    if (deposit) {
-      setSelectedDepForManage(deposit);
-      setTempMilestones((deposit.milestones || []).map(m => ({ ...m })));
-      setSharesData([]);
-      setTempExpectedCommission(Number(deposit.expected_commission) || 0);
-      setTempSharesData([]);
-      setIsEditingCommission(false);
-      setAutoRemindManage(Number(deposit.auto_remind) === 1);
-      setRemindDaysBeforeManage(Number(deposit.remind_days_before) || 3);
-      setRemindAtHourManage(Number(deposit.remind_at_hour) || 8);
-      setRemindTargetManage(Number(deposit.remind_target) || 2);
+    if (!deposit) return;
+    const controller = new AbortController();
+    const { signal } = controller;
 
-      // Fetch customer details if email is missing
-      if (!deposit.email && deposit.contact_id) {
-        fetchAPI(`contacts/${deposit.contact_id}`)
-          .then(res => {
-            const c = res.data || res;
-            if (c && c.email) {
-              setSelectedDepForManage((prev: any) => prev ? { ...prev, email: c.email } : null);
-            }
-          })
-          .catch(err => console.error("Error fetching contact email:", err));
-      }
+    setSelectedDepForManage(deposit);
+    setTempMilestones((deposit.milestones || []).map((m: any) => ({ ...m })));
+    setSharesData([]);
+    setTempExpectedCommission(Number(deposit.expected_commission) || 0);
+    setTempSharesData([]);
+    setIsEditingCommission(false);
+    setAutoRemindManage(Number(deposit.auto_remind) === 1);
+    setRemindDaysBeforeManage(Number(deposit.remind_days_before) || 3);
+    setRemindAtHourManage(Number(deposit.remind_at_hour) || 8);
+    setRemindTargetManage(Number(deposit.remind_target) || 2);
+    setComments([]);
+    setHistoryLogs([]);
+    setNewCommentText('');
+    setIsEditSOOpen(false);
+    setIsCancelOpen(false);
+    setPreviewReminderMilestone(null);
 
-      // Load co-op shares
-      fetchAPI(`cooperation-slips?contact_id=${deposit.contact_id}`)
+    // Fetch customer details if email is missing
+    if (!deposit.email && deposit.contact_id) {
+      fetchAPI(`contacts/${deposit.contact_id}`, { signal })
         .then(res => {
-          const slips = res.data || res || [];
-          if (slips.length > 0) {
-            const matchedSlip = slips.find((s: any) => Number(s.deposit_slip_id) === Number(deposit.id));
-            if (matchedSlip && matchedSlip.shareholders) {
-              setSharesData(matchedSlip.shareholders);
-              setTempSharesData(matchedSlip.shareholders.map((sh: any) => ({ ...sh })));
-            }
+          if (signal.aborted) return;
+          const c = res.data || res;
+          if (c && c.email) {
+            setSelectedDepForManage((prev: any) => prev ? { ...prev, email: c.email } : null);
           }
         })
-        .catch(err => console.error("Error loading cooperation shares:", err));
+        .catch(err => {
+          if (err?.name === 'AbortError' || err?.code === 'ERR_CANCELED') return;
+          console.error("Error fetching contact email:", err);
+        });
     }
+
+    // Load co-op shares
+    fetchAPI(`cooperation-slips?contact_id=${deposit.contact_id}`, { signal })
+      .then(res => {
+        if (signal.aborted) return;
+        const slips = res.data || res || [];
+        if (slips.length > 0) {
+          const matchedSlip = slips.find((s: any) => Number(s.deposit_slip_id) === Number(deposit.id));
+          if (matchedSlip && matchedSlip.shareholders) {
+            setSharesData(matchedSlip.shareholders);
+            setTempSharesData(matchedSlip.shareholders.map((sh: any) => ({ ...sh })));
+          }
+        }
+      })
+      .catch(err => {
+        if (err?.name === 'AbortError' || err?.code === 'ERR_CANCELED') return;
+        console.error("Error loading cooperation shares:", err);
+      });
+
+    return () => {
+      controller.abort();
+    };
   }, [deposit]);
+
+  const commentsAbortRef = useRef<AbortController | null>(null);
+  const historyAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    return () => {
+      if (commentsAbortRef.current) commentsAbortRef.current.abort();
+      if (historyAbortRef.current) historyAbortRef.current.abort();
+    };
+  }, []);
 
   // Load comments and history when open
   const loadComments = async (isInitial = false) => {
     if (!selectedDepForManage?.id) return;
+    if (commentsAbortRef.current) commentsAbortRef.current.abort();
+    const controller = new AbortController();
+    commentsAbortRef.current = controller;
+    const { signal } = controller;
+
     setLoadingComments(true);
     try {
-      const res = await fetchAPI(`deposits/${selectedDepForManage.id}/comments`);
+      const res = await fetchAPI(`deposits/${selectedDepForManage.id}/comments`, { signal });
+      if (signal.aborted) return;
       if (res.success) {
         const commentsList = res.data || [];
         setComments(commentsList);
         const searchParams = new URLSearchParams(window.location.search);
-        const highlightCommentId = searchParams.get('highlight_comment_id');
+        const highlightCommentId = searchParams.get('highlight_comment_id') || searchParams.get('comment_id');
 
         if (highlightCommentId) {
           setActiveDrawerTab('comments');
@@ -350,6 +393,15 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
             if (el) {
               el.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
+            setTimeout(() => {
+              const p = new URLSearchParams(window.location.search);
+              if (p.has('highlight_comment_id') || p.has('comment_id')) {
+                p.delete('highlight_comment_id');
+                p.delete('comment_id');
+                const qs = p.toString();
+                window.history.replaceState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash}`);
+              }
+            }, 2600);
           }, 350);
         } else if (isInitial) {
           if (commentsList.length === 0) {
@@ -364,15 +416,21 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
           }
         }, 50);
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.name === 'AbortError' || err?.code === 'ERR_CANCELED') return;
       console.error("Error loading comments:", err);
     } finally {
-      setLoadingComments(false);
+      if (!signal.aborted) {
+        setLoadingComments(false);
+      }
     }
   };
 
+  const deleteCommentInFlightRef = useRef(false);
   const handleDeleteComment = async (commentId: number) => {
     if (!selectedDepForManage?.id) return;
+    if (deleteCommentInFlightRef.current) return;
+    deleteCommentInFlightRef.current = true;
     try {
       const res = await fetchAPI(`deposits/comments/${commentId}`, { method: 'DELETE' });
       if (res.success) {
@@ -383,21 +441,32 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
       }
     } catch (err: any) {
       addToast(t('Lỗi khi xóa bình luận: ') + err.message, 'error');
+    } finally {
+      deleteCommentInFlightRef.current = false;
     }
   };
 
   const loadHistory = async () => {
     if (!selectedDepForManage?.id) return;
+    if (historyAbortRef.current) historyAbortRef.current.abort();
+    const controller = new AbortController();
+    historyAbortRef.current = controller;
+    const { signal } = controller;
+
     setLoadingHistory(true);
     try {
-      const res = await fetchAPI(`deposits/${selectedDepForManage.id}/history`);
+      const res = await fetchAPI(`deposits/${selectedDepForManage.id}/history`, { signal });
+      if (signal.aborted) return;
       if (res.success) {
         setHistoryLogs(res.data || []);
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.name === 'AbortError' || err?.code === 'ERR_CANCELED') return;
       console.error("Error loading history:", err);
     } finally {
-      setLoadingHistory(false);
+      if (!signal.aborted) {
+        setLoadingHistory(false);
+      }
     }
   };
 
@@ -408,12 +477,14 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
     }
   }, [isOpen, selectedDepForManage?.id]);
 
+  const addCommentInFlightRef = useRef(false);
   const handleAddComment = async () => {
     const hasContent = newCommentText.includes('<img') || 
                        newCommentText.includes('comment-attachment-chip') || 
                        newCommentText.includes('<a') ||
                        !!newCommentText.replace(/<[^>]*>/g, '').trim();
-    if (!hasContent || !selectedDepForManage?.id || isSubmittingComment) return;
+    if (!hasContent || !selectedDepForManage?.id || isSubmittingComment || addCommentInFlightRef.current) return;
+    addCommentInFlightRef.current = true;
     setIsSubmittingComment(true);
     try {
       const res = await fetchAPI(`deposits/${selectedDepForManage.id}/comments`, {
@@ -431,6 +502,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
     } catch (err: any) {
       addToast(err.message || 'Lỗi kết nối', 'error');
     } finally {
+      addCommentInFlightRef.current = false;
       setIsSubmittingComment(false);
     }
   };
@@ -478,10 +550,13 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
     });
   };
 
+  const uploadUncInFlightRef = useRef(false);
   const handleUploadUncFromModal = async (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
     const m = tempMilestones[index];
     if (!selectedDepForManage || !m.id) return;
     if (!e.target.files || e.target.files.length === 0) return;
+    if (uploadUncInFlightRef.current) return;
+    uploadUncInFlightRef.current = true;
     const file = e.target.files[0];
 
     try {
@@ -512,6 +587,8 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
       }
     } catch (e: any) {
       addToast(e.message || 'Lỗi kết nối', 'error');
+    } finally {
+      uploadUncInFlightRef.current = false;
     }
   };
 
@@ -585,10 +662,11 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
     }
   };
 
+  const rejectInFlightRef = useRef(false);
   const handleRejectFromModal = async (index: number) => {
     const m = tempMilestones[index];
     if (!selectedDepForManage || !m.id) return;
-    if (actioningMilestoneId !== null) return;
+    if (actioningMilestoneId !== null || rejectInFlightRef.current) return;
     showConfirm({
       title: 'Từ chối UNC',
       message: 'Vui lòng nhập lý do từ chối bản xác nhận thanh toán này:',
@@ -598,6 +676,8 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
       requirePromptInput: true,
       promptPlaceholder: 'Nhập lý do từ chối (bắt buộc)...',
       onConfirm: async (reason) => {
+        if (rejectInFlightRef.current) return;
+        rejectInFlightRef.current = true;
         setActioningMilestoneId(m.id);
         setActioningType('reject');
         try {
@@ -617,6 +697,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
         } catch (e: any) {
           addToast(e.message || 'Lỗi kết nối', 'error');
         } finally {
+          rejectInFlightRef.current = false;
           setActioningMilestoneId(null);
           setActioningType(null);
         }
@@ -624,8 +705,10 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
     });
   };
 
+  const saveMilestonesInFlightRef = useRef(false);
   const handleSaveMilestones = async () => {
     if (!selectedDepForManage) return;
+    if (saveMilestonesInFlightRef.current) return;
     for (let i = 0; i < tempMilestones.length; i++) {
       const m = tempMilestones[i];
       if (!m.milestone_name.trim()) {
@@ -656,6 +739,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
       }
     }
 
+    saveMilestonesInFlightRef.current = true;
     try {
       setIsSavingMilestones(true);
       const payload: any = {
@@ -687,12 +771,15 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
     } catch (e: any) {
       addToast(e.message || 'Lỗi kết nối', 'error');
     } finally {
+      saveMilestonesInFlightRef.current = false;
       setIsSavingMilestones(false);
     }
   };
 
+  const sendManualReminderInFlightRef = useRef(false);
   const handleSendManualReminder = async (milestoneId: number, targetChoice: number = 2) => {
-    if (sendingReminderId !== null) return;
+    if (sendingReminderId !== null || sendManualReminderInFlightRef.current) return;
+    sendManualReminderInFlightRef.current = true;
     setSendingReminderId(milestoneId);
     try {
       const res = await fetchAPI(`deposits/${selectedDepForManage?.id}/milestones/${milestoneId}/remind`, {
@@ -707,6 +794,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
     } catch (e: any) {
       addToast(e.message || 'Lỗi kết nối', 'error');
     } finally {
+      sendManualReminderInFlightRef.current = false;
       setSendingReminderId(null);
     }
   };
@@ -716,12 +804,15 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
     setIsCancelOpen(true);
   };
 
+  const cancelDepositInFlightRef = useRef(false);
   const handleCancelDeposit = async () => {
     if (!selectedDepForManage) return;
+    if (cancelDepositInFlightRef.current) return;
     if (!cancelReason.trim()) {
       addToast('Vui lòng nhập lý do hủy giao dịch.', 'error');
       return;
     }
+    cancelDepositInFlightRef.current = true;
     setIsSaving(true);
     try {
       const res = await fetchAPI(`deposits/${selectedDepForManage.id}/cancel`, {
@@ -739,6 +830,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
     } catch (e: any) {
       addToast(e.message || 'Lỗi kết nối', 'error');
     } finally {
+      cancelDepositInFlightRef.current = false;
       setIsSaving(false);
     }
   };
@@ -769,6 +861,31 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
     return strVal.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
   };
 
+  const [isClosing, setIsClosing] = useState(false);
+
+  useEffect(() => {
+    setIsClosing(false);
+  }, [isOpen]);
+
+  const handleClose = () => {
+    if (isClosing) return;
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose();
+      setIsClosing(false);
+    }, 280);
+  };
+  const handleCloseRef = useRef(handleClose);
+  handleCloseRef.current = handleClose;
+
+  useEffect(() => {
+    if (isOpen) {
+      return pushOverlay('deposit-detail-drawer', () => {
+        handleCloseRef.current();
+      }, 100);
+    }
+  }, [isOpen]);
+
   if (!isOpen || !selectedDepForManage) return null;
 
   const totalApprovedMilestones = tempMilestones
@@ -792,33 +909,6 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
     ? Math.round((tempExpectedCommission || selectedDepForManage.expected_commission || 0) * (totalApprovedMilestones / selectedDepForManage.price))
     : 0;
 
-  const [isClosing, setIsClosing] = useState(false);
-
-  useEffect(() => {
-    if (isOpen) {
-      setIsClosing(false);
-    } else {
-      setIsClosing(false);
-    }
-  }, [isOpen]);
-
-  const handleClose = () => {
-    if (isClosing) return;
-    setIsClosing(true);
-    setTimeout(() => {
-      onClose();
-      setIsClosing(false);
-    }, 280);
-  };
-
-  useEffect(() => {
-    if (isOpen) {
-      return pushOverlay('deposit-detail-drawer', () => {
-        handleClose();
-      }, 100);
-    }
-  }, [isOpen, isClosing]);
-
   const baseZIndex = Math.min(zIndex || 2147483635, 2147483645);
 
   return createPortal(
@@ -841,12 +931,14 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                 backdropFilter: 'blur(8px)',
                 WebkitBackdropFilter: 'blur(8px)',
                 zIndex: baseZIndex + 5,
+                '--drawer-backdrop-z': baseZIndex + 5,
                 willChange: 'opacity',
                 transform: 'translate3d(0, 0, 0)'
-              }}
+              } as any}
             />
             {/* Drawer panel */}
             <motion.div
+              className="drawer-sheet"
               initial={window.innerWidth < 768 ? { y: '100%' } : { opacity: 0, x: '250px' }}
               animate={{ y: 0, x: 0, opacity: 1 }}
               exit={window.innerWidth < 768 ? { y: '60%', opacity: 0 } : { opacity: 0, x: '60%' }}
@@ -2086,7 +2178,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                               const isCommentAuthor = user?.id && String(user.id) === String(c.user_id);
                               const canDeleteComment = isCurrentUserAdmin || isCommentAuthor;
                               const searchParams = new URLSearchParams(window.location.search);
-                              const highlightCommentId = searchParams.get('highlight_comment_id');
+                              const highlightCommentId = searchParams.get('highlight_comment_id') || searchParams.get('comment_id');
                               const isHighlighted = highlightCommentId && String(c.id) === String(highlightCommentId);
 
                               return (

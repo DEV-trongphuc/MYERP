@@ -73,7 +73,13 @@ class InventoryController {
         $this->db->beginTransaction();
         try {
             // 1. Get batch info and lock for update
-            $stmt = $this->db->prepare("SELECT current_qty, import_price, product_id FROM batches WHERE id = ? AND tenant_id = ? FOR UPDATE");
+            $stmt = $this->db->prepare("
+                SELECT b.current_qty, b.import_price, b.product_id, COALESCE(p.unit, 'Cái') as unit, p.name as product_name
+                FROM batches b
+                LEFT JOIN products p ON p.id = b.product_id
+                WHERE b.id = ? AND b.tenant_id = ?
+                FOR UPDATE
+            ");
             $stmt->execute([$b['batch_id'], $auth['tenant_id']]);
             $batch = $stmt->fetch();
 
@@ -82,8 +88,8 @@ class InventoryController {
 
             // 2. Update batch quantity
             $newQty = (float)$batch['current_qty'] - (float)$b['qty'];
-            $this->db->prepare("UPDATE batches SET current_qty = ? WHERE id = ?")
-                 ->execute([$newQty, $b['batch_id']]);
+            $this->db->prepare("UPDATE batches SET current_qty = ? WHERE id = ? AND tenant_id = ?")
+                 ->execute([$newQty, $b['batch_id'], $auth['tenant_id']]);
 
             // 3. Create inventory log
             $logStmt = $this->db->prepare("
@@ -97,16 +103,19 @@ class InventoryController {
                 $auth['tenant_id'], $b['batch_id'], -$b['qty'], $b['reason'], $auth['user_id'], $receiverId, $receiverType
             ]);
 
-            // 4. Update overall product stock
-            $this->db->prepare("UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ? AND tenant_id = ?")
+            // 4. Update overall product stock (prevent negative stock)
+            $this->db->prepare("UPDATE products SET stock_quantity = GREATEST(0, stock_quantity - ?) WHERE id = ? AND tenant_id = ?")
                  ->execute([$b['qty'], $batch['product_id'], $auth['tenant_id']]);
 
             // 5. If gift/loss with receiver, create Expense record automatically
             if ($receiverId && $b['reason'] === 'Hàng tặng/Quà tặng') {
                 $expenseAmount = $b['qty'] * $batch['import_price'];
-                $productNameStmt = $this->db->prepare("SELECT name FROM products WHERE id = ? AND tenant_id = ?");
-                $productNameStmt->execute([$batch['product_id'], $auth['tenant_id']]);
-                $pName = $productNameStmt->fetchColumn();
+                $pName = $batch['product_name'] ?? '';
+                if (!$pName) {
+                    $productNameStmt = $this->db->prepare("SELECT name FROM products WHERE id = ? AND tenant_id = ?");
+                    $productNameStmt->execute([$batch['product_id'], $auth['tenant_id']]);
+                    $pName = $productNameStmt->fetchColumn();
+                }
 
                 $expStmt = $this->db->prepare("
                     INSERT INTO expenses (tenant_id, created_by, title, category, amount, vat_amount, date, status, notes, has_vat_invoice, is_vat_inclusive)
@@ -128,14 +137,15 @@ class InventoryController {
                 ]);
 
                 // Log interaction in contact timeline
-                logInteraction($this->db, $auth['tenant_id'], $auth['user_id'], 'note', "Nhận quà tặng: $pName", "Quà tặng từ kho (Lô #{$b['batch_id']}). Số lượng: {$b['qty']} {$batch['unit']}. Lý do: {$b['reason']}", 'contact', $receiverId);
+                $unitLabel = $batch['unit'] ?? 'Cái';
+                logInteraction($this->db, $auth['tenant_id'], $auth['user_id'], 'note', "Nhận quà tặng: $pName", "Quà tặng từ kho (Lô #{$b['batch_id']}). Số lượng: {$b['qty']} {$unitLabel}. Lý do: {$b['reason']}", 'contact', $receiverId);
             }
 
             logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'EXPORT_INTERNAL', 'inventory', $b['batch_id'], json_encode(['qty' => $b['qty'], 'reason' => $b['reason']]));
             $this->db->commit();
             respond(200, null, 'Xuất kho nội bộ thành công');
         } catch (Exception $e) {
-            $this->db->rollBack();
+            if ($this->db->inTransaction()) $this->db->rollBack();
             respond(500, null, $e->getMessage(), false);
         }
     }
@@ -172,8 +182,8 @@ class InventoryController {
             if (!$batch) throw new Exception('Không tìm thấy lô hàng');
 
             $qtyChange = (float)$b['new_qty'] - (float)$batch['current_qty'];
-            $this->db->prepare("UPDATE batches SET current_qty = ? WHERE id = ?")
-                 ->execute([(float)$b['new_qty'], $b['batch_id']]);
+            $this->db->prepare("UPDATE batches SET current_qty = ? WHERE id = ? AND tenant_id = ?")
+                 ->execute([(float)$b['new_qty'], $b['batch_id'], $auth['tenant_id']]);
 
             $logStmt = $this->db->prepare("
                 INSERT INTO inventory_logs (tenant_id, batch_id, action_type, qty_change, reason, created_by)
@@ -184,14 +194,14 @@ class InventoryController {
             ]);
 
             // Update overall product stock
-            $this->db->prepare("UPDATE products p JOIN batches b ON p.id = b.product_id SET p.stock_quantity = p.stock_quantity + ? WHERE b.id = ?")
-                 ->execute([$qtyChange, $b['batch_id']]);
+            $this->db->prepare("UPDATE products p JOIN batches b ON p.id = b.product_id SET p.stock_quantity = GREATEST(0, p.stock_quantity + ?) WHERE b.id = ? AND p.tenant_id = ?")
+                 ->execute([$qtyChange, $b['batch_id'], $auth['tenant_id']]);
 
             logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'ADJUST', 'inventory', $b['batch_id'], json_encode(['new_qty' => $b['new_qty'], 'reason' => $b['reason'] ?? '']));
             $this->db->commit();
             respond(200, null, 'Điều chỉnh kho thành công');
         } catch (Exception $e) {
-            $this->db->rollBack();
+            if ($this->db->inTransaction()) $this->db->rollBack();
             respond(500, null, $e->getMessage(), false);
         }
     }
@@ -229,7 +239,11 @@ class InventoryController {
         if ($qty === false) respond(404, null, 'Không tìm thấy lô hàng', false);
         if ((float)$qty > 0) respond(400, null, 'Không thể lưu trữ lô hàng còn tồn kho. Vui lòng điều chỉnh kho về 0 trước.', false);
 
-        $this->db->prepare("UPDATE batches SET status='archived' WHERE id=? AND tenant_id=?")->execute([$id, $auth['tenant_id']]);
+        $upd = $this->db->prepare("UPDATE batches SET status='archived' WHERE id=? AND tenant_id=? AND current_qty <= 0");
+        $upd->execute([$id, $auth['tenant_id']]);
+        if ($upd->rowCount() === 0) {
+            respond(409, null, 'Không thể lưu trữ lô hàng do số lượng tồn kho đã thay đổi', false);
+        }
         respond(200, null, 'Đã lưu trữ lô hàng');
     }
 }

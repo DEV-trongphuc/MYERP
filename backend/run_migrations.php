@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 318;
+$targetVersion = 319;
 $currentVersion = 186;
 
 // Query current DB version
@@ -4595,10 +4595,22 @@ try {
         $logMsg("Nâng cấp lên phiên bản 318 hoàn tất.", "success");
     }
 
-    // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '318') ON DUPLICATE KEY UPDATE setting_value = '318'");
+    // --- PHIÊN BẢN 319: BỔ SUNG HỆ THỐNG COMPOSITE PERFORMANCE INDEXES TOÀN DIỆN (ENTERPRISE SAAS) ---
+    if ($currentVersion < 319) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 319: Bổ sung Composite Performance Indexes toàn hệ thống...", "info");
+        try {
+            require_once __DIR__ . '/migrations/313_add_enterprise_performance_indexes.php';
+            $logMsg("Bổ sung Composite Performance Indexes phiên bản 319 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi chạy migration 319: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 319 hoàn tất.", "success");
+    }
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 318", "success");
+    // Update DB version in system_settings
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '319') ON DUPLICATE KEY UPDATE setting_value = '319'");
+
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 319", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");

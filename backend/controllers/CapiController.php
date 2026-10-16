@@ -105,7 +105,7 @@ class CapiController {
             SELECT cl.*, c.full_name, c.phone 
             FROM capi_logs cl
             JOIN contacts c ON cl.contact_id = c.id
-            WHERE c.tenant_id = ?
+            WHERE c.tenant_id = ? AND c.deleted_at IS NULL
             ORDER BY cl.sent_at DESC 
             LIMIT 100
         ");
@@ -117,8 +117,13 @@ class CapiController {
     public function retry(array $auth, int $id): void {
         requireRole($auth, ['admin', 'superadmin', 'super_admin', 'director']);
         
-        $stmt = $this->db->prepare("SELECT * FROM capi_logs WHERE id = ?");
-        $stmt->execute([$id]);
+        $stmt = $this->db->prepare("
+            SELECT cl.* 
+            FROM capi_logs cl
+            JOIN contacts c ON cl.contact_id = c.id
+            WHERE cl.id = ? AND c.tenant_id = ? AND c.deleted_at IS NULL
+        ");
+        $stmt->execute([$id, $auth['tenant_id']]);
         $log = $stmt->fetch();
         if (!$log) {
             respond(404, null, 'Không tìm thấy nhật ký sự kiện', false);
@@ -170,7 +175,17 @@ class CapiController {
     }
 
     public function sendEvent(array $auth): void {
+        if (($auth['role'] ?? '') === 'viewer') {
+            respond(403, null, 'Bạn không có quyền gửi sự kiện CAPI', false);
+        }
         $b = getBody();
+        if (!empty($b['contact_id'])) {
+            $stmtC = $this->db->prepare("SELECT id FROM contacts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL LIMIT 1");
+            $stmtC->execute([(int)$b['contact_id'], $auth['tenant_id']]);
+            if (!$stmtC->fetch()) {
+                respond(404, null, 'Không tìm thấy khách hàng hợp lệ', false);
+            }
+        }
         $eventName = trim($b['event_name'] ?? 'Lead');
         $eventId = trim($b['event_id'] ?? ('evt_' . time() . '_' . rand(1000, 9999)));
 

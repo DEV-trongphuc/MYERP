@@ -37,6 +37,7 @@ class ConnectorController {
     }
 
     public function store(array $auth): void {
+        requireRole($auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director']);
         $tid = $auth['tenant_id'];
         $body = getBody();
         $name = trim($body['name'] ?? 'Google Sheet Connector');
@@ -54,6 +55,7 @@ class ConnectorController {
     }
 
     public function update(array $auth, int $id): void {
+        requireRole($auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director']);
         $tid = $auth['tenant_id'];
         $body = getBody();
         $updates = [];
@@ -83,6 +85,7 @@ class ConnectorController {
     }
 
     public function destroy(array $auth, int $id): void {
+        requireRole($auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director']);
         $tid = $auth['tenant_id'];
         $stmt = $this->db->prepare("DELETE FROM integration_connectors WHERE id = ? AND tenant_id = ?");
         $stmt->execute([$id, $tid]);
@@ -90,6 +93,7 @@ class ConnectorController {
     }
 
     public function sync(array $auth, int $id): void {
+        requireRole($auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director']);
         $tid = $auth['tenant_id'];
         $stmt = $this->db->prepare("SELECT * FROM integration_connectors WHERE id = ? AND tenant_id = ? LIMIT 1");
         $stmt->execute([$id, $tid]);
@@ -97,7 +101,7 @@ class ConnectorController {
         if (!$conn) respond(404, null, 'Không tìm thấy connector', false);
 
         // Update last synced at
-        $this->db->prepare("UPDATE integration_connectors SET last_sync_at = NOW() WHERE id = ?")->execute([$id]);
+        $this->db->prepare("UPDATE integration_connectors SET last_sync_at = NOW() WHERE id = ? AND tenant_id = ?")->execute([$id, $tid]);
 
         respond(200, [
             'id' => $id,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, XCircle, CheckCircle2, Pencil, Wallet, Clock, Package, MessageSquare, Loader2, Coffee, Trash2, Upload, Send, Info, Copy, Activity, Bell, FileText, Landmark, QrCode, Receipt, Eye } from 'lucide-react';
@@ -74,6 +74,7 @@ const getAvatarStatusRingStyle = (border?: string): React.CSSProperties => {
 
 interface ExpenseQuickViewDrawerProps {
   expenseId: number | null;
+  initialItem?: any;
   onClose: () => void;
   user: any;
   onStatusChange?: () => void;
@@ -83,6 +84,7 @@ interface ExpenseQuickViewDrawerProps {
 
 export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
   expenseId,
+  initialItem,
   onClose,
   user,
   onStatusChange,
@@ -90,7 +92,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
   zIndex
 }) => {
   const { addToast } = useUIStore();
-  const [viewItem, setViewItem] = useState<any>(null);
+  const [viewItem, setViewItem] = useState<any>(initialItem || null);
   const [activeNoteModal, setActiveNoteModal] = useState<{ notes: string; itemName?: string; title?: string } | null>(null);
   const [previewQrModalUrl, setPreviewQrModalUrl] = useState<string | null>(null);
   const [lightboxState, setLightboxState] = useState<{ isOpen: boolean; items: AttachmentItem[]; initialIndex: number }>({
@@ -182,8 +184,11 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
     };
   }, [showAddWatcherDropdown]);
 
+  const updateWatchersInFlightRef = useRef(false);
   const handleUpdateWatchers = async (newIds: number[]) => {
     if (!viewItem) return;
+    if (updateWatchersInFlightRef.current) return;
+    updateWatchersInFlightRef.current = true;
     setSavingWatchers(true);
     try {
       const res = await api.post('/hrm/approvals/update-related-users', {
@@ -203,6 +208,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
     } catch (err: any) {
       addToast(err?.response?.data?.message || 'Lỗi khi cập nhật người theo dõi', 'error');
     } finally {
+      updateWatchersInFlightRef.current = false;
       setSavingWatchers(false);
     }
   };
@@ -213,18 +219,37 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  const detailsAbortRef = useRef<AbortController | null>(null);
+  const commentsAbortRef = useRef<AbortController | null>(null);
+  const historyAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    return () => {
+      if (detailsAbortRef.current) detailsAbortRef.current.abort();
+      if (commentsAbortRef.current) commentsAbortRef.current.abort();
+      if (historyAbortRef.current) historyAbortRef.current.abort();
+    };
+  }, []);
+
   const fetchExpenseDetails = useCallback(async (id: number) => {
+    if (detailsAbortRef.current) detailsAbortRef.current.abort();
+    const controller = new AbortController();
+    detailsAbortRef.current = controller;
+    const { signal } = controller;
+
     setLoading(true);
     try {
-      const r = await api.get(`/expenses/${id}`);
+      const r = await api.get(`/expenses/${id}`, { signal });
+      if (signal.aborted) return;
       if (r.data?.success && r.data.data) {
         setViewItem(r.data.data);
         return;
       }
     } catch (e: any) {
+      if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
       // Intelligent fallback 1: If /expenses/:id returned 404, check /purchase-orders/:id
       try {
-        const poRes = await api.get(`/purchase-orders/${id}`);
+        const poRes = await api.get(`/purchase-orders/${id}`, { signal });
+        if (signal.aborted) return;
         const poData = poRes.data?.data || poRes.data;
         if (poData && (poData.id || poData.po_number)) {
           setViewItem({
@@ -256,10 +281,12 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
           });
           return;
         }
-      } catch (errPo) {
+      } catch (errPo: any) {
+        if (errPo?.name === 'AbortError' || errPo?.name === 'CanceledError' || errPo?.code === 'ERR_CANCELED') return;
         // Intelligent fallback 2: Check /hrm/leaves if this ID was a leave/WFH request
         try {
-          const lvRes = await api.get(`/hrm/leaves/${id}`);
+          const lvRes = await api.get(`/hrm/leaves/${id}`, { signal });
+          if (signal.aborted) return;
           const lv = lvRes.data?.data || lvRes.data;
           if (lv && lv.id) {
             setViewItem({
@@ -279,44 +306,77 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
           }
         } catch (errLv) {}
       }
-      addToast('Không thể tải chi tiết chi phí: ' + (e?.response?.data?.message || e.message), 'error');
+      if (!signal.aborted) {
+        addToast('Không thể tải chi tiết chi phí: ' + (e?.response?.data?.message || e.message), 'error');
+      }
     } finally {
-      setLoading(false);
+      if (!signal.aborted) {
+        setLoading(false);
+      }
     }
   }, [addToast]);
 
   const fetchComments = useCallback(async (id: number) => {
+    if (commentsAbortRef.current) commentsAbortRef.current.abort();
+    const controller = new AbortController();
+    commentsAbortRef.current = controller;
+    const { signal } = controller;
+
     setLoadingComments(true);
     try {
-      const res = await api.get(`/expenses/${id}/comments`);
+      const res = await api.get(`/expenses/${id}/comments`, { signal });
+      if (signal.aborted) return;
       setComments(res.data.data || []);
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.name === 'AbortError' || err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return;
       setComments([]);
     } finally {
-      setLoadingComments(false);
+      if (!signal.aborted) {
+        setLoadingComments(false);
+      }
     }
   }, []);
 
   const fetchHistory = useCallback(async (id: number) => {
+    if (historyAbortRef.current) historyAbortRef.current.abort();
+    const controller = new AbortController();
+    historyAbortRef.current = controller;
+    const { signal } = controller;
+
     setLoadingHistory(true);
     try {
-      const res = await api.get(`/expenses/${id}/history`);
+      const res = await api.get(`/expenses/${id}/history`, { signal });
+      if (signal.aborted) return;
       setHistoryLogs(res.data.data || []);
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.name === 'AbortError' || err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return;
       setHistoryLogs([]);
     } finally {
-      setLoadingHistory(false);
+      if (!signal.aborted) {
+        setLoadingHistory(false);
+      }
     }
   }, []);
+
+  const feedContainerRef = React.useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setRefundImgUrl('');
     setUploadingRefund(false);
     setSubmittingRefund(false);
+    setComments([]);
+    setHistoryLogs([]);
+    setReminderTargetUser(null);
     if (expenseId) {
+      if (initialItem && Number(initialItem.id) === Number(expenseId)) {
+        setViewItem(initialItem);
+      }
       fetchExpenseDetails(expenseId);
+      const params = new URLSearchParams(window.location.search);
+      const hcId = params.get('highlight_comment_id') || params.get('comment_id');
       setActiveTab('comments');
-      setMobileDrawerTab('info');
+      setRightPaneTab('discussion');
+      setMobileDrawerTab(hcId ? 'discussion' : 'info');
       fetchComments(expenseId);
       fetchHistory(expenseId);
       api.get('/users').then(res => {
@@ -327,7 +387,64 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
     } else {
       setViewItem(null);
     }
-  }, [expenseId, fetchExpenseDetails, fetchComments, fetchHistory]);
+  }, [expenseId, initialItem, fetchExpenseDetails, fetchComments, fetchHistory]);
+
+  useEffect(() => {
+    if (!expenseId || comments.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const hcId = params.get('highlight_comment_id') || params.get('comment_id');
+    if (!hcId) return;
+    setRightPaneTab('discussion');
+    setMobileDrawerTab('discussion');
+    const timer = setTimeout(() => {
+      const rootComments: any[] = [];
+      const repliesMap = new Map<string, any[]>();
+      comments.forEach((item: any) => {
+        const pId = item.parent_id;
+        if (pId && comments.some((c: any) => String(c.id) === String(pId))) {
+          const key = String(pId);
+          const list = repliesMap.get(key) || [];
+          list.push(item);
+          repliesMap.set(key, list);
+        } else {
+          rootComments.push(item);
+        }
+      });
+      repliesMap.forEach((replies) => {
+        replies.sort((a, b) => (a.created_at ? new Date(a.created_at).getTime() : 0) - (b.created_at ? new Date(b.created_at).getTime() : 0));
+      });
+      const ordered: any[] = [];
+      rootComments.forEach(r => {
+        ordered.push(r);
+        const reps = repliesMap.get(String(r.id)) || [];
+        ordered.push(...reps);
+      });
+      const idx = ordered.findIndex(c => String(c.id) === String(hcId));
+      if (idx >= 0 && feedContainerRef.current) {
+        const cards = feedContainerRef.current.querySelectorAll('.custom-scrollbar div[style*="position: relative"]');
+        const targetEl = cards[idx] as HTMLElement | undefined;
+        if (targetEl) {
+          targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          const origBorder = targetEl.style.border;
+          const origBg = targetEl.style.background;
+          const origShadow = targetEl.style.boxShadow;
+          targetEl.style.border = '2px solid var(--color-primary, #a31422)';
+          targetEl.style.background = 'rgba(163, 20, 34, 0.08)';
+          targetEl.style.boxShadow = '0 0 16px rgba(163, 20, 34, 0.25)';
+          setTimeout(() => {
+            targetEl.style.border = origBorder;
+            targetEl.style.background = origBg;
+            targetEl.style.boxShadow = origShadow;
+          }, 2600);
+        }
+      }
+      params.delete('highlight_comment_id');
+      params.delete('comment_id');
+      const nextSearch = params.toString();
+      window.history.replaceState({}, '', `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}${window.location.hash}`);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [comments, expenseId]);
 
   const handleAddComment = async () => {
     if (!commentText.trim() || !viewItem) return;
@@ -541,12 +658,15 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
       });
     } else {
       const overall = (viewItem.status || 'pending').toLowerCase();
+      const isDraft = overall === 'draft';
       const s1 = (viewItem.status_level_1 || 'pending').toLowerCase();
       const s2 = (viewItem.status_level_2 || 'pending').toLowerCase();
       const s3 = (viewItem.status_level_3 || 'pending').toLowerCase();
       const isRefunded = !!viewItem.is_refunded;
       const hasL2 = !!viewItem.approver_id_2;
       const hasL3 = !!viewItem.approver_id_3;
+      const isStationery = rawNotes.includes('DANH SÁCH VĂN PHÒNG PHẨM') || rawNotes.includes('Đồ vật đề xuất:') || String(viewItem.title || '').toLowerCase().includes('văn phòng phẩm');
+      const isZeroCost = Number(viewItem.amount || 0) === 0 || isStationery || rawNotes.includes('Quy trình: In, đóng dấu và gửi hồ sơ') || Boolean(viewItem.isLeaveRequest);
 
       // Step 1: Creator / Proposer
       const creatorUser = users.find((u: any) => 
@@ -564,7 +684,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
 
       steps.push({
         stepNumber: 1,
-        title: 'Bước 1: Lập đề xuất & gửi',
+        title: isDraft ? 'Bước 1: Đang lưu bản nháp' : 'Bước 1: Lập đề xuất & gửi',
         roleTitle: 'Người lập đề xuất',
         user: creatorUser,
         status: 'approved',
@@ -573,7 +693,9 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
 
       // Step 2: Level 1 Approver
       let s1Status: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'pending';
-      if (overall === 'approved' || overall === 'refunded' || isRefunded || s1 === 'approved') {
+      if (isDraft) {
+        s1Status = 'not_reached';
+      } else if (overall === 'approved' || overall === 'refunded' || isRefunded || s1 === 'approved') {
         s1Status = 'approved';
       } else if (overall === 'rejected' || s1 === 'rejected') {
         s1Status = 'rejected';
@@ -602,14 +724,16 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
         status: s1Status,
         approvedAt: s1Status === 'approved' || s1Status === 'rejected' ? formatApprovalTime(s1ApprovedTime) : '',
         waitingSince: s1Status === 'pending' ? step1CreatedTime : null,
-        showBell: s1Status === 'pending'
+        showBell: s1Status === 'pending',
+        customNotReachedText: isDraft ? 'Sẽ thực hiện sau khi gửi duyệt' : undefined
       });
 
       // Step 3: Level 2 Approver (Optional)
       let s2ApprovedTime: any = null;
       let s2Status: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'not_reached';
       if (hasL2) {
-        if (s2 === 'approved' || isRefunded) s2Status = 'approved';
+        if (isDraft) s2Status = 'not_reached';
+        else if (s2 === 'approved' || isRefunded) s2Status = 'approved';
         else if (s2 === 'rejected') s2Status = 'rejected';
         else if (overall === 'rejected' || s1 === 'rejected') s2Status = 'not_reached';
         else if (s1Status === 'approved') s2Status = 'pending';
@@ -637,7 +761,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
           approvedAt: s2Status === 'approved' || s2Status === 'rejected' ? formatApprovalTime(s2ApprovedTime) : '',
           waitingSince: s2Status === 'pending' ? (s1ApprovedTime || step1CreatedTime) : null,
           showBell: s2Status === 'pending',
-          customNotReachedText: 'Sẽ thực hiện sau khi Cấp 1 duyệt'
+          customNotReachedText: isDraft ? 'Sẽ thực hiện sau khi gửi duyệt' : 'Sẽ thực hiện sau khi Cấp 1 duyệt'
         });
       }
 
@@ -645,7 +769,8 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
       let s3ApprovedTime: any = null;
       let s3Status: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'not_reached';
       if (hasL3) {
-        if (s3 === 'approved' || isRefunded) s3Status = 'approved';
+        if (isDraft) s3Status = 'not_reached';
+        else if (s3 === 'approved' || isRefunded) s3Status = 'approved';
         else if (s3 === 'rejected') s3Status = 'rejected';
         else if (overall === 'rejected' || s1 === 'rejected' || s2 === 'rejected') s3Status = 'not_reached';
         else if (hasL2 ? s2Status === 'approved' : s1Status === 'approved') s3Status = 'pending';
@@ -673,58 +798,60 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
           approvedAt: s3Status === 'approved' || s3Status === 'rejected' ? formatApprovalTime(s3ApprovedTime) : '',
           waitingSince: s3Status === 'pending' ? (s2ApprovedTime || s1ApprovedTime || step1CreatedTime) : null,
           showBell: s3Status === 'pending',
-          customNotReachedText: 'Sẽ thực hiện sau khi Cấp 2 duyệt'
+          customNotReachedText: isDraft ? 'Sẽ thực hiện sau khi gửi duyệt' : 'Sẽ thực hiện sau khi Cấp 2 duyệt'
         });
       }
 
-      // Step Payment: Hạch toán thanh toán thực tế
-      const lastApprovalTime = (hasL3 ? s3ApprovedTime : hasL2 ? s2ApprovedTime : s1ApprovedTime) || viewItem.approved_at || viewItem.updated_at;
-      let isPreApproved = false;
-      if (hasL3) {
-        isPreApproved = s3Status === 'approved' || overall === 'approved' || isRefunded;
-      } else if (hasL2) {
-        isPreApproved = s2Status === 'approved' || overall === 'approved' || isRefunded;
-      } else {
-        isPreApproved = s1Status === 'approved' || overall === 'approved' || isRefunded;
+      // Step Payment: Hạch toán thanh toán thực tế (Only for monetary expenses/POs)
+      if (!isZeroCost) {
+        const lastApprovalTime = (hasL3 ? s3ApprovedTime : hasL2 ? s2ApprovedTime : s1ApprovedTime) || viewItem.approved_at || viewItem.updated_at;
+        let isPreApproved = false;
+        if (hasL3) {
+          isPreApproved = s3Status === 'approved' || overall === 'approved' || isRefunded;
+        } else if (hasL2) {
+          isPreApproved = s2Status === 'approved' || overall === 'approved' || isRefunded;
+        } else {
+          isPreApproved = s1Status === 'approved' || overall === 'approved' || isRefunded;
+        }
+
+        let paymentStatus: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'not_reached';
+        if (isRefunded) {
+          paymentStatus = 'approved';
+        } else if (isPreApproved && !isDraft) {
+          paymentStatus = 'pending';
+        } else {
+          paymentStatus = 'not_reached';
+        }
+
+        const defaultAccountant = users.find((u: any) => String(u.role).toLowerCase() === 'accountant') || users.find((u: any) => ['admin', 'superadmin'].includes(String(u.role).toLowerCase())) || {
+          id: 1001,
+          full_name: 'Kế toán / Thủ quỹ',
+          avatar: undefined,
+          avatar_url: undefined,
+          role: 'Thủ quỹ'
+        };
+
+        const refunderUser = isRefunded ? (users.find((u: any) => Number(u.id) === Number(viewItem.refunder_id)) || {
+          id: viewItem.refunder_id,
+          full_name: viewItem.refunder_name || 'Kế toán / Thủ quỹ',
+          avatar: viewItem.refunder_avatar,
+          avatar_url: viewItem.refunder_avatar,
+          role: 'Kế toán chi'
+        }) : defaultAccountant;
+
+        steps.push({
+          stepNumber: steps.length + 1,
+          title: `Bước ${steps.length + 1}: Hạch toán thanh toán thực tế`,
+          roleTitle: refunderUser.role || (isRefunded ? 'Kế toán chi' : 'Thủ quỹ'),
+          user: refunderUser,
+          status: paymentStatus,
+          approvedAt: isRefunded && viewItem.refunded_at ? formatApprovalTime(viewItem.refunded_at) : '',
+          waitingSince: paymentStatus === 'pending' ? (lastApprovalTime || step1CreatedTime) : null,
+          showBell: paymentStatus === 'pending',
+          customNotReachedText: 'Sẽ thực hiện sau khi đề xuất được duyệt',
+          isPayment: true
+        });
       }
-
-      let paymentStatus: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'not_reached';
-      if (isRefunded) {
-        paymentStatus = 'approved';
-      } else if (isPreApproved) {
-        paymentStatus = 'pending';
-      } else {
-        paymentStatus = 'not_reached';
-      }
-
-      const defaultAccountant = users.find((u: any) => String(u.role).toLowerCase() === 'accountant') || users.find((u: any) => ['admin', 'superadmin'].includes(String(u.role).toLowerCase())) || {
-        id: 1001,
-        full_name: 'Kế toán / Thủ quỹ',
-        avatar: undefined,
-        avatar_url: undefined,
-        role: 'Thủ quỹ'
-      };
-
-      const refunderUser = isRefunded ? (users.find((u: any) => Number(u.id) === Number(viewItem.refunder_id)) || {
-        id: viewItem.refunder_id,
-        full_name: viewItem.refunder_name || 'Kế toán / Thủ quỹ',
-        avatar: viewItem.refunder_avatar,
-        avatar_url: viewItem.refunder_avatar,
-        role: 'Kế toán chi'
-      }) : defaultAccountant;
-
-      steps.push({
-        stepNumber: steps.length + 1,
-        title: `Bước ${steps.length + 1}: Hạch toán thanh toán thực tế`,
-        roleTitle: refunderUser.role || (isRefunded ? 'Kế toán chi' : 'Thủ quỹ'),
-        user: refunderUser,
-        status: paymentStatus,
-        approvedAt: isRefunded && viewItem.refunded_at ? formatApprovalTime(viewItem.refunded_at) : '',
-        waitingSince: paymentStatus === 'pending' ? (lastApprovalTime || step1CreatedTime) : null,
-        showBell: paymentStatus === 'pending',
-        customNotReachedText: 'Sẽ thực hiện sau khi đề xuất được duyệt',
-        isPayment: true
-      });
     }
 
     return (
@@ -811,7 +938,13 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                 </div>
                 {st.status === 'approved' && (
                   <span style={{ fontSize: '0.725rem', color: '#10b981', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    {st.stepNumber === 1 ? `Đã gửi lúc ${st.approvedAt || new Date().toLocaleString('vi-VN')}` : st.isPayment ? `✓ Đã chi ${st.approvedAt ? `lúc ${st.approvedAt}` : ''}` : `✓ Đã duyệt ${st.approvedAt ? `lúc ${st.approvedAt}` : ''}`}
+                    {st.stepNumber === 1
+                      ? ((viewItem.status || '').toLowerCase() === 'draft'
+                        ? 'Bản nháp (Chưa gửi duyệt)'
+                        : `Đã gửi lúc ${st.approvedAt || new Date().toLocaleString('vi-VN')}`)
+                      : st.isPayment
+                        ? `✓ Đã chi ${st.approvedAt ? `lúc ${st.approvedAt}` : ''}`
+                        : `✓ Đã duyệt ${st.approvedAt ? `lúc ${st.approvedAt}` : ''}`}
                   </span>
                 )}
                 {st.status === 'rejected' && (
@@ -868,8 +1001,10 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
     );
   };
 
+  const approveRejectInFlightRef = useRef(false);
   const handleApprove = async () => {
-    if (!viewItem || isProcessingApproval) return;
+    if (!viewItem || isProcessingApproval || approveRejectInFlightRef.current) return;
+    approveRejectInFlightRef.current = true;
     setIsProcessingApproval('approve');
     try {
       if (viewItem.isPurchaseOrder) {
@@ -885,12 +1020,14 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
     } catch (e: any) {
       addToast(e?.response?.data?.message || e?.message || 'Lỗi khi phê duyệt chi phí', 'error');
     } finally {
+      approveRejectInFlightRef.current = false;
       setIsProcessingApproval(null);
     }
   };
 
   const handleReject = async () => {
-    if (!viewItem || isProcessingApproval) return;
+    if (!viewItem || isProcessingApproval || approveRejectInFlightRef.current) return;
+    approveRejectInFlightRef.current = true;
     setIsProcessingApproval('reject');
     try {
       if (viewItem.isPurchaseOrder) {
@@ -906,6 +1043,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
     } catch (e: any) {
       addToast(e?.response?.data?.message || e?.message || 'Lỗi khi từ chối chi phí', 'error');
     } finally {
+      approveRejectInFlightRef.current = false;
       setIsProcessingApproval(null);
     }
   };
@@ -926,14 +1064,115 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
       setIsClosing(false);
     }, 280);
   };
+  const handleCloseRef = useRef(handleClose);
+  handleCloseRef.current = handleClose;
+  const reminderTargetUserRef = useRef(reminderTargetUser);
+  reminderTargetUserRef.current = reminderTargetUser;
+  const addCommentInFlightRef = useRef(false);
+  const deleteCommentInFlightRef = useRef(false);
+  const sendReminderInFlightRef = useRef(false);
 
   useEffect(() => {
     if (expenseId) {
       return pushOverlay('expense-quick-view-drawer', () => {
-        handleClose();
+        if (reminderTargetUserRef.current) {
+          setReminderTargetUser(null);
+          return;
+        }
+        handleCloseRef.current();
       }, 100);
     }
   }, [expenseId, isClosing]);
+
+  const memoizedExpenseItems = useMemo(() => {
+    if (!viewItem) return null;
+    const normalizeExpenseItems = (items: any[]) => {
+      if (!Array.isArray(items)) return [];
+      return items
+        .filter(it => it && typeof it === 'object')
+        .map((it: any) => {
+          const rawContent = it.content || it.name || it.description || it.item_name || it.title || it.noi_dung || 'Chi phí';
+          return {
+            ...it,
+            content: rawContent,
+            name: rawContent,
+            description: it.description || rawContent
+          };
+        });
+    };
+
+    const directItems = viewItem.items;
+    if (Array.isArray(directItems) && directItems.length > 0) return normalizeExpenseItems(directItems);
+    if (typeof directItems === 'string' && directItems.trim().startsWith('[')) {
+      try {
+        const parsed = JSON.parse(directItems);
+        if (Array.isArray(parsed) && parsed.length > 0) return normalizeExpenseItems(parsed);
+      } catch (e) {}
+    }
+    const text = viewItem.notes || viewItem.description || '';
+    if (!text) return null;
+    const jsonMatch = text.match(/\[JSON_ITEMS\]:\s*(\[[\s\S]*?\])(?=\n\n|\n\[|$)/i);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[1]);
+        if (Array.isArray(parsed) && parsed.length > 0) return normalizeExpenseItems(parsed);
+      } catch (e) {}
+    }
+    const blockMatch = text.match(/\[Bảng chi tiết thanh toán\]:\s*([\s\S]*?)(?=\n\n\[|\n\[|$)/i);
+    if (blockMatch) {
+      const lines = blockMatch[1].split('\n').map((l: string) => l.trim()).filter(Boolean);
+      const parsedItems: any[] = [];
+      for (const line of lines) {
+        if (/^Tổng cộng/i.test(line)) continue;
+        const m = line.match(/^(\d+)[\.\)]\s*(.*?)(?:\s*\(SL:\s*([\d\.,]+)\s*x\s*([\d\.,]+)\s*đ\s*=\s*([\d\.,]+)\s*đ\))?$/i);
+        if (m) {
+          const stt = parseInt(m[1]);
+          const name = m[2].trim();
+          const qty = m[3] ? parseFloat(m[3].replace(/\./g, '').replace(',', '.')) : 1;
+          const price = m[4] ? parseFloat(m[4].replace(/\./g, '').replace(',', '.')) : 0;
+          const amt = m[5] ? parseFloat(m[5].replace(/\./g, '').replace(',', '.')) : 0;
+          parsedItems.push({ stt, name, content: name, quantity: qty, unit_price: price, amount: amt, total: amt });
+        }
+      }
+      if (parsedItems.length > 0) return normalizeExpenseItems(parsedItems);
+    }
+    return null;
+  }, [viewItem?.notes, viewItem?.description, viewItem?.items]);
+
+  const memoizedBankInfo = useMemo(() => {
+    if (!viewItem) return null;
+    const rawText = viewItem.notes || viewItem.description || '';
+    const bankMatch = rawText.match(/\[Thông tin chuyển khoản\]:\s*([^\n]+)/i);
+    let bankName = viewItem.bank_name || '';
+    let bankNum = viewItem.bank_account_number || viewItem.bank_account || '';
+    let bankOwner = viewItem.bank_account_name || viewItem.vendor_name || '';
+    let bankBranch = '';
+
+    if (bankMatch) {
+      const fullBankStr = bankMatch[1].trim();
+      const stkMatch = fullBankStr.match(/STK:\s*([0-9A-Za-z\-_]+)/i);
+      const holderMatch = fullBankStr.match(/Chủ\s*TK:\s*([^-\n]+)/i);
+      const branchMatch = fullBankStr.match(/Chi\s*nhánh:\s*([^-\n]+)/i);
+      const bankNamePart = fullBankStr.split(/-\s*STK:/i)[0].replace(/^Ngân\s*hàng:\s*/i, '').trim();
+
+      if (bankNamePart) bankName = bankNamePart;
+      if (stkMatch) bankNum = stkMatch[1].trim();
+      if (holderMatch) bankOwner = holderMatch[1].trim();
+      if (branchMatch) bankBranch = branchMatch[1].trim();
+    }
+
+    if (!bankNum && !bankName) return null;
+    const vietQrUrl = bankNum
+      ? getVietQrUrl({
+          bankBinOrCode: bankName || 'VCB',
+          accountNumber: bankNum,
+          accountName: bankOwner,
+          amount: viewItem.amount,
+          memo: viewItem.title || 'Thanh toan'
+        })
+      : '';
+    return { bankName, bankNum, bankOwner, bankBranch, vietQrUrl };
+  }, [viewItem?.notes, viewItem?.description, viewItem?.bank_name, viewItem?.bank_account_number, viewItem?.bank_account, viewItem?.bank_account_name, viewItem?.vendor_name, viewItem?.amount, viewItem?.title]);
 
   if (!expenseId) return null;
 
@@ -955,14 +1194,16 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                 position: 'fixed',
                 inset: 0,
                 zIndex: baseZIndex + 1,
+                '--drawer-backdrop-z': baseZIndex + 1,
                 background: 'rgba(0, 0, 0, 0.45)',
                 backdropFilter: 'blur(8px)',
                 WebkitBackdropFilter: 'blur(8px)',
                 willChange: 'opacity',
                 transform: 'translate3d(0, 0, 0)'
-              }}
+              } as any}
             />
             <motion.div
+              className="drawer-sheet"
               initial={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
               animate={{ y: 0, x: 0, opacity: 1 }}
               exit={isMobile ? { y: '60%', opacity: 0 } : { opacity: 0, x: '60%' }}
@@ -1008,16 +1249,18 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
               position: 'fixed',
               inset: 0,
               zIndex: baseZIndex + 1,
+              '--drawer-backdrop-z': baseZIndex + 1,
               background: 'rgba(0, 0, 0, 0.45)',
               backdropFilter: 'blur(8px)',
               WebkitBackdropFilter: 'blur(8px)',
               willChange: 'opacity',
               transform: 'translate3d(0, 0, 0)'
-            }}
+            } as any}
           />
 
           {/* Drawer Sheet Panel */}
           <motion.div
+            className="drawer-sheet"
             initial={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
             animate={{ y: 0, x: 0, opacity: 1 }}
             exit={isMobile ? { y: '60%', opacity: 0 } : { opacity: 0, x: '60%' }}
@@ -1177,7 +1420,23 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                   }} 
                   title="Nhân bản phiếu chi" 
                   onClick={() => { 
-                    const cloned = { ...viewItem, id: undefined, isClone: true };
+                    const cloned = {
+                      ...viewItem,
+                      id: undefined,
+                      isClone: true,
+                      status: 'pending',
+                      status_level_1: 'pending',
+                      status_level_2: 'pending',
+                      status_level_3: 'pending',
+                      approved_at: null,
+                      approved_at_2: null,
+                      approved_at_3: null,
+                      is_refunded: 0,
+                      refunded_at: null,
+                      refund_image_url: null,
+                      refunder_id: null,
+                      date: new Date().toISOString().split('T')[0]
+                    };
                     onClose(); 
                     onEditClick(cloned); 
                   }}
@@ -1194,7 +1453,10 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                 let badgeClass = 'warning';
                 let badgeText = 'Chờ duyệt';
                 
-                if (viewItem.status === 'approved') {
+                if (viewItem.status === 'draft') {
+                  badgeClass = 'secondary';
+                  badgeText = 'Bản nháp';
+                } else if (viewItem.status === 'approved') {
                   badgeClass = viewItem.is_refunded ? 'info' : 'success';
                   badgeText = viewItem.is_refunded ? 'Đã thanh toán' : 'Đã duyệt';
                 } else if (viewItem.status === 'rejected') {
@@ -1482,59 +1744,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
 
               {/* Bảng kê chi tiết chi phí (nếu có các dòng chi phí con) */}
               {(() => {
-                const normalizeExpenseItems = (items: any[]) => {
-                  if (!Array.isArray(items)) return [];
-                  return items
-                    .filter(it => it && typeof it === 'object')
-                    .map((it: any) => {
-                      const rawContent = it.content || it.name || it.description || it.item_name || it.title || it.noi_dung || 'Chi phí';
-                      return {
-                        ...it,
-                        content: rawContent,
-                        name: rawContent,
-                        description: it.description || rawContent
-                      };
-                    });
-                };
-
-                const parseExpenseLineItems = (text: string, directItems?: any) => {
-                  if (Array.isArray(directItems) && directItems.length > 0) return normalizeExpenseItems(directItems);
-                  if (typeof directItems === 'string' && directItems.trim().startsWith('[')) {
-                    try {
-                      const parsed = JSON.parse(directItems);
-                      if (Array.isArray(parsed) && parsed.length > 0) return normalizeExpenseItems(parsed);
-                    } catch (e) {}
-                  }
-                  if (!text) return null;
-                  const jsonMatch = text.match(/\[JSON_ITEMS\]:\s*(\[[\s\S]*?\])(?=\n\n|\n\[|$)/i);
-                  if (jsonMatch) {
-                    try {
-                      const parsed = JSON.parse(jsonMatch[1]);
-                      if (Array.isArray(parsed) && parsed.length > 0) return normalizeExpenseItems(parsed);
-                    } catch (e) {}
-                  }
-                  const blockMatch = text.match(/\[Bảng chi tiết thanh toán\]:\s*([\s\S]*?)(?=\n\n\[|\n\[|$)/i);
-                  if (blockMatch) {
-                    const lines = blockMatch[1].split('\n').map(l => l.trim()).filter(Boolean);
-                    const parsedItems: any[] = [];
-                    for (const line of lines) {
-                      if (/^Tổng cộng/i.test(line)) continue;
-                      const m = line.match(/^(\d+)[\.\)]\s*(.*?)(?:\s*\(SL:\s*([\d\.,]+)\s*x\s*([\d\.,]+)\s*đ\s*=\s*([\d\.,]+)\s*đ\))?$/i);
-                      if (m) {
-                        const stt = parseInt(m[1]);
-                        const name = m[2].trim();
-                        const qty = m[3] ? parseFloat(m[3].replace(/\./g, '').replace(',', '.')) : 1;
-                        const price = m[4] ? parseFloat(m[4].replace(/\./g, '').replace(',', '.')) : 0;
-                        const amt = m[5] ? parseFloat(m[5].replace(/\./g, '').replace(',', '.')) : 0;
-                        parsedItems.push({ stt, name, content: name, quantity: qty, unit_price: price, amount: amt, total: amt });
-                      }
-                    }
-                    if (parsedItems.length > 0) return normalizeExpenseItems(parsedItems);
-                  }
-                  return null;
-                };
-
-                const expenseItems = parseExpenseLineItems(viewItem.notes || viewItem.description || '', viewItem.items);
+                const expenseItems = memoizedExpenseItems;
                 if (!expenseItems || expenseItems.length === 0) return null;
 
                 return (
@@ -2119,8 +2329,11 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
 
               {/* Refund confirmation for Accountant/Admin if approved but not yet refunded - Placed right above Bank Card */}
               {(() => {
+                const rawNotes = viewItem.notes || viewItem.description || '';
+                const isStationery = rawNotes.includes('DANH SÁCH VĂN PHÒNG PHẨM') || rawNotes.includes('Đồ vật đề xuất:') || String(viewItem.title || '').toLowerCase().includes('văn phòng phẩm');
+                const isZeroCost = Number(viewItem.amount || 0) === 0 || isStationery || rawNotes.includes('Quy trình: In, đóng dấu và gửi hồ sơ') || Boolean(viewItem.isLeaveRequest);
                 const canDisburse = Boolean(user && ['admin', 'superadmin', 'super_admin', 'director', 'accountant', 'hr'].includes(String(user.role).toLowerCase()));
-                if (viewItem.status !== 'approved' || viewItem.is_refunded) return null;
+                if (isZeroCost || viewItem.status !== 'approved' || viewItem.is_refunded) return null;
                 if (!canDisburse) {
                   return (
                     <div style={{ background: 'var(--color-surface)', padding: '1rem 1.25rem', borderRadius: '12px', border: '1px solid rgba(245, 158, 11, 0.25)', display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -2337,27 +2550,8 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
 
               {/* Bank Transfer Info parsed from notes or description */}
               {(() => {
-                const rawText = viewItem.notes || viewItem.description || '';
-                const bankMatch = rawText.match(/\[Thông tin chuyển khoản\]:\s*([^\n]+)/i);
-                let bankName = viewItem.bank_name || '';
-                let bankNum = viewItem.bank_account_number || viewItem.bank_account || '';
-                let bankOwner = viewItem.bank_account_name || viewItem.vendor_name || '';
-                let bankBranch = '';
-
-                if (bankMatch) {
-                  const fullBankStr = bankMatch[1].trim();
-                  const stkMatch = fullBankStr.match(/STK:\s*([0-9A-Za-z\-_]+)/i);
-                  const holderMatch = fullBankStr.match(/Chủ\s*TK:\s*([^-\n]+)/i);
-                  const branchMatch = fullBankStr.match(/Chi\s*nhánh:\s*([^-\n]+)/i);
-                  const bankNamePart = fullBankStr.split(/-\s*STK:/i)[0].replace(/^Ngân\s*hàng:\s*/i, '').trim();
-
-                  if (bankNamePart) bankName = bankNamePart;
-                  if (stkMatch) bankNum = stkMatch[1].trim();
-                  if (holderMatch) bankOwner = holderMatch[1].trim();
-                  if (branchMatch) bankBranch = branchMatch[1].trim();
-                }
-
-                if (!bankNum && !bankName) return null;
+                if (!memoizedBankInfo) return null;
+                const { bankName, bankNum, bankOwner, bankBranch, vietQrUrl } = memoizedBankInfo;
 
                 if (!bankNum) {
                   return (
@@ -2385,14 +2579,6 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                     </div>
                   );
                 }
-
-                const vietQrUrl = getVietQrUrl({
-                  bankBinOrCode: bankName || 'VCB',
-                  accountNumber: bankNum,
-                  accountName: bankOwner,
-                  amount: viewItem.amount,
-                  memo: viewItem.title || 'Thanh toan'
-                });
 
                 return (
                   <div style={{
@@ -3373,29 +3559,42 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                     <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>Xem tiến trình →</span>
                   </div>
 
-                  <ProcessFeed
-                    comments={comments}
-                    historyLogs={historyLogs}
-                    loadingComments={loadingComments}
-                    loadingHistory={loadingHistory}
-                    currentUser={user}
-                    onAddComment={async (text, fileAttachments, parentId) => {
-                      if ((!text.trim() && (!fileAttachments || fileAttachments.length === 0)) || !viewItem) return;
-                      await api.post(`/expenses/${viewItem.id}/comments`, {
-                        body: text.trim(),
-                        attachments: fileAttachments || [],
-                        parent_id: parentId || null
-                      });
-                      addToast('Thêm bình luận thành công', 'success');
-                      fetchComments(viewItem.id);
-                    }}
-                    onDeleteComment={async (commentId) => {
-                      if (!viewItem) return;
-                      await api.delete(`/expenses/comments/${commentId}`);
-                      addToast('Đã xóa bình luận', 'success');
-                      fetchComments(viewItem.id);
-                    }}
-                  />
+                  <div ref={feedContainerRef} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+                    <ProcessFeed
+                      comments={comments}
+                      historyLogs={historyLogs}
+                      loadingComments={loadingComments}
+                      loadingHistory={loadingHistory}
+                      currentUser={user}
+                      onAddComment={async (text, fileAttachments, parentId) => {
+                        if ((!text.trim() && (!fileAttachments || fileAttachments.length === 0)) || !viewItem) return;
+                        if (addCommentInFlightRef.current) return;
+                        addCommentInFlightRef.current = true;
+                        try {
+                          await api.post(`/expenses/${viewItem.id}/comments`, {
+                            body: text.trim(),
+                            attachments: fileAttachments || [],
+                            parent_id: parentId || null
+                          });
+                          addToast('Thêm bình luận thành công', 'success');
+                          fetchComments(viewItem.id);
+                        } finally {
+                          addCommentInFlightRef.current = false;
+                        }
+                      }}
+                      onDeleteComment={async (commentId) => {
+                        if (!viewItem || deleteCommentInFlightRef.current) return;
+                        deleteCommentInFlightRef.current = true;
+                        try {
+                          await api.delete(`/expenses/comments/${commentId}`);
+                          addToast('Đã xóa bình luận', 'success');
+                          fetchComments(viewItem.id);
+                        } finally {
+                          deleteCommentInFlightRef.current = false;
+                        }
+                      }}
+                    />
+                  </div>
                 </div>
               )}
 
@@ -3588,7 +3787,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 9999
+          zIndex: baseZIndex + 20
         }} onClick={() => setReminderTargetUser(null)}>
           <div style={{
             background: 'var(--color-surface)',
@@ -3643,6 +3842,8 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                 className="btn primary sm"
                 disabled={sendingReminder}
                 onClick={async () => {
+                  if (sendReminderInFlightRef.current || sendingReminder) return;
+                  sendReminderInFlightRef.current = true;
                   setSendingReminder(true);
                   const targetName = reminderTargetUser.full_name || reminderTargetUser.name || '';
                   try {
@@ -3657,6 +3858,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                   } catch (err: any) {
                     addToast(err?.response?.data?.message || err?.message || 'Lỗi gửi nhắc nhở', 'error');
                   } finally {
+                    sendReminderInFlightRef.current = false;
                     setSendingReminder(false);
                   }
                 }}

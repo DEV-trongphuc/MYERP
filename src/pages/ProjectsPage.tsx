@@ -1,4 +1,4 @@
-import React, { useEffect, useState, lazy, Suspense } from 'react';
+import React, { useEffect, useState, useRef, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { fetchAPI } from '../utils/api';
@@ -533,12 +533,13 @@ export default function ProjectsPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const taskId = params.get('task_id');
+    const taskId = params.get('open_task_id') || params.get('task_id');
     if (taskId) {
       const tid = Number(taskId);
       if (tid) {
         api.get(`/activities/${tid}`).then(res => {
           if (res.data && res.data.success && res.data.data) {
+            useUIStore.getState().closeTaskDrawer();
             setSelectedTaskForDrawer(res.data.data);
           }
         }).catch(err => {
@@ -550,14 +551,14 @@ export default function ProjectsPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const isCampaigns = params.get('tab') === 'campaigns' || params.get('sub') === 'campaigns';
+    const isCampaigns = params.get('tab') === 'campaigns' || params.get('sub') === 'campaigns' || Boolean(params.get('campaign_id'));
     if (isCampaigns) {
       setActiveSubTab('campaigns');
-    } else {
+    } else if (params.get('tab') === 'projects' || params.get('sub') === 'projects' || params.get('project_id')) {
       setActiveSubTab('projects');
     }
 
-    const targetId = params.get('id') || params.get('project_id');
+    const targetId = params.get('open_id') || params.get('id') || params.get('project_id') || params.get('campaign_id');
     if (targetId) {
       if (isCampaigns) {
         if (campaigns.length > 0) {
@@ -567,10 +568,12 @@ export default function ProjectsPage() {
             setCampaignModalMode('view');
             setIsCampaignModalOpen(true);
 
-            // clean url parameters
+            // clean url parameters while preserving highlight_comment_id
             const newParams = new URLSearchParams(window.location.search);
+            newParams.delete('open_id');
             newParams.delete('id');
             newParams.delete('project_id');
+            newParams.delete('campaign_id');
             const cleanUrl = window.location.pathname + (newParams.toString() ? '?' + newParams.toString() : '');
             window.history.replaceState({}, '', cleanUrl);
           }
@@ -583,10 +586,12 @@ export default function ProjectsPage() {
             setProjectModalMode('view');
             setIsEditModalOpen(true);
 
-            // clean url parameters
+            // clean url parameters while preserving highlight_comment_id
             const newParams = new URLSearchParams(window.location.search);
+            newParams.delete('open_id');
             newParams.delete('id');
             newParams.delete('project_id');
+            newParams.delete('campaign_id');
             const cleanUrl = window.location.pathname + (newParams.toString() ? '?' + newParams.toString() : '');
             window.history.replaceState({}, '', cleanUrl);
           }
@@ -845,8 +850,13 @@ export default function ProjectsPage() {
     });
   };
 
+  const projectsAbortRef = useRef<AbortController | null>(null);
+  const campaignsAbortRef = useRef<AbortController | null>(null);
+  const inFlightRef = useRef(false);
+
   const handlePostDetailComment = async (entityType: 'project' | 'campaign', entityId: number) => {
-    if ((!newCommentText.trim() && commentAttachments.length === 0) || isSubmittingComment) return;
+    if ((!newCommentText.trim() && commentAttachments.length === 0) || isSubmittingComment || inFlightRef.current) return;
+    inFlightRef.current = true;
     setIsSubmittingComment(true);
     setUploadingAttachment(true);
 
@@ -907,6 +917,7 @@ export default function ProjectsPage() {
       console.error(e);
       addToast('Không thể gửi bình luận: ' + (e.message || ''), 'error');
     } finally {
+      inFlightRef.current = false;
       setIsSubmittingComment(false);
       setUploadingAttachment(false);
     }
@@ -920,6 +931,8 @@ export default function ProjectsPage() {
       cancelText: 'Hủy',
       isDanger: true,
       onConfirm: async () => {
+        if (inFlightRef.current) return;
+        inFlightRef.current = true;
         try {
           const res = await fetchAPI(`${entityType}s/${entityId}/comments/${commentId}`, {
             method: 'DELETE'
@@ -932,6 +945,8 @@ export default function ProjectsPage() {
           }
         } catch (e: any) {
           addToast('Lỗi khi xóa bình luận: ' + e.message, 'error');
+        } finally {
+          inFlightRef.current = false;
         }
       }
     });
@@ -1218,6 +1233,7 @@ export default function ProjectsPage() {
 
   useEffect(() => {
     if (editingProject && editingProject.id) {
+      setProjectDrawerTab('details');
       loadProjectRoster(editingProject.id);
       loadDetailComments('project', editingProject.id);
       loadLinkedTasks('project', editingProject.id);
@@ -1233,6 +1249,7 @@ export default function ProjectsPage() {
 
   useEffect(() => {
     if (editingCampaign && editingCampaign.id) {
+      setCampaignDrawerTab('details');
       loadDetailComments('campaign', editingCampaign.id);
       loadLinkedTasks('campaign', editingCampaign.id);
       loadCampaignStats(editingCampaign.id);
@@ -1352,26 +1369,32 @@ export default function ProjectsPage() {
   useEffect(() => {
     if (detailComments.length > 0 && (isEditModalOpen || isCampaignModalOpen)) {
       const params = new URLSearchParams(window.location.search);
-      const highlightCommentId = params.get('highlight_comment_id');
+      const highlightCommentId = params.get('highlight_comment_id') || params.get('comment_id');
       if (highlightCommentId) {
+        if (isEditModalOpen) setProjectDrawerTab('details');
+        if (isCampaignModalOpen) setCampaignDrawerTab('details');
         setTimeout(() => {
-          const element = document.getElementById(`project-comment-${highlightCommentId}`);
+          const element = document.getElementById(`entity-comment-${highlightCommentId}`) || document.getElementById(`project-comment-${highlightCommentId}`);
           if (element) {
             element.scrollIntoView({ behavior: 'smooth', block: 'center' });
             // Flash highlight comment bubble
             const bubble = element.querySelector('div') as HTMLElement;
             if (bubble) {
               const originalBg = bubble.style.background;
+              const originalShadow = bubble.style.boxShadow;
               bubble.style.backgroundColor = '#fef08a'; // yellow-200
+              bubble.style.boxShadow = '0 0 0 2px #f59e0b';
               bubble.style.transition = 'all 0.5s ease';
               setTimeout(() => {
                 bubble.style.background = originalBg;
+                bubble.style.boxShadow = originalShadow;
               }, 2500);
             }
 
             // Clean URL parameters
             const newParams = new URLSearchParams(window.location.search);
             newParams.delete('highlight_comment_id');
+            newParams.delete('comment_id');
             const cleanUrl = window.location.pathname + (newParams.toString() ? '?' + newParams.toString() : '');
             window.history.replaceState({}, '', cleanUrl);
           }
@@ -1499,16 +1522,20 @@ export default function ProjectsPage() {
       return campIds.includes(camp?.name);
     });
     const rosters: Record<number, any[]> = {};
-    for (const p of pObjs) {
-      try {
-        const res = await fetchAPI(`projects/${p.id}/roster`);
-        if (res && Array.isArray(res)) {
-          rosters[p.id] = res.filter((m: any) => m.is_assigned === 1);
+    await Promise.all(
+      pObjs.map(async (p) => {
+        try {
+          const res = await fetchAPI(`projects/${p.id}/roster`);
+          if (res && Array.isArray(res)) {
+            rosters[p.id] = res.filter((m: any) => m.is_assigned === 1);
+          } else if (res?.success && Array.isArray(res.data)) {
+            rosters[p.id] = res.data.filter((m: any) => m.is_assigned === 1);
+          }
+        } catch (e) {
+          console.error(e);
         }
-      } catch (e) {
-        console.error(e);
-      }
-    }
+      })
+    );
     setCampaignRosters(rosters);
     setCampaignRostersLoading(false);
   };
@@ -1586,6 +1613,7 @@ export default function ProjectsPage() {
   };
 
   const handleOpenCampaignView = (camp: any) => {
+    setCampaignDrawerTab('details');
     setEditingCampaign(camp);
     setCampaignModalMode('view');
     setIsCampaignModalOpen(true);
@@ -5075,9 +5103,17 @@ export default function ProjectsPage() {
   };
 
   const loadProjects = async () => {
+    if (projectsAbortRef.current) {
+      projectsAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    projectsAbortRef.current = controller;
+    const { signal } = controller;
+
     setLoading(true);
     try {
-      const res = await fetchAPI(`projects?page=${projectPage}&limit=${projectPageSize}`);
+      const res = await fetchAPI(`projects?page=${projectPage}&limit=${projectPageSize}`, { signal });
+      if (signal.aborted) return;
       console.log('Projects API Response:', res);
       if (res.success) {
         if (res.data && typeof res.data === 'object' && 'data' in res.data) {
@@ -5094,10 +5130,11 @@ export default function ProjectsPage() {
         addToast(res.message || 'Lỗi tải danh sách chương trình', 'error');
       }
     } catch (e: any) {
+      if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED' || signal.aborted) return;
       console.error('loadProjects error:', e);
       addToast(e.message || 'Lỗi kết nối', 'error');
     } finally {
-      setLoading(false);
+      if (!signal.aborted) setLoading(false);
     }
   };
 
@@ -5173,10 +5210,18 @@ export default function ProjectsPage() {
   };
 
   const loadCampaigns = async () => {
+    if (campaignsAbortRef.current) {
+      campaignsAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    campaignsAbortRef.current = controller;
+    const { signal } = controller;
+
     setCampaignsLoading(true);
     try {
       const url = 'campaigns?limit=1000';
-      const res = await fetchAPI(url);
+      const res = await fetchAPI(url, { signal });
+      if (signal.aborted) return;
       if (res.success) {
         if (res.data && typeof res.data === 'object' && 'data' in res.data) {
           setCampaigns(res.data.data || []);
@@ -5187,10 +5232,11 @@ export default function ProjectsPage() {
           setTotalCampaigns(arr.length);
         }
       }
-    } catch (e) {
+    } catch (e: any) {
+      if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED' || signal.aborted) return;
       console.error('Failed to load campaigns', e);
     } finally {
-      setCampaignsLoading(false);
+      if (!signal.aborted) setCampaignsLoading(false);
     }
   };
 
@@ -5200,9 +5246,10 @@ export default function ProjectsPage() {
       addToast('Tên chiến dịch là bắt buộc', 'error');
       return;
     }
-    if (isSaving) return;
+    if (isSaving || inFlightRef.current) return;
 
     try {
+      inFlightRef.current = true;
       setIsSaving(true);
       const isNew = !editingCampaign.id;
       const action = isNew ? 'campaigns' : `campaigns/${editingCampaign.id}`;
@@ -5223,6 +5270,7 @@ export default function ProjectsPage() {
     } catch (err: any) {
       addToast(err.message || 'Lỗi kết nối', 'error');
     } finally {
+      inFlightRef.current = false;
       setIsSaving(false);
     }
   };
@@ -5235,6 +5283,8 @@ export default function ProjectsPage() {
       cancelText: 'Hủy',
       isDanger: true,
       onConfirm: async () => {
+        if (inFlightRef.current) return;
+        inFlightRef.current = true;
         try {
           const res = await fetchAPI(`campaigns/${id}`, { method: 'DELETE' });
           if (res.success) {
@@ -5245,6 +5295,8 @@ export default function ProjectsPage() {
           }
         } catch (err: any) {
           addToast(err.message || 'Lỗi kết nối', 'error');
+        } finally {
+          inFlightRef.current = false;
         }
       }
     });
@@ -5285,6 +5337,9 @@ export default function ProjectsPage() {
 
   useEffect(() => {
     loadProjects();
+    return () => {
+      projectsAbortRef.current?.abort();
+    };
   }, [projectPage, projectPageSize]);
 
   useEffect(() => {
@@ -5294,6 +5349,9 @@ export default function ProjectsPage() {
     loadConsultants();
     loadCompanies();
     loadCampaigns();
+    return () => {
+      campaignsAbortRef.current?.abort();
+    };
   }, []);
 
   const formatDateVN = (dateStr: string | null | undefined, separator = '/') => {
@@ -5440,9 +5498,10 @@ export default function ProjectsPage() {
       addToast('Mã chương trình là bắt buộc khi tắt tự động sinh mã', 'error');
       return;
     }
-    if (isSaving) return;
+    if (isSaving || inFlightRef.current) return;
 
     try {
+      inFlightRef.current = true;
       setIsSaving(true);
       const isNew = !editingProject.id;
       const action = isNew ? 'projects' : `projects/${editingProject.id}`;
@@ -5463,6 +5522,7 @@ export default function ProjectsPage() {
     } catch (e: any) {
       addToast(e.message || 'Lỗi kết nối', 'error');
     } finally {
+      inFlightRef.current = false;
       setIsSaving(false);
     }
   };
@@ -5475,6 +5535,8 @@ export default function ProjectsPage() {
       cancelText: 'Hủy',
       isDanger: true,
       onConfirm: async () => {
+        if (inFlightRef.current) return;
+        inFlightRef.current = true;
         try {
           const res = await fetchAPI(`projects/${id}`, { method: 'DELETE' });
           if (res.success) {
@@ -5485,6 +5547,8 @@ export default function ProjectsPage() {
           }
         } catch (e: any) {
           addToast(e.message || 'Lỗi kết nối', 'error');
+        } finally {
+          inFlightRef.current = false;
         }
       }
     });
@@ -5528,9 +5592,10 @@ export default function ProjectsPage() {
   };
 
   const handleSaveRoster = async () => {
-    if (!selectedProjectId) return;
+    if (!selectedProjectId || inFlightRef.current) return;
 
     const assignedIds = rosterMembers.filter(m => m.is_assigned === 1).map(m => m.id);
+    inFlightRef.current = true;
     try {
       const res = await fetchAPI(`projects/${selectedProjectId}/roster`, {
         method: 'POST',
@@ -5549,6 +5614,8 @@ export default function ProjectsPage() {
       }
     } catch (e: any) {
       addToast(e.message || 'Lỗi kết nối', 'error');
+    } finally {
+      inFlightRef.current = false;
     }
   };
 
@@ -5573,9 +5640,10 @@ export default function ProjectsPage() {
   };
 
   const handleUploadFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0 || !selectedProjectId) return;
+    if (!e.target.files || e.target.files.length === 0 || !selectedProjectId || inFlightRef.current) return;
     const file = e.target.files[0];
 
+    inFlightRef.current = true;
     setUploadingDoc(true);
     try {
       const compressedFile = await compressToWebP(file);
@@ -5604,6 +5672,7 @@ export default function ProjectsPage() {
     } catch (e: any) {
       addToast(e.message || 'Lỗi tải file', 'error');
     } finally {
+      inFlightRef.current = false;
       setUploadingDoc(false);
     }
   };
@@ -5617,6 +5686,8 @@ export default function ProjectsPage() {
       cancelText: 'Hủy',
       isDanger: true,
       onConfirm: async () => {
+        if (inFlightRef.current) return;
+        inFlightRef.current = true;
         try {
           const res = await fetchAPI(`projects/${selectedProjectId}/documents/${docId}`, { method: 'DELETE' });
           if (res.success) {
@@ -5628,6 +5699,8 @@ export default function ProjectsPage() {
           }
         } catch (e: any) {
           addToast(e.message || 'Lỗi kết nối', 'error');
+        } finally {
+          inFlightRef.current = false;
         }
       }
     });
@@ -6158,6 +6231,7 @@ export default function ProjectsPage() {
                       e.currentTarget.style.boxShadow = '0 2px 8px -2px rgba(15, 23, 42, 0.04)';
                     }}
                     onClick={() => {
+                      setProjectDrawerTab('details');
                       setEditingProject(proj);
                       setProjectModalMode('view');
                       setIsEditModalOpen(true);
@@ -9639,7 +9713,9 @@ export default function ProjectsPage() {
           };
 
           const handleSaveConfig = async () => {
+            if (isSaving || inFlightRef.current) return;
             try {
+              inFlightRef.current = true;
               setIsSaving(true);
               const res = await fetchAPI(`campaigns/${editingCampaign.id}`, {
                 method: 'PUT',
@@ -9662,6 +9738,7 @@ export default function ProjectsPage() {
             } catch (e: any) {
               addToast(e.message || 'Lỗi kết nối', 'error');
             } finally {
+              inFlightRef.current = false;
               setIsSaving(false);
             }
           };

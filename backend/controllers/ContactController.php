@@ -3,12 +3,16 @@
 
 class ContactController {
     private PDO $db;
+    private array $stagesCache = [];
+    private static bool $autoReconciled = false;
+
     public function __construct(PDO $db) { 
         $this->db = $db; 
     }
 
     public function index(array $auth): void {
         $tid    = $auth['tenant_id'];
+        $this->ensureTenantStagesReconciled((int)$tid);
         $page   = max(1, (int)($_GET['page']   ?? 1));
         $limit  = min(2000, max(10, (int)($_GET['limit']  ?? 20)));
         $offset = ($page - 1) * $limit;
@@ -24,6 +28,7 @@ class ContactController {
         }
         $source  = $_GET['source'] ?? '';
         $owner   = $_GET['owner_id'] ?? '';
+        $teamId  = trim((string)($_GET['team_id'] ?? ''));
         $stage   = $_GET['stage_id'] ?? '';
         $companyId = $_GET['company_id'] ?? '';
         $projectId = $_GET['project_id'] ?? '';
@@ -120,9 +125,9 @@ class ContactController {
         }
 
         // Validating sort fields
-        $allowedSort = ['created_at', 'updated_at', 'full_name', 'lead_score', 'last_contact', 'admission_date'];
-        if (!in_array($sortBy, $allowedSort)) $sortBy = 'created_at';
-        if (!in_array(strtoupper($order), ['ASC', 'DESC'])) $order = 'DESC';
+        $allowedSort = ['created_at', 'updated_at', 'full_name', 'lead_score', 'last_contact', 'admission_date', 'open_deal_value', 'expected_revenue'];
+        if (!in_array($sortBy, $allowedSort, true)) $sortBy = 'created_at';
+        if (!in_array(strtoupper($order), ['ASC', 'DESC'], true)) $order = 'DESC';
 
         if ($sortBy === 'created_at') {
             $orderByClause = "GREATEST(c.created_at, IFNULL(c.updated_at, c.created_at)) $order, c.id $order";
@@ -132,6 +137,8 @@ class ContactController {
             $orderByClause = "c.updated_at $order, c.id $order";
         } elseif ($sortBy === 'admission_date') {
             $orderByClause = "c.admission_date $order, c.id $order";
+        } elseif ($sortBy === 'open_deal_value' || $sortBy === 'expected_revenue') {
+            $orderByClause = "COALESCE(c.expected_revenue, 0) $order, c.id $order";
         } else {
             $orderByClause = "c.$sortBy $order, c.id $order";
         }
@@ -213,6 +220,10 @@ class ContactController {
         }
         if ($source) { $where[] = 'c.source = ?'; $params[] = $source; }
         if ($owner)  { $where[] = 'c.owner_id = ?'; $params[] = (int)$owner; }
+        if ($teamId !== '' && $teamId !== 'all') {
+            $where[] = 'c.owner_id IN (SELECT id FROM users WHERE team_id = ?)';
+            $params[] = (int)$teamId;
+        }
         if ($companyId) { $where[] = 'c.company_id = ?'; $params[] = (int)$companyId; }
         if ($projectId !== '') { $where[] = 'c.project_id = ?'; $params[] = (int)$projectId; }
         if ($campaignId !== '') { $where[] = 'c.campaign_id = ?'; $params[] = (int)$campaignId; }
@@ -378,8 +389,9 @@ class ContactController {
                         $lostTotal += $cnt;
                     } else {
                         // Active pipeline leads
-                        $resolvedId = $sId ?: ($slugMap[$slug] ?? null);
-                        $resolvedSlug = $sId && isset($psMap[$sId]) ? $psMap[$sId] : $slug;
+                        $effStage = $this->resolveEffectiveStage($sId, $slug, (int)$tid);
+                        $resolvedId = $effStage ? (int)$effStage['id'] : ($sId ?: ($slugMap[$slug] ?? null));
+                        $resolvedSlug = $effStage ? (string)$effStage['system_slug'] : ($sId && isset($psMap[$sId]) ? $psMap[$sId] : $slug);
 
                         if (!empty($resolvedId)) {
                             $stageCounts[(string)$resolvedId] = ($stageCounts[(string)$resolvedId] ?? 0) + $cnt;
@@ -387,7 +399,7 @@ class ContactController {
                         if (!empty($resolvedSlug)) {
                             $stageCounts[(string)$resolvedSlug] = ($stageCounts[(string)$resolvedSlug] ?? 0) + $cnt;
                         }
-                        $isEnrolledStage = ($resolvedId == 44) || in_array($resolvedSlug, ['enrolled', 'hoc_vien'], true);
+                        $isEnrolledStage = ($resolvedId == 44) || in_array($resolvedSlug, ['enrolled', 'hoc_vien'], true) || (!empty($effStage['is_won']));
                         if ($segment !== 'tiem_nang' || !$isEnrolledStage) {
                             $activeTotal += $cnt;
                         }
@@ -573,74 +585,141 @@ class ContactController {
         if ($isKanban) {
             $whereStr = implode(' AND ', $where);
             $limitPerStage = min(100, max(10, (int)($_GET['limit_per_stage'] ?? 30)));
+            $kanbanStageId = isset($_GET['kanban_stage_id']) && $_GET['kanban_stage_id'] !== '' ? (int)$_GET['kanban_stage_id'] : 0;
+            $kanbanOffset  = max(0, (int)($_GET['kanban_offset'] ?? 0));
 
-            // 1. Fast stage totals grouped by stage_id
+            // 1. Fast stage totals & revenues grouped by stage_id and pipeline_status
             $stageTotals = [];
+            $stageRevenues = [];
             $totStmt = $this->db->prepare("
-                SELECT c.stage_id, COUNT(*) as cnt 
+                SELECT c.stage_id, c.pipeline_status, COUNT(*) as cnt, COALESCE(SUM(COALESCE(c.expected_revenue, 0)), 0) as rev
                 FROM contacts c 
                 WHERE $whereStr 
-                GROUP BY c.stage_id
+                GROUP BY c.stage_id, c.pipeline_status
             ");
             $totStmt->execute($params);
             while ($row = $totStmt->fetch(PDO::FETCH_ASSOC)) {
-                $sid = (int)($row['stage_id'] ?? 0);
+                $effStage = $this->resolveEffectiveStage(
+                    !empty($row['stage_id']) ? (int)$row['stage_id'] : null,
+                    $row['pipeline_status'] ?? null,
+                    (int)$tid
+                );
+                $sid = (int)($effStage['id'] ?? $row['stage_id'] ?? 0);
                 if ($sid > 0) {
-                    $stageTotals[$sid] = (int)$row['cnt'];
+                    $stageTotals[$sid] = ($stageTotals[$sid] ?? 0) + (int)$row['cnt'];
+                    $stageRevenues[$sid] = ($stageRevenues[$sid] ?? 0.0) + (float)$row['rev'];
                 }
             }
 
-            // 2. Fetch top N contacts per stage using ROW_NUMBER() OVER
-            $kanbanSql = "
-                SELECT t.* FROM (
+            // 2. Phase 1: Select target contact IDs for Kanban columns
+            if ($kanbanStageId > 0) {
+                $kStageSlug = $this->getSlugFromStageId($kanbanStageId, (int)$tid);
+                $kStageWhere = $whereStr . " AND (c.stage_id = ? OR (c.stage_id IS NULL AND c.pipeline_status = ?))";
+                $kStageParams = array_merge($params, [$kanbanStageId, $kStageSlug]);
+                $kIdStmt = $this->db->prepare("
+                    SELECT c.id
+                    FROM contacts c
+                    WHERE $kStageWhere
+                    ORDER BY $orderByClause
+                    LIMIT $limitPerStage OFFSET $kanbanOffset
+                ");
+                $kIdStmt->execute($kStageParams);
+                $kanbanIds = $kIdStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+            } else {
+                $kIdStmt = $this->db->prepare("
+                    SELECT t.id FROM (
+                        SELECT c.id,
+                               ROW_NUMBER() OVER (PARTITION BY c.stage_id ORDER BY $orderByClause) as rn
+                        FROM contacts c
+                        WHERE $whereStr
+                    ) t
+                    WHERE t.rn <= $limitPerStage
+                ");
+                $kIdStmt->execute($params);
+                $kanbanIds = $kIdStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+            }
+
+            $data = [];
+            if (!empty($kanbanIds)) {
+                $kPlaceholders = implode(',', array_fill(0, count($kanbanIds), '?'));
+                $kOrderField = "FIELD(c.id, " . implode(',', array_map('intval', $kanbanIds)) . ")";
+                $kanbanRichSql = "
                     SELECT c.*,
-                            comp.name as company_name,
-                            comp.tier as company_tier,
-                            CASE 
-                                WHEN comp.tier = 'referrer' THEN comp.name
-                                WHEN c.source IN ('gioi_thieu', 'ref', 'referral') AND comp.name IS NOT NULL THEN comp.name
-                                ELSE NULL
-                            END as referrer_name,
-                            CASE 
-                                WHEN comp.tier = 'referrer' THEN comp.logo_url
-                                WHEN c.source IN ('gioi_thieu', 'ref', 'referral') AND comp.logo_url IS NOT NULL THEN comp.logo_url
-                                ELSE NULL
-                            END as referrer_avatar,
-                            u.full_name as owner_name,
+                           comp.name as company_name,
+                           comp.tier as company_tier,
+                           CASE 
+                               WHEN comp.tier = 'referrer' THEN comp.name
+                               WHEN c.source IN ('gioi_thieu', 'ref', 'referral') AND comp.name IS NOT NULL THEN comp.name
+                               ELSE NULL
+                           END as referrer_name,
+                           CASE 
+                               WHEN comp.tier = 'referrer' THEN comp.logo_url
+                               WHEN c.source IN ('gioi_thieu', 'ref', 'referral') AND comp.logo_url IS NOT NULL THEN comp.logo_url
+                               ELSE NULL
+                           END as referrer_avatar,
+                           u.full_name as owner_name,
                            u.avatar_url as owner_avatar,
+                           pr.name as project_name,
+                           mc.name as campaign_name,
                            COALESCE(ps.name, ps_fb.name) as stage_name, 
                            COALESCE(ps.color, ps_fb.color) as stage_color,
-                           1 as linked_profiles_count,
-                           ROW_NUMBER() OVER (PARTITION BY c.stage_id ORDER BY c.id DESC) as rn
+                           COALESCE(
+                               (SELECT n.body FROM notes n WHERE n.tenant_id = c.tenant_id AND n.entity_type = 'contact' AND n.entity_id = c.id ORDER BY n.id DESC LIMIT 1),
+                               (SELECT COALESCE(a.body, a.subject) FROM activities a WHERE a.tenant_id = c.tenant_id AND a.related_type = 'contact' AND a.related_id = c.id AND a.deleted_at IS NULL ORDER BY a.id DESC LIMIT 1)
+                           ) as last_interaction,
+                           COALESCE(
+                               (SELECT n.created_at FROM notes n WHERE n.tenant_id = c.tenant_id AND n.entity_type = 'contact' AND n.entity_id = c.id ORDER BY n.id DESC LIMIT 1),
+                               (SELECT a.created_at FROM activities a WHERE a.tenant_id = c.tenant_id AND a.related_type = 'contact' AND a.related_id = c.id AND a.deleted_at IS NULL ORDER BY a.id DESC LIMIT 1)
+                           ) as last_interaction_at,
+                           (
+                               SELECT COALESCE(SUM(dep.price), 0)
+                               FROM deposits dep
+                               WHERE dep.contact_id = c.id AND dep.status NOT IN ('cancelled', 'rejected')
+                           ) as total_deposit,
+                           COALESCE(
+                               NULLIF(c.expected_revenue, 0),
+                               (SELECT COALESCE(SUM(d.value), 0) FROM deals d WHERE d.contact_id = c.id AND d.deleted_at IS NULL),
+                               0
+                           ) as open_deal_value,
+                           1 as linked_profiles_count
                     FROM contacts c
                     LEFT JOIN companies comp ON c.company_id = comp.id
                     LEFT JOIN users u ON c.owner_id = u.id
+                    LEFT JOIN projects pr ON c.project_id = pr.id
+                    LEFT JOIN marketing_campaigns mc ON c.campaign_id = mc.id
                     LEFT JOIN pipeline_stages ps ON ps.id = c.stage_id
                     LEFT JOIN pipeline_stages ps_fb ON (c.stage_id IS NULL AND ps_fb.system_slug = c.pipeline_status)
-                    WHERE $whereStr
-                ) t
-                WHERE t.rn <= $limitPerStage
-                ORDER BY t.stage_id, t.id DESC
-            ";
-            $kStmt = $this->db->prepare($kanbanSql);
-            $kStmt->execute($params);
-            $data = $kStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-            $this->populateLinkedProfilesCount($data, $tid);
+                    WHERE c.id IN ($kPlaceholders)
+                    ORDER BY $kOrderField
+                ";
+                $kStmt = $this->db->prepare($kanbanRichSql);
+                $kStmt->execute($kanbanIds);
+                $data = $kStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                $this->populateLinkedProfilesCount($data, (int)$tid);
+            }
 
             $grouped = [];
             foreach ($data as &$row) {
                 $row['tags'] = json_decode($row['tags'] ?? '[]');
+                $this->resolveEffectiveStageRow($row, (int)$tid);
                 $sid = (int)($row['stage_id'] ?? 0);
                 if (!isset($grouped[$sid])) {
                     $grouped[$sid] = [];
                 }
                 $grouped[$sid][] = $row;
             }
+            unset($row);
 
+            $totalRev = array_sum($stageRevenues);
             respond(200, [
                 'items' => $data,
                 'grouped' => $grouped,
                 'stage_totals' => $stageTotals,
+                'stageTotals' => $stageTotals,
+                'stage_revenues' => $stageRevenues,
+                'stageRevenues' => $stageRevenues,
+                'total_revenue' => $totalRev,
+                'totalRevenue' => $totalRev,
                 'total' => array_sum($stageTotals)
             ]);
             return;
@@ -774,8 +853,12 @@ class ContactController {
         $stmt->execute($targetIds);
         $data = $stmt->fetchAll();
         $this->populateLinkedProfilesCount($data, (int)($tid ?: 1));
-        // Parse JSON tags
-        foreach ($data as &$row) $row['tags'] = json_decode($row['tags'] ?? '[]');
+        // Parse JSON tags & reconcile effective stage
+        foreach ($data as &$row) {
+            $row['tags'] = json_decode($row['tags'] ?? '[]');
+            $this->resolveEffectiveStageRow($row, (int)($tid ?: 1));
+        }
+        unset($row);
 
         respond(200, [
             'items' => $data, 'total' => $total,
@@ -1104,7 +1187,7 @@ class ContactController {
                 $title = "Cảnh báo trùng số (Nghi ngờ rửa nguồn)";
                 $body = "Sale " . ($auth['full_name'] ?? 'Nhân viên') . " đã nhập tay khách hàng trùng SĐT với lead MKT đang hoạt động (Contact ID: " . $duplicateWithId . ")";
                 $type = "warning";
-                $link = "/contacts?id=" . $id;
+                $link = "/contacts?open_contact_id=" . $id;
 
                 $insertNotif = $this->db->prepare("
                     INSERT INTO notifications (user_id, tenant_id, title, body, type, link)
@@ -1144,7 +1227,8 @@ class ContactController {
                                 'user_id' => $targetUserId,
                                 'customer_name' => $fullName,
                                 'inviter_name' => $auth['full_name'] ?? 'đồng nghiệp',
-                                'contact_id' => $id
+                                'contact_id' => $id,
+                                'link' => "/contacts?open_contact_id=" . $id
                             ]);
                         }
                     }
@@ -1262,6 +1346,7 @@ class ContactController {
             }
         }
         $row['tags'] = json_decode($row['tags'] ?? '[]');
+        $this->resolveEffectiveStageRow($row, (int)$auth['tenant_id']);
         $row['custom_fields'] = getCustomFields($this->db, $auth['tenant_id'], $id, 'contact');
         respond(200, $row);
     }
@@ -1270,12 +1355,18 @@ class ContactController {
         if ($auth['role'] === 'viewer') respond(403, null, 'Bạn không có quyền cập nhật', false);
         $b = getBody();
         // 1. Pre-fetch current contact state for lifecycle validation
-        $stmtCurr = $this->db->prepare("SELECT pipeline_status, ttl1_completed, owner_id, full_name, person_id, email, phone, mobile, collaborator_ids FROM contacts WHERE id = ? AND tenant_id = ?");
+        $stmtCurr = $this->db->prepare("SELECT stage_id, pipeline_status, ttl1_completed, owner_id, full_name, person_id, email, phone, mobile, collaborator_ids FROM contacts WHERE id = ? AND tenant_id = ?");
         $stmtCurr->execute([$id, $auth['tenant_id']]);
         $currentContact = $stmtCurr->fetch();
         if (!$currentContact) respond(404, null, 'Không tìm thấy liên hệ', false);
 
-        $currStatus = $currentContact['pipeline_status'] ?? 'chua_xac_dinh';
+        $currEffStage = $this->resolveEffectiveStage(
+            !empty($currentContact['stage_id']) ? (int)$currentContact['stage_id'] : null,
+            $currentContact['pipeline_status'] ?? null,
+            (int)$auth['tenant_id']
+        );
+        $currStageId = (int)($currEffStage['id'] ?? $currentContact['stage_id'] ?? 0);
+        $currStatus = (string)($currEffStage['system_slug'] ?? $currentContact['pipeline_status'] ?? 'new_lead');
         $currTtl1 = (int)($currentContact['ttl1_completed'] ?? 0);
 
         // Fetch pipeline status hierarchy dynamically from system_settings
@@ -1297,9 +1388,9 @@ class ContactController {
             $statusHierarchy[trim($statusName)] = $idxVal;
         }
 
-        // Synchronize stage_id and pipeline_status if only one is updated
+        // Synchronize stage_id and pipeline_status whether one or both are sent in payload
         $reqStageId = array_key_exists('stage_id', $b) && !empty($b['stage_id']) ? (int)$b['stage_id'] : null;
-        $reqStatus = array_key_exists('pipeline_status', $b) && !empty($b['pipeline_status']) ? (string)$b['pipeline_status'] : null;
+        $reqStatus = array_key_exists('pipeline_status', $b) && !empty($b['pipeline_status']) ? trim((string)$b['pipeline_status']) : null;
 
         if ($reqStatus !== null && is_numeric($reqStatus)) {
             $reqStageId = (int)$reqStatus;
@@ -1308,12 +1399,33 @@ class ContactController {
         }
 
         if ($reqStageId !== null && $reqStatus === null) {
-            $computedStatus = $this->getSlugFromStageId($reqStageId, $auth['tenant_id']);
+            $computedStatus = $this->getSlugFromStageId($reqStageId, (int)$auth['tenant_id']);
             $b['pipeline_status'] = $computedStatus;
-        } else if ($reqStatus !== null && $reqStageId === null) {
-            $computedStageId = $this->getStageIdFromSlug($reqStatus, $auth['tenant_id']);
-            if ($computedStageId > 0) {
-                $b['stage_id'] = $computedStageId;
+        } elseif ($reqStatus !== null && $reqStageId === null) {
+            if ($reqStatus !== 'not_lead') {
+                $computedStageId = $this->getStageIdFromSlug($reqStatus, (int)$auth['tenant_id']);
+                if ($computedStageId > 0) {
+                    $b['stage_id'] = $computedStageId;
+                    $b['pipeline_status'] = $this->getSlugFromStageId($computedStageId, (int)$auth['tenant_id']);
+                }
+            }
+        } elseif ($reqStageId !== null && $reqStatus !== null && $reqStatus !== 'not_lead') {
+            $stageIdFromReqSlug = $this->getStageIdFromSlug($reqStatus, (int)$auth['tenant_id']);
+            if ($reqStageId !== $currStageId && ($stageIdFromReqSlug === $currStageId || $reqStatus === ($currentContact['pipeline_status'] ?? ''))) {
+                // stage_id was explicitly changed by client while pipeline_status was stale
+                $b['pipeline_status'] = $this->getSlugFromStageId($reqStageId, (int)$auth['tenant_id']);
+            } elseif ($stageIdFromReqSlug > 0 && $stageIdFromReqSlug !== $currStageId && $reqStageId === (int)($currentContact['stage_id'] ?? 0)) {
+                // pipeline_status was explicitly changed by client while stage_id was stale
+                $b['stage_id'] = $stageIdFromReqSlug;
+                $b['pipeline_status'] = $this->getSlugFromStageId($stageIdFromReqSlug, (int)$auth['tenant_id']);
+            } elseif ($stageIdFromReqSlug > 0 && $stageIdFromReqSlug !== $reqStageId) {
+                $eff = $this->resolveEffectiveStage($reqStageId, $reqStatus, (int)$auth['tenant_id']);
+                if ($eff) {
+                    $b['stage_id'] = (int)$eff['id'];
+                    $b['pipeline_status'] = (string)$eff['system_slug'];
+                }
+            } else {
+                $b['pipeline_status'] = $this->getSlugFromStageId($reqStageId, (int)$auth['tenant_id']);
             }
         }
 
@@ -1378,8 +1490,8 @@ class ContactController {
 
         // Check interaction gate before closing as 'dong_deal' or 'churned'
         if ($newStatus === 'dong_deal' || (isset($b['status']) && $b['status'] === 'churned')) {
-            $stmtCheckAct = $this->db->prepare("SELECT COUNT(*) FROM activities WHERE related_type = 'contact' AND related_id = ?");
-            $stmtCheckAct->execute([$id]);
+            $stmtCheckAct = $this->db->prepare("SELECT COUNT(*) FROM activities WHERE (related_type = 'contact' AND related_id = ? OR contact_id = ?) AND deleted_at IS NULL AND tenant_id = ?");
+            $stmtCheckAct->execute([$id, $id, $auth['tenant_id']]);
             $actCount = (int)$stmtCheckAct->fetchColumn();
             if ($actCount === 0) {
                 respond(400, null, 'Chặn đóng deal: Khách hàng chưa từng có tương tác nào! Vui lòng tạo ghi chú cuộc gọi, email hoặc hoạt động trước.', false);
@@ -1460,17 +1572,14 @@ class ContactController {
         }
 
         // Auto-synchronize stage_id and pipeline_status to prevent desync
-        if (!empty($b['pipeline_status'])) {
-            $psLookup = $this->db->prepare("SELECT id, name FROM pipeline_stages WHERE (system_slug = ? OR CAST(id AS CHAR) = ?) AND tenant_id = ? LIMIT 1");
-            $psLookup->execute([$b['pipeline_status'], $b['pipeline_status'], $auth['tenant_id']]);
-            $psRow = $psLookup->fetch();
-            if ($psRow) {
-                $b['stage_id'] = (int)$psRow['id'];
+        if (!empty($b['pipeline_status']) && $b['pipeline_status'] !== 'not_lead') {
+            $resolvedSid = $this->getStageIdFromSlug((string)$b['pipeline_status'], (int)$auth['tenant_id']);
+            if ($resolvedSid > 0) {
+                $b['stage_id'] = $resolvedSid;
+                $b['pipeline_status'] = $this->getSlugFromStageId($resolvedSid, (int)$auth['tenant_id']);
             }
         } elseif (!empty($b['stage_id'])) {
-            $psLookup = $this->db->prepare("SELECT system_slug FROM pipeline_stages WHERE id = ? AND tenant_id = ? LIMIT 1");
-            $psLookup->execute([(int)$b['stage_id'], $auth['tenant_id']]);
-            $foundSlug = $psLookup->fetchColumn();
+            $foundSlug = $this->getSlugFromStageId((int)$b['stage_id'], (int)$auth['tenant_id']);
             if ($foundSlug) {
                 $b['pipeline_status'] = $foundSlug;
             }
@@ -1641,7 +1750,8 @@ class ContactController {
                                     'user_id' => $targetUserId,
                                     'customer_name' => $fullName,
                                     'inviter_name' => $auth['full_name'] ?? 'đồng nghiệp',
-                                    'contact_id' => $id
+                                    'contact_id' => $id,
+                                    'link' => "/contacts?open_contact_id=" . $id
                                 ]);
                             }
                         }
@@ -1808,6 +1918,7 @@ class ContactController {
                 }
             }
             $row['tags'] = json_decode($row['tags'] ?? '[]');
+            $this->resolveEffectiveStageRow($row, (int)$auth['tenant_id']);
             $row['custom_fields'] = getCustomFields($this->db, $auth['tenant_id'], $id, 'contact');
             respond(200, $row);
         } else {
@@ -1825,11 +1936,12 @@ class ContactController {
         }
         
         $stageParam = trim((string)$b['stage_id']);
-        $sStage = $this->db->prepare("SELECT id, name, system_slug FROM pipeline_stages WHERE (CAST(id AS CHAR)=? OR system_slug=?) AND tenant_id=? LIMIT 1");
-        $sStage->execute([$stageParam, $stageParam, $auth['tenant_id']]);
+        $normStageParam = self::normalizeStageSlug($stageParam);
+        $sStage = $this->db->prepare("SELECT id, name, system_slug, order_index FROM pipeline_stages WHERE (CAST(id AS CHAR)=? OR system_slug=? OR system_slug=?) AND tenant_id=? LIMIT 1");
+        $sStage->execute([$stageParam, $stageParam, $normStageParam, $auth['tenant_id']]);
         $targetStageData = $sStage->fetch();
         if (!$targetStageData) {
-            $sStageByName = $this->db->prepare("SELECT id, name, system_slug FROM pipeline_stages WHERE name=? AND tenant_id=? LIMIT 1");
+            $sStageByName = $this->db->prepare("SELECT id, name, system_slug, order_index FROM pipeline_stages WHERE name=? AND tenant_id=? LIMIT 1");
             $sStageByName->execute([$stageParam, $auth['tenant_id']]);
             $targetStageData = $sStageByName->fetch();
         }
@@ -1837,12 +1949,16 @@ class ContactController {
             $targetStageData = [
                 'id' => is_numeric($stageParam) ? (int)$stageParam : 0,
                 'name' => $stageParam,
-                'system_slug' => $stageParam
+                'system_slug' => $normStageParam ?: $stageParam,
+                'order_index' => 0
             ];
         }
 
         $stageId = (int)$targetStageData['id'];
-        $newStatus = $targetStageData['system_slug'] ?: (is_numeric($stageParam) ? $this->getSlugFromStageId($stageId, $auth['tenant_id']) : $stageParam);
+        $newStatus = $targetStageData['system_slug'] ?: (is_numeric($stageParam) ? $this->getSlugFromStageId($stageId, (int)$auth['tenant_id']) : ($normStageParam ?: $stageParam));
+        if ($stageId === 0 && !empty($newStatus)) {
+            $stageId = $this->getStageIdFromSlug($newStatus, (int)$auth['tenant_id']);
+        }
 
         // Check current status for CAPI/Timer trigger
         $stmtC = $this->db->prepare("SELECT pipeline_status, stage_id, owner_id, full_name, ttl1_completed, lead_status FROM contacts WHERE id = ? AND tenant_id = ?");
@@ -1850,8 +1966,13 @@ class ContactController {
         $currentContact = $stmtC->fetch();
         if (!$currentContact) respond(404, null, 'Không tìm thấy liên hệ', false);
 
-        $currStatus = $currentContact['pipeline_status'] ?? 'chua_xac_dinh';
-        $currStageId = (int)($currentContact['stage_id'] ?? 0);
+        $currEffStage = $this->resolveEffectiveStage(
+            !empty($currentContact['stage_id']) ? (int)$currentContact['stage_id'] : null,
+            $currentContact['pipeline_status'] ?? null,
+            (int)$auth['tenant_id']
+        );
+        $currStatus = (string)($currEffStage['system_slug'] ?? $currentContact['pipeline_status'] ?? 'new_lead');
+        $currStageId = (int)($currEffStage['id'] ?? $currentContact['stage_id'] ?? 0);
         $currTtl1 = (int)($currentContact['ttl1_completed'] ?? 0);
 
         // Advanced fields
@@ -1898,19 +2019,6 @@ class ContactController {
             $statusHierarchy[trim($statusName)] = $idxVal;
         }
 
-        $aliases = [
-            'dat_coc' => 'deposit_tuition_payment',
-            'coc' => 'deposit_tuition_payment',
-            '13' => 'deposit_tuition_payment',
-            'hoc_vien' => 'enrolled',
-            'nhap_hoc' => 'enrolled',
-            '14' => 'enrolled',
-            'new' => 'new_lead',
-            'lead_moi' => 'new_lead',
-            '1' => 'new_lead',
-            '01' => 'new_lead'
-        ];
-
         $currStageRow = null;
         if ($currStageId > 0) {
             $stC = $this->db->prepare("SELECT id, order_index, system_slug FROM pipeline_stages WHERE id = ? AND tenant_id = ?");
@@ -1925,8 +2033,8 @@ class ContactController {
         }
         $currStageOrder = (int)($currStageRow['order_index'] ?? 0);
 
-        $normCurr = $aliases[$currStatus] ?? $currStatus;
-        $normNew = $aliases[$newStatus] ?? $newStatus;
+        $normCurr = self::normalizeStageSlug($currStatus);
+        $normNew = self::normalizeStageSlug($newStatus);
 
         $currIdx = $statusHierarchy[$normCurr] ?? ($currStageOrder > 0 ? $currStageOrder - 1 : 0);
         $newIdx = $statusHierarchy[$normNew] ?? ($targetStageOrder > 0 ? $targetStageOrder - 1 : 0);
@@ -1996,7 +2104,7 @@ class ContactController {
         }
 
         // If enrolled or hoc_vien or stage 14, also ensure status is customer
-        if ($newStatus === 'enrolled' || $newStatus === 'hoc_vien' || $stageId === 14) {
+        if ($newStatus === 'enrolled' || $newStatus === 'hoc_vien' || $stageId === 14 || $stageId === 44 || $targetStageOrder === 14) {
             $sets[] = "status = 'customer'";
         }
 
@@ -2438,16 +2546,225 @@ class ContactController {
         return null;
     }
 
+    public static function normalizeStageSlug(?string $slug): string {
+        $s = strtolower(trim((string)$slug));
+        if ($s === '') return '';
+        $aliases = [
+            'new' => 'new_lead',
+            'chua_xac_dinh' => 'new_lead',
+            'lead_moi' => 'new_lead',
+            'moi' => 'new_lead',
+            '1' => 'new_lead',
+            '01' => 'new_lead',
+            'da_lien_he' => 'contact_attempted',
+            'lien_he_lan_1' => 'contact_attempted',
+            '2' => 'contact_attempted',
+            '02' => 'contact_attempted',
+            'ket_noi' => 'connected',
+            'da_ket_noi' => 'connected',
+            '3' => 'connected',
+            '03' => 'connected',
+            'co_nhu_cau' => 'needed',
+            'nhu_cau' => 'needed',
+            '4' => 'needed',
+            '04' => 'needed',
+            'kham_pha' => 'discovery_completed',
+            'da_kham_pha' => 'discovery_completed',
+            '5' => 'discovery_completed',
+            '05' => 'discovery_completed',
+            'phu_hop' => 'program_matched',
+            '6' => 'program_matched',
+            '06' => 'program_matched',
+            'gui_de_xuat' => 'proposal_sent',
+            'bao_gia' => 'proposal_sent',
+            'dong_y_gap' => 'proposal_sent',
+            'da_gap' => 'proposal_sent',
+            '7' => 'proposal_sent',
+            '07' => 'proposal_sent',
+            'danh_gia' => 'evaluation_objection',
+            'xu_ly_tu_choi' => 'evaluation_objection',
+            '8' => 'evaluation_objection',
+            '08' => 'evaluation_objection',
+            'nop_ho_so' => 'application_started',
+            'bat_dau_ho_so' => 'application_started',
+            'lam_ho_so' => 'application_started',
+            '9' => 'application_started',
+            '09' => 'application_started',
+            'hoan_tat_ho_so' => 'application_completed',
+            '10' => 'application_completed',
+            'duyet_nhap_hoc' => 'admission_approved',
+            '11' => 'admission_approved',
+            'chap_nhan_offer' => 'offer_accepted',
+            '12' => 'offer_accepted',
+            'dong_le_phi_ho_so' => 'deposit_tuition_payment',
+            'dat_coc' => 'deposit_tuition_payment',
+            'da_coc' => 'deposit_tuition_payment',
+            'coc' => 'deposit_tuition_payment',
+            '13' => 'deposit_tuition_payment',
+            'dong_deal' => 'enrolled',
+            'thanh_cong' => 'enrolled',
+            'hoc_vien' => 'enrolled',
+            'nhap_hoc' => 'enrolled',
+            '14' => 'enrolled',
+        ];
+        return $aliases[$s] ?? $s;
+    }
+
+    private function getStagesMap(int $tenantId): array {
+        if (isset($this->stagesCache[$tenantId])) {
+            return $this->stagesCache[$tenantId];
+        }
+        $byId = [];
+        $bySlug = [];
+        $byName = [];
+        $first = null;
+        try {
+            $stmt = $this->db->prepare("SELECT id, name, color, system_slug, order_index, is_won FROM pipeline_stages WHERE tenant_id = ? ORDER BY order_index ASC, id ASC");
+            $stmt->execute([$tenantId]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            foreach ($rows as $r) {
+                $sid = (int)$r['id'];
+                $slug = trim((string)($r['system_slug'] ?? ''));
+                $item = [
+                    'id' => $sid,
+                    'name' => (string)($r['name'] ?? ''),
+                    'color' => (string)($r['color'] ?? '#6366f1'),
+                    'system_slug' => $slug,
+                    'order_index' => (int)($r['order_index'] ?? 0),
+                    'is_won' => (int)($r['is_won'] ?? 0),
+                ];
+                $byId[$sid] = $item;
+                if ($slug !== '') {
+                    $bySlug[strtolower($slug)] = $item;
+                }
+                if ($item['name'] !== '') {
+                    $byName[mb_strtolower(trim($item['name']))] = $item;
+                }
+                if ($first === null) {
+                    $first = $item;
+                }
+            }
+        } catch (\Throwable $e) {
+            // Ignore schema lookup errors
+        }
+        $this->stagesCache[$tenantId] = [
+            'by_id' => $byId,
+            'by_slug' => $bySlug,
+            'by_name' => $byName,
+            'first' => $first,
+        ];
+        return $this->stagesCache[$tenantId];
+    }
+
+    private function resolveEffectiveStage(?int $stageId, ?string $pipelineStatus, int $tenantId): ?array {
+        $map = $this->getStagesMap($tenantId);
+        $sById = ($stageId && isset($map['by_id'][$stageId])) ? $map['by_id'][$stageId] : null;
+        $rawSlug = trim((string)($pipelineStatus ?? ''));
+        $normSlug = self::normalizeStageSlug($rawSlug);
+        $sBySlug = ($normSlug !== '' && isset($map['by_slug'][$normSlug])) ? $map['by_slug'][$normSlug] : null;
+        if (!$sBySlug && $rawSlug !== '' && is_numeric($rawSlug) && isset($map['by_id'][(int)$rawSlug])) {
+            $sBySlug = $map['by_id'][(int)$rawSlug];
+        }
+        // Only treat pipeline_status as an active progression override if it wasn't just the default placeholder 'chua_xac_dinh' / 'new' / 'new_lead' when stage_id is already higher
+        if ($sById && $sBySlug) {
+            if ((int)$sById['id'] === (int)$sBySlug['id']) {
+                return $sById;
+            }
+            return ((int)$sBySlug['order_index'] >= (int)$sById['order_index']) ? $sBySlug : $sById;
+        }
+        if ($sById) return $sById;
+        if ($sBySlug) return $sBySlug;
+        return $map['first'] ?? null;
+    }
+
+    private function resolveEffectiveStageRow(array &$row, int $tenantId, bool $selfHealDb = true): void {
+        $rawStageId = !empty($row['stage_id']) ? (int)$row['stage_id'] : null;
+        $rawSlug = isset($row['pipeline_status']) ? trim((string)$row['pipeline_status']) : null;
+        if ($rawSlug === 'not_lead') {
+            return;
+        }
+        $eff = $this->resolveEffectiveStage($rawStageId, $rawSlug, $tenantId);
+        if (!$eff) {
+            return;
+        }
+        $effId = (int)$eff['id'];
+        $effSlug = (string)($eff['system_slug'] ?: 'new_lead');
+        $row['stage_id'] = $effId;
+        $row['pipeline_status'] = $effSlug;
+        $row['stage_name'] = $eff['name'];
+        $row['stage_color'] = $eff['color'];
+
+        if ($selfHealDb && !empty($row['id']) && ($rawStageId !== $effId || $rawSlug !== $effSlug)) {
+            try {
+                $stmtHeal = $this->db->prepare("UPDATE contacts SET stage_id = ?, pipeline_status = ? WHERE id = ? AND tenant_id = ?");
+                $stmtHeal->execute([$effId, $effSlug, (int)$row['id'], $tenantId]);
+            } catch (\Throwable $e) {
+                // Ignore read-time self-heal failure
+            }
+        }
+    }
+
+    private function ensureTenantStagesReconciled(int $tenantId): void {
+        if (self::$autoReconciled) return;
+        self::$autoReconciled = true;
+        try {
+            $flagKey = 'migration_314_stage_sync_v1';
+            $chk = $this->db->prepare("SELECT setting_value FROM system_settings WHERE setting_key = ? LIMIT 1");
+            $chk->execute([$flagKey]);
+            if ($chk->fetchColumn() === '1') {
+                return;
+            }
+            $stmt = $this->db->prepare("SELECT id, stage_id, pipeline_status FROM contacts WHERE tenant_id = ? AND deleted_at IS NULL");
+            $stmt->execute([$tenantId]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            $upd = $this->db->prepare("UPDATE contacts SET stage_id = ?, pipeline_status = ? WHERE id = ? AND tenant_id = ?");
+            foreach ($rows as $r) {
+                $rawSid = !empty($r['stage_id']) ? (int)$r['stage_id'] : null;
+                $rawSlug = isset($r['pipeline_status']) ? trim((string)$r['pipeline_status']) : '';
+                if ($rawSlug === 'not_lead') continue;
+                $eff = $this->resolveEffectiveStage($rawSid, $rawSlug, $tenantId);
+                if (!$eff) continue;
+                $effId = (int)$eff['id'];
+                $effSlug = (string)($eff['system_slug'] ?: 'new_lead');
+                if ($rawSid !== $effId || $rawSlug !== $effSlug) {
+                    $upd->execute([$effId, $effSlug, (int)$r['id'], $tenantId]);
+                }
+            }
+            $saveFlag = $this->db->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES (?, '1') ON DUPLICATE KEY UPDATE setting_value = '1'");
+            $saveFlag->execute([$flagKey]);
+        } catch (\Throwable $e) {
+            // Ignore reconciliation errors
+        }
+    }
+
     private function getSlugFromStageId(int $stageId, int $tenantId): string {
+        $map = $this->getStagesMap($tenantId);
+        if (isset($map['by_id'][$stageId]) && $map['by_id'][$stageId]['system_slug'] !== '') {
+            return $map['by_id'][$stageId]['system_slug'];
+        }
         $stmt = $this->db->prepare("SELECT system_slug FROM pipeline_stages WHERE id = ? AND tenant_id = ?");
         $stmt->execute([$stageId, $tenantId]);
         $slug = $stmt->fetchColumn();
-        return $slug ?: 'chua_xac_dinh';
+        return $slug ?: 'new_lead';
     }
 
     private function getStageIdFromSlug(string $slug, int $tenantId): int {
-        $stmt = $this->db->prepare("SELECT id FROM pipeline_stages WHERE system_slug = ? AND tenant_id = ? LIMIT 1");
-        $stmt->execute([$slug, $tenantId]);
+        $raw = trim($slug);
+        if ($raw === '') return 0;
+        $map = $this->getStagesMap($tenantId);
+        if (is_numeric($raw) && isset($map['by_id'][(int)$raw])) {
+            return (int)$raw;
+        }
+        $norm = self::normalizeStageSlug($raw);
+        if ($norm !== '' && isset($map['by_slug'][$norm])) {
+            return (int)$map['by_slug'][$norm]['id'];
+        }
+        $lowName = mb_strtolower($raw);
+        if (isset($map['by_name'][$lowName])) {
+            return (int)$map['by_name'][$lowName]['id'];
+        }
+        $stmt = $this->db->prepare("SELECT id FROM pipeline_stages WHERE (system_slug = ? OR system_slug = ? OR name = ?) AND tenant_id = ? LIMIT 1");
+        $stmt->execute([$raw, $norm, $raw, $tenantId]);
         return (int)($stmt->fetchColumn() ?: 0);
     }
 
@@ -2586,12 +2903,11 @@ class ContactController {
         $ids = [$userId];
         try {
             $stmt = $this->db->prepare("
-                SELECT id FROM consultants 
-                WHERE email = (SELECT email FROM users WHERE id = ?) 
-                   OR user_id = ? 
-                   OR name = (SELECT full_name FROM users WHERE id = ?)
+                SELECT c.id FROM consultants c
+                JOIN users u ON (c.email = u.email OR c.name = u.full_name)
+                WHERE u.id = ?
             ");
-            $stmt->execute([$userId, $userId, $userId]);
+            $stmt->execute([$userId]);
             while ($cid = $stmt->fetchColumn()) {
                 if ($cid) $ids[] = (int)$cid;
             }
@@ -2611,15 +2927,18 @@ class ContactController {
                 ) OR team_id = (SELECT team_id FROM users WHERE id = ?)
             ");
             $stmtTeam->execute([$userId, $userId]);
-            $fetchedIds = $stmtTeam->fetchAll(PDO::FETCH_COLUMN) ?: [];
-            foreach ($fetchedIds as $fid) {
-                if ($fid) {
-                    $allIds[] = (int)$fid;
-                    $stmtC = $this->db->prepare("SELECT id FROM consultants WHERE email = (SELECT email FROM users WHERE id = ?) OR user_id = ? OR name = (SELECT full_name FROM users WHERE id = ?)");
-                    $stmtC->execute([$fid, $fid, $fid]);
-                    while ($cid = $stmtC->fetchColumn()) {
-                        if ($cid) $allIds[] = (int)$cid;
-                    }
+            $fetchedIds = array_values(array_filter(array_map('intval', $stmtTeam->fetchAll(PDO::FETCH_COLUMN) ?: [])));
+            if (!empty($fetchedIds)) {
+                $allIds = array_merge($allIds, $fetchedIds);
+                $inPlaceholders = implode(',', array_fill(0, count($fetchedIds), '?'));
+                $stmtC = $this->db->prepare("
+                    SELECT c.id FROM consultants c
+                    JOIN users u ON (c.email = u.email OR c.name = u.full_name)
+                    WHERE u.id IN ($inPlaceholders)
+                ");
+                $stmtC->execute($fetchedIds);
+                while ($cid = $stmtC->fetchColumn()) {
+                    if ($cid) $allIds[] = (int)$cid;
                 }
             }
         } catch (\Throwable $e) {}
@@ -3879,12 +4198,12 @@ class ContactController {
 
         try {
             $stmt = $this->db->prepare("
-                INSERT INTO notes (tenant_id, contact_id, user_id, content, created_at, updated_at)
-                VALUES (?, ?, ?, ?, NOW(), NOW())
+                INSERT INTO notes (tenant_id, entity_type, entity_id, user_id, body, created_at, updated_at)
+                VALUES (?, 'contact', ?, ?, ?, NOW(), NOW())
             ");
             $stmt->execute([$auth['tenant_id'], $contactId, $auth['user_id'], $content]);
             $noteId = (int)$this->db->lastInsertId();
-            respond(201, ['id' => $noteId, 'contact_id' => $contactId, 'content' => $content], 'Thêm ghi chú thành công');
+            respond(201, ['id' => $noteId, 'contact_id' => $contactId, 'content' => $content, 'body' => $content], 'Thêm ghi chú thành công');
         } catch (\Throwable $e) {
             respond(200, ['contact_id' => $contactId, 'content' => $content], 'Đã ghi nhận ghi chú');
         }

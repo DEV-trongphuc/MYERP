@@ -38,6 +38,8 @@ class PurchaseOrderController {
 
         $isAdminOrDirectorOrAccountant = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'accountant'], true);
         $specificId = (int)($_GET['id'] ?? ($_GET['open_id'] ?? 0));
+        $where[] = "(po.status != 'draft' OR po.created_by = ?)";
+        $params[] = $uid;
 
         if ($specificId > 0) {
             $where[] = "po.id = ?";
@@ -139,6 +141,7 @@ class PurchaseOrderController {
         }
 
         $b = getBody();
+        $isDraft = (($b['status'] ?? '') === 'draft');
         $supplier_id = !empty($b['supplier_id']) ? (int)$b['supplier_id'] : null;
         $beneficiary_type = !empty($b['beneficiary_type']) ? $b['beneficiary_type'] : 'supplier';
         $beneficiary_id = !empty($b['beneficiary_id']) ? (int)$b['beneficiary_id'] : null;
@@ -217,7 +220,7 @@ class PurchaseOrderController {
 
         $tax = max(0, (float)($b['tax'] ?? 0));
         $calculatedTotal = $calculatedSubtotal + $tax;
-        if ($calculatedTotal <= 0) {
+        if (!$isDraft && $calculatedTotal <= 0) {
             respond(422, null, 'Tổng giá trị đơn mua hàng phải lớn hơn 0', false);
         }
 
@@ -227,12 +230,14 @@ class PurchaseOrderController {
         $approver_id_3 = !empty($b['approver_id_3']) ? (int)$b['approver_id_3'] : null;
         $related_user_ids = !empty($b['related_user_ids']) ? (is_array($b['related_user_ids']) ? implode(',', $b['related_user_ids']) : (string)$b['related_user_ids']) : null;
 
-        if (empty($approver_id)) {
-            respond(422, null, 'Đơn hàng yêu cầu duyệt bắt buộc phải chọn người duyệt Cấp 1.', false);
-        }
-        if ($total >= $threshold) {
-            if (empty($approver_id_2)) {
-                respond(422, null, 'Đơn hàng từ ' . number_format($threshold, 0, ',', '.') . ' VND trở lên bắt buộc phải phê duyệt 2 cấp, vui lòng chọn đầy đủ người duyệt Cấp 2.', false);
+        if (!$isDraft) {
+            if (empty($approver_id)) {
+                respond(422, null, 'Đơn hàng yêu cầu duyệt bắt buộc phải chọn người duyệt Cấp 1.', false);
+            }
+            if ($total >= $threshold) {
+                if (empty($approver_id_2)) {
+                    respond(422, null, 'Đơn hàng từ ' . number_format($threshold, 0, ',', '.') . ' VND trở lên bắt buộc phải phê duyệt 2 cấp, vui lòng chọn đầy đủ người duyệt Cấp 2.', false);
+                }
             }
         }
 
@@ -240,11 +245,19 @@ class PurchaseOrderController {
         try {
             $po_number = 'PO-' . date('Ymd') . '-' . strtoupper(substr(uniqid(), -4));
 
-            $status_level_1 = $approver_id ? 'pending' : 'none';
-            $status_level_2 = $approver_id_2 ? 'pending' : 'none';
-            $status_level_3 = $approver_id_3 ? 'pending' : 'none';
-            $approval_status = $approver_id ? 'pending' : 'approved';
-            $status = $approver_id ? 'pending_approval' : 'ordered';
+            if ($isDraft) {
+                $status_level_1 = 'none';
+                $status_level_2 = 'none';
+                $status_level_3 = 'none';
+                $approval_status = 'draft';
+                $status = 'draft';
+            } else {
+                $status_level_1 = $approver_id ? 'pending' : 'none';
+                $status_level_2 = $approver_id_2 ? 'pending' : 'none';
+                $status_level_3 = $approver_id_3 ? 'pending' : 'none';
+                $approval_status = $approver_id ? 'pending' : 'approved';
+                $status = $approver_id ? 'pending_approval' : 'ordered';
+            }
 
             $stmt = $this->db->prepare("
                 INSERT INTO purchase_orders (
@@ -278,10 +291,10 @@ class PurchaseOrderController {
             }
 
             $this->db->commit();
-            logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'Tạo đơn nhập hàng', 'purchase_order', $poId, $po_number);
+            logActivity($this->db, $auth['tenant_id'], $auth['user_id'], $isDraft ? 'Lưu nháp đơn nhập hàng' : 'Tạo đơn nhập hàng', 'purchase_order', $poId, $po_number);
 
-            // Send notification to first approver if any
-            if ($approver_id) {
+            // Send notification to first approver if any (skip if draft)
+            if (!$isDraft && $approver_id) {
                 try {
                     require_once __DIR__ . '/../NotificationService.php';
                     NotificationService::send($this->db, $auth['tenant_id'], 'PO_WAITING_APPROVAL', [
@@ -298,8 +311,8 @@ class PurchaseOrderController {
                 }
             }
 
-            // Send notification to related users if any
-            if (!empty($related_user_ids)) {
+            // Send notification to related users if any (skip if draft)
+            if (!$isDraft && !empty($related_user_ids)) {
                 try {
                     $relIds = array_filter(array_map('intval', explode(',', $related_user_ids)));
                     foreach ($relIds as $rUserId) {
@@ -314,7 +327,7 @@ class PurchaseOrderController {
                                 $rUserId,
                                 'Bạn được gắn liên quan trong đơn mua/chi phí: ' . $po_number,
                                 'Người tạo: ' . $creatorName . ' - Số tiền: ' . number_format($total, 0, ',', '.') . ' đ',
-                                '/inventory/purchase-orders?po_id=' . $poId
+                                '/inventory?tab=purchase_orders&open_id=' . $poId
                             ]);
                         }
                     }
@@ -619,20 +632,231 @@ class PurchaseOrderController {
     }
 
     public function update(array $auth, int $id): void {
-        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true)) {
-            respond(403, null, 'Bạn không có quyền cập nhật đơn nhập hàng', false);
-        }
+        $stmtPo = $this->db->prepare("SELECT * FROM purchase_orders WHERE id = ? AND tenant_id = ?");
+        $stmtPo->execute([$id, $auth['tenant_id']]);
+        $po = $stmtPo->fetch(PDO::FETCH_ASSOC);
 
-        $stmtStatus = $this->db->prepare("SELECT status FROM purchase_orders WHERE id = ? AND tenant_id = ?");
-        $stmtStatus->execute([$id, $auth['tenant_id']]);
-        $currentStatus = $stmtStatus->fetchColumn();
-
-        if ($currentStatus === false) {
+        if (!$po) {
             respond(404, null, 'Không tìm thấy đơn hàng', false);
+            return;
         }
+
+        $role = $auth['role'] ?? '';
+        $uid = (int)($auth['user_id'] ?? 0);
+        $isPrivileged = in_array($role, ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'accountant'], true);
+        $isCreator = ((int)$po['created_by'] === $uid);
+
+        if (!$isPrivileged && !$isCreator) {
+            respond(403, null, 'Bạn không có quyền cập nhật đơn nhập hàng này', false);
+            return;
+        }
+
+        $currentStatus = $po['status'] ?? '';
+        $currentApprovalStatus = $po['approval_status'] ?? 'pending';
+        $lvl1 = $po['status_level_1'] ?? 'pending';
 
         $b = getBody();
-        
+        $isFullEditPayload = array_key_exists('items', $b) || array_key_exists('supplier_id', $b) || array_key_exists('approver_id', $b) || array_key_exists('beneficiary_id', $b) || array_key_exists('tax', $b) || array_key_exists('order_date', $b) || array_key_exists('related_user_ids', $b);
+
+        if (!$isPrivileged && $isCreator) {
+            $canCreatorEdit = ($currentStatus === 'draft')
+                || (in_array($currentStatus, ['pending', 'pending_approval'], true) && $lvl1 !== 'approved')
+                || ($currentStatus === 'cancelled' || $currentApprovalStatus === 'rejected');
+            if (!$canCreatorEdit) {
+                respond(400, null, 'Chỉ có thể chỉnh sửa đơn hàng khi đang ở trạng thái Nháp, Chờ duyệt cấp 1 hoặc Từ chối', false);
+                return;
+            }
+        }
+
+        if ($currentStatus === 'received' && isset($b['status']) && $b['status'] !== $currentStatus) {
+            respond(422, null, 'Không thể thay đổi trạng thái của đơn hàng đã nhập kho', false);
+            return;
+        }
+
+        if ($isFullEditPayload || ($isCreator && !$isPrivileged)) {
+            $isDraft = isset($b['status']) ? ($b['status'] === 'draft') : ($currentStatus === 'draft' && empty($b['submit']));
+
+            $supplier_id = array_key_exists('supplier_id', $b) && !empty($b['supplier_id']) ? (int)$b['supplier_id'] : (int)$po['supplier_id'];
+            $beneficiary_type = !empty($b['beneficiary_type']) ? $b['beneficiary_type'] : 'supplier';
+            $beneficiary_id = !empty($b['beneficiary_id']) ? (int)$b['beneficiary_id'] : null;
+
+            if ($beneficiary_type === 'employee' && $beneficiary_id) {
+                $uStmt = $this->db->prepare("SELECT id, full_name, email, phone, bank_name, bank_account FROM users WHERE id=? AND tenant_id=?");
+                $uStmt->execute([$beneficiary_id, $auth['tenant_id']]);
+                $uRow = $uStmt->fetch();
+                if ($uRow) {
+                    $supName = '[Nhân viên] ' . $uRow['full_name'];
+                    $sCheck = $this->db->prepare("SELECT id FROM suppliers WHERE name=? AND tenant_id=? LIMIT 1");
+                    $sCheck->execute([$supName, $auth['tenant_id']]);
+                    $existingSup = $sCheck->fetch();
+                    if ($existingSup) {
+                        $supplier_id = (int)$existingSup['id'];
+                    } else {
+                        $bankStr = trim(($uRow['bank_name'] ? $uRow['bank_name'] . ' ' : '') . ($uRow['bank_account'] ?? ''));
+                        $insSup = $this->db->prepare("INSERT INTO suppliers (tenant_id, name, phone, email, bank_account, created_by) VALUES (?, ?, ?, ?, ?, ?)");
+                        $insSup->execute([$auth['tenant_id'], $supName, $uRow['phone'] ?? '', $uRow['email'] ?? '', $bankStr, $auth['user_id']]);
+                        $supplier_id = (int)$this->db->lastInsertId();
+                    }
+                }
+            }
+
+            if ($supplier_id > 0) {
+                $checkSup = $this->db->prepare("SELECT id FROM suppliers WHERE id=? AND tenant_id=?");
+                $checkSup->execute([$supplier_id, $auth['tenant_id']]);
+                if (!$checkSup->fetch()) {
+                    respond(404, null, 'Nhà cung cấp hoặc đơn vị thụ hưởng không hợp lệ', false);
+                    return;
+                }
+            }
+
+            $threshold = 5000000;
+            $thQuery = $this->db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'po_three_level_threshold' LIMIT 1");
+            if ($thQuery) {
+                $thRow = $thQuery->fetch();
+                if ($thRow && is_numeric($thRow['setting_value'])) {
+                    $threshold = (float)$thRow['setting_value'];
+                }
+            }
+
+            $calculatedSubtotal = (float)($po['subtotal'] ?? 0);
+            $validatedItems = null;
+            if (array_key_exists('items', $b) && is_array($b['items'])) {
+                if (empty($b['items'])) {
+                    respond(422, null, 'Danh sách sản phẩm không được để trống', false);
+                    return;
+                }
+                $validatedItems = [];
+                $calculatedSubtotal = 0.0;
+                foreach ($b['items'] as $item) {
+                    $qty = (float)($item['quantity'] ?? 1.0);
+                    $unit_cost = (float)($item['unit_cost'] ?? 0);
+                    if ($qty <= 0 || $unit_cost < 0) {
+                        respond(422, null, 'Số lượng sản phẩm phải lớn hơn 0 và đơn giá không được âm', false);
+                        return;
+                    }
+                    if (!empty($item['product_id'])) {
+                        $prodCheck = $this->db->prepare("SELECT id FROM products WHERE id=? AND tenant_id=?");
+                        $prodCheck->execute([(int)$item['product_id'], $auth['tenant_id']]);
+                        if (!$prodCheck->fetch()) {
+                            respond(422, null, "Sản phẩm ID {$item['product_id']} không hợp lệ hoặc không thuộc cửa hàng của bạn", false);
+                            return;
+                        }
+                    }
+                    $itemSubtotal = round($qty * $unit_cost, 2);
+                    $calculatedSubtotal += $itemSubtotal;
+                    $validatedItems[] = [
+                        'product_id' => !empty($item['product_id']) ? (int)$item['product_id'] : null,
+                        'name' => trim($item['name'] ?? ''),
+                        'quantity' => $qty,
+                        'unit_cost' => $unit_cost,
+                        'subtotal' => $itemSubtotal
+                    ];
+                }
+            }
+
+            $tax = array_key_exists('tax', $b) ? max(0, (float)$b['tax']) : (float)($po['tax'] ?? 0);
+            $calculatedTotal = $calculatedSubtotal + $tax;
+            if (!$isDraft && $calculatedTotal <= 0) {
+                respond(422, null, 'Tổng giá trị đơn mua hàng phải lớn hơn 0', false);
+                return;
+            }
+
+            $approver_id = array_key_exists('approver_id', $b) ? (!empty($b['approver_id']) ? (int)$b['approver_id'] : null) : (!empty($po['approver_id']) ? (int)$po['approver_id'] : null);
+            $approver_id_2 = array_key_exists('approver_id_2', $b) ? (!empty($b['approver_id_2']) ? (int)$b['approver_id_2'] : null) : (!empty($po['approver_id_2']) ? (int)$po['approver_id_2'] : null);
+            $approver_id_3 = array_key_exists('approver_id_3', $b) ? (!empty($b['approver_id_3']) ? (int)$b['approver_id_3'] : null) : (!empty($po['approver_id_3']) ? (int)$po['approver_id_3'] : null);
+            $related_user_ids = array_key_exists('related_user_ids', $b)
+                ? (!empty($b['related_user_ids']) ? (is_array($b['related_user_ids']) ? implode(',', $b['related_user_ids']) : (string)$b['related_user_ids']) : null)
+                : ($po['related_user_ids'] ?? null);
+            $order_date = !empty($b['order_date']) ? $b['order_date'] : ($po['order_date'] ?: date('Y-m-d'));
+            $notes = array_key_exists('notes', $b) ? $b['notes'] : ($po['notes'] ?? null);
+
+            if (!$isDraft) {
+                if (empty($approver_id)) {
+                    respond(422, null, 'Đơn hàng yêu cầu duyệt bắt buộc phải chọn người duyệt Cấp 1.', false);
+                    return;
+                }
+                if ($calculatedTotal >= $threshold && empty($approver_id_2)) {
+                    respond(422, null, 'Đơn hàng từ ' . number_format($threshold, 0, ',', '.') . ' VND trở lên bắt buộc phải phê duyệt 2 cấp, vui lòng chọn đầy đủ người duyệt Cấp 2.', false);
+                    return;
+                }
+            }
+
+            if ($isDraft) {
+                $status_level_1 = 'none';
+                $status_level_2 = 'none';
+                $status_level_3 = 'none';
+                $approval_status = 'draft';
+                $nextStatus = 'draft';
+            } else {
+                $status_level_1 = $approver_id ? 'pending' : 'none';
+                $status_level_2 = $approver_id_2 ? 'pending' : 'none';
+                $status_level_3 = $approver_id_3 ? 'pending' : 'none';
+                $approval_status = $approver_id ? 'pending' : 'approved';
+                $nextStatus = $approver_id ? 'pending_approval' : 'ordered';
+            }
+
+            $this->db->beginTransaction();
+            try {
+                $stmtUpd = $this->db->prepare("
+                    UPDATE purchase_orders
+                    SET supplier_id = ?, order_date = ?, status = ?, subtotal = ?, tax = ?, total = ?, notes = ?,
+                        approver_id = ?, approver_id_2 = ?, approver_id_3 = ?,
+                        status_level_1 = ?, status_level_2 = ?, status_level_3 = ?, approval_status = ?,
+                        related_user_ids = ?
+                    WHERE id = ? AND tenant_id = ?
+                ");
+                $stmtUpd->execute([
+                    $supplier_id, $order_date, $nextStatus, $calculatedSubtotal, $tax, $calculatedTotal, $notes,
+                    $approver_id, $approver_id_2, $approver_id_3,
+                    $status_level_1, $status_level_2, $status_level_3, $approval_status,
+                    $related_user_ids,
+                    $id, $auth['tenant_id']
+                ]);
+
+                if (is_array($validatedItems)) {
+                    $this->db->prepare("DELETE FROM purchase_order_items WHERE po_id = ?")->execute([$id]);
+                    $itemStmt = $this->db->prepare("
+                        INSERT INTO purchase_order_items (po_id, product_id, name, quantity, unit_cost, subtotal)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    ");
+                    foreach ($validatedItems as $vItem) {
+                        $itemStmt->execute([
+                            $id, $vItem['product_id'], $vItem['name'],
+                            $vItem['quantity'], $vItem['unit_cost'], $vItem['subtotal']
+                        ]);
+                    }
+                }
+
+                $this->db->commit();
+
+                if (!$isDraft && in_array($currentStatus, ['draft', 'cancelled'], true) && $approver_id) {
+                    try {
+                        require_once __DIR__ . '/../NotificationService.php';
+                        NotificationService::send($this->db, $auth['tenant_id'], 'PO_WAITING_APPROVAL', [
+                            'po_id' => $id,
+                            'po_number' => $po['po_number'],
+                            'current_level' => 1,
+                            'status' => 'pending',
+                            'next_approval_status' => 'pending',
+                            'creator_id' => $po['created_by'],
+                            'target_user_id' => $approver_id
+                        ]);
+                    } catch (\Throwable $notifEx) {}
+                }
+
+                $this->show($auth, $id);
+                return;
+            } catch (\Throwable $e) {
+                if (get_class($e) === 'ResponseException') {
+                    if ($this->db->inTransaction()) $this->db->rollBack();
+                    throw $e;
+                }
+                if ($this->db->inTransaction()) $this->db->rollBack();
+                respond(500, null, 'Lỗi khi cập nhật đơn nhập hàng: ' . $e->getMessage(), false);
+                return;
+            }
+        }
+
         // Nếu đơn hàng đã hoàn tất nhập kho (received) hoặc đã bị hủy (cancelled), cấm đổi trạng thái
         if (in_array($currentStatus, ['received', 'cancelled'], true) && isset($b['status']) && $b['status'] !== $currentStatus) {
             respond(422, null, 'Không thể thay đổi trạng thái của đơn hàng đã nhập kho hoặc đã hủy bỏ', false);

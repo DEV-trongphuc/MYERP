@@ -294,9 +294,15 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
     const params = new URLSearchParams(window.location.search);
     const openId = params.get('open_id') || params.get('id');
     if (openId) {
+      params.delete('open_id');
+      params.delete('id');
+      const newSearch = params.toString();
+      window.history.replaceState({}, '', `${window.location.pathname}${newSearch ? `?${newSearch}` : ''}${window.location.hash}`);
+
       api.get(`/deposits/${openId}`)
         .then(res => {
           if (res.data?.data) {
+            useUIStore.getState().closeDepositDrawer();
             setSelectedDepForManage(res.data.data);
             setShowManageModal(true);
           }
@@ -305,6 +311,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
           console.error('Error fetching deposit from deep-link:', err);
           const found = deposits.find((d: any) => String(d.id) === String(openId));
           if (found) {
+            useUIStore.getState().closeDepositDrawer();
             setSelectedDepForManage(found);
             setShowManageModal(true);
           }
@@ -319,6 +326,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
         api.get(`/deposits/${depId}`)
           .then(res => {
             if (res.data?.data) {
+              useUIStore.getState().closeDepositDrawer();
               setSelectedDepForManage(res.data.data);
               setShowManageModal(true);
             }
@@ -425,22 +433,38 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
     String(selectedDepForManage.contact_owner_id) === String(user?.id)
   ));
 
+  const loadDataAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    return () => {
+      if (loadDataAbortRef.current) loadDataAbortRef.current.abort();
+    };
+  }, []);
+
   const loadData = async () => {
+    if (loadDataAbortRef.current) {
+      loadDataAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    loadDataAbortRef.current = controller;
+    const { signal } = controller;
+
     setLoading(true);
     try {
       const isStats = activeViewTab === 'stats';
       const [resDep, resCont, resProj, resCoop, resUsr, resPO, resExp, resComp, resSup, resSO] = await Promise.all([
-        fetchAPI('deposits'),
-        isStats ? Promise.resolve({ success: true, data: [] }) : fetchAPI('contacts?limit=1000'),
-        fetchAPI('projects?bypass_roster=1'),
-        isStats ? Promise.resolve({ success: true, data: [] }) : fetchAPI('cooperation-slips').catch(() => ({ success: false, data: [] })),
-        isStats ? Promise.resolve({ success: true, data: [] }) : fetchAPI('users?all=1').catch(() => ({ success: false, data: [] })),
-        isStats ? fetchAPI('purchase-orders?payment_status=unpaid&simple=1').catch(() => ({ success: false, data: [] })) : Promise.resolve({ success: true, data: [] }),
-        isStats ? fetchAPI('expenses?status=pending&limit=5000&simple=1').catch(() => ({ success: false, data: [] })) : Promise.resolve({ success: true, data: [] }),
-        isStats ? Promise.resolve({ success: true, data: [] }) : fetchAPI('companies?limit=1000').catch(() => ({ success: false, data: [] })),
-        isStats ? Promise.resolve({ success: true, data: [] }) : fetchAPI('suppliers').catch(() => ({ success: false, data: [] })),
-        isStats ? fetchAPI('sales-orders?exclude_status=cancelled&payment_status=unpaid&limit=5000&simple=1').catch(() => ({ success: false, data: [] })) : Promise.resolve({ success: true, data: [] })
+        fetchAPI('deposits', { signal }),
+        isStats ? Promise.resolve({ success: true, data: [] }) : fetchAPI('contacts?limit=1000', { signal }),
+        fetchAPI('projects?bypass_roster=1', { signal }),
+        isStats ? Promise.resolve({ success: true, data: [] }) : fetchAPI('cooperation-slips', { signal }).catch(() => ({ success: false, data: [] })),
+        isStats ? Promise.resolve({ success: true, data: [] }) : fetchAPI('users?all=1', { signal }).catch(() => ({ success: false, data: [] })),
+        isStats ? fetchAPI('purchase-orders?payment_status=unpaid&simple=1', { signal }).catch(() => ({ success: false, data: [] })) : Promise.resolve({ success: true, data: [] }),
+        isStats ? fetchAPI('expenses?status=pending&limit=5000&simple=1', { signal }).catch(() => ({ success: false, data: [] })) : Promise.resolve({ success: true, data: [] }),
+        isStats ? Promise.resolve({ success: true, data: [] }) : fetchAPI('companies?limit=1000', { signal }).catch(() => ({ success: false, data: [] })),
+        isStats ? Promise.resolve({ success: true, data: [] }) : fetchAPI('suppliers', { signal }).catch(() => ({ success: false, data: [] })),
+        isStats ? fetchAPI('sales-orders?exclude_status=cancelled&payment_status=unpaid&limit=5000&simple=1', { signal }).catch(() => ({ success: false, data: [] })) : Promise.resolve({ success: true, data: [] })
       ]);
+
+      if (signal.aborted) return;
 
       if (resDep.success) setDeposits(resDep.data || []);
       if (resCont.success) {
@@ -478,9 +502,12 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
         setExpenses(Array.isArray(expData) ? expData : []);
       }
     } catch (e: any) {
+      if (e?.name === 'AbortError' || e?.code === 'ERR_CANCELED') return;
       addToast(e.message || 'Lỗi kết nối', 'error');
     } finally {
-      setLoading(false);
+      if (!signal.aborted) {
+        setLoading(false);
+      }
     }
   };
 
@@ -827,7 +854,10 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
     }
   };
 
+  const approveMilestoneInFlightRef = useRef(false);
   const handleApproveMilestone = async (depositId: number, milestoneId: number) => {
+    if (approveMilestoneInFlightRef.current) return;
+    approveMilestoneInFlightRef.current = true;
     try {
       const res = await fetchAPI(`deposits/${depositId}/milestones/${milestoneId}/approve`, { method: 'POST' });
       if (res.success) {
@@ -838,9 +868,12 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
       }
     } catch (e: any) {
       addToast(e.message || 'Lỗi kết nối', 'error');
+    } finally {
+      approveMilestoneInFlightRef.current = false;
     }
   };
 
+  const rejectMilestoneInFlightRef = useRef(false);
   const handleRejectMilestone = (depositId: number, milestoneId: number) => {
     showConfirm({
       title: 'Từ chối UNC',
@@ -851,6 +884,8 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
       requirePromptInput: true,
       promptPlaceholder: 'Nhập lý do từ chối (bắt buộc)...',
       onConfirm: async (reason) => {
+        if (rejectMilestoneInFlightRef.current) return;
+        rejectMilestoneInFlightRef.current = true;
         try {
           const res = await fetchAPI(`deposits/${depositId}/milestones/${milestoneId}/reject`, {
             method: 'POST',
@@ -864,6 +899,8 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
           }
         } catch (e: any) {
           addToast(e.message || 'Lỗi kết nối', 'error');
+        } finally {
+          rejectMilestoneInFlightRef.current = false;
         }
       }
     });
@@ -2251,6 +2288,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                                 <span style={{ fontSize: '0.725rem', color: isUrgent ? '#d97706' : 'var(--color-text-muted)', display: 'block', marginTop: '2px', fontWeight: isUrgent ? 600 : 400 }}>Còn {diffDays} ngày nữa</span>
                               </div>
                             );
+                          } else if (diffDays === 0) {
                             return (
                               <div>
                                 <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#d97706', display: 'block' }}>{payDateStr}</span>
@@ -3091,7 +3129,16 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
         <Suspense fallback={null}>
           <DepositDetailDrawer
             isOpen={showManageModal}
-            onClose={() => setShowManageModal(false)}
+            onClose={() => {
+              setShowManageModal(false);
+              const params = new URLSearchParams(window.location.search);
+              if (params.has('highlight_comment_id') || params.has('comment_id')) {
+                params.delete('highlight_comment_id');
+                params.delete('comment_id');
+                const qs = params.toString();
+                window.history.replaceState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash}`);
+              }
+            }}
             deposit={selectedDepForManage}
             onSaveSuccess={loadData}
           />

@@ -212,14 +212,31 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
     }
   };
 
+  const roundsAbortRef = useRef<AbortController | null>(null);
+  const activeLogsAbortRef = useRef<AbortController | null>(null);
+  const reportsAbortRef = useRef<AbortController | null>(null);
+  const inFlightRef = useRef(false);
+
   const fetchRounds = async () => {
+    if (roundsAbortRef.current) {
+      roundsAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    roundsAbortRef.current = controller;
+    const { signal } = controller;
+
     try {
-      const json = await fetchAPI(`get_rounds&date=${encodeURIComponent(dateFilter)}`);
+      const json = await fetchAPI(`get_rounds&date=${encodeURIComponent(dateFilter)}`, { signal });
+      if (signal.aborted) return;
       if (json.success) setRounds(json.data);
     } catch (e: any) {
+      if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
       toast.error(t('Không thể tải dữ liệu: ') + e.message);
+    } finally {
+      if (!signal.aborted) {
+        setLoading(false);
+      }
     }
-    setLoading(false);
   };
 
   const fetchAccounts = async () => {
@@ -254,6 +271,11 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
       setRoundsPage(1);
       fetchRounds();
     }
+    return () => {
+      if (roundsAbortRef.current) {
+        roundsAbortRef.current.abort();
+      }
+    };
   }, [dateFilter, isActive]);
 
   useEffect(() => {
@@ -310,7 +332,8 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
   };
 
   const handleSaveComp = async () => {
-    if (isReadOnly || !compRound || isSavingComp) return;
+    if (isReadOnly || !compRound || isSavingComp || inFlightRef.current) return;
+    inFlightRef.current = true;
     setIsSavingComp(true);
     try {
       const payload = {
@@ -331,13 +354,19 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
       }
     } catch (e: any) {
       toast.error(t('Lỗi: ') + e.message);
+    } finally {
+      inFlightRef.current = false;
+      setIsSavingComp(false);
     }
-    setIsSavingComp(false);
   };
 
   const openEditModal = (r: any) => {
     setEditingRound(r);
     setActiveTab('config');
+    setReports([]);
+    setActiveLogs([]);
+    setReportsPage(1);
+    setActiveLogsPage(1);
     let matchedIds: number[] = [];
     if (r.consultant_ids) {
       matchedIds = r.consultant_ids.split(',').map((id: string) => parseInt(id, 10));
@@ -496,29 +525,54 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
   };
 
   const fetchActiveLogs = async (roundId: number) => {
+    if (activeLogsAbortRef.current) {
+      activeLogsAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    activeLogsAbortRef.current = controller;
+    const { signal } = controller;
+
     setLoadingActiveLogs(true);
     try {
-      const res = await fetchAPI(`get_active_compensation_logs&round_id=${roundId}`);
+      const res = await fetchAPI(`get_active_compensation_logs&round_id=${roundId}`, { signal });
+      if (signal.aborted) return;
       if (res.success) setActiveLogs(res.data || []);
-    } catch (e) {
+    } catch (e: any) {
+      if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
       console.error(e);
+    } finally {
+      if (!signal.aborted) {
+        setLoadingActiveLogs(false);
+      }
     }
-    setLoadingActiveLogs(false);
   };
 
   const fetchReports = async (roundId: number) => {
+    if (reportsAbortRef.current) {
+      reportsAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    reportsAbortRef.current = controller;
+    const { signal } = controller;
+
     setLoadingReports(true);
     try {
-      const res = await fetchAPI(`get_reports&round_id=${roundId}`);
+      const res = await fetchAPI(`get_reports&round_id=${roundId}`, { signal });
+      if (signal.aborted) return;
       if (res.success) setReports(res.data);
-    } catch (e) {
+    } catch (e: any) {
+      if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
       console.error(e);
+    } finally {
+      if (!signal.aborted) {
+        setLoadingReports(false);
+      }
     }
-    setLoadingReports(false);
   };
 
   const handleReportAction = async (reportId: number, action: 'approve' | 'reject') => {
-    if (isActioning) return;
+    if (isActioning || inFlightRef.current) return;
+    inFlightRef.current = true;
     setIsActioning(reportId);
     try {
       const endpoint = action === 'approve' ? 'approve_report' : 'reject_report';
@@ -535,15 +589,18 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
       }
     } catch (e: any) {
       toast.error(t('Lỗi: ') + e.message);
+    } finally {
+      inFlightRef.current = false;
+      setIsActioning(null);
     }
-    setIsActioning(null);
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isReadOnly) return;
     if (!formData.round_name) return toast.error(t("Vui lòng nhập tên vòng"));
-    if (isSaving) return;
+    if (isSaving || inFlightRef.current) return;
+    inFlightRef.current = true;
 
     setIsSaving(true);
     try {
@@ -577,8 +634,10 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
       }
     } catch (e: any) {
       toast.error(t('Lỗi: ') + e.message);
+    } finally {
+      inFlightRef.current = false;
+      setIsSaving(false);
     }
-    setIsSaving(false);
   };
 
   const toggleUserSelection = (userId: number | string) => {
@@ -592,7 +651,8 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
   };
 
   const handleDelete = async () => {
-    if (isReadOnly || !deleteId || isDeleting) return;
+    if (isReadOnly || !deleteId || isDeleting || inFlightRef.current) return;
+    inFlightRef.current = true;
     setIsDeleting(true);
     try {
       const json = await fetchAPI(`delete_round&id=${deleteId}`);
@@ -604,9 +664,11 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
       }
     } catch (e: any) {
       toast.error(t('Lỗi: ') + e.message);
+    } finally {
+      inFlightRef.current = false;
+      setIsDeleting(false);
+      setConfirmDeleteOpen(false);
     }
-    setIsDeleting(false);
-    setConfirmDeleteOpen(false);
   };
 
   const removeUser = (userId: number | string, e: React.MouseEvent) => {

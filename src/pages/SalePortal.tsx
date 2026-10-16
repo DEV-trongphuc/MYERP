@@ -2286,69 +2286,110 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       is_muted: task.is_muted,
       task_group_id: task.task_group_id,
       task_group_name: task.task_group_name,
-      task_group_color: task.task_group_color
+      task_group_color: task.task_group_color,
+      highlightCommentId: task.highlightCommentId || new URLSearchParams(window.location.search).get('highlight_comment_id') || new URLSearchParams(window.location.search).get('comment_id') || undefined,
+      subtaskId: task.subtaskId || new URLSearchParams(window.location.search).get('subtask_id') || undefined
     };
     setChecklist(checklistItems);
     useUIStore.getState().closeTaskDrawer();
     setSelectedTaskForDetails(parsedTask);
   }, []);
 
+  const lastHandledTaskSearchRef = useRef<string>('');
+  const inFlightTaskFetchIdRef = useRef<number | null>(null);
+
   // Deep-linking URL listener for task_id / open_task_id & global event 'open-task-drawer'
   useEffect(() => {
-    const params = new URLSearchParams(loc?.search || window.location.search);
+    const currentSearch = loc?.search || window.location.search;
+    const params = new URLSearchParams(currentSearch);
     const targetTaskId = params.get('task_id') || params.get('open_task_id') || params.get('highlight_activity_id');
-    
+    const highlightCommentId = params.get('highlight_comment_id') || params.get('comment_id') || undefined;
+    const subtaskId = params.get('subtask_id') || undefined;
+
     if (targetTaskId && targetTaskId !== 'new') {
       const numId = Number(targetTaskId);
-      if (numId) {
-        // If already selected, do not refetch
-        if (selectedTaskForDetails && Number(selectedTaskForDetails.id) === numId) {
-          return;
-        }
-        
+      if (numId && lastHandledTaskSearchRef.current !== currentSearch) {
+        lastHandledTaskSearchRef.current = currentSearch;
+        useUIStore.getState().closeTaskDrawer();
+
         // 1. Try finding in existing wsTasks or portalTasks in memory
         const foundInWs = (wsTasks || []).find((t: any) => Number(t.id) === numId);
         const foundInPortal = (portalTasks || []).find((t: any) => Number(t.id) === numId);
         const found = foundInWs || foundInPortal;
-        
+
         if (found) {
-          handleSelectTask(found);
+          handleSelectTask({ ...found, highlightCommentId, subtaskId });
           if (activeTab !== 'workspace') {
             setActiveTab('workspace');
           }
-        } else {
+        } else if (inFlightTaskFetchIdRef.current !== numId) {
           // 2. Fetch directly from backend API
+          inFlightTaskFetchIdRef.current = numId;
           api.get(`/activities/${numId}`)
             .then(res => {
               if (res.data && res.data.success && res.data.data) {
-                handleSelectTask(res.data.data);
+                const task = res.data.data;
+                handleSelectTask({ ...task, highlightCommentId, subtaskId });
                 if (activeTab !== 'workspace') {
                   setActiveTab('workspace');
+                }
+                const isClient = task.related_type && ['contact', 'deal', 'company'].includes(task.related_type);
+                const tagsList = task.tags ? String(task.tags).split(',').map((t: string) => t.trim()) : [];
+                if (tagsList.includes('personal_task')) {
+                  setWsSubTab('personal');
+                } else if (!isClient) {
+                  setWsSubTab('team');
+                } else {
+                  setWsSubTab('customer');
                 }
               }
             })
             .catch(err => {
               console.error("Error fetching task details from URL parameter:", err);
+            })
+            .finally(() => {
+              if (inFlightTaskFetchIdRef.current === numId) {
+                inFlightTaskFetchIdRef.current = null;
+              }
             });
         }
       }
+    } else if (!targetTaskId) {
+      lastHandledTaskSearchRef.current = '';
     }
 
     const handleOpenTaskEvent = (e: Event) => {
       const customEvent = e as CustomEvent;
       const detail = customEvent.detail;
+      useUIStore.getState().closeTaskDrawer();
       if (detail?.task) {
-        handleSelectTask(detail.task);
+        handleSelectTask({
+          ...detail.task,
+          highlightCommentId: detail.highlightCommentId || detail.task.highlightCommentId,
+          subtaskId: detail.subtaskId || detail.task.subtaskId
+        });
         if (activeTab !== 'workspace') setActiveTab('workspace');
-      } else if (detail?.taskId) {
-        api.get(`/activities/${detail.taskId}`)
+      } else if (detail?.taskId || detail?.id) {
+        const numId = Number(detail.taskId || detail.id);
+        if (!numId || inFlightTaskFetchIdRef.current === numId) return;
+        inFlightTaskFetchIdRef.current = numId;
+        api.get(`/activities/${numId}`)
           .then(res => {
             if (res.data && res.data.success && res.data.data) {
-              handleSelectTask(res.data.data);
+              handleSelectTask({
+                ...res.data.data,
+                highlightCommentId: detail.highlightCommentId,
+                subtaskId: detail.subtaskId
+              });
               if (activeTab !== 'workspace') setActiveTab('workspace');
             }
           })
-          .catch(err => console.error("Error opening task via event:", err));
+          .catch(err => console.error("Error opening task via event:", err))
+          .finally(() => {
+            if (inFlightTaskFetchIdRef.current === numId) {
+              inFlightTaskFetchIdRef.current = null;
+            }
+          });
       }
     };
 
@@ -2356,7 +2397,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     return () => {
       window.removeEventListener('open-task-drawer', handleOpenTaskEvent);
     };
-  }, [loc?.search, wsTasks, portalTasks, activeTab, selectedTaskForDetails]);
+  }, [loc?.search, wsTasks, portalTasks, activeTab, handleSelectTask]);
 
   const serializeDescriptionAndChecklist = (pureDesc: string, items: Array<{ text: string; checked: boolean }>) => {
     let result = pureDesc.trim();
@@ -3349,9 +3390,10 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
   const effectiveRole = displayUser?.role;
 
-  // Find oldest active offered lead to accept
-  const activeIncomingOffer = useMemo(() => {
+  // Find oldest active offered lead to accept (independent of `now` tick)
+  const activeIncomingOfferLead = useMemo(() => {
     if (!['sale', 'manager'].includes(String(effectiveRole).toLowerCase())) return null;
+    const currentNow = Date.now();
     const unacceptedLeads = (data.leads || []).filter((l: any) => {
       if (Number(l.is_accepted)) return false;
       if (Number(l.lead_recall_minutes) <= 0) return false;
@@ -3368,33 +3410,45 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     const activeOffers = unacceptedLeads.map((lead: any) => {
       const leadRecallMins = Number(lead.lead_recall_minutes) || 0;
       const limitMs = leadRecallMins * 60 * 1000;
-      const elapsedMs = now - new Date(lead.last_interaction_date).getTime();
+      const elapsedMs = currentNow - new Date(lead.last_interaction_date).getTime();
       const remainingMs = limitMs - elapsedMs;
       return { lead, remainingMs };
     }).filter(item => item.remainingMs > 0);
 
     if (activeOffers.length === 0) return null;
     activeOffers.sort((a, b) => a.remainingMs - b.remainingMs);
-    return activeOffers[0];
-  }, [data.leads, effectiveRole, now, dismissedLeadIds]);
+    return activeOffers[0].lead;
+  }, [data.leads, effectiveRole, dismissedLeadIds]);
+
+  const activeIncomingOffer = useMemo(() => {
+    if (!activeIncomingOfferLead) return null;
+    const leadRecallMins = Number(activeIncomingOfferLead.lead_recall_minutes) || 0;
+    const limitMs = leadRecallMins * 60 * 1000;
+    const elapsedMs = now - new Date(activeIncomingOfferLead.last_interaction_date).getTime();
+    const remainingMs = limitMs - elapsedMs;
+    if (remainingMs <= 0) return null;
+    return { lead: activeIncomingOfferLead, remainingMs };
+  }, [activeIncomingOfferLead, now]);
+
+  const activeOfferLeadId = activeIncomingOffer ? Number(activeIncomingOffer.lead.lead_id || activeIncomingOffer.lead.id) : null;
 
   useEffect(() => {
-    const intervalMs = activeIncomingOffer ? 100 : 10000;
-    const timer = setInterval(() => setNow(Date.now()), intervalMs);
+    if (!activeOfferLeadId) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(timer);
-  }, [activeIncomingOffer]);
+  }, [activeOfferLeadId]);
 
   useEffect(() => {
-    if (activeIncomingOffer) {
-      const currentId = Number(activeIncomingOffer.lead.lead_id || activeIncomingOffer.lead.id);
-      if (currentId !== lastOfferedLeadId) {
-        setLastOfferedLeadId(currentId);
+    if (activeOfferLeadId) {
+      if (activeOfferLeadId !== lastOfferedLeadId) {
+        setLastOfferedLeadId(activeOfferLeadId);
         setHideOfferModal(false);
       }
     } else {
       setLastOfferedLeadId(null);
     }
-  }, [activeIncomingOffer, lastOfferedLeadId]);
+  }, [activeOfferLeadId, lastOfferedLeadId]);
 
   // Tickets states & loading logic
   const [tickets, setTickets] = useState<any[]>([]);
@@ -3442,6 +3496,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         toast.error(res.message || t('Không thể tải danh sách ticket'));
       }
     } catch (err: any) {
+      if (err?.name === 'AbortError' || err?.code === 'ERR_CANCELED') return;
       if (err.message !== 'Unauthorized') {
         toast.error(t('Lỗi tải ticket: ') + err.message);
       }
@@ -3772,8 +3827,22 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     setCallsModalPage(1);
   }, [callsSearch]);
 
+  const wsTasksAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    return () => {
+      if (wsTasksAbortRef.current) wsTasksAbortRef.current.abort();
+    };
+  }, []);
+
   const fetchWorkspaceTasks = async () => {
     if (!token) return;
+    if (wsTasksAbortRef.current) {
+      wsTasksAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    wsTasksAbortRef.current = controller;
+    const { signal } = controller;
+
     setLoadingWsTasks(true);
     try {
       let url = '/activities?limit=1000';
@@ -3816,9 +3885,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       }
 
       const [res, callsRes] = await Promise.all([
-        api.get(url),
-        api.get(callsUrl).catch(() => ({ data: { data: { total: 0 } } }))
+        api.get(url, { signal }),
+        api.get(callsUrl, { signal }).catch(() => ({ data: { data: { total: 0 } } }))
       ]);
+
+      if (signal.aborted) return;
 
       if (res.data && res.data.data) {
         let rawTasks = res.data.data.items || res.data.data || [];
@@ -3832,10 +3903,13 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       if (callsRes?.data?.data) {
         setCompletedCallsCount(callsRes.data.data.total || 0);
       }
-    } catch (e) {
+    } catch (e: any) {
+      if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
       console.error(e);
     } finally {
-      setLoadingWsTasks(false);
+      if (!signal.aborted) {
+        setLoadingWsTasks(false);
+      }
     }
   };
 
@@ -4407,8 +4481,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     }
   };
 
+  const postTaskCommentInFlightRef = useRef(false);
   const handlePostTaskComment = async () => {
     if ((!newCommentText.trim() && pendingAttachments.length === 0) || !selectedTaskForDetails) return;
+    if (postTaskCommentInFlightRef.current) return;
+    postTaskCommentInFlightRef.current = true;
     try {
       const res = await api.post(`/activities/${selectedTaskForDetails.id}/comments`, {
         content: newCommentText.trim(),
@@ -4425,6 +4502,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     } catch (e) {
       console.error(e);
       toast.error(t('Lỗi khi thêm bình luận'));
+    } finally {
+      postTaskCommentInFlightRef.current = false;
     }
   };
 
@@ -4869,6 +4948,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     }
     if (!isSilent) setLoading(false);
   };
+  const loadPortalDataRef = useRef(loadPortalData);
+  loadPortalDataRef.current = loadPortalData;
 
   const [togglingVacation, setTogglingVacation] = useState(false);
 
@@ -5374,14 +5455,14 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
   useEffect(() => {
     const handleContactUpdated = () => {
-      loadPortalData(true);
+      loadPortalDataRef.current(true);
     };
     const handleNewNotif = () => {
-      loadPortalData(true);
+      loadPortalDataRef.current(true);
     };
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        loadPortalData(true);
+        loadPortalDataRef.current(true);
       }
     };
 
@@ -5621,7 +5702,10 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
 
 
+  const acceptLeadInFlightRef = useRef(false);
   const handleAcceptLead = async (leadId: number) => {
+    if (acceptLeadInFlightRef.current) return;
+    acceptLeadInFlightRef.current = true;
     try {
       const json = await fetchAPI('accept_lead', {
         method: 'POST',
@@ -5636,6 +5720,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       }
     } catch (err: any) {
       toast.error(t('Lỗi kết nối: ') + err.message);
+    } finally {
+      acceptLeadInFlightRef.current = false;
     }
   };
 
@@ -6175,88 +6261,6 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     }
   }, [loc.search]);
 
-  useEffect(() => {
-    const params = new URLSearchParams(loc.search);
-    const taskId = params.get('task_id');
-    if (taskId && token) {
-      const loadTaskDetailFromUrl = async () => {
-        try {
-          const res = await api.get(`/activities/${taskId}`);
-          if (res.data && res.data.success) {
-            const task = res.data.data;
-            if (task) {
-              let link = '';
-              const parsedBody = parseTaskBody(task.body);
-              if (parsedBody.links?.[0]?.url) {
-                link = parsedBody.links[0].url;
-              } else if (task.body) {
-                const matchLink = task.body.match(/Tài liệu\/Link đính kèm:\s*(https?:\/\/[^\s]+)/);
-                if (matchLink) {
-                  link = matchLink[1];
-                }
-              }
-              const description = parsedBody.description;
-              const parsed = parseDescriptionAndChecklist(description);
-              const checklistItems = (parsedBody.checklist && parsedBody.checklist.length > 0)
-                ? parsedBody.checklist.map(c => ({ text: String(c.text || ''), checked: Boolean(c.checked) }))
-                : parsed.checklist;
-              const parsedTask = {
-                id: task.id,
-                title: task.subject,
-                done: task.status === 'done',
-                priority: task.priority,
-                due_date: task.due_date || '',
-                created_at: task.created_at,
-                link,
-                description: parsedBody.pureDescription || parsed.pureDescription,
-                user_id: task.user_id,
-                user_name: task.user_name || 'Hệ thống',
-                tags: task.tags || '',
-                participant_ids: task.participant_ids || '',
-                progress: task.progress || 0,
-                require_approval: task.require_approval || 0,
-                approver_id: task.approver_id,
-                approval_status: task.approval_status,
-                contact_id: task.contact_id,
-                contact_name: task.contact_name,
-                contact_avatar: task.contact_avatar,
-                related_type: task.related_type,
-                related_id: task.related_id,
-                body: task.body,
-                created_by: task.created_by,
-                created_by_name: task.created_by_name,
-                created_by_avatar: task.created_by_avatar,
-                due_sla_notified: parsedBody.due_sla_notified,
-                subtask_sla_notified: parsedBody.subtask_sla_notified
-              };
-              setChecklist(checklistItems);
-              setSelectedTaskForDetails(parsedTask);
-              
-              // Set active subtab to correspond with the task type so it shows in the list
-              const isClient = task.related_type && ['contact', 'deal', 'company'].includes(task.related_type);
-              const tagsList = task.tags ? task.tags.split(',').map((t: string) => t.trim()) : [];
-              if (tagsList.includes('personal_task')) {
-                setWsSubTab('personal');
-              } else if (!isClient) {
-                setWsSubTab('team');
-              } else {
-                setWsSubTab('customer');
-              }
-
-              // Clear the task_id from URL so it doesn't pop open again when page refreshes/loads
-              const nextParams = new URLSearchParams(loc.search);
-              nextParams.delete('task_id');
-              navigate(`${loc.pathname}${nextParams.toString() ? '?' + nextParams.toString() : ''}`, { replace: true });
-            }
-          }
-        } catch (e) {
-          console.error("Lỗi khi nạp chi tiết công việc từ URL:", e);
-        }
-      };
-      loadTaskDetailFromUrl();
-    }
-  }, [loc.search, token]);
-
   const handleExitImpersonation = () => {
     setSaleIdFilter('');
     const params = new URLSearchParams(loc.search);
@@ -6409,6 +6413,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         toast.error(json.message || t('Lỗi tải chi tiết ngày'));
       }
     } catch (e: any) {
+      if (e?.name === 'AbortError' || e?.code === 'ERR_CANCELED') return;
       toast.error(t('Lỗi tải chi tiết ngày: ') + e.message);
     } finally {
       setDayDetailsLoading(false);
@@ -20927,15 +20932,23 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
             onClose={() => {
               setSelectedTaskForDetails(null);
               setIsFocusSessionActive(false);
-              const params = new URLSearchParams(window.location.search);
-              if (params.has('task_id') || params.has('open_task_id') || params.has('highlight_activity_id')) {
+              lastHandledTaskSearchRef.current = '';
+              const params = new URLSearchParams(loc?.search || window.location.search);
+              if (
+                params.has('task_id') ||
+                params.has('open_task_id') ||
+                params.has('highlight_activity_id') ||
+                params.has('highlight_comment_id') ||
+                params.has('comment_id') ||
+                params.has('subtask_id')
+              ) {
                 params.delete('task_id');
                 params.delete('open_task_id');
                 params.delete('highlight_activity_id');
                 params.delete('highlight_comment_id');
                 params.delete('comment_id');
                 params.delete('subtask_id');
-                navigate(`${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}`, { replace: true });
+                navigate(`${loc?.pathname || window.location.pathname}${params.toString() ? '?' + params.toString() : ''}`, { replace: true });
               }
             }}
             task={selectedTaskForDetails}

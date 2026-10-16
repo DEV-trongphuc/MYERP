@@ -144,6 +144,13 @@ api.request = function (urlOrConfig: any, config?: any) {
       return Promise.resolve(cached.data);
     }
     
+    if (finalConfig.signal) {
+      return originalRequest(urlOrConfig, config).then((response) => {
+        setCacheEntry(key, response);
+        return response;
+      });
+    }
+
     let pending = pendingRequests.get(key);
     if (!pending) {
       pending = originalRequest(urlOrConfig, config)
@@ -288,6 +295,10 @@ api.interceptors.response.use(
         localStorage.removeItem('Ideas_user');
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
+        try {
+          const { useChatStore } = await import('../store/chatStore' as any);
+          useChatStore.getState().resetChatState();
+        } catch {}
         if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
           window.location.href = '/login';
         }

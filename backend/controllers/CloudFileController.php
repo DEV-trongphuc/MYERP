@@ -262,7 +262,7 @@ class CloudFileController {
 
                 $notifyUids = array_unique($notifyUids);
                 if (!empty($notifyUids)) {
-                    $link = "/contacts?open_contact_id=$contact_id";
+                    $link = "/contacts?open_contact_id=$contact_id&tab=files";
                     foreach ($notifyUids as $nUid) {
                         // Check if an unread notification for the same contact from the same uploader exists in the last 30 minutes
                         $chkStmt = $this->db->prepare("

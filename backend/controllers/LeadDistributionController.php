@@ -31,7 +31,7 @@ class LeadDistributionController {
                    u.full_name as owner_name
             FROM contacts c
             LEFT JOIN users u ON c.owner_id = u.id
-            WHERE c.tenant_id = ? AND c.pipeline_status IN ('held', 'holding', 'pending_distribution')
+            WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND c.pipeline_status IN ('held', 'holding', 'pending_distribution')
             ORDER BY c.id DESC
             LIMIT 100
         ");
@@ -67,54 +67,66 @@ class LeadDistributionController {
             respond(422, null, 'Không thể phân bổ lead cho nhân sự đã bị vô hiệu hóa hoặc nghỉ việc', false);
         }
 
-        $stmtLead = $this->db->prepare("SELECT id, full_name, phone FROM contacts WHERE id = ? AND tenant_id = ?");
-        $stmtLead->execute([$contactId, $tid]);
-        $lead = $stmtLead->fetch();
-        if (!$lead) {
-            respond(404, null, 'Không tìm thấy thông tin khách hàng / lead', false);
-        }
-
-        $stmt = $this->db->prepare("
-            UPDATE contacts 
-            SET owner_id = ?, pipeline_status = 'assigned', assigned_at = NOW(), updated_at = NOW() 
-            WHERE id = ? AND tenant_id = ?
-        ");
-        $stmt->execute([$consultantId, $contactId, $tid]);
-
-        // Audit Trail
-        logInteraction($this->db, $tid, $auth['user_id'], 'system', 'Phân bổ Lead thủ công', "Bàn giao lead '{$lead['full_name']}' cho tư vấn viên {$consultant['full_name']}.", 'contact', $contactId);
-        logActivity($this->db, $tid, $auth['user_id'], 'ASSIGN_LEAD', 'contact', $contactId, json_encode([
-            'consultant_id' => $consultantId,
-            'consultant_name' => $consultant['full_name']
-        ]));
-
-        // Insert into distribution_logs for rotation / assignment tracking (DEF-CRM-03)
+        $this->db->beginTransaction();
         try {
-            $logDist = $this->db->prepare("
-                INSERT INTO distribution_logs (lead_id, assigned_to, round_id, status, message, received_at)
-                VALUES (?, ?, 0, 'assigned', ?, NOW())
+            $stmtLead = $this->db->prepare("SELECT id, full_name, phone, status, pipeline_status, owner_id FROM contacts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL FOR UPDATE");
+            $stmtLead->execute([$contactId, $tid]);
+            $lead = $stmtLead->fetch();
+            if (!$lead) {
+                $this->db->rollBack();
+                respond(404, null, 'Không tìm thấy thông tin khách hàng / lead', false);
+            }
+
+            $stmt = $this->db->prepare("
+                UPDATE contacts 
+                SET owner_id = ?, pipeline_status = 'assigned', assigned_at = NOW(), updated_at = NOW() 
+                WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
             ");
-            $assignerName = $auth['name'] ?? $auth['full_name'] ?? 'Quản trị viên';
-            $msg = "Phân bổ thủ công cho {$consultant['full_name']} bởi {$assignerName}";
-            $logDist->execute([$contactId, $consultantId, $msg]);
-        } catch (\Throwable $eDist) {
+            $stmt->execute([$consultantId, $contactId, $tid]);
+
+            // Audit Trail
+            logInteraction($this->db, $tid, $auth['user_id'], 'system', 'Phân bổ Lead thủ công', "Bàn giao lead '{$lead['full_name']}' cho tư vấn viên {$consultant['full_name']}.", 'contact', $contactId);
+            logActivity($this->db, $tid, $auth['user_id'], 'ASSIGN_LEAD', 'contact', $contactId, json_encode([
+                'consultant_id' => $consultantId,
+                'consultant_name' => $consultant['full_name']
+            ]));
+
+            // Insert into distribution_logs for rotation / assignment tracking (DEF-CRM-03)
             try {
-                $logDistFallback = $this->db->prepare("
-                    INSERT INTO distribution_logs (lead_id, assigned_to, status, message)
-                    VALUES (?, ?, 'assigned', ?)
+                $logDist = $this->db->prepare("
+                    INSERT INTO distribution_logs (lead_id, assigned_to, round_id, status, message, received_at)
+                    VALUES (?, ?, 0, 'assigned', ?, NOW())
                 ");
-                $logDistFallback->execute([$contactId, $consultantId, "Phân bổ thủ công cho {$consultant['full_name']}"]);
-            } catch (\Throwable $ex) {}
+                $assignerName = $auth['name'] ?? $auth['full_name'] ?? 'Quản trị viên';
+                $msg = "Phân bổ thủ công cho {$consultant['full_name']} bởi {$assignerName}";
+                $logDist->execute([$contactId, $consultantId, $msg]);
+            } catch (\Throwable $eDist) {
+                try {
+                    $logDistFallback = $this->db->prepare("
+                        INSERT INTO distribution_logs (lead_id, assigned_to, status, message)
+                        VALUES (?, ?, 'assigned', ?)
+                    ");
+                    $logDistFallback->execute([$contactId, $consultantId, "Phân bổ thủ công cho {$consultant['full_name']}"]);
+                } catch (\Throwable $ex) {}
+            }
+
+            $this->db->commit();
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            respond(500, null, 'Lỗi khi phân bổ lead: ' . $e->getMessage(), false);
         }
 
-        // Dispatch Notification to consultant
+        // Dispatch Notification to consultant (after commit)
         try {
             require_once __DIR__ . '/../NotificationService.php';
             NotificationService::send($this->db, $tid, 'LEAD_HANDOVER_NEW_SALE', [
+                'user_id' => $consultantId,
                 'contact_id' => $contactId,
-                'lead_name' => $lead['full_name'] ?? 'Khách hàng',
-                'lead_phone' => $lead['phone'] ?? '',
-                'target_user_id' => $consultantId
+                'customer_name' => $lead['full_name'] ?? 'Khách hàng',
+                'phone' => $lead['phone'] ?? '',
+                'actor_name' => $auth['name'] ?? $auth['full_name'] ?? 'Quản trị viên'
             ]);
         } catch (\Throwable $notifEx) {
             error_log("AssignLead Notification Error: " . $notifEx->getMessage());
@@ -141,11 +153,11 @@ class LeadDistributionController {
 
         if (!empty($leadIds) && is_array($leadIds)) {
             $inClause = implode(',', array_map('intval', $leadIds));
-            $this->db->prepare("UPDATE contacts SET pipeline_status = 'new', owner_id = NULL, updated_at = NOW() WHERE id IN ($inClause) AND tenant_id = ?")
+            $this->db->prepare("UPDATE contacts SET pipeline_status = 'new', owner_id = NULL, updated_at = NOW() WHERE id IN ($inClause) AND tenant_id = ? AND deleted_at IS NULL")
                 ->execute([$tid]);
         } else {
             // Release holding leads
-            $this->db->prepare("UPDATE contacts SET pipeline_status = 'new', owner_id = NULL, updated_at = NOW() WHERE pipeline_status = 'held' AND tenant_id = ?")
+            $this->db->prepare("UPDATE contacts SET pipeline_status = 'new', owner_id = NULL, updated_at = NOW() WHERE pipeline_status = 'held' AND tenant_id = ? AND deleted_at IS NULL")
                 ->execute([$tid]);
         }
 

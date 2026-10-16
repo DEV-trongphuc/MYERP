@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { useAuthStore } from '../store/authStore';
+import { useChatStore } from '../store/chatStore';
 import api from '../api/axios';
 
 type User = {
@@ -91,6 +92,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('Ideas_user');
     localStorage.removeItem('IDEAS_DEMO_MODE');
+    useChatStore.getState().resetChatState();
   }, []);
 
   const updateUser = useCallback((updatedUser: Partial<User>) => {

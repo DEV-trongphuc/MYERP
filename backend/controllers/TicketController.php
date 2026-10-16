@@ -195,7 +195,7 @@ class TicketController {
         $validContacts = [];
         if (!empty($data['related_contacts']) && is_array($data['related_contacts'])) {
             $inClause = implode(',', array_fill(0, count($data['related_contacts']), '?'));
-            $sC = $this->db->prepare("SELECT id FROM contacts WHERE tenant_id=? AND id IN ($inClause)");
+            $sC = $this->db->prepare("SELECT id FROM contacts WHERE tenant_id=? AND deleted_at IS NULL AND id IN ($inClause)");
             $sC->execute(array_merge([$auth['tenant_id']], $data['related_contacts']));
             $validContacts = $sC->fetchAll(PDO::FETCH_COLUMN);
         }
@@ -203,7 +203,7 @@ class TicketController {
         // Check direct contact_id/customer_id parameter in payload as fallback
         $rawContactId = $data['contact_id'] ?? $data['customer_id'] ?? null;
         if ($rawContactId && (empty($validContacts) || !in_array((int)$rawContactId, $validContacts, true))) {
-            $checkC = $this->db->prepare("SELECT id FROM contacts WHERE id=? AND tenant_id=?");
+            $checkC = $this->db->prepare("SELECT id FROM contacts WHERE id=? AND tenant_id=? AND deleted_at IS NULL");
             $checkC->execute([(int)$rawContactId, $auth['tenant_id']]);
             if ($checkC->fetch()) {
                 $validContacts[] = (int)$rawContactId;
@@ -217,7 +217,7 @@ class TicketController {
 
         if ($data['subject'] === 'Báo lỗi data' && !empty($validContacts)) {
             $contactId = (int)$validContacts[0];
-            $stmtC = $this->db->prepare("SELECT source, owner_id, person_id FROM contacts WHERE id = ? AND tenant_id = ?");
+            $stmtC = $this->db->prepare("SELECT source, owner_id, person_id FROM contacts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
             $stmtC->execute([$contactId, $auth['tenant_id']]);
             $contactRow = $stmtC->fetch(PDO::FETCH_ASSOC);
             if ($contactRow) {
@@ -409,7 +409,7 @@ class TicketController {
             $validContacts = [];
             if (!empty($data['related_contacts']) && is_array($data['related_contacts'])) {
                 $inClause = implode(',', array_fill(0, count($data['related_contacts']), '?'));
-                $sC = $this->db->prepare("SELECT id FROM contacts WHERE tenant_id=? AND id IN ($inClause)");
+                $sC = $this->db->prepare("SELECT id FROM contacts WHERE tenant_id=? AND deleted_at IS NULL AND id IN ($inClause)");
                 $sC->execute(array_merge([$auth['tenant_id']], $data['related_contacts']));
                 $validContacts = $sC->fetchAll(PDO::FETCH_COLUMN);
             }
@@ -420,8 +420,16 @@ class TicketController {
             $sets[] = 'contact_id=?';
             $params[] = !empty($validContacts) ? (int)$validContacts[0] : null;
         } else if (isset($data['contact_id'])) {
+            $contactId = null;
+            if (!empty($data['contact_id'])) {
+                $sC = $this->db->prepare("SELECT id FROM contacts WHERE id=? AND tenant_id=? AND deleted_at IS NULL");
+                $sC->execute([(int)$data['contact_id'], $auth['tenant_id']]);
+                if ($sC->fetchColumn()) {
+                    $contactId = (int)$data['contact_id'];
+                }
+            }
             $sets[] = 'contact_id=?';
-            $params[] = $data['contact_id'] ? (int)$data['contact_id'] : null;
+            $params[] = $contactId;
         }
         
         if (isset($data['related_users'])) { 
@@ -534,7 +542,8 @@ class TicketController {
                     NotificationService::send($this->db, $auth['tenant_id'], 'WORKFLOW_TASK_ASSIGNED', [
                         'user_id' => $nUid,
                         'task_title' => "Cập nhật Ticket #{$id}: {$statusLabel}",
-                        'reason' => "Ticket #{$id} [{$oldTicket['subject']}] đã được chuyển sang trạng thái: {$statusLabel}"
+                        'reason' => "Ticket #{$id} [{$oldTicket['subject']}] đã được chuyển sang trạng thái: {$statusLabel}",
+                        'link' => "/tickets?id={$id}"
                     ]);
 
                     $stmtUser = $this->db->prepare("SELECT email, full_name FROM users WHERE id=?");
@@ -737,6 +746,9 @@ class TicketController {
     }
 
     public function deleteComment(array $auth, int $ticketId, int $commentId): void {
+        if (!$this->checkTicketAccess($auth, $ticketId)) {
+            respond(403, null, 'Bạn không có quyền truy cập vào ticket này', false);
+        }
         $stmt = $this->db->prepare("SELECT * FROM ticket_comments WHERE id = ? AND ticket_id = ?");
         $stmt->execute([$commentId, $ticketId]);
         $comment = $stmt->fetch(PDO::FETCH_ASSOC);

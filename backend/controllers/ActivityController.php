@@ -754,8 +754,8 @@ class ActivityController {
         $sql = "
             SELECT 
                 COUNT(CASE WHEN a.status NOT IN ('done', 'completed') AND (a.progress < 100 OR a.progress IS NULL) AND a.user_id = $uid THEN 1 END) as assigned_to_me,
-                COUNT(CASE WHEN a.status NOT IN ('done', 'completed') AND (a.progress < 100 OR a.progress IS NULL) AND a.due_date IS NOT NULL AND a.due_date != '0000-00-00 00:00:00' AND DATE(a.due_date) < CURDATE() THEN 1 END) as overdue,
-                COUNT(CASE WHEN a.status NOT IN ('done', 'completed') AND (a.progress < 100 OR a.progress IS NULL) AND a.due_date IS NOT NULL AND a.due_date != '0000-00-00 00:00:00' AND DATE(a.due_date) = CURDATE() THEN 1 END) as due_today,
+                COUNT(CASE WHEN a.status NOT IN ('done', 'completed') AND (a.progress < 100 OR a.progress IS NULL) AND a.due_date IS NOT NULL AND a.due_date != '0000-00-00 00:00:00' AND a.due_date < CURDATE() THEN 1 END) as overdue,
+                COUNT(CASE WHEN a.status NOT IN ('done', 'completed') AND (a.progress < 100 OR a.progress IS NULL) AND a.due_date IS NOT NULL AND a.due_date != '0000-00-00 00:00:00' AND (a.due_date >= CURDATE() AND a.due_date < DATE_ADD(CURDATE(), INTERVAL 1 DAY)) THEN 1 END) as due_today,
                 COUNT(CASE WHEN a.require_approval = 1 AND a.approval_status = 'pending' AND a.approver_id = $uid THEN 1 END) as pending_approval,
                 COUNT(CASE WHEN a.status NOT IN ('done', 'completed') AND (a.progress < 100 OR a.progress IS NULL) AND a.participant_ids IS NOT NULL AND FIND_IN_SET($uid, a.participant_ids) THEN 1 END) as collaborator
             FROM activities a
@@ -1553,7 +1553,7 @@ class ActivityController {
                             'Bạn được giao công việc con mới',
                             ($auth['full_name'] ?? 'Hệ thống') . ' đã giao việc con "' . ($newItem['title'] ?? 'Công việc con') . '" cho bạn trong nhiệm vụ "' . ($activity['subject'] ?? '') . '".' . (!empty($newItem['due_date']) && strtotime($newItem['due_date']) ? " (Hạn: " . date('d/m/Y', strtotime($newItem['due_date'])) . ")" : ""),
                             'task_assignment',
-                            "/activities/{$id}?subtask_id={$idKey}",
+                            "/workspace?task_id={$id}&subtask_id={$idKey}",
                             $id
                         );
                     }
@@ -1566,7 +1566,7 @@ class ActivityController {
                             'Bạn được giao công việc con mới',
                             ($auth['full_name'] ?? 'Hệ thống') . ' đã giao việc con "' . ($newItem['title'] ?? 'Công việc con') . '" cho bạn trong nhiệm vụ "' . ($activity['subject'] ?? '') . '".' . (!empty($newItem['due_date']) && strtotime($newItem['due_date']) ? " (Hạn: " . date('d/m/Y', strtotime($newItem['due_date'])) . ")" : ""),
                             'task_assignment',
-                            "/activities/{$id}?subtask_id={$idKey}",
+                            "/workspace?task_id={$id}&subtask_id={$idKey}",
                             $id
                         );
                     }
@@ -1704,9 +1704,9 @@ class ActivityController {
         $taskSubject = $activity['subject'] ?? 'Công việc';
 
         $targetLink = "/workspace?task_id={$id}&highlight_comment_id={$commentId}" . ($subtaskId ? "&subtask_id={$subtaskId}" : "");
-        if (!empty($activity['related_type']) && !empty($activity['related_id'])) {
+        if (($activity['type'] ?? 'task') !== 'task' && !empty($activity['related_type']) && !empty($activity['related_id'])) {
             if ($activity['related_type'] === 'contact') {
-                $targetLink = "/contacts?open_contact_id={$activity['related_id']}&highlight_activity_id={$id}&highlight_comment_id={$commentId}" . ($subtaskId ? "&subtask_id={$subtaskId}" : "");
+                $targetLink = "/contacts?open_contact_id={$activity['related_id']}&tab=timeline&highlight_activity_id={$id}&highlight_comment_id={$commentId}" . ($subtaskId ? "&subtask_id={$subtaskId}" : "");
             } else if ($activity['related_type'] === 'deal') {
                 $targetLink = "/deals?id={$activity['related_id']}&highlight_activity_id={$id}&highlight_comment_id={$commentId}" . ($subtaskId ? "&subtask_id={$subtaskId}" : "");
             }
@@ -2283,6 +2283,15 @@ class ActivityController {
 
             $tenantId = (int)($u['tenant_id'] ?: 1);
 
+            $actorName = 'Đồng nghiệp';
+            if (preg_match('/^(.+?)\s+(?:vừa|đã)\s+/u', $title, $mActor)) {
+                $actorName = trim($mActor[1]);
+            } elseif (preg_match('/^(.+?)\s+(?:vừa|đã)\s+/u', $body, $mActorBody)) {
+                $actorName = trim($mActorBody[1]);
+            } elseif (preg_match('/bởi\s+([^\.]+)\.?$/u', $body, $mActorBy)) {
+                $actorName = trim($mActorBy[1]);
+            }
+
             // Multi-channel Notification (In-App Bell + Zalo / Telegram / Email via NotificationService)
             require_once __DIR__ . '/../NotificationService.php';
             if (in_array($type, ['task_assignment', 'task_assigned', 'assignment', 'approval_request', 'participant_added', 'task_status'], true)) {
@@ -2297,7 +2306,7 @@ class ActivityController {
                 NotificationService::send($this->db, $tenantId, 'TASK_COMMENT_NEW', [
                     'user_id' => $userId,
                     'recipients' => [$u],
-                    'author_name' => $u['full_name'] ?? 'Đồng nghiệp',
+                    'author_name' => $actorName,
                     'task_title' => $title,
                     'comment' => $body,
                     'link' => $link
@@ -2306,7 +2315,7 @@ class ActivityController {
                 NotificationService::send($this->db, $tenantId, 'MENTION_TAGGED', [
                     'user_id' => $userId,
                     'recipients' => [$u],
-                    'author_name' => $title,
+                    'author_name' => $actorName,
                     'comment' => $body,
                     'link' => $link
                 ]);

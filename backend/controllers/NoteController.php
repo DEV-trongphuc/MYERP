@@ -266,6 +266,14 @@ class NoteController {
         if (!empty($mentions)) {
             require_once __DIR__ . '/../NotificationService.php';
             $ins = $this->db->prepare("INSERT IGNORE INTO note_mentions (note_id, user_id) VALUES (?,?)");
+            $entityType = $type;
+            $noteLink = match ($entityType) {
+                'contact' => "/contacts?open_contact_id={$entityId}&tab=tags&highlight_note_id={$id}",
+                'deal' => "/deals?open_deal_id={$entityId}&highlight_note_id={$id}",
+                'company' => "/companies?id={$entityId}&highlight_note_id={$id}",
+                'project' => "/projects?id={$entityId}&highlight_note_id={$id}",
+                default => "/contacts?open_contact_id={$entityId}&tab=tags&highlight_note_id={$id}"
+            };
             
             foreach ($mentions as $uid) {
                 $uid = (int)$uid;
@@ -276,7 +284,7 @@ class NoteController {
                     'user_id' => $uid,
                     'author_name' => $auth['full_name'] ?? 'Đồng nghiệp',
                     'comment' => $b['body'] ?? '',
-                    'link' => "/contacts/{$entityId}"
+                    'link' => $noteLink
                 ]);
             }
         }
@@ -323,6 +331,66 @@ class NoteController {
 
             $this->db->prepare("UPDATE contacts SET last_contact = NOW(), security_expires_at = ? WHERE id = ? AND tenant_id = ?")
                  ->execute([$securityExpires, $cid, $auth['tenant_id']]);
+        }
+
+        // Extract and notify mentions on note update
+        $bodyText = (string)($b['body'] ?? '');
+        $mentions = $b['mentions'] ?? [];
+        if (empty($mentions)) {
+            if (preg_match_all('/data-user-id=(?:&quot;|["\']|\\\\+["\'])?(\d+)/i', $bodyText, $matchesId)) {
+                $uids = array_filter(array_map('intval', $matchesId[1]));
+                foreach ($uids as $uid) {
+                    if ($uid && (int)$uid !== (int)$auth['user_id']) {
+                        $mentions[] = (int)$uid;
+                    }
+                }
+            }
+            $matches = [];
+            preg_match_all('/@([a-zA-Z0-9_\x{00C0}-\x{1EF9}()\s]+?)(?:<\/span>|<br|\n|$)/u', $bodyText, $matches);
+            $names = is_array($matches[1] ?? null) ? $matches[1] : [];
+            if (!empty($names)) {
+                foreach ($names as $nameWithUnderscores) {
+                    $nameWithUnderscores = trim(strip_tags($nameWithUnderscores));
+                    if (empty($nameWithUnderscores)) continue;
+                    $fullName = str_replace('_', ' ', $nameWithUnderscores);
+                    $stmtM = $this->db->prepare("SELECT id FROM users WHERE (full_name=? OR REPLACE(full_name, ' ', '_')=?)");
+                    $stmtM->execute([$fullName, $nameWithUnderscores]);
+                    $uid = $stmtM->fetchColumn();
+                    if ($uid && (int)$uid !== (int)$auth['user_id']) $mentions[] = (int)$uid;
+                }
+            }
+        }
+        $mentions = array_unique(array_filter(array_map('intval', $mentions), function($uid) use ($auth) {
+            return $uid > 0 && $uid !== (int)$auth['user_id'];
+        }));
+
+        if (!empty($mentions)) {
+            require_once __DIR__ . '/../NotificationService.php';
+            $stmtExisting = $this->db->prepare("SELECT user_id FROM note_mentions WHERE note_id = ?");
+            $stmtExisting->execute([$id]);
+            $existingMentions = array_map('intval', $stmtExisting->fetchAll(PDO::FETCH_COLUMN) ?: []);
+
+            $ins = $this->db->prepare("INSERT IGNORE INTO note_mentions (note_id, user_id) VALUES (?,?)");
+            $entityType = $oldNote['entity_type'] ?? 'contact';
+            $entityId = (int)($oldNote['entity_id'] ?? 0);
+            $noteLink = match ($entityType) {
+                'contact' => "/contacts?open_contact_id={$entityId}&tab=tags&highlight_note_id={$id}",
+                'deal' => "/deals?open_deal_id={$entityId}&highlight_note_id={$id}",
+                'company' => "/companies?id={$entityId}&highlight_note_id={$id}",
+                'project' => "/projects?id={$entityId}&highlight_note_id={$id}",
+                default => "/contacts?open_contact_id={$entityId}&tab=tags&highlight_note_id={$id}"
+            };
+
+            foreach ($mentions as $uid) {
+                if (in_array($uid, $existingMentions, true)) continue;
+                $ins->execute([$id, $uid]);
+                NotificationService::send($this->db, $auth['tenant_id'], 'MENTION_TAGGED', [
+                    'user_id' => $uid,
+                    'author_name' => $auth['full_name'] ?? 'Đồng nghiệp',
+                    'comment' => $b['body'] ?? '',
+                    'link' => $noteLink
+                ]);
+            }
         }
 
         respond(200, null, 'Đã cập nhật ghi chú');

@@ -42,7 +42,9 @@ class ConsultantShiftController {
     public function register(array $auth): void {
         $tid = $auth['tenant_id'];
         $body = getBody();
-        $userId = (int)($body['user_id'] ?? $auth['user_id']);
+        $role = strtolower($auth['role'] ?? '');
+        $isManagerOrAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'hr'], true);
+        $userId = $isManagerOrAdmin ? (int)($body['user_id'] ?? $auth['user_id']) : (int)$auth['user_id'];
         $shiftType = trim($body['shift_type'] ?? 'regular'); // regular, night, weekend, holiday
         $shiftDate = trim($body['shift_date'] ?? date('Y-m-d'));
         $note = trim($body['notes'] ?? $body['note'] ?? '');
@@ -51,12 +53,32 @@ class ConsultantShiftController {
             respond(422, null, 'Ngày trực là bắt buộc', false);
         }
 
-        $stmt = $this->db->prepare("
-            INSERT INTO consultant_shifts (tenant_id, user_id, shift_type, shift_date, status, notes, created_at, updated_at)
-            VALUES (?, ?, ?, ?, 'pending', ?, NOW(), NOW())
-        ");
-        $stmt->execute([$tid, $userId, $shiftType, $shiftDate, $note]);
-        $id = (int)$this->db->lastInsertId();
+        $this->db->beginTransaction();
+        try {
+            $stmtDup = $this->db->prepare("
+                SELECT id FROM consultant_shifts
+                WHERE tenant_id = ? AND user_id = ? AND shift_date = ? AND shift_type = ?
+                LIMIT 1 FOR UPDATE
+            ");
+            $stmtDup->execute([$tid, $userId, $shiftDate, $shiftType]);
+            if ($stmtDup->fetchColumn()) {
+                $this->db->rollBack();
+                respond(409, null, 'Ca trực này đã được đăng ký trước đó', false);
+            }
+
+            $stmt = $this->db->prepare("
+                INSERT INTO consultant_shifts (tenant_id, user_id, shift_type, shift_date, status, notes, created_at, updated_at)
+                VALUES (?, ?, ?, ?, 'pending', ?, NOW(), NOW())
+            ");
+            $stmt->execute([$tid, $userId, $shiftType, $shiftDate, $note]);
+            $id = (int)$this->db->lastInsertId();
+            $this->db->commit();
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            respond(500, null, 'Lỗi đăng ký ca trực: ' . $e->getMessage(), false);
+        }
 
         respond(201, ['id' => $id, 'user_id' => $userId, 'shift_date' => $shiftDate, 'status' => 'pending'], 'Đăng ký ca trực thành công');
     }
@@ -66,6 +88,22 @@ class ConsultantShiftController {
         $body = getBody();
         $status = trim($body['status'] ?? '');
         $note = trim($body['notes'] ?? '');
+
+        $stmtCheck = $this->db->prepare("SELECT user_id, status FROM consultant_shifts WHERE id = ? AND tenant_id = ? LIMIT 1");
+        $stmtCheck->execute([$id, $tid]);
+        $shift = $stmtCheck->fetch(PDO::FETCH_ASSOC);
+        if (!$shift) {
+            respond(404, null, 'Không tìm thấy ca trực', false);
+        }
+
+        $role = strtolower($auth['role'] ?? '');
+        $isManagerOrAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'hr'], true);
+        if (!$isManagerOrAdmin && (int)$shift['user_id'] !== (int)$auth['user_id']) {
+            respond(403, null, 'Bạn không có quyền cập nhật ca trực của nhân sự khác', false);
+        }
+        if ($status && !$isManagerOrAdmin) {
+            respond(403, null, 'Chỉ quản lý hoặc Admin mới có quyền phê duyệt trạng thái ca trực', false);
+        }
 
         $updates = [];
         $params = [];
@@ -87,27 +125,47 @@ class ConsultantShiftController {
         $this->db->prepare("UPDATE consultant_shifts SET " . implode(', ', $updates) . ", updated_at = NOW() WHERE id = ? AND tenant_id = ?")
             ->execute($params);
 
-        respond(200, ['id' => $id, 'status' => $status], 'Cập nhật ca trực thành công');
+        respond(200, ['id' => $id, 'status' => $status ?: $shift['status']], 'Cập nhật ca trực thành công');
     }
 
     public function destroy(array $auth, int $id): void {
         $tid = $auth['tenant_id'];
+        $stmtCheck = $this->db->prepare("SELECT user_id, status FROM consultant_shifts WHERE id = ? AND tenant_id = ? LIMIT 1");
+        $stmtCheck->execute([$id, $tid]);
+        $shift = $stmtCheck->fetch(PDO::FETCH_ASSOC);
+        if (!$shift) {
+            respond(404, null, 'Không tìm thấy ca trực', false);
+        }
+
+        $role = strtolower($auth['role'] ?? '');
+        $isManagerOrAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'hr'], true);
+        if (!$isManagerOrAdmin && (int)$shift['user_id'] !== (int)$auth['user_id']) {
+            respond(403, null, 'Bạn không có quyền hủy ca trực của nhân sự khác', false);
+        }
+
         $stmt = $this->db->prepare("DELETE FROM consultant_shifts WHERE id = ? AND tenant_id = ?");
         $stmt->execute([$id, $tid]);
         respond(200, null, 'Hủy đăng ký ca trực thành công');
     }
 
     public function toggleVacation(array $auth): void {
+        $tid = $auth['tenant_id'];
         $body = getBody();
-        $userId = (int)($body['user_id'] ?? $auth['user_id']);
+        $role = strtolower($auth['role'] ?? '');
+        $isManagerOrAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'hr'], true);
+        $userId = $isManagerOrAdmin ? (int)($body['user_id'] ?? $auth['user_id']) : (int)$auth['user_id'];
         
-        $stmt = $this->db->prepare("SELECT vacation_mode FROM users WHERE id = ? LIMIT 1");
-        $stmt->execute([$userId]);
-        $current = (int)$stmt->fetchColumn();
+        $stmt = $this->db->prepare("SELECT vacation_mode FROM users WHERE id = ? AND tenant_id = ? LIMIT 1");
+        $stmt->execute([$userId, $tid]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            respond(404, null, 'Không tìm thấy nhân sự thuộc chi nhánh/tổ chức này', false);
+        }
+        $current = (int)$row['vacation_mode'];
         $newMode = $current === 1 ? 0 : 1;
 
-        $this->db->prepare("UPDATE users SET vacation_mode = ?, updated_at = NOW() WHERE id = ?")
-            ->execute([$newMode, $userId]);
+        $this->db->prepare("UPDATE users SET vacation_mode = ?, updated_at = NOW() WHERE id = ? AND tenant_id = ?")
+            ->execute([$newMode, $userId, $tid]);
 
         respond(200, [
             'user_id' => $userId,

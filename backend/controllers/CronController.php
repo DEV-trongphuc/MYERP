@@ -31,6 +31,7 @@ class CronController {
     }
 
     public function run(array $auth, int $id): void {
+        requireRole($auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director']);
         $tid = $auth['tenant_id'];
         $stmt = $this->db->prepare("SELECT * FROM system_cron_jobs WHERE id = ? AND tenant_id = ? LIMIT 1");
         $stmt->execute([$id, $tid]);
@@ -43,7 +44,7 @@ class CronController {
             VALUES (?, ?, 'success', 125, 'Chạy tác vụ định kỳ thủ công thành công', NOW())
         ")->execute([$id, $tid]);
 
-        $this->db->prepare("UPDATE system_cron_jobs SET last_run_at = NOW(), last_status = 'success' WHERE id = ?")->execute([$id]);
+        $this->db->prepare("UPDATE system_cron_jobs SET last_run_at = NOW(), last_status = 'success' WHERE id = ? AND tenant_id = ?")->execute([$id, $tid]);
 
         respond(200, [
             'id' => $id,
@@ -54,6 +55,7 @@ class CronController {
     }
 
     public function updateSchedule(array $auth, int $id): void {
+        requireRole($auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director']);
         $tid = $auth['tenant_id'];
         $body = getBody();
         $cronExpr = trim($body['cron_expression'] ?? $body['schedule'] ?? '');
@@ -66,6 +68,7 @@ class CronController {
     }
 
     public function deleteLogs(array $auth, int $id): void {
+        requireRole($auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director']);
         $tid = $auth['tenant_id'];
         $stmt = $this->db->prepare("DELETE FROM system_cron_logs WHERE cron_id = ? AND tenant_id = ?");
         $stmt->execute([$id, $tid]);
@@ -78,11 +81,25 @@ class CronController {
             ['name' => 'Đồng Bộ Điểm Danh & Check-in Tự Động', 'cron_expression' => '0 18 * * *', 'command' => 'hrm:checkin-auto-close'],
             ['name' => 'Gửi Báo Cáo Tuyển Sinh Đầu Ngày Cho Ban Giám Đốc', 'cron_expression' => '0 8 * * *', 'command' => 'reports:daily-sales-summary']
         ];
-        foreach ($defaults as $d) {
-            $this->db->prepare("
+        $this->db->beginTransaction();
+        try {
+            $checkStmt = $this->db->prepare("SELECT id FROM system_cron_jobs WHERE tenant_id = ? AND command = ? LIMIT 1 FOR UPDATE");
+            $insStmt = $this->db->prepare("
                 INSERT INTO system_cron_jobs (tenant_id, name, cron_expression, command, is_active, last_status, created_at)
                 VALUES (?, ?, ?, ?, 1, 'idle', NOW())
-            ")->execute([$tid, $d['name'], $d['cron_expression'], $d['command']]);
+            ");
+            foreach ($defaults as $d) {
+                $checkStmt->execute([$tid, $d['command']]);
+                if (!$checkStmt->fetchColumn()) {
+                    $insStmt->execute([$tid, $d['name'], $d['cron_expression'], $d['command']]);
+                }
+            }
+            $this->db->commit();
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            error_log("Seed Default Crons Error: " . $e->getMessage());
         }
     }
 

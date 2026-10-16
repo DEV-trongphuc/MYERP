@@ -141,6 +141,7 @@ export const POSModal: React.FC<{ onClose: () => void; defaultContact?: Contact 
         shipping_customer_pay: shippingCustomerPay ? 1 : 0
       });
       addToast('Tạo đơn hàng thành công!', 'success');
+      window.dispatchEvent(new CustomEvent('erp-action-completed', { detail: { actionType: 'sales_order' } }));
       onClose();
     } catch (err: any) {
       addToast(err.response?.data?.message || 'Lỗi khi tạo đơn hàng', 'error');
@@ -158,7 +159,7 @@ export const POSModal: React.FC<{ onClose: () => void; defaultContact?: Contact 
       style={{ 
         position: 'fixed', 
         inset: 0, 
-        zIndex: 2000000, 
+        zIndex: 2147483642, 
         display: 'flex', 
         alignItems: 'center', 
         justifyContent: 'center', 

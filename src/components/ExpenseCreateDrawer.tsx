@@ -260,7 +260,11 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
   const baseZIndex = zIndex || 2147483641;
   const { addToast } = useUIStore();
   const saveInFlightRef = useRef(false);
+  const justHydratedRef = useRef(false);
+  const isEditMode = Boolean(editItem?.id && !editItem?.isClone);
+  const isCloneMode = Boolean(editItem?.isClone);
   const [form, setForm] = useState<any>({ ...EMPTY_FORM });
+  const [titlePrefix, setTitlePrefix] = useState<string>('Đề nghị thanh toán');
   const [titleSuffix, setTitleSuffix] = useState<string>('');
 
   // Multi-line payment breakdown table
@@ -331,7 +335,8 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
   const handleSuffixChange = (val: string) => {
     setTitleSuffix(val);
     const trimmed = val.trim();
-    const combined = trimmed ? `Đề nghị thanh toán — ${trimmed}` : 'Đề nghị thanh toán';
+    const activePrefix = titlePrefix || 'Đề nghị thanh toán';
+    const combined = trimmed ? `${activePrefix} — ${trimmed}` : activePrefix;
     setForm((prev: any) => ({ ...prev, title: combined }));
   };
 
@@ -362,15 +367,16 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
 
   // Security guard: Only creator can edit
   useEffect(() => {
-    if (isOpen && editItem && editItem.id && !editItem.isClone) {
+    if (isOpen && isEditMode) {
       const creatorId = Number(editItem.created_by || editItem.user_id);
       const currentUserId = Number(user?.id);
-      if (creatorId && currentUserId && creatorId !== currentUserId) {
+      const isAdminOrMgr = Boolean(user && ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'accountant'].includes(String(user.role).toLowerCase()));
+      if (creatorId && currentUserId && creatorId !== currentUserId && !isAdminOrMgr) {
         addToast('Chỉ người tạo phiếu mới có quyền chỉnh sửa', 'error');
         onClose();
       }
     }
-  }, [isOpen, editItem, user?.id]);
+  }, [isOpen, isEditMode, editItem, user?.id, user?.role]);
 
   const isInitializedRef = useRef(false);
   const prevOpenRef = useRef(false);
@@ -407,7 +413,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
   }, [isOpen, editItem]);
 
   const isFormDirty = () => {
-    if (editItem) return false;
+    if (isEditMode) return false;
     return Boolean(
       titleSuffix?.trim() ||
       form.title?.trim() ||
@@ -423,11 +429,13 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
   const saveDraftToStorage = () => {
     const payload = {
       form,
+      titlePrefix,
       titleSuffix,
       expenseItems,
       images,
       expenseCategory,
       invoiceType,
+      allocationType,
       paymentTarget,
       paymentMethod,
       currencyType,
@@ -442,6 +450,12 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
       paymentBankBranch,
       paymentPhone,
       paymentTaxCode,
+      paymentDestination,
+      paymentWalletType,
+      paymentWalletPhone,
+      paymentCorporateCard,
+      paymentGovAgencyType,
+      paymentGovDecisionNumber,
       savedAt: new Date().toISOString()
     };
     try {
@@ -460,6 +474,10 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
   };
 
   const handleExplicitSaveDraft = () => {
+    if (isEditMode && editItem?.status === 'draft') {
+      handleSave(true);
+      return;
+    }
     saveDraftToStorage();
     addToast('Đã lưu bản nháp chi phí thành công!', 'success');
   };
@@ -480,18 +498,29 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
       onClose();
     }
   };
+  const handleRequestCloseRef = useRef<() => void>(() => {});
+  handleRequestCloseRef.current = handleRequestClose;
+  const previewQrModalUrlRef = useRef<string | null>(null);
+  previewQrModalUrlRef.current = previewQrModalUrl;
+  const confirmUploadInFlightRef = useRef(false);
 
   useEffect(() => {
     if (isOpen) {
       return pushOverlay('expense-create-drawer', () => {
-        handleRequestClose();
-      }, 120);
+        if (previewQrModalUrlRef.current) {
+          setPreviewQrModalUrl(null);
+          return;
+        }
+        handleRequestCloseRef.current();
+      }, 100);
     }
   }, [isOpen, showExitConfirm]);
 
   const handleRestoreDraft = () => {
     if (!existingDraft) return;
+    justHydratedRef.current = true;
     if (existingDraft.form) setForm({ ...EMPTY_FORM, ...existingDraft.form });
+    if (existingDraft.titlePrefix) setTitlePrefix(existingDraft.titlePrefix);
     if (existingDraft.titleSuffix !== undefined) {
       setTitleSuffix(existingDraft.titleSuffix);
     } else if (existingDraft.form?.title) {
@@ -503,20 +532,27 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
     if (Array.isArray(existingDraft.images)) setImages(existingDraft.images);
     if (existingDraft.expenseCategory) setExpenseCategory(existingDraft.expenseCategory);
     if (existingDraft.invoiceType) setInvoiceType(existingDraft.invoiceType);
+    setAllocationType(existingDraft.allocationType ?? 'contact');
     if (existingDraft.paymentTarget) setPaymentTarget(existingDraft.paymentTarget);
     if (existingDraft.paymentMethod) setPaymentMethod(existingDraft.paymentMethod);
     if (existingDraft.currencyType) setCurrencyType(existingDraft.currencyType);
-    if (existingDraft.paymentEmployeeId) setPaymentEmployeeId(existingDraft.paymentEmployeeId);
-    if (existingDraft.paymentSupplierId) setPaymentSupplierId(existingDraft.paymentSupplierId);
-    if (existingDraft.paymentLecturerId) setPaymentLecturerId(existingDraft.paymentLecturerId);
-    if (existingDraft.paymentContactId) setPaymentContactId(existingDraft.paymentContactId);
-    if (existingDraft.paymentBeneficiaryName) setPaymentBeneficiaryName(existingDraft.paymentBeneficiaryName);
-    if (existingDraft.paymentBankName) setPaymentBankName(existingDraft.paymentBankName);
-    if (existingDraft.paymentBankAccount) setPaymentBankAccount(existingDraft.paymentBankAccount);
-    if (existingDraft.paymentAccountName) setPaymentAccountName(existingDraft.paymentAccountName);
-    if (existingDraft.paymentBankBranch) setPaymentBankBranch(existingDraft.paymentBankBranch);
-    if (existingDraft.paymentPhone) setPaymentPhone(existingDraft.paymentPhone);
-    if (existingDraft.paymentTaxCode) setPaymentTaxCode(existingDraft.paymentTaxCode);
+    setPaymentEmployeeId(existingDraft.paymentEmployeeId ?? '');
+    setPaymentSupplierId(existingDraft.paymentSupplierId ?? '');
+    setPaymentLecturerId(existingDraft.paymentLecturerId ?? '');
+    setPaymentContactId(existingDraft.paymentContactId ?? '');
+    setPaymentBeneficiaryName(existingDraft.paymentBeneficiaryName ?? '');
+    setPaymentBankName(existingDraft.paymentBankName ?? '');
+    setPaymentBankAccount(existingDraft.paymentBankAccount ?? '');
+    setPaymentAccountName(existingDraft.paymentAccountName ?? '');
+    setPaymentBankBranch(existingDraft.paymentBankBranch ?? '');
+    setPaymentPhone(existingDraft.paymentPhone ?? '');
+    setPaymentTaxCode(existingDraft.paymentTaxCode ?? '');
+    setPaymentDestination(existingDraft.paymentDestination ?? '');
+    setPaymentWalletType(existingDraft.paymentWalletType ?? 'momo');
+    setPaymentWalletPhone(existingDraft.paymentWalletPhone ?? '');
+    setPaymentCorporateCard(existingDraft.paymentCorporateCard ?? '');
+    setPaymentGovAgencyType(existingDraft.paymentGovAgencyType ?? 'tax');
+    setPaymentGovDecisionNumber(existingDraft.paymentGovDecisionNumber ?? '');
     addToast('Đã khôi phục dữ liệu bản nháp chi phí', 'info');
     setExistingDraft(null);
   };
@@ -646,50 +682,101 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
     });
   }, [contacts]);
 
+  const employeeSelectOptions = useMemo(() => (
+    users.map((u: any) => ({
+      value: String(u.id),
+      label: u.full_name || u.name || u.username || `Nhân viên #${u.id}`,
+      avatar: u.avatar_url || u.avatar,
+      sublabel: [
+        u.role || '',
+        u.bank_name ? `${u.bank_name}: ${u.bank_account}` : 'Chưa có STK'
+      ].filter(Boolean).join(' • ')
+    }))
+  ), [users]);
+
+  const allocationContactOptions = useMemo(() => (
+    contacts.filter(c => !form.entities.find((e: any) => e.entity_id === c.id)).map(c => ({
+      value: String(c.id),
+      label: (c.full_name || '').trim(),
+      avatar: c.avatar_url,
+      sublabel: c.company_name
+    }))
+  ), [contacts, form.entities]);
+
+  const allocationCompanyOptions = useMemo(() => (
+    companies.filter(c => !form.entities.find((e: any) => e.entity_id === c.id)).map(c => ({
+      value: String(c.id),
+      label: c.name || c.company_name || 'Không tên',
+      avatar: c.logo_url || c.logo,
+      sublabel: c.code || c.phone
+    }))
+  ), [companies, form.entities]);
+
+  const approverUserOptions = useMemo(() => (
+    users.map((u: any) => ({
+      value: u.id,
+      label: u.full_name,
+      avatar: u.avatar_url,
+      sublabel: [u.phone, u.email, u.role].filter(Boolean).join(' - ')
+    }))
+  ), [users]);
+
   // Fetch initial system settings & dependencies
   useEffect(() => {
-    if (isOpen) {
-      if (propUsers && propUsers.length > 0) {
-        setUsers(propUsers);
-      }
+    if (!isOpen) return;
+    const controller = new AbortController();
+    const { signal } = controller;
 
-      api.get('/api.php?action=get_settings').then(r => {
-        if (r.data?.data) {
-          const matching = r.data.data.find((s: any) => s.setting_key === 'po_three_level_threshold');
-          if (matching && !isNaN(Number(matching.setting_value))) {
-            setThreshold(Number(matching.setting_value));
-          }
-        }
-      }).catch(() => {});
-
-      api.get('/users').then(r => {
-        const d = r.data?.data || r.data;
-        const list = Array.isArray(d) ? d : (d?.items || []);
-        if (list.length > 0) {
-          setUsers(list);
-        }
-      }).catch(() => {});
-
-      api.get('/teams').then(r => {
-        const d = r.data?.data;
-        setTeams(Array.isArray(d) ? d : (r.data || []));
-      }).catch(() => {});
-
-      api.get('/suppliers').then(r => {
-        const d = r.data.data;
-        setSuppliers(Array.isArray(d) ? d : (d?.items || []));
-      }).catch(() => {});
-
-      api.get('/contacts?limit=1000').then(r => {
-        const d = r.data.data;
-        setContacts(Array.isArray(d) ? d : (d?.items || []));
-      }).catch(() => {});
-
-      api.get('/companies?limit=1000').then(r => {
-        const d = r.data.data;
-        setCompanies(Array.isArray(d) ? d : (d?.items || []));
-      }).catch(() => {});
+    if (propUsers && propUsers.length > 0) {
+      setUsers(propUsers);
     }
+
+    api.get('/api.php?action=get_settings', { signal }).then(r => {
+      if (signal.aborted) return;
+      if (r.data?.data) {
+        const matching = r.data.data.find((s: any) => s.setting_key === 'po_three_level_threshold');
+        if (matching && !isNaN(Number(matching.setting_value))) {
+          setThreshold(Number(matching.setting_value));
+        }
+      }
+    }).catch(() => {});
+
+    api.get('/users', { signal }).then(r => {
+      if (signal.aborted) return;
+      const d = r.data?.data || r.data;
+      const list = Array.isArray(d) ? d : (d?.items || []);
+      if (list.length > 0) {
+        setUsers(list);
+      }
+    }).catch(() => {});
+
+    api.get('/teams', { signal }).then(r => {
+      if (signal.aborted) return;
+      const d = r.data?.data;
+      setTeams(Array.isArray(d) ? d : (r.data || []));
+    }).catch(() => {});
+
+    api.get('/suppliers', { signal }).then(r => {
+      if (signal.aborted) return;
+      const d = r.data.data;
+      setSuppliers(Array.isArray(d) ? d : (d?.items || []));
+    }).catch(() => {});
+
+    api.get('/contacts?limit=1000', { signal }).then(r => {
+      if (signal.aborted) return;
+      const d = r.data.data;
+      setContacts(Array.isArray(d) ? d : (d?.items || []));
+    }).catch(() => {});
+
+    api.get('/companies?limit=1000', { signal }).then(r => {
+      if (signal.aborted) return;
+      const d = r.data.data;
+      setCompanies(Array.isArray(d) ? d : (d?.items || []));
+    }).catch(() => {});
+
+    return () => {
+      controller.abort();
+    };
   }, [isOpen, propUsers]);
 
   // Auto-fill logged in user's bank details if target is 'Nội bộ'
@@ -719,6 +806,8 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
         prevEditItemRef.current = editItem;
 
         if (editItem) {
+          justHydratedRef.current = true;
+
           // Extract existing images with strict deduplication
           const existingImages: (ExpenseAttachmentItem | string)[] = [];
           const isDuplicateImg = (candidate: string) => {
@@ -759,7 +848,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
           let parsedBankName = editItem.bank_name || '';
           let parsedBankAccount = editItem.bank_account_number || editItem.bank_account || '';
           let parsedAccountName = editItem.bank_account_name || '';
-          let parsedBranch = '';
+          let parsedBranch = editItem.bank_branch || '';
 
           if (match) {
             parsedBankName = match[1].trim();
@@ -773,9 +862,23 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
           setPaymentAccountName(parsedAccountName);
           setPaymentBankBranch(parsedBranch);
 
-          const initialSuffix = extractExpenseTitleSuffix(editItem.title || '');
+          const rawTitle = (editItem.title || '').trim();
+          let detectedPrefix = 'Đề nghị thanh toán';
+          let rawSuffix = extractExpenseTitleSuffix(rawTitle);
+          const dashMatch = rawTitle.match(/^([^—\-]+?)\s*(?:—|-)\s*(.+)$/);
+          if (dashMatch) {
+            const candidatePrefix = dashMatch[1].trim();
+            if (/^(Đề nghị|Đề xuất|Phiếu|Tờ trình|Thanh toán|Tạm ứng|Hoàn ứng)/i.test(candidatePrefix)) {
+              detectedPrefix = candidatePrefix;
+              rawSuffix = dashMatch[2].trim();
+            }
+          }
+          const initialSuffix = editItem.isClone && rawSuffix && !rawSuffix.endsWith('(Bản sao)')
+            ? `${rawSuffix} (Bản sao)`
+            : rawSuffix;
+          setTitlePrefix(detectedPrefix);
           setTitleSuffix(initialSuffix);
-          const fullTitle = initialSuffix ? `Đề nghị thanh toán — ${initialSuffix}` : (editItem.title || '');
+          const fullTitle = initialSuffix ? `${detectedPrefix} — ${initialSuffix}` : rawTitle;
 
           let initialCategory = editItem.category || 'Vận hành';
           if (initialCategory === 'Di chuyển' || initialCategory === 'Vận chuyển') initialCategory = 'travel';
@@ -789,10 +892,114 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
           setPaymentBeneficiaryName(editItem.vendor_name || '');
           setCurrencyType(editItem.currency || 'VND');
 
+          const rawNotes = editItem.notes || editItem.description || '';
+
+          // Restore paymentMethod & auxiliary payment details from editItem or notes
+          const cashMatch = rawNotes.match(/\[Thông tin nhận tiền\]:\s*Tiền mặt(?:\s*-\s*Người nhận:\s*([^\-\n]+))?(?:\s*-\s*Quầy bàn giao:\s*([^\n]+))?/i);
+          const walletMatch = rawNotes.match(/\[Thông tin nhận tiền\]:\s*Ví điện tử\s*\(([^)]+)\)(?:\s*-\s*SĐT:\s*([^\-\n]+))?(?:\s*-\s*Chủ ví:\s*([^\n]+))?/i);
+          const cardMatch = rawNotes.match(/\[Thông tin nhận tiền\]:\s*Thẻ tín dụng(?:\s*-\s*4 số cuối:\s*([^\-\n]+))?(?:\s*-\s*Người quẹt:\s*([^\n]+))?/i);
+
+          if (editItem.payment_method) {
+            setPaymentMethod(editItem.payment_method);
+          } else if (cashMatch) {
+            setPaymentMethod('Tiền mặt');
+          } else if (walletMatch) {
+            setPaymentMethod('Ví điện tử');
+          } else if (cardMatch) {
+            setPaymentMethod('Thẻ tín dụng');
+          } else if (editItem.request_bank_transfer === false || editItem.request_bank_transfer === 0) {
+            setPaymentMethod('Tiền mặt');
+          } else {
+            setPaymentMethod('Chuyển khoản');
+          }
+
+          setPaymentDestination(editItem.payment_destination || cashMatch?.[2]?.trim() || '');
+          setPaymentWalletType((editItem.payment_wallet_type || walletMatch?.[1]?.trim() || 'momo') as any);
+          setPaymentWalletPhone(editItem.payment_wallet_phone || walletMatch?.[2]?.trim() || '');
+          const parsedCard = editItem.payment_corporate_card || cardMatch?.[1]?.trim() || '';
+          setPaymentCorporateCard(parsedCard === 'N/A' ? '' : parsedCard);
+          setPaymentGovAgencyType(editItem.payment_gov_agency_type || 'tax');
+          setPaymentGovDecisionNumber(editItem.payment_gov_decision_number || '');
+          setPaymentPhone(editItem.payment_phone || '');
+          setPaymentTaxCode(editItem.payment_tax_code || '');
+
+          // Restore paymentTarget & beneficiary selector IDs
+          const matchedEmp = users.find((u: any) =>
+            (editItem.vendor_name && (u.full_name === editItem.vendor_name || u.name === editItem.vendor_name)) ||
+            (parsedBankAccount && u.bank_account && String(u.bank_account).trim() === String(parsedBankAccount).trim())
+          );
+          const matchedPartner = companies.find((c: any) =>
+            editItem.vendor_name && (c.name === editItem.vendor_name || c.company_name === editItem.vendor_name)
+          );
+          const matchedContact = contacts.find((c: any) =>
+            editItem.vendor_name && ((c.full_name || '').trim() === editItem.vendor_name || c.name === editItem.vendor_name)
+          );
+
+          if (editItem.payment_target) {
+            setPaymentTarget(editItem.payment_target);
+            setPaymentEmployeeId(editItem.payment_employee_id ? String(editItem.payment_employee_id) : (matchedEmp ? String(matchedEmp.id) : ''));
+            setPaymentSupplierId(editItem.payment_supplier_id ? String(editItem.payment_supplier_id) : (matchedPartner ? String(matchedPartner.id) : ''));
+            setPaymentLecturerId(editItem.payment_lecturer_id ? String(editItem.payment_lecturer_id) : '');
+            setPaymentContactId(editItem.payment_contact_id ? String(editItem.payment_contact_id) : (matchedContact ? String(matchedContact.id) : ''));
+          } else if (matchedEmp) {
+            setPaymentTarget('Nội bộ');
+            setPaymentEmployeeId(String(matchedEmp.id));
+            setPaymentSupplierId('');
+            setPaymentLecturerId('');
+            setPaymentContactId('');
+          } else if (matchedPartner) {
+            setPaymentTarget('Đối tác');
+            setPaymentEmployeeId('');
+            setPaymentSupplierId(String(matchedPartner.id));
+            setPaymentLecturerId('');
+            setPaymentContactId('');
+          } else if (matchedContact) {
+            setPaymentTarget('Khách hàng');
+            setPaymentEmployeeId('');
+            setPaymentSupplierId('');
+            setPaymentLecturerId('');
+            setPaymentContactId(String(matchedContact.id));
+          } else if (editItem.vendor_name) {
+            setPaymentTarget('Đối tác');
+            setPaymentEmployeeId('');
+            setPaymentSupplierId('');
+            setPaymentLecturerId('');
+            setPaymentContactId('');
+          } else {
+            setPaymentTarget('Nội bộ');
+            setPaymentEmployeeId('');
+            setPaymentSupplierId('');
+            setPaymentLecturerId('');
+            setPaymentContactId('');
+          }
+
+          // Restore allocationType from entities
+          const hydratedEntities = Array.isArray(editItem.entities) ? editItem.entities : [];
+          setAllocationType(hydratedEntities[0]?.entity_type === 'company' ? 'company' : 'contact');
+
+          // Parse related_user_ids safely from array, JSON string, or comma-separated string
+          let parsedRelatedIds: number[] = [];
+          if (Array.isArray(editItem.related_user_ids)) {
+            parsedRelatedIds = editItem.related_user_ids.map(Number).filter(n => !isNaN(n) && n > 0);
+          } else if (typeof editItem.related_user_ids === 'string' && editItem.related_user_ids.trim()) {
+            const rawRel = editItem.related_user_ids.trim();
+            if (rawRel.startsWith('[')) {
+              try {
+                const parsed = JSON.parse(rawRel);
+                if (Array.isArray(parsed)) parsedRelatedIds = parsed.map(Number).filter(n => !isNaN(n) && n > 0);
+              } catch {}
+            } else {
+              parsedRelatedIds = rawRel.split(',').map(s => Number(s.trim())).filter(n => !isNaN(n) && n > 0);
+            }
+          }
+
           let cleanNotes = editItem.notes ? editItem.notes
             .replace(/\[Chi tiết các khoản chi\]:[^\n]*(\n[•\-*][^\n]*)*\s*/gi, '')
+            .replace(/\[JSON_ITEMS\]:[^\n]*/gi, '')
             .replace(/\[Hồ sơ chi phí[^\]]*\]:[^\n]*/gi, '')
+            .replace(/\[Phòng ban[^\]]*\]:[^\n]*/gi, '')
             .replace(/\[Thông tin chuyển khoản[^\]]*\]:[^\n]*/gi, '')
+            .replace(/\[Thông tin nhận tiền[^\]]*\]:[^\n]*/gi, '')
             .replace(/\[Tài liệu đính kèm[^\]]*\]:[^\n]*(\n•[^\n]*)*\s*/gi, '')
             .trim() : '';
 
@@ -808,13 +1015,13 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
             approver_id: editItem.approver_id ? Number(editItem.approver_id) : null,
             approver_id_2: editItem.approver_id_2 ? Number(editItem.approver_id_2) : null,
             approver_id_3: editItem.approver_id_3 ? Number(editItem.approver_id_3) : null,
-            related_user_ids: Array.isArray(editItem.related_user_ids) ? editItem.related_user_ids.map(Number) : [],
+            related_user_ids: parsedRelatedIds,
             vendor_name: editItem.vendor_name || '',
             has_vat_invoice: !!editItem.has_vat_invoice,
             is_vat_inclusive: !!editItem.is_vat_inclusive,
-            entities: Array.isArray(editItem.entities) ? editItem.entities : [],
+            entities: hydratedEntities,
             image_url: editItem.image_url || '',
-            request_bank_transfer: true,
+            request_bank_transfer: paymentMethod === 'Chuyển khoản',
             bank_name: parsedBankName,
             bank_account_number: parsedBankAccount,
             bank_account_name: parsedAccountName
@@ -822,28 +1029,37 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
 
           // Expense items breakdown parsing
           let loadedItems: any[] = [];
-          if (Array.isArray(editItem.items) && editItem.items.length > 0) {
-            loadedItems = editItem.items;
-          } else if (typeof editItem.items === 'string' && editItem.items.trim().startsWith('[')) {
+          const jsonItemsMatch = rawNotes.match(/\[JSON_ITEMS\]:\s*(\[[^\n]+\])/i);
+          if (jsonItemsMatch) {
             try {
-              const parsed = JSON.parse(editItem.items);
+              const parsed = JSON.parse(jsonItemsMatch[1]);
               if (Array.isArray(parsed) && parsed.length > 0) loadedItems = parsed;
-            } catch (e) {}
+            } catch {}
+          }
+          if (loadedItems.length === 0) {
+            if (Array.isArray(editItem.items) && editItem.items.length > 0) {
+              loadedItems = editItem.items;
+            } else if (typeof editItem.items === 'string' && editItem.items.trim().startsWith('[')) {
+              try {
+                const parsed = JSON.parse(editItem.items);
+                if (Array.isArray(parsed) && parsed.length > 0) loadedItems = parsed;
+              } catch (e) {}
+            }
           }
 
+          let hydratedItems: ExpenseItemRow[] = [];
           if (loadedItems.length > 0) {
-            setExpenseItems(loadedItems.map((it: any, idx: number) => ({
+            hydratedItems = loadedItems.map((it: any, idx: number) => ({
               id: it.id || Date.now() + idx,
-              content: it.content || it.name || '',
+              content: it.content || it.name || it.description || '',
               quantity: Number(it.quantity) || 1,
               price: parseMoneyVn(it.price !== undefined ? it.price : it.unit_price),
-              vat: Number(it.vat !== undefined ? it.vat : 10)
-            })));
+              vat: Number(it.vat !== undefined ? it.vat : (editItem.has_vat_invoice ? 10 : 0))
+            }));
           } else {
-            const rawNotes = editItem.notes || editItem.description || '';
             const itemMatches = Array.from(rawNotes.matchAll(/[•\-*]?\s*\[?(\d+)\]?\s*([^\-\n]+?)\s*-\s*SL:\s*(\d+(?:\.\d+)?)\s*-\s*Đơn giá:\s*([0-9.,]+)[^\-]*-\s*VAT:\s*(\d+)%/gi));
             if (itemMatches.length > 0) {
-              const parsed = itemMatches.map((m: any, idx: number) => {
+              hydratedItems = itemMatches.map((m: any, idx: number) => {
                 const parsedPrice = String(m[4] || '').trim();
                 const p = parseMoneyVn(parsedPrice);
                 return {
@@ -854,19 +1070,18 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                   vat: Number(m[5]) || 0
                 };
               });
-              setExpenseItems(parsed);
             } else {
               const amt = Math.round(Number(editItem.amount) || 0);
               const vatAmt = Math.round(Number(editItem.vat_amount) || 0);
-              let vatPct = 10;
+              let vatPct = 0;
               let netPrice = amt;
               if (vatAmt > 0 && amt > 0) {
                 netPrice = Math.round(amt - vatAmt);
-                const calcPct = Math.round((vatAmt / netPrice) * 100);
+                const calcPct = netPrice > 0 ? Math.round((vatAmt / netPrice) * 100) : 0;
                 vatPct = [0, 5, 8, 10].includes(calcPct) ? calcPct : Math.round((vatAmt / amt) * 100);
                 if (![0, 5, 8, 10].includes(vatPct)) vatPct = 8;
               }
-              setExpenseItems([
+              hydratedItems = [
                 {
                   id: Date.now(),
                   content: initialSuffix || editItem.title || '',
@@ -874,20 +1089,47 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                   price: Math.round(netPrice > 0 ? netPrice : amt),
                   vat: vatPct
                 }
-              ]);
+              ];
             }
+          }
+          setExpenseItems(hydratedItems);
+
+          // Restore invoiceType accurately from editItem or hydrated items
+          if (editItem.invoice_type && ['vat_10', 'vat_8', 'vat_5', 'vat_0', 'retail', 'none'].includes(editItem.invoice_type)) {
+            setInvoiceType(editItem.invoice_type);
+          } else if (editItem.has_vat_invoice || hydratedItems.some(it => Number(it.vat) > 0)) {
+            const firstVat = Number(hydratedItems[0]?.vat ?? 10);
+            if (firstVat === 8) setInvoiceType('vat_8');
+            else if (firstVat === 5) setInvoiceType('vat_5');
+            else if (firstVat === 0) setInvoiceType('vat_0');
+            else setInvoiceType('vat_10');
+          } else {
+            setInvoiceType('none');
           }
         } else {
           // Fresh create mode
           const defaultApproverId = resolveTeamLeaderId(user, users, teams) || (users[0]?.id || null);
 
           setImages([]);
+          setTitlePrefix('Đề nghị thanh toán');
           setTitleSuffix('');
           setExpenseCategory('general');
           setInvoiceType('vat_10');
           setPaymentTarget('Nội bộ');
           setPaymentMethod('Chuyển khoản');
           setCurrencyType('VND');
+          setAllocationType('contact');
+          setPaymentSupplierId('');
+          setPaymentLecturerId('');
+          setPaymentContactId('');
+          setPaymentDestination('');
+          setPaymentWalletType('momo');
+          setPaymentWalletPhone('');
+          setPaymentCorporateCard('');
+          setPaymentGovAgencyType('tax');
+          setPaymentGovDecisionNumber('');
+          setPaymentPhone('');
+          setPaymentTaxCode('');
           setExpenseItems([{ id: Date.now(), content: '', quantity: 1, price: 0, vat: 10 }]);
 
           setForm({
@@ -942,7 +1184,11 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
 
   // Dynamic threshold routing effect
   useEffect(() => {
-    if (isOpen && !editItem && users.length > 0) {
+    if (isOpen && users.length > 0) {
+      if (justHydratedRef.current) {
+        justHydratedRef.current = false;
+        return;
+      }
       const amt = Number(itemsGrandTotal || 0);
       if (amt >= threshold) {
         setForm((prev: any) => ({
@@ -958,7 +1204,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
         }));
       }
     }
-  }, [itemsGrandTotal, threshold, isOpen, editItem, defaultDirector, defaultAccountant, users]);
+  }, [itemsGrandTotal, threshold, isOpen, defaultDirector, defaultAccountant, users]);
 
   // Keep approver_id updated with team leader
   useEffect(() => {
@@ -974,12 +1220,12 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
   const isAutoApprove = Boolean(isManagerOrAbove && form.approver_id !== null && user?.id !== undefined && Number(form.approver_id) === Number(user.id));
 
   // Handle Save
-  const handleSave = async () => {
+  const handleSave = async (isSaveDraft = false) => {
     if (saveInFlightRef.current) return;
     saveInFlightRef.current = true;
 
     try {
-      if (editItem && editItem.id && !editItem.isClone) {
+      if (isEditMode) {
         const creatorId = Number(editItem.created_by || editItem.user_id);
         const currentUserId = Number(user?.id);
         if (creatorId && currentUserId && creatorId !== currentUserId) {
@@ -988,36 +1234,41 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
         }
       }
 
-      let finalTitle = titleSuffix.trim() ? `Đề nghị thanh toán — ${titleSuffix.trim()}` : (form.title?.trim() || '');
+      const activePrefix = titlePrefix || 'Đề nghị thanh toán';
+      let finalTitle = titleSuffix.trim() ? `${activePrefix} — ${titleSuffix.trim()}` : (form.title?.trim() || '');
       const validItems = expenseItems.filter(it => it.content?.trim());
-      if (!titleSuffix.trim() && (!finalTitle || finalTitle === 'Đề nghị thanh toán')) {
+      if (!titleSuffix.trim() && (!finalTitle || finalTitle === activePrefix)) {
         if (validItems.length > 0) {
           const autoSuffix = validItems.map(it => it.content.trim()).join(', ');
-          finalTitle = `Đề nghị thanh toán — ${autoSuffix}`;
-        } else {
+          finalTitle = `${activePrefix} — ${autoSuffix}`;
+        } else if (!isSaveDraft) {
           addToast('Vui lòng nhập chi tiết nội dung chi trong bảng kê hoặc tiêu đề', 'error');
           return;
+        } else {
+          finalTitle = `${activePrefix} — Bản nháp`;
         }
       }
-      if (itemsGrandTotal <= 0) {
-        addToast('Vui lòng nhập đầy đủ số tiền chi trong bảng chi tiết', 'error');
-        return;
-      }
-      if (form.approver_id === null) {
-        addToast('Vui lòng chọn người duyệt Cấp 1 (Trưởng nhóm / Quản lý)', 'error');
-        return;
-      }
-      if (!isManagerOrAbove && form.approver_id !== null && user?.id !== undefined && Number(form.approver_id) === Number(user.id)) {
-        addToast('Nhân viên không thể tự phê duyệt phiếu chi của mình. Vui lòng chọn Quản lý / Trưởng nhóm phê duyệt', 'error');
-        return;
-      }
-      if (form.approver_id_2 === null) {
-        addToast(itemsGrandTotal >= threshold ? 'Vui lòng chọn người duyệt Cấp 2 (Ban Giám đốc)' : 'Vui lòng chọn người duyệt Cấp 2 (Kế toán)', 'error');
-        return;
-      }
-      if (itemsGrandTotal >= threshold && form.approver_id_3 === null) {
-        addToast(`Khoản chi từ ${threshold.toLocaleString('vi-VN')}đ trở lên bắt buộc phê duyệt 3 cấp: Leader -> Ban Giám đốc -> Kế toán!`, 'error');
-        return;
+      if (!isSaveDraft) {
+        if (itemsGrandTotal <= 0) {
+          addToast('Vui lòng nhập đầy đủ số tiền chi trong bảng chi tiết', 'error');
+          return;
+        }
+        if (form.approver_id === null) {
+          addToast('Vui lòng chọn người duyệt Cấp 1 (Trưởng nhóm / Quản lý)', 'error');
+          return;
+        }
+        if (!isManagerOrAbove && form.approver_id !== null && user?.id !== undefined && Number(form.approver_id) === Number(user.id)) {
+          addToast('Nhân viên không thể tự phê duyệt phiếu chi của mình. Vui lòng chọn Quản lý / Trưởng nhóm phê duyệt', 'error');
+          return;
+        }
+        if (form.approver_id_2 === null) {
+          addToast(itemsGrandTotal >= threshold ? 'Vui lòng chọn người duyệt Cấp 2 (Ban Giám đốc)' : 'Vui lòng chọn người duyệt Cấp 2 (Kế toán)', 'error');
+          return;
+        }
+        if (itemsGrandTotal >= threshold && form.approver_id_3 === null) {
+          addToast(`Khoản chi từ ${threshold.toLocaleString('vi-VN')}đ trở lên bắt buộc phê duyệt 3 cấp: Leader -> Ban Giám đốc -> Kế toán!`, 'error');
+          return;
+        }
       }
 
       setSaving(true);
@@ -1029,7 +1280,9 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
 
       let finalNotes = form.notes || '';
       finalNotes = finalNotes.replace(/\[Chi tiết các khoản chi\]:[^\n]*(\n[•\-*][^\n]*)*\s*/gi, '').trim();
+      finalNotes = finalNotes.replace(/\[JSON_ITEMS\]:[^\n]*/gi, '').trim();
       finalNotes = finalNotes.replace(/\[Hồ sơ chi phí[^\]]*\]:[^\n]*/gi, '').trim();
+      finalNotes = finalNotes.replace(/\[Phòng ban[^\]]*\]:[^\n]*/gi, '').trim();
       finalNotes = finalNotes.replace(/\[Thông tin chuyển khoản[^\]]*\]:[^\n]*/gi, '').trim();
       finalNotes = finalNotes.replace(/\[Thông tin nhận tiền[^\]]*\]:[^\n]*/gi, '').trim();
       finalNotes = finalNotes.replace(/\[Tài liệu đính kèm[^\]]*\]:[^\n]*(\n•[^\n]*)*\s*/gi, '').trim();
@@ -1083,7 +1336,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
         finalNotes = `${finalNotes}\n\n[Tài liệu đính kèm (${uniqueAttachments.length} tệp)]:\n${attsStr}`.trim();
       }
 
-      const statusVal = isAutoApprove ? 'approved' : 'pending';
+      const statusVal = isSaveDraft ? 'draft' : (isAutoApprove ? 'approved' : 'pending');
 
       const payload = {
         ...form,
@@ -1105,16 +1358,31 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
         entities: payloadEntities
       };
 
-      if (editItem && editItem.id && !editItem.isClone) {
+      if (isEditMode) {
         const { created_by, ...updatePayload } = payload;
-        await api.put(`/expenses/${editItem.id}`, updatePayload);
-        addToast('Đã cập nhật chi phí thành công!', 'success');
+        await api.put(`/expenses/${editItem.id}`, {
+          ...updatePayload,
+          status: statusVal
+        });
+        addToast(
+          isSaveDraft
+            ? 'Đã lưu bản nháp đề xuất!'
+            : (editItem?.status === 'draft' || editItem?.status === 'rejected')
+              ? 'Đã gửi phê duyệt đề xuất thành công!'
+              : 'Đã cập nhật đề xuất thanh toán thành công!',
+          'success'
+        );
+        if (!isSaveDraft) {
+          try {
+            localStorage.removeItem(EXPENSE_DRAFT_KEY);
+          } catch {}
+        }
       } else {
         await api.post('/expenses', {
           ...payload,
           status: statusVal
         });
-        addToast('Đã tạo đề xuất thanh toán thành công!', 'success');
+        addToast(isSaveDraft ? 'Đã lưu bản nháp đề xuất!' : 'Đã tạo đề xuất thanh toán thành công!', 'success');
         try {
           localStorage.removeItem(EXPENSE_DRAFT_KEY);
         } catch {}
@@ -1146,15 +1414,17 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
               position: 'fixed',
               inset: 0,
               zIndex: baseZIndex,
+              '--drawer-backdrop-z': baseZIndex,
               background: 'rgba(0, 0, 0, 0.45)',
               backdropFilter: 'blur(8px)',
               WebkitBackdropFilter: 'blur(8px)',
               willChange: 'opacity',
               transform: 'translate3d(0, 0, 0)'
-            }}
+            } as any}
           />
 
           <motion.div
+            className="drawer-sheet"
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
@@ -1216,7 +1486,11 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
 
                 <div style={{ minWidth: 0 }}>
                   <h3 style={{ fontWeight: 800, fontSize: '1.15rem', margin: 0 }}>
-                    {editItem ? 'Cập nhật đề xuất thanh toán (PO)' : 'Lập đề nghị thanh toán mới (PO)'}
+                    {isEditMode
+                      ? 'Cập nhật đề xuất thanh toán (PO)'
+                      : isCloneMode
+                        ? 'Nhân bản đề xuất thanh toán (PO)'
+                        : 'Tạo đề xuất thanh toán (PO)'}
                   </h3>
                   <p style={{ fontSize: '0.78rem', color: 'var(--color-text-light)', marginTop: 2, marginBottom: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '560px' }} title={form.title || editItem?.title || undefined}>
                     {form.title || editItem?.title || 'Biểu mẫu quy trình đề xuất thanh toán & giải ngân Purchase Order chuẩn hóa.'}
@@ -1233,11 +1507,11 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                 width: isMobile ? '100%' : 'auto',
                 flexWrap: isMobile ? 'wrap' : 'nowrap'
               }}>
-                {!editItem && (
+                {(!isEditMode || editItem?.status === 'draft') && (
                   <button
                     type="button"
                     className="btn secondary"
-                    onClick={handleExplicitSaveDraft}
+                    onClick={() => isEditMode ? handleSave(true) : handleExplicitSaveDraft()}
                     disabled={saving}
                     style={{
                       height: '34px',
@@ -1259,7 +1533,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                 <button
                   type="button"
                   className="btn primary"
-                  onClick={handleSave}
+                  onClick={() => handleSave(false)}
                   disabled={saving}
                   style={{
                     height: '34px',
@@ -1276,7 +1550,11 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                   }}
                 >
                   {saving ? <Loader2 size={16} className="spin" /> : <CheckCircle2 size={16} />}
-                  {saving ? 'Đang lưu...' : (isAutoApprove ? 'Tạo & Duyệt' : 'Gửi phê duyệt')}
+                  {saving
+                    ? 'Đang lưu...'
+                    : isEditMode
+                      ? ((editItem?.status === 'draft' || editItem?.status === 'rejected') ? 'Gửi duyệt' : 'Cập nhật')
+                      : (isAutoApprove ? 'Tạo & Duyệt' : 'Gửi phê duyệt')}
                 </button>
               </div>
             </div>
@@ -1410,7 +1688,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                         flexShrink: 0
                       }}>
                         <span style={{ color: '#10b981', fontSize: '0.9rem' }}>●</span>
-                        <span>Đề nghị thanh toán</span>
+                        <span>{titlePrefix || 'Đề nghị thanh toán'}</span>
                         <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>—</span>
                       </div>
 
@@ -1616,15 +1894,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                         </span>
                       </div>
                       <CustomSelect
-                        options={users.map((u: any) => ({
-                          value: String(u.id),
-                          label: u.full_name || u.name || u.username || `Nhân viên #${u.id}`,
-                          avatar: u.avatar_url || u.avatar,
-                          sublabel: [
-                            u.role || '',
-                            u.bank_name ? `${u.bank_name}: ${u.bank_account}` : 'Chưa có STK'
-                          ].filter(Boolean).join(' • ')
-                        }))}
+                        options={employeeSelectOptions}
                         value={paymentEmployeeId}
                         onChange={val => {
                           const empId = String(val);
@@ -2776,6 +3046,8 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                     accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.csv,image/*"
                     onConfirmUpload={async (item) => {
                       if (item.file) {
+                        if (confirmUploadInFlightRef.current) return;
+                        confirmUploadInFlightRef.current = true;
                         setUploadingImg(true);
                         try {
                           let fileToUpload: File = item.file;
@@ -2816,6 +3088,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                         } catch (err: any) {
                           addToast('Lỗi khi tải tệp: ' + (err.message || err), 'error');
                         } finally {
+                          confirmUploadInFlightRef.current = false;
                           setUploadingImg(false);
                         }
                       }
@@ -3018,12 +3291,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
 
                   {allocationType === 'contact' ? (
                     <CustomSelect
-                      options={contacts.filter(c => !form.entities.find((e: any) => e.entity_id === c.id)).map(c => ({
-                        value: String(c.id),
-                        label: (c.full_name || '').trim(),
-                        avatar: c.avatar_url,
-                        sublabel: c.company_name
-                      }))}
+                      options={allocationContactOptions}
                       value=""
                       onChange={(val) => {
                         const found = contacts.find(c => String(c.id) === val);
@@ -3037,12 +3305,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                     />
                   ) : (
                     <CustomSelect
-                      options={companies.filter(c => !form.entities.find((e: any) => e.entity_id === c.id)).map(c => ({
-                        value: String(c.id),
-                        label: c.name || c.company_name || 'Không tên',
-                        avatar: c.logo_url || c.logo,
-                        sublabel: c.code || c.phone
-                      }))}
+                      options={allocationCompanyOptions}
                       value=""
                       onChange={(val) => {
                         const found = companies.find(c => String(c.id) === val);
@@ -3154,12 +3417,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                           Người duyệt Cấp 1 *
                         </strong>
                         <CustomSelect
-                          options={users.map((u: any) => ({
-                            value: u.id,
-                            label: u.full_name,
-                            avatar: u.avatar_url,
-                            sublabel: [u.phone, u.email, u.role].filter(Boolean).join(' - ')
-                          }))}
+                          options={approverUserOptions}
                           value={form.approver_id}
                           onChange={val => {
                             const numVal = Number(val);
@@ -3206,12 +3464,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                           )}
                         </strong>
                         <CustomSelect
-                          options={users.map((u: any) => ({
-                            value: u.id,
-                            label: u.full_name,
-                            avatar: u.avatar_url,
-                            sublabel: [u.phone, u.email, u.role].filter(Boolean).join(' - ')
-                          }))}
+                          options={approverUserOptions}
                           value={form.approver_id_2}
                           onChange={val => {
                             const numVal = Number(val);
@@ -3255,12 +3508,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                             Người duyệt Cấp 3: Kế toán <span style={{ color: 'var(--color-danger)' }}>*</span>
                           </strong>
                           <CustomSelect
-                            options={users.map((u: any) => ({
-                              value: u.id,
-                              label: u.full_name,
-                              avatar: u.avatar_url,
-                              sublabel: [u.phone, u.email, u.role].filter(Boolean).join(' - ')
-                            }))}
+                            options={approverUserOptions}
                             value={form.approver_id_3}
                             onChange={val => {
                               const numVal = Number(val);

@@ -66,7 +66,17 @@ export const QuotesPage: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClose);
   }, []);
 
+  const quotesAbortRef = useRef<AbortController | null>(null);
+  const inFlightRef = useRef(false);
+
   const fetchQuotes = useCallback(async () => {
+    if (quotesAbortRef.current) {
+      quotesAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    quotesAbortRef.current = controller;
+    const { signal } = controller;
+
     setLoading(true);
     try {
       const params = {
@@ -77,21 +87,28 @@ export const QuotesPage: React.FC = () => {
         status: statusFilter,
         search: debouncedSearch
       };
-      const r = await api.get('/quotes', { params });
+      const r = await api.get('/quotes', { params, signal });
+      if (signal.aborted) return;
       const data = r.data.data;
       setItems(data.items || []);
       setTotal(data.total || 0);
       setSummary(data.summary || { total_val: 0, accepted_val: 0, sent_count: 0, accepted_count: 0, total_count: 0 });
     } catch (e: any) {
+      if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED' || signal.aborted) return;
       setItems([]);
       setTotal(0);
       addToast('Lỗi khi tải danh sách báo giá', 'error');
     } finally {
-      setLoading(false);
+      if (!signal.aborted) setLoading(false);
     }
   }, [page, dateRange, statusFilter, debouncedSearch]);
 
-  useEffect(() => { fetchQuotes(); }, [fetchQuotes]);
+  useEffect(() => {
+    fetchQuotes();
+    return () => {
+      quotesAbortRef.current?.abort();
+    };
+  }, [fetchQuotes]);
 
   // Client-side items match server-paginated data
 
@@ -122,8 +139,12 @@ export const QuotesPage: React.FC = () => {
       try {
         const pending = sessionStorage.getItem('pending_quote_draft');
         if (pending) {
-          initialQuote = JSON.parse(pending);
           sessionStorage.removeItem('pending_quote_draft');
+          const parsed = JSON.parse(pending);
+          const createdAt = parsed?._draft_created_at || 0;
+          if (!createdAt || Date.now() - createdAt < 10 * 60 * 1000) {
+            initialQuote = parsed;
+          }
         }
       } catch (e) {}
 
@@ -143,6 +164,8 @@ export const QuotesPage: React.FC = () => {
       message: 'Bạn có chắc chắn muốn xóa bản báo giá này?',
       isDanger: true,
       onConfirm: async () => {
+        if (inFlightRef.current) return;
+        inFlightRef.current = true;
         try {
           await api.delete(`/quotes/${id}`);
           setItems(p => p.filter(i => i.id !== id));
@@ -150,6 +173,7 @@ export const QuotesPage: React.FC = () => {
         } catch (e: any) {
           addToast('Lỗi khi xóa báo giá', 'error');
         } finally {
+          inFlightRef.current = false;
           closeConfirm();
         }
       }
@@ -157,12 +181,16 @@ export const QuotesPage: React.FC = () => {
   };
 
   const handleStatusChange = async (id: number, status: string) => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     try {
       await api.put(`/quotes/${id}`, { status });
       setItems(p => p.map(i => i.id === id ? { ...i, status } : i));
       addToast(`Đã cập nhật trạng thái báo giá`, 'success');
     } catch (e: any) {
       addToast('Lỗi khi cập nhật trạng thái', 'error');
+    } finally {
+      inFlightRef.current = false;
     }
   };
 
@@ -171,6 +199,8 @@ export const QuotesPage: React.FC = () => {
       title: 'Chuyển thành Hóa đơn',
       message: 'Bạn có chắc chắn muốn chuyển bản báo giá này thành hóa đơn không?',
       onConfirm: async () => {
+        if (inFlightRef.current) return;
+        inFlightRef.current = true;
         try {
           await api.post(`/quotes/${id}/convert`);
           addToast('Đã chuyển thành hóa đơn thành công', 'success');
@@ -178,6 +208,7 @@ export const QuotesPage: React.FC = () => {
         } catch (e: any) {
           addToast(e.response?.data?.message || 'Lỗi khi chuyển đổi', 'error');
         } finally {
+          inFlightRef.current = false;
           closeConfirm();
         }
       }
@@ -561,6 +592,7 @@ export const QuotesPage: React.FC = () => {
         onSuccess={() => {
           setShowEditor(false);
           fetchQuotes();
+          window.dispatchEvent(new CustomEvent('erp-action-completed', { detail: { actionType: 'quote' } }));
         }}
       />
 

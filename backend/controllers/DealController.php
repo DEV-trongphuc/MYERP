@@ -82,7 +82,7 @@ class DealController {
     public function destroyStage(array $auth, int $id): void {
         if (!in_array($auth['role'], ['admin', 'super_admin'], true)) respond(403, null, 'Chỉ admin mới có quyền quản lý pipeline', false);
         // Prevent deleting stages that have deals
-        $cnt = $this->db->prepare("SELECT COUNT(*) FROM deals WHERE stage_id=? AND tenant_id=?");
+        $cnt = $this->db->prepare("SELECT COUNT(*) FROM deals WHERE stage_id=? AND tenant_id=? AND deleted_at IS NULL");
         $cnt->execute([$id, $auth['tenant_id']]);
         if ($cnt->fetchColumn() > 0) respond(400, null, 'Không thể xóa stage đang có cơ hội bán hàng', false);
         
@@ -142,8 +142,32 @@ class DealController {
         }
         if ($stage && $search === '') { $where[]='d.stage_id=?'; $params[]=(int)$stage; }
         if ($owner) { $where[]='d.owner_id=?'; $params[]=(int)$owner; }
+        $teamId = trim((string)($_GET['team_id'] ?? ''));
+        if ($teamId !== '' && $teamId !== 'all') {
+            $where[] = 'd.owner_id IN (SELECT id FROM users WHERE team_id = ?)';
+            $params[] = (int)$teamId;
+        }
         if ($contactId) { $where[]='d.contact_id=?'; $params[]=(int)$contactId; }
         if ($companyId) { $where[]='d.company_id=?'; $params[]=(int)$companyId; }
+        $projectId = trim((string)($_GET['project_id'] ?? ''));
+        if ($projectId !== '' && $projectId !== 'all') {
+            $where[] = 'd.contact_id IN (SELECT id FROM contacts WHERE project_id = ? AND deleted_at IS NULL)';
+            $params[] = (int)$projectId;
+        }
+        $campaignId = trim((string)($_GET['campaign_id'] ?? ''));
+        if ($campaignId !== '' && $campaignId !== 'all') {
+            $where[] = 'd.contact_id IN (SELECT id FROM contacts WHERE campaign_id = ? AND deleted_at IS NULL)';
+            $params[] = (int)$campaignId;
+        }
+        $source = trim((string)($_GET['source'] ?? ''));
+        if ($source !== '' && $source !== 'all') {
+            $where[] = 'd.contact_id IN (SELECT id FROM contacts WHERE source = ? AND deleted_at IS NULL)';
+            $params[] = $source;
+        }
+        $from = trim((string)($_GET['from'] ?? ''));
+        $to   = trim((string)($_GET['to'] ?? ''));
+        if ($from !== '') { $where[] = 'd.created_at >= ?'; $params[] = $from . ' 00:00:00'; }
+        if ($to !== '')   { $where[] = 'd.created_at <= ?'; $params[] = $to . ' 23:59:59'; }
         $w = implode(' AND ',$where);
 
         $cnt = $this->db->prepare("SELECT COUNT(*) FROM deals d WHERE $w");
@@ -196,12 +220,12 @@ class DealController {
         }
         $tid = $auth['tenant_id'];
         if (!empty($b['contact_id'])) {
-            $c = $this->db->prepare("SELECT id FROM contacts WHERE id=? AND tenant_id=?");
+            $c = $this->db->prepare("SELECT id FROM contacts WHERE id=? AND tenant_id=? AND deleted_at IS NULL");
             $c->execute([(int)$b['contact_id'], $tid]);
             if (!$c->fetch()) respond(404, null, 'Liên hệ không hợp lệ', false);
         }
         if (!empty($b['company_id'])) {
-            $c = $this->db->prepare("SELECT id FROM companies WHERE id=? AND tenant_id=?");
+            $c = $this->db->prepare("SELECT id FROM companies WHERE id=? AND tenant_id=? AND deleted_at IS NULL");
             $c->execute([(int)$b['company_id'], $tid]);
             if (!$c->fetch()) respond(404, null, 'Công ty không hợp lệ', false);
         }
@@ -309,7 +333,7 @@ class DealController {
         $this->db->beginTransaction();
         try {
             // Get old stage for history
-            $permissionSql = "SELECT stage_id FROM deals WHERE id=? AND tenant_id=?";
+            $permissionSql = "SELECT stage_id FROM deals WHERE id=? AND tenant_id=? AND deleted_at IS NULL";
             $cp = [$id, $auth['tenant_id']];
             if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
                 $permissionSql .= ' AND (owner_id=? OR contact_id IN (
@@ -337,22 +361,23 @@ class DealController {
             }
 
             $stageParam = trim((string)$b['stage_id']);
-            $sStage = $this->db->prepare("SELECT id, is_won, is_lost FROM pipeline_stages WHERE (CAST(id AS CHAR)=? OR system_slug=?) AND tenant_id=? LIMIT 1");
+            $sStage = $this->db->prepare("SELECT id, system_slug, is_won, is_lost FROM pipeline_stages WHERE (CAST(id AS CHAR)=? OR system_slug=?) AND tenant_id=? LIMIT 1");
             $sStage->execute([$stageParam, $stageParam, $auth['tenant_id']]);
             $stageInfo = $sStage->fetch();
             if (!$stageInfo) {
-                $sStageByName = $this->db->prepare("SELECT id, is_won, is_lost FROM pipeline_stages WHERE name=? AND tenant_id=? LIMIT 1");
+                $sStageByName = $this->db->prepare("SELECT id, system_slug, is_won, is_lost FROM pipeline_stages WHERE name=? AND tenant_id=? LIMIT 1");
                 $sStageByName->execute([$stageParam, $auth['tenant_id']]);
                 $stageInfo = $sStageByName->fetch();
             }
             if (!$stageInfo) {
-                $stageInfo = ['id' => is_numeric($stageParam) ? (int)$stageParam : 0, 'is_won' => 0, 'is_lost' => 0];
+                $stageInfo = ['id' => is_numeric($stageParam) ? (int)$stageParam : 0, 'system_slug' => $stageParam, 'is_won' => 0, 'is_lost' => 0];
             }
             
             $targetStageId = (int)$stageInfo['id'];
+            $targetStageSlug = !empty($stageInfo['system_slug']) ? (string)$stageInfo['system_slug'] : null;
             $setActualDate = ($stageInfo['is_won'] || $stageInfo['is_lost']) ? ", actual_close_date=CURDATE()" : ", actual_close_date=NULL";
 
-            $sql = "UPDATE deals SET stage_id=? $setActualDate WHERE id=? AND tenant_id=?";
+            $sql = "UPDATE deals SET stage_id=? $setActualDate WHERE id=? AND tenant_id=? AND deleted_at IS NULL";
             $p = [$targetStageId, $id, $auth['tenant_id']];
             $update = $this->db->prepare($sql);
             $update->execute($p);
@@ -365,14 +390,22 @@ class DealController {
                 logInteraction($this->db, $auth['tenant_id'], $auth['user_id'], 'system', 'Chuyển giai đoạn Deal', "Deal đã được chuyển sang giai đoạn mới." . ($note ? " Ghi chú: " . $note : ""), 'deal', $id);
                 logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'MOVE_STAGE', 'deal', $id, json_encode(['from_stage' => $old, 'to_stage' => $b['stage_id'], 'note' => $note]));
 
-                // Update contact temperature to hot if deal is won (Sôi = xuống tiền)
-                if ($stageInfo['is_won']) {
-                    $stmtCId = $this->db->prepare("SELECT contact_id FROM deals WHERE id = ?");
-                    $stmtCId->execute([$id]);
-                    $contactId = $stmtCId->fetchColumn();
-                    if ($contactId) {
-                        $this->db->prepare("UPDATE contacts SET status = 'customer', temperature = 'hot', suggested_temperature = 'hot' WHERE id = ? AND tenant_id = ?")
-                                 ->execute([$contactId, $auth['tenant_id']]);
+                // Sync linked contact stage_id & pipeline_status, and set hot/customer if deal is won
+                $stmtCId = $this->db->prepare("SELECT contact_id FROM deals WHERE id = ?");
+                $stmtCId->execute([$id]);
+                $contactId = $stmtCId->fetchColumn();
+                if ($contactId) {
+                    if ($stageInfo['is_won']) {
+                        if ($targetStageId > 0 && $targetStageSlug) {
+                            $this->db->prepare("UPDATE contacts SET stage_id = ?, pipeline_status = ?, status = 'customer', temperature = 'hot', suggested_temperature = 'hot' WHERE id = ? AND tenant_id = ?")
+                                     ->execute([$targetStageId, $targetStageSlug, $contactId, $auth['tenant_id']]);
+                        } else {
+                            $this->db->prepare("UPDATE contacts SET status = 'customer', temperature = 'hot', suggested_temperature = 'hot' WHERE id = ? AND tenant_id = ?")
+                                     ->execute([$contactId, $auth['tenant_id']]);
+                        }
+                    } elseif ($targetStageId > 0 && $targetStageSlug) {
+                        $this->db->prepare("UPDATE contacts SET stage_id = ?, pipeline_status = ? WHERE id = ? AND tenant_id = ?")
+                                 ->execute([$targetStageId, $targetStageSlug, $contactId, $auth['tenant_id']]);
                     }
                 }
             }
@@ -380,7 +413,7 @@ class DealController {
             $this->db->commit();
             respond(200, null, 'Đã cập nhật stage thành công');
         } catch (Exception $e) {
-            $this->db->rollBack();
+            if ($this->db->inTransaction()) $this->db->rollBack();
             respond(500, null, $e->getMessage(), false);
         }
     }
@@ -407,12 +440,12 @@ class DealController {
 
         $tid = $auth['tenant_id'];
         if (!empty($b['contact_id'])) {
-            $c = $this->db->prepare("SELECT id FROM contacts WHERE id=? AND tenant_id=?");
+            $c = $this->db->prepare("SELECT id FROM contacts WHERE id=? AND tenant_id=? AND deleted_at IS NULL");
             $c->execute([(int)$b['contact_id'], $tid]);
             if (!$c->fetch()) respond(404, null, 'Liên hệ không hợp lệ', false);
         }
         if (!empty($b['company_id'])) {
-            $c = $this->db->prepare("SELECT id FROM companies WHERE id=? AND tenant_id=?");
+            $c = $this->db->prepare("SELECT id FROM companies WHERE id=? AND tenant_id=? AND deleted_at IS NULL");
             $c->execute([(int)$b['company_id'], $tid]);
             if (!$c->fetch()) respond(404, null, 'Công ty không hợp lệ', false);
         }
@@ -423,8 +456,8 @@ class DealController {
             if (!$sStage->fetch()) respond(404, null, 'Giai đoạn không hợp lệ', false);
         }
 
-        // Check permission first and get old stage
-        $permissionSql = "SELECT id, stage_id FROM deals WHERE id=? AND tenant_id=?";
+        // Check permission first and get old stage + title
+        $permissionSql = "SELECT id, owner_id, stage_id, value, title FROM deals WHERE id=? AND tenant_id=? AND deleted_at IS NULL";
         $cp = [$id, $auth['tenant_id']];
         if ($scope === 'all') {
             // No extra filters
@@ -465,7 +498,7 @@ class DealController {
 
         if ($sets) {
             $params[]=$id; $params[]=$auth['tenant_id'];
-            $stmt = $this->db->prepare("UPDATE deals SET ".implode(',',$sets)." WHERE id=? AND tenant_id=?");
+            $stmt = $this->db->prepare("UPDATE deals SET ".implode(',',$sets)." WHERE id=? AND tenant_id=? AND deleted_at IS NULL");
             $stmt->execute($params);
         }
         
@@ -478,7 +511,7 @@ class DealController {
             saveCustomFields($this->db, $auth['tenant_id'], $id, 'deal', $b['custom_fields']);
         }
         
-        logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'UPDATE', 'deal', $id, json_encode(['title' => $oldDeal['title']]));
+        logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'UPDATE', 'deal', $id, json_encode(['title' => $oldDeal['title'] ?? '']));
         $this->show($auth, $id);
     }
 
@@ -486,7 +519,7 @@ class DealController {
         $scope = $this->getScope($auth, 'deals', 'delete');
         if ($scope === 'none') respond(403, null, 'Bạn không có quyền xóa deal', false);
         
-        $sql = "UPDATE deals SET deleted_at=NOW() WHERE id=? AND tenant_id=?";
+        $sql = "UPDATE deals SET deleted_at=NOW() WHERE id=? AND tenant_id=? AND deleted_at IS NULL";
         $p = [$id, $auth['tenant_id']];
         if ($scope === 'team') {
             $sql .= " AND (owner_id=? OR owner_id IN (
@@ -517,7 +550,7 @@ class DealController {
         if (empty($ids)) respond(400, null, 'ID không hợp lệ', false);
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
         
-        $sql = "UPDATE deals SET deleted_at=NOW() WHERE tenant_id=? AND id IN ($placeholders)";
+        $sql = "UPDATE deals SET deleted_at=NOW() WHERE tenant_id=? AND id IN ($placeholders) AND deleted_at IS NULL";
         $p = array_merge([$auth['tenant_id']], $ids);
         
         $stmt = $this->db->prepare($sql);
@@ -545,9 +578,13 @@ class DealController {
             $params = [$id, $auth['tenant_id']];
             $stmt->execute($params);
             $oldDeal = $stmt->fetch();
-            if (!$oldDeal) respond(404, null, 'Không tìm thấy deal cũ', false);
+            if (!$oldDeal) {
+                $this->db->rollBack();
+                respond(404, null, 'Không tìm thấy deal cũ', false);
+            }
 
             if ($auth['role'] === 'sales' && $oldDeal['owner_id'] != $auth['user_id']) {
+                $this->db->rollBack();
                 respond(403, null, 'Bạn không có quyền đổi căn cho deal của người khác', false);
             }
 

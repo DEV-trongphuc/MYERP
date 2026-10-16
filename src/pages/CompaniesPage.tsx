@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Search, Building2, X, Loader2, Pencil, Trash2, Globe, Phone, Mail, MapPin, Users, LayoutGrid, List, Filter, RefreshCw, Download, DollarSign, Briefcase, MoreHorizontal } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar } from '../components/ui/Avatar';
@@ -52,7 +52,15 @@ export const CompaniesPage: React.FC = () => {
     return Number(localStorage.getItem('Ideas_companies_page_size')) || 12;
   });
 
+  const fetchAbortRef = useRef<AbortController | null>(null);
+  const saveInFlightRef = useRef(false);
+  const deleteInFlightRef = useRef(false);
+  const exportInFlightRef = useRef(false);
+
   const fetchCompanies = useCallback(async () => {
+    if (fetchAbortRef.current) fetchAbortRef.current.abort();
+    const controller = new AbortController();
+    fetchAbortRef.current = controller;
     setLoading(true);
     try {
       const params: any = { page, limit: pageSize };
@@ -60,21 +68,29 @@ export const CompaniesPage: React.FC = () => {
       if (statusFilter) params.status = statusFilter;
       if (tierFilter) params.tier = tierFilter;
       
-      const r = await api.get('/companies', { params });
-      const data = r.data.data;
-      setCompanies(data.items || []);
-      setTotal(data.total || 0);
+      const r = await api.get('/companies', { params, signal: controller.signal });
+      if (!controller.signal.aborted) {
+        const data = r.data.data;
+        setCompanies(data.items || []);
+        setTotal(data.total || 0);
+      }
     } catch (e: any) {
+      if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
       setCompanies([]);
       setTotal(0);
       addToast('Không thể tải danh sách đại lý/đối tác', 'error');
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+      }
     }
   }, [page, pageSize, debouncedSearch, statusFilter, tierFilter]);
 
   useEffect(() => {
     fetchCompanies();
+    return () => {
+      if (fetchAbortRef.current) fetchAbortRef.current.abort();
+    };
   }, [fetchCompanies]);
 
   useEffect(() => {
@@ -82,13 +98,14 @@ export const CompaniesPage: React.FC = () => {
   }, [debouncedSearch, statusFilter, tierFilter]);
 
   useEffect(() => {
+    const controller = new AbortController();
     const urlParams = new URLSearchParams(window.location.search);
     const targetId = urlParams.get('id') || urlParams.get('company_id');
     if (targetId) {
       const cid = Number(targetId);
       if (cid) {
-        api.get(`/companies/${cid}`).then(res => {
-          if (res.data.success && res.data.data) {
+        api.get(`/companies/${cid}`, { signal: controller.signal }).then(res => {
+          if (!controller.signal.aborted && res.data.success && res.data.data) {
             setEditItem(res.data.data);
             setShowModal(true);
             
@@ -100,16 +117,20 @@ export const CompaniesPage: React.FC = () => {
             window.history.replaceState({}, '', cleanUrl);
           }
         }).catch(err => {
+          if (err?.name === 'AbortError' || err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return;
           console.error("Error loading deep link company:", err);
         });
       }
     }
+    return () => controller.abort();
   }, [window.location.search]);
 
   const openCreate = () => { setEditItem(null); setShowModal(true); };
   const openEdit = (c: any) => { setEditItem(c); setShowModal(true); };
 
   const handleSaveCompany = async (formData: any) => {
+    if (saveInFlightRef.current) return;
+    saveInFlightRef.current = true;
     try {
       if (editItem) {
         await api.put(`/companies/${editItem.id}`, formData);
@@ -125,6 +146,8 @@ export const CompaniesPage: React.FC = () => {
     } catch (err: any) {
       addToast(err.response?.data?.message || 'Lỗi khi lưu đối tác', 'error');
       throw err;
+    } finally {
+      saveInFlightRef.current = false;
     }
   };
 
@@ -142,6 +165,8 @@ export const CompaniesPage: React.FC = () => {
       impactInfo: hasHistory ? `Lưu ý: Dữ liệu khách hàng/data giới thiệu vẫn được giữ nguyên và chỉ chuyển về trạng thái không gắn đối tác.` : undefined,
       confirmText: 'Xác nhận xóa',
       onConfirm: async () => {
+        if (deleteInFlightRef.current) return;
+        deleteInFlightRef.current = true;
         try {
           setDeleting(true);
           const res = await api.delete(`/companies/${co.id}`);
@@ -151,6 +176,7 @@ export const CompaniesPage: React.FC = () => {
           const errMsg = e.response?.data?.message || e.message || 'Lỗi khi xóa đối tác';
           addToast(errMsg, 'error');
         } finally {
+          deleteInFlightRef.current = false;
           setDeleting(false);
           closeConfirm();
         }
@@ -751,6 +777,8 @@ export const CompaniesPage: React.FC = () => {
         onClose={() => setShowImportExport(false)} 
         entityName="Đối tác" 
         onExport={async (format) => {
+          if (exportInFlightRef.current) return;
+          exportInFlightRef.current = true;
           addToast('Đang tải xuống danh sách đối tác...', 'info');
           try {
             await downloadExportFile({
@@ -767,6 +795,8 @@ export const CompaniesPage: React.FC = () => {
             });
           } catch (err: any) {
             addToast(err?.message || 'Xuất danh sách đối tác thất bại', 'error');
+          } finally {
+            exportInFlightRef.current = false;
           }
         }}
       />

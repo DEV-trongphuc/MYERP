@@ -150,10 +150,6 @@ class AssetController {
     public function handover(array $auth, int $id): void {
         $this->checkPermission($auth);
         $tid = (int)($auth['tenant_id'] ?? 0);
-        $asset = $this->findTenantAsset($id, $tid);
-        if (!$asset) {
-            respond(404, null, 'Không tìm thấy tài sản hoặc bạn không có quyền bàn giao', false);
-        }
 
         $body = getBody();
         $userId = (int)($body['user_id'] ?? $body['employee_id'] ?? 0);
@@ -165,8 +161,35 @@ class AssetController {
             respond(422, null, 'Nhân sự tiếp nhận không thuộc chi nhánh của bạn', false);
         }
 
-        $stmt = $this->db->prepare("UPDATE hrm_assets SET user_id = ?, status = 'assigned', updated_at = NOW() WHERE id = ?");
-        $stmt->execute([$userId, $id]);
+        $this->db->beginTransaction();
+        try {
+            $stmtLock = $this->db->prepare("
+                SELECT a.* FROM hrm_assets a
+                JOIN users u ON a.user_id = u.id
+                WHERE a.id = ? AND u.tenant_id = ?
+                FOR UPDATE
+            ");
+            $stmtLock->execute([$id, $tid]);
+            $asset = $stmtLock->fetch(PDO::FETCH_ASSOC);
+            if (!$asset) {
+                $this->db->rollBack();
+                respond(404, null, 'Không tìm thấy tài sản hoặc bạn không có quyền bàn giao', false);
+            }
+
+            if (($asset['status'] ?? '') === 'assigned' && (int)$asset['user_id'] === $userId) {
+                $this->db->rollBack();
+                respond(409, null, 'Tài sản này đang được bàn giao cho nhân sự này rồi', false);
+            }
+
+            $stmt = $this->db->prepare("UPDATE hrm_assets SET user_id = ?, status = 'assigned', given_date = CURDATE(), returned_date = NULL, updated_at = NOW() WHERE id = ?");
+            $stmt->execute([$userId, $id]);
+            $this->db->commit();
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            respond(500, null, 'Lỗi bàn giao tài sản: ' . $e->getMessage(), false);
+        }
 
         respond(200, ['id' => $id, 'assigned_to' => $userId, 'status' => 'assigned'], 'Bàn giao thiết bị cho nhân viên thành công');
     }
@@ -174,14 +197,45 @@ class AssetController {
     public function recall(array $auth, int $id): void {
         $this->checkPermission($auth);
         $tid = (int)($auth['tenant_id'] ?? 0);
-        $asset = $this->findTenantAsset($id, $tid);
-        if (!$asset) {
-            respond(404, null, 'Không tìm thấy tài sản hoặc bạn không có quyền thu hồi', false);
+
+        $this->db->beginTransaction();
+        try {
+            $stmtLock = $this->db->prepare("
+                SELECT a.* FROM hrm_assets a
+                JOIN users u ON a.user_id = u.id
+                WHERE a.id = ? AND u.tenant_id = ?
+                FOR UPDATE
+            ");
+            $stmtLock->execute([$id, $tid]);
+            $asset = $stmtLock->fetch(PDO::FETCH_ASSOC);
+            if (!$asset) {
+                $this->db->rollBack();
+                respond(404, null, 'Không tìm thấy tài sản hoặc bạn không có quyền thu hồi', false);
+            }
+
+            if (($asset['status'] ?? '') === 'returned') {
+                $this->db->rollBack();
+                respond(409, null, 'Tài sản này đã được thu hồi trước đó', false);
+            }
+
+            $stmt = $this->db->prepare("UPDATE hrm_assets SET status = 'returned', returned_date = CURDATE(), updated_at = NOW() WHERE id = ?");
+            $stmt->execute([$id]);
+            $this->db->commit();
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            respond(500, null, 'Lỗi thu hồi tài sản: ' . $e->getMessage(), false);
         }
 
-        $stmt = $this->db->prepare("UPDATE hrm_assets SET status = 'returned', returned_date = CURDATE(), updated_at = NOW() WHERE id = ?");
-        $stmt->execute([$id]);
-
         respond(200, ['id' => $id, 'status' => 'returned'], 'Thu hồi tài sản về kho thành công');
+    }
+
+    public function assign(array $auth, int $id): void {
+        $this->handover($auth, $id);
+    }
+
+    public function returnAsset(array $auth, int $id): void {
+        $this->recall($auth, $id);
     }
 }

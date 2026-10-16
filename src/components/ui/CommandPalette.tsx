@@ -289,12 +289,14 @@ export const CommandPalette: React.FC = () => {
       return;
     }
 
+    const controller = new AbortController();
     setLoading(true);
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
 
     debounceTimerRef.current = setTimeout(async () => {
       try {
-        const res = await api.get(`/search/global?q=${encodeURIComponent(trimmed)}`);
+        const res = await api.get(`/search/global?q=${encodeURIComponent(trimmed)}`, { signal: controller.signal });
+        if (controller.signal.aborted) return;
         const data = res.data?.grouped || {
           contacts: [],
           tasks: [],
@@ -302,14 +304,18 @@ export const CommandPalette: React.FC = () => {
           companies: []
         };
         setBackendResults(data);
-      } catch (e) {
+      } catch (e: any) {
+        if (controller.signal.aborted || e?.name === 'AbortError' || e?.name === 'CanceledError') return;
         console.error('Lỗi tìm kiếm Spotlight:', e);
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
       }
     }, 120);
 
     return () => {
+      controller.abort();
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     };
   }, [search]);

@@ -144,7 +144,7 @@ class ProductController {
         $params[]=$id;$params[]=$auth['tenant_id'];
 
         try {
-            $this->db->prepare("UPDATE products SET ".implode(',',$sets)." WHERE id=? AND tenant_id=?")->execute($params);
+            $this->db->prepare("UPDATE products SET ".implode(',',$sets)." WHERE id=? AND tenant_id=? AND deleted_at IS NULL")->execute($params);
             $this->show($auth,$id);
         } catch (PDOException $e) {
             respond(500, null, 'Lỗi cập nhật sản phẩm: ' . $e->getMessage(), false);
@@ -152,7 +152,9 @@ class ProductController {
     }
     public function destroy(array $auth,int $id): void {
         if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true)) respond(403, null, 'Bạn không có quyền xóa sản phẩm', false);
-        $this->db->prepare("UPDATE products SET deleted_at=NOW() WHERE id=? AND tenant_id=?")->execute([$id,$auth['tenant_id']]);
+        $stmt = $this->db->prepare("UPDATE products SET deleted_at=NOW() WHERE id=? AND tenant_id=? AND deleted_at IS NULL");
+        $stmt->execute([$id,$auth['tenant_id']]);
+        if (!$stmt->rowCount()) respond(404, null, 'Không tìm thấy sản phẩm', false);
         logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'Xóa sản phẩm', 'product', $id);
         respond(200,null,'Đã xóa sản phẩm (vào thùng rác)');
     }
@@ -163,8 +165,8 @@ class ProductController {
         $ids = $b['ids'] ?? [];
         if (empty($ids)) respond(400, null, 'ID không hợp lệ', false);
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
-        $this->db->prepare("UPDATE products SET deleted_at=NOW() WHERE tenant_id=? AND id IN ($placeholders)")
-            ->execute(array_merge([$auth['tenant_id']], $ids));
-        respond(200, null, "Đã xóa " . count($ids) . " sản phẩm");
+        $stmt = $this->db->prepare("UPDATE products SET deleted_at=NOW() WHERE tenant_id=? AND id IN ($placeholders) AND deleted_at IS NULL");
+        $stmt->execute(array_merge([$auth['tenant_id']], $ids));
+        respond(200, null, "Đã xóa " . $stmt->rowCount() . " sản phẩm");
     }
 }

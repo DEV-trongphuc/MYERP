@@ -328,17 +328,6 @@ class SalesOrderController {
                         }
 
                         if ($cOwnerId > 0 && $cOwnerId !== $userId) {
-                            $stmtSaleNotif = $this->db->prepare("
-                                INSERT INTO notifications (user_id, tenant_id, title, body, type, link)
-                                VALUES (?, ?, 'Đơn bán hàng mới cho khách hàng của bạn', ?, 'order', ?)
-                            ");
-                            $stmtSaleNotif->execute([
-                                $cOwnerId,
-                                $tenantId,
-                                "$creatorName vừa tạo đơn bán hàng mới ($soNumber) cho khách hàng $customerName ($formattedTotal).",
-                                "/contacts/$contactId"
-                            ]);
-
                             require_once __DIR__ . '/../NotificationService.php';
                             NotificationService::send($this->db, $tenantId, 'SO_CREATED_FOR_SALE', [
                                 'user_id' => $cOwnerId,

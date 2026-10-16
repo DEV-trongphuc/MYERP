@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useMemo, useEffect, useRef, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import { Plus, Search, Filter, LifeBuoy, AlertCircle, Clock, X, Save, MoreHorizontal, FileText, Loader2 } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
@@ -99,7 +99,17 @@ export const TicketsPage: React.FC = () => {
     return d.getTime() < now;
   };
 
+  const ticketsAbortRef = useRef<AbortController | null>(null);
+  const inFlightRef = useRef(false);
+
   const fetchTickets = async () => {
+    if (ticketsAbortRef.current) {
+      ticketsAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    ticketsAbortRef.current = controller;
+    const { signal } = controller;
+
     setLoading(true);
     // Always fetch from API
     try {
@@ -109,16 +119,19 @@ export const TicketsPage: React.FC = () => {
           limit: 20, 
           search: debouncedSearch, 
           status: filterStatus 
-        } 
+        },
+        signal
       });
+      if (signal.aborted) return;
       const data = r.data.data;
       setTickets(data.items || []);
       setTotal(data.total || 0);
     } catch (e: any) {
+      if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED' || signal.aborted) return;
       setTickets([]);
       addToast('Không thể kết nối với máy chủ Backend', 'error');
     } finally {
-      setLoading(false);
+      if (!signal.aborted) setLoading(false);
     }
   };
 
@@ -137,6 +150,9 @@ export const TicketsPage: React.FC = () => {
 
   useEffect(() => {
     fetchTickets();
+    return () => {
+      ticketsAbortRef.current?.abort();
+    };
   }, [page, debouncedSearch, filterStatus]);
 
   useEffect(() => {
@@ -159,15 +175,17 @@ export const TicketsPage: React.FC = () => {
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const targetId = urlParams.get('id') || urlParams.get('ticket_id');
+    const targetId = urlParams.get('open_id') || urlParams.get('id') || urlParams.get('ticket_id');
     if (targetId) {
       const tid = Number(targetId);
       if (tid) {
         api.get(`/tickets/${tid}`).then(res => {
           if (res.data.success && res.data.data) {
+            (useUIStore.getState() as any).closeTicketDrawer?.();
             setSelectedTicket(res.data.data);
-            // clean url parameters
+            // clean url parameters while preserving highlight_comment_id
             const newParams = new URLSearchParams(window.location.search);
+            newParams.delete('open_id');
             newParams.delete('id');
             newParams.delete('ticket_id');
             const cleanUrl = window.location.pathname + (newParams.toString() ? '?' + newParams.toString() : '');
@@ -199,8 +217,12 @@ export const TicketsPage: React.FC = () => {
         try {
           const pending = sessionStorage.getItem('pending_ticket_draft');
           if (pending) {
-            initialDraft = JSON.parse(pending);
             sessionStorage.removeItem('pending_ticket_draft');
+            const parsed = JSON.parse(pending);
+            const createdAt = parsed?._draft_created_at || 0;
+            if (!createdAt || Date.now() - createdAt < 10 * 60 * 1000) {
+              initialDraft = parsed;
+            }
           }
         } catch (e) {}
 
@@ -268,6 +290,7 @@ export const TicketsPage: React.FC = () => {
   };
 
   const handleCreateTicket = async () => {
+    if (inFlightRef.current) return;
     const trimmedSubject = createForm.subject?.trim() || '';
     const trimmedCustomer = createForm.customer_name?.trim() || '';
     if (!trimmedSubject || !trimmedCustomer) {
@@ -286,17 +309,23 @@ export const TicketsPage: React.FC = () => {
       related_users: createForm.related_users,
       attachments: createForm.attachments
     };
+    inFlightRef.current = true;
     setSaving(true);
     try {
       const r = await api.post('/tickets', payload);
-      const newTicket = r.data.data || { ...payload, id: Date.now(), assignee_name: 'Admin', created_at: new Date().toISOString(), due_date: new Date(Date.now() + 86400000).toISOString() };
-      setTickets([newTicket, ...tickets]);
+      const newTicket = r.data?.data;
+      if (newTicket) {
+        setTickets(prev => [newTicket, ...prev]);
+      }
+      fetchTickets();
       setShowCreateModal(false);
       setCreateForm({ subject: '', priority: 'medium', customer_name: '', contact_id: null, description: '', related_contacts: [], related_users: [], attachments: [] });
+      window.dispatchEvent(new CustomEvent('erp-action-completed', { detail: { actionType: 'ticket', id: newTicket?.id } }));
       addToast('Đã tạo Ticket thành công', 'success');
     } catch (e: any) {
       addToast(e.response?.data?.message || 'Không thể tạo Ticket do lỗi mạng', 'error');
     } finally {
+      inFlightRef.current = false;
       setSaving(false);
     }
   };
@@ -810,7 +839,9 @@ export const TicketsPage: React.FC = () => {
                     placeholder="Kéo thả tệp hoặc nhấn Ctrl+V để dán ảnh màn hình lỗi"
                     subtext="Chụp ảnh màn hình lỗi (Ctrl+V) dán trực tiếp tại đây"
                     onConfirmUpload={async (item) => {
+                      if (inFlightRef.current) return;
                       if (item.file) {
+                        inFlightRef.current = true;
                         const fd = new FormData();
                         fd.append('file', item.file);
                         try {
@@ -827,7 +858,10 @@ export const TicketsPage: React.FC = () => {
                               }]
                             }));
                           }
-                        } catch (err) {}
+                        } catch (err) {
+                        } finally {
+                          inFlightRef.current = false;
+                        }
                       } else if (item.url) {
                         setCreateForm(prev => ({
                           ...prev,

@@ -321,7 +321,21 @@ class HRMController {
         respond(200, $row);
     }
 
-    private function resolveRelatedUsers($rawRelated): array {
+    private static array $tableColumnsCache = [];
+
+    private function hasColumn(string $table, string $column): bool {
+        if (!isset(self::$tableColumnsCache[$table])) {
+            try {
+                $stmt = $this->db->query("SHOW COLUMNS FROM `{$table}`");
+                self::$tableColumnsCache[$table] = $stmt ? ($stmt->fetchAll(PDO::FETCH_COLUMN) ?: []) : [];
+            } catch (\Throwable $e) {
+                self::$tableColumnsCache[$table] = [];
+            }
+        }
+        return in_array($column, self::$tableColumnsCache[$table], true);
+    }
+
+    public function resolveRelatedUsers($rawRelated): array {
         if (empty($rawRelated)) return [];
         $ids = is_array($rawRelated) ? $rawRelated : (json_decode((string)$rawRelated, true) ?: []);
         if (!is_array($ids)) return [];
@@ -339,8 +353,8 @@ class HRMController {
         $userId = (int)$auth['user_id'];
         $leaveId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
-        $where = "u.tenant_id = ?";
-        $params = [$auth['tenant_id']];
+        $where = "u.tenant_id = ? AND (l.status != 'draft' OR l.user_id = ?)";
+        $params = [$auth['tenant_id'], $userId];
 
         if ($leaveId > 0) {
             $where .= " AND l.id = ?";
@@ -377,6 +391,30 @@ class HRMController {
         ");
         $stmt->execute($params);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $allRelatedIds = [];
+        foreach ($rows as $rowItem) {
+            $rawRel = $rowItem['related_user_ids'] ?? null;
+            if (!empty($rawRel)) {
+                $parsedIds = is_array($rawRel) ? $rawRel : (json_decode((string)$rawRel, true) ?: []);
+                if (is_array($parsedIds)) {
+                    foreach ($parsedIds as $rid) {
+                        $ridInt = (int)$rid;
+                        if ($ridInt > 0) $allRelatedIds[$ridInt] = $ridInt;
+                    }
+                }
+            }
+        }
+        $relatedUsersMap = [];
+        if (!empty($allRelatedIds)) {
+            $inClause = implode(',', array_fill(0, count($allRelatedIds), '?'));
+            $stmtRel = $this->db->prepare("SELECT id, full_name, full_name as name, avatar_url, avatar_url as avatar, job_title, department, role FROM users WHERE id IN ($inClause)");
+            $stmtRel->execute(array_values($allRelatedIds));
+            foreach ($stmtRel->fetchAll(PDO::FETCH_ASSOC) ?: [] as $uRow) {
+                $relatedUsersMap[(int)$uRow['id']] = $uRow;
+            }
+        }
+
         foreach ($rows as &$r) {
             $r['annual_leave_total'] = (float)$r['annual_leave_total'];
             $r['annual_leave_used'] = (float)$r['annual_leave_used'];
@@ -384,9 +422,20 @@ class HRMController {
             $r['compensatory_leave_used'] = (float)$r['compensatory_leave_used'];
             $r['remaining_annual_leave'] = max(0.0, $r['annual_leave_total'] - $r['annual_leave_used']);
             $r['remaining_compensatory_leave'] = max(0.0, $r['compensatory_leave_total'] - $r['compensatory_leave_used']);
+            $r['raw_reason'] = $r['reason'] ?? '';
             $r['reason'] = self::cleanLeaveReason($r['reason'] ?? '');
             $r['title'] = self::formatLeaveTitle($r);
-            $r['related_users'] = $this->resolveRelatedUsers($r['related_user_ids'] ?? null);
+            $rawRel = $r['related_user_ids'] ?? null;
+            $relIds = !empty($rawRel) ? (is_array($rawRel) ? $rawRel : (json_decode((string)$rawRel, true) ?: [])) : [];
+            $relUsers = [];
+            if (is_array($relIds)) {
+                foreach (array_unique(array_map('intval', $relIds)) as $ridInt) {
+                    if ($ridInt > 0 && isset($relatedUsersMap[$ridInt])) {
+                        $relUsers[] = $relatedUsersMap[$ridInt];
+                    }
+                }
+            }
+            $r['related_users'] = $relUsers;
         }
         unset($r);
 
@@ -433,6 +482,7 @@ class HRMController {
         $row['compensatory_leave_used'] = (float)$row['compensatory_leave_used'];
         $row['remaining_annual_leave'] = max(0.0, $row['annual_leave_total'] - $row['annual_leave_used']);
         $row['remaining_compensatory_leave'] = max(0.0, $row['compensatory_leave_total'] - $row['compensatory_leave_used']);
+        $row['raw_reason'] = $row['reason'] ?? '';
         $row['reason'] = self::cleanLeaveReason($row['reason'] ?? '');
         $row['title'] = self::formatLeaveTitle($row);
         $row['related_users'] = $this->resolveRelatedUsers($row['related_user_ids'] ?? null);
@@ -442,9 +492,13 @@ class HRMController {
 
     public function createLeave(array $auth): void {
         $b = getBody();
+        $isDraft = (($b['status'] ?? '') === 'draft');
         // Support frontend key names from_date & to_date as fallbacks
-        $startDate = $b['start_date'] ?? $b['from_date'] ?? null;
-        $endDate = $b['end_date'] ?? $b['to_date'] ?? null;
+        $startDate = $b['start_date'] ?? $b['from_date'] ?? ($isDraft ? date('Y-m-d') : null);
+        $endDate = $b['end_date'] ?? $b['to_date'] ?? ($isDraft ? $startDate : null);
+        if ($isDraft && empty($b['leave_type'])) {
+            $b['leave_type'] = 'annual';
+        }
 
         if (empty($startDate) || empty($endDate) || empty($b['leave_type'])) {
             respond(400, null, 'Thiếu thông tin đăng ký nghỉ phép', false);
@@ -459,7 +513,7 @@ class HRMController {
         }
 
         $approverId = !empty($b['approver_id']) ? (int)$b['approver_id'] : null;
-        if (empty($approverId)) {
+        if (empty($approverId) && !$isDraft) {
             $stmtUser = $this->db->prepare("SELECT email, department, team_id FROM users WHERE id = ?");
             $stmtUser->execute([$auth['user_id']]);
             $uInfo = $stmtUser->fetch(PDO::FETCH_ASSOC);
@@ -511,9 +565,10 @@ class HRMController {
         $otType = null;
         $otRate = null;
         $salaryRate = 100.0;
-        $totalDays = (float)($b['total_days'] ?? 1.0);
+        $totalDays = (float)($b['total_days'] ?? $b['days'] ?? 1.0);
         $unpaidDays = 0.0;
-        $reason = self::cleanLeaveReason($b['reason'] ?? '');
+        $rawReason = trim((string)($b['reason'] ?? ''));
+        $reason = self::cleanLeaveReason($rawReason);
 
         if ($leaveType === 'overtime') {
             $otType = (!empty($b['ot_type']) && in_array($b['ot_type'], ['compensatory', 'salary'], true)) ? $b['ot_type'] : 'salary';
@@ -550,12 +605,21 @@ class HRMController {
             $salaryRate = 0.0;
         }
 
-        $isSelfApproved = ($approverId > 0 && $approverId === (int)$auth['user_id'] && (empty($approverId2) || $approverId2 === (int)$auth['user_id']));
-        $initialStatus = $isSelfApproved ? 'approved' : 'pending';
-        $statusL1 = $isSelfApproved ? 'approved' : 'pending';
-        $statusL2 = $isSelfApproved ? (!empty($approverId2) ? 'approved' : 'none') : ($approverId2 ? 'pending' : 'none');
-        $approvedBy = $isSelfApproved ? $auth['user_id'] : null;
-        $approvedAt = $isSelfApproved ? date('Y-m-d H:i:s') : null;
+        if ($isDraft) {
+            $isSelfApproved = false;
+            $initialStatus = 'draft';
+            $statusL1 = 'none';
+            $statusL2 = 'none';
+            $approvedBy = null;
+            $approvedAt = null;
+        } else {
+            $isSelfApproved = ($approverId > 0 && $approverId === (int)$auth['user_id'] && (empty($approverId2) || $approverId2 === (int)$auth['user_id']));
+            $initialStatus = $isSelfApproved ? 'approved' : 'pending';
+            $statusL1 = $isSelfApproved ? 'approved' : 'pending';
+            $statusL2 = $isSelfApproved ? (!empty($approverId2) ? 'approved' : 'none') : ($approverId2 ? 'pending' : 'none');
+            $approvedBy = $isSelfApproved ? $auth['user_id'] : null;
+            $approvedAt = $isSelfApproved ? date('Y-m-d H:i:s') : null;
+        }
 
         $stmt = $this->db->prepare("
             INSERT INTO hrm_leave_requests (user_id, leave_type, ot_type, ot_rate, salary_rate, start_date, end_date, total_days, unpaid_days, reason, status, approver_id, approver_id_2, status_level_1, status_level_2, approved_by, approved_at, related_user_ids)
@@ -571,7 +635,7 @@ class HRMController {
             $endDate,
             $totalDays,
             $unpaidDays,
-            $reason,
+            $rawReason !== '' ? $rawReason : $reason,
             $initialStatus,
             $approverId,
             $approverId2,
@@ -581,67 +645,235 @@ class HRMController {
             $approvedAt,
             $relatedUserIds
         ]);
+        $leaveId = (int)$this->db->lastInsertId();
 
-        if ($isSelfApproved && in_array($leaveType, ['annual', 'compensatory', 'sick', 'special_paid', 'maternity', 'paternity', 'marriage', 'funeral', 'remote_work'], true)) {
-            $startDateOnly = date('Y-m-d', strtotime($startDate));
-            $endDateOnly = date('Y-m-d', strtotime($endDate));
+        if (!$isDraft) {
+            if ($isSelfApproved && in_array($leaveType, ['annual', 'compensatory', 'sick', 'special_paid', 'maternity', 'paternity', 'marriage', 'funeral', 'remote_work'], true)) {
+                $startDateOnly = date('Y-m-d', strtotime($startDate));
+                $endDateOnly = date('Y-m-d', strtotime($endDate));
+                try {
+                    $cLeaveStmt = $this->db->prepare("INSERT IGNORE INTO consultant_leaves (consultant_id, start_date, end_date) VALUES (?, ?, ?)");
+                    $cLeaveStmt->execute([$auth['user_id'], $startDateOnly, $endDateOnly]);
+                } catch (\Throwable $e) {}
+            }
+
+            // Dispatch Notification
             try {
-                $cLeaveStmt = $this->db->prepare("INSERT IGNORE INTO consultant_leaves (consultant_id, start_date, end_date) VALUES (?, ?, ?)");
-                $cLeaveStmt->execute([$auth['user_id'], $startDateOnly, $endDateOnly]);
+                $stmtUser = $this->db->prepare("SELECT full_name FROM users WHERE id = ?");
+                $stmtUser->execute([$auth['user_id']]);
+                $userName = $stmtUser->fetchColumn() ?: 'Nhân viên';
+
+                $leaveTypeText = self::formatLeaveTypeText($b['leave_type']);
+
+                require_once __DIR__ . '/../NotificationService.php';
+                $targetUserId = $approverId ?: $auth['user_id'];
+                NotificationService::send($this->db, $auth['tenant_id'], 'HRM_LEAVE_REQUEST', [
+                    'approver_id' => $targetUserId,
+                    'target_user_id' => $targetUserId,
+                    'user_id' => $targetUserId,
+                    'user_name' => $userName,
+                    'submitter_id' => (int)$auth['user_id'],
+                    'leave_type_text' => $leaveTypeText,
+                    'start_date' => $startDate,
+                    'end_date' => $endDate,
+                    'total_days' => $totalDays,
+                    'reason' => $reason,
+                    'date' => date('Y-m-d'),
+                    'ref_id' => $leaveId
+                ]);
+
+                // Notify related persons
+                if (!empty($relArr)) {
+                    foreach ($relArr as $relUid) {
+                        $relUid = (int)$relUid;
+                        if ($relUid > 0 && $relUid !== (int)$auth['user_id'] && $relUid !== (int)$targetUserId) {
+                            NotificationService::send($this->db, $auth['tenant_id'], 'HRM_LEAVE_REQUEST', [
+                                'approver_id' => $relUid,
+                                'target_user_id' => $relUid,
+                                'user_id' => $relUid,
+                                'user_name' => $userName,
+                                'submitter_id' => (int)$auth['user_id'],
+                                'leave_type_text' => $leaveTypeText,
+                                'start_date' => $startDate,
+                                'end_date' => $endDate,
+                                'total_days' => $totalDays,
+                                'reason' => $reason ? ($reason . ' (Bạn được gắn là Người theo dõi)') : '(Bạn được gắn là Người theo dõi)',
+                                'date' => date('Y-m-d'),
+                                'ref_id' => $leaveId
+                            ]);
+                        }
+                    }
+                }
             } catch (\Throwable $e) {}
         }
 
-        // Dispatch Notification
+        respond(200, ['success' => true, 'id' => $leaveId]);
+    }
+
+    public function updateLeave(array $auth, int $id): void {
+        $b = getBody();
+        $uid = (int)($auth['user_id'] ?? 0);
+        $tid = (int)($auth['tenant_id'] ?? 0);
+
+        $this->db->beginTransaction();
         try {
-            $stmtUser = $this->db->prepare("SELECT full_name FROM users WHERE id = ?");
-            $stmtUser->execute([$auth['user_id']]);
-            $userName = $stmtUser->fetchColumn() ?: 'Nhân viên';
+            $stmt = $this->db->prepare("
+                SELECT l.*, u.tenant_id, u.full_name as employee_name
+                FROM hrm_leave_requests l
+                JOIN users u ON l.user_id = u.id
+                WHERE l.id = ? AND u.tenant_id = ?
+                FOR UPDATE
+            ");
+            $stmt->execute([$id, $tid]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$row) {
+                $this->db->rollBack();
+                respond(404, null, 'Không tìm thấy đơn xin nghỉ phép', false);
+            }
 
-            $leaveTypeText = self::formatLeaveTypeText($b['leave_type']);
+            $isCreator = ((int)$row['user_id'] === $uid);
+            $isPrivileged = $this->isAdmin($auth) || in_array(strtolower($auth['role'] ?? ''), ['manager', 'director', 'hr', 'leader', 'truongphong', 'head_of_department'], true);
+            if (!$isCreator && !$isPrivileged) {
+                $this->db->rollBack();
+                respond(403, null, 'Bạn không có quyền chỉnh sửa đơn này', false);
+            }
 
-            require_once __DIR__ . '/../NotificationService.php';
-            $targetUserId = $approverId ?: $auth['user_id'];
-            $leaveId = (int)$this->db->lastInsertId();
-            NotificationService::send($this->db, $auth['tenant_id'], 'HRM_LEAVE_REQUEST', [
-                'approver_id' => $targetUserId,
-                'target_user_id' => $targetUserId,
-                'user_id' => $targetUserId,
-                'user_name' => $userName,
-                'submitter_id' => (int)$auth['user_id'],
-                'leave_type_text' => $leaveTypeText,
-                'start_date' => $startDate,
-                'end_date' => $endDate,
-                'total_days' => (float)($b['total_days'] ?? 1.0),
-                'reason' => $reason,
-                'date' => date('Y-m-d'),
-                'ref_id' => $leaveId
-            ]);
+            $oldStatus = $row['status'] ?? 'pending';
+            if (!in_array($oldStatus, ['draft', 'pending', 'rejected'], true)) {
+                $this->db->rollBack();
+                respond(422, null, 'Chỉ có thể chỉnh sửa đơn ở trạng thái Nháp, Chờ duyệt hoặc Từ chối', false);
+            }
 
-            // Notify related persons
-            if (!empty($relArr)) {
-                foreach ($relArr as $relUid) {
-                    $relUid = (int)$relUid;
-                    if ($relUid > 0 && $relUid !== (int)$auth['user_id'] && $relUid !== (int)$targetUserId) {
-                        NotificationService::send($this->db, $auth['tenant_id'], 'HRM_LEAVE_REQUEST', [
-                            'approver_id' => $relUid,
-                            'target_user_id' => $relUid,
-                            'user_id' => $relUid,
-                            'user_name' => $userName,
-                            'submitter_id' => (int)$auth['user_id'],
-                            'leave_type_text' => $leaveTypeText,
-                            'start_date' => $startDate,
-                            'end_date' => $endDate,
-                            'total_days' => (float)($b['total_days'] ?? 1.0),
-                            'reason' => $reason ? ($reason . ' (Bạn được gắn là Người theo dõi)') : '(Bạn được gắn là Người theo dõi)',
-                            'date' => date('Y-m-d'),
-                            'ref_id' => $leaveId
-                        ]);
-                    }
+            $leaveType = $b['leave_type'] ?? $row['leave_type'];
+            $startDate = $b['start_date'] ?? $b['from_date'] ?? $row['start_date'];
+            $endDate = $b['end_date'] ?? $b['to_date'] ?? $row['end_date'];
+            $totalDays = isset($b['total_days']) ? (float)$b['total_days'] : (isset($b['days']) ? (float)$b['days'] : (float)$row['total_days']);
+            $rawReason = array_key_exists('reason', $b) ? trim((string)$b['reason']) : (string)($row['reason'] ?? '');
+
+            $newStatus = isset($b['status']) && in_array($b['status'], ['pending', 'draft'], true)
+                ? $b['status']
+                : ($oldStatus === 'rejected' ? 'pending' : $oldStatus);
+
+            if ($newStatus === 'pending') {
+                $rawReason = trim(preg_replace('/\s*\[Từ chối:[^\]]*\]/u', '', $rawReason));
+            }
+
+            $approverId = array_key_exists('approver_id', $b) ? (!empty($b['approver_id']) ? (int)$b['approver_id'] : null) : (!empty($row['approver_id']) ? (int)$row['approver_id'] : null);
+            $approverId2 = array_key_exists('approver_id_2', $b) ? (!empty($b['approver_id_2']) ? (int)$b['approver_id_2'] : null) : (!empty($row['approver_id_2']) ? (int)$row['approver_id_2'] : null);
+
+            if ($newStatus === 'pending' && empty($approverId)) {
+                $stmtLeader = $this->db->prepare("SELECT t.leader_id FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ?");
+                $stmtLeader->execute([$row['user_id']]);
+                $leadId = $stmtLeader->fetchColumn();
+                if (!empty($leadId) && (int)$leadId !== (int)$row['user_id']) {
+                    $approverId = (int)$leadId;
+                } else {
+                    $stmtDir = $this->db->query("SELECT id FROM users WHERE LOWER(role) IN ('director', 'superadmin', 'super_admin') AND id != " . (int)$row['user_id'] . " LIMIT 1");
+                    $approverId = (int)($stmtDir->fetchColumn() ?: 1003);
                 }
             }
-        } catch (\Throwable $e) {}
 
-        respond(200, ['success' => true]);
+            $relatedUserIds = $row['related_user_ids'] ?? null;
+            if (array_key_exists('related_user_ids', $b)) {
+                $relArr = !empty($b['related_user_ids']) ? (is_array($b['related_user_ids']) ? $b['related_user_ids'] : json_decode((string)$b['related_user_ids'], true)) : [];
+                if (!is_array($relArr)) $relArr = [];
+                $relatedUserIds = !empty($relArr) ? json_encode(array_values(array_unique(array_map('intval', $relArr)))) : null;
+            }
+
+            $otType = array_key_exists('ot_type', $b) ? $b['ot_type'] : ($row['ot_type'] ?? null);
+            $otRate = array_key_exists('ot_rate', $b) ? (float)$b['ot_rate'] : (isset($row['ot_rate']) ? (float)$row['ot_rate'] : null);
+            $salaryRate = array_key_exists('salary_rate', $b) ? (float)$b['salary_rate'] : (isset($row['salary_rate']) ? (float)$row['salary_rate'] : 100.0);
+            $unpaidDays = (float)($row['unpaid_days'] ?? 0.0);
+            if ($leaveType === 'remote_work') {
+                $unpaidDays = round($totalDays * (1.0 - ($salaryRate / 100.0)), 2);
+            } elseif ($leaveType === 'unpaid') {
+                $unpaidDays = $totalDays;
+                $salaryRate = 0.0;
+            }
+
+            $statusL1 = $newStatus === 'draft' ? 'none' : 'pending';
+            $statusL2 = $newStatus === 'draft' ? 'none' : (!empty($approverId2) ? 'pending' : 'none');
+
+            $sets = [
+                'leave_type = ?',
+                'start_date = ?',
+                'end_date = ?',
+                'total_days = ?',
+                'unpaid_days = ?',
+                'salary_rate = ?',
+                'ot_type = ?',
+                'ot_rate = ?',
+                'reason = ?',
+                'approver_id = ?',
+                'approver_id_2 = ?',
+                'related_user_ids = ?',
+                'status = ?',
+                'status_level_1 = ?',
+                'status_level_2 = ?'
+            ];
+            $params = [
+                $leaveType,
+                $startDate,
+                $endDate,
+                $totalDays,
+                $unpaidDays,
+                $salaryRate,
+                $otType,
+                $otRate,
+                $rawReason,
+                $approverId,
+                $approverId2,
+                $relatedUserIds,
+                $newStatus,
+                $statusL1,
+                $statusL2
+            ];
+
+            if ($newStatus === 'pending') {
+                $sets[] = 'approved_by = NULL';
+                $sets[] = 'approved_at = NULL';
+                if ($this->hasColumn('hrm_leave_requests', 'reject_reason')) {
+                    $sets[] = 'reject_reason = NULL';
+                }
+            }
+            if (array_key_exists('attachment_url', $b) && $this->hasColumn('hrm_leave_requests', 'attachment_url')) {
+                $sets[] = 'attachment_url = ?';
+                $params[] = $b['attachment_url'];
+            }
+
+            $params[] = $id;
+            $upd = $this->db->prepare("UPDATE hrm_leave_requests SET " . implode(', ', $sets) . " WHERE id = ?");
+            $upd->execute($params);
+
+            $this->db->commit();
+
+            if (in_array($oldStatus, ['draft', 'rejected'], true) && $newStatus === 'pending' && $approverId && $approverId !== $uid) {
+                try {
+                    require_once __DIR__ . '/../NotificationService.php';
+                    NotificationService::send($this->db, $tid, 'HRM_LEAVE_REQUEST', [
+                        'approver_id' => $approverId,
+                        'target_user_id' => $approverId,
+                        'user_id' => $approverId,
+                        'user_name' => $row['employee_name'] ?: ($auth['full_name'] ?? 'Nhân viên'),
+                        'submitter_id' => (int)$row['user_id'],
+                        'leave_type_text' => self::formatLeaveTypeText($leaveType),
+                        'start_date' => $startDate,
+                        'end_date' => $endDate,
+                        'total_days' => $totalDays,
+                        'reason' => self::cleanLeaveReason($rawReason),
+                        'date' => date('Y-m-d'),
+                        'ref_id' => $id
+                    ]);
+                } catch (\Throwable $e) {}
+            }
+
+            $this->showLeave($auth, $id);
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            respond(500, null, 'Lỗi khi cập nhật đơn nghỉ phép: ' . $e->getMessage(), false);
+        }
     }
 
     public function approveLeave(array $auth): void {
@@ -1034,8 +1266,8 @@ class HRMController {
 
     public function indexAdvances(array $auth): void {
         $userId = (int)$auth['user_id'];
-        $where = "u.tenant_id = ?";
-        $params = [$auth['tenant_id']];
+        $where = "u.tenant_id = ? AND (a.status != 'draft' OR a.user_id = ?)";
+        $params = [$auth['tenant_id'], $userId];
 
         if (!$this->isAdmin($auth)) {
             $where .= " AND (a.user_id = ? OR a.approver_id = ? OR a.approver_id_2 = ? OR a.related_user_ids LIKE ? OR a.related_user_ids LIKE ?)";
@@ -1063,8 +1295,42 @@ class HRMController {
         ");
         $stmt->execute($params);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $allRelatedIds = [];
+        foreach ($rows as $rowItem) {
+            $rawRel = $rowItem['related_user_ids'] ?? null;
+            if (!empty($rawRel)) {
+                $parsedIds = is_array($rawRel) ? $rawRel : (json_decode((string)$rawRel, true) ?: []);
+                if (is_array($parsedIds)) {
+                    foreach ($parsedIds as $rid) {
+                        $ridInt = (int)$rid;
+                        if ($ridInt > 0) $allRelatedIds[$ridInt] = $ridInt;
+                    }
+                }
+            }
+        }
+        $relatedUsersMap = [];
+        if (!empty($allRelatedIds)) {
+            $inClause = implode(',', array_fill(0, count($allRelatedIds), '?'));
+            $stmtRel = $this->db->prepare("SELECT id, full_name, full_name as name, avatar_url, avatar_url as avatar, job_title, department, role FROM users WHERE id IN ($inClause)");
+            $stmtRel->execute(array_values($allRelatedIds));
+            foreach ($stmtRel->fetchAll(PDO::FETCH_ASSOC) ?: [] as $uRow) {
+                $relatedUsersMap[(int)$uRow['id']] = $uRow;
+            }
+        }
+
         foreach ($rows as &$r) {
-            $r['related_users'] = $this->resolveRelatedUsers($r['related_user_ids'] ?? null);
+            $rawRel = $r['related_user_ids'] ?? null;
+            $relIds = !empty($rawRel) ? (is_array($rawRel) ? $rawRel : (json_decode((string)$rawRel, true) ?: [])) : [];
+            $relUsers = [];
+            if (is_array($relIds)) {
+                foreach (array_unique(array_map('intval', $relIds)) as $ridInt) {
+                    if ($ridInt > 0 && isset($relatedUsersMap[$ridInt])) {
+                        $relUsers[] = $relatedUsersMap[$ridInt];
+                    }
+                }
+            }
+            $r['related_users'] = $relUsers;
         }
         unset($r);
         respond(200, $rows);
@@ -1100,14 +1366,18 @@ class HRMController {
 
     public function createAdvance(array $auth): void {
         $b = getBody();
-        if (empty($b['amount']) || (float)$b['amount'] <= 0) {
+        $isDraft = (($b['status'] ?? '') === 'draft');
+        $amount = isset($b['amount']) ? (float)$b['amount'] : 0.0;
+        if (!$isDraft && $amount <= 0) {
             respond(400, null, 'Số tiền tạm ứng phải lớn hơn 0', false);
+        } elseif ($amount < 0) {
+            respond(400, null, 'Số tiền tạm ứng không được âm', false);
         }
 
         $tid = (int)($auth['tenant_id'] ?? 0);
         $uid = (int)($auth['user_id'] ?? 0);
         $approverId = !empty($b['approver_id']) ? (int)$b['approver_id'] : null;
-        if (empty($approverId)) {
+        if (empty($approverId) && !$isDraft) {
             $stmtLeader = $this->db->prepare("SELECT t.leader_id FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ? AND u.tenant_id = ?");
             $stmtLeader->execute([$uid, $tid]);
             $leadId = $stmtLeader->fetchColumn();
@@ -1130,7 +1400,7 @@ class HRMController {
 
         // Chỉ Ban Giám đốc / Superadmin mới có quyền tự duyệt tạm ứng của chính mình; Quản lý và nhân sự cấp dưới bắt buộc chờ Ban Giám đốc duyệt
         $isExecutive = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true);
-        if (!$isExecutive && ($approverId === $uid || $approverId2 === $uid)) {
+        if (!$isDraft && !$isExecutive && ($approverId === $uid || $approverId2 === $uid)) {
             $stmtDir = $this->db->prepare("SELECT id FROM users WHERE LOWER(role) IN ('director', 'superadmin', 'super_admin') AND tenant_id = ? AND id != ? AND is_active = 1 ORDER BY id ASC LIMIT 1");
             $stmtDir->execute([$tid, $uid]);
             $dirId = $stmtDir->fetchColumn();
@@ -1142,20 +1412,32 @@ class HRMController {
             $approverId = $dirId ? (int)$dirId : null;
             if ($approverId2 === $uid) $approverId2 = null;
         }
-        $isSelfApproved = $isExecutive && ($approverId > 0 && $approverId === (int)$auth['user_id'] && (empty($approverId2) || $approverId2 === (int)$auth['user_id']));
-        $initialStatus = $isSelfApproved ? 'approved' : 'pending';
-        $statusL1 = $isSelfApproved ? 'approved' : 'pending';
-        $statusL2 = $isSelfApproved ? (!empty($approverId2) ? 'approved' : 'none') : ($approverId2 ? 'pending' : 'none');
-        $approvedBy = $isSelfApproved ? $auth['user_id'] : null;
-        $approvedAt = $isSelfApproved ? date('Y-m-d H:i:s') : null;
 
+        if ($isDraft) {
+            $isSelfApproved = false;
+            $initialStatus = 'draft';
+            $statusL1 = 'none';
+            $statusL2 = 'none';
+            $approvedBy = null;
+            $approvedAt = null;
+        } else {
+            $isSelfApproved = $isExecutive && ($approverId > 0 && $approverId === (int)$auth['user_id'] && (empty($approverId2) || $approverId2 === (int)$auth['user_id']));
+            $initialStatus = $isSelfApproved ? 'approved' : 'pending';
+            $statusL1 = $isSelfApproved ? 'approved' : 'pending';
+            $statusL2 = $isSelfApproved ? (!empty($approverId2) ? 'approved' : 'none') : ($approverId2 ? 'pending' : 'none');
+            $approvedBy = $isSelfApproved ? $auth['user_id'] : null;
+            $approvedAt = $isSelfApproved ? date('Y-m-d H:i:s') : null;
+        }
+
+        $requestDate = !empty($b['request_date']) ? $b['request_date'] : date('Y-m-d');
         $stmt = $this->db->prepare("
             INSERT INTO hrm_salary_advances (user_id, amount, request_date, reason, status, approver_id, approver_id_2, status_level_1, status_level_2, approved_by, approved_at, related_user_ids)
-            VALUES (?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         $stmt->execute([
             $auth['user_id'],
-            (float)$b['amount'],
+            $amount,
+            $requestDate,
             $b['reason'] ?? '',
             $initialStatus,
             $approverId,
@@ -1166,46 +1448,191 @@ class HRMController {
             $approvedAt,
             $relatedUserIds
         ]);
+        $advId = (int)$this->db->lastInsertId();
 
-        try {
-            $stmtUser = $this->db->prepare("SELECT full_name FROM users WHERE id = ?");
-            $stmtUser->execute([$auth['user_id']]);
-            $userName = $stmtUser->fetchColumn() ?: 'Nhân viên';
+        if (!$isDraft) {
+            try {
+                $stmtUser = $this->db->prepare("SELECT full_name FROM users WHERE id = ?");
+                $stmtUser->execute([$auth['user_id']]);
+                $userName = $stmtUser->fetchColumn() ?: 'Nhân viên';
 
-            require_once __DIR__ . '/../NotificationService.php';
-            $targetUserId = $approverId ?: $auth['user_id'];
-            $advId = (int)$this->db->lastInsertId();
-            NotificationService::send($this->db, $auth['tenant_id'], 'HRM_ADVANCE_REQUEST', [
-                'user_id' => $targetUserId,
-                'user_name' => $userName,
-                'amount' => (float)$b['amount'],
-                'reason' => $b['reason'] ?? '',
-                'date' => date('Y-m-d'),
-                'ref_id' => $advId
-            ]);
+                require_once __DIR__ . '/../NotificationService.php';
+                $targetUserId = $approverId ?: $auth['user_id'];
+                NotificationService::send($this->db, $auth['tenant_id'], 'HRM_ADVANCE_REQUEST', [
+                    'user_id' => $targetUserId,
+                    'user_name' => $userName,
+                    'amount' => $amount,
+                    'reason' => $b['reason'] ?? '',
+                    'date' => date('Y-m-d'),
+                    'ref_id' => $advId
+                ]);
 
-            // Notify related persons
-            if (!empty($b['related_user_ids'])) {
-                $relList = is_array($b['related_user_ids']) ? $b['related_user_ids'] : json_decode($b['related_user_ids'], true);
-                if (is_array($relList)) {
-                    foreach ($relList as $relUid) {
-                        $relUid = (int)$relUid;
-                        if ($relUid > 0 && $relUid !== (int)$auth['user_id'] && $relUid !== (int)$targetUserId) {
-                            NotificationService::send($this->db, $auth['tenant_id'], 'HRM_ADVANCE_REQUEST', [
-                                'user_id' => $relUid,
-                                'user_name' => $userName,
-                                'amount' => (float)$b['amount'],
-                                'reason' => ($b['reason'] ?? '') . ' (Bạn được gắn là Người liên quan)',
-                                'date' => date('Y-m-d'),
-                                'ref_id' => $advId
-                            ]);
+                // Notify related persons
+                if (!empty($b['related_user_ids'])) {
+                    $relList = is_array($b['related_user_ids']) ? $b['related_user_ids'] : json_decode($b['related_user_ids'], true);
+                    if (is_array($relList)) {
+                        foreach ($relList as $relUid) {
+                            $relUid = (int)$relUid;
+                            if ($relUid > 0 && $relUid !== (int)$auth['user_id'] && $relUid !== (int)$targetUserId) {
+                                NotificationService::send($this->db, $auth['tenant_id'], 'HRM_ADVANCE_REQUEST', [
+                                    'user_id' => $relUid,
+                                    'user_name' => $userName,
+                                    'amount' => $amount,
+                                    'reason' => ($b['reason'] ?? '') . ' (Bạn được gắn là Người liên quan)',
+                                    'date' => date('Y-m-d'),
+                                    'ref_id' => $advId
+                                ]);
+                            }
                         }
                     }
                 }
-            }
-        } catch (\Throwable $e) {}
+            } catch (\Throwable $e) {}
+        }
 
-        respond(200, ['success' => true]);
+        respond(200, ['success' => true, 'id' => $advId]);
+    }
+
+    public function updateAdvance(array $auth, int $id): void {
+        $b = getBody();
+        $uid = (int)($auth['user_id'] ?? 0);
+        $tid = (int)($auth['tenant_id'] ?? 0);
+
+        $this->db->beginTransaction();
+        try {
+            $stmt = $this->db->prepare("
+                SELECT a.*, u.tenant_id, u.full_name as employee_name
+                FROM hrm_salary_advances a
+                JOIN users u ON a.user_id = u.id
+                WHERE a.id = ? AND u.tenant_id = ?
+                FOR UPDATE
+            ");
+            $stmt->execute([$id, $tid]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$row) {
+                $this->db->rollBack();
+                respond(404, null, 'Không tìm thấy đề nghị tạm ứng', false);
+            }
+
+            $isCreator = ((int)$row['user_id'] === $uid);
+            $isPrivileged = $this->isAdmin($auth) || in_array(strtolower($auth['role'] ?? ''), ['manager', 'director', 'hr', 'accountant', 'leader', 'truongphong', 'head_of_department'], true);
+            if (!$isCreator && !$isPrivileged) {
+                $this->db->rollBack();
+                respond(403, null, 'Bạn không có quyền chỉnh sửa đề nghị tạm ứng này', false);
+            }
+
+            $oldStatus = $row['status'] ?? 'pending';
+            if (!in_array($oldStatus, ['draft', 'pending', 'rejected'], true)) {
+                $this->db->rollBack();
+                respond(422, null, 'Chỉ có thể chỉnh sửa đề nghị tạm ứng ở trạng thái Nháp, Chờ duyệt hoặc Từ chối', false);
+            }
+
+            $newStatus = isset($b['status']) && in_array($b['status'], ['pending', 'draft'], true)
+                ? $b['status']
+                : ($oldStatus === 'rejected' ? 'pending' : $oldStatus);
+
+            $amount = array_key_exists('amount', $b) ? (float)$b['amount'] : (float)($row['amount'] ?? 0);
+            if ($newStatus !== 'draft' && $amount <= 0) {
+                $this->db->rollBack();
+                respond(400, null, 'Số tiền tạm ứng phải lớn hơn 0', false);
+            } elseif ($amount < 0) {
+                $this->db->rollBack();
+                respond(400, null, 'Số tiền tạm ứng không được âm', false);
+            }
+
+            $reason = array_key_exists('reason', $b) ? trim((string)$b['reason']) : (string)($row['reason'] ?? '');
+            if ($newStatus === 'pending') {
+                $reason = trim(preg_replace('/\s*\[Từ chối:[^\]]*\]/u', '', $reason));
+            }
+
+            $requestDate = !empty($b['request_date']) ? $b['request_date'] : ($row['request_date'] ?? date('Y-m-d'));
+            $approverId = array_key_exists('approver_id', $b) ? (!empty($b['approver_id']) ? (int)$b['approver_id'] : null) : (!empty($row['approver_id']) ? (int)$row['approver_id'] : null);
+            $approverId2 = array_key_exists('approver_id_2', $b) ? (!empty($b['approver_id_2']) ? (int)$b['approver_id_2'] : null) : (!empty($row['approver_id_2']) ? (int)$row['approver_id_2'] : null);
+
+            if ($newStatus === 'pending' && empty($approverId)) {
+                $stmtLeader = $this->db->prepare("SELECT t.leader_id FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ? AND u.tenant_id = ?");
+                $stmtLeader->execute([(int)$row['user_id'], $tid]);
+                $leadId = $stmtLeader->fetchColumn();
+                if (!empty($leadId) && (int)$leadId !== (int)$row['user_id']) {
+                    $approverId = (int)$leadId;
+                } else {
+                    $stmtDir = $this->db->prepare("SELECT id FROM users WHERE LOWER(role) IN ('director', 'superadmin', 'super_admin') AND tenant_id = ? AND id != ? AND is_active = 1 ORDER BY id ASC LIMIT 1");
+                    $stmtDir->execute([$tid, (int)$row['user_id']]);
+                    $approverId = (int)($stmtDir->fetchColumn() ?: 1003);
+                }
+            }
+
+            $relatedUserIds = $row['related_user_ids'] ?? null;
+            if (array_key_exists('related_user_ids', $b)) {
+                $relArr = !empty($b['related_user_ids']) ? (is_array($b['related_user_ids']) ? $b['related_user_ids'] : json_decode((string)$b['related_user_ids'], true)) : [];
+                if (!is_array($relArr)) $relArr = [];
+                $relatedUserIds = !empty($relArr) ? json_encode(array_values(array_unique(array_map('intval', $relArr)))) : null;
+            }
+
+            $statusL1 = $newStatus === 'draft' ? 'none' : 'pending';
+            $statusL2 = $newStatus === 'draft' ? 'none' : (!empty($approverId2) ? 'pending' : 'none');
+
+            $sets = [
+                'amount = ?',
+                'reason = ?',
+                'request_date = ?',
+                'approver_id = ?',
+                'approver_id_2 = ?',
+                'related_user_ids = ?',
+                'status = ?',
+                'status_level_1 = ?',
+                'status_level_2 = ?'
+            ];
+            $params = [
+                $amount,
+                $reason,
+                $requestDate,
+                $approverId,
+                $approverId2,
+                $relatedUserIds,
+                $newStatus,
+                $statusL1,
+                $statusL2
+            ];
+
+            if ($newStatus === 'pending') {
+                $sets[] = 'approved_by = NULL';
+                $sets[] = 'approved_at = NULL';
+                if ($this->hasColumn('hrm_salary_advances', 'reject_reason')) {
+                    $sets[] = 'reject_reason = NULL';
+                }
+            }
+            if (array_key_exists('attachment_url', $b) && $this->hasColumn('hrm_salary_advances', 'attachment_url')) {
+                $sets[] = 'attachment_url = ?';
+                $params[] = $b['attachment_url'];
+            }
+
+            $params[] = $id;
+            $upd = $this->db->prepare("UPDATE hrm_salary_advances SET " . implode(', ', $sets) . " WHERE id = ?");
+            $upd->execute($params);
+
+            $this->db->commit();
+
+            if (in_array($oldStatus, ['draft', 'rejected'], true) && $newStatus === 'pending' && $approverId && $approverId !== $uid) {
+                try {
+                    require_once __DIR__ . '/../NotificationService.php';
+                    NotificationService::send($this->db, $tid, 'HRM_ADVANCE_REQUEST', [
+                        'user_id' => $approverId,
+                        'user_name' => $row['employee_name'] ?: ($auth['full_name'] ?? 'Nhân viên'),
+                        'amount' => $amount,
+                        'reason' => $reason,
+                        'date' => date('Y-m-d'),
+                        'ref_id' => $id
+                    ]);
+                } catch (\Throwable $e) {}
+            }
+
+            $this->showAdvance($auth, $id);
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            respond(500, null, 'Lỗi khi cập nhật đề nghị tạm ứng: ' . $e->getMessage(), false);
+        }
     }
 
     public function approveAdvance(array $auth): void {
@@ -1921,10 +2348,10 @@ class HRMController {
                     SELECT p.*, u.full_name as employee_name, u.email, u.phone, u.job_title
                     FROM monthly_payslips p
                     JOIN users u ON p.user_id = u.id
-                    WHERE p.user_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
+                    WHERE u.tenant_id = ? AND p.user_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
                     ORDER BY p.month_year DESC
                 ");
-                $stmt->execute([$auth['user_id']]);
+                $stmt->execute([$auth['tenant_id'], $auth['user_id']]);
             }
             respond(200, $stmt->fetchAll(PDO::FETCH_ASSOC));
             return;
@@ -1943,9 +2370,9 @@ class HRMController {
                 SELECT p.*, u.full_name as employee_name, u.email, u.phone, u.job_title
                 FROM monthly_payslips p
                 JOIN users u ON p.user_id = u.id
-                WHERE p.user_id = ? AND p.month_year = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
+                WHERE u.tenant_id = ? AND p.user_id = ? AND p.month_year = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
             ");
-            $stmt->execute([$auth['user_id'], $monthYear]);
+            $stmt->execute([$auth['tenant_id'], $auth['user_id'], $monthYear]);
         }
         respond(200, $stmt->fetchAll(PDO::FETCH_ASSOC));
     }
@@ -2038,7 +2465,7 @@ class HRMController {
 
         // Fetch payslip to verify permission and tenant ownership
         $stmtCheck = $this->db->prepare("
-            SELECT mp.*, u.tenant_id as owner_tenant_id 
+            SELECT mp.*, u.tenant_id as owner_tenant_id, u.full_name as employee_name 
             FROM monthly_payslips mp
             JOIN users u ON mp.user_id = u.id
             WHERE mp.id = ?
@@ -2405,9 +2832,10 @@ class HRMController {
         $stmtList->execute([$batchId, $tenantId]);
         $records = $stmtList->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-        // Tự động tính toán lại số liệu mới nhất cho các nhân sự chưa chốt (pending / disputed)
+        $forceRecalc = (($_GET['recalculate'] ?? '') === '1');
+        // Chỉ tự động tính toán lại khi có cờ ?recalculate=1 hoặc bản ghi chưa được tính toán lần nào
         foreach ($records as &$rec) {
-            if (in_array($rec['status'], ['pending', 'disputed'], true)) {
+            if (in_array($rec['status'], ['pending', 'disputed'], true) && ($forceRecalc || $rec['actual_work_days'] === null)) {
                 $rec['from_date'] = $batch['from_date'];
                 $rec['to_date'] = $batch['to_date'];
                 self::recalculateConfirmationRecord($this->db, $tenantId, $rec);
@@ -2841,6 +3269,21 @@ class HRMController {
         respond(200, $this->fetchAllApprovals($auth));
     }
 
+    private function batchLoadExpenseEntities(array $expenseIds): array {
+        $expenseIds = array_values(array_filter(array_unique(array_map('intval', $expenseIds))));
+        if (empty($expenseIds)) return [];
+        $in = implode(',', array_fill(0, count($expenseIds), '?'));
+        $sEE = $this->db->prepare("SELECT ee.*, c.full_name, c.avatar_url FROM expense_entities ee LEFT JOIN contacts c ON ee.entity_type='contact' AND ee.entity_id=c.id WHERE ee.expense_id IN ($in)");
+        $sEE->execute($expenseIds);
+        $allEntities = $sEE->fetchAll(PDO::FETCH_ASSOC);
+        $entitiesByExp = [];
+        foreach ($allEntities as $ee) {
+            $ee['name'] = trim($ee['full_name'] ?? '');
+            $entitiesByExp[(int)$ee['expense_id']][] = $ee;
+        }
+        return $entitiesByExp;
+    }
+
     private function fetchPendingApprovals(array $auth): array {
         $pending = [];
         $userId = (int)$auth['user_id'];
@@ -2918,7 +3361,8 @@ class HRMController {
                 $relArr = array_values(array_filter(array_map('intval', (array)$relArr)));
 
                 $levelText = ($l['status_level_1'] === 'approved') ? 'Cấp 2 (Giám đốc)' : 'Cấp 1 (Quản lý)';
-                $cleanReason = self::cleanLeaveReason($l['reason'] ?? '');
+                $rawReason = $l['reason'] ?? '';
+                $cleanReason = self::cleanLeaveReason($rawReason);
                 $l['reason'] = $cleanReason;
                 $pending[] = [
                     'id' => (int)$l['id'],
@@ -2938,11 +3382,13 @@ class HRMController {
                     'start_date' => $l['start_date'],
                     'end_date' => $l['end_date'],
                     'total_days' => (float)$l['total_days'],
+                    'unpaid_days' => isset($l['unpaid_days']) ? (float)$l['unpaid_days'] : 0.0,
                     'salary_rate' => isset($l['salary_rate']) ? (float)$l['salary_rate'] : 50.0,
                     'ot_type' => $l['ot_type'] ?? null,
                     'ot_rate' => isset($l['ot_rate']) ? (float)$l['ot_rate'] : null,
                     'leave_type' => $l['leave_type'],
                     'reason' => $cleanReason,
+                    'raw_reason' => $rawReason,
                     'title' => self::formatLeaveTitle($l) . ' - ' . $levelText,
                     'description' => 'Thời gian: ' . $l['start_date'] . ' -> ' . $l['end_date'] . ' (' . $l['total_days'] . ' ngày/giờ).' . ($cleanReason ? ' Lý do: "' . $cleanReason . '"' : ''),
                     'status' => $l['status'] ?? 'pending',
@@ -2953,9 +3399,7 @@ class HRMController {
 
         // 2. Pending Advances
         $stmtAdvances = $this->db->prepare("
-            SELECT a.id, a.user_id, u.full_name as employee_name, a.amount, a.reason, a.status, a.created_at,
-                   a.approver_id, a.approver_id_2, a.status_level_1, a.status_level_2,
-                   a.approved_by, a.approved_at, a.related_user_ids,
+            SELECT a.*, u.full_name as employee_name,
                    u_app1.full_name as approver_name,
                    u_app2.full_name as approver_name_2,
                    u_real.full_name as approved_by_name
@@ -3019,7 +3463,9 @@ class HRMController {
                     'status_level_2' => $a['status_level_2'] ?? 'none',
                     'related_user_ids' => $relArr,
                     'amount' => (float)$a['amount'],
-                    'reason' => $a['reason'],
+                    'reason' => $a['reason'] ?? '',
+                    'raw_reason' => $a['reason'] ?? '',
+                    'request_date' => $a['request_date'] ?? null,
                     'title' => 'Đề xuất tạm ứng lương - ' . $levelText,
                     'description' => 'Số tiền: ' . number_format($a['amount'], 0, ',', '.') . 'đ. Lý do: "' . $a['reason'] . '"',
                     'status' => $a['status'] ?? 'pending',
@@ -3030,9 +3476,7 @@ class HRMController {
 
         // 3. Pending Expenses
         $stmtExpenses = $this->db->prepare("
-            SELECT e.id, e.created_by, u.full_name as employee_name, e.title, e.amount, e.currency, e.category, e.date, e.notes, e.notes as description, e.status, e.created_at,
-                   e.approver_id, e.approver_id_2, e.approver_id_3, e.status_level_1, e.status_level_2, e.status_level_3,
-                   e.approved_by, e.approved_at, e.approved_at_2, e.approved_at_3, e.approval_steps, e.related_user_ids, e.image_url, e.items, e.is_refunded, e.refunded_at,
+            SELECT e.*, e.notes as description, u.full_name as employee_name,
                    u_app1.full_name as approver_name,
                    u_app2.full_name as approver_name_2,
                    u_app3.full_name as approver_name_3,
@@ -3043,12 +3487,13 @@ class HRMController {
             LEFT JOIN users u_app2 ON e.approver_id_2 = u_app2.id
             LEFT JOIN users u_app3 ON e.approver_id_3 = u_app3.id
             LEFT JOIN users u_real ON e.approved_by = u_real.id
-            WHERE e.tenant_id = ? AND e.status NOT IN ('approved', 'rejected', 'failed', 'cancelled', 'confirmed', 'paid', 'completed') AND e.deleted_at IS NULL AND e.created_by != ?
+            WHERE e.tenant_id = ? AND e.status NOT IN ('draft', 'approved', 'rejected', 'failed', 'cancelled', 'confirmed', 'paid', 'completed') AND e.deleted_at IS NULL AND e.created_by != ?
             ORDER BY e.created_at DESC
             LIMIT 200
         ");
         $stmtExpenses->execute([$auth['tenant_id'], $userId]);
         $expenses = $stmtExpenses->fetchAll(PDO::FETCH_ASSOC);
+        $entitiesByExp = $this->batchLoadExpenseEntities(array_column($expenses, 'id'));
         foreach ($expenses as $e) {
             $shouldShow = false;
             $levelText = '';
@@ -3134,12 +3579,20 @@ class HRMController {
                     'related_user_ids' => $relArr,
                     'image_url' => $e['image_url'] ?? null,
                     'items' => !empty($e['items']) ? (is_string($e['items']) ? json_decode($e['items'], true) : $e['items']) : [],
+                    'entities' => $entitiesByExp[(int)$e['id']] ?? [],
                     'title' => $displayTitle,
+                    'raw_title' => $e['title'],
                     'description' => $displayDesc,
                     'amount' => (float)$e['amount'],
                     'currency' => self::detectExpenseCurrency($e['title'], $e['notes'] ?? '', $e['items'] ?? null, $e['currency'] ?? 'VND'),
                     'category' => $e['category'] ?? 'Vận hành',
                     'date' => $e['date'] ?? null,
+                    'due_date' => $e['due_date'] ?? null,
+                    'vat_amount' => isset($e['vat_amount']) ? (float)$e['vat_amount'] : 0.0,
+                    'vendor_name' => $e['vendor_name'] ?? null,
+                    'has_vat_invoice' => (int)($e['has_vat_invoice'] ?? 0),
+                    'is_vat_inclusive' => (int)($e['is_vat_inclusive'] ?? 0),
+                    'reject_reason' => $e['reject_reason'] ?? null,
                     'notes' => $e['notes'] ?? '',
                     'status' => $e['status'] ?? 'pending',
                     'is_refunded' => (int)($e['is_refunded'] ?? 0),
@@ -3188,7 +3641,7 @@ class HRMController {
                 $title = 'Bổ sung chấm công ngày ' . $c['check_in_date'];
                 $desc = 'Bổ sung chấm công (Check-in lúc ' . $c['check_in_time'] . '). Lý do: "' . ($c['reason'] ?: 'Quên chấm công') . '"';
                 $mgrId = (int)($c['manager_id'] ?: $c['team_leader_id'] ?: 0);
-                $mgrName = $c['approver_name'] ?: $c['team_leader_name'] ?: 'Quản lý trực tiếp';
+                $mgrName = $c['approver_name'] ?: $c['team_leader_name'] ?: null;
                 $mgrAvatar = $c['approver_avatar'] ?: $c['team_leader_avatar'] ?: null;
 
                 $pending[] = [
@@ -3274,6 +3727,7 @@ class HRMController {
                     'employee_name' => $b['employee_name'],
                     'user_id' => (int)$b['user_id'],
                     'approver_id' => (int)($b['approved_by'] ?? $b['manager_id'] ?? 0),
+                    'approver_id_2' => (int)($b['approver2_id'] ?? 0),
                     'manager_id' => (int)($b['manager_id'] ?? 0),
                     'manager_name' => $b['manager_name'] ?? null,
                     'approved_by' => (int)($b['approved_by'] ?? 0),
@@ -3330,7 +3784,8 @@ class HRMController {
             }
             $relArr = array_values(array_filter(array_map('intval', (array)$relArr)));
 
-            $cleanReason = self::cleanLeaveReason($l['reason'] ?? '');
+            $rawReason = $l['reason'] ?? '';
+            $cleanReason = self::cleanLeaveReason($rawReason);
             $l['reason'] = $cleanReason;
             $pending[] = [
                 'id' => (int)$l['id'],
@@ -3350,11 +3805,13 @@ class HRMController {
                 'start_date' => $l['start_date'],
                 'end_date' => $l['end_date'],
                 'total_days' => (float)$l['total_days'],
+                'unpaid_days' => isset($l['unpaid_days']) ? (float)$l['unpaid_days'] : 0.0,
                 'salary_rate' => isset($l['salary_rate']) ? (float)$l['salary_rate'] : 50.0,
                 'ot_type' => $l['ot_type'] ?? null,
                 'ot_rate' => isset($l['ot_rate']) ? (float)$l['ot_rate'] : null,
                 'leave_type' => $l['leave_type'],
                 'reason' => $cleanReason,
+                'raw_reason' => $rawReason,
                 'title' => self::formatLeaveTitle($l),
                 'description' => 'Thời gian: ' . $l['start_date'] . ' -> ' . $l['end_date'] . ' (' . $l['total_days'] . ' ngày/giờ).' . ($cleanReason ? ' Lý do: "' . $cleanReason . '"' : ''),
                 'status' => $statusText,
@@ -3364,9 +3821,7 @@ class HRMController {
 
         // 2. My Advances
         $stmtAdvances = $this->db->prepare("
-            SELECT a.id, a.amount, a.reason, a.status, a.created_at,
-                   a.status_level_1, a.status_level_2, a.approver_id, a.approver_id_2, a.user_id, a.related_user_ids, u.full_name as employee_name,
-                   a.approved_by, a.approved_at,
+            SELECT a.*, u.full_name as employee_name,
                    u_app1.full_name as approver_name,
                    u_app2.full_name as approver_name_2,
                    u_real.full_name as approved_by_name
@@ -3408,7 +3863,9 @@ class HRMController {
                 'status_level_2' => $a['status_level_2'] ?? 'none',
                 'related_user_ids' => $relArr,
                 'amount' => (float)$a['amount'],
-                'reason' => $a['reason'],
+                'reason' => $a['reason'] ?? '',
+                'raw_reason' => $a['reason'] ?? '',
+                'request_date' => $a['request_date'] ?? null,
                 'title' => 'Đề xuất tạm ứng lương',
                 'description' => 'Số tiền: ' . number_format($a['amount'], 0, ',', '.') . 'đ. Lý do: "' . $a['reason'] . '"',
                 'status' => $statusText,
@@ -3418,12 +3875,7 @@ class HRMController {
 
         // 3. My Expenses
         $stmtExpenses = $this->db->prepare("
-            SELECT e.id, e.title, e.amount, e.currency, e.category, e.date, e.notes, e.notes as description, e.status, e.created_at,
-                   e.approver_id, e.approver_id_2, e.approver_id_3,
-                   e.status_level_1, e.status_level_2, e.status_level_3,
-                   e.related_user_ids, e.image_url, e.items, e.is_refunded, e.refunded_at,
-                   e.created_by as user_id, u.full_name as employee_name,
-                   e.approved_by, e.approved_at, e.approved_at_2, e.approved_at_3, e.approval_steps,
+            SELECT e.*, e.notes as description, e.created_by as user_id, u.full_name as employee_name,
                    u_app1.full_name as approver_name,
                    u_app2.full_name as approver_name_2,
                    u_app3.full_name as approver_name_3,
@@ -3434,12 +3886,13 @@ class HRMController {
             LEFT JOIN users u_app2 ON e.approver_id_2 = u_app2.id
             LEFT JOIN users u_app3 ON e.approver_id_3 = u_app3.id
             LEFT JOIN users u_real ON e.approved_by = u_real.id
-            WHERE (e.created_by = ? OR u.id = ?) AND e.deleted_at IS NULL
+            WHERE (e.created_by = ? OR u.id = ?) AND e.tenant_id = ? AND e.deleted_at IS NULL
             ORDER BY e.created_at DESC
             LIMIT 200
         ");
-        $stmtExpenses->execute([$userId, $userId]);
+        $stmtExpenses->execute([$userId, $userId, $auth['tenant_id']]);
         $expenses = $stmtExpenses->fetchAll(PDO::FETCH_ASSOC);
+        $entitiesByExp = $this->batchLoadExpenseEntities(array_column($expenses, 'id'));
         foreach ($expenses as $e) {
             $isZeroAmt = (float)($e['amount'] ?? 0) == 0;
             $displayTitle = $e['title'];
@@ -3478,12 +3931,20 @@ class HRMController {
                 'related_user_ids' => $relArr,
                 'image_url' => $e['image_url'] ?? null,
                 'items' => !empty($e['items']) ? (is_string($e['items']) ? json_decode($e['items'], true) : $e['items']) : [],
+                'entities' => $entitiesByExp[(int)$e['id']] ?? [],
                 'title' => $displayTitle,
+                'raw_title' => $e['title'],
                 'description' => $displayDesc,
                 'amount' => (float)$e['amount'],
                 'currency' => self::detectExpenseCurrency($e['title'], $e['notes'] ?? '', $e['items'] ?? null, $e['currency'] ?? 'VND'),
                 'category' => $e['category'] ?? 'Vận hành',
                 'date' => $e['date'] ?? null,
+                'due_date' => $e['due_date'] ?? null,
+                'vat_amount' => isset($e['vat_amount']) ? (float)$e['vat_amount'] : 0.0,
+                'vendor_name' => $e['vendor_name'] ?? null,
+                'has_vat_invoice' => (int)($e['has_vat_invoice'] ?? 0),
+                'is_vat_inclusive' => (int)($e['is_vat_inclusive'] ?? 0),
+                'reject_reason' => $e['reject_reason'] ?? null,
                 'notes' => $e['notes'] ?? '',
                 'status' => $e['status'],
                 'is_refunded' => (int)($e['is_refunded'] ?? 0),
@@ -3493,11 +3954,26 @@ class HRMController {
         }
 
         // 4. My Checkins (Chỉ lấy khi là đơn đề xuất chờ duyệt hoặc có lý do giải trình thực sự từ nhân viên)
+        $phuongMyId = 0;
+        try {
+            $stmtHrMyP = $this->db->prepare("SELECT id FROM users WHERE (username = 'phuongntd' OR full_name LIKE '%Duy Phương%' OR role = 'hr') LIMIT 1");
+            $stmtHrMyP->execute();
+            $phuongMyId = (int)$stmtHrMyP->fetchColumn();
+        } catch (\Throwable $eMyP) {}
+
         $stmtCheckins = $this->db->prepare("
             SELECT c.id, c.check_in_date, c.check_in_time, c.late_minutes, c.reason, c.status, 
-                   CONCAT(c.check_in_date, ' ', c.check_in_time) as created_at, c.user_id, u.full_name as employee_name
+                   CONCAT(c.check_in_date, ' ', c.check_in_time) as created_at, c.user_id, c.manager_id, c.approved_by,
+                   u.full_name as employee_name, u.avatar_url as employee_avatar, u.team_id,
+                   m.full_name as approver_name, m.avatar_url as approver_avatar,
+                   t_lead.id as team_leader_id, t_lead.full_name as team_leader_name, t_lead.avatar_url as team_leader_avatar,
+                   ap.full_name as approved_by_name, ap.avatar_url as approved_by_avatar
             FROM check_ins c
             JOIN users u ON c.user_id = u.id
+            LEFT JOIN users m ON c.manager_id = m.id
+            LEFT JOIN teams t ON u.team_id = t.id
+            LEFT JOIN users t_lead ON t.leader_id = t_lead.id
+            LEFT JOIN users ap ON c.approved_by = ap.id
             WHERE c.user_id = ? AND (c.status = 'pending_approval' OR (c.reason IS NOT NULL AND TRIM(c.reason) != '' AND c.reason NOT LIKE 'Duyệt%' AND c.reason NOT LIKE 'Tự động%'))
             ORDER BY c.id DESC
             LIMIT 100
@@ -3510,11 +3986,24 @@ class HRMController {
             $desc = $isLate 
                 ? ('Đi trễ ' . $c['late_minutes'] . ' phút (Check-in lúc ' . $c['check_in_time'] . '). Lý do: "' . $c['reason'] . '"')
                 : ('Bổ sung chấm công (Check-in lúc ' . $c['check_in_time'] . '). Lý do: "' . ($c['reason'] ?: 'Quên chấm công') . '"');
+            $mgrId = (int)($c['manager_id'] ?: $c['team_leader_id'] ?: 0);
+            $mgrName = $c['approver_name'] ?: $c['team_leader_name'] ?: null;
+            $mgrAvatar = $c['approver_avatar'] ?: $c['team_leader_avatar'] ?: null;
+
             $pending[] = [
                 'id' => (int)$c['id'],
                 'type' => 'checkin',
                 'employee_name' => $c['employee_name'],
+                'employee_avatar' => $c['employee_avatar'] ?? null,
                 'user_id' => (int)$c['user_id'],
+                'manager_id' => $mgrId ?: null,
+                'approver_id' => $mgrId ?: null,
+                'approver_name' => $mgrName,
+                'approver_avatar' => $mgrAvatar,
+                'related_user_ids' => $phuongMyId > 0 ? [$phuongMyId] : [],
+                'approved_by' => !empty($c['approved_by']) ? (int)$c['approved_by'] : null,
+                'approved_by_name' => $c['approved_by_name'] ?? null,
+                'approved_by_avatar' => $c['approved_by_avatar'] ?? null,
                 'title' => $title,
                 'description' => $desc,
                 'status' => $c['status'],
@@ -3554,6 +4043,7 @@ class HRMController {
                 'employee_name' => $b['employee_name'],
                 'user_id' => (int)$b['user_id'],
                 'approver_id' => (int)($b['approved_by'] ?? $b['manager_id'] ?? 0),
+                'approver_id_2' => (int)($b['approver2_id'] ?? 0),
                 'manager_id' => (int)($b['manager_id'] ?? 0),
                 'manager_name' => $b['manager_name'] ?? null,
                 'approved_by' => (int)($b['approved_by'] ?? 0),
@@ -3579,11 +4069,12 @@ class HRMController {
         $userId = (int)$auth['user_id'];
         $role = strtolower($auth['role'] ?? '');
 
-        // 1. Leaves where user is in related_user_ids or user is HR (excluding leaves created by self)
+        // 1. Leaves where user is in related_user_ids or user is HR (excluding leaves created by self and drafts)
         if ($role === 'hr') {
             $stmtLeaves = $this->db->prepare("
                 SELECT l.id, l.leave_type, l.start_date, l.end_date, l.total_days, l.unpaid_days, l.reason, l.status, l.created_at,
                        l.status_level_1, l.status_level_2, l.approver_id, l.approver_id_2, l.user_id, l.related_user_ids,
+                       l.approved_by, l.approved_at,
                        l.salary_rate, l.ot_type, l.ot_rate,
                        u.full_name as employee_name,
                        ap1.full_name as approver_name,
@@ -3594,7 +4085,7 @@ class HRMController {
                 LEFT JOIN users ap1 ON l.approver_id = ap1.id
                 LEFT JOIN users ap2 ON l.approver_id_2 = ap2.id
                 LEFT JOIN users app_by ON l.approved_by = app_by.id
-                WHERE u.tenant_id = ? AND l.user_id != ?
+                WHERE u.tenant_id = ? AND l.user_id != ? AND l.status != 'draft'
                 ORDER BY l.created_at DESC
                 LIMIT 200
             ");
@@ -3603,6 +4094,7 @@ class HRMController {
             $stmtLeaves = $this->db->prepare("
                 SELECT l.id, l.leave_type, l.start_date, l.end_date, l.total_days, l.unpaid_days, l.reason, l.status, l.created_at,
                        l.status_level_1, l.status_level_2, l.approver_id, l.approver_id_2, l.user_id, l.related_user_ids,
+                       l.approved_by, l.approved_at,
                        l.salary_rate, l.ot_type, l.ot_rate,
                        u.full_name as employee_name,
                        ap1.full_name as approver_name,
@@ -3613,7 +4105,7 @@ class HRMController {
                 LEFT JOIN users ap1 ON l.approver_id = ap1.id
                 LEFT JOIN users ap2 ON l.approver_id_2 = ap2.id
                 LEFT JOIN users app_by ON l.approved_by = app_by.id
-                WHERE u.tenant_id = ? AND l.user_id != ? AND (l.related_user_ids LIKE ? OR l.related_user_ids LIKE ?)
+                WHERE u.tenant_id = ? AND l.user_id != ? AND l.status != 'draft' AND (l.related_user_ids LIKE ? OR l.related_user_ids LIKE ?)
                 ORDER BY l.created_at DESC
                 LIMIT 200
             ");
@@ -3633,7 +4125,8 @@ class HRMController {
                 if ($l['status'] === 'pending' && $l['status_level_1'] === 'approved' && !empty($l['approver_id_2'])) {
                     $statusText = 'level1_approved';
                 }
-                $cleanReason = self::cleanLeaveReason($l['reason'] ?? '');
+                $rawReason = $l['reason'] ?? '';
+                $cleanReason = self::cleanLeaveReason($rawReason);
                 $l['reason'] = $cleanReason;
                 $pending[] = [
                     'id' => (int)$l['id'],
@@ -3644,18 +4137,22 @@ class HRMController {
                     'approver_id_2' => (int)($l['approver_id_2'] ?? 0),
                     'approver_name' => $l['approver_name'] ?? null,
                     'approver_name_2' => $l['approver_name_2'] ?? null,
+                    'approved_by' => (int)($l['approved_by'] ?? 0),
                     'approved_by_name' => $l['approved_by_name'] ?? null,
+                    'approved_at' => $l['approved_at'] ?? null,
                     'status_level_1' => $l['status_level_1'] ?? 'pending',
                     'status_level_2' => $l['status_level_2'] ?? 'none',
                     'start_date' => $l['start_date'] ?? null,
                     'end_date' => $l['end_date'] ?? null,
-                    'total_days' => $l['total_days'] ?? null,
+                    'total_days' => isset($l['total_days']) ? (float)$l['total_days'] : null,
+                    'unpaid_days' => isset($l['unpaid_days']) ? (float)$l['unpaid_days'] : 0.0,
                     'salary_rate' => isset($l['salary_rate']) ? (float)$l['salary_rate'] : 50.0,
                     'ot_type' => $l['ot_type'] ?? null,
                     'ot_rate' => isset($l['ot_rate']) ? (float)$l['ot_rate'] : null,
                     'leave_type' => $l['leave_type'] ?? null,
                     'reason' => $cleanReason,
-                    'related_user_ids' => $relArr,
+                    'raw_reason' => $rawReason,
+                    'related_user_ids' => array_values($relArr),
                     'title' => self::formatLeaveTitle($l),
                     'description' => 'Thời gian: ' . $l['start_date'] . ' -> ' . $l['end_date'] . ' (' . $l['total_days'] . ' ngày/giờ).' . ($cleanReason ? ' Lý do: "' . $cleanReason . '"' : ''),
                     'status' => $statusText,
@@ -3665,12 +4162,9 @@ class HRMController {
             }
         }
 
-        // 2. Advances where user is in related_user_ids
+        // 2. Advances where user is in related_user_ids (excluding drafts)
         $stmtAdvances = $this->db->prepare("
-            SELECT a.id, a.amount, a.reason, a.status, a.created_at,
-                   a.status_level_1, a.status_level_2, a.approver_id, a.approver_id_2, a.user_id, a.related_user_ids,
-                   a.approved_by, a.approved_at,
-                   u.full_name as employee_name,
+            SELECT a.*, u.full_name as employee_name,
                    u_app1.full_name as approver_name,
                    u_app2.full_name as approver_name_2,
                    u_real.full_name as approved_by_name
@@ -3679,7 +4173,7 @@ class HRMController {
             LEFT JOIN users u_app1 ON a.approver_id = u_app1.id
             LEFT JOIN users u_app2 ON a.approver_id_2 = u_app2.id
             LEFT JOIN users u_real ON a.approved_by = u_real.id
-            WHERE u.tenant_id = ? AND a.user_id != ? AND (a.related_user_ids LIKE ? OR a.related_user_ids LIKE ?)
+            WHERE u.tenant_id = ? AND a.user_id != ? AND a.status != 'draft' AND (a.related_user_ids LIKE ? OR a.related_user_ids LIKE ?)
             ORDER BY a.created_at DESC
             LIMIT 200
         ");
@@ -3712,7 +4206,11 @@ class HRMController {
                     'approved_at' => $a['approved_at'] ?? null,
                     'status_level_1' => $a['status_level_1'] ?? 'pending',
                     'status_level_2' => $a['status_level_2'] ?? 'none',
-                    'related_user_ids' => $relArr,
+                    'related_user_ids' => array_values($relArr),
+                    'amount' => (float)$a['amount'],
+                    'reason' => $a['reason'] ?? '',
+                    'raw_reason' => $a['reason'] ?? '',
+                    'request_date' => $a['request_date'] ?? null,
                     'title' => 'Đề xuất tạm ứng lương',
                     'description' => 'Số tiền: ' . number_format($a['amount'], 0, ',', '.') . 'đ. Lý do: "' . $a['reason'] . '"',
                     'status' => $statusText,
@@ -3722,13 +4220,9 @@ class HRMController {
             }
         }
 
-        // 3. Expenses where user is in related_user_ids
+        // 3. Expenses where user is in related_user_ids (excluding drafts)
         $stmtExpenses = $this->db->prepare("
-            SELECT e.id, e.title, e.amount, e.currency, e.category, e.date, e.notes, e.notes as description, e.status, e.created_at,
-                   e.approver_id, e.approver_id_2, e.approver_id_3,
-                   e.status_level_1, e.status_level_2, e.status_level_3,
-                   e.created_by as user_id, e.related_user_ids, e.image_url, e.items, e.is_refunded, e.refunded_at,
-                   e.approved_by, e.approved_at, e.approved_at_2, e.approved_at_3, e.approval_steps,
+            SELECT e.*, e.notes as description, e.created_by as user_id,
                    u.full_name as employee_name,
                    u_app1.full_name as approver_name,
                    u_app2.full_name as approver_name_2,
@@ -3740,12 +4234,13 @@ class HRMController {
             LEFT JOIN users u_app2 ON e.approver_id_2 = u_app2.id
             LEFT JOIN users u_app3 ON e.approver_id_3 = u_app3.id
             LEFT JOIN users u_real ON e.approved_by = u_real.id
-            WHERE e.tenant_id = ? AND e.deleted_at IS NULL AND e.created_by != ? AND (e.related_user_ids LIKE ? OR e.related_user_ids LIKE ?)
+            WHERE e.tenant_id = ? AND e.deleted_at IS NULL AND e.status != 'draft' AND e.created_by != ? AND (e.related_user_ids LIKE ? OR e.related_user_ids LIKE ?)
             ORDER BY e.created_at DESC
             LIMIT 200
         ");
         $stmtExpenses->execute([$auth['tenant_id'], $userId, '%"' . $userId . '"%', '%' . $userId . '%']);
         $expenses = $stmtExpenses->fetchAll(PDO::FETCH_ASSOC);
+        $entitiesByExp = $this->batchLoadExpenseEntities(array_column($expenses, 'id'));
         foreach ($expenses as $e) {
             $relArr = !empty($e['related_user_ids']) ? (is_array($e['related_user_ids']) ? $e['related_user_ids'] : json_decode($e['related_user_ids'], true)) : [];
             if (!is_array($relArr)) {
@@ -3786,12 +4281,20 @@ class HRMController {
                     'related_user_ids' => $relArr,
                     'image_url' => $e['image_url'] ?? null,
                     'items' => !empty($e['items']) ? (is_string($e['items']) ? json_decode($e['items'], true) : $e['items']) : [],
+                    'entities' => $entitiesByExp[(int)$e['id']] ?? [],
                     'title' => $displayTitle,
+                    'raw_title' => $e['title'],
                     'description' => $displayDesc,
                     'amount' => (float)$e['amount'],
                     'currency' => self::detectExpenseCurrency($e['title'], $e['notes'] ?? '', $e['items'] ?? null, $e['currency'] ?? 'VND'),
                     'category' => $e['category'] ?? 'Vận hành',
                     'date' => $e['date'] ?? null,
+                    'due_date' => $e['due_date'] ?? null,
+                    'vat_amount' => isset($e['vat_amount']) ? (float)$e['vat_amount'] : 0.0,
+                    'vendor_name' => $e['vendor_name'] ?? null,
+                    'has_vat_invoice' => (int)($e['has_vat_invoice'] ?? 0),
+                    'is_vat_inclusive' => (int)($e['is_vat_inclusive'] ?? 0),
+                    'reject_reason' => $e['reject_reason'] ?? null,
                     'notes' => $e['notes'] ?? '',
                     'status' => $e['status'],
                     'is_refunded' => (int)($e['is_refunded'] ?? 0),
@@ -3802,7 +4305,7 @@ class HRMController {
             }
         }
 
-        // 4. Bulk Attendance Requests where user is in related_user_ids
+        // 4. Bulk Attendance Requests where user is in related_user_ids (excluding drafts)
         $stmtBulks = $this->db->prepare("
             SELECT r.*, u.full_name as employee_name,
                    u_mgr.full_name as manager_name,
@@ -3814,7 +4317,7 @@ class HRMController {
             JOIN users u ON r.user_id = u.id
             LEFT JOIN users u_mgr ON r.manager_id = u_mgr.id
             LEFT JOIN users u_app ON r.approved_by = u_app.id
-            WHERE u.tenant_id = ? AND r.user_id != ? AND (r.related_user_ids LIKE ? OR r.related_user_ids LIKE ?)
+            WHERE u.tenant_id = ? AND r.user_id != ? AND r.status != 'draft' AND (r.related_user_ids LIKE ? OR r.related_user_ids LIKE ?)
             ORDER BY r.created_at DESC
             LIMIT 100
         ");
@@ -3835,12 +4338,13 @@ class HRMController {
                     'employee_name' => $b['employee_name'],
                     'user_id' => (int)$b['user_id'],
                     'approver_id' => (int)($b['approved_by'] ?? $b['manager_id'] ?? 0),
+                    'approver_id_2' => (int)($b['approver2_id'] ?? 0),
                     'manager_id' => (int)($b['manager_id'] ?? 0),
                     'manager_name' => $b['manager_name'] ?? null,
                     'approved_by' => (int)($b['approved_by'] ?? 0),
                     'approved_by_name' => $b['approved_by_name'] ?? null,
                     'approved_at' => $b['approved_at'] ?? null,
-                    'related_user_ids' => $relArr,
+                    'related_user_ids' => array_values($relArr),
                     'title' => $bTitle,
                     'description' => $bDesc,
                     'status' => $b['status'],
@@ -3886,6 +4390,7 @@ class HRMController {
             $stmtLeaves = $this->db->prepare("
                 SELECT l.id, l.leave_type, l.start_date, l.end_date, l.total_days, l.unpaid_days, l.reason, l.status, l.created_at,
                        l.status_level_1, l.status_level_2, l.approver_id, l.approver_id_2, l.user_id, l.related_user_ids,
+                       l.approved_by, l.approved_at,
                        l.salary_rate, l.ot_type, l.ot_rate,
                        u.full_name as employee_name,
                        ap1.full_name as approver_name,
@@ -3896,14 +4401,14 @@ class HRMController {
                 LEFT JOIN users ap1 ON l.approver_id = ap1.id
                 LEFT JOIN users ap2 ON l.approver_id_2 = ap2.id
                 LEFT JOIN users app_by ON l.approved_by = app_by.id
-                WHERE u.tenant_id = ?
+                WHERE u.tenant_id = ? AND (l.status != 'draft' OR l.user_id = ?)
                 ORDER BY l.created_at DESC
                 LIMIT 500
             ");
-            $stmtLeaves->execute([$auth['tenant_id']]);
+            $stmtLeaves->execute([$auth['tenant_id'], $userId]);
         } else {
             $conds = ["l.user_id = ?", "l.approver_id = ?", "l.approver_id_2 = ?", "l.related_user_ids LIKE ?", "l.related_user_ids LIKE ?"];
-            $pL = [$auth['tenant_id'], $userId, $userId, $userId, '%"' . $userId . '"%', '%' . $userId . '%'];
+            $pL = [$auth['tenant_id'], $userId, $userId, $userId, $userId, '%"' . $userId . '"%', '%' . $userId . '%'];
             if (!empty($managedUserIds)) {
                 $mPh = implode(',', array_fill(0, count($managedUserIds), '?'));
                 $conds[] = "l.user_id IN ($mPh)";
@@ -3912,6 +4417,7 @@ class HRMController {
             $sqlL = "
                 SELECT l.id, l.leave_type, l.start_date, l.end_date, l.total_days, l.unpaid_days, l.reason, l.status, l.created_at,
                        l.status_level_1, l.status_level_2, l.approver_id, l.approver_id_2, l.user_id, l.related_user_ids,
+                       l.approved_by, l.approved_at,
                        l.salary_rate, l.ot_type, l.ot_rate,
                        u.full_name as employee_name,
                        ap1.full_name as approver_name,
@@ -3922,7 +4428,7 @@ class HRMController {
                 LEFT JOIN users ap1 ON l.approver_id = ap1.id
                 LEFT JOIN users ap2 ON l.approver_id_2 = ap2.id
                 LEFT JOIN users app_by ON l.approved_by = app_by.id
-                WHERE u.tenant_id = ? AND (" . implode(' OR ', $conds) . ")
+                WHERE u.tenant_id = ? AND (l.status != 'draft' OR l.user_id = ?) AND (" . implode(' OR ', $conds) . ")
                 ORDER BY l.created_at DESC LIMIT 500";
             $stmtLeaves = $this->db->prepare($sqlL);
             $stmtLeaves->execute($pL);
@@ -3942,8 +4448,12 @@ class HRMController {
             if (!$isHrAdmin && !$isCreator && !$isApprover && !$isRelated && !$isManagerOfUser) {
                 continue;
             }
+            if (($l['status'] ?? '') === 'draft' && !$isCreator) {
+                continue;
+            }
 
-            $cleanReason = self::cleanLeaveReason($l['reason'] ?? '');
+            $rawReason = $l['reason'] ?? '';
+            $cleanReason = self::cleanLeaveReason($rawReason);
             $l['reason'] = $cleanReason;
             $all[] = [
                 'id' => (int)$l['id'],
@@ -3954,17 +4464,21 @@ class HRMController {
                 'approver_id_2' => (int)($l['approver_id_2'] ?? 0),
                 'approver_name' => $l['approver_name'] ?? null,
                 'approver_name_2' => $l['approver_name_2'] ?? null,
+                'approved_by' => (int)($l['approved_by'] ?? 0),
                 'approved_by_name' => $l['approved_by_name'] ?? null,
+                'approved_at' => $l['approved_at'] ?? null,
                 'status_level_1' => $l['status_level_1'] ?? 'pending',
                 'status_level_2' => $l['status_level_2'] ?? 'none',
                 'start_date' => $l['start_date'] ?? null,
                 'end_date' => $l['end_date'] ?? null,
-                'total_days' => $l['total_days'] ?? null,
+                'total_days' => isset($l['total_days']) ? (float)$l['total_days'] : null,
+                'unpaid_days' => isset($l['unpaid_days']) ? (float)$l['unpaid_days'] : 0.0,
                 'salary_rate' => isset($l['salary_rate']) ? (float)$l['salary_rate'] : 50.0,
                 'ot_type' => $l['ot_type'] ?? null,
                 'ot_rate' => isset($l['ot_rate']) ? (float)$l['ot_rate'] : null,
                 'leave_type' => $l['leave_type'] ?? null,
                 'reason' => $cleanReason,
+                'raw_reason' => $rawReason,
                 'related_user_ids' => $relArr,
                 'title' => self::formatLeaveTitle($l),
                 'description' => 'Thời gian: ' . $l['start_date'] . ' -> ' . $l['end_date'] . ' (' . $l['total_days'] . ' ngày/giờ).' . ($cleanReason ? ' Lý do: "' . $cleanReason . '"' : ''),
@@ -3975,10 +4489,7 @@ class HRMController {
 
         // 2. All Advances
         $advSelect = "
-            SELECT a.id, a.amount, a.reason, a.status, a.created_at,
-                   a.status_level_1, a.status_level_2, a.approver_id, a.approver_id_2, a.user_id, a.related_user_ids,
-                   a.approved_by, a.approved_at,
-                   u.full_name as employee_name,
+            SELECT a.*, u.full_name as employee_name,
                    u_app1.full_name as approver_name,
                    u_app2.full_name as approver_name_2,
                    u_real.full_name as approved_by_name
@@ -3990,21 +4501,21 @@ class HRMController {
         ";
         if ($isFinanceAdmin) {
             $stmtAdvances = $this->db->prepare($advSelect . "
-                WHERE u.tenant_id = ?
+                WHERE u.tenant_id = ? AND (a.status != 'draft' OR a.user_id = ?)
                 ORDER BY a.created_at DESC
                 LIMIT 500
             ");
-            $stmtAdvances->execute([$auth['tenant_id']]);
+            $stmtAdvances->execute([$auth['tenant_id'], $userId]);
         } else {
             $conds = ["a.user_id = ?", "a.approver_id = ?", "a.approver_id_2 = ?", "a.related_user_ids LIKE ?", "a.related_user_ids LIKE ?"];
-            $pA = [$auth['tenant_id'], $userId, $userId, $userId, '%"' . $userId . '"%', '%' . $userId . '%'];
+            $pA = [$auth['tenant_id'], $userId, $userId, $userId, $userId, '%"' . $userId . '"%', '%' . $userId . '%'];
             if (!empty($managedUserIds)) {
                 $mPh = implode(',', array_fill(0, count($managedUserIds), '?'));
                 $conds[] = "a.user_id IN ($mPh)";
                 $pA = array_merge($pA, $managedUserIds);
             }
             $sqlA = $advSelect . "
-                WHERE u.tenant_id = ? AND (" . implode(' OR ', $conds) . ")
+                WHERE u.tenant_id = ? AND (a.status != 'draft' OR a.user_id = ?) AND (" . implode(' OR ', $conds) . ")
                 ORDER BY a.created_at DESC LIMIT 500";
             $stmtAdvances = $this->db->prepare($sqlA);
             $stmtAdvances->execute($pA);
@@ -4024,6 +4535,9 @@ class HRMController {
             if (!$isFinanceAdmin && !$isCreator && !$isApprover && !$isRelated && !$isManagerOfUser) {
                 continue;
             }
+            if (($a['status'] ?? '') === 'draft' && !$isCreator) {
+                continue;
+            }
 
             $all[] = [
                 'id' => (int)$a['id'],
@@ -4040,6 +4554,10 @@ class HRMController {
                 'status_level_1' => $a['status_level_1'] ?? 'pending',
                 'status_level_2' => $a['status_level_2'] ?? 'none',
                 'related_user_ids' => $relArr,
+                'amount' => (float)$a['amount'],
+                'reason' => $a['reason'] ?? '',
+                'raw_reason' => $a['reason'] ?? '',
+                'request_date' => $a['request_date'] ?? null,
                 'title' => 'Đề xuất tạm ứng lương',
                 'description' => 'Số tiền: ' . number_format($a['amount'], 0, ',', '.') . 'đ. Lý do: "' . $a['reason'] . '"',
                 'status' => $a['status'],
@@ -4049,16 +4567,12 @@ class HRMController {
 
         // 3. All Expenses
         $expSelect = "
-            SELECT e.id, e.title, e.amount, e.currency, e.category, e.date, e.notes, e.notes as description, e.status, e.created_at,
-                   e.approver_id, e.approver_id_2, e.approver_id_3,
-                   e.status_level_1, e.status_level_2, e.status_level_3,
-                   e.created_by as user_id, e.related_user_ids, e.image_url, e.items,
+            SELECT e.*, e.notes as description, e.created_by as user_id,
                    u.full_name as employee_name,
                    u_app1.full_name as approver_name,
                    u_app2.full_name as approver_name_2,
                    u_app3.full_name as approver_name_3,
-                   u_real.full_name as approved_by_name,
-                   e.approved_by, e.approved_at, e.approved_at_2, e.approved_at_3, e.approval_steps, e.is_refunded, e.refunded_at
+                   u_real.full_name as approved_by_name
             FROM expenses e
             LEFT JOIN users u ON e.created_by = u.id
             LEFT JOIN users u_app1 ON e.approver_id = u_app1.id
@@ -4069,26 +4583,27 @@ class HRMController {
 
         if ($isFinanceAdmin) {
             $stmtExpenses = $this->db->prepare($expSelect . "
-                WHERE e.tenant_id = ? AND e.deleted_at IS NULL
+                WHERE e.tenant_id = ? AND e.deleted_at IS NULL AND (e.status != 'draft' OR e.created_by = ?)
                 ORDER BY e.created_at DESC
                 LIMIT 500
             ");
-            $stmtExpenses->execute([$auth['tenant_id']]);
+            $stmtExpenses->execute([$auth['tenant_id'], $userId]);
         } else {
             $conds = ["e.created_by = ?", "e.approver_id = ?", "e.approver_id_2 = ?", "e.approver_id_3 = ?", "e.related_user_ids LIKE ?", "e.related_user_ids LIKE ?"];
-            $pE = [$auth['tenant_id'], $userId, $userId, $userId, $userId, '%"' . $userId . '"%', '%' . $userId . '%'];
+            $pE = [$auth['tenant_id'], $userId, $userId, $userId, $userId, $userId, '%"' . $userId . '"%', '%' . $userId . '%'];
             if (!empty($managedUserIds)) {
                 $mPh = implode(',', array_fill(0, count($managedUserIds), '?'));
                 $conds[] = "e.created_by IN ($mPh)";
                 $pE = array_merge($pE, $managedUserIds);
             }
             $sqlE = $expSelect . "
-                WHERE e.tenant_id = ? AND e.deleted_at IS NULL AND (" . implode(' OR ', $conds) . ")
+                WHERE e.tenant_id = ? AND e.deleted_at IS NULL AND (e.status != 'draft' OR e.created_by = ?) AND (" . implode(' OR ', $conds) . ")
                 ORDER BY e.created_at DESC LIMIT 500";
             $stmtExpenses = $this->db->prepare($sqlE);
             $stmtExpenses->execute($pE);
         }
         $expenses = $stmtExpenses->fetchAll(PDO::FETCH_ASSOC);
+        $entitiesByExp = $this->batchLoadExpenseEntities(array_column($expenses, 'id'));
         foreach ($expenses as $e) {
             $relArr = !empty($e['related_user_ids']) ? (is_array($e['related_user_ids']) ? $e['related_user_ids'] : json_decode($e['related_user_ids'], true)) : [];
             if (!is_array($relArr)) {
@@ -4101,6 +4616,9 @@ class HRMController {
             $isRelated = in_array($userId, $relArr, true);
             $isManagerOfUser = in_array((int)$e['user_id'], $managedUserIds, true);
             if (!$isFinanceAdmin && !$isCreator && !$isApprover && !$isRelated && !$isManagerOfUser) {
+                continue;
+            }
+            if (($e['status'] ?? '') === 'draft' && !$isCreator) {
                 continue;
             }
 
@@ -4135,12 +4653,20 @@ class HRMController {
                 'related_user_ids' => $relArr,
                 'image_url' => $e['image_url'] ?? null,
                 'items' => !empty($e['items']) ? (is_string($e['items']) ? json_decode($e['items'], true) : $e['items']) : [],
+                'entities' => $entitiesByExp[(int)$e['id']] ?? [],
                 'title' => $displayTitle,
+                'raw_title' => $e['title'],
                 'description' => $displayDesc,
                 'amount' => (float)$e['amount'],
                 'currency' => self::detectExpenseCurrency($e['title'], $e['notes'] ?? '', $e['items'] ?? null, $e['currency'] ?? 'VND'),
                 'category' => $e['category'] ?? 'Vận hành',
                 'date' => $e['date'] ?? null,
+                'due_date' => $e['due_date'] ?? null,
+                'vat_amount' => isset($e['vat_amount']) ? (float)$e['vat_amount'] : 0.0,
+                'vendor_name' => $e['vendor_name'] ?? null,
+                'has_vat_invoice' => (int)($e['has_vat_invoice'] ?? 0),
+                'is_vat_inclusive' => (int)($e['is_vat_inclusive'] ?? 0),
+                'reject_reason' => $e['reject_reason'] ?? null,
                 'notes' => $e['notes'] ?? '',
                 'status' => $e['status'],
                 'is_refunded' => (int)($e['is_refunded'] ?? 0),
@@ -4211,7 +4737,7 @@ class HRMController {
             $title = 'Bổ sung chấm công ngày ' . $c['check_in_date'];
             $desc = 'Bổ sung chấm công (Check-in lúc ' . $c['check_in_time'] . '). Lý do: "' . ($c['reason'] ?: 'Quên chấm công') . '"';
             $mgrId = (int)($c['manager_id'] ?: $c['team_leader_id'] ?: 0);
-            $mgrName = $c['approver_name'] ?: $c['team_leader_name'] ?: 'Quản lý trực tiếp';
+            $mgrName = $c['approver_name'] ?: $c['team_leader_name'] ?: null;
             $mgrAvatar = $c['approver_avatar'] ?: $c['team_leader_avatar'] ?: null;
 
             $all[] = [
@@ -4250,21 +4776,21 @@ class HRMController {
         ";
         if ($isHrAdmin) {
             $stmtBulks = $this->db->prepare($bulkSelect . "
-                WHERE u.tenant_id = ?
+                WHERE u.tenant_id = ? AND (r.status != 'draft' OR r.user_id = ?)
                 ORDER BY r.created_at DESC
                 LIMIT 500
             ");
-            $stmtBulks->execute([$auth['tenant_id']]);
+            $stmtBulks->execute([$auth['tenant_id'], $userId]);
         } else {
             $conds = ["r.user_id = ?", "r.manager_id = ?", "r.approved_by = ?", "r.related_user_ids LIKE ?", "r.related_user_ids LIKE ?"];
-            $pB = [$auth['tenant_id'], $userId, $userId, $userId, '%"' . $userId . '"%', '%' . $userId . '%'];
+            $pB = [$auth['tenant_id'], $userId, $userId, $userId, $userId, '%"' . $userId . '"%', '%' . $userId . '%'];
             if (!empty($managedUserIds)) {
                 $mPh = implode(',', array_fill(0, count($managedUserIds), '?'));
                 $conds[] = "r.user_id IN ($mPh)";
                 $pB = array_merge($pB, $managedUserIds);
             }
             $sqlB = $bulkSelect . "
-                WHERE u.tenant_id = ? AND (" . implode(' OR ', $conds) . ")
+                WHERE u.tenant_id = ? AND (r.status != 'draft' OR r.user_id = ?) AND (" . implode(' OR ', $conds) . ")
                 ORDER BY r.created_at DESC LIMIT 500";
             $stmtBulks = $this->db->prepare($sqlB);
             $stmtBulks->execute($pB);
@@ -4284,6 +4810,9 @@ class HRMController {
             if (!$isHrAdmin && !$isCreator && !$isApprover && !$isRelated && !$isManagerOfUser) {
                 continue;
             }
+            if (($b['status'] ?? '') === 'draft' && !$isCreator) {
+                continue;
+            }
             list($bTitle, $bDesc) = self::formatBulkTitleAndDesc($b);
             $all[] = [
                 'id' => (int)$b['id'],
@@ -4291,6 +4820,7 @@ class HRMController {
                 'employee_name' => $b['employee_name'],
                 'user_id' => (int)$b['user_id'],
                 'approver_id' => (int)($b['approved_by'] ?? $b['manager_id'] ?? 0),
+                'approver_id_2' => (int)($b['approver2_id'] ?? 0),
                 'manager_id' => (int)($b['manager_id'] ?? 0),
                 'manager_name' => $b['manager_name'] ?? null,
                 'approved_by' => (int)($b['approved_by'] ?? 0),
@@ -4319,29 +4849,32 @@ class HRMController {
         ";
         if ($isFinanceAdmin || $isGlobalAdmin) {
             $stmtPOs = $this->db->prepare($poSelect . "
-                WHERE po.tenant_id = ?
+                WHERE po.tenant_id = ? AND (po.status != 'draft' OR po.created_by = ?)
                 ORDER BY po.created_at DESC
                 LIMIT 300
             ");
-            $stmtPOs->execute([$auth['tenant_id']]);
+            $stmtPOs->execute([$auth['tenant_id'], $userId]);
         } else {
             $conds = ["po.created_by = ?", "po.approver_id = ?", "po.approver_id_2 = ?", "po.approver_id_3 = ?"];
-            $pPO = [$auth['tenant_id'], $userId, $userId, $userId, $userId];
+            $pPO = [$auth['tenant_id'], $userId, $userId, $userId, $userId, $userId];
             if (!empty($managedUserIds)) {
                 $mPh = implode(',', array_fill(0, count($managedUserIds), '?'));
                 $conds[] = "po.created_by IN ($mPh)";
                 $pPO = array_merge($pPO, $managedUserIds);
             }
             $sqlPO = $poSelect . "
-                WHERE po.tenant_id = ? AND (" . implode(' OR ', $conds) . ")
+                WHERE po.tenant_id = ? AND (po.status != 'draft' OR po.created_by = ?) AND (" . implode(' OR ', $conds) . ")
                 ORDER BY po.created_at DESC LIMIT 300";
             $stmtPOs = $this->db->prepare($sqlPO);
             $stmtPOs->execute($pPO);
         }
         $pos = $stmtPOs->fetchAll(PDO::FETCH_ASSOC);
         foreach ($pos as $p) {
+            if (($p['status'] ?? '') === 'draft' && (int)$p['created_by'] !== $userId) {
+                continue;
+            }
             $relArr = !empty($p['related_user_ids']) ? array_filter(array_map('intval', explode(',', (string)$p['related_user_ids']))) : [];
-            $isPoApproved = ($p['approval_status'] === 'approved') || in_array($p['status'], ['ordered', 'received'], true) || ($p['status_level_1'] === 'approved' && empty($p['approver_id_2']));
+            $isPoApproved = ($p['approval_status'] === 'approved') || in_array($p['status'], ['ordered', 'received'], true) || ($p['status_level_1'] === 'approved' && empty($p['approver_id_2']) && $p['status'] !== 'draft');
             $all[] = [
                 'id' => (int)$p['id'],
                 'type' => 'po',
@@ -4462,8 +4995,12 @@ class HRMController {
     }
 
     public function deleteLeave(array $auth, int $id): void {
-        $stmt = $this->db->prepare("SELECT * FROM hrm_leave_requests WHERE id = ?");
-        $stmt->execute([$id]);
+        $stmt = $this->db->prepare("
+            SELECT l.* FROM hrm_leave_requests l
+            JOIN users u ON l.user_id = u.id
+            WHERE l.id = ? AND u.tenant_id = ?
+        ");
+        $stmt->execute([$id, $auth['tenant_id']]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$row) {
             respond(404, null, 'Không tìm thấy yêu cầu nghỉ phép', false);
@@ -4477,13 +5014,17 @@ class HRMController {
             respond(403, null, 'Bạn không có quyền xóa yêu cầu này', false);
         }
         
-        $this->db->prepare("DELETE FROM hrm_leave_requests WHERE id = ?")->execute([$id]);
+        $this->db->prepare("DELETE l FROM hrm_leave_requests l JOIN users u ON l.user_id = u.id WHERE l.id = ? AND u.tenant_id = ?")->execute([$id, $auth['tenant_id']]);
         respond(200, null, 'Đã xóa yêu cầu nghỉ phép');
     }
 
     public function deleteAdvance(array $auth, int $id): void {
-        $stmt = $this->db->prepare("SELECT * FROM hrm_salary_advances WHERE id = ?");
-        $stmt->execute([$id]);
+        $stmt = $this->db->prepare("
+            SELECT a.* FROM hrm_salary_advances a
+            JOIN users u ON a.user_id = u.id
+            WHERE a.id = ? AND u.tenant_id = ?
+        ");
+        $stmt->execute([$id, $auth['tenant_id']]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$row) {
             respond(404, null, 'Không tìm thấy yêu cầu tạm ứng', false);
@@ -4497,7 +5038,7 @@ class HRMController {
             respond(403, null, 'Bạn không có quyền xóa yêu cầu này', false);
         }
         
-        $this->db->prepare("DELETE FROM hrm_salary_advances WHERE id = ?")->execute([$id]);
+        $this->db->prepare("DELETE a FROM hrm_salary_advances a JOIN users u ON a.user_id = u.id WHERE a.id = ? AND u.tenant_id = ?")->execute([$id, $auth['tenant_id']]);
         respond(200, null, 'Đã xóa yêu cầu tạm ứng');
     }
 
@@ -4537,8 +5078,38 @@ class HRMController {
             VALUES (?, 'hrm_leave', ?, ?, ?, ?, ?)
         ");
         $stmt->execute([$auth['tenant_id'], $id, $auth['user_id'], $body, $attachments, $parentId]);
-        $newId = $this->db->lastInsertId();
-        $this->parseAndNotifyMentions($body, $id, 'leave', $auth);
+        $newId = (int)$this->db->lastInsertId();
+        $mentionedIds = $this->parseAndNotifyMentions($body, $id, 'leave', $auth, $newId);
+        try {
+            $stmtReq = $this->db->prepare("SELECT l.user_id, l.approver_id, l.approver_id_2 FROM hrm_leave_requests l JOIN users u ON l.user_id = u.id WHERE l.id = ? AND u.tenant_id = ?");
+            $stmtReq->execute([$id, $auth['tenant_id']]);
+            $reqRow = $stmtReq->fetch(PDO::FETCH_ASSOC);
+            if ($reqRow) {
+                $uid = (int)$auth['user_id'];
+                $commenterName = $auth['full_name'] ?? 'Đồng nghiệp';
+                $targetLink = "/approvals?open_id={$id}&open_type=leave&highlight_comment_id={$newId}";
+                $recipients = array_unique(array_filter([
+                    (int)($reqRow['user_id'] ?? 0),
+                    (int)($reqRow['approver_id'] ?? 0),
+                    (int)($reqRow['approver_id_2'] ?? 0),
+                ]));
+                $insNotif = $this->db->prepare("
+                    INSERT INTO notifications (user_id, tenant_id, title, body, type, link, is_read, created_at)
+                    VALUES (?, ?, ?, ?, 'comment', ?, 0, NOW())
+                ");
+                foreach ($recipients as $rUid) {
+                    if ($rUid > 0 && $rUid !== $uid && !in_array($rUid, $mentionedIds, true)) {
+                        $insNotif->execute([
+                            $rUid,
+                            $auth['tenant_id'],
+                            "Bình luận mới trong đơn xin nghỉ phép #{$id}",
+                            "{$commenterName} vừa bình luận: \"" . mb_substr(strip_tags($body), 0, 120) . "\"",
+                            $targetLink
+                        ]);
+                    }
+                }
+            }
+        } catch (Throwable $e) {}
         respond(200, ['id' => $newId], 'Thêm bình luận thành công');
     }
 
@@ -4578,19 +5149,49 @@ class HRMController {
             VALUES (?, 'hrm_advance', ?, ?, ?, ?, ?)
         ");
         $stmt->execute([$auth['tenant_id'], $id, $auth['user_id'], $body, $attachments, $parentId]);
-        $newId = $this->db->lastInsertId();
-        $this->parseAndNotifyMentions($body, $id, 'leave', $auth);
+        $newId = (int)$this->db->lastInsertId();
+        $mentionedIds = $this->parseAndNotifyMentions($body, $id, 'advance', $auth, $newId);
+        try {
+            $stmtReq = $this->db->prepare("SELECT a.user_id, a.approver_id, a.approver_id_2 FROM hrm_salary_advances a JOIN users u ON a.user_id = u.id WHERE a.id = ? AND u.tenant_id = ?");
+            $stmtReq->execute([$id, $auth['tenant_id']]);
+            $reqRow = $stmtReq->fetch(PDO::FETCH_ASSOC);
+            if ($reqRow) {
+                $uid = (int)$auth['user_id'];
+                $commenterName = $auth['full_name'] ?? 'Đồng nghiệp';
+                $targetLink = "/approvals?open_id={$id}&open_type=advance&highlight_comment_id={$newId}";
+                $recipients = array_unique(array_filter([
+                    (int)($reqRow['user_id'] ?? 0),
+                    (int)($reqRow['approver_id'] ?? 0),
+                    (int)($reqRow['approver_id_2'] ?? 0),
+                ]));
+                $insNotif = $this->db->prepare("
+                    INSERT INTO notifications (user_id, tenant_id, title, body, type, link, is_read, created_at)
+                    VALUES (?, ?, ?, ?, 'comment', ?, 0, NOW())
+                ");
+                foreach ($recipients as $rUid) {
+                    if ($rUid > 0 && $rUid !== $uid && !in_array($rUid, $mentionedIds, true)) {
+                        $insNotif->execute([
+                            $rUid,
+                            $auth['tenant_id'],
+                            "Bình luận mới trong phiếu tạm ứng lương #{$id}",
+                            "{$commenterName} vừa bình luận: \"" . mb_substr(strip_tags($body), 0, 120) . "\"",
+                            $targetLink
+                        ]);
+                    }
+                }
+            }
+        } catch (Throwable $e) {}
         respond(200, ['id' => $newId], 'Thêm bình luận thành công');
     }
 
-    private function parseAndNotifyMentions(string $body, int $id, string $type, array $auth): void {
+    private function parseAndNotifyMentions(string $body, int $id, string $type, array $auth, ?int $commentId = null): array {
         $mentions = [];
         if (preg_match_all('/data-user-id=(?:&quot;|["\']|\\\\+["\'])?(\d+)/i', (string)$body, $matches)) {
             $uids = array_filter(array_map('intval', $matches[1]));
             foreach ($uids as $uid) {
                 if ($uid !== (int)$auth['user_id']) {
-                    $stmtUser = $this->db->prepare("SELECT id, email, full_name, role FROM users WHERE id=?");
-                    $stmtUser->execute([$uid]);
+                    $stmtUser = $this->db->prepare("SELECT id, email, full_name, role FROM users WHERE id=? AND tenant_id=?");
+                    $stmtUser->execute([$uid, $auth['tenant_id']]);
                     $userRow = $stmtUser->fetch(PDO::FETCH_ASSOC);
                     if ($userRow) {
                         $mentions[$uid] = $userRow;
@@ -4607,8 +5208,8 @@ class HRMController {
                 $nameWithUnderscores = trim(strip_tags($nameWithUnderscores));
                 if (empty($nameWithUnderscores)) continue;
                 $fullName = str_replace('_', ' ', $nameWithUnderscores);
-                $stmtUser = $this->db->prepare("SELECT id, email, full_name, role FROM users WHERE (full_name=? OR REPLACE(full_name, ' ', '_')=?)");
-                $stmtUser->execute([$fullName, $nameWithUnderscores]);
+                $stmtUser = $this->db->prepare("SELECT id, email, full_name, role FROM users WHERE (full_name=? OR REPLACE(full_name, ' ', '_')=?) AND tenant_id=?");
+                $stmtUser->execute([$fullName, $nameWithUnderscores, $auth['tenant_id']]);
                 $userRow = $stmtUser->fetch(PDO::FETCH_ASSOC);
                 if ($userRow) {
                     $uid = (int)$userRow['id'];
@@ -4622,9 +5223,9 @@ class HRMController {
         if (!empty($mentions)) {
             // 1. Automatically append mentioned users into related_user_ids
             try {
-                $table = ($type === 'advance' || $type === 'hrm_advance') ? 'hrm_advance_requests' : 'hrm_leave_requests';
-                $stmtReq = $this->db->prepare("SELECT related_user_ids FROM `{$table}` WHERE id = ?");
-                $stmtReq->execute([$id]);
+                $table = ($type === 'advance' || $type === 'hrm_advance') ? 'hrm_salary_advances' : 'hrm_leave_requests';
+                $stmtReq = $this->db->prepare("SELECT r.related_user_ids FROM `{$table}` r JOIN users u ON r.user_id = u.id WHERE r.id = ? AND u.tenant_id = ?");
+                $stmtReq->execute([$id, $auth['tenant_id']]);
                 $reqRow = $stmtReq->fetch(PDO::FETCH_ASSOC);
                 if ($reqRow) {
                     $curRelated = [];
@@ -4643,8 +5244,8 @@ class HRMController {
                         }
                     }
                     if ($newRelated !== $curRelated) {
-                        $updateStmt = $this->db->prepare("UPDATE `{$table}` SET related_user_ids = ? WHERE id = ?");
-                        $updateStmt->execute([json_encode(array_values(array_unique($newRelated))), $id]);
+                        $updateStmt = $this->db->prepare("UPDATE `{$table}` r JOIN users u ON r.user_id = u.id SET r.related_user_ids = ? WHERE r.id = ? AND u.tenant_id = ?");
+                        $updateStmt->execute([json_encode(array_values(array_unique($newRelated))), $id, $auth['tenant_id']]);
                     }
                 }
             } catch (Throwable $e) {
@@ -4653,15 +5254,17 @@ class HRMController {
 
             // 2. Dispatch notifications
             require_once __DIR__ . '/../NotificationService.php';
+            $link = "/approvals?open_id={$id}&open_type={$type}" . ($commentId ? "&highlight_comment_id={$commentId}" : "");
             foreach ($mentions as $uid => $userRow) {
                 NotificationService::send($this->db, $auth['tenant_id'], 'MENTION_TAGGED', [
                     'user_id' => $uid,
                     'author_name' => $auth['full_name'] ?? 'Đồng nghiệp',
                     'comment' => $body,
-                    'link' => "/approvals?open_id={$id}&open_type={$type}"
+                    'link' => $link
                 ]);
             }
         }
+        return array_map('intval', array_keys($mentions));
     }
 
     public function updateRelatedUsers(array $auth): void {
@@ -4678,22 +5281,23 @@ class HRMController {
             $relatedUserIds = array_values(array_unique(array_filter(array_map('intval', $relatedUserIds))));
         }
         $jsonVal = json_encode($relatedUserIds);
+        $tid = (int)($auth['tenant_id'] ?? 1);
 
         if ($type === 'expense' || $type === 'expenses' || $type === 'commission_payout') {
             $stmt = $this->db->prepare("UPDATE expenses SET related_user_ids = ? WHERE id = ? AND tenant_id = ?");
-            $stmt->execute([$jsonVal, $id, $auth['tenant_id']]);
+            $stmt->execute([$jsonVal, $id, $tid]);
         } elseif ($type === 'leave' || $type === 'hrm_leave') {
-            $stmt = $this->db->prepare("UPDATE hrm_leave_requests SET related_user_ids = ? WHERE id = ?");
-            $stmt->execute([$jsonVal, $id]);
+            $stmt = $this->db->prepare("UPDATE hrm_leave_requests l JOIN users u ON l.user_id = u.id SET l.related_user_ids = ? WHERE l.id = ? AND u.tenant_id = ?");
+            $stmt->execute([$jsonVal, $id, $tid]);
         } elseif ($type === 'advance' || $type === 'hrm_advance') {
-            $stmt = $this->db->prepare("UPDATE hrm_advance_requests SET related_user_ids = ? WHERE id = ?");
-            $stmt->execute([$jsonVal, $id]);
+            $stmt = $this->db->prepare("UPDATE hrm_salary_advances a JOIN users u ON a.user_id = u.id SET a.related_user_ids = ? WHERE a.id = ? AND u.tenant_id = ?");
+            $stmt->execute([$jsonVal, $id, $tid]);
         } elseif ($type === 'bulk_attendance' || $type === 'bulk' || $type === 'checkin_bulk') {
-            $stmt = $this->db->prepare("UPDATE attendance_bulk_requests SET related_user_ids = ? WHERE id = ?");
-            $stmt->execute([$jsonVal, $id]);
+            $stmt = $this->db->prepare("UPDATE attendance_bulk_requests r JOIN users u ON r.user_id = u.id SET r.related_user_ids = ? WHERE r.id = ? AND u.tenant_id = ?");
+            $stmt->execute([$jsonVal, $id, $tid]);
         } elseif ($type === 'deposit' || $type === 'deposits') {
-            $stmt = $this->db->prepare("UPDATE deposits SET related_user_ids = ? WHERE id = ?");
-            $stmt->execute([$jsonVal, $id]);
+            $stmt = $this->db->prepare("UPDATE deposits d LEFT JOIN contacts c ON d.contact_id = c.id LEFT JOIN projects p ON d.project_id = p.id SET d.related_user_ids = ? WHERE d.id = ? AND (c.tenant_id = ? OR p.tenant_id = ?)");
+            $stmt->execute([$jsonVal, $id, $tid, $tid]);
         } else {
             respond(400, null, 'Loại quy trình không được hỗ trợ', false);
         }

@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { ErpCardTagData } from './chatTagParsers';
+import { copyTextSafely } from '../../utils/clipboard';
 
 interface Props {
   card: ErpCardTagData;
@@ -127,14 +128,17 @@ export const ChatSmartErpCard: React.FC<Props> = ({ card, onOpen }) => {
 
   const IconComp = themeConfig.icon;
 
-  const handleCopyLink = (e: React.MouseEvent) => {
+  const handleCopyLink = async (e: React.MouseEvent) => {
     e.stopPropagation();
     const url = card.direct_url || (card.relative_url ? `https://myerp.ideas.edu.vn${card.relative_url}` : window.location.href);
-    navigator.clipboard.writeText(url).then(() => {
+    const ok = await copyTextSafely(url);
+    if (ok) {
       setCopied(true);
       toast.success('Đã sao chép liên kết trực tiếp!');
       setTimeout(() => setCopied(false), 2000);
-    });
+    } else {
+      toast.error('Không thể sao chép liên kết');
+    }
   };
 
   const handleCardClick = () => {

@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useEffect, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useUIStore } from '../../store/uiStore';
@@ -27,90 +27,144 @@ export const GlobalEntityDrawers: React.FC = () => {
   const [fullTask, setFullTask] = useState<any>(null);
   const [expenseCreateOpen, setExpenseCreateOpen] = useState(false);
   const [expenseCreateEditItem, setExpenseCreateEditItem] = useState<any>(null);
+  const approvalActionInFlightRef = useRef(false);
 
   // Deep link URL listener: Auto-open drawer when navigating with query parameters or direct entity path (e.g. /contact/123)
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const path = location.pathname;
 
-    const contactPathMatch = path.match(/^\/(?:contacts?|students?|leads?|crm)\/([0-9]+)/i);
-    const contactId = params.get('contact_id') || 
-                      (contactPathMatch ? contactPathMatch[1] : null) || 
-                      ((path.startsWith('/contacts') || path.startsWith('/students')) ? params.get('id') : null);
-    if (contactId && !isNaN(Number(contactId))) {
-      openCustomerDrawer(Number(contactId), params.get('tab') || 'info');
-      return;
+    // 1. Contacts: ContactsPage (/contacts, /students) handles its own local drawer
+    const isContactsPage = path === '/contacts' || path === '/students' || path.startsWith('/contacts?') || path.startsWith('/students?');
+    if (isContactsPage) {
+      if (customerDrawer.isOpen && (params.get('open_contact_id') || params.get('id') || params.get('contact_id'))) {
+        closeCustomerDrawer();
+      }
+    } else {
+      const contactPathMatch = path.match(/^\/(?:contacts?|students?|leads?|crm)\/([0-9]+)/i);
+      const contactId = params.get('contact_id') || (contactPathMatch ? contactPathMatch[1] : null);
+      if (contactId && !isNaN(Number(contactId))) {
+        openCustomerDrawer(Number(contactId), params.get('tab') || 'info');
+        return;
+      }
     }
 
+    // 2. Expenses: ExpensesPage does not have a URL param listener for ?open_id= / ?id=, so GlobalEntityDrawers handles it
     const expensePathMatch = path.match(/^\/(?:expenses?|workflow\/expense)\/([0-9]+)/i);
-    const expenseId = params.get('expense_id') || (expensePathMatch ? expensePathMatch[1] : null) || (path.startsWith('/expenses') ? params.get('id') : null);
+    const expenseId = params.get('expense_id') || (expensePathMatch ? expensePathMatch[1] : null) || (path.startsWith('/expenses') ? (params.get('open_id') || params.get('id')) : null);
     if (expenseId && !isNaN(Number(expenseId))) {
       openExpenseDrawer(Number(expenseId));
       return;
     }
 
-    const taskPathMatch = path.match(/^\/(?:tasks?|workspace)\/([0-9]+)/i);
-    const taskId = params.get('task_id') || (taskPathMatch ? taskPathMatch[1] : null) || ((path.startsWith('/tasks') || path.startsWith('/workspace')) ? params.get('id') : null);
-    if (taskId && !isNaN(Number(taskId))) {
-      openTaskDrawer(Number(taskId));
-      return;
+    // 3. Tasks: SalePortal (/workspace, /sale-portal, /) and ProjectsPage (/projects) handle their own local WorkspaceTaskDrawer
+    const isLocalTaskPage = path === '/' || path.startsWith('/workspace') || path.startsWith('/sale-portal') || path.startsWith('/projects');
+    if (isLocalTaskPage) {
+      if (taskDrawer.isOpen && (params.get('task_id') || params.get('open_task_id') || params.get('id'))) {
+        closeTaskDrawer();
+      }
+    } else {
+      const taskPathMatch = path.match(/^\/tasks?\/([0-9]+)/i);
+      const taskId = params.get('task_id') || params.get('open_task_id') || (taskPathMatch ? taskPathMatch[1] : null) || (path.startsWith('/tasks') ? params.get('id') : null);
+      if (taskId && !isNaN(Number(taskId))) {
+        openTaskDrawer(Number(taskId));
+        return;
+      }
     }
 
-    const approvalId = params.get('approval_id') || (path.startsWith('/approvals') ? params.get('id') : null);
-    if (approvalId && !isNaN(Number(approvalId))) {
-      openApprovalDrawer({ id: Number(approvalId), type: params.get('type') || 'leave' });
-      return;
+    // 4. Approvals: Approvals.tsx (/approvals) handles its own local drawer
+    if (path.startsWith('/approvals')) {
+      if (approvalDrawer.isOpen && (params.get('open_id') || params.get('id') || params.get('approval_id'))) {
+        closeApprovalDrawer();
+      }
+    } else {
+      const approvalId = params.get('approval_id');
+      if (approvalId && !isNaN(Number(approvalId))) {
+        openApprovalDrawer({ id: Number(approvalId), type: params.get('type') || params.get('open_type') || 'leave' });
+        return;
+      }
     }
 
-    const depositId = params.get('deposit_id') || (path.startsWith('/deposits') ? params.get('id') : null);
-    if (depositId && !isNaN(Number(depositId))) {
-      openDepositDrawer(Number(depositId));
-      return;
+    // 5. Deposits: DepositsPage.tsx (/deposits) handles its own local drawer
+    if (path.startsWith('/deposits')) {
+      if (depositDrawer.isOpen && (params.get('open_id') || params.get('id') || params.get('deposit_id'))) {
+        closeDepositDrawer();
+      }
+    } else {
+      const depositId = params.get('deposit_id');
+      if (depositId && !isNaN(Number(depositId))) {
+        openDepositDrawer(Number(depositId));
+        return;
+      }
     }
-  }, [location.pathname, location.search, openCustomerDrawer, openExpenseDrawer, openTaskDrawer, openApprovalDrawer, openDepositDrawer]);
+  }, [
+    location.pathname,
+    location.search,
+    customerDrawer.isOpen,
+    taskDrawer.isOpen,
+    approvalDrawer.isOpen,
+    depositDrawer.isOpen,
+    openCustomerDrawer,
+    closeCustomerDrawer,
+    openExpenseDrawer,
+    openTaskDrawer,
+    closeTaskDrawer,
+    openApprovalDrawer,
+    closeApprovalDrawer,
+    openDepositDrawer,
+    closeDepositDrawer
+  ]);
 
   // Sync / fetch full contact if only ID is provided
   useEffect(() => {
+    const controller = new AbortController();
     if (customerDrawer.isOpen && customerDrawer.contact) {
       const c = customerDrawer.contact;
       if (c.full_name || c.phone || c.email) {
         setFullContact(c);
       } else if (c.id) {
         setFullContact({ ...c, full_name: 'Đang tải thông tin...' });
-        api.get(`/contacts/${c.id}`).then(res => {
+        api.get(`/contacts/${c.id}`, { signal: controller.signal }).then(res => {
+          if (controller.signal.aborted) return;
           const d = res.data?.data || res.data;
           if (d && d.id) {
             setFullContact(d);
           }
-        }).catch(() => {
+        }).catch((err: any) => {
+          if (controller.signal.aborted || err?.name === 'AbortError' || err?.name === 'CanceledError') return;
           setFullContact(c);
         });
       }
     } else {
       setFullContact(null);
     }
+    return () => controller.abort();
   }, [customerDrawer.isOpen, customerDrawer.contact]);
 
   // Sync / fetch full task if only ID is provided
   useEffect(() => {
+    const controller = new AbortController();
     if (taskDrawer.isOpen && taskDrawer.task) {
       const t = taskDrawer.task;
       if (t.subject || t.body || t.status) {
         setFullTask(t);
       } else if (t.id) {
         setFullTask({ ...t, subject: 'Đang tải công việc...' });
-        api.get(`/activities/${t.id}`).then(res => {
+        api.get(`/activities/${t.id}`, { signal: controller.signal }).then(res => {
+          if (controller.signal.aborted) return;
           const d = res.data?.data || res.data;
           if (d && d.id) {
             setFullTask(d);
           }
-        }).catch(() => {
+        }).catch((err: any) => {
+          if (controller.signal.aborted || err?.name === 'AbortError' || err?.name === 'CanceledError') return;
           setFullTask(t);
         });
       }
     } else {
       setFullTask(null);
     }
+    return () => controller.abort();
   }, [taskDrawer.isOpen, taskDrawer.task]);
 
   // Global window CustomEvents listener
@@ -238,16 +292,76 @@ export const GlobalEntityDrawers: React.FC = () => {
     }
   }, [approvalDrawer.isOpen]);
 
+  const clearUrlEntityParams = (paramKeys: string[]) => {
+    const params = new URLSearchParams(location.search || window.location.search);
+    let changed = false;
+    const allKeys = [
+      ...paramKeys,
+      'open_contact_id',
+      'open_id',
+      'open_type',
+      'open_status',
+      'open_deposit_id',
+      'task_id',
+      'open_task_id',
+      'highlight_activity_id',
+      'highlight_comment_id',
+      'highlight_note_id',
+      'subtask_id',
+      'comment_id'
+    ];
+    allKeys.forEach((k) => {
+      if (params.has(k)) {
+        params.delete(k);
+        changed = true;
+      }
+    });
+    if (changed) {
+      const nextSearch = params.toString();
+      navigate({ pathname: location.pathname, search: nextSearch ? '?' + nextSearch : '' }, { replace: true });
+    }
+  };
+
+  const handleCloseCustomerDrawer = () => {
+    (window as any).__activeErpProposalId = null;
+    clearUrlEntityParams(['contact_id', 'open_contact_id', 'id', 'tab']);
+    closeCustomerDrawer();
+  };
+
+  const handleCloseTaskDrawer = () => {
+    (window as any).__activeErpProposalId = null;
+    clearUrlEntityParams(['task_id', 'open_id', 'id']);
+    closeTaskDrawer();
+  };
+
+  const handleCloseExpenseDrawer = () => {
+    (window as any).__activeErpProposalId = null;
+    clearUrlEntityParams(['expense_id', 'open_id', 'id']);
+    closeExpenseDrawer();
+  };
+
+  const handleCloseApprovalDrawer = () => {
+    (window as any).__activeErpProposalId = null;
+    clearUrlEntityParams(['approval_id', 'open_id', 'open_type', 'open_status', 'id', 'type']);
+    closeApprovalDrawer();
+  };
+
+  const handleCloseDepositDrawer = () => {
+    (window as any).__activeErpProposalId = null;
+    clearUrlEntityParams(['deposit_id', 'open_deposit_id', 'open_id', 'id']);
+    closeDepositDrawer();
+  };
+
   return (
     <>
       {customerDrawer.isOpen && fullContact && (
         <Suspense fallback={null}>
           <CustomerProfileDrawer
             isOpen={customerDrawer.isOpen}
-            onClose={closeCustomerDrawer}
+            onClose={handleCloseCustomerDrawer}
             contact={fullContact}
             initialTab={customerDrawer.initialTab || 'info'}
-            zIndex={2147483645}
+            zIndex={2147483620}
           />
         </Suspense>
       )}
@@ -256,9 +370,9 @@ export const GlobalEntityDrawers: React.FC = () => {
         <Suspense fallback={null}>
           <WorkspaceTaskDrawer
             isOpen={taskDrawer.isOpen}
-            onClose={closeTaskDrawer}
+            onClose={handleCloseTaskDrawer}
             task={fullTask}
-            zIndex={2147483645}
+            zIndex={2147483640}
             onUpdate={() => {
               // Trigger refresh on window event if someone is listening
               window.dispatchEvent(new CustomEvent('task-updated', { detail: fullTask }));
@@ -276,9 +390,9 @@ export const GlobalEntityDrawers: React.FC = () => {
         <Suspense fallback={null}>
           <ExpenseQuickViewDrawer
             expenseId={expenseDrawer.expenseId}
-            onClose={closeExpenseDrawer}
+            onClose={handleCloseExpenseDrawer}
             user={currentUser}
-            zIndex={2147483645}
+            zIndex={2147483620}
           />
         </Suspense>
       )}
@@ -288,6 +402,7 @@ export const GlobalEntityDrawers: React.FC = () => {
           <ExpenseCreateDrawer
             isOpen={expenseCreateOpen}
             onClose={() => {
+              (window as any).__activeErpProposalId = null;
               setExpenseCreateOpen(false);
               setExpenseCreateEditItem(null);
             }}
@@ -297,8 +412,9 @@ export const GlobalEntityDrawers: React.FC = () => {
               setExpenseCreateOpen(false);
               setExpenseCreateEditItem(null);
               window.dispatchEvent(new CustomEvent('refresh-pending-counts'));
+              window.dispatchEvent(new CustomEvent('erp-action-completed', { detail: { actionType: 'expense' } }));
             }}
-            zIndex={2147483645}
+            zIndex={2147483620}
           />
         </Suspense>
       )}
@@ -307,40 +423,78 @@ export const GlobalEntityDrawers: React.FC = () => {
         <Suspense fallback={null}>
           <ApprovalDetailDrawer
             item={approvalDrawer.item}
-            onClose={closeApprovalDrawer}
+            onClose={handleCloseApprovalDrawer}
             users={usersList}
             t={(k: string) => k}
             onApprove={async (it) => {
+              if (approvalActionInFlightRef.current) return;
+              approvalActionInFlightRef.current = true;
+              const itemType = String(it.type || '').toLowerCase();
               try {
-                if (it.type === 'leave') {
-                  await api.put(`/hrm/leaves/${it.id}/status`, { status: 'approved' });
+                if (itemType === 'leave' || itemType === 'wfh' || itemType === 'ot' || itemType === 'late_early') {
+                  await api.put('/hrm/leaves/' + it.id + '/status', { status: 'approved' });
+                } else if (itemType === 'advance') {
+                  await api.put('/hrm/advances/' + it.id + '/status', { status: 'approved' });
+                } else if (itemType === 'checkin') {
+                  await api.post('/attendance/check-ins/' + it.id + '/approve');
+                } else if (itemType === 'attendance_bulk') {
+                  await api.post('/attendance/bulk-requests/' + it.id + '/approve');
                 } else {
-                  await api.post(`/expenses/${it.id}/approve`);
+                  await api.post('/expenses/' + it.id + '/approve');
                 }
                 toast.success('Đã duyệt yêu cầu thành công');
-                closeApprovalDrawer();
+                handleCloseApprovalDrawer();
                 window.dispatchEvent(new CustomEvent('refresh-pending-counts'));
               } catch (err: any) {
                 toast.error(err?.response?.data?.message || 'Lỗi khi phê duyệt');
+              } finally {
+                approvalActionInFlightRef.current = false;
               }
             }}
             onReject={async (it) => {
+              if (approvalActionInFlightRef.current) return;
               const reason = window.prompt('Nhập lý do từ chối:') || '';
+              approvalActionInFlightRef.current = true;
+              const itemType = String(it.type || '').toLowerCase();
               try {
-                if (it.type === 'leave') {
-                  await api.put(`/hrm/leaves/${it.id}/status`, { status: 'rejected', reject_reason: reason });
+                if (itemType === 'leave' || itemType === 'wfh' || itemType === 'ot' || itemType === 'late_early') {
+                  await api.put('/hrm/leaves/' + it.id + '/status', { status: 'rejected', reject_reason: reason });
+                } else if (itemType === 'advance') {
+                  await api.put('/hrm/advances/' + it.id + '/status', { status: 'rejected', reject_reason: reason });
+                } else if (itemType === 'checkin') {
+                  await api.post('/attendance/check-ins/' + it.id + '/reject', { reason });
+                } else if (itemType === 'attendance_bulk') {
+                  await api.post('/attendance/bulk-requests/' + it.id + '/reject', { reason });
                 } else {
-                  await api.post(`/expenses/${it.id}/reject`, { reason });
+                  await api.post('/expenses/' + it.id + '/reject', { reason });
                 }
                 toast.success('Đã từ chối yêu cầu');
-                closeApprovalDrawer();
+                handleCloseApprovalDrawer();
                 window.dispatchEvent(new CustomEvent('refresh-pending-counts'));
               } catch (err: any) {
                 toast.error(err?.response?.data?.message || 'Lỗi khi từ chối');
+              } finally {
+                approvalActionInFlightRef.current = false;
               }
             }}
             isAdmin={Boolean(currentUser?.role === 'admin' || currentUser?.role === 'manager' || (currentUser as any)?.is_admin)}
-            zIndex={2147483645}
+            onEdit={(it) => {
+              handleCloseApprovalDrawer();
+              if (window.location.pathname.startsWith('/approvals')) {
+                window.dispatchEvent(new CustomEvent('open-approval-item', { detail: { id: it.id, type: it.type, raw: it, mode: 'edit' } }));
+              } else {
+                navigate(`/approvals?open_id=${it.id}&open_type=${it.type}&action=edit`);
+              }
+            }}
+            onDuplicate={(it) => {
+              handleCloseApprovalDrawer();
+              if (window.location.pathname.startsWith('/approvals')) {
+                window.dispatchEvent(new CustomEvent('open-approval-item', { detail: { id: it.id, type: it.type, raw: it, mode: 'duplicate' } }));
+              } else {
+                navigate(`/approvals?open_id=${it.id}&open_type=${it.type}&action=duplicate`);
+              }
+            }}
+            zIndex={2147483620}
           />
         </Suspense>
       )}
@@ -349,13 +503,14 @@ export const GlobalEntityDrawers: React.FC = () => {
         <Suspense fallback={null}>
           <DepositDetailDrawer
             isOpen={depositDrawer.isOpen}
-            onClose={closeDepositDrawer}
+            onClose={handleCloseDepositDrawer}
             deposit={depositDrawer.deposit}
             onSaveSuccess={() => {
-              closeDepositDrawer();
+              handleCloseDepositDrawer();
               window.dispatchEvent(new CustomEvent('refresh-deposits'));
+              window.dispatchEvent(new CustomEvent('erp-action-completed', { detail: { actionType: 'deposit' } }));
             }}
-            zIndex={2147483645}
+            zIndex={2147483620}
           />
         </Suspense>
       )}

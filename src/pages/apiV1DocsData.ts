@@ -1,30 +1,25 @@
-// src/pages/apiV1DocsData.ts
-// BỘ DỮ LIỆU ĐẶC TẢ CHI TIẾT 100% CỔNG API V1 DỰ ÁN MYERP
-// BAO QUÁT ĐẦY ĐỦ 25 PHÂN HỆ NGHIỆP VỤ - TOÀN DIỆN CRUD (GET, POST, PUT, DELETE)
+/**
+ * MYERP RESTful API v1.0 — Enterprise OpenAPI 3.0 Specification Dataset
+ * 25 Categories • 173 Endpoints • 100% Real Backend Parity (respond() envelope)
+ */
 
-export interface QueryParamDoc {
+export interface ApiV1Param {
   name: string;
-  type: string;
+  type: 'string' | 'number' | 'integer' | 'boolean' | 'array' | 'object' | 'file';
   required: boolean;
   default?: string;
+  enumOptions?: string[];
   desc: string;
-  enumOptions?: (string | number)[];
 }
 
-export interface BodyParamDoc {
-  name: string;
-  type: string;
-  required: boolean;
-  default?: string;
-  desc: string;
-  enumOptions?: (string | number)[];
-}
-
-export interface ErrorResponseDoc {
+export interface ApiV1ErrorResponse {
   status: number;
-  title: string;
-  desc: string;
-  response: any;
+  description?: string;
+  response: {
+    success: false;
+    data: null;
+    message: string;
+  };
 }
 
 export interface ApiV1Endpoint {
@@ -36,19 +31,23 @@ export interface ApiV1Endpoint {
   category: string;
   authRequired: boolean;
   rateLimit: string;
-  scopes: string[];
+  scopes?: string[];
   headers?: Record<string, string>;
-  queryParams?: QueryParamDoc[];
-  bodyParams?: BodyParamDoc[];
+  queryParams?: ApiV1Param[];
+  bodyParams?: ApiV1Param[];
   sampleBody?: any;
-  sampleResponse: any;
-  errorResponses: ErrorResponseDoc[];
+  sampleResponse: {
+    success: true;
+    data: any;
+    message: string;
+  };
+  errorResponses?: ApiV1ErrorResponse[];
 }
 
 export interface ApiV1Category {
   id: string;
   title: string;
-  iconName: string;
+  iconName?: string;
   description: string;
   endpoints: ApiV1Endpoint[];
 }
@@ -65,7 +64,7 @@ export const apiV1Categories: ApiV1Category[] = [
         "method": "POST",
         "path": "/api/v1/auth/login",
         "title": "Đăng Nhập Hệ Thống & Cấp Phát JWT Token",
-        "description": "Xác thực tài khoản qua username/email và mật khẩu. Trả về Access Token (hạn 2 giờ) và Refresh Token (hạn 7 ngày) kèm thông tin phân quyền RBAC.",
+        "description": "Xác thực email/username và mật khẩu nhân sự để cấp JWT Access Token (`access_token` và `token`), Refresh Token và hồ sơ phân quyền. Nếu tài khoản bật xác thực 2 lớp (2FA), API trả về `requires_2fa: true` kèm `temp_token` để xác thực bước 2 tại `/api/v1/auth/verify-2fa`.",
         "category": "auth",
         "authRequired": false,
         "rateLimit": "10 requests / phút / IP",
@@ -104,67 +103,46 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Đăng nhập thành công",
           "data": {
             "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-            "refresh_token": "d9a1f28b4c5e7810aa39c4f102938475...",
+            "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+            "refresh_token": "def50200b8c9a123f456...",
             "token_type": "Bearer",
-            "expires_in": 7200,
+            "expires_in": 604800,
+            "requires_2fa": false,
             "user": {
-              "id": 1042,
-              "full_name": "Nguyễn Thị Lan",
-              "email": "sale.leader@ideas.edu.vn",
-              "phone": "0901234567",
-              "role": "sale",
-              "tenant_id": 1,
-              "branch_id": 2,
-              "branch_name": "Cơ sở Tân Bình - TP.HCM",
-              "permissions": [
-                "leads.view_own",
-                "leads.create",
-                "deals.view",
-                "quotes.create"
-              ]
+              "id": 1,
+              "full_name": "Quản Trị Viên",
+              "email": "admin@ideas.edu.vn",
+              "role": "admin",
+              "tenant_id": 1
             }
           },
-          "timestamp": "2026-10-08T09:00:00Z"
+          "message": "Đăng nhập thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -198,50 +176,36 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Làm mới phiên đăng nhập thành công",
           "data": {
             "access_token": "eyJhbGciOiJIUzI1Ni...",
             "expires_in": 7200,
             "token_type": "Bearer"
           },
-          "timestamp": "2026-10-08T09:01:00Z"
+          "message": "Làm mới phiên đăng nhập thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -265,8 +229,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Truy vấn hồ sơ cá nhân thành công",
           "data": {
             "id": 1042,
             "full_name": "Nguyễn Thị Lan",
@@ -283,43 +245,31 @@ export const apiV1Categories: ApiV1Category[] = [
               "deposits.view"
             ]
           },
-          "timestamp": "2026-10-08T09:02:00Z"
+          "message": "Truy vấn hồ sơ cá nhân thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -368,49 +318,35 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Cập nhật hồ sơ cá nhân thành công",
           "data": {
             "id": 1042,
             "updated_at": "2026-10-08 09:05:00"
           },
-          "timestamp": "2026-10-08T09:05:00Z"
+          "message": "Cập nhật hồ sơ cá nhân thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -452,45 +388,32 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Đổi mật khẩu thành công. Các phiên đăng nhập trên thiết bị khác đã được thu hồi.",
-          "timestamp": "2026-10-08T09:06:00Z"
+          "data": null,
+          "message": "Đổi mật khẩu thành công. Các phiên đăng nhập trên thiết bị khác đã được thu hồi."
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -500,7 +423,7 @@ export const apiV1Categories: ApiV1Category[] = [
         "method": "POST",
         "path": "/api/v1/auth/logout",
         "title": "Đăng Xuất & Hủy Phiên Làm Việc (Revoke Token)",
-        "description": "Đưa Token hiện tại vào danh sách đen (Blacklist Redis/DB) và hủy bỏ hoàn toàn phiên đăng nhập hiện hành.",
+        "description": "Đăng xuất phiên làm việc hiện tại và thu hồi hiệu lực Refresh Token trong cơ sở dữ liệu.",
         "category": "auth",
         "authRequired": true,
         "rateLimit": "60 requests / phút",
@@ -511,51 +434,48 @@ export const apiV1Categories: ApiV1Category[] = [
           "Authorization": "Bearer <TOKEN>"
         },
         "queryParams": [],
-        "bodyParams": [],
+        "bodyParams": [
+          {
+            "name": "refresh_token",
+            "type": "string",
+            "required": true,
+            "desc": "Refresh Token đang hoạt động cần thu hồi khỏi hệ thống"
+          }
+        ],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Đăng xuất tài khoản thành công. Token đã bị vô hiệu hóa.",
-          "timestamp": "2026-10-08T09:07:00Z"
+          "data": null,
+          "message": "Đăng xuất thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
-        ]
+        ],
+        "sampleBody": {
+          "refresh_token": "def50200b8c9a123f456..."
+        }
       },
       {
         "id": "auth-permissions",
@@ -576,8 +496,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy ma trận quyền hạn thành công",
           "data": [
             {
               "module": "contacts",
@@ -607,43 +525,31 @@ export const apiV1Categories: ApiV1Category[] = [
               ]
             }
           ],
-          "timestamp": "2026-10-08T09:08:00Z"
+          "message": "Lấy ma trận quyền hạn thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -661,7 +567,7 @@ export const apiV1Categories: ApiV1Category[] = [
         "method": "GET",
         "path": "/api/v1/contacts",
         "title": "Truy Vấn Danh Sách Khách Hàng / Học Viên (Có Phân Trang & Bộ Lọc)",
-        "description": "Lấy danh sách khách hàng và lead theo chi nhánh hoặc quyền sở hữu. Hỗ trợ tìm kiếm theo họ tên, SĐT, email, trạng thái tư vấn và nguồn tiếp cận.",
+        "description": "Truy vấn danh sách khách hàng tiềm năng (Leads), học viên (Students) hoặc hồ sơ ngừng chăm sóc (Dropped) với bộ lọc đa tầng, tìm kiếm toàn văn, hỗ trợ cả chế độ bảng phân trang và chế độ cột Kanban.",
         "category": "contacts",
         "authRequired": true,
         "rateLimit": "100 requests / phút",
@@ -677,51 +583,211 @@ export const apiV1Categories: ApiV1Category[] = [
             "type": "integer",
             "required": false,
             "default": "1",
-            "desc": "Số thứ tự trang kết quả"
+            "desc": "Trang hiện tại (bắt đầu từ 1)"
           },
           {
             "name": "limit",
             "type": "integer",
             "required": false,
-            "default": "25",
-            "desc": "Số lượng bản ghi mỗi trang (tối đa 100)"
+            "default": "20",
+            "desc": "Số lượng bản ghi mỗi trang (mặc định 20, tối đa 500)"
           },
           {
             "name": "search",
             "type": "string",
             "required": false,
-            "desc": "Từ khóa tìm kiếm theo họ tên, số điện thoại hoặc email"
+            "desc": "Từ khóa tìm kiếm theo họ tên, SĐT, email, mã hồ sơ, trường học, ghi chú"
           },
           {
             "name": "stage_id",
             "type": "integer",
             "required": false,
-            "desc": "Lọc theo ID giai đoạn phễu tư vấn"
+            "desc": "Lọc theo ID giai đoạn phễu (Pipeline Stage ID)"
           },
           {
-            "name": "branch_id",
+            "name": "stages",
+            "type": "string",
+            "required": false,
+            "desc": "Danh sách nhiều stage_id cách nhau bởi dấu phẩy (VD: \"1,2,3\")"
+          },
+          {
+            "name": "lead_status",
+            "type": "string",
+            "required": false,
+            "desc": "Lọc theo trạng thái liên hệ / kết quả cuộc gọi"
+          },
+          {
+            "name": "owner_id",
             "type": "integer",
             "required": false,
-            "desc": "Lọc theo cơ sở / chi nhánh phụ trách"
+            "desc": "Lọc theo ID nhân viên Sale phụ trách (hỗ trợ cả mảng owner_id[])"
           },
           {
             "name": "assigned_to",
             "type": "integer",
             "required": false,
-            "desc": "Lọc theo ID tư vấn viên đang phụ trách"
+            "desc": "Bí danh (alias) tương đương với owner_id để lọc theo nhân viên phụ trách"
+          },
+          {
+            "name": "team_id",
+            "type": "integer",
+            "required": false,
+            "desc": "Lọc theo ID đội nhóm kinh doanh (Sales Team)"
+          },
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": false,
+            "desc": "Lọc theo ID dự án / chương trình đào tạo"
+          },
+          {
+            "name": "program",
+            "type": "string",
+            "required": false,
+            "desc": "Lọc theo mã hoặc tên chương trình quan tâm (VD: Thạc sĩ, Tiến sĩ)"
+          },
+          {
+            "name": "campaign_id",
+            "type": "integer",
+            "required": false,
+            "desc": "Lọc theo ID chiến dịch Marketing"
           },
           {
             "name": "source",
             "type": "string",
             "required": false,
-            "desc": "Lọc theo nguồn: 'facebook_ads', 'google_search', 'referral', 'zalo_oa'"
+            "desc": "Lọc theo nguồn khách hàng (VD: Facebook, Google Ads, Tiktok, Website, Zalo)"
+          },
+          {
+            "name": "source_type",
+            "type": "string",
+            "required": false,
+            "desc": "Lọc theo nhóm nguồn (Ads, Organic, Referral, Event)"
+          },
+          {
+            "name": "tag",
+            "type": "string",
+            "required": false,
+            "desc": "Lọc theo nhãn (Tag) gắn trên hồ sơ"
+          },
+          {
+            "name": "uncontacted",
+            "type": "string",
+            "required": false,
+            "enumOptions": [
+              "1",
+              "true"
+            ],
+            "desc": "Chỉ lấy danh sách Lead mới chưa phát sinh tương tác chăm sóc"
+          },
+          {
+            "name": "date_field",
+            "type": "string",
+            "required": false,
+            "default": "created_at",
+            "enumOptions": [
+              "created_at",
+              "updated_at",
+              "assigned_at",
+              "last_contacted_at"
+            ],
+            "desc": "Trường thời gian áp dụng cho bộ lọc từ ngày - đến ngày"
+          },
+          {
+            "name": "from",
+            "type": "string",
+            "required": false,
+            "desc": "Từ ngày (YYYY-MM-DD) áp dụng trên trường date_field"
+          },
+          {
+            "name": "to",
+            "type": "string",
+            "required": false,
+            "desc": "Đến ngày (YYYY-MM-DD) áp dụng trên trường date_field"
+          },
+          {
+            "name": "admission_from",
+            "type": "string",
+            "required": false,
+            "desc": "Lọc ngày dự kiến nhập học từ ngày (YYYY-MM-DD)"
+          },
+          {
+            "name": "admission_to",
+            "type": "string",
+            "required": false,
+            "desc": "Lọc ngày dự kiến nhập học đến ngày (YYYY-MM-DD)"
+          },
+          {
+            "name": "segment",
+            "type": "string",
+            "required": false,
+            "default": "leads",
+            "enumOptions": [
+              "leads",
+              "students",
+              "dropped",
+              "all"
+            ],
+            "desc": "Phân khúc hồ sơ: leads (Tiềm năng), students (Học viên), dropped (Rớt/Ngừng), all (Tất cả)"
+          },
+          {
+            "name": "student_sub_tab",
+            "type": "string",
+            "required": false,
+            "default": "all",
+            "enumOptions": [
+              "all",
+              "deposited",
+              "enrolled",
+              "graduated"
+            ],
+            "desc": "Tab con khi xem phân khúc học viên (segment=students)"
+          },
+          {
+            "name": "kanban",
+            "type": "string",
+            "required": false,
+            "enumOptions": [
+              "1",
+              "true"
+            ],
+            "desc": "Bật chế độ tải dữ liệu phân nhóm theo từng cột giai đoạn Kanban"
+          },
+          {
+            "name": "limit_per_stage",
+            "type": "integer",
+            "required": false,
+            "default": "10",
+            "desc": "Số lượng hồ sơ tối đa tải về trên mỗi cột khi bật kanban=1"
+          },
+          {
+            "name": "sort",
+            "type": "string",
+            "required": false,
+            "default": "created_at",
+            "enumOptions": [
+              "created_at",
+              "updated_at",
+              "full_name",
+              "lead_score"
+            ],
+            "desc": "Trường sắp xếp dữ liệu"
+          },
+          {
+            "name": "order",
+            "type": "string",
+            "required": false,
+            "default": "DESC",
+            "enumOptions": [
+              "ASC",
+              "DESC"
+            ],
+            "desc": "Thứ tự sắp xếp"
           }
         ],
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Truy vấn danh sách khách hàng thành công",
           "data": {
             "items": [
               {
@@ -751,55 +817,39 @@ export const apiV1Categories: ApiV1Category[] = [
               "total_pages": 57
             }
           },
-          "timestamp": "2026-10-08T09:10:00Z"
+          "message": "Truy vấn danh sách khách hàng thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi khách hàng không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu khách hàng theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu khách hàng theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -823,8 +873,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Truy vấn chi tiết khách hàng thành công",
           "data": {
             "id": 5012,
             "full_name": "Trần Thị Mai Phương",
@@ -842,55 +890,39 @@ export const apiV1Categories: ApiV1Category[] = [
             "assigned_to_name": "Nguyễn Thị Lan",
             "created_at": "2026-10-06 14:20:10"
           },
-          "timestamp": "2026-10-08T09:11:00Z"
+          "message": "Truy vấn chi tiết khách hàng thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi khách hàng không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu khách hàng theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu khách hàng theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -917,13 +949,13 @@ export const apiV1Categories: ApiV1Category[] = [
             "name": "full_name",
             "type": "string",
             "required": true,
-            "desc": "Họ và tên khách hàng hoặc học viên"
+            "desc": "Họ và tên đầy đủ của khách hàng / học viên"
           },
           {
             "name": "phone",
             "type": "string",
             "required": true,
-            "desc": "Số điện thoại di động hợp lệ (10 chữ số)"
+            "desc": "Số điện thoại liên hệ chính (chuẩn hóa 10 số, kiểm tra chống trùng lặp)"
           },
           {
             "name": "email",
@@ -932,44 +964,78 @@ export const apiV1Categories: ApiV1Category[] = [
             "desc": "Địa chỉ email liên hệ"
           },
           {
-            "name": "branch_id",
+            "name": "program",
+            "type": "string",
+            "required": false,
+            "desc": "Chương trình đào tạo quan tâm (VD: Thạc sĩ Quản trị Kinh doanh)"
+          },
+          {
+            "name": "project_id",
             "type": "integer",
-            "required": true,
-            "desc": "ID cơ sở đăng ký quan tâm"
+            "required": false,
+            "desc": "ID dự án / chương trình đào tạo"
+          },
+          {
+            "name": "owner_id",
+            "type": "integer",
+            "required": false,
+            "desc": "ID nhân viên Sale phụ trách (nếu bỏ trống sẽ tự động gán người tạo)"
+          },
+          {
+            "name": "stage_id",
+            "type": "integer",
+            "required": false,
+            "desc": "ID giai đoạn phễu ban đầu (mặc định Stage 1 - New Lead)"
           },
           {
             "name": "source",
             "type": "string",
             "required": false,
-            "default": "direct",
-            "desc": "Nguồn tiếp cận: 'facebook_ads', 'landing_page', 'event'"
+            "desc": "Nguồn khách hàng (VD: Facebook Ads, Website, Zalo, Hotline)"
           },
           {
-            "name": "course_interest",
+            "name": "city",
             "type": "string",
             "required": false,
-            "desc": "Khóa học quan tâm, ví dụ: 'BBA Quản Trị Kinh Doanh'"
+            "desc": "Tỉnh / Thành phố sinh sống"
           },
           {
             "name": "notes",
             "type": "string",
             "required": false,
-            "desc": "Ghi chú ban đầu từ biểu mẫu đăng ký"
+            "desc": "Ghi chú ban đầu về nhu cầu tư vấn của khách hàng"
+          },
+          {
+            "name": "admission_date",
+            "type": "string",
+            "required": false,
+            "desc": "Ngày dự kiến nhập học (YYYY-MM-DD)"
+          },
+          {
+            "name": "tags",
+            "type": "array",
+            "required": false,
+            "desc": "Mảng các nhãn phân loại khách hàng (VD: [\"VIP\", \"Học bổng\"])"
           }
         ],
         "sampleBody": {
-          "full_name": "Lê Hoàng Nam",
-          "phone": "0934567890",
-          "email": "hoangnam.le@gmail.com",
-          "branch_id": 2,
-          "source": "landing_page",
-          "course_interest": "BBA Digital Marketing K2026",
-          "notes": "Quan tâm học phí và chính sách học bổng đầu vào"
+          "full_name": "Nguyễn Minh Tuấn",
+          "phone": "0987654321",
+          "email": "minhtuan@example.com",
+          "program": "Thạc sĩ Quản trị Kinh doanh (MBA)",
+          "project_id": 2,
+          "owner_id": 12,
+          "source": "Facebook Ads",
+          "city": "TP. Hồ Chí Minh",
+          "notes": "Quan tâm lịch học cuối tuần tại cơ sở Quận 3",
+          "admission_date": "2026-11-15",
+          "tags": [
+            "MBA-2026",
+            "Tư vấn gấp"
+          ]
         },
         "sampleResponse": {
           "success": true,
-          "code": 201,
-          "message": "Tạo khách hàng mới thành công",
           "data": {
             "id": 5013,
             "full_name": "Lê Hoàng Nam",
@@ -978,55 +1044,39 @@ export const apiV1Categories: ApiV1Category[] = [
             "assigned_to": 1042,
             "created_at": "2026-10-08 09:12:00"
           },
-          "timestamp": "2026-10-08T09:12:00Z"
+          "message": "Tạo khách hàng mới thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi khách hàng không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu khách hàng theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu khách hàng theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "PHONE_DUPLICATED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -1087,61 +1137,95 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Cập nhật thông tin khách hàng thành công",
           "data": {
             "id": 5012,
             "updated_at": "2026-10-08 09:13:00"
           },
-          "timestamp": "2026-10-08T09:13:00Z"
+          "message": "Cập nhật thông tin khách hàng thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi khách hàng không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu khách hàng theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu khách hàng theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
+            }
+          }
+        ]
+      },
+      {
+        "id": "contacts-stage-move",
+        "method": "PUT",
+        "path": "/api/v1/contacts/:id/stage",
+        "title": "Chuyển giai đoạn phễu khách hàng (Move Contact Stage)",
+        "description": "Chuyển hồ sơ khách hàng sang giai đoạn phễu (Stage) mới kèm ghi chú bắt buộc để lưu vết vào dòng thời gian (Timeline) và nhật ký kiểm toán (Audit Log). Hỗ trợ các phương thức PUT, PATCH và POST.",
+        "category": "contacts",
+        "authRequired": true,
+        "rateLimit": "120 req/min",
+        "scopes": [
+          "contacts:write"
+        ],
+        "bodyParams": [
+          {
+            "name": "stage_id",
+            "type": "integer",
+            "required": true,
+            "desc": "ID giai đoạn phễu mới cần chuyển tới"
+          },
+          {
+            "name": "note",
+            "type": "string",
+            "required": true,
+            "desc": "Ghi chú lý do chuyển giai đoạn (bắt buộc không được để trống)"
+          }
+        ],
+        "sampleBody": {
+          "stage_id": 3,
+          "note": "Khách hàng đã xác nhận lịch hẹn tư vấn 1-1 cùng Ban Giám hiệu vào chiều thứ Bảy"
+        },
+        "sampleResponse": {
+          "success": true,
+          "data": {
+            "id": 1025,
+            "stage_id": 3,
+            "stage_name": "03 – Đã hẹn tư vấn",
+            "updated_at": "2026-10-16T09:30:00Z"
+          },
+          "message": "Chuyển giai đoạn thành công"
+        },
+        "errorResponses": [
+          {
+            "status": 422,
+            "description": "Thiếu ghi chú bắt buộc khi chuyển giai đoạn",
+            "response": {
+              "success": false,
+              "data": null,
+              "message": "Vui lòng nhập ghi chú lý do chuyển giai đoạn"
             }
           }
         ]
@@ -1165,61 +1249,43 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Hồ sơ khách hàng đã được chuyển vào thùng rác thành công",
           "data": {
             "id": 5012,
             "deleted_at": "2026-10-08 09:14:00"
           },
-          "timestamp": "2026-10-08T09:14:00Z"
+          "message": "Hồ sơ khách hàng đã được chuyển vào thùng rác thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi khách hàng không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu khách hàng theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu khách hàng theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -1261,62 +1327,44 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Bàn giao khách hàng thành công",
           "data": {
             "id": 5012,
             "assigned_to": 1055,
             "assigned_to_name": "Vũ Hoàng Minh"
           },
-          "timestamp": "2026-10-08T09:15:00Z"
+          "message": "Bàn giao khách hàng thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi khách hàng không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu khách hàng theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu khách hàng theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -1355,8 +1403,6 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Đã xóa thành công 3 hồ sơ khách hàng",
           "data": {
             "deleted_count": 3,
             "ids": [
@@ -1365,43 +1411,31 @@ export const apiV1Categories: ApiV1Category[] = [
               5017
             ]
           },
-          "timestamp": "2026-10-08T09:16:00Z"
+          "message": "Đã xóa thành công 3 hồ sơ khách hàng"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -1409,9 +1443,9 @@ export const apiV1Categories: ApiV1Category[] = [
       {
         "id": "contacts-notes-list",
         "method": "GET",
-        "path": "/api/v1/contacts/:id/notes",
+        "path": "/api/v1/notes/contact/:id",
         "title": "Truy Vấn Lịch Sử Ghi Chú & Tương Tác Của Khách Hàng",
-        "description": "Lấy toàn bộ dòng thời gian ghi chú, nội dung cuộc gọi tư vấn và biên bản làm việc của khách hàng.",
+        "description": "Lấy danh sách lịch sử ghi chú chăm sóc của một khách hàng theo ID (Hỗ trợ cả định dạng `/api/v1/notes/contact/:id` và `/api/v1/notes?entity_type=contact&entity_id=:id`).",
         "category": "contacts",
         "authRequired": true,
         "rateLimit": "100 requests / phút",
@@ -1425,8 +1459,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy lịch sử ghi chú thành công",
           "data": [
             {
               "id": 892,
@@ -1436,55 +1468,39 @@ export const apiV1Categories: ApiV1Category[] = [
               "created_at": "2026-10-07 10:15:00"
             }
           ],
-          "timestamp": "2026-10-08T09:17:00Z"
+          "message": "Lấy lịch sử ghi chú thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi khách hàng không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu khách hàng theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu khách hàng theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -1526,62 +1542,200 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 201,
-          "message": "Thêm ghi chú tương tác thành công",
           "data": {
             "id": 893,
             "contact_id": 5012,
             "created_at": "2026-10-08 09:18:00"
           },
-          "timestamp": "2026-10-08T09:18:00Z"
+          "message": "Thêm ghi chú tương tác thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi khách hàng không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu khách hàng theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu khách hàng theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
+            }
+          }
+        ]
+      },
+      {
+        "id": "contacts-export",
+        "method": "GET",
+        "path": "/api/v1/export",
+        "title": "Xuất dữ liệu đa phân hệ ra Excel / CSV (Universal Export Engine)",
+        "description": "Xuất dữ liệu thực tế từ MySQL ra tệp CSV/Excel (UTF-8 BOM) cho tất cả phân hệ (`contact`, `company`, `deal`, `product`, `inventory`, `asset`, `attendance`, `expense`, `deposit`, `task`, `ticket`, `staff`). Đồng bộ 100% bộ lọc đa tầng với giao diện danh sách và AI Copilot.",
+        "category": "contacts",
+        "authRequired": true,
+        "rateLimit": "30 req/min",
+        "scopes": [
+          "contacts:read"
+        ],
+        "queryParams": [
+          {
+            "name": "type",
+            "type": "string",
+            "required": true,
+            "default": "contact",
+            "enumOptions": [
+              "contact",
+              "company",
+              "deal",
+              "product",
+              "inventory",
+              "asset",
+              "attendance",
+              "expense",
+              "deposit",
+              "task",
+              "ticket",
+              "staff"
+            ],
+            "desc": "Phân hệ dữ liệu cần xuất file"
+          },
+          {
+            "name": "export_mode",
+            "type": "string",
+            "required": false,
+            "default": "filtered",
+            "enumOptions": [
+              "filtered",
+              "full"
+            ],
+            "desc": "Chế độ xuất: filtered (theo bộ lọc hiện tại) hoặc full (toàn bộ dữ liệu trong phạm vi phân quyền RBAC)"
+          },
+          {
+            "name": "search",
+            "type": "string",
+            "required": false,
+            "desc": "Từ khóa tìm kiếm áp dụng đồng bộ khi xuất file"
+          },
+          {
+            "name": "stage_id",
+            "type": "integer",
+            "required": false,
+            "desc": "Lọc theo ID giai đoạn phễu"
+          },
+          {
+            "name": "stage_name",
+            "type": "string",
+            "required": false,
+            "desc": "Lọc theo tên giai đoạn phễu (đồng bộ từ link xuất file của AI Copilot)"
+          },
+          {
+            "name": "program",
+            "type": "string",
+            "required": false,
+            "desc": "Lọc theo chương trình đào tạo quan tâm"
+          },
+          {
+            "name": "city",
+            "type": "string",
+            "required": false,
+            "desc": "Lọc theo tỉnh / thành phố"
+          },
+          {
+            "name": "source",
+            "type": "string",
+            "required": false,
+            "desc": "Lọc theo nguồn khách hàng"
+          },
+          {
+            "name": "gender",
+            "type": "string",
+            "required": false,
+            "desc": "Lọc theo giới tính"
+          },
+          {
+            "name": "deposit_status",
+            "type": "string",
+            "required": false,
+            "enumOptions": [
+              "has_deposit",
+              "no_deposit",
+              "pending",
+              "approved"
+            ],
+            "desc": "Lọc theo trạng thái đặt cọc"
+          },
+          {
+            "name": "activity_status",
+            "type": "string",
+            "required": false,
+            "enumOptions": [
+              "has_activity",
+              "no_activity"
+            ],
+            "desc": "Lọc theo trạng thái tương tác chăm sóc"
+          },
+          {
+            "name": "assigned_to",
+            "type": "integer",
+            "required": false,
+            "desc": "Lọc theo ID nhân viên phụ trách (hoặc owner_id)"
+          },
+          {
+            "name": "date_field",
+            "type": "string",
+            "required": false,
+            "default": "created_at",
+            "desc": "Trường ngày áp dụng bộ lọc khoảng thời gian"
+          },
+          {
+            "name": "from",
+            "type": "string",
+            "required": false,
+            "desc": "Từ ngày (YYYY-MM-DD)"
+          },
+          {
+            "name": "to",
+            "type": "string",
+            "required": false,
+            "desc": "Đến ngày (YYYY-MM-DD)"
+          }
+        ],
+        "sampleResponse": {
+          "success": true,
+          "data": {
+            "content_type": "text/csv; charset=UTF-8",
+            "filename": "export_contact_20261016.csv",
+            "stream": "UTF-8 BOM CSV Binary Stream"
+          },
+          "message": "Luồng tải xuống tệp CSV/Excel trực tiếp"
+        },
+        "errorResponses": [
+          {
+            "status": 401,
+            "description": "Chưa xác thực hoặc Token không hợp lệ",
+            "response": {
+              "success": false,
+              "data": null,
+              "message": "Token không hợp lệ"
             }
           }
         ]
@@ -1615,39 +1769,79 @@ export const apiV1Categories: ApiV1Category[] = [
             "type": "integer",
             "required": false,
             "default": "1",
-            "desc": "Số thứ tự trang kết quả"
+            "desc": "Trang hiện tại"
           },
           {
             "name": "limit",
             "type": "integer",
             "required": false,
-            "default": "25",
+            "default": "20",
             "desc": "Số lượng bản ghi mỗi trang"
           },
           {
-            "name": "pipeline_id",
-            "type": "integer",
+            "name": "search",
+            "type": "string",
             "required": false,
-            "desc": "Lọc theo ID phễu tuyển sinh"
+            "desc": "Tìm kiếm theo tên cơ hội, tên khách hàng hoặc mã hồ sơ"
           },
           {
             "name": "stage_id",
             "type": "integer",
             "required": false,
-            "desc": "Lọc theo ID giai đoạn Kanban"
+            "desc": "Lọc theo ID giai đoạn phễu bán hàng"
           },
           {
-            "name": "assigned_to",
+            "name": "owner_id",
             "type": "integer",
             "required": false,
-            "desc": "Lọc theo ID nhân viên phụ trách"
+            "desc": "Lọc theo ID nhân viên Sale phụ trách cơ hội"
+          },
+          {
+            "name": "contact_id",
+            "type": "integer",
+            "required": false,
+            "desc": "Lọc các cơ hội thuộc về một khách hàng cụ thể"
+          },
+          {
+            "name": "company_id",
+            "type": "integer",
+            "required": false,
+            "desc": "Lọc các cơ hội thuộc về một doanh nghiệp B2B"
+          },
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": false,
+            "desc": "Lọc theo ID dự án / chương trình đào tạo"
+          },
+          {
+            "name": "campaign_id",
+            "type": "integer",
+            "required": false,
+            "desc": "Lọc theo ID chiến dịch Marketing"
+          },
+          {
+            "name": "source",
+            "type": "string",
+            "required": false,
+            "desc": "Lọc theo nguồn cơ hội"
+          },
+          {
+            "name": "from",
+            "type": "string",
+            "required": false,
+            "desc": "Lọc từ ngày tạo (YYYY-MM-DD)"
+          },
+          {
+            "name": "to",
+            "type": "string",
+            "required": false,
+            "desc": "Lọc đến ngày tạo (YYYY-MM-DD)"
           }
         ],
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy danh sách cơ hội thành công",
           "data": {
             "items": [
               {
@@ -1673,55 +1867,39 @@ export const apiV1Categories: ApiV1Category[] = [
               "total_pages": 14
             }
           },
-          "timestamp": "2026-10-08T09:20:00Z"
+          "message": "Lấy danh sách cơ hội thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi cơ hội bán hàng không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu cơ hội bán hàng theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu cơ hội bán hàng theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -1745,8 +1923,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Truy vấn chi tiết cơ hội thành công",
           "data": {
             "id": 1205,
             "title": "Học Bổng BBA Quốc Tế - Trần Thị Mai Phương",
@@ -1766,55 +1942,39 @@ export const apiV1Categories: ApiV1Category[] = [
             ],
             "created_at": "2026-10-06 15:00:00"
           },
-          "timestamp": "2026-10-08T09:21:00Z"
+          "message": "Truy vấn chi tiết cơ hội thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi cơ hội bán hàng không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu cơ hội bán hàng theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu cơ hội bán hàng theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -1841,113 +2001,107 @@ export const apiV1Categories: ApiV1Category[] = [
             "name": "title",
             "type": "string",
             "required": true,
-            "desc": "Tên cơ hội bán hàng"
+            "desc": "Tên cơ hội bán hàng / gói ghi danh"
+          },
+          {
+            "name": "value",
+            "type": "number",
+            "required": true,
+            "desc": "Giá trị cơ hội dự kiến (VNĐ)"
           },
           {
             "name": "contact_id",
             "type": "integer",
             "required": true,
-            "desc": "ID khách hàng gắn với cơ hội"
-          },
-          {
-            "name": "pipeline_id",
-            "type": "integer",
-            "required": true,
-            "desc": "ID phễu bán hàng"
+            "desc": "ID khách hàng liên kết"
           },
           {
             "name": "stage_id",
             "type": "integer",
             "required": true,
-            "desc": "ID giai đoạn khởi tạo trong phễu"
+            "desc": "ID giai đoạn phễu khởi tạo"
           },
           {
-            "name": "expected_revenue",
-            "type": "number",
-            "required": true,
-            "desc": "Doanh thu dự kiến (VNĐ)"
-          },
-          {
-            "name": "probability",
+            "name": "owner_id",
             "type": "integer",
             "required": false,
-            "default": "50",
-            "desc": "Xác suất chốt thành công (%)"
+            "desc": "ID nhân viên Sale phụ trách (mặc định là người tạo)"
           },
           {
-            "name": "expected_close_date",
+            "name": "project_id",
+            "type": "integer",
+            "required": false,
+            "desc": "ID dự án / chương trình đào tạo"
+          },
+          {
+            "name": "company_id",
+            "type": "integer",
+            "required": false,
+            "desc": "ID công ty / đối tác B2B (nếu có)"
+          },
+          {
+            "name": "expected_close",
             "type": "string",
             "required": false,
-            "desc": "Ngày dự kiến chốt (YYYY-MM-DD)"
+            "desc": "Ngày dự kiến chốt thành công (YYYY-MM-DD)"
+          },
+          {
+            "name": "notes",
+            "type": "string",
+            "required": false,
+            "desc": "Ghi chú chi tiết về cơ hội"
           }
         ],
         "sampleBody": {
-          "title": "Khóa Học BBA Digital Marketing K2026 - Lê Hoàng Nam",
-          "contact_id": 5013,
-          "pipeline_id": 1,
+          "title": "Hồ sơ ghi danh MBA Quốc tế - Nguyễn Minh Tuấn",
+          "value": 85000000,
+          "contact_id": 1025,
           "stage_id": 2,
-          "expected_revenue": 120000000,
-          "probability": 60,
-          "expected_close_date": "2026-11-15"
+          "owner_id": 12,
+          "project_id": 2,
+          "expected_close": "2026-11-30",
+          "notes": "Khách đăng ký gói đóng học phí 1 lần ưu đãi 10%"
         },
         "sampleResponse": {
           "success": true,
-          "code": 201,
-          "message": "Tạo cơ hội bán hàng thành công",
           "data": {
             "id": 1206,
             "title": "Khóa Học BBA Digital Marketing K2026 - Lê Hoàng Nam",
             "created_at": "2026-10-08 09:22:00"
           },
-          "timestamp": "2026-10-08T09:22:00Z"
+          "message": "Tạo cơ hội bán hàng thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi cơ hội bán hàng không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu cơ hội bán hàng theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu cơ hội bán hàng theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -1974,89 +2128,91 @@ export const apiV1Categories: ApiV1Category[] = [
             "name": "title",
             "type": "string",
             "required": false,
-            "desc": "Tiêu đề cơ hội"
+            "desc": "Tên cơ hội bán hàng"
           },
           {
-            "name": "expected_revenue",
+            "name": "value",
             "type": "number",
             "required": false,
-            "desc": "Doanh thu dự kiến mới"
+            "desc": "Giá trị cơ hội (VNĐ)"
           },
           {
-            "name": "probability",
+            "name": "stage_id",
             "type": "integer",
             "required": false,
-            "desc": "Tỷ lệ chốt % mới"
+            "desc": "ID giai đoạn phễu mới"
           },
           {
-            "name": "expected_close_date",
+            "name": "owner_id",
+            "type": "integer",
+            "required": false,
+            "desc": "ID nhân viên Sale phụ trách"
+          },
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": false,
+            "desc": "ID dự án / chương trình đào tạo"
+          },
+          {
+            "name": "company_id",
+            "type": "integer",
+            "required": false,
+            "desc": "ID doanh nghiệp liên kết"
+          },
+          {
+            "name": "expected_close",
             "type": "string",
             "required": false,
-            "desc": "Ngày dự kiến chốt cập nhật"
+            "desc": "Ngày dự kiến chốt (YYYY-MM-DD)"
           }
         ],
         "sampleBody": {
-          "expected_revenue": 130000000,
-          "probability": 85,
-          "expected_close_date": "2026-10-20"
+          "title": "Hồ sơ ghi danh MBA Quốc tế - Nguyễn Minh Tuấn (Đã cập nhật ưu đãi)",
+          "value": 78000000,
+          "stage_id": 4,
+          "owner_id": 12,
+          "expected_close": "2026-11-20"
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Cập nhật cơ hội thành công",
           "data": {
             "id": 1205,
             "updated_at": "2026-10-08 09:23:00"
           },
-          "timestamp": "2026-10-08T09:23:00Z"
+          "message": "Cập nhật cơ hội thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi cơ hội bán hàng không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu cơ hội bán hàng theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu cơ hội bán hàng theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -2080,61 +2236,43 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Xóa cơ hội bán hàng thành công",
           "data": {
             "id": 1205,
             "deleted_at": "2026-10-08 09:24:00"
           },
-          "timestamp": "2026-10-08T09:24:00Z"
+          "message": "Xóa cơ hội bán hàng thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi cơ hội bán hàng không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu cơ hội bán hàng theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu cơ hội bán hàng theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -2176,63 +2314,45 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Chuyển giai đoạn cơ hội thành công",
           "data": {
             "id": 1205,
             "stage_id": 4,
             "stage_name": "Đã Nộp Hồ Sơ Đăng Ký",
             "updated_at": "2026-10-08 09:25:00"
           },
-          "timestamp": "2026-10-08T09:25:00Z"
+          "message": "Chuyển giai đoạn cơ hội thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi cơ hội bán hàng không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu cơ hội bán hàng theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu cơ hội bán hàng theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -2256,8 +2376,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy danh mục giai đoạn thành công",
           "data": [
             {
               "id": 1,
@@ -2290,43 +2408,31 @@ export const apiV1Categories: ApiV1Category[] = [
               "default_probability": 100
             }
           ],
-          "timestamp": "2026-10-08T09:26:00Z"
+          "message": "Lấy danh mục giai đoạn thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -2365,8 +2471,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy danh sách vòng chia lead thành công",
           "data": [
             {
               "consultant_id": 1042,
@@ -2385,43 +2489,31 @@ export const apiV1Categories: ApiV1Category[] = [
               "vacation_mode": false
             }
           ],
-          "timestamp": "2026-10-08T09:30:00Z"
+          "message": "Lấy danh sách vòng chia lead thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -2453,8 +2545,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Truy vấn danh sách lead bị giữ quá hạn thành công",
           "data": [
             {
               "contact_id": 5012,
@@ -2464,43 +2554,31 @@ export const apiV1Categories: ApiV1Category[] = [
               "idle_minutes": 75
             }
           ],
-          "timestamp": "2026-10-08T09:31:00Z"
+          "message": "Truy vấn danh sách lead bị giữ quá hạn thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -2542,62 +2620,44 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Phân phối lead thành công",
           "data": {
             "contact_id": 5012,
             "assigned_to": 1055,
             "assigned_at": "2026-10-08 09:32:00"
           },
-          "timestamp": "2026-10-08T09:32:00Z"
+          "message": "Phân phối lead thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi lead không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu lead theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu lead theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -2607,7 +2667,7 @@ export const apiV1Categories: ApiV1Category[] = [
         "method": "POST",
         "path": "/api/v1/lead-distribution/release-held",
         "title": "Thu Hồi Lead Bị Giam Quá Hạn Trả Về Bể Chung",
-        "description": "Thu hồi quyền chăm sóc của tư vấn viên vi phạm SLA chăm sóc, đưa lead trở lại hàng đợi phân phối hoặc bể chung cho nhân viên khác nhận.",
+        "description": "Giải phóng danh sách Lead đang nằm trong kho tạm giữ (Held Leads ngoài giờ trực hoặc chờ xử lý) để đẩy vào vòng chia số tự động ngay lập tức.",
         "category": "lead-distribution",
         "authRequired": true,
         "rateLimit": "30 requests / phút",
@@ -2621,80 +2681,72 @@ export const apiV1Categories: ApiV1Category[] = [
         "queryParams": [],
         "bodyParams": [
           {
-            "name": "contact_id",
-            "type": "integer",
-            "required": true,
-            "desc": "ID khách hàng cần thu hồi"
+            "name": "lead_ids",
+            "type": "array",
+            "required": false,
+            "desc": "Mảng ID các hồ sơ liên hệ (contacts) cần giải phóng (hoặc truyền contact_id đơn lẻ)"
           },
           {
-            "name": "reason",
-            "type": "string",
+            "name": "contact_id",
+            "type": "integer",
             "required": false,
-            "desc": "Lý do thu hồi (vd: quá hạn SLA 30 phút không gọi)"
+            "desc": "ID hồ sơ liên hệ đơn lẻ cần giải phóng ngay"
+          },
+          {
+            "name": "target_round",
+            "type": "integer",
+            "required": false,
+            "desc": "ID vòng chia mục tiêu (mặc định là Vòng 1)"
           }
         ],
         "sampleBody": {
-          "contact_id": 5012,
-          "reason": "Quá hạn 60 phút chưa phát sinh tương tác"
+          "lead_ids": [
+            1040,
+            1041,
+            1042
+          ],
+          "target_round": 1
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Thu hồi lead về bể chung thành công",
           "data": {
             "contact_id": 5012,
             "previous_consultant_id": 1042,
             "status": "returned_to_pool"
           },
-          "timestamp": "2026-10-08T09:33:00Z"
+          "message": "Thu hồi lead về bể chung thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi lead không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu lead theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu lead theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -2704,7 +2756,7 @@ export const apiV1Categories: ApiV1Category[] = [
         "method": "PUT",
         "path": "/api/v1/lead-distribution/config",
         "title": "Cập Nhật Cấu Hình Thuật Toán Chia Lead",
-        "description": "Cập nhật tham số chia lead: chuyển đổi giữa thuật toán vòng tròn (Round Robin) và thuật toán trọng số (Weighted), thời hạn SLA (phút).",
+        "description": "Cập nhật cấu hình thuật toán chia số tự động (Round Robin / Weighted), thời gian SLA phản hồi tối đa và vòng chia dự phòng.",
         "category": "lead-distribution",
         "authRequired": true,
         "rateLimit": "20 requests / phút",
@@ -2718,73 +2770,79 @@ export const apiV1Categories: ApiV1Category[] = [
         "queryParams": [],
         "bodyParams": [
           {
-            "name": "algorithm",
+            "name": "distribution_mode",
             "type": "string",
             "required": true,
-            "desc": "'round_robin' hoặc 'weighted'"
+            "enumOptions": [
+              "round_robin",
+              "weighted",
+              "performance",
+              "manual"
+            ],
+            "desc": "Chế độ phân bổ Lead tự động"
           },
           {
-            "name": "sla_timeout_minutes",
+            "name": "sla_minutes",
             "type": "integer",
             "required": true,
-            "desc": "Thời gian tối đa để liên hệ lead (phút)"
+            "desc": "Thời gian SLA tối đa (phút) để Sale tiếp nhận trước khi thu hồi sang vòng tiếp theo"
           },
           {
-            "name": "auto_revoke_enabled",
-            "type": "boolean",
-            "required": true,
-            "desc": "Tự động thu hồi khi quá hạn SLA"
+            "name": "fallback_round_id",
+            "type": "integer",
+            "required": false,
+            "desc": "ID vòng chia dự phòng khi quá hạn SLA"
+          },
+          {
+            "name": "hold_off_hours_start",
+            "type": "string",
+            "required": false,
+            "desc": "Giờ bắt đầu tạm giữ Lead ca đêm (VD: \"22:00\")"
+          },
+          {
+            "name": "hold_off_hours_end",
+            "type": "string",
+            "required": false,
+            "desc": "Giờ kết thúc tạm giữ Lead để xả kho sáng hôm sau (VD: \"08:00\")"
           }
         ],
         "sampleBody": {
-          "algorithm": "round_robin",
-          "sla_timeout_minutes": 30,
-          "auto_revoke_enabled": true
+          "distribution_mode": "round_robin",
+          "sla_minutes": 15,
+          "fallback_round_id": 2,
+          "hold_off_hours_start": "22:00",
+          "hold_off_hours_end": "08:00"
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Cập nhật cấu hình phân phối lead thành công",
           "data": {
             "updated_at": "2026-10-08 09:34:00"
           },
-          "timestamp": "2026-10-08T09:34:00Z"
+          "message": "Cập nhật cấu hình phân phối lead thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -2808,61 +2866,43 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Đã loại nhân viên khỏi hàng đợi chia lead",
           "data": {
             "consultant_id": 1055,
             "removed_at": "2026-10-08 09:35:00"
           },
-          "timestamp": "2026-10-08T09:35:00Z"
+          "message": "Đã loại nhân viên khỏi hàng đợi chia lead"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi hàng đợi không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu hàng đợi theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu hàng đợi theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -2913,8 +2953,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy lịch trực ca thành công",
           "data": [
             {
               "id": 101,
@@ -2925,43 +2963,31 @@ export const apiV1Categories: ApiV1Category[] = [
               "status": "approved"
             }
           ],
-          "timestamp": "2026-10-08T09:36:00Z"
+          "message": "Lấy lịch trực ca thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -2985,8 +3011,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Truy vấn chi tiết ca trực thành công",
           "data": {
             "id": 101,
             "shift_name": "Ca Tối 18h-21h",
@@ -2996,55 +3020,39 @@ export const apiV1Categories: ApiV1Category[] = [
               "Vũ Hoàng Minh"
             ]
           },
-          "timestamp": "2026-10-08T09:37:00Z"
+          "message": "Truy vấn chi tiết ca trực thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi ca trực không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu ca trực theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu ca trực theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -3093,61 +3101,43 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 201,
-          "message": "Đăng ký ca trực thành công, đang chờ quản lý duyệt",
           "data": {
             "registration_id": 504,
             "status": "pending"
           },
-          "timestamp": "2026-10-08T09:38:00Z"
+          "message": "Đăng ký ca trực thành công, đang chờ quản lý duyệt"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi ca trực không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu ca trực theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu ca trực theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -3189,61 +3179,43 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Cập nhật trạng thái ca trực thành công",
           "data": {
             "id": 101,
             "status": "approved"
           },
-          "timestamp": "2026-10-08T09:39:00Z"
+          "message": "Cập nhật trạng thái ca trực thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi ca trực không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu ca trực theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu ca trực theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -3267,61 +3239,43 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Đã hủy ca trực thành công",
           "data": {
             "id": 101,
             "status": "cancelled"
           },
-          "timestamp": "2026-10-08T09:40:00Z"
+          "message": "Đã hủy ca trực thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi ca trực không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu ca trực theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu ca trực theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -3363,49 +3317,35 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Đã kích hoạt chế độ nghỉ phép thành công. Hệ thống sẽ tạm dừng chia lead.",
           "data": {
             "consultant_id": 1042,
             "vacation_mode": true
           },
-          "timestamp": "2026-10-08T09:41:00Z"
+          "message": "Đã kích hoạt chế độ nghỉ phép thành công. Hệ thống sẽ tạm dừng chia lead."
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -3451,8 +3391,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy danh sách báo giá thành công",
           "data": [
             {
               "id": 302,
@@ -3463,43 +3401,31 @@ export const apiV1Categories: ApiV1Category[] = [
               "status": "sent"
             }
           ],
-          "timestamp": "2026-10-08T09:42:00Z"
+          "message": "Lấy danh sách báo giá thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -3523,8 +3449,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Truy vấn chi tiết báo giá thành công",
           "data": {
             "id": 302,
             "quote_code": "BG-2026-0042",
@@ -3541,55 +3465,39 @@ export const apiV1Categories: ApiV1Category[] = [
               }
             ]
           },
-          "timestamp": "2026-10-08T09:43:00Z"
+          "message": "Truy vấn chi tiết báo giá thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi báo giá không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu báo giá theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu báo giá theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -3613,6 +3521,12 @@ export const apiV1Categories: ApiV1Category[] = [
         "queryParams": [],
         "bodyParams": [
           {
+            "name": "title",
+            "type": "string",
+            "required": true,
+            "desc": "Tiêu đề phiếu báo giá"
+          },
+          {
             "name": "contact_id",
             "type": "integer",
             "required": true,
@@ -3622,92 +3536,95 @@ export const apiV1Categories: ApiV1Category[] = [
             "name": "deal_id",
             "type": "integer",
             "required": false,
-            "desc": "ID cơ hội bán hàng gắn kèm"
+            "desc": "ID cơ hội bán hàng liên kết"
+          },
+          {
+            "name": "valid_until",
+            "type": "string",
+            "required": false,
+            "desc": "Ngày hết hiệu lực báo giá (YYYY-MM-DD)"
+          },
+          {
+            "name": "discount",
+            "type": "number",
+            "required": false,
+            "desc": "Số tiền chiết khấu / học bổng giảm trừ (VNĐ)"
+          },
+          {
+            "name": "notes",
+            "type": "string",
+            "required": false,
+            "desc": "Điều khoản và ghi chú báo giá"
           },
           {
             "name": "items",
             "type": "array",
             "required": true,
-            "desc": "Danh sách các sản phẩm/khóa học trong báo giá"
-          },
-          {
-            "name": "discount_amount",
-            "type": "number",
-            "required": false,
-            "default": "0",
-            "desc": "Số tiền chiết khấu hoặc học bổng giảm trừ"
+            "desc": "Danh sách hạng mục báo giá: [{ product_id, name, quantity, price }]"
           }
         ],
         "sampleBody": {
-          "contact_id": 5012,
-          "deal_id": 1205,
+          "title": "Báo giá Chương trình Thạc sĩ Quản trị Kinh doanh (MBA)",
+          "contact_id": 1025,
+          "deal_id": 310,
+          "valid_until": "2026-11-30",
+          "discount": 5000000,
+          "notes": "Áp dụng ưu đãi học bổng nhập học sớm đợt 1",
           "items": [
             {
-              "product_id": 101,
+              "product_id": 1,
+              "name": "Học phí toàn khóa MBA Quốc tế",
               "quantity": 1,
-              "price": 145000000
+              "price": 85000000
+            },
+            {
+              "product_id": 5,
+              "name": "Lệ phí xét duyệt hồ sơ & Cấp bằng quốc tế",
+              "quantity": 1,
+              "price": 5000000
             }
-          ],
-          "discount_amount": 15000000
+          ]
         },
         "sampleResponse": {
           "success": true,
-          "code": 201,
-          "message": "Tạo báo giá thành công",
           "data": {
             "id": 303,
             "quote_code": "BG-2026-0043",
             "final_amount": 130000000
           },
-          "timestamp": "2026-10-08T09:44:00Z"
+          "message": "Tạo báo giá thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi báo giá không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu báo giá theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu báo giá theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -3749,61 +3666,43 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Cập nhật báo giá thành công",
           "data": {
             "id": 303,
             "updated_at": "2026-10-08 09:45:00"
           },
-          "timestamp": "2026-10-08T09:45:00Z"
+          "message": "Cập nhật báo giá thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi báo giá không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu báo giá theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu báo giá theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -3827,61 +3726,43 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Xóa báo giá thành công",
           "data": {
             "id": 303,
             "deleted_at": "2026-10-08 09:46:00"
           },
-          "timestamp": "2026-10-08T09:46:00Z"
+          "message": "Xóa báo giá thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi báo giá không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu báo giá theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu báo giá theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -3890,8 +3771,8 @@ export const apiV1Categories: ApiV1Category[] = [
         "id": "quotes-convert-to-order",
         "method": "POST",
         "path": "/api/v1/quotes/:id/convert-to-order",
-        "title": "Chuyển Đổi Báo Giá Thành Đơn Hàng Bán Chính Thức (SO)",
-        "description": "Khi phụ huynh/học viên đồng ý chốt đăng ký, chuyển đổi trạng thái báo giá sang Đơn hàng chính thức (Sales Order) để chuyển sang Kế toán thu tiền.",
+        "title": "Chuyển đổi Báo giá thành Hóa đơn (Convert Quote to Invoice)",
+        "description": "Chuyển đổi một phiếu báo giá đã được khách hàng đồng ý thành Hóa đơn thu tiền (`invoices`) trong phân hệ Tài chính - Kế toán.",
         "category": "quotes-orders",
         "authRequired": true,
         "rateLimit": "30 requests / phút",
@@ -3907,63 +3788,46 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Chuyển đổi báo giá thành Đơn hàng bán thành công",
           "data": {
-            "order_id": 801,
-            "order_code": "SO-2026-0021",
-            "total_amount": 125000000,
-            "status": "confirmed"
+            "quote_id": 45,
+            "invoice_id": 812,
+            "invoice_number": "INV-20261016-00812",
+            "total": 85000000,
+            "status": "unpaid"
           },
-          "timestamp": "2026-10-08T09:47:00Z"
+          "message": "Đã chuyển đổi báo giá thành hóa đơn thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi báo giá không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu báo giá theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu báo giá theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -3971,9 +3835,9 @@ export const apiV1Categories: ApiV1Category[] = [
       {
         "id": "orders-list",
         "method": "GET",
-        "path": "/api/v1/orders",
+        "path": "/api/v1/sales-orders",
         "title": "Truy Vấn Danh Sách Đơn Hàng Bán / Hợp Đồng",
-        "description": "Lấy danh sách các đơn hàng bán (Sales Orders), tình trạng thanh toán, công nợ và trạng thái bàn giao đào tạo.",
+        "description": "Lấy danh sách đơn đặt hàng bán (`sales-orders`, hỗ trợ cả alias `/api/v1/orders`) kèm trạng thái phê duyệt và thanh toán.",
         "category": "quotes-orders",
         "authRequired": true,
         "rateLimit": "100 requests / phút",
@@ -4001,8 +3865,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy danh sách đơn hàng thành công",
           "data": [
             {
               "id": 801,
@@ -4014,43 +3876,31 @@ export const apiV1Categories: ApiV1Category[] = [
               "status": "pending_payment"
             }
           ],
-          "timestamp": "2026-10-08T09:48:00Z"
+          "message": "Lấy danh sách đơn hàng thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -4058,9 +3908,9 @@ export const apiV1Categories: ApiV1Category[] = [
       {
         "id": "orders-detail",
         "method": "GET",
-        "path": "/api/v1/orders/:id",
+        "path": "/api/v1/sales-orders/:id",
         "title": "Chi Tiết Đơn Hàng Bán & Lịch Trình Công Nợ",
-        "description": "Xem chi tiết toàn bộ điều khoản đơn hàng bán, lịch sử các đợt đóng học phí và số tiền còn lại phải thanh toán.",
+        "description": "Xem chi tiết thông tin đơn đặt hàng bán và danh sách sản phẩm/khóa học trong đơn.",
         "category": "quotes-orders",
         "authRequired": true,
         "rateLimit": "100 requests / phút",
@@ -4074,8 +3924,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Truy vấn chi tiết đơn hàng thành công",
           "data": {
             "id": 801,
             "order_code": "SO-2026-0021",
@@ -4088,65 +3936,49 @@ export const apiV1Categories: ApiV1Category[] = [
               }
             ]
           },
-          "timestamp": "2026-10-08T09:49:00Z"
+          "message": "Truy vấn chi tiết đơn hàng thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi đơn hàng không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu đơn hàng theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu đơn hàng theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
       },
       {
-        "id": "orders-update-status",
-        "method": "PUT",
-        "path": "/api/v1/orders/:id/status",
-        "title": "Cập Nhật Trạng Thái Đơn Hàng Bán",
-        "description": "Quản lý / Kế toán cập nhật trạng thái duyệt đơn hàng (Approved/Cancelled).",
+        "id": "orders-approve",
+        "method": "POST",
+        "path": "/api/v1/sales-orders/:id/approve",
+        "title": "Phê duyệt Đơn đặt hàng (Approve Sales Order)",
+        "description": "Phê duyệt đơn đặt hàng bán (`POST /api/v1/sales-orders/:id/approve`). Ngoài ra hỗ trợ `POST /api/v1/sales-orders/:id/reject` để từ chối và `POST /api/v1/sales-orders/:id/cancel` để hủy đơn.",
         "category": "quotes-orders",
         "authRequired": true,
         "rateLimit": "30 requests / phút",
@@ -4160,79 +3992,55 @@ export const apiV1Categories: ApiV1Category[] = [
         "queryParams": [],
         "bodyParams": [
           {
-            "name": "status",
-            "type": "string",
-            "required": true,
-            "desc": "'approved', 'cancelled'"
-          },
-          {
-            "name": "reason",
+            "name": "note",
             "type": "string",
             "required": false,
-            "desc": "Lý do thay đổi trạng thái"
+            "desc": "Ghi chú phê duyệt đơn hàng"
           }
         ],
         "sampleBody": {
-          "status": "approved",
-          "reason": "Đã đối soát tiền cọc"
+          "note": "Đã kiểm tra đủ điều kiện ghi danh và công nợ"
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Cập nhật trạng thái đơn hàng thành công",
           "data": {
-            "id": 801,
-            "status": "approved"
+            "id": 120,
+            "status": "approved",
+            "approved_at": "2026-10-16T10:00:00Z"
           },
-          "timestamp": "2026-10-08T09:50:00Z"
+          "message": "Đã phê duyệt đơn hàng thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi đơn hàng không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu đơn hàng theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu đơn hàng theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -4240,9 +4048,9 @@ export const apiV1Categories: ApiV1Category[] = [
       {
         "id": "orders-delete",
         "method": "DELETE",
-        "path": "/api/v1/orders/:id",
+        "path": "/api/v1/sales-orders/:id",
         "title": "Hủy / Xóa Đơn Hàng Bán Chưa Thanh Toán",
-        "description": "Hủy đơn hàng bán khi khách hàng không tiếp tục đăng ký và chưa phát sinh phiếu thu tiền.",
+        "description": "Xóa đơn đặt hàng bán ở trạng thái nháp hoặc đã hủy.",
         "category": "quotes-orders",
         "authRequired": true,
         "rateLimit": "20 requests / phút",
@@ -4256,61 +4064,43 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Đã hủy đơn hàng bán thành công",
           "data": {
             "id": 801,
             "status": "deleted"
           },
-          "timestamp": "2026-10-08T09:51:00Z"
+          "message": "Đã hủy đơn hàng bán thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi đơn hàng không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu đơn hàng theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu đơn hàng theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -4356,8 +4146,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy danh sách phiếu đặt cọc thành công",
           "data": [
             {
               "id": 401,
@@ -4368,43 +4156,31 @@ export const apiV1Categories: ApiV1Category[] = [
               "payment_method": "bank_transfer"
             }
           ],
-          "timestamp": "2026-10-08T09:52:00Z"
+          "message": "Lấy danh sách phiếu đặt cọc thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -4428,63 +4204,45 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Truy vấn chi tiết phiếu cọc thành công",
           "data": {
             "id": 401,
             "amount": 5000000,
             "unc_image_url": "https://myerp.ideas.edu.vn/uploads/unc/unc_401.jpg",
             "bank_account": "Techcombank - 1903..."
           },
-          "timestamp": "2026-10-08T09:53:00Z"
+          "message": "Truy vấn chi tiết phiếu cọc thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi phiếu cọc không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu phiếu cọc theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu phiếu cọc theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -4511,91 +4269,100 @@ export const apiV1Categories: ApiV1Category[] = [
             "name": "contact_id",
             "type": "integer",
             "required": true,
-            "desc": "ID khách hàng/học viên đặt cọc"
+            "desc": "ID khách hàng / học viên nộp đặt cọc"
           },
           {
-            "name": "amount",
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "desc": "ID dự án / chương trình đào tạo đăng ký giữ chỗ"
+          },
+          {
+            "name": "price",
             "type": "number",
             "required": true,
-            "desc": "Số tiền đặt cọc (VNĐ)"
+            "desc": "Số tiền đặt cọc (VNĐ) — hỗ trợ cả tên trường amount hoặc deposit_amount"
+          },
+          {
+            "name": "receipt_url",
+            "type": "string",
+            "required": false,
+            "desc": "URL ảnh chụp chứng từ chuyển khoản UNC / biên lai thu tiền"
           },
           {
             "name": "payment_method",
             "type": "string",
-            "required": true,
-            "desc": "'bank_transfer', 'cash', 'pos_card'"
+            "required": false,
+            "enumOptions": [
+              "bank_transfer",
+              "cash",
+              "card",
+              "momo"
+            ],
+            "desc": "Phương thức thanh toán đặt cọc"
           },
           {
-            "name": "unc_image_url",
+            "name": "deposit_date",
             "type": "string",
             "required": false,
-            "desc": "Đường dẫn ảnh chứng từ chuyển khoản UNC"
+            "desc": "Ngày thực hiện đặt cọc (YYYY-MM-DD)"
+          },
+          {
+            "name": "notes",
+            "type": "string",
+            "required": false,
+            "desc": "Ghi chú khoản cọc và cam kết lộ trình đóng học phí"
           }
         ],
         "sampleBody": {
-          "contact_id": 5012,
-          "amount": 5000000,
+          "contact_id": 1025,
+          "project_id": 2,
+          "price": 10000000,
           "payment_method": "bank_transfer",
-          "unc_image_url": "https://myerp.ideas.edu.vn/uploads/unc/sample.jpg"
+          "receipt_url": "https://myerp.ideas.edu.vn/backend/uploads/tenant_1/unc_1025.jpg",
+          "deposit_date": "2026-10-16",
+          "notes": "Đặt cọc giữ suất học bổng MBA đợt 1"
         },
         "sampleResponse": {
           "success": true,
-          "code": 201,
-          "message": "Tạo phiếu đặt cọc thành công",
           "data": {
             "id": 402,
             "deposit_code": "DC-2026-0016",
             "status": "pending_confirmation"
           },
-          "timestamp": "2026-10-08T09:54:00Z"
+          "message": "Tạo phiếu đặt cọc thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi phiếu cọc không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu phiếu cọc theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu phiếu cọc theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -4619,79 +4386,81 @@ export const apiV1Categories: ApiV1Category[] = [
         "queryParams": [],
         "bodyParams": [
           {
-            "name": "amount",
-            "type": "number",
-            "required": false,
-            "desc": "Số tiền hiệu chỉnh"
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "desc": "ID dự án / chương trình đào tạo"
           },
           {
-            "name": "unc_image_url",
+            "name": "price",
+            "type": "number",
+            "required": true,
+            "desc": "Số tiền đặt cọc cập nhật (VNĐ) — hỗ trợ cả amount / deposit_amount"
+          },
+          {
+            "name": "receipt_url",
             "type": "string",
             "required": false,
-            "desc": "URL ảnh chứng từ mới"
+            "desc": "URL ảnh chứng từ UNC cập nhật"
+          },
+          {
+            "name": "deposit_date",
+            "type": "string",
+            "required": false,
+            "desc": "Ngày đặt cọc (YYYY-MM-DD)"
+          },
+          {
+            "name": "notes",
+            "type": "string",
+            "required": false,
+            "desc": "Ghi chú điều chỉnh phiếu đặt cọc"
           }
         ],
         "sampleBody": {
-          "amount": 5000000,
-          "unc_image_url": "https://myerp.ideas.edu.vn/uploads/unc/unc_cleared.jpg"
+          "project_id": 2,
+          "price": 15000000,
+          "receipt_url": "https://myerp.ideas.edu.vn/backend/uploads/tenant_1/unc_1025_updated.jpg",
+          "notes": "Khách đóng bổ sung thêm 5.000.000đ tiền cọc"
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Cập nhật phiếu cọc thành công",
           "data": {
             "id": 401,
             "updated_at": "2026-10-08 09:55:00"
           },
-          "timestamp": "2026-10-08T09:55:00Z"
+          "message": "Cập nhật phiếu cọc thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi phiếu cọc không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu phiếu cọc theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu phiếu cọc theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -4715,61 +4484,43 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Xóa phiếu cọc thành công",
           "data": {
             "id": 401,
             "deleted_at": "2026-10-08 09:56:00"
           },
-          "timestamp": "2026-10-08T09:56:00Z"
+          "message": "Xóa phiếu cọc thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi phiếu cọc không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu phiếu cọc theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu phiếu cọc theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -4811,62 +4562,44 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Khớp tiền cọc thành công. Sổ quỹ tài khoản đã được ghi nhận.",
           "data": {
             "id": 401,
             "status": "confirmed",
             "confirmed_by": "Kế toán Nguyễn Mai"
           },
-          "timestamp": "2026-10-08T09:57:00Z"
+          "message": "Khớp tiền cọc thành công. Sổ quỹ tài khoản đã được ghi nhận."
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi phiếu cọc không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu phiếu cọc theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu phiếu cọc theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -4908,61 +4641,43 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Tạo đề xuất hoàn cọc thành công, chờ Kế toán trưởng phê duyệt chi",
           "data": {
             "id": 401,
             "status": "refund_requested"
           },
-          "timestamp": "2026-10-08T09:58:00Z"
+          "message": "Tạo đề xuất hoàn cọc thành công, chờ Kế toán trưởng phê duyệt chi"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi phiếu cọc không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu phiếu cọc theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu phiếu cọc theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -5014,8 +4729,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy danh sách phiếu thu thành công",
           "data": [
             {
               "id": 901,
@@ -5026,43 +4739,31 @@ export const apiV1Categories: ApiV1Category[] = [
               "created_at": "2026-10-07"
             }
           ],
-          "timestamp": "2026-10-08T09:59:00Z"
+          "message": "Lấy danh sách phiếu thu thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -5086,62 +4787,44 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy chi tiết phiếu thu thành công",
           "data": {
             "id": 901,
             "amount": 25000000,
             "description": "Thu học phí Đợt 1 Khóa BBA 2026"
           },
-          "timestamp": "2026-10-08T10:00:00Z"
+          "message": "Lấy chi tiết phiếu thu thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi phiếu thu không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu phiếu thu theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu phiếu thu theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -5165,94 +4848,97 @@ export const apiV1Categories: ApiV1Category[] = [
         "queryParams": [],
         "bodyParams": [
           {
-            "name": "contact_id",
-            "type": "integer",
-            "required": true,
-            "desc": "ID khách hàng/học viên nộp tiền"
-          },
-          {
-            "name": "amount",
-            "type": "number",
-            "required": true,
-            "desc": "Số tiền thu (VNĐ)"
-          },
-          {
-            "name": "account_id",
-            "type": "integer",
-            "required": true,
-            "desc": "ID tài khoản ngân hàng hoặc quỹ tiền mặt nhận"
-          },
-          {
-            "name": "description",
+            "name": "title",
             "type": "string",
             "required": true,
-            "desc": "Nội dung thu tiền"
+            "desc": "Tiêu đề hóa đơn thu tiền / học phí"
+          },
+          {
+            "name": "total",
+            "type": "number",
+            "required": true,
+            "desc": "Tổng số tiền thanh toán của hóa đơn (VNĐ) — hỗ trợ cả tên trường amount"
+          },
+          {
+            "name": "contact_id",
+            "type": "integer",
+            "required": false,
+            "desc": "ID khách hàng / học viên nộp tiền"
+          },
+          {
+            "name": "deal_id",
+            "type": "integer",
+            "required": false,
+            "desc": "ID cơ hội bán hàng liên kết"
+          },
+          {
+            "name": "due_date",
+            "type": "string",
+            "required": false,
+            "desc": "Hạn thanh toán (YYYY-MM-DD)"
+          },
+          {
+            "name": "items",
+            "type": "array",
+            "required": false,
+            "desc": "Danh sách khoản mục chi tiết trên hóa đơn"
           }
         ],
         "sampleBody": {
-          "contact_id": 5012,
-          "amount": 25000000,
-          "account_id": 1,
-          "description": "Thu học phí Học kỳ 1"
+          "title": "Thu học phí đợt 1 - Chương trình MBA Quốc tế",
+          "total": 45000000,
+          "contact_id": 1025,
+          "deal_id": 310,
+          "due_date": "2026-10-25",
+          "items": [
+            {
+              "name": "Học phí học kỳ I - MBA",
+              "quantity": 1,
+              "unit_price": 45000000,
+              "subtotal": 45000000
+            }
+          ]
         },
         "sampleResponse": {
           "success": true,
-          "code": 201,
-          "message": "Tạo phiếu thu thành công",
           "data": {
             "id": 902,
             "invoice_code": "PT-2026-0106",
             "amount": 25000000
           },
-          "timestamp": "2026-10-08T10:01:00Z"
+          "message": "Tạo phiếu thu thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi phiếu thu không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu phiếu thu theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu phiếu thu theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -5276,61 +4962,43 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Đã hủy phiếu thu thành công",
           "data": {
             "id": 902,
             "status": "void"
           },
-          "timestamp": "2026-10-08T10:02:00Z"
+          "message": "Đã hủy phiếu thu thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi phiếu thu không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu phiếu thu theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu phiếu thu theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -5368,8 +5036,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy danh sách phiếu chi thành công",
           "data": [
             {
               "id": 612,
@@ -5379,43 +5045,31 @@ export const apiV1Categories: ApiV1Category[] = [
               "status": "pending_approval"
             }
           ],
-          "timestamp": "2026-10-08T10:03:00Z"
+          "message": "Lấy danh sách phiếu chi thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -5439,63 +5093,45 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy chi tiết phiếu chi thành công",
           "data": {
             "id": 612,
             "amount": 18000000,
             "requester": "Marketing Team",
             "status": "pending_approval"
           },
-          "timestamp": "2026-10-08T10:04:00Z"
+          "message": "Lấy chi tiết phiếu chi thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi phiếu chi không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu phiếu chi theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu phiếu chi theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -5522,91 +5158,108 @@ export const apiV1Categories: ApiV1Category[] = [
             "name": "title",
             "type": "string",
             "required": true,
-            "desc": "Nội dung mục đích chi tiền"
+            "desc": "Tiêu đề phiếu đề nghị thanh toán / chi phí"
           },
           {
             "name": "amount",
             "type": "number",
             "required": true,
-            "desc": "Số tiền đề nghị chi (VNĐ)"
+            "desc": "Tổng số tiền đề nghị chi (VNĐ, phải lớn hơn 0)"
           },
           {
-            "name": "category_id",
-            "type": "integer",
+            "name": "category",
+            "type": "string",
             "required": true,
-            "desc": "ID danh mục chi phí (vd: Marketing, Hành chính, Lương)"
+            "desc": "Danh mục khoản chi (VD: Marketing, Văn phòng phẩm, Công tác phí, Hoa hồng, Khác)"
           },
           {
-            "name": "account_id",
+            "name": "approver_id",
             "type": "integer",
             "required": true,
-            "desc": "ID quỹ/tài khoản nguồn tiền chi"
+            "desc": "ID Quản lý phê duyệt cấp 1"
+          },
+          {
+            "name": "approver_id_2",
+            "type": "integer",
+            "required": false,
+            "desc": "ID Lãnh đạo phê duyệt cấp 2 (Bắt buộc khi số tiền chi >= 5.000.000 VNĐ)"
+          },
+          {
+            "name": "vendor_name",
+            "type": "string",
+            "required": false,
+            "desc": "Tên đơn vị thụ hưởng / nhà cung cấp"
+          },
+          {
+            "name": "date",
+            "type": "string",
+            "required": false,
+            "desc": "Ngày phát sinh chi phí (YYYY-MM-DD)"
+          },
+          {
+            "name": "notes",
+            "type": "string",
+            "required": false,
+            "desc": "Thuyết minh chi tiết nội dung đề nghị thanh toán và thông tin tài khoản nhận"
+          },
+          {
+            "name": "image_url",
+            "type": "string",
+            "required": false,
+            "desc": "Đường dẫn tệp chứng từ / hóa đơn VAT đính kèm"
           }
         ],
         "sampleBody": {
-          "title": "Chi phí in ấn tờ rơi ngày hội Open Day",
-          "amount": 4500000,
-          "category_id": 2,
-          "account_id": 1
+          "title": "Đề nghị thanh toán chi phí chạy quảng cáo Facebook tháng 10/2026",
+          "amount": 12500000,
+          "category": "Marketing",
+          "approver_id": 1003,
+          "approver_id_2": 1004,
+          "vendor_name": "Meta Platforms Ireland Limited",
+          "date": "2026-10-16",
+          "notes": "Chi phí chiến dịch tuyển sinh MBA Khóa 18 kèm hóa đơn VAT",
+          "image_url": "uploads/tenant_1/invoice_meta_oct.pdf"
         },
         "sampleResponse": {
           "success": true,
-          "code": 201,
-          "message": "Tạo phiếu đề nghị chi tiền thành công",
           "data": {
             "id": 613,
             "expense_code": "PC-2026-0090",
             "status": "pending_approval"
           },
-          "timestamp": "2026-10-08T10:05:00Z"
+          "message": "Tạo phiếu đề nghị chi tiền thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi phiếu chi không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu phiếu chi theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu phiếu chi theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -5641,62 +5294,44 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Phê duyệt xuất quỹ phiếu chi thành công",
           "data": {
             "id": 612,
             "status": "approved",
             "approved_at": "2026-10-08 10:06:00"
           },
-          "timestamp": "2026-10-08T10:06:00Z"
+          "message": "Phê duyệt xuất quỹ phiếu chi thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi phiếu chi không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu phiếu chi theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu phiếu chi theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -5731,61 +5366,43 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Từ chối duyệt phiếu chi thành công",
           "data": {
             "id": 612,
             "status": "rejected"
           },
-          "timestamp": "2026-10-08T10:07:00Z"
+          "message": "Từ chối duyệt phiếu chi thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi phiếu chi không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu phiếu chi theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu phiếu chi theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -5809,61 +5426,43 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Đã hủy phiếu đề nghị chi tiền",
           "data": {
             "id": 613,
             "status": "cancelled"
           },
-          "timestamp": "2026-10-08T10:08:00Z"
+          "message": "Đã hủy phiếu đề nghị chi tiền"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi phiếu chi không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu phiếu chi theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu phiếu chi theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -5887,8 +5486,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy danh sách tài khoản quỹ thành công",
           "data": [
             {
               "id": 1,
@@ -5903,43 +5500,31 @@ export const apiV1Categories: ApiV1Category[] = [
               "type": "bank"
             }
           ],
-          "timestamp": "2026-10-08T10:09:00Z"
+          "message": "Lấy danh sách tài khoản quỹ thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -5948,16 +5533,16 @@ export const apiV1Categories: ApiV1Category[] = [
   },
   {
     "id": "cooperation",
-    "title": "09. Đối Tác Tuyển Sinh & Hoa Hồng Đại Lý (Cooperation & Agent)",
+    "title": "9. Phiếu Hợp Tác & Chia Doanh Số (Cooperation Slips)",
     "iconName": "Briefcase",
-    "description": "Quản trị mạng lưới đối tác liên kết tuyển sinh, hợp tác đại lý giới thiệu học viên, tính toán tỷ lệ chia sẻ hoa hồng và thanh toán chiết khấu.",
+    "description": "Quản lý phiếu hợp tác tư vấn nội bộ giữa các nhân viên Sale trên cùng một hồ sơ khách hàng/học viên, cấu hình tỷ lệ chia sẻ doanh số (tổng 100%), ký xác nhận và phê duyệt đa cấp.",
     "endpoints": [
       {
         "id": "coop-slips-list",
         "method": "GET",
         "path": "/api/v1/cooperation/slips",
-        "title": "Truy Vấn Danh Sách Phiếu Ghi Nhận Doanh Số Đối Tác",
-        "description": "Lấy danh sách các phiếu tính hoa hồng cho đối tác, cộng tác viên tuyển sinh và các trường THPT liên kết.",
+        "title": "Danh sách Phiếu hợp tác chia doanh số (List Cooperation Slips)",
+        "description": "Lấy danh sách các phiếu hợp tác nội bộ giữa nhiều nhân viên Sale cùng chăm sóc chung một hồ sơ khách hàng/học viên, kèm trạng thái ký xác nhận và phê duyệt.",
         "category": "cooperation",
         "authRequired": true,
         "rateLimit": "100 requests / phút",
@@ -5985,8 +5570,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy danh sách phiếu đối tác thành công",
           "data": [
             {
               "id": 701,
@@ -5997,43 +5580,31 @@ export const apiV1Categories: ApiV1Category[] = [
               "status": "approved"
             }
           ],
-          "timestamp": "2026-10-08T10:10:00Z"
+          "message": "Lấy danh sách phiếu đối tác thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -6042,8 +5613,8 @@ export const apiV1Categories: ApiV1Category[] = [
         "id": "coop-slips-detail",
         "method": "GET",
         "path": "/api/v1/cooperation/slips/:id",
-        "title": "Chi Tiết Phiếu Hoa Hồng Tuyển Sinh Đối Tác",
-        "description": "Xem chi tiết danh sách học viên do đối tác giới thiệu, số tiền học phí đã thu và tỷ lệ % hoa hồng được hưởng.",
+        "title": "Chi tiết Phiếu hợp tác & Tỷ lệ chia phần trăm",
+        "description": "Xem chi tiết phiếu hợp tác, danh sách các nhân viên đồng phụ trách (`collaborators`), tỷ lệ phần trăm doanh số của từng người và lịch sử điều chỉnh.",
         "category": "cooperation",
         "authRequired": true,
         "rateLimit": "100 requests / phút",
@@ -6057,8 +5628,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Truy vấn chi tiết phiếu đối tác thành công",
           "data": {
             "id": 701,
             "commission_rate": "10%",
@@ -6067,55 +5636,39 @@ export const apiV1Categories: ApiV1Category[] = [
               "Lê Văn Hùng"
             ]
           },
-          "timestamp": "2026-10-08T10:11:00Z"
+          "message": "Truy vấn chi tiết phiếu đối tác thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi phiếu đối tác không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu phiếu đối tác theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu phiếu đối tác theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -6124,8 +5677,8 @@ export const apiV1Categories: ApiV1Category[] = [
         "id": "coop-slips-create",
         "method": "POST",
         "path": "/api/v1/cooperation/slips",
-        "title": "Tạo Phiếu Hoa Hồng Tuyển Sinh Đối Tác Mới",
-        "description": "Khởi tạo phiếu tính hoa hồng cho đối tác khi học viên nhập học thành công và hoàn thành nghĩa vụ học phí.",
+        "title": "Tạo Phiếu hợp tác nội bộ (Create Cooperation Slip)",
+        "description": "Khởi tạo phiếu hợp tác chia sẻ doanh số/hoa hồng giữa các nhân viên Sale cùng tư vấn một khách hàng. Tổng tỷ lệ phần trăm (`percentage`) của các thành viên trong `shares` phải bằng đúng 100%.",
         "category": "cooperation",
         "authRequired": true,
         "rateLimit": "60 requests / phút",
@@ -6139,86 +5692,86 @@ export const apiV1Categories: ApiV1Category[] = [
         "queryParams": [],
         "bodyParams": [
           {
-            "name": "partner_id",
-            "type": "integer",
-            "required": true,
-            "desc": "ID đối tác liên kết"
-          },
-          {
             "name": "contact_id",
             "type": "integer",
             "required": true,
-            "desc": "ID học viên được giới thiệu"
+            "desc": "ID khách hàng / học viên được đồng tư vấn"
           },
           {
-            "name": "commission_amount",
-            "type": "number",
+            "name": "project_id",
+            "type": "integer",
+            "required": false,
+            "desc": "ID dự án / chương trình đào tạo"
+          },
+          {
+            "name": "reason",
+            "type": "string",
             "required": true,
-            "desc": "Số tiền hoa hồng tính toán (VNĐ)"
+            "desc": "Lý do hợp tác và mô tả đóng góp của từng nhân sự"
+          },
+          {
+            "name": "shares",
+            "type": "array",
+            "required": true,
+            "desc": "Danh sách phân bổ tỷ lệ doanh số (tổng percentage = 100): [{ user_id, percentage, role_note }]"
           }
         ],
         "sampleBody": {
-          "partner_id": 12,
-          "contact_id": 5012,
-          "commission_amount": 5000000
+          "contact_id": 1025,
+          "project_id": 2,
+          "reason": "Sale A khai thác nguồn khách hàng và hẹn lịch, Sale B trực tiếp tư vấn chuyên sâu và chốt cọc tại văn phòng",
+          "shares": [
+            {
+              "user_id": 12,
+              "percentage": 50,
+              "role_note": "Người tạo nguồn & chăm sóc ban đầu"
+            },
+            {
+              "user_id": 18,
+              "percentage": 50,
+              "role_note": "Người tư vấn trực tiếp & chốt hồ sơ"
+            }
+          ]
         },
         "sampleResponse": {
           "success": true,
-          "code": 201,
-          "message": "Tạo phiếu hoa hồng đối tác thành công",
           "data": {
             "id": 702,
             "status": "pending_approval"
           },
-          "timestamp": "2026-10-08T10:12:00Z"
+          "message": "Tạo phiếu hoa hồng đối tác thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi phiếu đối tác không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu phiếu đối tác theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu phiếu đối tác theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -6227,8 +5780,8 @@ export const apiV1Categories: ApiV1Category[] = [
         "id": "coop-slips-update",
         "method": "PUT",
         "path": "/api/v1/cooperation/slips/:id",
-        "title": "Cập Nhật Tỷ Lệ Hoa Hồng & Số Tiền Chi Trả",
-        "description": "Điều chỉnh số tiền hoặc chính sách % chiết khấu đối tác trước khi duyệt chi.",
+        "title": "Cập nhật Tỷ lệ chia sẻ Phiếu hợp tác",
+        "description": "Cập nhật nội dung hoặc điều chỉnh tỷ lệ phần trăm chia doanh số giữa các nhân viên hợp tác khi phiếu chưa khóa.",
         "category": "cooperation",
         "authRequired": true,
         "rateLimit": "60 requests / phút",
@@ -6260,61 +5813,43 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Cập nhật phiếu hoa hồng thành công",
           "data": {
             "id": 701,
             "updated_at": "2026-10-08 10:13:00"
           },
-          "timestamp": "2026-10-08T10:13:00Z"
+          "message": "Cập nhật phiếu hoa hồng thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi phiếu đối tác không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu phiếu đối tác theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu phiếu đối tác theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -6338,61 +5873,43 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Hủy phiếu hoa hồng đối tác thành công",
           "data": {
             "id": 701,
             "status": "deleted"
           },
-          "timestamp": "2026-10-08T10:14:00Z"
+          "message": "Hủy phiếu hoa hồng đối tác thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi phiếu đối tác không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu phiếu đối tác theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu phiếu đối tác theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -6401,8 +5918,8 @@ export const apiV1Categories: ApiV1Category[] = [
         "id": "coop-slips-approve",
         "method": "POST",
         "path": "/api/v1/cooperation/slips/:id/approve",
-        "title": "Phê Duyệt Chi Trả Hoa Hồng Đối Tác",
-        "description": "Giám đốc phê duyệt phiếu chi trả hoa hồng để kế toán tiến hành chuyển khoản cho đối tác.",
+        "title": "Phê duyệt Phiếu hợp tác chia doanh số",
+        "description": "Trưởng phòng / Giám đốc phê duyệt phiếu hợp tác sau khi tất cả nhân viên tham gia đã ký xác nhận đồng thuận tỷ lệ chia.",
         "category": "cooperation",
         "authRequired": true,
         "rateLimit": "30 requests / phút",
@@ -6417,61 +5934,43 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Duyệt chi trả hoa hồng đối tác thành công",
           "data": {
             "id": 701,
             "status": "approved"
           },
-          "timestamp": "2026-10-08T10:15:00Z"
+          "message": "Duyệt chi trả hoa hồng đối tác thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi phiếu đối tác không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu phiếu đối tác theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu phiếu đối tác theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -6516,8 +6015,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy lịch sử chấm công thành công",
           "data": [
             {
               "id": 9210,
@@ -6528,43 +6025,31 @@ export const apiV1Categories: ApiV1Category[] = [
               "device_name": "iPhone 15 Pro"
             }
           ],
-          "timestamp": "2026-10-08T10:16:00Z"
+          "message": "Lấy lịch sử chấm công thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -6588,8 +6073,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy chi tiết chấm công thành công",
           "data": {
             "id": 9210,
             "latitude": 10.7989,
@@ -6597,55 +6080,39 @@ export const apiV1Categories: ApiV1Category[] = [
             "wifi_ssid": "IDEAS_OFFICE_5G",
             "distance_meters": 12.5
           },
-          "timestamp": "2026-10-08T10:17:00Z"
+          "message": "Lấy chi tiết chấm công thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi bản ghi chấm công không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu bản ghi chấm công theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu bản ghi chấm công theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -6669,94 +6136,90 @@ export const apiV1Categories: ApiV1Category[] = [
         "queryParams": [],
         "bodyParams": [
           {
-            "name": "type",
+            "name": "selfie_url",
             "type": "string",
             "required": true,
-            "desc": "'check_in' hoặc 'check_out'"
+            "desc": "URL ảnh chụp Selfie trực tiếp từ Camera tại thời điểm chấm công (Bắt buộc để chống chấm công hộ)"
           },
           {
             "name": "latitude",
             "type": "number",
             "required": true,
-            "desc": "Vĩ độ GPS thiết bị"
+            "desc": "Vĩ độ GPS hiện tại của thiết bị"
           },
           {
             "name": "longitude",
             "type": "number",
             "required": true,
-            "desc": "Kinh độ GPS thiết bị"
+            "desc": "Kinh độ GPS hiện tại của thiết bị"
           },
           {
-            "name": "wifi_bssid",
+            "name": "branch_id",
+            "type": "integer",
+            "required": false,
+            "desc": "ID chi nhánh / văn phòng làm việc"
+          },
+          {
+            "name": "wifi_ssid",
             "type": "string",
             "required": false,
-            "desc": "Địa chỉ MAC WiFi thiết bị đang kết nối"
+            "desc": "Tên mạng WiFi văn phòng (nếu có)"
+          },
+          {
+            "name": "note",
+            "type": "string",
+            "required": false,
+            "desc": "Ghi chú chấm công (nếu đi công tác hoặc gặp khách hàng bên ngoài)"
           }
         ],
         "sampleBody": {
-          "type": "check_in",
-          "latitude": 10.7989,
-          "longitude": 106.6541,
-          "wifi_bssid": "ac:84:c6:28:11:02"
+          "selfie_url": "https://myerp.ideas.edu.vn/backend/uploads/tenant_1/checkin_selfie_20261016.jpg",
+          "latitude": 10.776889,
+          "longitude": 106.687312,
+          "branch_id": 1,
+          "wifi_ssid": "IDEAS_OFFICE_5G",
+          "note": "Chấm công ca sáng tại văn phòng Quận 3"
         },
         "sampleResponse": {
           "success": true,
-          "code": 201,
-          "message": "Chấm công thành công! Đúng giờ làm việc.",
           "data": {
             "id": 9211,
             "check_time": "2026-10-08 08:29:00",
             "status": "valid"
           },
-          "timestamp": "2026-10-08T10:18:00Z"
+          "message": "Chấm công thành công! Đúng giờ làm việc."
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi chấm công không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu chấm công theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu chấm công theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "LOCATION_OUT_OF_RANGE",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -6798,61 +6261,43 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Hiệu chỉnh chấm công thành công",
           "data": {
             "id": 9210,
             "status": "manually_adjusted"
           },
-          "timestamp": "2026-10-08T10:19:00Z"
+          "message": "Hiệu chỉnh chấm công thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi bản ghi chấm công không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu bản ghi chấm công theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu bản ghi chấm công theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -6876,61 +6321,43 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Xóa bản ghi chấm công thành công",
           "data": {
             "id": 9210,
             "deleted_at": "2026-10-08 10:20:00"
           },
-          "timestamp": "2026-10-08T10:20:00Z"
+          "message": "Xóa bản ghi chấm công thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi bản ghi chấm công không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu bản ghi chấm công theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu bản ghi chấm công theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -6961,51 +6388,37 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy thống kê chấm công thành công",
           "data": {
             "standard_days": 26,
             "actual_worked_days": 24.5,
             "late_count": 1,
             "late_minutes": 15
           },
-          "timestamp": "2026-10-08T10:21:00Z"
+          "message": "Lấy thống kê chấm công thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -7035,17 +6448,27 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "queryParams": [
           {
-            "name": "month",
+            "name": "month_year",
             "type": "string",
-            "required": true,
-            "desc": "Tháng lương (YYYY-MM)"
+            "required": false,
+            "desc": "Kỳ lương cần truy vấn theo định dạng YYYY-MM (VD: \"2026-10\")"
+          },
+          {
+            "name": "department_id",
+            "type": "integer",
+            "required": false,
+            "desc": "Lọc theo ID phòng ban"
+          },
+          {
+            "name": "user_id",
+            "type": "integer",
+            "required": false,
+            "desc": "Lọc phiếu lương của một nhân sự cụ thể"
           }
         ],
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy bảng lương thành công",
           "data": [
             {
               "id": 501,
@@ -7055,43 +6478,31 @@ export const apiV1Categories: ApiV1Category[] = [
               "status": "approved"
             }
           ],
-          "timestamp": "2026-10-08T10:22:00Z"
+          "message": "Lấy bảng lương thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -7115,8 +6526,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Truy vấn phiếu lương thành công",
           "data": {
             "employee_name": "Nguyễn Thị Lan",
             "base_salary": 12000000,
@@ -7125,55 +6534,39 @@ export const apiV1Categories: ApiV1Category[] = [
             "deduction_insurance": 1260000,
             "net_salary": 20740000
           },
-          "timestamp": "2026-10-08T10:23:00Z"
+          "message": "Truy vấn phiếu lương thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi phiếu lương không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu phiếu lương theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu phiếu lương theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -7197,61 +6590,53 @@ export const apiV1Categories: ApiV1Category[] = [
         "queryParams": [],
         "bodyParams": [
           {
-            "name": "month",
+            "name": "month_year",
             "type": "string",
             "required": true,
-            "desc": "Tháng cần tính toán (YYYY-MM)"
+            "desc": "Kỳ lương cần chạy động cơ tính toán tự động (Định dạng YYYY-MM, VD: \"2026-10\")"
+          },
+          {
+            "name": "department_id",
+            "type": "integer",
+            "required": false,
+            "desc": "ID phòng ban cần tính (bỏ trống để tính toàn công ty)"
           }
         ],
         "sampleBody": {
-          "month": "2026-10"
+          "month_year": "2026-10"
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Bảng lương đã được tính toán thành công",
           "data": {
             "month": "2026-10",
             "processed_employees": 48,
             "status": "draft"
           },
-          "timestamp": "2026-10-08T10:24:00Z"
+          "message": "Bảng lương đã được tính toán thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -7299,61 +6684,43 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Hiệu chỉnh phiếu lương thành công",
           "data": {
             "id": 501,
             "net_salary": 21740000
           },
-          "timestamp": "2026-10-08T10:25:00Z"
+          "message": "Hiệu chỉnh phiếu lương thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi phiếu lương không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu phiếu lương theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu phiếu lương theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -7388,62 +6755,44 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Bảng lương tháng đã được duyệt và khóa sổ thành công",
           "data": {
             "id": 501,
             "status": "approved",
             "locked": true
           },
-          "timestamp": "2026-10-08T10:26:00Z"
+          "message": "Bảng lương tháng đã được duyệt và khóa sổ thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi bảng lương không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu bảng lương theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu bảng lương theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -7467,61 +6816,43 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Đã hủy bảng lương nháp thành công",
           "data": {
             "id": 501,
             "status": "deleted"
           },
-          "timestamp": "2026-10-08T10:27:00Z"
+          "message": "Đã hủy bảng lương nháp thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi bảng lương không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu bảng lương theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu bảng lương theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -7572,8 +6903,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy danh sách công việc thành công",
           "data": [
             {
               "id": 305,
@@ -7584,43 +6913,31 @@ export const apiV1Categories: ApiV1Category[] = [
               "progress": 60
             }
           ],
-          "timestamp": "2026-10-08T10:28:00Z"
+          "message": "Lấy danh sách công việc thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -7644,8 +6961,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Truy vấn chi tiết công việc thành công",
           "data": {
             "id": 305,
             "title": "Thiết kế Standee",
@@ -7657,55 +6972,39 @@ export const apiV1Categories: ApiV1Category[] = [
               }
             ]
           },
-          "timestamp": "2026-10-08T10:29:00Z"
+          "message": "Truy vấn chi tiết công việc thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi công việc không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu công việc theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu công việc theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -7768,61 +7067,43 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 201,
-          "message": "Tạo và giao việc thành công",
           "data": {
             "id": 306,
             "status": "todo"
           },
-          "timestamp": "2026-10-08T10:30:00Z"
+          "message": "Tạo và giao việc thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi công việc không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu công việc theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu công việc theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -7864,61 +7145,43 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Cập nhật công việc thành công",
           "data": {
             "id": 305,
             "progress": 80
           },
-          "timestamp": "2026-10-08T10:31:00Z"
+          "message": "Cập nhật công việc thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi công việc không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu công việc theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu công việc theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -7942,61 +7205,43 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Đã xóa công việc thành công",
           "data": {
             "id": 305,
             "status": "deleted"
           },
-          "timestamp": "2026-10-08T10:32:00Z"
+          "message": "Đã xóa công việc thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi công việc không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu công việc theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu công việc theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -8031,62 +7276,44 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Chuyển trạng thái công việc thành công",
           "data": {
             "id": 305,
             "status": "done",
             "completed_at": "2026-10-08 10:33:00"
           },
-          "timestamp": "2026-10-08T10:33:00Z"
+          "message": "Chuyển trạng thái công việc thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi công việc không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu công việc theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu công việc theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -8121,61 +7348,43 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 201,
-          "message": "Đã gửi bình luận thành công",
           "data": {
             "comment_id": 912,
             "task_id": 305
           },
-          "timestamp": "2026-10-08T10:34:00Z"
+          "message": "Đã gửi bình luận thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi công việc không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu công việc theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu công việc theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -8214,8 +7423,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy danh sách chiến dịch thành công",
           "data": [
             {
               "id": 88,
@@ -8227,43 +7434,31 @@ export const apiV1Categories: ApiV1Category[] = [
               "status": "active"
             }
           ],
-          "timestamp": "2026-10-08T10:35:00Z"
+          "message": "Lấy danh sách chiến dịch thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -8287,63 +7482,45 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Truy vấn chi tiết chiến dịch thành công",
           "data": {
             "id": 88,
             "name": "Chuyển Đổi Lead BBA",
             "roas": "4.2x",
             "enrolled_revenue": 134400000
           },
-          "timestamp": "2026-10-08T10:36:00Z"
+          "message": "Truy vấn chi tiết chiến dịch thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi chiến dịch không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu chiến dịch theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu chiến dịch theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -8392,61 +7569,43 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 201,
-          "message": "Tạo chiến dịch tiếp thị thành công",
           "data": {
             "id": 89,
             "status": "active"
           },
-          "timestamp": "2026-10-08T10:37:00Z"
+          "message": "Tạo chiến dịch tiếp thị thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi chiến dịch không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu chiến dịch theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu chiến dịch theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -8488,61 +7647,43 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Cập nhật chiến dịch thành công",
           "data": {
             "id": 88,
             "budget": 100000000
           },
-          "timestamp": "2026-10-08T10:38:00Z"
+          "message": "Cập nhật chiến dịch thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi chiến dịch không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu chiến dịch theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu chiến dịch theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -8566,61 +7707,43 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Đã xóa chiến dịch thành công",
           "data": {
             "id": 89,
             "status": "deleted"
           },
-          "timestamp": "2026-10-08T10:39:00Z"
+          "message": "Đã xóa chiến dịch thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi chiến dịch không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu chiến dịch theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu chiến dịch theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -8684,61 +7807,43 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Sự kiện CAPI đã được truyền thành công tới Meta Graph API",
           "data": {
             "events_received": 1,
             "fbtrace_id": "AbCdEf123456"
           },
-          "timestamp": "2026-10-08T10:40:00Z"
+          "message": "Sự kiện CAPI đã được truyền thành công tới Meta Graph API"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi sự kiện CAPI không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu sự kiện CAPI theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu sự kiện CAPI theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -8762,8 +7867,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy nhật ký CAPI thành công",
           "data": [
             {
               "id": 5510,
@@ -8774,43 +7877,31 @@ export const apiV1Categories: ApiV1Category[] = [
               "created_at": "2026-10-08 10:39:50"
             }
           ],
-          "timestamp": "2026-10-08T10:41:00Z"
+          "message": "Lấy nhật ký CAPI thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -8842,8 +7933,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy danh sách kết nối thành công",
           "data": [
             {
               "id": 14,
@@ -8854,43 +7943,31 @@ export const apiV1Categories: ApiV1Category[] = [
               "synced_rows": 1820
             }
           ],
-          "timestamp": "2026-10-08T10:45:00Z"
+          "message": "Lấy danh sách kết nối thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -8914,8 +7991,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Truy vấn chi tiết kết nối thành công",
           "data": {
             "id": 14,
             "sheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
@@ -8925,55 +8000,39 @@ export const apiV1Categories: ApiV1Category[] = [
               "Email": "email"
             }
           },
-          "timestamp": "2026-10-08T10:46:00Z"
+          "message": "Truy vấn chi tiết kết nối thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi luồng kết nối không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu luồng kết nối theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu luồng kết nối theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -9029,61 +8088,43 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 201,
-          "message": "Đăng ký luồng kết nối thành công",
           "data": {
             "id": 15,
             "status": "active"
           },
-          "timestamp": "2026-10-08T10:47:00Z"
+          "message": "Đăng ký luồng kết nối thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi kết nối không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu kết nối theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu kết nối theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -9122,61 +8163,43 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Cập nhật ánh xạ cột thành công",
           "data": {
             "id": 14,
             "updated_at": "2026-10-08 10:48:00"
           },
-          "timestamp": "2026-10-08T10:48:00Z"
+          "message": "Cập nhật ánh xạ cột thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi kết nối không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu kết nối theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu kết nối theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -9200,61 +8223,43 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Đã ngắt kết nối và xóa luồng đồng bộ thành công",
           "data": {
             "id": 15,
             "status": "deleted"
           },
-          "timestamp": "2026-10-08T10:49:00Z"
+          "message": "Đã ngắt kết nối và xóa luồng đồng bộ thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi kết nối không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu kết nối theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu kết nối theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -9279,63 +8284,45 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Đồng bộ hoàn tất thành công",
           "data": {
             "connector_id": 14,
             "new_records_imported": 12,
             "duplicates_skipped": 3,
             "synced_at": "2026-10-08 10:50:00"
           },
-          "timestamp": "2026-10-08T10:50:00Z"
+          "message": "Đồng bộ hoàn tất thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi kết nối không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu kết nối theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu kết nối theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -9367,8 +8354,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy danh mục mẫu tin nhắn thành công",
           "data": [
             {
               "template_id": "zns_deposit_confirm_01",
@@ -9382,43 +8367,31 @@ export const apiV1Categories: ApiV1Category[] = [
               ]
             }
           ],
-          "timestamp": "2026-10-08T10:51:00Z"
+          "message": "Lấy danh mục mẫu tin nhắn thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -9442,61 +8415,43 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy chi tiết mẫu tin nhắn thành công",
           "data": {
             "template_id": "zns_deposit_confirm_01",
             "preview_html": "<div>Kính gửi Quý phụ huynh...</div>"
           },
-          "timestamp": "2026-10-08T10:52:00Z"
+          "message": "Lấy chi tiết mẫu tin nhắn thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi mẫu tin không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu mẫu tin theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu mẫu tin theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -9538,61 +8493,43 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Gửi tin nhắn Zalo thành công",
           "data": {
             "message_id": "msg_zalo_991823",
             "status": "sent"
           },
-          "timestamp": "2026-10-08T10:53:00Z"
+          "message": "Gửi tin nhắn Zalo thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi tin nhắn không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu tin nhắn theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu tin nhắn theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -9646,61 +8583,43 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Gửi tin nhắn ZNS thành công",
           "data": {
             "msg_id": "zns_msg_448102",
             "status": "delivered"
           },
-          "timestamp": "2026-10-08T10:54:00Z"
+          "message": "Gửi tin nhắn ZNS thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi tin nhắn ZNS không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu tin nhắn ZNS theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu tin nhắn ZNS theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -9724,8 +8643,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy nhật ký tin nhắn thành công",
           "data": [
             {
               "id": 1024,
@@ -9735,43 +8652,31 @@ export const apiV1Categories: ApiV1Category[] = [
               "sent_at": "2026-10-08 10:53:30"
             }
           ],
-          "timestamp": "2026-10-08T10:55:00Z"
+          "message": "Lấy nhật ký tin nhắn thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -9795,61 +8700,43 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Xóa bản ghi nhật ký tin nhắn thành công",
           "data": {
             "id": 1024,
             "deleted": true
           },
-          "timestamp": "2026-10-08T10:56:00Z"
+          "message": "Xóa bản ghi nhật ký tin nhắn thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi bản ghi không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu bản ghi theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu bản ghi theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -9898,63 +8785,45 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "AI đã sinh câu trả lời thành công",
           "data": {
             "answer": "Để đạt học bổng 50% BBA K2026, thí sinh cần có điểm trung bình THPT 3 năm từ 8.5 trở lên HOẶC đạt chứng chỉ IELTS từ 6.5 trở lên và vượt qua vòng phỏng vấn của Hội đồng Khoa học.",
             "sources": [
               "Quy_che_hoc_bong_2026.pdf - Trang 4"
             ]
           },
-          "timestamp": "2026-10-08T10:57:00Z"
+          "message": "AI đã sinh câu trả lời thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi hệ thống AI không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu hệ thống AI theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu hệ thống AI theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -9978,8 +8847,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy danh mục tri thức AI thành công",
           "data": [
             {
               "id": 55,
@@ -9989,43 +8856,31 @@ export const apiV1Categories: ApiV1Category[] = [
               "updated_at": "2026-10-01"
             }
           ],
-          "timestamp": "2026-10-08T10:58:00Z"
+          "message": "Lấy danh mục tri thức AI thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -10049,62 +8904,44 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy chi tiết tài liệu thành công",
           "data": {
             "id": 55,
             "file_name": "Quy_che_tuyen_sinh_2026.pdf",
             "total_tokens": 34500
           },
-          "timestamp": "2026-10-08T10:59:00Z"
+          "message": "Lấy chi tiết tài liệu thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi tài liệu tri thức không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu tài liệu tri thức theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu tài liệu tri thức theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -10146,61 +8983,43 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 201,
-          "message": "Nạp tài liệu vào kho tri thức AI thành công",
           "data": {
             "id": 56,
             "status": "vectorized"
           },
-          "timestamp": "2026-10-08T11:00:00Z"
+          "message": "Nạp tài liệu vào kho tri thức AI thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi tri thức AI không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu tri thức AI theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu tri thức AI theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -10224,61 +9043,43 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Đã xóa tài liệu khỏi kho tri thức AI",
           "data": {
             "id": 55,
             "status": "removed"
           },
-          "timestamp": "2026-10-08T11:01:00Z"
+          "message": "Đã xóa tài liệu khỏi kho tri thức AI"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi tài liệu không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu tài liệu theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu tài liệu theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -10302,50 +9103,36 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy báo cáo dự báo AI thành công",
           "data": {
             "predicted_enrolled_leads": 85,
             "estimated_revenue": 11050000000,
             "confidence_score": 0.88
           },
-          "timestamp": "2026-10-08T11:02:00Z"
+          "message": "Lấy báo cáo dự báo AI thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -10385,8 +9172,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy bảng tin thành công",
           "data": [
             {
               "id": 142,
@@ -10397,43 +9182,31 @@ export const apiV1Categories: ApiV1Category[] = [
               "created_at": "2026-10-01 08:00:00"
             }
           ],
-          "timestamp": "2026-10-08T11:03:00Z"
+          "message": "Lấy bảng tin thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -10457,8 +9230,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Truy vấn chi tiết bài đăng thành công",
           "data": {
             "id": 142,
             "content": "Chúc mừng bạn Nguyễn Thị Lan đạt doanh số 1.2 tỷ VNĐ...",
@@ -10466,55 +9237,39 @@ export const apiV1Categories: ApiV1Category[] = [
               "https://myerp.../banner_bestseller.jpg"
             ]
           },
-          "timestamp": "2026-10-08T11:04:00Z"
+          "message": "Truy vấn chi tiết bài đăng thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi bài đăng không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu bài đăng theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu bài đăng theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -10564,61 +9319,43 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 201,
-          "message": "Đăng bài viết lên bảng tin thành công",
           "data": {
             "id": 143,
             "created_at": "2026-10-08 11:05:00"
           },
-          "timestamp": "2026-10-08T11:05:00Z"
+          "message": "Đăng bài viết lên bảng tin thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi bài viết không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu bài viết theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu bài viết theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -10653,61 +9390,43 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Cập nhật bài viết thành công",
           "data": {
             "id": 142,
             "updated_at": "2026-10-08 11:06:00"
           },
-          "timestamp": "2026-10-08T11:06:00Z"
+          "message": "Cập nhật bài viết thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi bài viết không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu bài viết theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu bài viết theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -10731,61 +9450,43 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Đã xóa bài viết thành công",
           "data": {
             "id": 143,
             "status": "deleted"
           },
-          "timestamp": "2026-10-08T11:07:00Z"
+          "message": "Đã xóa bài viết thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi bài viết không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu bài viết theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu bài viết theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -10820,61 +9521,75 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 201,
-          "message": "Gửi bình luận thành công",
           "data": {
             "comment_id": 880,
             "post_id": 142
           },
-          "timestamp": "2026-10-08T11:08:00Z"
+          "message": "Gửi bình luận thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi bình luận không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu bình luận theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu bình luận theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
+            }
+          }
+        ]
+      },
+      {
+        "id": "feed-posts-comment-delete",
+        "method": "DELETE",
+        "path": "/api/v1/posts/:id/comments/:comment_id",
+        "title": "Xóa bình luận trên bảng tin (Delete Post Comment)",
+        "description": "Xóa một bình luận cụ thể trên bài viết bảng tin nội bộ (Hỗ trợ đồng thời các đường dẫn `/api/v1/posts/:id/comments/:comment_id`, `/api/v1/feed/posts/:id/comments/:comment_id` và `/api/v1/comments/:comment_id`). Chỉ người tạo bình luận hoặc Quản trị viên mới có quyền xóa.",
+        "category": "enterprise-feed",
+        "authRequired": true,
+        "rateLimit": "60 req/min",
+        "scopes": [
+          "feed:write"
+        ],
+        "sampleResponse": {
+          "success": true,
+          "data": {
+            "deleted_comment_id": 305,
+            "post_id": 88
+          },
+          "message": "Đã xóa bình luận thành công"
+        },
+        "errorResponses": [
+          {
+            "status": 403,
+            "description": "Không có quyền xóa bình luận của người khác",
+            "response": {
+              "success": false,
+              "data": null,
+              "message": "Bạn không có quyền xóa bình luận này"
             }
           }
         ]
@@ -10910,61 +9625,43 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Thả cảm xúc thành công",
           "data": {
             "post_id": 142,
             "liked": true
           },
-          "timestamp": "2026-10-08T11:09:00Z"
+          "message": "Thả cảm xúc thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi bài viết không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu bài viết theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu bài viết theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -10996,8 +9693,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy danh sách hội thoại thành công",
           "data": [
             {
               "id": 48,
@@ -11011,43 +9706,31 @@ export const apiV1Categories: ApiV1Category[] = [
               }
             }
           ],
-          "timestamp": "2026-10-08T11:10:00Z"
+          "message": "Lấy danh sách hội thoại thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -11079,8 +9762,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy lịch sử tin nhắn thành công",
           "data": [
             {
               "id": 1940,
@@ -11090,55 +9771,39 @@ export const apiV1Categories: ApiV1Category[] = [
               "created_at": "2026-10-08 11:02:15"
             }
           ],
-          "timestamp": "2026-10-08T11:11:00Z"
+          "message": "Lấy lịch sử tin nhắn thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi phòng chat không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu phòng chat theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu phòng chat theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -11162,90 +9827,83 @@ export const apiV1Categories: ApiV1Category[] = [
         "queryParams": [],
         "bodyParams": [
           {
-            "name": "name",
-            "type": "string",
-            "required": false,
-            "desc": "Tên nhóm chat (đối với nhóm)"
-          },
-          {
             "name": "type",
             "type": "string",
             "required": true,
-            "desc": "'direct' (1-1) hoặc 'group' (nhóm)"
+            "enumOptions": [
+              "direct",
+              "group"
+            ],
+            "desc": "Loại cuộc trò chuyện: direct (1-1) hoặc group (Nhóm công việc)"
+          },
+          {
+            "name": "title",
+            "type": "string",
+            "required": false,
+            "desc": "Tên nhóm trò chuyện (Bắt buộc khi type=\"group\", hỗ trợ cả tên trường name)"
           },
           {
             "name": "participant_ids",
             "type": "array",
             "required": true,
-            "desc": "Mảng danh sách các User ID tham gia"
+            "desc": "Mảng ID các nhân sự tham gia vào phòng trò chuyện"
+          },
+          {
+            "name": "avatar_url",
+            "type": "string",
+            "required": false,
+            "desc": "URL ảnh đại diện của nhóm trò chuyện"
           }
         ],
         "sampleBody": {
-          "name": "Dự Án Open Day Tháng 10",
           "type": "group",
+          "title": "Ban Tuyển Sinh MBA Khóa 18",
           "participant_ids": [
-            1042,
-            1055,
-            1088
+            12,
+            15,
+            18,
+            22
           ]
         },
         "sampleResponse": {
           "success": true,
-          "code": 201,
-          "message": "Tạo phòng chat thành công",
           "data": {
             "id": 49,
             "type": "group"
           },
-          "timestamp": "2026-10-08T11:12:00Z"
+          "message": "Tạo phòng chat thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi phòng chat không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu phòng chat theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu phòng chat theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -11293,61 +9951,87 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 201,
-          "message": "Gửi tin nhắn thành công",
           "data": {
             "message_id": 1941,
             "created_at": "2026-10-08 11:13:00"
           },
-          "timestamp": "2026-10-08T11:13:00Z"
+          "message": "Gửi tin nhắn thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi tin nhắn không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu tin nhắn theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu tin nhắn theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
+            }
+          }
+        ]
+      },
+      {
+        "id": "chat-message-reactions",
+        "method": "POST",
+        "path": "/api/v1/chat/messages/:id/reactions",
+        "title": "Thả biểu cảm tin nhắn (Toggle Message Reaction)",
+        "description": "Thả hoặc gỡ biểu cảm cảm xúc (Emoji Reaction) trên một tin nhắn trong cuộc trò chuyện WorkChat.",
+        "category": "live-chat",
+        "authRequired": true,
+        "rateLimit": "120 req/min",
+        "scopes": [
+          "chat:write"
+        ],
+        "bodyParams": [
+          {
+            "name": "reaction",
+            "type": "string",
+            "required": true,
+            "desc": "Biểu tượng cảm xúc hoặc mã reaction (VD: \"❤️\", \"👍\", \"😂\", \"🎉\")"
+          }
+        ],
+        "sampleBody": {
+          "reaction": "❤️"
+        },
+        "sampleResponse": {
+          "success": true,
+          "data": {
+            "message_id": 9402,
+            "reaction": "❤️",
+            "action": "added"
+          },
+          "message": "Đã cập nhật biểu cảm tin nhắn"
+        },
+        "errorResponses": [
+          {
+            "status": 404,
+            "description": "Tin nhắn không tồn tại hoặc đã bị thu hồi",
+            "response": {
+              "success": false,
+              "data": null,
+              "message": "Không tìm thấy tin nhắn"
             }
           }
         ]
@@ -11372,61 +10056,43 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Đã đánh dấu đã đọc",
           "data": {
             "conversation_id": 48,
             "unread_count": 0
           },
-          "timestamp": "2026-10-08T11:14:00Z"
+          "message": "Đã đánh dấu đã đọc"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi phòng chat không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu phòng chat theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu phòng chat theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -11450,61 +10116,43 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Đã thu hồi tin nhắn thành công",
           "data": {
             "message_id": 1941,
             "recalled": true
           },
-          "timestamp": "2026-10-08T11:15:00Z"
+          "message": "Đã thu hồi tin nhắn thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi tin nhắn không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu tin nhắn theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu tin nhắn theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -11549,8 +10197,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy danh sách ticket thành công",
           "data": [
             {
               "id": 204,
@@ -11562,43 +10208,31 @@ export const apiV1Categories: ApiV1Category[] = [
               "created_at": "2026-10-08 08:30:00"
             }
           ],
-          "timestamp": "2026-10-08T11:20:00Z"
+          "message": "Lấy danh sách ticket thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -11622,8 +10256,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Truy vấn chi tiết ticket thành công",
           "data": {
             "id": 204,
             "subject": "Đổi lớp học phần",
@@ -11636,55 +10268,39 @@ export const apiV1Categories: ApiV1Category[] = [
               }
             ]
           },
-          "timestamp": "2026-10-08T11:21:00Z"
+          "message": "Truy vấn chi tiết ticket thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi phiếu hỗ trợ không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu phiếu hỗ trợ theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu phiếu hỗ trợ theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -11708,95 +10324,111 @@ export const apiV1Categories: ApiV1Category[] = [
         "queryParams": [],
         "bodyParams": [
           {
-            "name": "contact_id",
-            "type": "integer",
-            "required": true,
-            "desc": "ID học viên/phụ huynh gửi yêu cầu"
-          },
-          {
             "name": "subject",
             "type": "string",
             "required": true,
-            "desc": "Tiêu đề yêu cầu hỗ trợ"
+            "desc": "Tiêu đề sự vụ / yêu cầu hỗ trợ học vụ"
           },
           {
-            "name": "content",
+            "name": "customer_name",
             "type": "string",
             "required": true,
-            "desc": "Nội dung chi tiết khiếu nại / yêu cầu"
+            "desc": "Họ tên khách hàng / học viên cần hỗ trợ"
+          },
+          {
+            "name": "description",
+            "type": "string",
+            "required": true,
+            "desc": "Nội dung mô tả chi tiết sự vụ cần giải quyết"
           },
           {
             "name": "priority",
             "type": "string",
             "required": false,
-            "default": "normal",
-            "desc": "'low', 'normal', 'high', 'urgent'"
+            "enumOptions": [
+              "low",
+              "medium",
+              "high",
+              "urgent"
+            ],
+            "desc": "Mức độ ưu tiên xử lý (mặc định: medium)"
+          },
+          {
+            "name": "assignee_id",
+            "type": "integer",
+            "required": false,
+            "desc": "ID nhân sự được phân công xử lý chính"
+          },
+          {
+            "name": "due_date",
+            "type": "string",
+            "required": false,
+            "desc": "Hạn hoàn thành xử lý SLA (YYYY-MM-DD)"
+          },
+          {
+            "name": "related_contacts",
+            "type": "array",
+            "required": false,
+            "desc": "Mảng ID các hồ sơ khách hàng/học viên liên quan"
+          },
+          {
+            "name": "related_users",
+            "type": "array",
+            "required": false,
+            "desc": "Mảng ID các nhân sự phối hợp theo dõi"
           }
         ],
         "sampleBody": {
-          "contact_id": 5012,
-          "subject": "Yêu cầu cấp lại bảng điểm học kỳ 1",
-          "content": "Học viên cần bảng điểm công chứng nộp bổ sung hồ sơ",
-          "priority": "normal"
+          "subject": "Hỗ trợ cấp lại giấy xác nhận học viên song ngữ",
+          "customer_name": "Nguyễn Minh Tuấn",
+          "description": "Học viên cần giấy xác nhận đang theo học MBA Quốc tế để bổ sung hồ sơ công tác trước ngày 20/10.",
+          "priority": "high",
+          "assignee_id": 15,
+          "due_date": "2026-10-19",
+          "related_contacts": [
+            1025
+          ]
         },
         "sampleResponse": {
           "success": true,
-          "code": 201,
-          "message": "Tạo ticket thành công",
           "data": {
             "id": 205,
             "ticket_code": "TK-2026-0082",
             "status": "open"
           },
-          "timestamp": "2026-10-08T11:22:00Z"
+          "message": "Tạo ticket thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi ticket không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu ticket theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu ticket theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -11838,61 +10470,43 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Cập nhật thông tin ticket thành công",
           "data": {
             "id": 204,
             "assigned_to": 1088
           },
-          "timestamp": "2026-10-08T11:23:00Z"
+          "message": "Cập nhật thông tin ticket thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi ticket không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu ticket theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu ticket theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -11916,61 +10530,43 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Đã xóa ticket thành công",
           "data": {
             "id": 205,
             "status": "deleted"
           },
-          "timestamp": "2026-10-08T11:24:00Z"
+          "message": "Đã xóa ticket thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi ticket không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu ticket theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu ticket theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -11994,72 +10590,69 @@ export const apiV1Categories: ApiV1Category[] = [
         "queryParams": [],
         "bodyParams": [
           {
-            "name": "content",
+            "name": "body",
             "type": "string",
             "required": true,
-            "desc": "Nội dung phản hồi giải quyết"
+            "desc": "Nội dung phản hồi / ghi chú xử lý sự vụ (hỗ trợ HTML & @mention)"
+          },
+          {
+            "name": "parent_id",
+            "type": "integer",
+            "required": false,
+            "desc": "ID bình luận gốc nếu trả lời theo luồng (threaded reply)"
+          },
+          {
+            "name": "attachments",
+            "type": "array",
+            "required": false,
+            "desc": "Danh sách đường dẫn tệp đính kèm minh chứng xử lý"
           }
         ],
         "sampleBody": {
-          "content": "Phòng Đào Tạo đã in bảng điểm công chứng, mời bạn ghé văn phòng tầng 2 để nhận nhé!"
+          "body": "Phòng Học vụ đã phát hành giấy xác nhận song ngữ có mộc đỏ và gửi bản scan qua email cho học viên.",
+          "attachments": [
+            "uploads/tenant_1/xac_nhan_hoc_vien_1025.pdf"
+          ]
         },
         "sampleResponse": {
           "success": true,
-          "code": 201,
-          "message": "Gửi phản hồi ticket thành công",
           "data": {
             "reply_id": 992,
             "ticket_id": 204
           },
-          "timestamp": "2026-10-08T11:25:00Z"
+          "message": "Gửi phản hồi ticket thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi ticket không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu ticket theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu ticket theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -12101,62 +10694,44 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Cập nhật trạng thái đóng ticket thành công",
           "data": {
             "id": 204,
             "status": "resolved",
             "closed_at": "2026-10-08 11:26:00"
           },
-          "timestamp": "2026-10-08T11:26:00Z"
+          "message": "Cập nhật trạng thái đóng ticket thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi ticket không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu ticket theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu ticket theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -12195,8 +10770,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy danh mục kho thành công",
           "data": [
             {
               "id": 77,
@@ -12208,43 +10781,31 @@ export const apiV1Categories: ApiV1Category[] = [
               "cost_price": 180000
             }
           ],
-          "timestamp": "2026-10-08T11:27:00Z"
+          "message": "Lấy danh mục kho thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -12268,8 +10829,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy chi tiết vật tư thành công",
           "data": {
             "id": 77,
             "name": "Balo Quà Tặng",
@@ -12284,55 +10843,39 @@ export const apiV1Categories: ApiV1Category[] = [
               }
             ]
           },
-          "timestamp": "2026-10-08T11:28:00Z"
+          "message": "Lấy chi tiết vật tư thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi vật tư không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu vật tư theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu vật tư theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -12389,61 +10932,43 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 201,
-          "message": "Thêm mặt hàng mới thành công",
           "data": {
             "id": 78,
             "sku": "GT-BBA-QTKD-01"
           },
-          "timestamp": "2026-10-08T11:29:00Z"
+          "message": "Thêm mặt hàng mới thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi vật tư không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu vật tư theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu vật tư theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -12484,61 +11009,43 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Cập nhật mặt hàng thành công",
           "data": {
             "id": 77,
             "min_stock": 50
           },
-          "timestamp": "2026-10-08T11:30:00Z"
+          "message": "Cập nhật mặt hàng thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi vật tư không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu vật tư theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu vật tư theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -12562,61 +11069,43 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Đã ngừng sử dụng mặt hàng thành công",
           "data": {
             "id": 78,
             "status": "inactive"
           },
-          "timestamp": "2026-10-08T11:31:00Z"
+          "message": "Đã ngừng sử dụng mặt hàng thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi vật tư không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu vật tư theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu vật tư theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -12640,93 +11129,68 @@ export const apiV1Categories: ApiV1Category[] = [
         "queryParams": [],
         "bodyParams": [
           {
-            "name": "item_id",
+            "name": "batch_id",
             "type": "integer",
             "required": true,
-            "desc": "ID mặt hàng nhập kho"
+            "desc": "ID lô hàng (batch) cần điều chỉnh nhập/xuất tồn kho"
           },
           {
-            "name": "quantity",
-            "type": "integer",
-            "required": true,
-            "desc": "Số lượng nhập"
-          },
-          {
-            "name": "unit_cost",
+            "name": "new_qty",
             "type": "number",
             "required": true,
-            "desc": "Đơn giá nhập (VNĐ)"
+            "desc": "Số lượng tồn kho thực tế mới của lô hàng sau khi nhập/xuất"
           },
           {
-            "name": "branch_id",
-            "type": "integer",
+            "name": "reason",
+            "type": "string",
             "required": true,
-            "desc": "Kho cơ sở tiếp nhận"
+            "desc": "Lý do nhập kho bổ sung / kiểm kê tăng"
           }
         ],
         "sampleBody": {
-          "item_id": 77,
-          "quantity": 100,
-          "unit_cost": 175000,
-          "branch_id": 2
+          "batch_id": 14,
+          "new_qty": 150,
+          "reason": "Nhập bổ sung bộ giáo trình MBA Quốc tế đợt 2"
         },
         "sampleResponse": {
           "success": true,
-          "code": 201,
-          "message": "Lập phiếu nhập kho thành công",
           "data": {
             "receipt_code": "NK-2026-0045",
             "new_stock": 350
           },
-          "timestamp": "2026-10-08T11:32:00Z"
+          "message": "Lập phiếu nhập kho thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi vật tư không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu vật tư theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu vật tư theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -12750,93 +11214,68 @@ export const apiV1Categories: ApiV1Category[] = [
         "queryParams": [],
         "bodyParams": [
           {
-            "name": "item_id",
+            "name": "batch_id",
             "type": "integer",
             "required": true,
-            "desc": "ID mặt hàng xuất"
+            "desc": "ID lô hàng (batch) cần điều chỉnh nhập/xuất tồn kho"
           },
           {
-            "name": "quantity",
-            "type": "integer",
+            "name": "new_qty",
+            "type": "number",
             "required": true,
-            "desc": "Số lượng xuất"
-          },
-          {
-            "name": "recipient_name",
-            "type": "string",
-            "required": true,
-            "desc": "Tên người nhận (học viên/nhân viên)"
+            "desc": "Số lượng tồn kho thực tế mới của lô hàng sau khi nhập/xuất"
           },
           {
             "name": "reason",
             "type": "string",
             "required": true,
-            "desc": "Mục đích xuất cấp phát"
+            "desc": "Lý do xuất kho / kiểm kê giảm"
           }
         ],
         "sampleBody": {
-          "item_id": 77,
-          "quantity": 1,
-          "recipient_name": "Trần Thị Mai Phương",
-          "reason": "Cấp phát quà tặng tân học viên nhập học"
+          "batch_id": 14,
+          "new_qty": 85,
+          "reason": "Xuất kho phát giáo trình cho lớp MBA K18"
         },
         "sampleResponse": {
           "success": true,
-          "code": 201,
-          "message": "Lập phiếu xuất kho thành công",
           "data": {
             "slip_code": "XK-2026-0129",
             "remaining_stock": 349
           },
-          "timestamp": "2026-10-08T11:33:00Z"
+          "message": "Lập phiếu xuất kho thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi vật tư không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu vật tư theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu vật tư theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "INSUFFICIENT_STOCK",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -12867,8 +11306,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy nhật ký thẻ kho thành công",
           "data": [
             {
               "id": 501,
@@ -12879,43 +11316,31 @@ export const apiV1Categories: ApiV1Category[] = [
               "created_at": "2026-10-08 11:33:00"
             }
           ],
-          "timestamp": "2026-10-08T11:34:00Z"
+          "message": "Lấy nhật ký thẻ kho thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -12947,8 +11372,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy danh sách phiên thu ngân thành công",
           "data": [
             {
               "id": 12,
@@ -12959,43 +11382,31 @@ export const apiV1Categories: ApiV1Category[] = [
               "status": "open"
             }
           ],
-          "timestamp": "2026-10-08T11:35:00Z"
+          "message": "Lấy danh sách phiên thu ngân thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -13019,62 +11430,44 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Truy vấn chi tiết ca bán hàng thành công",
           "data": {
             "id": 12,
             "total_sales": 15400000,
             "orders_count": 8
           },
-          "timestamp": "2026-10-08T11:36:00Z"
+          "message": "Truy vấn chi tiết ca bán hàng thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi phiên thu ngân không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu phiên thu ngân theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu phiên thu ngân theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -13116,61 +11509,43 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 201,
-          "message": "Mở ca thu ngân thành công",
           "data": {
             "session_id": 13,
             "status": "open"
           },
-          "timestamp": "2026-10-08T11:37:00Z"
+          "message": "Mở ca thu ngân thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi phiên thu ngân không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu phiên thu ngân theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu phiên thu ngân theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -13178,9 +11553,9 @@ export const apiV1Categories: ApiV1Category[] = [
       {
         "id": "pos-create-order",
         "method": "POST",
-        "path": "/api/v1/pos/orders",
+        "path": "/api/v1/pos",
         "title": "Tạo Đơn Bán Hàng Trực Tiếp Tại Quầy & Thanh Toán",
-        "description": "Thu tiền học phí, bán giáo trình hoặc thu cọc trực tiếp tại quầy lễ tân, in hóa đơn nhiệt tức thì.",
+        "description": "Tạo đơn hàng bán lẻ trực tiếp tại quầy POS (`/api/v1/pos`), tự động kiểm tra tổng tiền (`total_amount`), sinh hóa đơn đã thanh toán (`paid`) và trừ tồn kho tự động theo nguyên tắc FIFO.",
         "category": "pos",
         "authRequired": true,
         "rateLimit": "60 requests / phút",
@@ -13194,101 +11569,101 @@ export const apiV1Categories: ApiV1Category[] = [
         "queryParams": [],
         "bodyParams": [
           {
-            "name": "session_id",
-            "type": "integer",
-            "required": true,
-            "desc": "ID ca thu ngân đang mở"
-          },
-          {
-            "name": "contact_id",
-            "type": "integer",
-            "required": false,
-            "desc": "ID học viên (nếu có)"
-          },
-          {
-            "name": "items",
+            "name": "cart",
             "type": "array",
             "required": true,
-            "desc": "Danh sách mặt hàng: [{ item_id, quantity, price }]"
+            "desc": "Danh sách sản phẩm trong giỏ hàng: [{ id, name, quantity, price }]"
           },
           {
-            "name": "payment_method",
-            "type": "string",
+            "name": "total_amount",
+            "type": "number",
             "required": true,
-            "desc": "'cash', 'card_pos', 'qr_transfer'"
+            "desc": "Tổng số tiền thanh toán cuối cùng (phải khớp với tổng tiền giỏ hàng + phí vận chuyển)"
+          },
+          {
+            "name": "customer_id",
+            "type": "integer",
+            "required": false,
+            "desc": "ID khách hàng / học viên mua hàng (nếu có)"
+          },
+          {
+            "name": "shipping_fee",
+            "type": "number",
+            "required": false,
+            "desc": "Phí giao hàng (VNĐ, mặc định 0)"
+          },
+          {
+            "name": "shipping_customer_pay",
+            "type": "integer",
+            "required": false,
+            "enumOptions": [
+              "0",
+              "1"
+            ],
+            "desc": "1 nếu khách hàng trả phí vận chuyển, 0 nếu miễn phí vận chuyển"
           }
         ],
         "sampleBody": {
-          "session_id": 12,
-          "contact_id": 5012,
-          "items": [
+          "customer_id": 1025,
+          "cart": [
             {
-              "item_id": 78,
+              "id": 1,
+              "name": "Bộ Giáo Trình Quản Trị Chiến Lược Harvard",
+              "quantity": 1,
+              "price": 1200000
+            },
+            {
+              "id": 4,
+              "name": "Áo Polo Đồng Phục Học Viên IDEAS",
               "quantity": 2,
-              "price": 150000
+              "price": 350000
             }
           ],
-          "payment_method": "qr_transfer"
+          "shipping_fee": 30000,
+          "shipping_customer_pay": 1,
+          "total_amount": 1930000
         },
         "sampleResponse": {
           "success": true,
-          "code": 201,
-          "message": "Thanh toán hóa đơn POS thành công",
           "data": {
             "order_id": 612,
             "order_code": "POS-2026-0044",
             "total_amount": 300000,
             "status": "completed"
           },
-          "timestamp": "2026-10-08T11:38:00Z"
+          "message": "Thanh toán hóa đơn POS thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi đơn POS không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu đơn POS theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu đơn POS theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -13312,62 +11687,44 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Truy vấn hóa đơn POS thành công",
           "data": {
             "id": 612,
             "order_code": "POS-2026-0044",
             "total_amount": 300000
           },
-          "timestamp": "2026-10-08T11:39:00Z"
+          "message": "Truy vấn hóa đơn POS thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi hóa đơn POS không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu hóa đơn POS theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu hóa đơn POS theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -13391,61 +11748,43 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Đã hủy hóa đơn POS và hoàn trả tồn kho",
           "data": {
             "id": 612,
             "status": "void"
           },
-          "timestamp": "2026-10-08T11:40:00Z"
+          "message": "Đã hủy hóa đơn POS và hoàn trả tồn kho"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi hóa đơn POS không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu hóa đơn POS theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu hóa đơn POS theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -13487,62 +11826,44 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Đóng ca thu ngân thành công. Báo cáo ca đã được gửi tới Kế toán.",
           "data": {
             "session_id": 12,
             "status": "closed",
             "closed_at": "2026-10-08 17:30:00"
           },
-          "timestamp": "2026-10-08T11:41:00Z"
+          "message": "Đóng ca thu ngân thành công. Báo cáo ca đã được gửi tới Kế toán."
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi phiên thu ngân không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu phiên thu ngân theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu phiên thu ngân theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -13581,8 +11902,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy danh mục tài sản thành công",
           "data": [
             {
               "id": 102,
@@ -13593,43 +11912,31 @@ export const apiV1Categories: ApiV1Category[] = [
               "purchase_date": "2025-06-10"
             }
           ],
-          "timestamp": "2026-10-08T11:42:00Z"
+          "message": "Lấy danh mục tài sản thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -13653,63 +11960,45 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Truy vấn chi tiết tài sản thành công",
           "data": {
             "id": 102,
             "serial_number": "DL5440-998821",
             "original_price": 22000000,
             "current_value": 17500000
           },
-          "timestamp": "2026-10-08T11:43:00Z"
+          "message": "Truy vấn chi tiết tài sản thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi tài sản không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu tài sản theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu tài sản theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -13765,61 +12054,43 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 201,
-          "message": "Thêm tài sản mới thành công",
           "data": {
             "id": 103,
             "asset_code": "TS-PROJ-0005"
           },
-          "timestamp": "2026-10-08T11:44:00Z"
+          "message": "Thêm tài sản mới thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi tài sản không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu tài sản theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu tài sản theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -13861,61 +12132,43 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Cập nhật trạng thái tài sản thành công",
           "data": {
             "id": 103,
             "status": "maintenance"
           },
-          "timestamp": "2026-10-08T11:45:00Z"
+          "message": "Cập nhật trạng thái tài sản thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi tài sản không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu tài sản theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu tài sản theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -13939,61 +12192,43 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Đã thanh lý tài sản thành công",
           "data": {
             "id": 103,
             "status": "disposed"
           },
-          "timestamp": "2026-10-08T11:46:00Z"
+          "message": "Đã thanh lý tài sản thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi tài sản không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu tài sản theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu tài sản theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -14017,80 +12252,55 @@ export const apiV1Categories: ApiV1Category[] = [
         "queryParams": [],
         "bodyParams": [
           {
-            "name": "assigned_to",
+            "name": "user_id",
             "type": "integer",
             "required": true,
-            "desc": "ID nhân viên tiếp nhận sử dụng"
-          },
-          {
-            "name": "condition",
-            "type": "string",
-            "required": true,
-            "desc": "Tình trạng thiết bị lúc bàn giao"
+            "desc": "ID nhân sự tiếp nhận bàn giao tài sản (hỗ trợ cả tên trường employee_id)"
           }
         ],
         "sampleBody": {
-          "assigned_to": 1042,
-          "condition": "Máy mới 99%, hoạt động tốt, kèm sạc và chuột"
+          "user_id": 18
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Bàn giao tài sản thành công",
           "data": {
             "id": 102,
             "status": "assigned",
             "assigned_to": 1042
           },
-          "timestamp": "2026-10-08T11:47:00Z"
+          "message": "Bàn giao tài sản thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi tài sản không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu tài sản theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu tài sản theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -14125,62 +12335,44 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Thu hồi tài sản về kho thành công",
           "data": {
             "id": 102,
             "status": "available",
             "assigned_to": null
           },
-          "timestamp": "2026-10-08T11:48:00Z"
+          "message": "Thu hồi tài sản về kho thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi tài sản không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu tài sản theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu tài sản theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -14213,14 +12405,17 @@ export const apiV1Categories: ApiV1Category[] = [
             "name": "entity_type",
             "type": "string",
             "required": false,
-            "desc": "'contacts', 'deals', 'orders'"
+            "enumOptions": [
+              "contact",
+              "deal",
+              "company"
+            ],
+            "desc": "Lọc danh sách trường tùy chỉnh theo phân hệ áp dụng (contact, deal, company)"
           }
         ],
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy danh mục trường tùy biến thành công",
           "data": [
             {
               "id": 18,
@@ -14231,43 +12426,31 @@ export const apiV1Categories: ApiV1Category[] = [
               "is_required": false
             }
           ],
-          "timestamp": "2026-10-08T11:49:00Z"
+          "message": "Lấy danh mục trường tùy biến thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -14291,62 +12474,44 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Truy vấn chi tiết trường tùy biến thành công",
           "data": {
             "id": 18,
             "field_key": "ielts_score",
             "options": []
           },
-          "timestamp": "2026-10-08T11:50:00Z"
+          "message": "Truy vấn chi tiết trường tùy biến thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi trường tùy biến không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu trường tùy biến theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu trường tùy biến theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -14373,90 +12538,111 @@ export const apiV1Categories: ApiV1Category[] = [
             "name": "entity_type",
             "type": "string",
             "required": true,
-            "desc": "'contacts', 'deals', 'orders'"
+            "enumOptions": [
+              "contact",
+              "deal",
+              "company"
+            ],
+            "desc": "Phân hệ dữ liệu áp dụng trường tùy chỉnh"
           },
           {
-            "name": "field_key",
+            "name": "label",
             "type": "string",
             "required": true,
-            "desc": "Mã khóa trường viết thường không dấu (vd: ielts_score)"
-          },
-          {
-            "name": "field_label",
-            "type": "string",
-            "required": true,
-            "desc": "Tên nhãn hiển thị trên giao diện"
+            "desc": "Tên hiển thị của trường dữ liệu trên giao diện"
           },
           {
             "name": "field_type",
             "type": "string",
             "required": true,
-            "desc": "'text', 'number', 'select', 'date', 'checkbox'"
+            "enumOptions": [
+              "text",
+              "number",
+              "date",
+              "dropdown",
+              "multiselect",
+              "checkbox"
+            ],
+            "desc": "Kiểu dữ liệu của trường tùy chỉnh"
+          },
+          {
+            "name": "field_key",
+            "type": "string",
+            "required": false,
+            "desc": "Mã định danh kỹ thuật (nếu bỏ trống hệ thống tự sinh từ label)"
+          },
+          {
+            "name": "options",
+            "type": "array",
+            "required": false,
+            "desc": "Mảng các lựa chọn khi field_type là dropdown hoặc multiselect"
+          },
+          {
+            "name": "is_required",
+            "type": "boolean",
+            "required": false,
+            "desc": "Bắt buộc nhập khi tạo/sửa hồ sơ"
+          },
+          {
+            "name": "is_filterable",
+            "type": "boolean",
+            "required": false,
+            "desc": "Cho phép dùng làm tiêu chí lọc trên danh sách"
           }
         ],
         "sampleBody": {
-          "entity_type": "contacts",
-          "field_key": "target_major",
-          "field_label": "Ngành Học Nguyện Vọng 1",
-          "field_type": "select"
+          "entity_type": "contact",
+          "label": "Trình độ ngoại ngữ hiện tại",
+          "field_key": "english_proficiency",
+          "field_type": "dropdown",
+          "options": [
+            "IELTS 5.5+",
+            "IELTS 6.5+",
+            "TOEIC 700+",
+            "Cần học bổ sung tiếng Anh"
+          ],
+          "is_required": false,
+          "is_filterable": true
         },
         "sampleResponse": {
           "success": true,
-          "code": 201,
-          "message": "Tạo trường tùy biến thành công",
           "data": {
             "id": 19,
             "field_key": "target_major"
           },
-          "timestamp": "2026-10-08T11:51:00Z"
+          "message": "Tạo trường tùy biến thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi trường tùy biến không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu trường tùy biến theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu trường tùy biến theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -14497,61 +12683,43 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Cập nhật trường tùy biến thành công",
           "data": {
             "id": 19,
             "field_label": "Chuyên Ngành Dự Tuyển Ưu Tiên"
           },
-          "timestamp": "2026-10-08T11:52:00Z"
+          "message": "Cập nhật trường tùy biến thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi trường tùy biến không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu trường tùy biến theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu trường tùy biến theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -14575,61 +12743,43 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Xóa trường tùy biến thành công",
           "data": {
             "id": 19,
             "status": "deleted"
           },
-          "timestamp": "2026-10-08T11:53:00Z"
+          "message": "Xóa trường tùy biến thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi trường tùy biến không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu trường tùy biến theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu trường tùy biến theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -14661,8 +12811,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy danh sách tác vụ cron thành công",
           "data": [
             {
               "id": 1,
@@ -14673,43 +12821,31 @@ export const apiV1Categories: ApiV1Category[] = [
               "duration_seconds": 3.4
             }
           ],
-          "timestamp": "2026-10-08T11:54:00Z"
+          "message": "Lấy danh sách tác vụ cron thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -14733,8 +12869,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy nhật ký cron thành công",
           "data": [
             {
               "run_id": 8812,
@@ -14743,55 +12877,39 @@ export const apiV1Categories: ApiV1Category[] = [
               "output": "Imported 12 rows successfully"
             }
           ],
-          "timestamp": "2026-10-08T11:55:00Z"
+          "message": "Lấy nhật ký cron thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi tác vụ cron không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu tác vụ cron theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu tác vụ cron theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -14816,62 +12934,44 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Đã kích hoạt tiến trình chạy thành công",
           "data": {
             "task_id": 1,
             "task_name": "Google Sheets Lead Sync Worker",
             "status": "running"
           },
-          "timestamp": "2026-10-08T11:56:00Z"
+          "message": "Đã kích hoạt tiến trình chạy thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi tác vụ cron không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu tác vụ cron theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu tác vụ cron theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -14906,61 +13006,43 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Cập nhật lịch trình cron thành công",
           "data": {
             "id": 1,
             "cron_expression": "*/5 * * * *"
           },
-          "timestamp": "2026-10-08T11:57:00Z"
+          "message": "Cập nhật lịch trình cron thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi tác vụ cron không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu tác vụ cron theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu tác vụ cron theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -14984,60 +13066,42 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Đã làm sạch nhật ký log cron cũ",
           "data": {
             "deleted_rows": 1420
           },
-          "timestamp": "2026-10-08T11:58:00Z"
+          "message": "Đã làm sạch nhật ký log cron cũ"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi tác vụ cron không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu tác vụ cron theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu tác vụ cron theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -15076,8 +13140,6 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Lấy danh sách nhân sự trực tuyến thành công",
           "data": [
             {
               "user_id": 1042,
@@ -15088,43 +13150,31 @@ export const apiV1Categories: ApiV1Category[] = [
               "device": "Chrome Windows"
             }
           ],
-          "timestamp": "2026-10-08T11:59:00Z"
+          "message": "Lấy danh sách nhân sự trực tuyến thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -15159,50 +13209,36 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Heartbeat ghi nhận thành công",
           "data": {
             "status": "online",
             "unread_notifications": 3,
             "server_time": "2026-10-08T11:59:30Z"
           },
-          "timestamp": "2026-10-08T11:59:30Z"
+          "message": "Heartbeat ghi nhận thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -15252,48 +13288,34 @@ export const apiV1Categories: ApiV1Category[] = [
         },
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Phát sóng thông báo khẩn cấp thành công",
           "data": {
             "recipients_count": 48
           },
-          "timestamp": "2026-10-08T12:00:00Z"
+          "message": "Phát sóng thông báo khẩn cấp thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]
@@ -15317,61 +13339,43 @@ export const apiV1Categories: ApiV1Category[] = [
         "bodyParams": [],
         "sampleResponse": {
           "success": true,
-          "code": 200,
-          "message": "Đã ngắt phiên đăng nhập của người dùng thành công",
           "data": {
             "user_id": 1055,
             "status": "terminated"
           },
-          "timestamp": "2026-10-08T12:01:00Z"
+          "message": "Đã ngắt phiên đăng nhập của người dùng thành công"
         },
         "errorResponses": [
           {
             "status": 401,
-            "title": "401 Unauthorized",
-            "desc": "Thiếu Bearer Token hoặc Token đã hết hạn / không hợp lệ.",
             "response": {
               "success": false,
-              "code": 401,
-              "error": "UNAUTHORIZED",
-              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
             }
           },
           {
             "status": 403,
-            "title": "403 Forbidden",
-            "desc": "Tài khoản không đủ quyền hạn RBAC hoặc truy cập ngoài phạm vi chi nhánh.",
             "response": {
               "success": false,
-              "code": 403,
-              "error": "FORBIDDEN_SCOPE",
-              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Bạn không có quyền thực hiện thao tác này trên tài nguyên được chỉ định."
             }
           },
           {
             "status": 404,
-            "title": "404 Not Found",
-            "desc": "Bản ghi phiên người dùng không tồn tại hoặc đã bị xóa khỏi hệ thống.",
             "response": {
               "success": false,
-              "code": 404,
-              "error": "RESOURCE_NOT_FOUND",
-              "message": "Không tìm thấy dữ liệu phiên người dùng theo mã ID cung cấp.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Không tìm thấy dữ liệu phiên người dùng theo mã ID cung cấp."
             }
           },
           {
             "status": 422,
-            "title": "422 Unprocessable Entity",
-            "desc": "Dữ liệu payload gửi lên vi phạm quy tắc ràng buộc nghiệp vụ hoặc thiếu trường bắt buộc.",
             "response": {
               "success": false,
-              "code": 422,
-              "error": "VALIDATION_FAILED",
-              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên.",
-              "timestamp": "2026-10-08T09:00:00Z"
+              "data": null,
+              "message": "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin gửi lên."
             }
           }
         ]

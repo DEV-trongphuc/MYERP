@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Users, AlertTriangle, RefreshCw,
@@ -164,11 +164,12 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
   }, [usersList, hrProfiles]);
 
   // AI Pre-screener variables
-  const aiPassed = stats?.ai_passed_count || 12;
-  const aiFailed = stats?.ai_failed_count || 3;
+  const aiPassed = stats?.ai_passed_count ?? 0;
+  const aiFailed = stats?.ai_failed_count ?? 0;
   const aiTotal = aiPassed + aiFailed;
   const aiPassedPercent = aiTotal > 0 ? Math.round((aiPassed / aiTotal) * 100) : 0;
   const aiFailedPercent = aiTotal > 0 ? 100 - aiPassedPercent : 0;
+  const hasInitializedOrderTypeRef = useRef(false);
 
   const fetchStatsOnly = async (metricVal: string, modeVal: string, signal?: AbortSignal) => {
     if (loading) return; // Skip if main dashboard loading is in progress
@@ -183,8 +184,11 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       if (e?.name !== 'AbortError') {
         console.error('Error fetching stats only:', e);
       }
+    } finally {
+      if (!signal?.aborted) {
+        setModalChartLoading(false);
+      }
     }
-    setModalChartLoading(false);
   };
 
   const formatNumberCompact = (val: number) => {
@@ -316,10 +320,10 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       // BUG-06 fix: Xử lý lỗi riêng từng API, không để lỗi một cái 'nuốt' cái kia
       const metric = showHealthModal ? healthChartMetric : 'lead';
       const [statsJson, logsJson, settingsJson, connectionsJson] = await Promise.all([
-        fetchAPI(`get_dashboard_stats&date=${encodeURIComponent(dateFilter)}&chart_mode=${displayChartMode}&chart_metric=${metric}`).catch(e => ({ success: false, message: e.message })),
-        fetchAPI('get_logs&exclude_status=silent&page=1&pageSize=5').catch(e => ({ success: false, message: e.message })),
-        fetchAPI('get_settings').catch(e => ({ success: false, message: e.message })),
-        fetchAPI('get_connections').catch(e => ({ success: false, message: e.message }))
+        fetchAPI(`get_dashboard_stats&date=${encodeURIComponent(dateFilter)}&chart_mode=${displayChartMode}&chart_metric=${metric}`, { signal }).catch(e => ({ success: false, message: e.message })),
+        fetchAPI('get_logs&exclude_status=silent&page=1&pageSize=5', { signal }).catch(e => ({ success: false, message: e.message })),
+        fetchAPI('get_settings', { signal }).catch(e => ({ success: false, message: e.message })),
+        fetchAPI('get_connections', { signal }).catch(e => ({ success: false, message: e.message }))
       ]);
 
       // Kiểm tra xem request đã bị hủy chưa (user đổi filter trước khi response về)
@@ -347,7 +351,9 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
         console.error('Dashboard fetch error:', e);
       }
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
       // Wait for real content DOM to paint before dismissing the splash screen
       requestAnimationFrame(() => {
         setTimeout(() => {
@@ -420,14 +426,17 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
             const uData = usersRes?.data?.data || usersRes?.data || [];
             if (Array.isArray(uData)) setUsersList(uData);
 
-            if (pos.length > 0 && sos.length > 0) {
-              setActiveOrderType('po');
-            } else if (pos.length > 0) {
-              setActiveOrderType('po');
-            } else if (sos.length > 0) {
-              setActiveOrderType('so');
-            } else {
-              setActiveOrderType('po');
+            if (!hasInitializedOrderTypeRef.current) {
+              hasInitializedOrderTypeRef.current = true;
+              if (pos.length > 0 && sos.length > 0) {
+                setActiveOrderType('po');
+              } else if (pos.length > 0) {
+                setActiveOrderType('po');
+              } else if (sos.length > 0) {
+                setActiveOrderType('so');
+              } else {
+                setActiveOrderType('po');
+              }
             }
           }).catch(e => console.error(e));
         }

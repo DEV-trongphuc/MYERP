@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { Plus, CheckCircle2, Clock, Phone, Mail, Users, Calendar, AlignLeft, X, Loader2, Pencil, Trash2, RefreshCw, Link2, Search, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar } from '../components/ui/Avatar';
@@ -87,13 +87,26 @@ export const ActivitiesPage: React.FC = () => {
   const [users, setUsers] = useState<any[]>([]);
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
 
+  const activitiesAbortRef = useRef<AbortController | null>(null);
+  const contactDrawerAbortRef = useRef<AbortController | null>(null);
+  const inFlightRef = useRef(false);
+
   const openContactDrawer = async (contactId: number) => {
+    if (contactDrawerAbortRef.current) {
+      contactDrawerAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    contactDrawerAbortRef.current = controller;
+    const { signal } = controller;
+
     try {
-      const res = await api.get(`/contacts/${contactId}`);
+      const res = await api.get(`/contacts/${contactId}`, { signal });
+      if (signal.aborted) return;
       if (res.data.success || res.data) {
         setProfileContact(res.data.data || res.data);
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.name === 'AbortError' || err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED' || signal.aborted) return;
       console.error("Lỗi khi tải thông tin khách hàng:", err);
     }
   };
@@ -162,6 +175,13 @@ export const ActivitiesPage: React.FC = () => {
   };
 
   const fetchActivities = useCallback(async () => {
+    if (activitiesAbortRef.current) {
+      activitiesAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    activitiesAbortRef.current = controller;
+    const { signal } = controller;
+
     setLoading(true);
     try {
       const params: any = { page, limit: PAGE_SIZE, search: debouncedSearch };
@@ -170,19 +190,27 @@ export const ActivitiesPage: React.FC = () => {
       if (filterTeamId) params.team_id = filterTeamId;
       if (filterUserId) params.user_id = filterUserId;
       
-      const r = await api.get('/activities', { params });
+      const r = await api.get('/activities', { params, signal });
+      if (signal.aborted) return;
       const data = r.data.data;
       setItems(data.items || []);
       setTotal(data.total || 0);
     } catch (e: any) {
+      if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED' || signal.aborted) return;
       setItems([]);
       setTotal(0);
     } finally {
-      setLoading(false);
+      if (!signal.aborted) setLoading(false);
     }
   }, [filterType, filterStatus, filterTeamId, filterUserId, debouncedSearch, page]);
 
-  useEffect(() => { fetchActivities(); }, [fetchActivities]);
+  useEffect(() => {
+    fetchActivities();
+    return () => {
+      activitiesAbortRef.current?.abort();
+      contactDrawerAbortRef.current?.abort();
+    };
+  }, [fetchActivities]);
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -255,7 +283,9 @@ export const ActivitiesPage: React.FC = () => {
   };
 
   const handleSave = async () => {
+    if (inFlightRef.current || saving) return;
     if (!form.subject.trim()) { addToast('Nhập tiêu đề hoạt động', 'error'); return; }
+    inFlightRef.current = true;
     setSaving(true);
     try {
       let finalBody = form.body;
@@ -281,13 +311,15 @@ export const ActivitiesPage: React.FC = () => {
     } catch (err: any) {
       addToast(err.response?.data?.message || 'Lỗi khi lưu hoạt động', 'error');
     } finally {
+      inFlightRef.current = false;
       setSaving(false);
     }
   };
 
   const toggleDone = async (item: any) => {
-    if (actionLoadingId === item.id) return;
+    if (inFlightRef.current || actionLoadingId === item.id) return;
     const newStatus = item.status === 'done' ? 'planned' : 'done';
+    inFlightRef.current = true;
     setActionLoadingId(item.id);
     try {
       await api.put(`/activities/${item.id}`, { status: newStatus, done_at: newStatus === 'done' ? new Date().toISOString() : null });
@@ -295,6 +327,7 @@ export const ActivitiesPage: React.FC = () => {
     } catch (e: any) {
       addToast('Lỗi khi cập nhật trạng thái', 'error');
     } finally {
+      inFlightRef.current = false;
       setActionLoadingId(null);
     }
   };
@@ -306,14 +339,16 @@ export const ActivitiesPage: React.FC = () => {
       message: `Bạn có chắc chắn muốn xóa vĩnh viễn "${actItem.subject}"?`,
       isDanger: true,
       onConfirm: async () => {
+        if (inFlightRef.current) return;
+        inFlightRef.current = true;
         try {
           await api.delete(`/activities/${actItem.id}`);
           setItems(prev => prev.filter(a => a.id !== actItem.id));
           addToast('Đã xóa hoạt động thành công', 'success');
         } catch (e: any) {
-          addToast('Lỗi khi xóa hoạt động (Demo Mode)', 'error');
-          setItems(prev => prev.filter(a => a.id !== actItem.id));
+          addToast(e.response?.data?.message || 'Lỗi khi xóa hoạt động', 'error');
         } finally {
+          inFlightRef.current = false;
           closeConfirm();
         }
       }
@@ -331,8 +366,12 @@ export const ActivitiesPage: React.FC = () => {
     }
   };
 
-  const doneCount = items.filter(a => a.status === 'done').length;
-  const counts = TYPES.reduce((acc, t) => ({ ...acc, [t]: items.filter(a => a.type === t).length }), {} as Record<string, number>);
+  const doneCount = useMemo(() => items.filter(a => a.status === 'done').length, [items]);
+  const counts = useMemo(() => TYPES.reduce((acc, t) => ({ ...acc, [t]: items.filter(a => a.type === t).length }), {} as Record<string, number>), [items]);
+  const filteredActivities = useMemo(
+    () => items.filter(act => !search || (act.subject || '').toLowerCase().includes(search.toLowerCase())),
+    [items, search]
+  );
 
   return (
     <div>
@@ -486,7 +525,7 @@ export const ActivitiesPage: React.FC = () => {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               {(() => {
-                const filtered = items.filter(act => !search || (act.subject || '').toLowerCase().includes(search.toLowerCase()));
+                const filtered = filteredActivities;
                 if (filtered.length === 0) return (
                   <div className="empty-state card">
                     <Calendar size={40} />

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, User, Camera, Lock, Save, Loader2, Info, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
+import { useAuth } from '../../contexts/AuthContext';
 import { useUIStore } from '../../store/uiStore';
 import api from '../../api/axios';
 
@@ -13,6 +14,7 @@ interface Props {
 
 export const AdminProfileModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const { user, setUser, clearAuth } = useAuthStore();
+  const { logout } = useAuth();
   const { addToast } = useUIStore();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -179,7 +181,7 @@ export const AdminProfileModal: React.FC<Props> = ({ isOpen, onClose }) => {
                       className="btn outline" 
                       style={{ width: '100%', color: 'var(--color-danger)', borderColor: 'var(--color-danger)' }}
                       onClick={() => {
-                        clearAuth();
+                        logout();
                         addToast('Đã đăng xuất thành công', 'info');
                         navigate('/login');
                         onClose();

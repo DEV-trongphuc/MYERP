@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, Building2, ChevronLeft, Plus, Trash2, Upload, X, AlertCircle, Loader2, Check, UserPlus, Bell, Search, FileText, Bookmark, FolderOpen, Sparkles } from 'lucide-react';
@@ -170,11 +170,18 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
       handleCloseAnimated();
     }
   };
+  const handleRequestCloseRef = useRef<() => void>(() => {});
+  handleRequestCloseRef.current = handleRequestClose;
+  const showDocPickerModalRef = useRef(false);
 
   useEffect(() => {
     if (isOpen) {
       return pushOverlay('deposit-create-drawer', () => {
-        handleRequestClose();
+        if (showDocPickerModalRef.current) {
+          setShowDocPickerModal(false);
+          return;
+        }
+        handleRequestCloseRef.current();
       }, 120);
     }
   }, [isOpen, isClosing]);
@@ -244,6 +251,7 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
   const [customerDocs, setCustomerDocs] = useState<any[]>([]);
   const [loadingCustomerDocs, setLoadingCustomerDocs] = useState(false);
   const [showDocPickerModal, setShowDocPickerModal] = useState(false);
+  showDocPickerModalRef.current = showDocPickerModal;
   const [docSearchText, setDocSearchText] = useState('');
 
   const handleApplyAIContract = (data: ExtractedContractData, uploadedUrl?: string, originalFile?: File) => {
@@ -444,6 +452,10 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
       setExpectedCommission('');
       setUnitCode('');
       setExchangeRate('1');
+      setDepositUncFile(null);
+      setDepositProofImgUrl('');
+      setDocSearchText('');
+      setShowDocPickerModal(false);
 
       if (defaultContact) {
         setNotes(defaultContact.notes ? String(defaultContact.notes) : '');
@@ -679,12 +691,27 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
     }
   }, [selectedContactId, contacts, coopSlips, usersList]);
 
+  const customerSearchAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    return () => {
+      if (customerSearchAbortRef.current) customerSearchAbortRef.current.abort();
+    };
+  }, []);
+
   const handleCustomerSearch = React.useCallback(async (query: string) => {
     const q = query.trim();
     if (!q || q.length < 2) return;
+    if (customerSearchAbortRef.current) {
+      customerSearchAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    customerSearchAbortRef.current = controller;
+    const { signal } = controller;
+
     if (entitySubtab === 'contact') {
       try {
-        const res = await fetchAPI(`contacts?search=${encodeURIComponent(q)}&limit=50`);
+        const res = await fetchAPI(`contacts?search=${encodeURIComponent(q)}&limit=50`, { signal });
+        if (signal.aborted) return;
         if (res.success && res.data) {
           const items = res.data.items || res.data || [];
           if (Array.isArray(items) && items.length > 0) {
@@ -702,7 +729,8 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
       } catch (err) {}
     } else {
       try {
-        const res = await fetchAPI(`companies?search=${encodeURIComponent(q)}&limit=50`);
+        const res = await fetchAPI(`companies?search=${encodeURIComponent(q)}&limit=50`, { signal });
+        if (signal.aborted) return;
         if (res.success && res.data) {
           const items = res.data.items || res.data || [];
           if (Array.isArray(items) && items.length > 0) {
@@ -729,8 +757,10 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
     setMilestonesInput(prev => prev.filter((_, i) => i !== index));
   };
 
+  const createInFlightRef = useRef(false);
   const handleCreateDeposit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (createInFlightRef.current || isSaving) return;
     if (!selectedContactId || !selectedProjectId || !price) {
       addToast('Vui lòng điền đầy đủ thông tin khách hàng, chương trình, doanh thu dự kiến', 'error');
       return;
@@ -764,8 +794,7 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
       }
     }
 
-    if (isSaving) return;
-
+    createInFlightRef.current = true;
     try {
       setIsSaving(true);
       const res = await fetchAPI('deposits', {
@@ -848,9 +877,11 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
     } catch (e: any) {
       addToast(e.message || 'Lỗi kết nối', 'error');
     } finally {
+      createInFlightRef.current = false;
       setIsSaving(false);
     }
   };
+  const uploadInFlightRef = useRef(false);
 
   const baseZIndex = zIndex || 2147483641;
 
@@ -873,13 +904,15 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
               backdropFilter: 'blur(8px)',
               WebkitBackdropFilter: 'blur(8px)',
               zIndex: baseZIndex + 5,
+              '--drawer-backdrop-z': baseZIndex + 5,
               willChange: 'opacity',
               transform: 'translate3d(0, 0, 0)'
-            }}
+            } as any}
           />
 
           {/* Drawer Sheet */}
           <motion.div
+            className="drawer-sheet"
             initial={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
             animate={{ y: 0, x: 0, opacity: 1 }}
             exit={isMobile ? { y: '60%', opacity: 0 } : { opacity: 0, x: '60%' }}
@@ -1753,6 +1786,8 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
                           accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.csv,image/*"
                           onConfirmUpload={async (item) => {
                             if (item.file) {
+                              if (uploadInFlightRef.current) return;
+                              uploadInFlightRef.current = true;
                               setUploadingDepositProof(true);
                               try {
                                 let fileToUpload: File = item.file;
@@ -1787,6 +1822,7 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
                               } catch (e: any) {
                                 addToast('Lỗi nạp tệp UNC: ' + e.message, 'error');
                               } finally {
+                                uploadInFlightRef.current = false;
                                 setUploadingDepositProof(false);
                               }
                             }

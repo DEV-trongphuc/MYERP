@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Building2, FileText, FileBadge, Tag as TagIcon, Phone, Mail, MapPin, Search, Calendar, Users, Briefcase, Plus, HelpCircle, Globe, Settings, Download, Trash2, Edit, Pencil, Loader2, History, ChevronLeft, ChevronRight, ChevronDown, Camera, Save, TrendingUp, DollarSign, BookOpen, List, GitBranch, CheckCircle2, Clock, RefreshCw, XCircle, Filter, ArrowRight, User, UserPlus } from 'lucide-react';
@@ -106,18 +106,36 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
     return list;
   }, [disableEdit, isLecturer]);
 
+  const pipelineStatsAbortRef = useRef<AbortController | null>(null);
+  const activitiesAbortRef = useRef<AbortController | null>(null);
+  const invoicesAbortRef = useRef<AbortController | null>(null);
+  const expensesAbortRef = useRef<AbortController | null>(null);
+  const soAbortRef = useRef<AbortController | null>(null);
+  const poAbortRef = useRef<AbortController | null>(null);
+  const subContactsAbortRef = useRef<AbortController | null>(null);
+  const dealsAbortRef = useRef<AbortController | null>(null);
+  const saveInFlightRef = useRef(false);
+  const createDealInFlightRef = useRef(false);
+  const logoUploadInFlightRef = useRef(false);
+  const escapeHandlerRef = useRef<() => void>(() => onClose());
+
   const fetchPipelineStats = useCallback(async (companyId: number) => {
     if (!companyId) return;
+    if (pipelineStatsAbortRef.current) pipelineStatsAbortRef.current.abort();
+    const abortController = new AbortController();
+    pipelineStatsAbortRef.current = abortController;
     setPipelineStatsLoading(true);
     try {
-      const res = await api.get(`/companies/${companyId}/pipeline-stats`);
+      const res = await api.get(`/companies/${companyId}/pipeline-stats`, { signal: abortController.signal });
+      if (abortController.signal.aborted) return;
       if (res.data?.data) {
         setPipelineStats(res.data.data);
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.name === 'AbortError' || err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return;
       console.error('Failed to fetch pipeline stats for partner', err);
     } finally {
-      setPipelineStatsLoading(false);
+      if (!abortController.signal.aborted) setPipelineStatsLoading(false);
     }
   }, []);
 
@@ -175,7 +193,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
-      const unregisterOverlay = pushOverlay('company-drawer', onClose, 2147483640);
+      const unregisterOverlay = pushOverlay('company-drawer', () => escapeHandlerRef.current(), 2147483640);
       fetchUsers();
       fetchAllCompanies();
       fetchCampaigns();
@@ -189,7 +207,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
     return () => {
       document.body.style.overflow = '';
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   const [baseData, setBaseData] = useState<any>(entity || {});
   const [baseTags, setBaseTags] = useState<string[]>(entity?.tags || []);
@@ -237,7 +255,8 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
   }, [formData, baseData, tags, baseTags, entity]);
 
   const handleSave = useCallback(async () => {
-    if (isSaving) return;
+    if (isSaving || saveInFlightRef.current) return;
+    saveInFlightRef.current = true;
     try {
       setIsSaving(true);
       // Validate
@@ -285,6 +304,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
       console.error("SAVE COMPANY ERROR:", e);
       addToast(e.response?.data?.message || e.message || 'Lỗi khi lưu thông tin giảng viên', 'error');
     } finally {
+      saveInFlightRef.current = false;
       setIsSaving(false);
     }
   }, [formData, tags, entity, onSave, addToast, isSaving]);
@@ -365,14 +385,19 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
 
   const fetchActivities = async () => {
     if (!entity?.id) return;
+    if (activitiesAbortRef.current) activitiesAbortRef.current.abort();
+    const abortController = new AbortController();
+    activitiesAbortRef.current = abortController;
     setActivitiesLoading(true);
     try {
-      const r = await api.get('/activities', { params: { related_type: 'company', related_id: entity.id } });
+      const r = await api.get('/activities', { params: { related_type: 'company', related_id: entity.id }, signal: abortController.signal });
+      if (abortController.signal.aborted) return;
       setActivities(r.data.data?.items || r.data.data || []);
     } catch (e: any) {
+      if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
       setActivities([]);
     } finally {
-      setActivitiesLoading(false);
+      if (!abortController.signal.aborted) setActivitiesLoading(false);
     }
   };
 
@@ -383,27 +408,37 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
 
   const fetchInvoices = async () => {
     if (!entity?.id) return;
+    if (invoicesAbortRef.current) invoicesAbortRef.current.abort();
+    const abortController = new AbortController();
+    invoicesAbortRef.current = abortController;
     setLoadingInvoices(true);
     try {
-      const r = await api.get('/invoices', { params: { company_id: entity.id, limit: 100 } });
+      const r = await api.get('/invoices', { params: { company_id: entity.id, limit: 100 }, signal: abortController.signal });
+      if (abortController.signal.aborted) return;
       setInvoices(r.data.data?.items || r.data.data || []);
-    } catch {
+    } catch (e: any) {
+      if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
       setInvoices([]);
     } finally {
-      setLoadingInvoices(false);
+      if (!abortController.signal.aborted) setLoadingInvoices(false);
     }
   };
 
   const fetchExpenses = async () => {
     if (!entity?.id) return;
+    if (expensesAbortRef.current) expensesAbortRef.current.abort();
+    const abortController = new AbortController();
+    expensesAbortRef.current = abortController;
     setLoadingExpenses(true);
     try {
-      const r = await api.get('/expenses', { params: { company_id: entity.id, limit: 100 } });
+      const r = await api.get('/expenses', { params: { company_id: entity.id, limit: 100 }, signal: abortController.signal });
+      if (abortController.signal.aborted) return;
       setExpenses(r.data.data?.items || r.data.data || []);
-    } catch {
+    } catch (e: any) {
+      if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
       setExpenses([]);
     } finally {
-      setLoadingExpenses(false);
+      if (!abortController.signal.aborted) setLoadingExpenses(false);
     }
   };
 
@@ -414,32 +449,43 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
 
   const fetchSalesOrders = async () => {
     if (!entity?.id) return;
+    if (soAbortRef.current) soAbortRef.current.abort();
+    const abortController = new AbortController();
+    soAbortRef.current = abortController;
     setLoadingSO(true);
     try {
-      const r = await api.get('/sales-orders', { params: { company_id: entity.id, limit: 100 } });
+      const r = await api.get('/sales-orders', { params: { company_id: entity.id, limit: 100 }, signal: abortController.signal });
+      if (abortController.signal.aborted) return;
       setSalesOrders(r.data.data?.orders || r.data.data || []);
-    } catch {
+    } catch (e: any) {
+      if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
       setSalesOrders([]);
     } finally {
-      setLoadingSO(false);
+      if (!abortController.signal.aborted) setLoadingSO(false);
     }
   };
 
   const fetchPurchaseOrders = async () => {
     if (!entity?.id) return;
+    if (poAbortRef.current) poAbortRef.current.abort();
+    const abortController = new AbortController();
+    poAbortRef.current = abortController;
     setLoadingPO(true);
     try {
-      const r = await api.get('/purchase-orders', { params: { supplier_id: entity.id, limit: 100 } });
+      const r = await api.get('/purchase-orders', { params: { supplier_id: entity.id, limit: 100 }, signal: abortController.signal });
+      if (abortController.signal.aborted) return;
       setPurchaseOrders(r.data.data?.orders || r.data.data || []);
-    } catch {
+    } catch (e: any) {
+      if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
       setPurchaseOrders([]);
     } finally {
-      setLoadingPO(false);
+      if (!abortController.signal.aborted) setLoadingPO(false);
     }
   };
 
   const handleCreateDeal = async () => {
-    if (!dealForm.title.trim() || isSaving) return;
+    if (!dealForm.title.trim() || isSaving || createDealInFlightRef.current) return;
+    createDealInFlightRef.current = true;
     try {
       setIsSaving(true);
       await api.post('/deals', {
@@ -453,17 +499,21 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
       setDealForm({ title: '', value: '', stage: 'lead', probability: 50, expected_close: '' });
       
       // Refresh deals
+      if (dealsAbortRef.current) dealsAbortRef.current.abort();
+      const abortController = new AbortController();
+      dealsAbortRef.current = abortController;
       setDealsLoading(true);
-      api.get('/deals', { params: { company_id: entity.id } })
-        .then(r => setDeals(r.data.data?.items || r.data.data || []))
-        .catch(() => setDeals([]))
-        .finally(() => setDealsLoading(false));
+      api.get('/deals', { params: { company_id: entity.id }, signal: abortController.signal })
+        .then(r => { if (!abortController.signal.aborted) setDeals(r.data.data?.items || r.data.data || []); })
+        .catch((err: any) => { if (err?.name !== 'AbortError' && err?.name !== 'CanceledError' && err?.code !== 'ERR_CANCELED') setDeals([]); })
+        .finally(() => { if (!abortController.signal.aborted) setDealsLoading(false); });
 
       addToast('Đã tạo cơ hội mới thành công', 'success');
     } catch (e: any) {
       console.error("CREATE DEAL ERROR:", e);
       addToast(e?.response?.data?.message || e.message || 'Lỗi khi tạo cơ hội', 'error');
     } finally {
+      createDealInFlightRef.current = false;
       setIsSaving(false);
     }
   };
@@ -485,30 +535,55 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
 
   const fetchSubContacts = useCallback(() => {
     if (!entity?.id) return;
+    if (subContactsAbortRef.current) subContactsAbortRef.current.abort();
+    const abortController = new AbortController();
+    subContactsAbortRef.current = abortController;
     setSubLoading(true);
     fetchPipelineStats(entity.id);
-    api.get('/contacts', { params: { company_id: entity.id, limit: 500 } })
-      .then(r => setSubContacts((r.data.data?.items || r.data.data || []).map((c: any) => ({
-        id: c.id,
-        name: (c.full_name || '').trim() || 'Chưa có tên',
-        role: c.job_title || '',
-        phone: c.phone || '',
-        email: c.email || '',
-        isPrimary: c.is_primary || false,
-        stage_id: c.stage_id,
-        stage_name: c.stage_name,
-        stage_color: c.stage_color,
-        pipeline_status: c.pipeline_status,
-        lead_status: c.lead_status,
-        created_at: c.created_at,
-        owner_name: c.owner_name,
-        owner_avatar: c.owner_avatar
-      }))))
-      .catch(() => setSubContacts([]))
-      .finally(() => setSubLoading(false));
+    api.get('/contacts', { params: { company_id: entity.id, limit: 500 }, signal: abortController.signal })
+      .then(r => {
+        if (abortController.signal.aborted) return;
+        setSubContacts((r.data.data?.items || r.data.data || []).map((c: any) => ({
+          id: c.id,
+          name: (c.full_name || '').trim() || 'Chưa có tên',
+          role: c.job_title || '',
+          phone: c.phone || '',
+          email: c.email || '',
+          isPrimary: c.is_primary || false,
+          stage_id: c.stage_id,
+          stage_name: c.stage_name,
+          stage_color: c.stage_color,
+          pipeline_status: c.pipeline_status,
+          lead_status: c.lead_status,
+          created_at: c.created_at,
+          owner_name: c.owner_name,
+          owner_avatar: c.owner_avatar
+        })));
+      })
+      .catch((err: any) => {
+        if (err?.name !== 'AbortError' && err?.name !== 'CanceledError' && err?.code !== 'ERR_CANCELED') {
+          setSubContacts([]);
+        }
+      })
+      .finally(() => {
+        if (!abortController.signal.aborted) setSubLoading(false);
+      });
   }, [entity?.id, fetchPipelineStats]);
 
   useEffect(() => {
+    setActivities([]);
+    setDeals([]);
+    setInvoices([]);
+    setExpenses([]);
+    setSalesOrders([]);
+    setPurchaseOrders([]);
+    setSubContacts([]);
+    setPipelineStats(null);
+    setSelectedStageFilter('all');
+    setHelpModal(null);
+    setShowDealModal(false);
+    setShowActivityModal(false);
+
     if (entity) {
       setFormData(entity);
       setTags(entity.tags || []);
@@ -517,41 +592,48 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
       setPrevEntityId(entity.id);
       fetchSubContacts();
         
+      if (dealsAbortRef.current) dealsAbortRef.current.abort();
+      const dealsAbort = new AbortController();
+      dealsAbortRef.current = dealsAbort;
       setDealsLoading(true);
-        api.get('/deals', { params: { company_id: entity.id } })
-          .then(r => setDeals(r.data.data?.items || r.data.data || []))
-          .catch(() => setDeals([]))
-          .finally(() => setDealsLoading(false));
+      api.get('/deals', { params: { company_id: entity.id }, signal: dealsAbort.signal })
+        .then(r => { if (!dealsAbort.signal.aborted) setDeals(r.data.data?.items || r.data.data || []); })
+        .catch((err: any) => { if (err?.name !== 'AbortError' && err?.name !== 'CanceledError' && err?.code !== 'ERR_CANCELED') setDeals([]); })
+        .finally(() => { if (!dealsAbort.signal.aborted) setDealsLoading(false); });
 
-        fetchInvoices();
-        fetchExpenses();
-        fetchSalesOrders();
-        fetchPurchaseOrders();
+      fetchInvoices();
+      fetchExpenses();
+      fetchSalesOrders();
+      fetchPurchaseOrders();
     } else {
       setFormData({});
       setTags([]);
       setBaseData({});
       setBaseTags([]);
-      setSubContacts([]);
-      setPipelineStats(null);
-      setSelectedStageFilter('all');
-      setDeals([]);
-      setInvoices([]);
-      setExpenses([]);
-      setSalesOrders([]);
-      setPurchaseOrders([]);
     }
-  }, [entity, fetchPipelineStats]);
-
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        handleClose();
-      }
+    return () => {
+      if (pipelineStatsAbortRef.current) pipelineStatsAbortRef.current.abort();
+      if (activitiesAbortRef.current) activitiesAbortRef.current.abort();
+      if (invoicesAbortRef.current) invoicesAbortRef.current.abort();
+      if (expensesAbortRef.current) expensesAbortRef.current.abort();
+      if (soAbortRef.current) soAbortRef.current.abort();
+      if (poAbortRef.current) poAbortRef.current.abort();
+      if (subContactsAbortRef.current) subContactsAbortRef.current.abort();
+      if (dealsAbortRef.current) dealsAbortRef.current.abort();
     };
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
-  }, [isOpen, handleClose]);
+  }, [entity, fetchPipelineStats, fetchSubContacts]);
+
+  escapeHandlerRef.current = () => {
+    if (helpModal) {
+      setHelpModal(null);
+    } else if (showDealModal) {
+      setShowDealModal(false);
+    } else if (showActivityModal) {
+      setShowActivityModal(false);
+    } else {
+      handleClose();
+    }
+  };
 
   const [isVisible, setIsVisible] = useState(isOpen);
   const [animateIn, setAnimateIn] = useState(isOpen);
@@ -845,6 +927,8 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
               style={{ display: 'none' }} 
               onChange={async (e) => {
                 if (e.target.files?.[0]) {
+                  if (logoUploadInFlightRef.current) return;
+                  logoUploadInFlightRef.current = true;
                   const file = e.target.files[0];
                   try {
                     const compressed = await compressToWebP(file);
@@ -873,6 +957,8 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                     }
                   } catch (err: any) {
                     addToast('Lỗi tải lên logo: ' + err.message, 'error');
+                  } finally {
+                    logoUploadInFlightRef.current = false;
                   }
                 }
               }}

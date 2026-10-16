@@ -551,7 +551,7 @@ class CampaignController {
                 $title = "Bạn có phản hồi mới trong thảo luận chiến dịch";
                 $bodyText = ($auth['full_name'] ?? 'Đồng nghiệp') . " đã trả lời bình luận của bạn trong chiến dịch";
                 $type = "info";
-                $link = "/marketing?id=" . $campaignId . "&highlight_comment_id=" . $newId;
+                $link = "/projects?sub=campaigns&id=" . $campaignId . "&tab=comments&highlight_comment_id=" . $newId;
 
                 $insertNotif = $this->db->prepare("
                     INSERT INTO notifications (user_id, tenant_id, title, body, type, link)
@@ -596,7 +596,7 @@ class CampaignController {
                     "Bạn được nhắc tên trong chiến dịch " . $campaignName,
                     $auth['full_name'] . ' đã nhắc tên bạn trong bình luận chiến dịch ' . $campaignName . ': "' . $preview . '"',
                     'campaign_comment_mention',
-                    "/projects?sub=campaigns&id=" . $campaignId . "&highlight_comment_id=" . $newId
+                    "/projects?sub=campaigns&id=" . $campaignId . "&tab=comments&highlight_comment_id=" . $newId
                 ]);
 
                 if (!empty($userRow['email'])) {

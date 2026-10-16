@@ -194,7 +194,7 @@ const ConsultantsInner = () => {
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
   const showAllTabs = true;
-  const activeTabRaw = queryParams.get('tab') || 'consultants';
+  const activeTabRaw = queryParams.get('tab') || (queryParams.get('team_id') ? 'teams' : 'consultants');
   const activeTab = activeTabRaw === 'teams' ? 'teams' : 'consultants';
 
   const uploadProgress = useUploadProgress();
@@ -405,15 +405,31 @@ const ConsultantsInner = () => {
     setTeamsLoading(false);
   };
 
+  const usersAbortRef = useRef<AbortController | null>(null);
+  const statsAbortRef = useRef<AbortController | null>(null);
+  const inFlightRef = useRef(false);
+
   const fetchUsers = async () => {
+    if (usersAbortRef.current) {
+      usersAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    usersAbortRef.current = controller;
+    const { signal } = controller;
+
     setLoading(true);
     try {
-      const json = await fetchAPI('get_consultants');
+      const json = await fetchAPI('get_consultants', { signal });
+      if (signal.aborted) return;
       if (json.success) setUsers(Array.isArray(json.data) ? json.data : []);
     } catch (e: any) {
+      if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
       toast.error(t('Không thể tải dữ liệu: ') + e.message);
+    } finally {
+      if (!signal.aborted) {
+        setLoading(false);
+      }
     }
-    setLoading(false);
   };
 
   const fetchAllSystemUsers = async () => {
@@ -483,6 +499,8 @@ const ConsultantsInner = () => {
 
   const handlePostTeamComment = async (teamId: number) => {
     if (!newTeamCommentText.trim() && teamCommentAttachments.length === 0) return;
+    if (isSubmittingTeamComment || inFlightRef.current) return;
+    inFlightRef.current = true;
     setIsSubmittingTeamComment(true);
     setIsUploadingCommentFile(true);
 
@@ -526,6 +544,7 @@ const ConsultantsInner = () => {
       console.error('Failed to post team comment:', e);
       toast.error(e.response?.data?.message || e.message || t('Lỗi khi gửi bình luận'));
     } finally {
+      inFlightRef.current = false;
       setIsSubmittingTeamComment(false);
       setIsUploadingCommentFile(false);
     }
@@ -555,6 +574,8 @@ const ConsultantsInner = () => {
   };
 
   const handleToggleVacation = async (id: number) => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     try {
       const json = await fetchAPI('toggle_consultant_vacation', {
         method: 'POST',
@@ -568,6 +589,8 @@ const ConsultantsInner = () => {
       }
     } catch (err: any) {
       toast.error(t('Lỗi kết nối: ') + err.message);
+    } finally {
+      inFlightRef.current = false;
     }
   };
 
@@ -599,6 +622,78 @@ const ConsultantsInner = () => {
       fetchTeamComments(editingTeam.id);
     }
   }, [editingTeam, teamDrawerTab]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab');
+    const teamIdParam = params.get('team_id') || (tabParam === 'teams' ? (params.get('open_id') || params.get('id')) : null);
+    const hcId = params.get('highlight_comment_id') || params.get('comment_id');
+    const subtab = params.get('subtab');
+
+    if (teamIdParam) {
+      const tid = Number(teamIdParam);
+      if (tid > 0) {
+        if (hcId || subtab === 'comments') {
+          setTeamDrawerTab('comments');
+        } else if (subtab === 'members') {
+          setTeamDrawerTab('members');
+        }
+        openEditTeamModal({ id: tid });
+        params.delete('team_id');
+        params.delete('open_id');
+        params.delete('id');
+        params.delete('subtab');
+        if (!params.get('tab')) params.set('tab', 'teams');
+        const qs = params.toString();
+        window.history.replaceState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash}`);
+      }
+      return;
+    }
+
+    const userIdParam = params.get('open_id') || params.get('id');
+    if (userIdParam && tabParam !== 'teams' && users.length > 0) {
+      const matchedUser = users.find((u: any) => String(u.id) === String(userIdParam));
+      if (matchedUser) {
+        openEditModal(matchedUser);
+        params.delete('open_id');
+        params.delete('id');
+        const qs = params.toString();
+        window.history.replaceState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash}`);
+      }
+    }
+  }, [location.search, teams.length, users.length]);
+
+  useEffect(() => {
+    if (!teamModalOpen || teamDrawerTab !== 'comments' || teamComments.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const hcId = params.get('highlight_comment_id') || params.get('comment_id');
+    if (!hcId) return;
+
+    const timer = setTimeout(() => {
+      const el = document.getElementById(`team-comment-${hcId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const bubble = (el.querySelector('div[style*="border-radius"]') as HTMLElement) || el;
+        const origTransition = bubble.style.transition;
+        const origBoxShadow = bubble.style.boxShadow;
+        const origBg = bubble.style.backgroundColor;
+        bubble.style.transition = 'all 0.4s ease';
+        bubble.style.boxShadow = '0 0 0 2px #f59e0b, 0 4px 12px rgba(245, 158, 11, 0.25)';
+        bubble.style.backgroundColor = 'rgba(254, 243, 199, 0.65)';
+        setTimeout(() => {
+          bubble.style.boxShadow = origBoxShadow;
+          bubble.style.backgroundColor = origBg;
+          setTimeout(() => { bubble.style.transition = origTransition; }, 400);
+        }, 2800);
+      }
+      params.delete('highlight_comment_id');
+      params.delete('comment_id');
+      const qs = params.toString();
+      window.history.replaceState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash}`);
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [teamComments, teamModalOpen, teamDrawerTab]);
 
   const openAddModal = () => {
     setEditingUser(null);
@@ -658,7 +753,8 @@ const ConsultantsInner = () => {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.email) return toast.error(t('Vui lòng điền đầy đủ thông tin'));
-    if (isSaving) return;
+    if (isSaving || inFlightRef.current) return;
+    inFlightRef.current = true;
 
     setIsSaving(true);
     try {
@@ -681,11 +777,15 @@ const ConsultantsInner = () => {
         toast.error(json.message || t('Lỗi khi lưu'));
       }
     } catch (e: any) { toast.error(t('Lỗi: ') + e.message); }
-    setIsSaving(false);
+    finally {
+      inFlightRef.current = false;
+      setIsSaving(false);
+    }
   };
 
   const handleDelete = async () => {
-    if (!deleteId || isDeleting) return;
+    if (!deleteId || isDeleting || inFlightRef.current) return;
+    inFlightRef.current = true;
     setIsDeleting(true);
     try {
       const json = await fetchAPI(`delete_consultant&id=${deleteId}`);
@@ -696,8 +796,11 @@ const ConsultantsInner = () => {
         toast.error(json.message || t('Lỗi khi xóa'));
       }
     } catch (e: any) { toast.error(t('Lỗi: ') + e.message); }
-    setIsDeleting(false);
-    setConfirmDeleteOpen(false);
+    finally {
+      inFlightRef.current = false;
+      setIsDeleting(false);
+      setConfirmDeleteOpen(false);
+    }
   };
 
   const openAddTeamModal = () => {
@@ -759,6 +862,8 @@ const ConsultantsInner = () => {
   const handleSaveTeam = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!teamFormData.name) return toast.error(t('Vui lòng nhập tên nhóm'));
+    if (isSaving || inFlightRef.current) return;
+    inFlightRef.current = true;
     
     setIsSaving(true);
     try {
@@ -794,12 +899,15 @@ const ConsultantsInner = () => {
       }
     } catch (e: any) {
       toast.error(t('Lỗi: ') + e.message);
+    } finally {
+      inFlightRef.current = false;
+      setIsSaving(false);
     }
-    setIsSaving(false);
   };
 
   const handleDeleteTeam = async () => {
-    if (!deleteTeamId) return;
+    if (!deleteTeamId || isDeleting || inFlightRef.current) return;
+    inFlightRef.current = true;
     setIsDeleting(true);
     try {
       const res = await fetchAPI(`teams/${deleteTeamId}`, { method: 'DELETE' });
@@ -812,10 +920,12 @@ const ConsultantsInner = () => {
       }
     } catch (e: any) {
       toast.error(t('Lỗi: ') + e.message);
+    } finally {
+      inFlightRef.current = false;
+      setIsDeleting(false);
+      setConfirmDeleteTeamOpen(false);
+      setDeleteTeamId(null);
     }
-    setIsDeleting(false);
-    setConfirmDeleteTeamOpen(false);
-    setDeleteTeamId(null);
   };
 
   const handleLeaveTeam = async () => {
@@ -911,7 +1021,8 @@ const ConsultantsInner = () => {
 
   const handleSendQuickMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!quickMessageText.trim() || !quickMessageTarget) return;
+    if (!quickMessageText.trim() || !quickMessageTarget || isSendingMsg || inFlightRef.current) return;
+    inFlightRef.current = true;
     setIsSendingMsg(true);
     try {
       const res = await fetchAPI('send_quick_zalo_message', {
@@ -927,8 +1038,10 @@ const ConsultantsInner = () => {
       }
     } catch (e: any) {
       toast.error(t('Lỗi: ') + e.message);
+    } finally {
+      inFlightRef.current = false;
+      setIsSendingMsg(false);
     }
-    setIsSendingMsg(false);
   };
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -972,22 +1085,34 @@ const ConsultantsInner = () => {
   };
 
   const fetchConsultantStats = async (consId: number, mode: string, start?: string, end?: string) => {
+    if (statsAbortRef.current) {
+      statsAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    statsAbortRef.current = controller;
+    const { signal } = controller;
+
     setStatsLoading(true);
     try {
       let query = `get_consultant_stats&consultant_id=${consId}&date_mode=${mode}`;
       if (mode === 'custom' && start && end) {
         query += `&start_date=${start}&end_date=${end}`;
       }
-      const json = await fetchAPI(query);
+      const json = await fetchAPI(query, { signal });
+      if (signal.aborted) return;
       if (json.success) {
         setStatsData(json);
       } else {
         toast.error(json.message || t('Lỗi khi tải báo cáo thống kê'));
       }
     } catch (e: any) {
+      if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
       toast.error(t('Lỗi kết nối: ') + e.message);
+    } finally {
+      if (!signal.aborted) {
+        setStatsLoading(false);
+      }
     }
-    setStatsLoading(false);
   };
 
   useEffect(() => {
@@ -996,6 +1121,11 @@ const ConsultantsInner = () => {
         fetchConsultantStats(statsConsultant.id, statsDateMode, statsStartDate, statsEndDate);
       }
     }
+    return () => {
+      if (statsAbortRef.current) {
+        statsAbortRef.current.abort();
+      }
+    };
   }, [statsModalOpen, statsConsultant, statsDateMode, statsStartDate, statsEndDate]);
 
   const activeCount = users.filter(u => String(u.is_active) === '1' || (u.is_active === undefined && u.status === 'active')).length;
@@ -2793,21 +2923,22 @@ const ConsultantsInner = () => {
                 style={{
                   position: 'fixed',
                   inset: 0,
-                  zIndex: 1000005,
+                  zIndex: 2147483619,
+                  '--drawer-backdrop-z': 2147483619,
                   background: 'rgba(0, 0, 0, 0.6)',
                   backdropFilter: 'blur(8px)',
                   WebkitBackdropFilter: 'blur(8px)',
                   cursor: 'pointer'
-                }}
+                } as any}
               />
               <motion.div
                 initial={{ x: '100%' }}
                 animate={{ x: 0 }}
                 exit={{ x: '100%' }}
                 transition={{ type: 'tween', duration: 0.3 }}
-                className={styles.drawer}
+                className={`${styles.drawer} drawer-sheet`}
                 style={{
-                  zIndex: 1000010
+                  zIndex: 2147483620
                 }}
               >
                 {/* Header */}

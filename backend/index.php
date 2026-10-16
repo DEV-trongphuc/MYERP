@@ -189,9 +189,10 @@ function getBody(): array {
             $trimmed = trim($item);
             // 1. Clean empty/corrupted dates
             $dateKeys = [
-                'dob', 'joined_date', 'start_date', 'end_date', 'approval_date', 
+                'dob', 'join_date', 'joined_date', 'start_date', 'end_date', 'approval_date', 
                 'leave_start', 'leave_end', 'check_in_date', 'created_at', 'updated_at', 
-                'due_date', 'payment_date', 'expiry_date', 'issued_date'
+                'due_date', 'expected_close', 'valid_until', 'issue_date', 'paid_date',
+                'payment_date', 'expiry_date', 'issued_date', 'date', 'request_date'
             ];
             if (in_array(strtolower($key), $dateKeys, true)) {
                 if ($trimmed === '' || $trimmed === '0000-00-00' || $trimmed === '1970-01-01') {
@@ -1235,7 +1236,13 @@ switch ($resource) {
             }
         }
         elseif ($resourceId === 'leaves' && $method === 'POST') $ctrl->createLeave($auth);
-        elseif ($resourceId === 'leaves' && $method === 'PUT') $ctrl->approveLeave($auth);
+        elseif ($resourceId === 'leaves' && ($method === 'PUT' || $method === 'PATCH')) {
+            if ($subResource && is_numeric($subResource) && ($segments[3] ?? '') !== 'status') {
+                $ctrl->updateLeave($auth, (int)$subResource);
+            } else {
+                $ctrl->approveLeave($auth);
+            }
+        }
         elseif ($resourceId === 'leaves' && $method === 'DELETE' && $subResource) $ctrl->deleteLeave($auth, (int)$subResource);
         elseif ($resourceId === 'advances' && $subResource && is_numeric($subResource) && $method === 'GET') $ctrl->showAdvance($auth, (int)$subResource);
         elseif ($resourceId === 'advances' && $method === 'GET') {
@@ -1246,7 +1253,13 @@ switch ($resource) {
             }
         }
         elseif ($resourceId === 'advances' && $method === 'POST') $ctrl->createAdvance($auth);
-        elseif ($resourceId === 'advances' && $method === 'PUT') $ctrl->approveAdvance($auth);
+        elseif ($resourceId === 'advances' && ($method === 'PUT' || $method === 'PATCH')) {
+            if ($subResource && is_numeric($subResource) && ($segments[3] ?? '') !== 'status') {
+                $ctrl->updateAdvance($auth, (int)$subResource);
+            } else {
+                $ctrl->approveAdvance($auth);
+            }
+        }
         elseif ($resourceId === 'advances' && $method === 'DELETE' && $subResource) $ctrl->deleteAdvance($auth, (int)$subResource);
         elseif ($resourceId === 'teams' && $method === 'GET') {
             $tCtrl = new TeamController($db);
@@ -1788,9 +1801,13 @@ switch ($resource) {
         } elseif ($resourceId === 'bulk-request' || $resourceId === 'create-bulk-request') {
             if ($method === 'POST') {
                 $ctrl->createBulkRequest($auth);
+            } elseif (($method === 'PUT' || $method === 'PATCH') && $subResource && is_numeric($subResource) && ($segments[3] ?? null) === null) {
+                $ctrl->updateBulkRequest($auth, (int)$subResource);
             } elseif ($method === 'GET') {
                 if ($subResource === 'suggest') {
                     $ctrl->suggestBulkDates($auth);
+                } elseif ($subResource && is_numeric($subResource)) {
+                    $ctrl->getBulkRequestDetail($auth, (int)$subResource);
                 } else {
                     $ctrl->listBulkRequests($auth);
                 }
@@ -1807,6 +1824,8 @@ switch ($resource) {
                     else respond(404, null, 'Route không tồn tại', false);
                 } elseif ($method === 'DELETE') {
                     $ctrl->deleteBulkRequest($auth, (int)$subResource);
+                } elseif (($method === 'PUT' || $method === 'PATCH') && ($segments[3] ?? null) === null) {
+                    $ctrl->updateBulkRequest($auth, (int)$subResource);
                 } else {
                     $ctrl->getBulkRequestDetail($auth, (int)$subResource);
                 }

@@ -13,9 +13,10 @@ interface ColumnCustomizerProps {
   onClose: () => void;
   columns: ColumnDef[];
   onChange: (columns: ColumnDef[]) => void;
+  onReset?: () => void;
 }
 
-export const ColumnCustomizer: React.FC<ColumnCustomizerProps> = ({ isOpen, onClose, columns, onChange }) => {
+export const ColumnCustomizer: React.FC<ColumnCustomizerProps> = ({ isOpen, onClose, columns, onChange, onReset }) => {
   const toggleCol = (id: string) => {
     onChange(columns.map(c => c.id === id ? { ...c, visible: !c.visible } : c));
   };
@@ -29,7 +30,7 @@ export const ColumnCustomizer: React.FC<ColumnCustomizerProps> = ({ isOpen, onCl
       title="Tùy chỉnh cột hiển thị"
       width={360}
     >
-      <div style={{ padding: '0.5rem 0', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+      <div style={{ padding: '0.5rem 0', paddingRight: '2px', display: 'flex', flexDirection: 'column', gap: '0.25rem', maxHeight: '340px', overflowY: 'auto' }}>
         {columns.map(col => (
           <label 
             key={col.id} 
@@ -51,10 +52,15 @@ export const ColumnCustomizer: React.FC<ColumnCustomizerProps> = ({ isOpen, onCl
         ))}
       </div>
 
-      <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--color-border)', display: 'flex', justifyContent: 'center' }}>
-        <button className="btn ghost sm" onClick={showAll} style={{ width: '100%', color: 'var(--color-primary)', fontWeight: 600 }}>
-          Hiện tất cả các cột
+      <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--color-border)', display: 'flex', justifyContent: 'center', gap: '0.5rem' }}>
+        <button className="btn ghost sm" onClick={showAll} style={{ flex: 1, color: 'var(--color-primary)', fontWeight: 600 }}>
+          Hiện tất cả
         </button>
+        {onReset && (
+          <button className="btn outline sm" onClick={onReset} style={{ flex: 1, fontWeight: 600 }}>
+            Khôi phục mặc định
+          </button>
+        )}
       </div>
     </CustomModal>
   );

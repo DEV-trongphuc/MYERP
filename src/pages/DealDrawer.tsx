@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, DollarSign, History, Briefcase, Tag as TagIcon, Box, FileText, CheckCircle2, Link2, Paperclip, RefreshCw, Trash2 } from 'lucide-react';
 import { CustomSelect } from '../components/ui/CustomSelect';
@@ -60,12 +60,18 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
   const [switchProjectId, setSwitchProjectId] = useState('');
   const [switchReason, setSwitchReason] = useState('');
   const [submittingSwitch, setSubmittingSwitch] = useState(false);
+  const switchUnitInFlightRef = useRef(false);
+  const addNoteInFlightRef = useRef(false);
+  const saveDealInFlightRef = useRef(false);
+  const escapeHandlerRef = useRef<() => void>(() => onClose());
 
   const handleSwitchUnit = async () => {
+    if (switchUnitInFlightRef.current) return;
     if (!switchUnitCode.trim() || !switchPrice) {
       addToast('Vui lòng điền đầy đủ mã căn hộ mới và giá bán mới', 'error');
       return;
     }
+    switchUnitInFlightRef.current = true;
     setSubmittingSwitch(true);
     try {
       const res = await api.post(`/deals/${deal.id}/switch`, {
@@ -87,6 +93,7 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
     } catch (e: any) {
       addToast(e.response?.data?.message || e.message || 'Lỗi kết nối', 'error');
     } finally {
+      switchUnitInFlightRef.current = false;
       setSubmittingSwitch(false);
     }
   };
@@ -95,7 +102,7 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
     if (isOpen) {
       document.body.style.overflow = 'hidden';
       const unregister = pushOverlay('deal-drawer', () => {
-        onClose();
+        escapeHandlerRef.current();
       }, 100);
       return () => {
         document.body.style.overflow = '';
@@ -104,7 +111,7 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
     } else {
       document.body.style.overflow = '';
     }
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   const renderFormattedText = (text: string) => {
     if (!text) return '';
@@ -166,19 +173,27 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
     });
   };
 
+  const listsAbortRef = useRef<AbortController | null>(null);
+  const notesAbortRef = useRef<AbortController | null>(null);
+  const detailsAbortRef = useRef<AbortController | null>(null);
+
   const fetchLists = async () => {
+    if (listsAbortRef.current) listsAbortRef.current.abort();
+    const abortController = new AbortController();
+    listsAbortRef.current = abortController;
     setLoadingLists(true);
     try {
       const usersEndpoint = '/users?all=1';
       const isRosterRestricted = ['sale', 'sales', 'manager', 'director'].includes(currentUser?.role || '');
       const bypassProj = isRosterRestricted ? '' : '?bypass_roster=1';
       const [rC, rCo, rT, rU, rP] = await Promise.all([
-        api.get('/contacts?limit=1000'),
-        api.get('/companies'),
-        api.get('/tags'),
-        api.get(usersEndpoint).catch(() => ({ data: { data: [] } })),
-        api.get(`/projects${bypassProj}`).catch(() => ({ data: { data: [] } }))
+        api.get('/contacts?limit=1000', { signal: abortController.signal }),
+        api.get('/companies', { signal: abortController.signal }),
+        api.get('/tags', { signal: abortController.signal }),
+        api.get(usersEndpoint, { signal: abortController.signal }).catch(() => ({ data: { data: [] } })),
+        api.get(`/projects${bypassProj}`, { signal: abortController.signal }).catch(() => ({ data: { data: [] } }))
       ]);
+      if (abortController.signal.aborted) return;
       setContacts(rC.data.data?.items || []);
       setCompanies(rCo.data.data?.items || []);
       setAllTags(rT.data.data || []);
@@ -194,25 +209,27 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
       setUsers(mapped);
       setProjects(rP.data.data || []);
     } catch (e: any) {
-      // Keep empty or mock
+      if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
     } finally {
-      setLoadingLists(false);
+      if (!abortController.signal.aborted) setLoadingLists(false);
     }
   };
 
   const fetchNotes = async () => {
     if (!deal?.id) return;
+    if (notesAbortRef.current) notesAbortRef.current.abort();
+    const abortController = new AbortController();
+    notesAbortRef.current = abortController;
     setLoadingNotes(true);
     try {
-      const r = await api.get(`/notes?entity_type=deal&entity_id=${deal.id}`);
+      const r = await api.get(`/notes?entity_type=deal&entity_id=${deal.id}`, { signal: abortController.signal });
+      if (abortController.signal.aborted) return;
       setNotes(r.data.data || []);
     } catch (e: any) {
-      setNotes([
-        { id: 1, author_name: 'Admin', body: 'Đã liên hệ khách hàng lần đầu, khách phản hồi tốt.', created_at: new Date().toISOString() },
-        { id: 2, author_name: 'Sales', body: 'Khách yêu cầu gửi thêm báo giá chi tiết module ERP.', created_at: new Date(Date.now() - 86400000).toISOString() }
-      ]);
+      if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
+      setNotes([]);
     } finally {
-      setLoadingNotes(false);
+      if (!abortController.signal.aborted) setLoadingNotes(false);
     }
   };
 
@@ -232,8 +249,12 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
   };
 
   const fetchDealDetails = async (dealId: number) => {
+    if (detailsAbortRef.current) detailsAbortRef.current.abort();
+    const abortController = new AbortController();
+    detailsAbortRef.current = abortController;
     try {
-      const res = await api.get(`/deals/${dealId}`);
+      const res = await api.get(`/deals/${dealId}`, { signal: abortController.signal });
+      if (abortController.signal.aborted) return;
       if (res.data.success && res.data.data) {
         const d = res.data.data;
         setFormData({
@@ -241,7 +262,8 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
           tags: Array.isArray(d.tags) ? d.tags : (typeof d.tags === 'string' ? JSON.parse(d.tags) : [])
         });
       }
-    } catch (e) {
+    } catch (e: any) {
+      if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
       console.error("Error fetching deal details:", e);
     }
   };
@@ -253,6 +275,14 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
   }
 
   useEffect(() => {
+    setNotes([]);
+    setNewNote('');
+    setIsSwitchModalOpen(false);
+    setNoteAttachmentFile(null);
+    setNoteAttachmentPreview(prev => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
     if (deal) {
       setFormData({
         ...deal,
@@ -263,6 +293,11 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
       fetchNotes();
     }
     fetchLists();
+    return () => {
+      if (listsAbortRef.current) listsAbortRef.current.abort();
+      if (notesAbortRef.current) notesAbortRef.current.abort();
+      if (detailsAbortRef.current) detailsAbortRef.current.abort();
+    };
   }, [deal]);
 
   useEffect(() => {
@@ -310,6 +345,8 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
 
   const handleAddNote = async () => {
     if (!newNote.trim() && !noteAttachmentFile) return;
+    if (addNoteInFlightRef.current) return;
+    addNoteInFlightRef.current = true;
     setIsSavingNote(true);
 
     let finalBody = newNote.trim();
@@ -335,6 +372,7 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
       console.error('Lỗi khi lưu ghi chú deal:', e);
       addToast(e?.response?.data?.message || 'Không thể lưu ghi chú vào máy chủ. Vui lòng thử lại!', 'error');
     } finally {
+      addNoteInFlightRef.current = false;
       setIsSavingNote(false);
     }
   };
@@ -361,15 +399,13 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
     }, 280);
   };
 
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        handleClose();
-      }
-    };
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
-  }, [isOpen]);
+  escapeHandlerRef.current = () => {
+    if (isSwitchModalOpen) {
+      setIsSwitchModalOpen(false);
+    } else {
+      handleClose();
+    }
+  };
 
   if (!isVisible) return null;
   if (typeof document === 'undefined') return null;
@@ -381,13 +417,14 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
         onClick={handleClose}
         style={{
           zIndex: 1000,
+          '--drawer-backdrop-z': 1000,
           opacity: animateIn ? 1 : 0,
           transition: 'opacity 0.28s cubic-bezier(0.25, 0.1, 0.25, 1)',
           pointerEvents: animateIn ? 'auto' : 'none'
-        }}
+        } as any}
       />
       <div
-        className={styles.drawer}
+        className={`${styles.drawer} drawer-sheet`}
         style={{
           transform: animateIn ? 'translateX(0)' : 'translateX(60%)',
           opacity: animateIn ? 1 : 0,
@@ -629,7 +666,7 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
                                           const newFields = [...formData.custom_fields];
                                           const newSelected = e.target.checked ? [...selected, o] : selected.filter((s: string) => s !== o);
                                           newFields[index].value = newSelected;
-                                          setFormData({ ...formData, custom_fields: newSelected });
+                                          setFormData({ ...formData, custom_fields: newFields });
                                         }} style={{ display: 'none' }} />
                                         <span style={{ fontSize: '0.8125rem', fontWeight: 500, color: isChecked ? 'white' : 'var(--color-text)' }}>{o}</span>
                                       </label>
@@ -1018,7 +1055,8 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
               )}
               <button className="btn ghost" onClick={onClose}>{isViewer ? 'Đóng' : 'Hủy bỏ'}</button>
               {!isViewer && (
-                <button className="btn primary" onClick={() => {
+                <button className="btn primary" onClick={async () => {
+                  if (saveDealInFlightRef.current) return;
                   const payload = { ...formData };
                   if (formData.custom_fields && Array.isArray(formData.custom_fields)) {
                     for (const f of formData.custom_fields) {
@@ -1030,7 +1068,12 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
                     }
                     payload.custom_fields = formData.custom_fields.map((f: any) => ({ field_id: f.id, value: f.value }));
                   }
-                  onSave(payload);
+                  saveDealInFlightRef.current = true;
+                  try {
+                    await onSave(payload);
+                  } finally {
+                    saveDealInFlightRef.current = false;
+                  }
                 }}>Lưu Cơ Hội</button>
               )}
             </div>

@@ -158,16 +158,19 @@ class CheckInController {
                 $userIdFilter = (int)$_GET['user_id'];
             }
 
+            $tid = (int)($auth['tenant_id'] ?? 1);
             if (isset($_GET['month']) && !empty($_GET['month'])) {
                 $year = (int)($_GET['year'] ?? date('Y'));
                 $month = (int)$_GET['month'];
+                $startDate = sprintf('%04d-%02d-01', $year, $month);
+                $endDate = date('Y-m-t', strtotime($startDate));
 
                 // 1. Night shifts
                 $nightSql = "SELECT 'night' as shift_type, r.id, r.user_id, r.shift_date, r.approved, r.created_at, u.full_name as user_name, '' as holiday_name, u.avatar_url as user_avatar, u.email as user_email 
                              FROM night_shift_registrations r 
                              JOIN users u ON r.user_id = u.id 
-                             WHERE YEAR(r.shift_date) = ? AND MONTH(r.shift_date) = ?";
-                $nightParams = [$year, $month];
+                             WHERE u.tenant_id = ? AND r.shift_date BETWEEN ? AND ?";
+                $nightParams = [$tid, $startDate, $endDate];
                 if ($userIdFilter !== null) {
                     $nightSql .= " AND r.user_id = ?";
                     $nightParams[] = $userIdFilter;
@@ -180,8 +183,8 @@ class CheckInController {
                 $weekendSql = "SELECT 'weekend' as shift_type, r.id, r.user_id, r.shift_date, r.approved, r.created_at, u.full_name as user_name, '' as holiday_name, u.avatar_url as user_avatar, u.email as user_email 
                                FROM weekend_shift_registrations r 
                                JOIN users u ON r.user_id = u.id 
-                               WHERE YEAR(r.shift_date) = ? AND MONTH(r.shift_date) = ?";
-                $weekendParams = [$year, $month];
+                               WHERE u.tenant_id = ? AND r.shift_date BETWEEN ? AND ?";
+                $weekendParams = [$tid, $startDate, $endDate];
                 if ($userIdFilter !== null) {
                     $weekendSql .= " AND r.user_id = ?";
                     $weekendParams[] = $userIdFilter;
@@ -194,8 +197,8 @@ class CheckInController {
                 $holidaySql = "SELECT 'holiday' as shift_type, r.id, r.user_id, r.shift_date, r.approved, r.created_at, u.full_name as user_name, r.holiday_name, u.avatar_url as user_avatar, u.email as user_email 
                                FROM holiday_shift_registrations r 
                                JOIN users u ON r.user_id = u.id 
-                               WHERE YEAR(r.shift_date) = ? AND MONTH(r.shift_date) = ?";
-                $holidayParams = [$year, $month];
+                               WHERE u.tenant_id = ? AND r.shift_date BETWEEN ? AND ?";
+                $holidayParams = [$tid, $startDate, $endDate];
                 if ($userIdFilter !== null) {
                     $holidaySql .= " AND r.user_id = ?";
                     $holidayParams[] = $userIdFilter;
@@ -221,8 +224,8 @@ class CheckInController {
                               JOIN users u ON r.user_id = u.id 
                               LEFT JOIN users app1 ON r.approver_id = app1.id
                               LEFT JOIN users app2 ON r.approver_id_2 = app2.id
-                              WHERE r.leave_type = 'overtime' AND r.status != 'rejected' AND YEAR(r.start_date) = ? AND MONTH(r.start_date) = ?";
-                    $otParams = [$year, $month];
+                              WHERE u.tenant_id = ? AND r.leave_type = 'overtime' AND r.status != 'rejected' AND YEAR(r.start_date) = ? AND MONTH(r.start_date) = ?";
+                    $otParams = [$tid, $year, $month];
                     if ($userIdFilter !== null) {
                         $otSql .= " AND r.user_id = ?";
                         $otParams[] = $userIdFilter;
@@ -247,9 +250,9 @@ class CheckInController {
                               JOIN users u ON r.user_id = u.id 
                               LEFT JOIN users app1 ON r.approver_id = app1.id
                               LEFT JOIN users app2 ON r.approver_id_2 = app2.id
-                              WHERE r.leave_type != 'overtime' AND r.status != 'rejected' 
+                              WHERE u.tenant_id = ? AND r.leave_type != 'overtime' AND r.status != 'rejected' 
                                 AND (YEAR(r.start_date) = ? AND MONTH(r.start_date) = ? OR YEAR(r.end_date) = ? AND MONTH(r.end_date) = ?)";
-                    $lvParams = [$year, $month, $year, $month];
+                    $lvParams = [$tid, $year, $month, $year, $month];
                     if ($userIdFilter !== null) {
                         $lvSql .= " AND r.user_id = ?";
                         $lvParams[] = $userIdFilter;
@@ -269,8 +272,8 @@ class CheckInController {
                 $nightSql = "SELECT 'night' as shift_type, r.id, r.user_id, r.shift_date, r.approved, r.created_at, u.full_name as user_name, '' as holiday_name, u.avatar_url as user_avatar, u.email as user_email 
                              FROM night_shift_registrations r 
                              JOIN users u ON r.user_id = u.id 
-                             WHERE r.shift_date BETWEEN ? AND ?";
-                $nightParams = [$from, $to];
+                             WHERE u.tenant_id = ? AND r.shift_date BETWEEN ? AND ?";
+                $nightParams = [$tid, $from, $to];
                 if ($userIdFilter !== null) {
                     $nightSql .= " AND r.user_id = ?";
                     $nightParams[] = $userIdFilter;
@@ -283,8 +286,8 @@ class CheckInController {
                 $weekendSql = "SELECT 'weekend' as shift_type, r.id, r.user_id, r.shift_date, r.approved, r.created_at, u.full_name as user_name, '' as holiday_name, u.avatar_url as user_avatar, u.email as user_email 
                                FROM weekend_shift_registrations r 
                                JOIN users u ON r.user_id = u.id 
-                               WHERE r.shift_date BETWEEN ? AND ?";
-                $weekendParams = [$from, $to];
+                               WHERE u.tenant_id = ? AND r.shift_date BETWEEN ? AND ?";
+                $weekendParams = [$tid, $from, $to];
                 if ($userIdFilter !== null) {
                     $weekendSql .= " AND r.user_id = ?";
                     $weekendParams[] = $userIdFilter;
@@ -297,8 +300,8 @@ class CheckInController {
                 $holidaySql = "SELECT 'holiday' as shift_type, r.id, r.user_id, r.shift_date, r.approved, r.created_at, u.full_name as user_name, r.holiday_name, u.avatar_url as user_avatar, u.email as user_email 
                                FROM holiday_shift_registrations r 
                                JOIN users u ON r.user_id = u.id 
-                               WHERE r.shift_date BETWEEN ? AND ?";
-                $holidayParams = [$from, $to];
+                               WHERE u.tenant_id = ? AND r.shift_date BETWEEN ? AND ?";
+                $holidayParams = [$tid, $from, $to];
                 if ($userIdFilter !== null) {
                     $holidaySql .= " AND r.user_id = ?";
                     $holidayParams[] = $userIdFilter;
@@ -324,8 +327,8 @@ class CheckInController {
                               JOIN users u ON r.user_id = u.id 
                               LEFT JOIN users app1 ON r.approver_id = app1.id
                               LEFT JOIN users app2 ON r.approver_id_2 = app2.id
-                              WHERE r.leave_type = 'overtime' AND r.status != 'rejected' AND DATE(r.start_date) BETWEEN ? AND ?";
-                    $otParams = [$from, $to];
+                              WHERE u.tenant_id = ? AND r.leave_type = 'overtime' AND r.status != 'rejected' AND DATE(r.start_date) BETWEEN ? AND ?";
+                    $otParams = [$tid, $from, $to];
                     if ($userIdFilter !== null) {
                         $otSql .= " AND r.user_id = ?";
                         $otParams[] = $userIdFilter;
@@ -350,9 +353,9 @@ class CheckInController {
                               JOIN users u ON r.user_id = u.id 
                               LEFT JOIN users app1 ON r.approver_id = app1.id
                               LEFT JOIN users app2 ON r.approver_id_2 = app2.id
-                              WHERE r.leave_type != 'overtime' AND r.status != 'rejected' 
+                              WHERE u.tenant_id = ? AND r.leave_type != 'overtime' AND r.status != 'rejected' 
                                 AND (DATE(r.start_date) <= ? AND DATE(r.end_date) >= ?)";
-                    $lvParams = [$to, $from];
+                    $lvParams = [$tid, $to, $from];
                     if ($userIdFilter !== null) {
                         $lvSql .= " AND r.user_id = ?";
                         $lvParams[] = $userIdFilter;
@@ -1028,6 +1031,7 @@ class CheckInController {
             'admin_note' => $adminNote,
             'reason' => $adminNote ?: ($row['reason'] ?? ''),
             'ref_id' => $id,
+            'open_type' => 'checkin',
             'is_supplementary' => $isSupplementary
         ]);
 
@@ -1443,6 +1447,7 @@ class CheckInController {
         $b = getBody();
         $month = trim($b['month_period'] ?? date('Y-m'));
         $details = $b['details'] ?? [];
+        $isDraft = (($b['status'] ?? '') === 'draft');
 
         if (empty($details)) {
             respond(400, null, 'Danh sách ngày đề xuất bổ sung không được trống', false);
@@ -1450,15 +1455,25 @@ class CheckInController {
 
         $this->db->beginTransaction();
         try {
-            // Check if there is already a pending bulk request for this month
+            // Check if there is already a pending bulk request (or draft if saving draft) for this month
             $existingReq = null;
-            $stmtCheck = $this->db->prepare("
-                SELECT id FROM attendance_bulk_requests 
-                WHERE user_id = ? AND month_period = ? AND status IN ('pending_manager', 'pending_hr')
-                ORDER BY id DESC LIMIT 1
-            ");
-            $stmtCheck->execute([$userId, $month]);
-            $existingReq = $stmtCheck->fetch(PDO::FETCH_ASSOC);
+            if ($isDraft) {
+                $stmtCheck = $this->db->prepare("
+                    SELECT id FROM attendance_bulk_requests 
+                    WHERE user_id = ? AND month_period = ? AND status = 'draft'
+                    ORDER BY id DESC LIMIT 1
+                ");
+                $stmtCheck->execute([$userId, $month]);
+                $existingReq = $stmtCheck->fetch(PDO::FETCH_ASSOC);
+            } else {
+                $stmtCheck = $this->db->prepare("
+                    SELECT id FROM attendance_bulk_requests 
+                    WHERE user_id = ? AND month_period = ? AND status IN ('pending_manager', 'pending_hr')
+                    ORDER BY id DESC LIMIT 1
+                ");
+                $stmtCheck->execute([$userId, $month]);
+                $existingReq = $stmtCheck->fetch(PDO::FETCH_ASSOC);
+            }
 
             // Look up manager/leader or HR as default if approver_id not provided
             $approverId = !empty($b['approver_id']) ? (int)$b['approver_id'] : null;
@@ -1542,8 +1557,14 @@ class CheckInController {
             $relatedUserIds = !empty($relArr) ? json_encode(array_values(array_unique($relArr))) : null;
 
             // QUY TẮC PHÊ DUYỆT:
-            // Trưởng phòng / Quản lý: TỰ TẠO VÀ TỰ PHÊ DUYỆT NGAY LẬP TỨC CHO MÌNH
-            if ($isLeaderOrManager) {
+            // Trưởng phòng / Quản lý: TỰ TẠO VÀ TỰ PHÊ DUYỆT NGAY LẬP TỨC CHO MÌNH (trừ khi lưu nháp)
+            if ($isDraft) {
+                $isSelfApproved = false;
+                $initialStatus = 'draft';
+                $approvedBy = null;
+                $approvedAt = null;
+                $adminNote = null;
+            } elseif ($isLeaderOrManager) {
                 $isSelfApproved = true;
                 $initialStatus = 'approved';
                 $approvedBy = $userId;
@@ -1616,7 +1637,10 @@ class CheckInController {
                 if (!empty($d['is_on_leave']) || !empty($d['disabled'])) {
                     continue;
                 }
-                $date = $d['date'];
+                $date = $d['date'] ?? $d['check_in_date'] ?? '';
+                if (empty($date)) {
+                    continue;
+                }
                 if ($date > date('Y-m-d')) {
                     throw new Exception('Không thể đề xuất bổ sung công cho các ngày trong tương lai: ' . $date);
                 }
@@ -1633,8 +1657,8 @@ class CheckInController {
                     continue;
                 }
 
-                $in = !empty($d['check_in']) ? $d['check_in'] : null;
-                $out = !empty($d['check_out']) ? $d['check_out'] : null;
+                $in = !empty($d['check_in']) ? $d['check_in'] : (!empty($d['suggested_check_in']) ? $d['suggested_check_in'] : null);
+                $out = !empty($d['check_out']) ? $d['check_out'] : (!empty($d['suggested_check_out']) ? $d['suggested_check_out'] : null);
                 $reason = $d['reason'] ?? 'Bổ sung công';
 
                 $stmtDetail->execute([$requestId, $date, $in, $out, $reason]);
@@ -1660,42 +1684,30 @@ class CheckInController {
 
             $this->db->commit();
 
-            // Send notification to approver/manager (ATTENDANCE_UPDATE event type)
-            try {
-                require_once __DIR__ . '/../NotificationService.php';
-                $userName = $auth['full_name'] ?? 'Nhân viên';
-                $targetUid = $approverId ?: $userId;
-                $daysCount = count($details);
-                $isSingleDay = ($daysCount === 1);
-                $singleDateStr = $isSingleDay && !empty($details[0]['date']) ? date('d/m/Y', strtotime($details[0]['date'])) : '';
-                $firstReason = trim($details[0]['reason'] ?? '');
+            // Send notification to approver/manager (ATTENDANCE_UPDATE event type) when not draft
+            if (!$isDraft) {
+                try {
+                    require_once __DIR__ . '/../NotificationService.php';
+                    $userName = $auth['full_name'] ?? 'Nhân viên';
+                    $targetUid = $approverId ?: $userId;
+                    $daysCount = count($details);
+                    $isSingleDay = ($daysCount === 1);
+                    $firstDate = $details[0]['date'] ?? $details[0]['check_in_date'] ?? '';
+                    $singleDateStr = $isSingleDay && !empty($firstDate) ? date('d/m/Y', strtotime($firstDate)) : '';
+                    $firstReason = trim($details[0]['reason'] ?? '');
 
-                if ($isSingleDay) {
-                    $notifReason = ($firstReason && $firstReason !== 'Bổ sung công') ? $firstReason : ("Giải trình cập nhật công ngày $singleDateStr");
-                } else {
-                    $notifReason = "Đề xuất cập nhật công chu kỳ tháng $month ($daysCount ngày)";
-                }
+                    if ($isSingleDay) {
+                        $notifReason = ($firstReason && $firstReason !== 'Bổ sung công') ? $firstReason : ("Giải trình cập nhật công ngày $singleDateStr");
+                    } else {
+                        $notifReason = "Đề xuất cập nhật công chu kỳ tháng $month ($daysCount ngày)";
+                    }
 
-                $tenantId = (int)($auth['tenant_id'] ?? 1);
+                    $tenantId = (int)($auth['tenant_id'] ?? 1);
 
-                NotificationService::send($this->db, $tenantId, 'ATTENDANCE_UPDATE', [
-                    'user_id' => $targetUid,
-                    'user_name' => $userName,
-                    'reason' => $notifReason,
-                    'ref_id' => $requestId,
-                    'is_bulk' => true,
-                    'is_single_day' => $isSingleDay,
-                    'single_date' => $singleDateStr,
-                    'days_count' => $daysCount,
-                    'month_period' => $month
-                ]);
-
-                // Notify approver 2 if present
-                if (!empty($approverId2) && (int)$approverId2 !== (int)$userId && (int)$approverId2 !== (int)$targetUid) {
                     NotificationService::send($this->db, $tenantId, 'ATTENDANCE_UPDATE', [
-                        'user_id' => $approverId2,
+                        'user_id' => $targetUid,
                         'user_name' => $userName,
-                        'reason' => $notifReason . " (Người duyệt cấp 2)",
+                        'reason' => $notifReason,
                         'ref_id' => $requestId,
                         'is_bulk' => true,
                         'is_single_day' => $isSingleDay,
@@ -1703,40 +1715,282 @@ class CheckInController {
                         'days_count' => $daysCount,
                         'month_period' => $month
                     ]);
-                }
 
-                // Notify related persons
-                if (!empty($relArr)) {
-                    foreach ($relArr as $relUid) {
-                        $relUid = (int)$relUid;
-                        if ($relUid > 0 && $relUid !== (int)$userId && $relUid !== (int)$targetUid) {
-                            NotificationService::send($this->db, $tenantId, 'ATTENDANCE_UPDATE', [
-                                'user_id' => $relUid,
-                                'user_name' => $userName,
-                                'reason' => $notifReason . " (Bạn được gắn là Người liên quan)",
-                                'ref_id' => $requestId,
-                                'is_bulk' => true,
-                                'is_single_day' => $isSingleDay,
-                                'single_date' => $singleDateStr,
-                                'days_count' => $daysCount,
-                                'month_period' => $month
-                            ]);
+                    // Notify approver 2 if present
+                    if (!empty($approverId2) && (int)$approverId2 !== (int)$userId && (int)$approverId2 !== (int)$targetUid) {
+                        NotificationService::send($this->db, $tenantId, 'ATTENDANCE_UPDATE', [
+                            'user_id' => $approverId2,
+                            'user_name' => $userName,
+                            'reason' => $notifReason . " (Người duyệt cấp 2)",
+                            'ref_id' => $requestId,
+                            'is_bulk' => true,
+                            'is_single_day' => $isSingleDay,
+                            'single_date' => $singleDateStr,
+                            'days_count' => $daysCount,
+                            'month_period' => $month
+                        ]);
+                    }
+
+                    // Notify related persons
+                    if (!empty($relArr)) {
+                        foreach ($relArr as $relUid) {
+                            $relUid = (int)$relUid;
+                            if ($relUid > 0 && $relUid !== (int)$userId && $relUid !== (int)$targetUid) {
+                                NotificationService::send($this->db, $tenantId, 'ATTENDANCE_UPDATE', [
+                                    'user_id' => $relUid,
+                                    'user_name' => $userName,
+                                    'reason' => $notifReason . " (Bạn được gắn là Người liên quan)",
+                                    'ref_id' => $requestId,
+                                    'is_bulk' => true,
+                                    'is_single_day' => $isSingleDay,
+                                    'single_date' => $singleDateStr,
+                                    'days_count' => $daysCount,
+                                    'month_period' => $month
+                                ]);
+                            }
                         }
                     }
+                } catch (\Throwable $ne) {
+                    error_log("Failed to send bulk request notification: " . $ne->getMessage());
                 }
-            } catch (\Throwable $ne) {
-                error_log("Failed to send bulk request notification: " . $ne->getMessage());
             }
 
-            $msg = $isUpdate
-                ? 'Đã cập nhật bổ sung ngày công vào phiếu đề xuất thành công'
-                : ($isSelfApproved 
-                    ? 'Đề xuất cập nhật công đã được tạo và tự động phê duyệt thành công' 
-                    : 'Tạo phiếu đề xuất bổ sung công tổng hợp thành công');
+            $msg = $isDraft
+                ? 'Đã lưu bản nháp đề xuất bổ sung công'
+                : ($isUpdate
+                    ? 'Đã cập nhật bổ sung ngày công vào phiếu đề xuất thành công'
+                    : ($isSelfApproved 
+                        ? 'Đề xuất cập nhật công đã được tạo và tự động phê duyệt thành công' 
+                        : 'Tạo phiếu đề xuất bổ sung công tổng hợp thành công'));
             respond($isUpdate ? 200 : 201, ['request_id' => $requestId, 'status' => $initialStatus, 'auto_approved' => $isSelfApproved, 'is_update' => $isUpdate], $msg);
         } catch (\Throwable $ex) {
-            $this->db->rollBack();
+            if ($this->db->inTransaction()) $this->db->rollBack();
             respond(500, null, 'Lỗi hệ thống: ' . $ex->getMessage(), false);
+        }
+    }
+
+    public function updateBulkRequest(array $auth, int $id): void {
+        $stmtReq = $this->db->prepare("
+            SELECT r.*, u.full_name, u.tenant_id
+            FROM attendance_bulk_requests r
+            JOIN users u ON r.user_id = u.id
+            WHERE r.id = ?
+        ");
+        $stmtReq->execute([$id]);
+        $req = $stmtReq->fetch(PDO::FETCH_ASSOC);
+
+        if (!$req) {
+            respond(404, null, 'Không tìm thấy phiếu đề xuất bổ sung công', false);
+            return;
+        }
+        if ((int)$req['tenant_id'] !== (int)$auth['tenant_id']) {
+            respond(403, null, 'Bạn không có quyền thao tác trên dữ liệu này', false);
+            return;
+        }
+
+        $userId = (int)$auth['user_id'];
+        $userRole = strtolower($auth['role'] ?? '');
+        $isAdmin = in_array($userRole, ['admin', 'superadmin', 'super_admin', 'director', 'hr'], true);
+        $isCreator = ((int)$req['user_id'] === $userId);
+        if (!$isCreator && !$isAdmin) {
+            respond(403, null, 'Chỉ người tạo hoặc Quản trị viên mới có quyền chỉnh sửa phiếu đề xuất này', false);
+            return;
+        }
+
+        $oldStatus = $req['status'] ?? 'pending_manager';
+        $canEdit = in_array($oldStatus, ['draft', 'pending_manager', 'pending', 'rejected'], true);
+        if (!$canEdit && !$isAdmin) {
+            respond(400, null, 'Chỉ có thể chỉnh sửa phiếu đề xuất khi đang ở trạng thái Nháp, Chờ duyệt cấp 1 hoặc Từ chối', false);
+            return;
+        }
+
+        $b = getBody();
+        $month = trim($b['month_period'] ?? $req['month_period'] ?? date('Y-m'));
+        $details = $b['details'] ?? null;
+        $isDraft = isset($b['status']) ? ($b['status'] === 'draft') : ($oldStatus === 'draft' && empty($b['submit']));
+
+        $approverId = array_key_exists('approver_id', $b) ? (!empty($b['approver_id']) ? (int)$b['approver_id'] : null) : (!empty($req['manager_id']) ? (int)$req['manager_id'] : null);
+        $approverId2 = (array_key_exists('approver_id_2', $b) || array_key_exists('approver2_id', $b))
+            ? (!empty($b['approver_id_2']) ? (int)$b['approver_id_2'] : (!empty($b['approver2_id']) ? (int)$b['approver2_id'] : null))
+            : (!empty($req['approver2_id']) ? (int)$req['approver2_id'] : null);
+
+        $targetUserId = (int)$req['user_id'];
+        $isLeaderOrManager = in_array($userRole, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'leader', 'truongphong', 'head_of_department'], true) && $isCreator;
+        if (!$isLeaderOrManager && $isCreator) {
+            try {
+                $stmtIsLeader = $this->db->prepare("
+                    SELECT 1 FROM teams WHERE leader_id = ? OR FIND_IN_SET(?, COALESCE(co_leader_ids, '')) LIMIT 1
+                ");
+                $stmtIsLeader->execute([$targetUserId, $targetUserId]);
+                $isLeaderOrManager = (bool)$stmtIsLeader->fetch();
+            } catch (\Throwable $e) {
+                $isLeaderOrManager = false;
+            }
+        }
+        if ($isLeaderOrManager && empty($approverId)) {
+            $approverId = $targetUserId;
+        }
+
+        if (array_key_exists('related_user_ids', $b)) {
+            $relArr = !empty($b['related_user_ids']) ? (is_array($b['related_user_ids']) ? $b['related_user_ids'] : json_decode((string)$b['related_user_ids'], true)) : [];
+            if (!is_array($relArr)) $relArr = [];
+        } else {
+            $relArr = !empty($req['related_user_ids']) ? (is_array($req['related_user_ids']) ? $req['related_user_ids'] : json_decode((string)$req['related_user_ids'], true)) : [];
+            if (!is_array($relArr)) $relArr = [];
+        }
+        $relatedUserIds = !empty($relArr) ? json_encode(array_values(array_unique(array_map('intval', $relArr)))) : null;
+
+        if ($isDraft) {
+            $isSelfApproved = false;
+            $nextStatus = 'draft';
+            $approvedBy = null;
+            $approvedAt = null;
+            $adminNote = null;
+        } elseif ($isLeaderOrManager) {
+            $isSelfApproved = true;
+            $nextStatus = 'approved';
+            $approvedBy = $targetUserId;
+            $approvedAt = date('Y-m-d H:i:s');
+            $adminNote = 'Trưởng phòng tự tạo và tự phê duyệt chấm công';
+        } else {
+            $isSelfApproved = false;
+            $nextStatus = 'pending_manager';
+            $approvedBy = null;
+            $approvedAt = null;
+            $adminNote = null;
+        }
+
+        $this->db->beginTransaction();
+        try {
+            $stmtUpdate = $this->db->prepare("
+                UPDATE attendance_bulk_requests 
+                SET month_period = ?, manager_id = ?, approver2_id = ?, related_user_ids = ?, status = ?, approved_by = ?, approved_at = ?, admin_note = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            ");
+            $stmtUpdate->execute([$month, $approverId, $approverId2, $relatedUserIds, $nextStatus, $approvedBy, $approvedAt, $adminNote, $id]);
+
+            if (is_array($details)) {
+                if (empty($details)) {
+                    throw new Exception('Danh sách ngày đề xuất bổ sung không được trống');
+                }
+                $this->db->prepare("DELETE FROM attendance_bulk_request_details WHERE request_id = ?")->execute([$id]);
+
+                $stmtDetail = $this->db->prepare("
+                    INSERT INTO attendance_bulk_request_details (request_id, check_in_date, suggested_check_in, suggested_check_out, reason, approved)
+                    VALUES (?, ?, ?, ?, ?, 1)
+                ");
+                $stmtUpsert = null;
+                if ($isSelfApproved) {
+                    $stmtUpsert = $this->db->prepare("
+                        INSERT INTO check_ins (user_id, check_in_date, check_in_time, check_out_time, status, reason, admin_note, late_minutes, early_minutes)
+                        VALUES (?, ?, ?, ?, 'approved', ?, ?, 0, 0)
+                        ON DUPLICATE KEY UPDATE 
+                          check_in_time = VALUES(check_in_time),
+                          check_out_time = VALUES(check_out_time),
+                          status = 'approved',
+                          reason = VALUES(reason),
+                          admin_note = VALUES(admin_note),
+                          late_minutes = 0,
+                          early_minutes = 0
+                    ");
+                }
+
+                $stmtLeaves = $this->db->prepare("
+                    SELECT DATE(start_date) as s_date, DATE(end_date) as e_date 
+                    FROM hrm_leave_requests 
+                    WHERE user_id = ? AND status IN ('approved', 'pending')
+                ");
+                $stmtLeaves->execute([$targetUserId]);
+                $userLeaves = $stmtLeaves->fetchAll(PDO::FETCH_ASSOC);
+
+                $validDetailsCount = 0;
+                foreach ($details as $d) {
+                    if (!empty($d['is_on_leave']) || !empty($d['disabled'])) {
+                        continue;
+                    }
+                    $date = $d['date'] ?? $d['check_in_date'] ?? '';
+                    if (empty($date)) {
+                        continue;
+                    }
+                    if ($date > date('Y-m-d')) {
+                        throw new Exception('Không thể đề xuất bổ sung công cho các ngày trong tương lai: ' . $date);
+                    }
+
+                    $isOnLeave = false;
+                    foreach ($userLeaves as $l) {
+                        if ($date >= $l['s_date'] && $date <= $l['e_date']) {
+                            $isOnLeave = true;
+                            break;
+                        }
+                    }
+                    if ($isOnLeave) {
+                        continue;
+                    }
+
+                    $in = !empty($d['check_in']) ? $d['check_in'] : (!empty($d['suggested_check_in']) ? $d['suggested_check_in'] : null);
+                    $out = !empty($d['check_out']) ? $d['check_out'] : (!empty($d['suggested_check_out']) ? $d['suggested_check_out'] : null);
+                    $reason = $d['reason'] ?? 'Bổ sung công';
+
+                    $stmtDetail->execute([$id, $date, $in, $out, $reason]);
+                    $validDetailsCount++;
+
+                    if ($isSelfApproved && $stmtUpsert) {
+                        $inTime = $in ? "$date $in:00" : "$date 08:30:00";
+                        $outTime = $out ? "$date $out:00" : "$date 17:00:00";
+                        $stmtUpsert->execute([
+                            $targetUserId,
+                            $date,
+                            $inTime,
+                            $outTime,
+                            $reason,
+                            $adminNote
+                        ]);
+                    }
+                }
+
+                if ($validDetailsCount === 0) {
+                    throw new Exception('Tất cả các ngày trong danh sách đã có đơn xin nghỉ phép hoặc không hợp lệ.');
+                }
+            }
+
+            $this->db->commit();
+
+            // Send notification if transitioning from draft/rejected to pending_manager
+            if (!$isDraft && in_array($oldStatus, ['draft', 'rejected'], true) && !$isSelfApproved && $approverId) {
+                try {
+                    require_once __DIR__ . '/../NotificationService.php';
+                    $userName = $req['full_name'] ?? $auth['full_name'] ?? 'Nhân viên';
+                    $daysCount = is_array($details) ? count($details) : 1;
+                    $isSingleDay = ($daysCount === 1);
+                    $firstDate = is_array($details) && !empty($details[0]) ? ($details[0]['date'] ?? $details[0]['check_in_date'] ?? '') : '';
+                    $singleDateStr = $isSingleDay && !empty($firstDate) ? date('d/m/Y', strtotime($firstDate)) : '';
+                    $firstReason = is_array($details) && !empty($details[0]) ? trim($details[0]['reason'] ?? '') : '';
+                    $notifReason = $isSingleDay
+                        ? (($firstReason && $firstReason !== 'Bổ sung công') ? $firstReason : ("Giải trình cập nhật công ngày $singleDateStr"))
+                        : "Đề xuất cập nhật công chu kỳ tháng $month ($daysCount ngày)";
+
+                    NotificationService::send($this->db, (int)$auth['tenant_id'], 'ATTENDANCE_UPDATE', [
+                        'user_id' => $approverId,
+                        'user_name' => $userName,
+                        'reason' => $notifReason,
+                        'ref_id' => $id,
+                        'is_bulk' => true,
+                        'is_single_day' => $isSingleDay,
+                        'single_date' => $singleDateStr,
+                        'days_count' => $daysCount,
+                        'month_period' => $month
+                    ]);
+                } catch (\Throwable $ne) {}
+            }
+
+            $this->getBulkRequestDetail($auth, $id);
+        } catch (\Throwable $ex) {
+            if (get_class($ex) === 'ResponseException') {
+                if ($this->db->inTransaction()) $this->db->rollBack();
+                throw $ex;
+            }
+            if ($this->db->inTransaction()) $this->db->rollBack();
+            respond(500, null, 'Lỗi cập nhật đề xuất bổ sung công: ' . $ex->getMessage(), false);
         }
     }
 
@@ -1748,9 +2002,9 @@ class CheckInController {
             SELECT r.*, u.full_name, u.role as user_role
             FROM attendance_bulk_requests r
             JOIN users u ON r.user_id = u.id
-            WHERE u.tenant_id = ?
+            WHERE u.tenant_id = ? AND (r.status != 'draft' OR r.user_id = ?)
         ";
-        $params = [$auth['tenant_id']];
+        $params = [$auth['tenant_id'], $userId];
 
         if ($role === 'manager') {
             // Find team members
@@ -1779,13 +2033,27 @@ class CheckInController {
         $stmt->execute($params);
         $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // Fetch details for each request
-        foreach ($requests as &$req) {
-            $stmtDetails = $this->db->prepare("
-                SELECT * FROM attendance_bulk_request_details WHERE request_id = ?
-            ");
-            $stmtDetails->execute([$req['id']]);
-            $req['details'] = $stmtDetails->fetchAll(PDO::FETCH_ASSOC);
+        // Fetch details for all requests in a single batch query
+        if (!empty($requests)) {
+            $reqIds = array_values(array_filter(array_unique(array_map(fn($r) => (int)($r['id'] ?? 0), $requests))));
+            $detailsByReqId = [];
+            if (!empty($reqIds)) {
+                $inPlaceholders = implode(',', array_fill(0, count($reqIds), '?'));
+                $stmtDetails = $this->db->prepare("
+                    SELECT * FROM attendance_bulk_request_details
+                    WHERE request_id IN ($inPlaceholders)
+                    ORDER BY check_in_date ASC
+                ");
+                $stmtDetails->execute($reqIds);
+                foreach ($stmtDetails->fetchAll(PDO::FETCH_ASSOC) ?: [] as $detailRow) {
+                    $rid = (int)$detailRow['request_id'];
+                    $detailsByReqId[$rid][] = $detailRow;
+                }
+            }
+            foreach ($requests as &$req) {
+                $req['details'] = $detailsByReqId[(int)$req['id']] ?? [];
+            }
+            unset($req);
         }
 
         respond(200, $requests, 'Lấy danh sách phiếu đề xuất thành công');
@@ -1793,12 +2061,15 @@ class CheckInController {
 
     public function getBulkRequestDetail(array $auth, int $id): void {
         $stmt = $this->db->prepare("
-            SELECT r.*, u.full_name as employee_name, u.full_name, u.avatar_url as employee_avatar, u.avatar_url, u.role as user_role, r.manager_id as approver_id,
+            SELECT r.*, u.full_name as employee_name, u.full_name, u.avatar_url as employee_avatar, u.avatar_url, u.role as user_role,
+                   r.manager_id as approver_id, r.approver2_id as approver_id_2,
                    m.full_name as approver_name, m.avatar_url as approver_avatar,
+                   m2.full_name as approver_name_2, m2.avatar_url as approver_avatar_2,
                    ap.full_name as approved_by_name, ap.avatar_url as approved_by_avatar
             FROM attendance_bulk_requests r
             JOIN users u ON r.user_id = u.id
             LEFT JOIN users m ON r.manager_id = m.id
+            LEFT JOIN users m2 ON r.approver2_id = m2.id
             LEFT JOIN users ap ON r.approved_by = ap.id
             WHERE r.id = ? AND u.tenant_id = ?
         ");
@@ -1814,6 +2085,22 @@ class CheckInController {
         ");
         $stmtDetails->execute([$id]);
         $req['details'] = $stmtDetails->fetchAll(PDO::FETCH_ASSOC);
+
+        $relArr = !empty($req['related_user_ids']) ? (is_array($req['related_user_ids']) ? $req['related_user_ids'] : json_decode((string)$req['related_user_ids'], true)) : [];
+        if (!is_array($relArr)) {
+            $relArr = explode(',', (string)$req['related_user_ids']);
+        }
+        $relArr = array_values(array_filter(array_map('intval', (array)$relArr)));
+        $req['related_user_ids'] = $relArr;
+
+        if (!empty($relArr)) {
+            $phRel = implode(',', array_fill(0, count($relArr), '?'));
+            $stmtRel = $this->db->prepare("SELECT id, full_name, avatar_url, department, job_title, role FROM users WHERE id IN ($phRel)");
+            $stmtRel->execute($relArr);
+            $req['related_users'] = $stmtRel->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        } else {
+            $req['related_users'] = [];
+        }
 
         $daysCount = count($req['details']);
         if ($daysCount === 1 && !empty($req['details'][0]['check_in_date'])) {
@@ -1999,6 +2286,7 @@ class CheckInController {
                     'single_date' => $singleDateStr,
                     'days_count' => $daysCount,
                     'ref_id' => $id,
+                    'open_type' => 'attendance_bulk',
                     'approver_name' => $approverName,
                     'admin_note' => $adminNote,
                     'reason' => $adminNote ?: $notifReason
@@ -2022,6 +2310,7 @@ class CheckInController {
                                     'single_date' => $singleDateStr,
                                     'days_count' => $daysCount,
                                     'ref_id' => $id,
+                                    'open_type' => 'attendance_bulk',
                                     'approver_name' => $approverName,
                                     'admin_note' => $adminNote,
                                     'reason' => ($adminNote ? "$adminNote - " : "") . "(Đề xuất bạn đang theo dõi đã có kết quả)"
@@ -2108,8 +2397,38 @@ class CheckInController {
             VALUES (?, 'checkin', ?, ?, ?, ?, ?)
         ");
         $stmt->execute([$auth['tenant_id'], $id, $auth['user_id'], $body, $attachments, $parentId]);
-        $newId = $this->db->lastInsertId();
-        $this->parseAndNotifyMentions($body, $id, 'checkin', $auth);
+        $newId = (int)$this->db->lastInsertId();
+        $mentionedIds = $this->parseAndNotifyMentions($body, $id, 'checkin', $auth, $newId);
+        try {
+            $stmtReq = $this->db->prepare("SELECT c.user_id, c.manager_id, c.approved_by FROM check_ins c JOIN users u ON c.user_id = u.id WHERE c.id = ? AND u.tenant_id = ?");
+            $stmtReq->execute([$id, $auth['tenant_id']]);
+            $reqRow = $stmtReq->fetch(PDO::FETCH_ASSOC);
+            if ($reqRow) {
+                $uid = (int)$auth['user_id'];
+                $commenterName = $auth['full_name'] ?? 'Đồng nghiệp';
+                $targetLink = "/approvals?open_id={$id}&open_type=checkin&highlight_comment_id={$newId}";
+                $recipients = array_unique(array_filter([
+                    (int)($reqRow['user_id'] ?? 0),
+                    (int)($reqRow['manager_id'] ?? 0),
+                    (int)($reqRow['approved_by'] ?? 0),
+                ]));
+                $insNotif = $this->db->prepare("
+                    INSERT INTO notifications (user_id, tenant_id, title, body, type, link, is_read, created_at)
+                    VALUES (?, ?, ?, ?, 'comment', ?, 0, NOW())
+                ");
+                foreach ($recipients as $rUid) {
+                    if ($rUid > 0 && $rUid !== $uid && !in_array($rUid, $mentionedIds, true)) {
+                        $insNotif->execute([
+                            $rUid,
+                            $auth['tenant_id'],
+                            "Bình luận mới trong phiếu chấm công #{$id}",
+                            "{$commenterName} vừa bình luận: \"" . mb_substr(strip_tags($body), 0, 120) . "\"",
+                            $targetLink
+                        ]);
+                    }
+                }
+            }
+        } catch (\Throwable $e) {}
         respond(200, ['id' => $newId], 'Thêm bình luận thành công');
     }
 
@@ -2149,12 +2468,43 @@ class CheckInController {
             VALUES (?, 'attendance_bulk', ?, ?, ?, ?, ?)
         ");
         $stmt->execute([$auth['tenant_id'], $id, $auth['user_id'], $body, $attachments, $parentId]);
-        $newId = $this->db->lastInsertId();
-        $this->parseAndNotifyMentions($body, $id, 'attendance_bulk', $auth);
+        $newId = (int)$this->db->lastInsertId();
+        $mentionedIds = $this->parseAndNotifyMentions($body, $id, 'attendance_bulk', $auth, $newId);
+        try {
+            $stmtReq = $this->db->prepare("SELECT r.user_id, r.manager_id, r.approver2_id, r.hr_id FROM attendance_bulk_requests r JOIN users u ON r.user_id = u.id WHERE r.id = ? AND u.tenant_id = ?");
+            $stmtReq->execute([$id, $auth['tenant_id']]);
+            $reqRow = $stmtReq->fetch(PDO::FETCH_ASSOC);
+            if ($reqRow) {
+                $uid = (int)$auth['user_id'];
+                $commenterName = $auth['full_name'] ?? 'Đồng nghiệp';
+                $targetLink = "/approvals?open_id={$id}&open_type=attendance_bulk&highlight_comment_id={$newId}";
+                $recipients = array_unique(array_filter([
+                    (int)($reqRow['user_id'] ?? 0),
+                    (int)($reqRow['manager_id'] ?? 0),
+                    (int)($reqRow['approver2_id'] ?? 0),
+                    (int)($reqRow['hr_id'] ?? 0),
+                ]));
+                $insNotif = $this->db->prepare("
+                    INSERT INTO notifications (user_id, tenant_id, title, body, type, link, is_read, created_at)
+                    VALUES (?, ?, ?, ?, 'comment', ?, 0, NOW())
+                ");
+                foreach ($recipients as $rUid) {
+                    if ($rUid > 0 && $rUid !== $uid && !in_array($rUid, $mentionedIds, true)) {
+                        $insNotif->execute([
+                            $rUid,
+                            $auth['tenant_id'],
+                            "Bình luận mới trong phiếu bổ sung công #{$id}",
+                            "{$commenterName} vừa bình luận: \"" . mb_substr(strip_tags($body), 0, 120) . "\"",
+                            $targetLink
+                        ]);
+                    }
+                }
+            }
+        } catch (\Throwable $e) {}
         respond(200, ['id' => $newId], 'Thêm bình luận thành công');
     }
 
-    private function parseAndNotifyMentions(string $body, int $id, string $type, array $auth): void {
+    private function parseAndNotifyMentions(string $body, int $id, string $type, array $auth, ?int $commentId = null): array {
         $mentions = [];
         if (preg_match_all('/data-user-id=(?:&quot;|["\']|\\\\+["\'])?(\d+)/i', (string)$body, $matches)) {
             $uids = array_filter(array_map('intval', $matches[1]));
@@ -2192,15 +2542,17 @@ class CheckInController {
 
         if (!empty($mentions)) {
             require_once __DIR__ . '/../NotificationService.php';
+            $link = "/approvals?open_id={$id}&open_type={$type}" . ($commentId ? "&highlight_comment_id={$commentId}" : "");
             foreach ($mentions as $uid => $userRow) {
                 NotificationService::send($this->db, $auth['tenant_id'], 'MENTION_TAGGED', [
                     'user_id' => $uid,
                     'author_name' => $auth['full_name'] ?? 'Đồng nghiệp',
                     'comment' => $body,
-                    'link' => "/approvals?open_id={$id}&open_type={$type}"
+                    'link' => $link
                 ]);
             }
         }
+        return array_map('intval', array_keys($mentions));
     }
 
     public function show(array $auth, int $id): void {
@@ -2286,13 +2638,14 @@ class CheckInController {
         $month = date('Y-m');
 
         $stmtToday = $this->db->prepare("
-            SELECT COUNT(DISTINCT user_id) as total_present,
-                   SUM(CASE WHEN late_minutes > 0 THEN 1 ELSE 0 END) as total_late,
-                   SUM(CASE WHEN early_minutes > 0 THEN 1 ELSE 0 END) as total_early
+            SELECT COUNT(DISTINCT check_ins.user_id) as total_present,
+                   SUM(CASE WHEN check_ins.late_minutes > 0 THEN 1 ELSE 0 END) as total_late,
+                   SUM(CASE WHEN check_ins.early_minutes > 0 THEN 1 ELSE 0 END) as total_early
             FROM check_ins
-            WHERE check_in_date = ?
+            JOIN users u ON check_ins.user_id = u.id
+            WHERE u.tenant_id = ? AND check_ins.check_in_date = ?
         ");
-        $stmtToday->execute([$today]);
+        $stmtToday->execute([$tid, $today]);
         $todayStats = $stmtToday->fetch(PDO::FETCH_ASSOC) ?: ['total_present' => 0, 'total_late' => 0, 'total_early' => 0];
 
         $stmtUsers = $this->db->prepare("SELECT COUNT(*) FROM users WHERE is_active = 1 AND tenant_id = ?");

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { withRouterFreezer } from '../components/RouterFreezer';
 import {
   Scale, Users, AlertTriangle, BarChart2, Info,
@@ -301,12 +301,15 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
     }
   };
 
+  const detailsAbortRef = useRef<AbortController | null>(null);
+  const inFlightRef = useRef(false);
+
   const fetchStats = async (signal?: AbortSignal) => {
     if (!roundFilter) return; // Guard to prevent fetching before round filter is initialized
     setLoading(true);
     try {
       const url = `get_fair_share_stats?date=${encodeURIComponent(dateFilter)}&round_id=${roundFilter}`;
-      const res = await fetchAPI(url);
+      const res = await fetchAPI(url, { signal });
       if (signal?.aborted) return;
 
       if (res.success) {
@@ -314,10 +317,14 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
       } else {
         toast.error(res.message || t('Lỗi tải dữ liệu đối soát'));
       }
-    } catch (e) {
+    } catch (e: any) {
+      if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
       console.error('Error fetching fair share stats:', e);
+    } finally {
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
-    setLoading(false);
   };
 
   const handleOpenQuickCompModal = (targetConsultantId?: number) => {
@@ -341,7 +348,8 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
   };
 
   const handleSaveQuickComp = async () => {
-    if (!roundFilter || isSavingQuickComp) return;
+    if (!roundFilter || isSavingQuickComp || inFlightRef.current) return;
+    inFlightRef.current = true;
     setIsSavingQuickComp(true);
     try {
       const payload = {
@@ -363,6 +371,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
     } catch (e: any) {
       toast.error(t('Lỗi: ') + (e?.message || e));
     } finally {
+      inFlightRef.current = false;
       setIsSavingQuickComp(false);
     }
   };
@@ -709,25 +718,36 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
   };
 
   const handleOpenDetailsModal = async (consultantId: number, overrideDateFilter?: string) => {
+    if (detailsAbortRef.current) {
+      detailsAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    detailsAbortRef.current = controller;
+    const { signal } = controller;
+
     setShowDetailsModal(true);
     setDetailsLoading(true);
     setCompensationDetails(null);
     try {
       const activeDateFilter = overrideDateFilter || dateFilter;
       const url = `get_consultant_compensation_details?consultant_id=${consultantId}&date=${encodeURIComponent(activeDateFilter)}&round_id=${roundFilter}`;
-      const res = await fetchAPI(url);
+      const res = await fetchAPI(url, { signal });
+      if (signal.aborted) return;
       if (res.success) {
         setCompensationDetails(res.data);
       } else {
         toast.error(res.message || t('Lỗi khi tải chi tiết đối soát bù'));
         setShowDetailsModal(false);
       }
-    } catch (e) {
+    } catch (e: any) {
+      if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
       console.error('Error fetching consultant compensation details:', e);
       toast.error(t('Lỗi kết nối khi tải chi tiết đối soát bù'));
       setShowDetailsModal(false);
     } finally {
-      setDetailsLoading(false);
+      if (!signal.aborted) {
+        setDetailsLoading(false);
+      }
     }
   };
 

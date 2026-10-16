@@ -150,7 +150,7 @@ class QuoteController {
 
         // Verify deal belongs to tenant and is accessible
         if (!empty($b['deal_id'])) {
-            $sqlDeal = "SELECT id FROM deals WHERE id=? AND tenant_id=?";
+            $sqlDeal = "SELECT id FROM deals WHERE id=? AND tenant_id=? AND deleted_at IS NULL";
             $pDeal = [(int)$b['deal_id'], $tid];
             if ($isSale) {
                 $sqlDeal .= " AND owner_id=?";
@@ -186,7 +186,7 @@ class QuoteController {
                 $calculatedSubtotal += $lineSubtotal;
                 
                 if (!empty($item['product_id'])) {
-                    $prodCheck = $this->db->prepare("SELECT id FROM products WHERE id=? AND tenant_id=?");
+                    $prodCheck = $this->db->prepare("SELECT id FROM products WHERE id=? AND tenant_id=? AND deleted_at IS NULL");
                     $prodCheck->execute([(int)$item['product_id'], $tid]);
                     if (!$prodCheck->fetch()) {
                         respond(422, null, "Sản phẩm ID {$item['product_id']} không hợp lệ hoặc không thuộc cửa hàng của bạn", false);
@@ -309,16 +309,24 @@ class QuoteController {
             }
         }
 
-        // Recalculate totals if discount or tax is updated (Anti-Tampering SEC-FIN-05)
-        if (array_key_exists('discount', $b) || array_key_exists('tax', $b)) {
-            $curQuote = $this->db->prepare("SELECT subtotal, discount, tax FROM quotes WHERE id=? AND tenant_id=?");
-            $curQuote->execute([$id, $tid]);
-            $cq = $curQuote->fetch();
-            if ($cq) {
-                $sub = (float)$cq['subtotal'];
-                $disc = array_key_exists('discount', $b) ? max(0, (float)$b['discount']) : (float)$cq['discount'];
-                $tx = array_key_exists('tax', $b) ? max(0, (float)$b['tax']) : (float)$cq['tax'];
+        $this->db->beginTransaction();
+        try {
+            // Lock quote row and verify status/totals atomically
+            $old = $this->db->prepare("SELECT status, contact_id, quote_number, title, subtotal, discount, tax FROM quotes WHERE id=? AND tenant_id=? FOR UPDATE");
+            $old->execute([$id, $tid]);
+            $oldData = $old->fetch();
+            if (!$oldData) {
+                $this->db->rollBack();
+                respond(404, null, 'Không tìm thấy hoặc không có quyền', false);
+            }
+
+            // Recalculate totals if discount or tax is updated (Anti-Tampering SEC-FIN-05)
+            if (array_key_exists('discount', $b) || array_key_exists('tax', $b)) {
+                $sub = (float)$oldData['subtotal'];
+                $disc = array_key_exists('discount', $b) ? max(0, (float)$b['discount']) : (float)$oldData['discount'];
+                $tx = array_key_exists('tax', $b) ? max(0, (float)$b['tax']) : (float)$oldData['tax'];
                 if ($disc > $sub) {
+                    $this->db->rollBack();
                     respond(422, null, 'Chiết khấu không được lớn hơn tổng tiền hàng', false);
                 }
                 $tot = round(max(0, $sub - $disc + $tx), 2);
@@ -329,74 +337,99 @@ class QuoteController {
                 $sets[] = "total=?";
                 $params[] = $tot;
             }
-        }
-        if($sets){
-            if (isset($b['contact_id']) && $b['contact_id']) {
-                $leadsReadScope = $this->getScope($auth, 'leads', 'read');
-                $sqlContact = "SELECT id FROM contacts WHERE id=? AND tenant_id=?";
-                $pContact = [(int)$b['contact_id'], $tid];
-                if ($leadsReadScope === 'own') {
-                    $sqlContact .= " AND owner_id=?";
-                    $pContact[] = $uid;
-                } else if ($leadsReadScope === 'team') {
-                    $sqlContact .= " AND (owner_id = ? OR owner_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?) OR team_id = (SELECT team_id FROM users WHERE id = ?)))";
-                    $pContact[] = $uid;
-                    $pContact[] = $uid;
-                    $pContact[] = $uid;
-                } else if ($leadsReadScope === 'none') {
-                    $sqlContact .= " AND 1=0";
+            if($sets){
+                if (isset($b['contact_id']) && $b['contact_id']) {
+                    $leadsReadScope = $this->getScope($auth, 'leads', 'read');
+                    $sqlContact = "SELECT id FROM contacts WHERE id=? AND tenant_id=? AND deleted_at IS NULL";
+                    $pContact = [(int)$b['contact_id'], $tid];
+                    if ($leadsReadScope === 'own') {
+                        $sqlContact .= " AND owner_id=?";
+                        $pContact[] = $uid;
+                    } else if ($leadsReadScope === 'team') {
+                        $sqlContact .= " AND (owner_id = ? OR owner_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?) OR team_id = (SELECT team_id FROM users WHERE id = ?)))";
+                        $pContact[] = $uid;
+                        $pContact[] = $uid;
+                        $pContact[] = $uid;
+                    } else if ($leadsReadScope === 'none') {
+                        $sqlContact .= " AND 1=0";
+                    }
+                    $c = $this->db->prepare($sqlContact);
+                    $c->execute($pContact);
+                    if (!$c->fetch()) {
+                        $this->db->rollBack();
+                        respond(403, null, 'Không có quyền thao tác trên liên hệ này', false);
+                    }
                 }
-                $c = $this->db->prepare($sqlContact);
-                $c->execute($pContact);
-                if (!$c->fetch()) respond(403, null, 'Không có quyền thao tác trên liên hệ này', false);
-            }
-            if (isset($b['deal_id']) && $b['deal_id']) {
-                $dealsReadScope = $this->getScope($auth, 'deals', 'read');
-                $sqlDeal = "SELECT id FROM deals WHERE id=? AND tenant_id=?";
-                $pDeal = [(int)$b['deal_id'], $tid];
-                if ($dealsReadScope === 'own') {
-                    $sqlDeal .= " AND owner_id=?";
-                    $pDeal[] = $uid;
-                } else if ($dealsReadScope === 'team') {
-                    $sqlDeal .= " AND (owner_id = ? OR owner_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?) OR team_id = (SELECT team_id FROM users WHERE id = ?)))";
-                    $pDeal[] = $uid;
-                    $pDeal[] = $uid;
-                    $pDeal[] = $uid;
-                } else if ($dealsReadScope === 'none') {
-                    $sqlDeal .= " AND 1=0";
+                if (isset($b['deal_id']) && $b['deal_id']) {
+                    $dealsReadScope = $this->getScope($auth, 'deals', 'read');
+                    $sqlDeal = "SELECT id FROM deals WHERE id=? AND tenant_id=? AND deleted_at IS NULL";
+                    $pDeal = [(int)$b['deal_id'], $tid];
+                    if ($dealsReadScope === 'own') {
+                        $sqlDeal .= " AND owner_id=?";
+                        $pDeal[] = $uid;
+                    } else if ($dealsReadScope === 'team') {
+                        $sqlDeal .= " AND (owner_id = ? OR owner_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?) OR team_id = (SELECT team_id FROM users WHERE id = ?)))";
+                        $pDeal[] = $uid;
+                        $pDeal[] = $uid;
+                        $pDeal[] = $uid;
+                    } else if ($dealsReadScope === 'none') {
+                        $sqlDeal .= " AND 1=0";
+                    }
+                    $c = $this->db->prepare($sqlDeal);
+                    $c->execute($pDeal);
+                    if (!$c->fetch()) {
+                        $this->db->rollBack();
+                        respond(403, null, 'Không có quyền thao tác trên deal này', false);
+                    }
                 }
-                $c = $this->db->prepare($sqlDeal);
-                $c->execute($pDeal);
-                if (!$c->fetch()) respond(403, null, 'Không có quyền thao tác trên deal này', false);
-            }
-            
-            // Get old status to check for transition
-            $old = $this->db->prepare("SELECT status, contact_id, quote_number, title FROM quotes WHERE id=? AND tenant_id=?");
-            $old->execute([$id, $tid]);
-            $oldData = $old->fetch();
 
-            $sql = "UPDATE quotes SET ".implode(',',$sets)." WHERE id=? AND tenant_id=?";
-            $params[]=$id;$params[]=$tid;
-            if ($scope === 'own') {
-                $sql .= " AND created_by=?";
-                $params[] = $uid;
-            } else if ($scope === 'team') {
-                $sql .= " AND (created_by = ? OR created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?) OR team_id = (SELECT team_id FROM users WHERE id = ?)))";
-                $params[] = $uid;
-                $params[] = $uid;
-                $params[] = $uid;
-            }
-            $stmt = $this->db->prepare($sql);
-            $stmt->execute($params);
-            if (!$stmt->rowCount()) respond(404, null, 'Không tìm thấy hoặc không có quyền', false);
+                $sql = "UPDATE quotes SET ".implode(',',$sets)." WHERE id=? AND tenant_id=?";
+                $params[]=$id;$params[]=$tid;
+                if ($scope === 'own') {
+                    $sql .= " AND created_by=?";
+                    $params[] = $uid;
+                } else if ($scope === 'team') {
+                    $sql .= " AND (created_by = ? OR created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?) OR team_id = (SELECT team_id FROM users WHERE id = ?)))";
+                    $params[] = $uid;
+                    $params[] = $uid;
+                    $params[] = $uid;
+                }
+                $stmt = $this->db->prepare($sql);
+                $stmt->execute($params);
+                if (!$stmt->rowCount() && $scope !== 'all') {
+                    // Check if quote actually belonged to user/team
+                    $chkPerm = "SELECT id FROM quotes WHERE id=? AND tenant_id=?";
+                    $pPerm = [$id, $tid];
+                    if ($scope === 'own') {
+                        $chkPerm .= " AND created_by=?";
+                        $pPerm[] = $uid;
+                    } else if ($scope === 'team') {
+                        $chkPerm .= " AND (created_by = ? OR created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?) OR team_id = (SELECT team_id FROM users WHERE id = ?)))";
+                        $pPerm[] = $uid;
+                        $pPerm[] = $uid;
+                        $pPerm[] = $uid;
+                    }
+                    $sPerm = $this->db->prepare($chkPerm);
+                    $sPerm->execute($pPerm);
+                    if (!$sPerm->fetch()) {
+                        $this->db->rollBack();
+                        respond(404, null, 'Không tìm thấy hoặc không có quyền', false);
+                    }
+                }
 
-            // Log interaction if status changed to 'sent'
-            if ($oldData && $oldData['status'] !== 'sent' && ($b['status'] ?? '') === 'sent' && ($b['contact_id'] ?? $oldData['contact_id'])) {
-                $cid = $b['contact_id'] ?? $oldData['contact_id'];
-                $qNum = $oldData['quote_number'];
-                $title = $b['title'] ?? $oldData['title'];
-                logInteraction($this->db, $tid, $uid, 'email', "Gửi Báo giá #$qNum", "Báo giá \"$title\" đã được gửi cho khách hàng.", 'quote', $id);
+                // Log interaction if status changed to 'sent'
+                if ($oldData && $oldData['status'] !== 'sent' && ($b['status'] ?? '') === 'sent' && ($b['contact_id'] ?? $oldData['contact_id'])) {
+                    $qNum = $oldData['quote_number'];
+                    $title = $b['title'] ?? $oldData['title'];
+                    logInteraction($this->db, $tid, $uid, 'email', "Gửi Báo giá #$qNum", "Báo giá \"$title\" đã được gửi cho khách hàng.", 'quote', $id);
+                }
             }
+            $this->db->commit();
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            respond(500, null, 'Lỗi cập nhật báo giá: ' . $e->getMessage(), false);
         }
         respond(200,null,'Đã cập nhật báo giá');
     }

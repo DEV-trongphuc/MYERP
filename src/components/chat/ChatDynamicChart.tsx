@@ -23,6 +23,7 @@ import {
 import { BarChart3, TrendingUp, PieChart as PieIcon, Table as TableIcon, Eye, Copy, Check, Maximize2, Minimize2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { DynamicChartData } from './chatTagParsers';
+import { copyTextSafely } from '../../utils/clipboard';
 
 const PALETTE = ['#6366f1', '#10b981', '#f59e0b', '#06b6d4', '#ec4899', '#8b5cf6', '#ef4444'];
 
@@ -57,7 +58,7 @@ export const ChatDynamicChart: React.FC<ChatDynamicChartProps> = ({ chart }) => 
 
   const ChartIcon = chart.type === 'pie' ? PieIcon : chart.type === 'line' ? TrendingUp : BarChart3;
 
-  const handleCopyData = () => {
+  const handleCopyData = async () => {
     try {
       const headers = ['Tiêu chí', ...series.map((s) => s.name || s.dataKey)];
       const rows = chart.data.map((row, rIdx) => [
@@ -65,10 +66,14 @@ export const ChatDynamicChart: React.FC<ChatDynamicChartProps> = ({ chart }) => 
         ...series.map((s) => row[s.dataKey] ?? ''),
       ]);
       const tsv = [headers.join('\t'), ...rows.map((r) => r.join('\t'))].join('\n');
-      navigator.clipboard.writeText(tsv);
-      setIsCopied(true);
-      toast.success('Đã sao chép bảng số liệu vào clipboard (dán ngay vào Excel)');
-      setTimeout(() => setIsCopied(false), 2000);
+      const ok = await copyTextSafely(tsv);
+      if (ok) {
+        setIsCopied(true);
+        toast.success('Đã sao chép bảng số liệu vào clipboard (dán ngay vào Excel)');
+        setTimeout(() => setIsCopied(false), 2000);
+      } else {
+        toast.error('Không thể sao chép số liệu, vui lòng cấp quyền clipboard');
+      }
     } catch {
       toast.error('Không thể sao chép số liệu');
     }

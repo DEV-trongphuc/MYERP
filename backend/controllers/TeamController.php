@@ -466,7 +466,7 @@ class TeamController
                 $title = "Bạn có phản hồi mới trong thảo luận nhóm";
                 $bodyText = ($auth['full_name'] ?? 'Đồng nghiệp') . " đã trả lời bình luận của bạn trong thảo luận nhóm";
                 $type = "info";
-                $link = "/consultants?tab=teams&highlight_comment_id=" . $newId;
+                $link = "/consultants?tab=teams&team_id=" . $teamId . "&highlight_comment_id=" . $newId;
 
                 $insertNotif = $this->db->prepare("
                     INSERT INTO notifications (user_id, tenant_id, title, body, type, link)
@@ -492,7 +492,7 @@ class TeamController
                         $title = "Bạn được nhắc tên trong thảo luận nhóm";
                         $bodyText = ($auth['full_name'] ?? 'Đồng nghiệp') . " đã nhắc đến bạn trong thảo luận nhóm";
                         $type = "mention";
-                        $link = "/consultants?tab=teams&highlight_comment_id=" . $newId;
+                        $link = "/consultants?tab=teams&team_id=" . $teamId . "&highlight_comment_id=" . $newId;
 
                         $insertNotif = $this->db->prepare("
                             INSERT INTO notifications (user_id, tenant_id, title, body, type, link)

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { 
@@ -96,6 +96,11 @@ export default function InventoryPage() {
   const location = useLocation();
   const [defaultSupplierId, setDefaultSupplierId] = useState<string | undefined>(undefined);
 
+  const batchesAbortRef = useRef<AbortController | null>(null);
+  const batchLogsAbortRef = useRef<AbortController | null>(null);
+  const globalLogsAbortRef = useRef<AbortController | null>(null);
+  const inFlightRef = useRef(false);
+
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const tabParam = params.get('tab');
@@ -136,6 +141,13 @@ export default function InventoryPage() {
   };
 
   const fetchBatches = async () => {
+    if (batchesAbortRef.current) {
+      batchesAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    batchesAbortRef.current = controller;
+    const { signal } = controller;
+
     setLoading(true);
     // Always fetch from API
     try {
@@ -147,43 +159,70 @@ export default function InventoryPage() {
         sort: sortBy.split('_')[0],
         order: sortBy.split('_')[1] === 'desc' ? 'DESC' : 'ASC'
       };
-      const res = await api.get('/inventory', { params });
+      const res = await api.get('/inventory', { params, signal });
+      if (signal.aborted) return;
       const data = res.data.data;
       setBatches(data.items || []);
       setTotal(data.total || 0);
       if (data.summary) setSummary(data.summary);
     } catch (err: any) {
+      if (err?.name === 'AbortError' || err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED' || signal.aborted) return;
       console.error(err);
     } finally {
-      setLoading(false);
+      if (!signal.aborted) setLoading(false);
     }
   };
 
   const fetchBatchLogs = async (batchId: number) => {
+    if (batchLogsAbortRef.current) {
+      batchLogsAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    batchLogsAbortRef.current = controller;
+    const { signal } = controller;
+
     try {
-      const res = await api.get(`/inventory/logs/${batchId}`);
+      const res = await api.get(`/inventory/logs/${batchId}`, { signal });
+      if (signal.aborted) return;
       if (res.data.success) setLogs(res.data.data);
     } catch (err: any) {
+      if (err?.name === 'AbortError' || err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED' || signal.aborted) return;
       console.error(err);
     }
   };
 
   const fetchGlobalLogs = async () => {
+    if (globalLogsAbortRef.current) {
+      globalLogsAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    globalLogsAbortRef.current = controller;
+    const { signal } = controller;
+
     try {
-      const res = await api.get('/inventory/global-logs');
+      const res = await api.get('/inventory/global-logs', { signal });
+      if (signal.aborted) return;
       if (res.data.success) setGlobalLogs(res.data.data);
     } catch (err: any) {
+      if (err?.name === 'AbortError' || err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED' || signal.aborted) return;
       console.error(err);
     }
   };
 
   useEffect(() => {
     fetchBatches();
+    return () => {
+      batchesAbortRef.current?.abort();
+    };
   }, [page, debouncedSearch, statusFilter, sortBy]);
 
   useEffect(() => {
     fetchGlobalLogs();
     fetchReceivers();
+    return () => {
+      batchLogsAbortRef.current?.abort();
+      globalLogsAbortRef.current?.abort();
+    };
   }, []);
 
   const archiveBatch = (id: number) => {
@@ -191,6 +230,8 @@ export default function InventoryPage() {
       'Lưu trữ căn hộ/lô đất', 
       'Bạn có chắc chắn muốn lưu trữ căn/lô này? Căn/lô này sẽ không còn xuất hiện trong danh sách hoạt động.',
       async () => {
+        if (inFlightRef.current) return;
+        inFlightRef.current = true;
         try {
           const res = await api.post(`/inventory/archive/${id}`);
           if (res.data.success) {
@@ -200,6 +241,8 @@ export default function InventoryPage() {
           closeConfirm();
         } catch (err: any) {
           addToast('Không thể kết nối máy chủ', 'error');
+        } finally {
+          inFlightRef.current = false;
         }
       }
     );
@@ -207,9 +250,10 @@ export default function InventoryPage() {
 
   const handleInternalExport = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedBatch || isSaving) return;
+    if (!selectedBatch || isSaving || inFlightRef.current) return;
     
     try {
+      inFlightRef.current = true;
       setIsSaving(true);
       const res = await api.post('/inventory/export', {
         batch_id: selectedBatch.id,
@@ -227,15 +271,17 @@ export default function InventoryPage() {
     } catch (err: any) {
       addToast('Không thể kết nối máy chủ', 'error');
     } finally {
+      inFlightRef.current = false;
       setIsSaving(false);
     }
   };
 
   const handleAdjust = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedBatch || isSaving) return;
+    if (!selectedBatch || isSaving || inFlightRef.current) return;
     
     try {
+      inFlightRef.current = true;
       setIsSaving(true);
       const res = await api.post('/inventory/adjust', {
         batch_id: selectedBatch.id,
@@ -252,6 +298,7 @@ export default function InventoryPage() {
     } catch (err: any) {
       addToast('Không thể kết nối máy chủ', 'error');
     } finally {
+      inFlightRef.current = false;
       setIsSaving(false);
     }
   };
@@ -274,7 +321,8 @@ export default function InventoryPage() {
   };
 
   const handleExport = async () => {
-    if (isExporting) return;
+    if (isExporting || inFlightRef.current) return;
+    inFlightRef.current = true;
     setIsExporting(true);
     addToast('Đang tải xuống dữ liệu kho hàng theo bộ lọc...', 'info');
     try {
@@ -293,6 +341,7 @@ export default function InventoryPage() {
     } catch (err: any) {
       addToast(err?.message || 'Xuất dữ liệu kho hàng thất bại', 'error');
     } finally {
+      inFlightRef.current = false;
       setIsExporting(false);
     }
   };
@@ -683,7 +732,7 @@ export default function InventoryPage() {
           <input 
             placeholder="Tìm theo tên căn, mã căn (Block - Số tầng), dự án..." 
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={e => { setSearch(e.target.value); setPage(1); }}
           />
         </div>
         
@@ -899,7 +948,7 @@ export default function InventoryPage() {
                                   <button className="btn-icon sm text-warning" title="Giữ chỗ / Lock căn" onClick={() => { setSelectedBatch(b); setExportForm({ qty: '', reason: 'Lock giữ chỗ', receiver_id: '' }); setShowExportModal(true); }}>
                                     <Share size={14} />
                                   </button>
-                                  <button className="btn-icon sm text-primary" title="Lịch sử giao dịch" onClick={() => { setSelectedBatch(b); fetchBatchLogs(b.id); setShowHistoryModal(true); }}>
+                                  <button className="btn-icon sm text-primary" title="Lịch sử giao dịch" onClick={() => { setSelectedBatch(b); setLogs([]); fetchBatchLogs(b.id); setShowHistoryModal(true); }}>
                                     <History size={14} />
                                   </button>
                                   {!isSale && (
@@ -988,7 +1037,7 @@ export default function InventoryPage() {
                           <Share size={14} /> Xuất nội bộ
                         </button>
                         <button 
-                          onClick={() => { setSelectedBatch(b); fetchBatchLogs(b.id); setShowHistoryModal(true); }}
+                          onClick={() => { setSelectedBatch(b); setLogs([]); fetchBatchLogs(b.id); setShowHistoryModal(true); }}
                           className="btn secondary"
                           style={{ width: '36px', height: '36px', padding: '0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                           title="Lịch sử"

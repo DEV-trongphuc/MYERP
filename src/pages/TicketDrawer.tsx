@@ -73,18 +73,19 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
   const handleClose = useCallback(() => {
     if (isClosing) return;
     setIsClosing(true);
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('highlight_comment_id') || params.has('comment_id')) {
+      params.delete('highlight_comment_id');
+      params.delete('comment_id');
+      const qs = params.toString();
+      window.history.replaceState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash}`);
+    }
     setTimeout(() => {
       onClose();
       setIsClosing(false);
     }, 280);
   }, [isClosing, onClose]);
 
-  useEffect(() => {
-    if (isOpen) {
-      const unregister = pushOverlay('ticket-drawer', handleClose, 2147483640);
-      return () => unregister();
-    }
-  }, [isOpen, handleClose]);
   const [newComment, setNewComment] = useState('');
   const [commentAttachments, setCommentAttachments] = useState<{ name: string; url: string; size?: number; type?: string }[]>([]);
   const [uploadingCommentFile, setUploadingCommentFile] = useState(false);
@@ -103,41 +104,120 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
   const [rejectReason, setRejectReason] = useState('');
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
+  const commentsAbortRef = useRef<AbortController | null>(null);
+  const contactAbortRef = useRef<AbortController | null>(null);
+  const deleteCommentInFlightRef = useRef(false);
+  const uploadCommentInFlightRef = useRef(false);
+  const sendCommentInFlightRef = useRef(false);
+  const ticketActionInFlightRef = useRef(false);
+  const deleteTicketInFlightRef = useRef(false);
+
+  const escapeHandlerRef = useRef<() => void>(() => {});
+  escapeHandlerRef.current = () => {
+    if (previewImage) {
+      setPreviewImage(null);
+      return;
+    }
+    if (commentToDelete !== null) {
+      setCommentToDelete(null);
+      return;
+    }
+    if (showRejectModal) {
+      setShowRejectModal(false);
+      setRejectReason('');
+      return;
+    }
+    if (showDeleteModal) {
+      setShowDeleteModal(false);
+      return;
+    }
+    handleClose();
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      const unregister = pushOverlay('ticket-drawer', () => escapeHandlerRef.current(), 2147483640);
+      return () => unregister();
+    }
+  }, [isOpen]);
+
   const fetchComments = async (targetId?: number) => {
     const tid = targetId ?? formData?.id ?? ticket?.id;
     if (!tid) return;
+    if (commentsAbortRef.current) commentsAbortRef.current.abort();
+    const controller = new AbortController();
+    commentsAbortRef.current = controller;
     setLoading(true);
     try {
-      const r = await api.get(`/tickets/${tid}/comments`);
-      if (currentTicketIdRef.current === tid) {
+      const r = await api.get(`/tickets/${tid}/comments`, { signal: controller.signal });
+      if (!controller.signal.aborted && currentTicketIdRef.current === tid) {
         setComments(Array.isArray(r.data?.data) ? r.data.data : []);
       }
     } catch (err: any) {
+      if (err?.name === 'AbortError' || err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return;
       console.error('Failed to fetch ticket comments', err);
       if (currentTicketIdRef.current === tid) {
         setComments([]);
       }
     } finally {
-      if (currentTicketIdRef.current === tid) {
+      if (!controller.signal.aborted && currentTicketIdRef.current === tid) {
         setLoading(false);
       }
     }
   };
 
+  useEffect(() => {
+    if (!isOpen || comments.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const hcId = params.get('highlight_comment_id') || params.get('comment_id');
+    if (!hcId) return;
+
+    const timer = setTimeout(() => {
+      const el = document.getElementById(`ticket-comment-${hcId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const bubble = (el.querySelector('div[style*="border-radius"]') as HTMLElement) || el;
+        const origTransition = bubble.style.transition;
+        const origBoxShadow = bubble.style.boxShadow;
+        const origBg = bubble.style.backgroundColor;
+        bubble.style.transition = 'all 0.4s ease';
+        bubble.style.boxShadow = '0 0 0 2px #f59e0b, 0 4px 12px rgba(245, 158, 11, 0.25)';
+        bubble.style.backgroundColor = 'rgba(254, 243, 199, 0.65)';
+        setTimeout(() => {
+          bubble.style.boxShadow = origBoxShadow;
+          bubble.style.backgroundColor = origBg;
+          setTimeout(() => { bubble.style.transition = origTransition; }, 400);
+        }, 2800);
+      }
+      params.delete('highlight_comment_id');
+      params.delete('comment_id');
+      const qs = params.toString();
+      window.history.replaceState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash}`);
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [isOpen, comments]);
+
   const handleDeleteComment = async (commentId: number) => {
     const tid = formData?.id || ticket?.id;
-    if (!tid) return;
+    if (!tid || deleteCommentInFlightRef.current) return;
+    deleteCommentInFlightRef.current = true;
     try {
       await api.delete(`/tickets/${tid}/comments/${commentId}`);
       addToast(t('Đã xóa bình luận!'), 'success');
       fetchComments(tid);
     } catch (err: any) {
       addToast(t('Lỗi khi xóa bình luận: ') + (err.response?.data?.message || err.message), 'error');
+    } finally {
+      deleteCommentInFlightRef.current = false;
     }
   };
 
   useEffect(() => {
+    if (contactAbortRef.current) contactAbortRef.current.abort();
     if (isOpen && ticket?.id) {
+      const controller = new AbortController();
+      contactAbortRef.current = controller;
       currentTicketIdRef.current = ticket.id;
       setFormData(ticket);
       setComments([]); // Always clear comments of previous ticket immediately!
@@ -145,17 +225,23 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
       setCommentAttachments([]);
       setReplyTo(null);
       setResolvedContact(null);
+      setShowRejectModal(false);
+      setRejectReason('');
+      setShowDeleteModal(false);
+      setPreviewImage(null);
+      setCommentToDelete(null);
       fetchComments(ticket.id);
 
       const cid = ticket.contact_id || ticket.customer_id || (ticket.related_contacts && ticket.related_contacts.length > 0 ? ticket.related_contacts[0] : null);
       if (cid) {
-        api.get(`/contacts/${cid}`).then(res => {
-          if (res.data.success && res.data.data && currentTicketIdRef.current === ticket.id) {
+        api.get(`/contacts/${cid}`, { signal: controller.signal }).then(res => {
+          if (!controller.signal.aborted && res.data.success && res.data.data && currentTicketIdRef.current === ticket.id) {
             setResolvedContact(res.data.data);
           }
         }).catch(() => {});
       } else if (ticket.customer_name && ticket.customer_name !== 'Hệ thống / Yêu cầu chung') {
-        api.get('/contacts', { params: { search: ticket.customer_name, limit: 5 } }).then(res => {
+        api.get('/contacts', { params: { search: ticket.customer_name, limit: 5 }, signal: controller.signal }).then(res => {
+          if (controller.signal.aborted) return;
           const list = res.data.data?.items || res.data.data || [];
           const matched = list.find((x: any) => {
             const fullName = (x.full_name || '').trim().toLowerCase();
@@ -169,6 +255,7 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
         }).catch(() => {});
       }
     } else if (!isOpen) {
+      if (commentsAbortRef.current) commentsAbortRef.current.abort();
       currentTicketIdRef.current = null;
       setFormData({});
       setComments([]);
@@ -176,7 +263,16 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
       setCommentAttachments([]);
       setReplyTo(null);
       setResolvedContact(null);
+      setShowRejectModal(false);
+      setRejectReason('');
+      setShowDeleteModal(false);
+      setPreviewImage(null);
+      setCommentToDelete(null);
     }
+    return () => {
+      if (contactAbortRef.current) contactAbortRef.current.abort();
+      if (commentsAbortRef.current) commentsAbortRef.current.abort();
+    };
   }, [isOpen, ticket?.id]);
 
   useEffect(() => {
@@ -191,7 +287,8 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
   }, [isOpen]);
 
   const handleUploadCommentFiles = async (files: FileList | File[]) => {
-    if (!files || files.length === 0) return;
+    if (!files || files.length === 0 || uploadCommentInFlightRef.current) return;
+    uploadCommentInFlightRef.current = true;
     setUploadingCommentFile(true);
     try {
       for (let i = 0; i < files.length; i++) {
@@ -212,6 +309,7 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
     } catch (err: any) {
       addToast('Lỗi khi tải lên tệp: ' + (err.response?.data?.message || err.message), 'error');
     } finally {
+      uploadCommentInFlightRef.current = false;
       setUploadingCommentFile(false);
       if (commentFileInputRef.current) commentFileInputRef.current.value = '';
     }
@@ -235,7 +333,8 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
 
   const handleSend = async () => {
     const tid = formData?.id || ticket?.id;
-    if (!tid || (!newComment.trim() && commentAttachments.length === 0) || isSubmitting) return;
+    if (!tid || (!newComment.trim() && commentAttachments.length === 0) || isSubmitting || sendCommentInFlightRef.current) return;
+    sendCommentInFlightRef.current = true;
     setIsSubmitting(true);
     try {
       const r = await api.post(`/tickets/${tid}/comments`, { 
@@ -243,21 +342,25 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
         parent_id: replyTo ? replyTo.id : null,
         attachments: commentAttachments
       });
-      setComments(r.data.data || []);
-      setNewComment('');
-      setCommentAttachments([]);
-      setReplyTo(null);
+      if (currentTicketIdRef.current === tid) {
+        setComments(r.data.data || []);
+        setNewComment('');
+        setCommentAttachments([]);
+        setReplyTo(null);
+      }
       addToast('Đã thêm ghi chú', 'success');
     } catch (err: any) {
       addToast('Lỗi khi lưu ghi chú', 'error');
     } finally {
+      sendCommentInFlightRef.current = false;
       setIsSubmitting(false);
     }
   };
 
   const handleAcceptTicket = async () => {
     const tid = formData?.id || ticket?.id;
-    if (!tid || isSubmitting) return;
+    if (!tid || isSubmitting || ticketActionInFlightRef.current) return;
+    ticketActionInFlightRef.current = true;
     setIsSubmitting(true);
     try {
       const updated = { ...formData, status: 'in_progress' };
@@ -268,12 +371,14 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
     } catch (err: any) {
       addToast('Lỗi khi tiếp nhận ticket', 'error');
     } finally {
+      ticketActionInFlightRef.current = false;
       setIsSubmitting(false);
     }
   };
 
   const handleResolveTicket = async () => {
-    if (isSubmitting || !formData.id) return;
+    if (isSubmitting || !formData.id || ticketActionInFlightRef.current) return;
+    ticketActionInFlightRef.current = true;
     setIsSubmitting(true);
     try {
       const updated = { ...formData, status: 'closed', resolution_status: 'resolved' };
@@ -286,12 +391,14 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
     } catch (err: any) {
       addToast('Lỗi khi đóng ticket', 'error');
     } finally {
+      ticketActionInFlightRef.current = false;
       setIsSubmitting(false);
     }
   };
 
   const handleReopenTicket = async () => {
-    if (isSubmitting || !formData.id) return;
+    if (isSubmitting || !formData.id || ticketActionInFlightRef.current) return;
+    ticketActionInFlightRef.current = true;
     setIsSubmitting(true);
     try {
       const updated = { ...formData, status: 'in_progress', resolution_status: null, rejection_reason: null };
@@ -303,12 +410,14 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
     } catch (err: any) {
       addToast('Lỗi khi mở lại ticket', 'error');
     } finally {
+      ticketActionInFlightRef.current = false;
       setIsSubmitting(false);
     }
   };
 
   const handleDeleteTicket = async () => {
-    if (!formData.id || isDeleting) return;
+    if (!formData.id || isDeleting || deleteTicketInFlightRef.current) return;
+    deleteTicketInFlightRef.current = true;
     setIsDeleting(true);
     try {
       await api.delete(`/tickets/${formData.id}`);
@@ -321,12 +430,14 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
     } catch (err: any) {
       addToast(err.response?.data?.message || 'Lỗi khi xóa ticket', 'error');
     } finally {
+      deleteTicketInFlightRef.current = false;
       setIsDeleting(false);
     }
   };
 
   const handleRejectTicket = async () => {
-    if (!rejectReason.trim() || isSubmitting || !formData.id) return;
+    if (!rejectReason.trim() || isSubmitting || !formData.id || ticketActionInFlightRef.current) return;
+    ticketActionInFlightRef.current = true;
     setIsSubmitting(true);
     try {
       const updated = { ...formData, status: 'closed', resolution_status: 'rejected', rejection_reason: rejectReason };
@@ -346,6 +457,7 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
     } catch (err: any) {
       addToast('Lỗi khi từ chối ticket', 'error');
     } finally {
+      ticketActionInFlightRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -457,7 +569,7 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
   return createPortal(
     <AnimatePresence>
       {isOpen && !isClosing && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 2000000000, display: 'flex', justifyContent: 'flex-end' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 2147483620, display: 'flex', justifyContent: 'flex-end' }}>
           <motion.div
             className="drawer-backdrop"
             initial={{ opacity: 0 }}
@@ -468,14 +580,16 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
             style={{
               position: 'fixed',
               inset: 0,
-              zIndex: 2000000005,
+              zIndex: 2147483619,
+              '--drawer-backdrop-z': 2147483619,
               background: 'rgba(0, 0, 0, 0.45)',
               backdropFilter: 'blur(8px)',
               WebkitBackdropFilter: 'blur(8px)'
-            }}
+            } as any}
           />
 
           <motion.div
+            className="drawer-sheet"
             initial={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
             animate={{ y: 0, x: 0, opacity: 1 }}
             exit={isMobile ? { y: '60%', opacity: 0 } : { x: '60%', opacity: 0 }}
@@ -491,7 +605,7 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
               boxShadow: '-10px 0 30px rgba(0, 0, 0, 0.15)',
               display: 'flex',
               flexDirection: 'column',
-              zIndex: 2000000010,
+              zIndex: 2147483620,
               overflow: 'hidden'
             }}
           >
@@ -1128,7 +1242,7 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
       )}
 
       {showRejectModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000000020, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2147483645, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
           <div style={{ background: 'var(--color-surface)', width: '100%', maxWidth: '440px', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--color-text)', marginBottom: '0.5rem' }}>Từ chối & Đóng Ticket</h3>
             <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '1rem' }}>
@@ -1176,7 +1290,7 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
       {previewImage && (
         <div 
           onClick={() => setPreviewImage(null)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 2000000030, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem', cursor: 'pointer' }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 2147483646, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem', cursor: 'pointer' }}
         >
           <div style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }} onClick={e => e.stopPropagation()}>
             <img src={previewImage} alt="Preview" style={{ maxWidth: '90vw', maxHeight: '85vh', objectFit: 'contain', borderRadius: '8px' }} />

@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ShoppingCart, Plus, Search, Filter, Calendar, 
   ChevronRight, ArrowUpRight, CheckCircle2, Clock, XCircle, Loader2,
   Truck, Package, Trash2, PlusCircle, MinusCircle, AlertCircle,
-  DollarSign, Building2, Users, User, FileText
+  DollarSign, Building2, Users, User, FileText, Pencil, Copy
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
@@ -28,7 +28,6 @@ interface Props {
 export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, defaultSupplierId }) => {
   const { user } = useAuth();
   const isSale = user?.role === 'sale' || user?.role === 'viewer';
-  console.log('PurchaseOrdersTab RENDERED. showModal =', showModal);
   
   const { addToast, showConfirm } = useUIStore();
   const navigate = useNavigate();
@@ -36,6 +35,8 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [editingPoId, setEditingPoId] = useState<number | null>(null);
+  const justHydratedPoRef = useRef(false);
   
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -69,7 +70,8 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
         if (aiDraftRaw) {
           sessionStorage.removeItem('pending_po_draft');
           const aiDraft = JSON.parse(aiDraftRaw);
-          if (aiDraft) {
+          const createdAt = aiDraft?._draft_created_at || 0;
+          if (aiDraft && (!createdAt || Date.now() - createdAt < 10 * 60 * 1000)) {
             const rawItems = Array.isArray(aiDraft.items) ? aiDraft.items : [];
             const mappedItems = rawItems.map((it: any) => {
               const qty = Number(it.quantity) || 1;
@@ -119,6 +121,7 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
       }
     } else {
       setShowExitConfirm(false);
+      setEditingPoId(null);
     }
   }, [showModal, suppliers]);
 
@@ -223,6 +226,10 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
 
   useEffect(() => {
     if (showModal) {
+      if (justHydratedPoRef.current) {
+        justHydratedPoRef.current = false;
+        return;
+      }
       const leaderId = resolveTeamLeaderId(user, users, teams);
       const subtotal = formData.items.reduce((acc, i) => acc + (Number(i.subtotal) || 0), 0);
       const taxRate = Number(formData.tax_rate || 0);
@@ -303,6 +310,53 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
     fetchOrders(); 
     fetchSuppliersAndProducts();
   }, []);
+
+  const handleOpenEditPO = async (o: any, isClone = false) => {
+    let poData = o;
+    if (!Array.isArray(o.items) && o.id) {
+      try {
+        const res = await api.get(`/purchase-orders/${o.id}`);
+        poData = res.data?.data || res.data || o;
+      } catch {
+        poData = o;
+      }
+    }
+    const rawItems = Array.isArray(poData.items) ? poData.items : [];
+    const mappedItems = rawItems.map((it: any) => {
+      const qty = Number(it.quantity) || 1;
+      const cost = Number(it.unit_cost || it.price || 0);
+      return {
+        product_id: it.product_id,
+        name: it.product_name || it.name || 'Sản phẩm',
+        quantity: qty,
+        unit_cost: cost,
+        subtotal: Number(it.subtotal) || qty * cost
+      };
+    });
+    const subtotalVal = Number(poData.subtotal || 0);
+    const taxVal = Number(poData.tax || 0);
+    const taxRate = poData.tax_rate !== undefined
+      ? Number(poData.tax_rate)
+      : (subtotalVal > 0 && taxVal > 0 ? Math.round((taxVal / subtotalVal) * 100) : 0);
+
+    setBeneficiaryType(poData.beneficiary_type === 'employee' ? 'employee' : 'supplier');
+    setSelectedEmployeeId(poData.beneficiary_id ? String(poData.beneficiary_id) : '');
+    justHydratedPoRef.current = true;
+    setEditingPoId(isClone ? null : Number(poData.id || o.id));
+    setFormData({
+      supplier_id: poData.supplier_id ? String(poData.supplier_id) : '',
+      order_date: isClone
+        ? new Date().toISOString().split('T')[0]
+        : (poData.order_date ? String(poData.order_date).split('T')[0] : new Date().toISOString().split('T')[0]),
+      notes: poData.notes || '',
+      items: mappedItems,
+      tax_rate: taxRate,
+      approver_id: poData.approver_id ? String(poData.approver_id) : '',
+      approver_id_2: poData.approver_id_2 ? String(poData.approver_id_2) : '',
+      approver_id_3: poData.approver_id_3 ? String(poData.approver_id_3) : ''
+    });
+    setShowModal(true);
+  };
 
   const handleAddItem = (p: any) => {
     const cost = Number(p.cost || 0);
@@ -390,7 +444,7 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
         return;
       }
 
-      await api.post('/purchase-orders', {
+      const payload = {
         supplier_id: beneficiaryType === 'supplier' ? formData.supplier_id : null,
         beneficiary_type: beneficiaryType,
         beneficiary_id: beneficiaryType === 'employee' ? Number(selectedEmployeeId) : null,
@@ -403,12 +457,21 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
         approver_id: formData.approver_id ? Number(formData.approver_id) : null,
         approver_id_2: formData.approver_id_2 ? Number(formData.approver_id_2) : null,
         approver_id_3: formData.approver_id_3 ? Number(formData.approver_id_3) : null
-      });
-      addToast('Đã tạo đơn nhập hàng mới', 'success');
+      };
+
+      if (editingPoId) {
+        await api.put(`/purchase-orders/${editingPoId}`, payload);
+        addToast('Đã cập nhật đơn nhập hàng thành công', 'success');
+      } else {
+        await api.post('/purchase-orders', payload);
+        addToast('Đã tạo đơn nhập hàng mới', 'success');
+      }
+      window.dispatchEvent(new CustomEvent('erp-action-completed', { detail: { actionType: 'inventory_receipt' } }));
       try {
         localStorage.removeItem(PO_DRAFT_KEY);
       } catch {}
       setExistingDraft(null);
+      setEditingPoId(null);
       setShowModal(false);
       setBeneficiaryType('supplier');
       setSelectedEmployeeId('');
@@ -442,10 +505,38 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
     });
   };
 
-  const filteredProducts = products.filter(p => 
-    p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    p.sku?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredProducts = useMemo(() => {
+    const q = searchTerm.toLowerCase();
+    return products.filter(p =>
+      p.name?.toLowerCase().includes(q) ||
+      p.sku?.toLowerCase().includes(q)
+    );
+  }, [products, searchTerm]);
+
+  const supplierSelectOptions = useMemo(() => {
+    return suppliers.map(s => ({ value: String(s.id), label: s.name }));
+  }, [suppliers]);
+
+  const employeeSelectOptions = useMemo(() => {
+    return users.map((u: any) => ({
+      value: String(u.id),
+      label: u.full_name || u.name || `Nhân viên #${u.id}`,
+      avatar: u.avatar_url || u.avatar,
+      sublabel: [
+        u.role || '',
+        u.bank_name ? `${u.bank_name}: ${u.bank_account}` : 'Chưa có STK'
+      ].filter(Boolean).join(' • ')
+    }));
+  }, [users]);
+
+  const approverUserOptions = useMemo(() => {
+    return users.map((u: any) => ({
+      value: String(u.id),
+      label: u.full_name || u.name,
+      avatar: u.avatar_url || u.avatar,
+      sublabel: [u.phone, u.email].filter(Boolean).join(' - ')
+    }));
+  }, [users]);
 
   return (
     <>
@@ -592,6 +683,32 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                         </td>
                         <td style={{ textAlign: 'right' }}>
                           <div className="flex flex-col gap-1.5 items-end">
+                            <div className="flex items-center gap-1 justify-end">
+                              <button
+                                type="button"
+                                className="btn-icon sm"
+                                title="Nhân bản đơn nhập hàng"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenEditPO(o, true);
+                                }}
+                              >
+                                <Copy size={13} />
+                              </button>
+                              {(o.status === 'pending' || o.status === 'pending_approval' || o.status === 'draft' || o.status === 'cancelled' || o.status === 'rejected') && (isCreator || isAdmin) && (
+                                <button
+                                  type="button"
+                                  className="btn-icon sm"
+                                  title="Chỉnh sửa đơn nhập hàng"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenEditPO(o, false);
+                                  }}
+                                >
+                                  <Pencil size={13} />
+                                </button>
+                              )}
+                            </div>
                             {o.status === 'ordered' && (
                               <button className="btn primary sm inline-flex items-center justify-center gap-2" onClick={() => handleReceive(o.id)}>
                                 <Package size={14} /> Nhập kho
@@ -655,7 +772,9 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                     <ShoppingCart size={24} />
                   </div>
                   <div>
-                    <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-text)' }}>Tạo đơn nhập hàng mới</h3>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-text)' }}>
+                      {editingPoId ? `Chỉnh sửa đơn nhập hàng #PO-${editingPoId}` : 'Tạo đơn nhập hàng mới'}
+                    </h3>
                     <p style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '4px' }}>
                       Bước 1: Thiết lập & Chọn sản phẩm
                     </p>
@@ -820,7 +939,7 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                               <Truck size={13} /> Nhà cung cấp <span className="text-danger">*</span>
                             </label>
                             <CustomSelect 
-                              options={suppliers.map(s => ({ value: String(s.id), label: s.name }))}
+                              options={supplierSelectOptions}
                               value={formData.supplier_id} 
                               onChange={val => setFormData({...formData, supplier_id: String(val)})}
                               placeholder="-- Chọn nhà cung cấp --"
@@ -833,15 +952,7 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                               <Users size={13} /> Nhân viên thanh toán <span className="text-danger">*</span>
                             </label>
                             <CustomSelect 
-                              options={users.map((u: any) => ({
-                                value: String(u.id),
-                                label: u.full_name || u.name || `Nhân viên #${u.id}`,
-                                avatar: u.avatar_url || u.avatar,
-                                sublabel: [
-                                  u.role || '',
-                                  u.bank_name ? `${u.bank_name}: ${u.bank_account}` : 'Chưa có STK'
-                                ].filter(Boolean).join(' • ')
-                              }))}
+                              options={employeeSelectOptions}
                               value={selectedEmployeeId}
                               onChange={val => {
                                 const empId = String(val);
@@ -994,12 +1105,7 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                             Cấp 1: Trưởng nhóm / Quản lý <span className="text-danger">*</span>
                           </label>
                           <CustomSelect 
-                            options={users.map((u: any) => ({
-                              value: String(u.id),
-                              label: u.full_name || u.name,
-                              avatar: u.avatar_url || u.avatar,
-                              sublabel: [u.phone, u.email].filter(Boolean).join(' - ')
-                            }))}
+                            options={approverUserOptions}
                             value={formData.approver_id} 
                             onChange={val => setFormData({...formData, approver_id: String(val)})}
                             placeholder="Chọn người duyệt Cấp 1..."
@@ -1022,12 +1128,7 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                             })()}
                           </label>
                           <CustomSelect 
-                            options={users.map((u: any) => ({
-                              value: String(u.id),
-                              label: u.full_name || u.name,
-                              avatar: u.avatar_url || u.avatar,
-                              sublabel: [u.phone, u.email].filter(Boolean).join(' - ')
-                            }))}
+                            options={approverUserOptions}
                             value={formData.approver_id_2} 
                             onChange={val => setFormData({...formData, approver_id_2: String(val)})}
                             placeholder="Chọn người duyệt Cấp 2..."
@@ -1050,12 +1151,7 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                             })()}
                           </label>
                           <CustomSelect 
-                            options={users.map((u: any) => ({
-                              value: String(u.id),
-                              label: u.full_name || u.name,
-                              avatar: u.avatar_url || u.avatar,
-                              sublabel: [u.phone, u.email].filter(Boolean).join(' - ')
-                            }))}
+                            options={approverUserOptions}
                             value={formData.approver_id_3} 
                             onChange={val => setFormData({...formData, approver_id_3: String(val)})}
                             placeholder="-- Không áp dụng --"
@@ -1238,7 +1334,7 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                       <span>Lưu nháp</span>
                     </button>
                     <button className="btn primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0 2rem' }} onClick={handleSubmit} disabled={isSubmitting}>
-                      {isSubmitting ? <Loader2 size={18} className="spin" /> : 'Xác nhận nhập hàng'}
+                      {isSubmitting ? <Loader2 size={18} className="spin" /> : (editingPoId ? 'Lưu cập nhật đơn hàng' : 'Xác nhận nhập hàng')}
                       {!isSubmitting && <ArrowUpRight size={18} />}
                     </button>
                   </>

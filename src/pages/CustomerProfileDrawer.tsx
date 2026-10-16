@@ -160,9 +160,10 @@ const buildTasks = (c: any): any[] => {
 const DEFAULT_PIPELINE_STAGES = [
   {
     id: 'new_lead',
+    db_id: 31,
     name: '01 – New Lead',
     system_slug: 'new_lead',
-    color: '#f97316',
+    color: '#dc2626',
     order_index: 1,
     definition: 'Lead vừa được ghi nhận trên CRM; chưa có hoạt động tư vấn thực tế.',
     target_goal: 'Thiết lập liên hệ đầu tiên.',
@@ -171,6 +172,7 @@ const DEFAULT_PIPELINE_STAGES = [
   },
   {
     id: 'contact_attempted',
+    db_id: 32,
     name: '02 – Contact Attempted',
     system_slug: 'contact_attempted',
     color: '#eab308',
@@ -182,6 +184,7 @@ const DEFAULT_PIPELINE_STAGES = [
   },
   {
     id: 'connected',
+    db_id: 33,
     name: '03 – Connected',
     system_slug: 'connected',
     color: '#8b5cf6',
@@ -193,6 +196,7 @@ const DEFAULT_PIPELINE_STAGES = [
   },
   {
     id: 'needed',
+    db_id: 34,
     name: '04 – Needed',
     system_slug: 'needed',
     color: '#ef4444',
@@ -204,6 +208,7 @@ const DEFAULT_PIPELINE_STAGES = [
   },
   {
     id: 'discovery_completed',
+    db_id: 35,
     name: '05 – Discovery Completed',
     system_slug: 'discovery_completed',
     color: '#0d9488',
@@ -215,6 +220,7 @@ const DEFAULT_PIPELINE_STAGES = [
   },
   {
     id: 'program_matched',
+    db_id: 36,
     name: '06 – Program Matched',
     system_slug: 'program_matched',
     color: '#0284c7',
@@ -226,6 +232,7 @@ const DEFAULT_PIPELINE_STAGES = [
   },
   {
     id: 'proposal_sent',
+    db_id: 37,
     name: '07 – Proposal Sent',
     system_slug: 'proposal_sent',
     color: '#d97706',
@@ -237,6 +244,7 @@ const DEFAULT_PIPELINE_STAGES = [
   },
   {
     id: 'evaluation_objection',
+    db_id: 38,
     name: '08 – Evaluation / Objection',
     system_slug: 'evaluation_objection',
     color: '#ea580c',
@@ -248,6 +256,7 @@ const DEFAULT_PIPELINE_STAGES = [
   },
   {
     id: 'application_started',
+    db_id: 39,
     name: '09 – Application Started',
     system_slug: 'application_started',
     color: '#f59e0b',
@@ -259,6 +268,7 @@ const DEFAULT_PIPELINE_STAGES = [
   },
   {
     id: 'application_completed',
+    db_id: 40,
     name: '10 – Application Completed',
     system_slug: 'application_completed',
     color: '#4338ca',
@@ -270,6 +280,7 @@ const DEFAULT_PIPELINE_STAGES = [
   },
   {
     id: 'admission_approved',
+    db_id: 41,
     name: '11 – Admission Approved',
     system_slug: 'admission_approved',
     color: '#65a30d',
@@ -281,6 +292,7 @@ const DEFAULT_PIPELINE_STAGES = [
   },
   {
     id: 'offer_accepted',
+    db_id: 42,
     name: '12 – Offer / Scholarship Accepted',
     system_slug: 'offer_accepted',
     color: '#16a34a',
@@ -292,6 +304,7 @@ const DEFAULT_PIPELINE_STAGES = [
   },
   {
     id: 'deposit_tuition_payment',
+    db_id: 43,
     name: '13 – Deposit / Tuition Payment',
     system_slug: 'deposit_tuition_payment',
     color: '#059669',
@@ -303,6 +316,7 @@ const DEFAULT_PIPELINE_STAGES = [
   },
   {
     id: 'enrolled',
+    db_id: 44,
     name: '14 – Enrolled',
     system_slug: 'enrolled',
     color: '#db2777',
@@ -1522,11 +1536,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   useEffect(() => {
     if (isOpen) {
       const params = new URLSearchParams(window.location.search);
-      const targetTab = params.get('tab');
+      const rawTab = params.get('tab');
+      const targetTab = rawTab === 'files' ? 'docs' : rawTab;
       if (targetTab) {
         setActiveTab(targetTab);
-      } else if (params.get('highlight_activity_id') || params.get('highlight_note_id') || params.get('highlight_comment_id')) {
+      } else if (params.get('open_deposit_id')) {
+        setActiveTab('deals');
+      } else if (params.get('highlight_activity_id') || params.get('highlight_comment_id')) {
         setActiveTab('timeline');
+      } else if (params.get('highlight_note_id')) {
+        setActiveTab('tags');
       }
     }
   }, [isOpen]);
@@ -1658,10 +1677,17 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const rawTab = params.get('tab');
+    const targetTab = rawTab === 'files' ? 'docs' : rawTab;
+    const hasOpenDeposit = params.has('open_deposit_id');
     const hasHighlight = params.has('highlight_activity_id') || params.has('highlight_comment_id');
     const hasHighlightNote = params.has('highlight_note_id');
     
-    if (isOpen && hasHighlight) {
+    if (isOpen && targetTab) {
+      setActiveTab(targetTab);
+    } else if (isOpen && hasOpenDeposit) {
+      setActiveTab('deals');
+    } else if (isOpen && hasHighlight) {
       setActiveTab('timeline');
     } else if (isOpen && hasHighlightNote) {
       setActiveTab('tags');
@@ -2030,6 +2056,15 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const handleClose = useCallback(() => {
     if (isClosing) return;
     const performClose = () => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const keysToClean = ['id', 'open_contact_id', 'tab', 'highlight_note_id', 'highlight_activity_id', 'highlight_comment_id', 'open_deposit_id'];
+        if (keysToClean.some(k => params.has(k))) {
+          keysToClean.forEach(k => params.delete(k));
+          const newSearch = params.toString();
+          window.history.replaceState({}, '', `${window.location.pathname}${newSearch ? `?${newSearch}` : ''}${window.location.hash}`);
+        }
+      } catch (e) {}
       setIsClosing(true);
       setTimeout(() => {
         onClose();
@@ -2459,43 +2494,57 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const getStageFromVal = (val: any, stageId?: any, stageName?: any) => {
     const stagesToUse = (pipelineStages && pipelineStages.length > 0) ? pipelineStages : DEFAULT_PIPELINE_STAGES;
 
-    // 1. Direct lookup by stageId if provided
-    if (stageId) {
+    let byStageId: any = null;
+    if (stageId !== undefined && stageId !== null && String(stageId).trim() !== '') {
       const sIdStr = String(stageId).trim();
-      const byStageId = stagesToUse.find(s => String(s.id) === sIdStr);
-      if (byStageId) return byStageId;
+      byStageId = stagesToUse.find(s => String(s.id) === sIdStr || String((s as any).db_id) === sIdStr);
     }
 
-    // 2. Direct lookup in pipelineStages by status value (id, slug, or name)
-    if (val) {
+    let byVal: any = null;
+    if (val !== undefined && val !== null && String(val).trim() !== '') {
       const searchVal = String(val).trim().toLowerCase();
-      const exact = stagesToUse.find(s => 
+      byVal = stagesToUse.find(s => 
         String(s.id).toLowerCase() === searchVal ||
+        String((s as any).db_id || '').toLowerCase() === searchVal ||
         String(s.system_slug || '').toLowerCase() === searchVal ||
         String(s.name).toLowerCase() === searchVal
       );
-      if (exact) return exact;
-
-      const mappedSlug = LEGACY_STAGE_MAPPING[searchVal];
-      if (mappedSlug) {
-        const mapped = stagesToUse.find(s => 
-          String(s.id).toLowerCase() === mappedSlug ||
-          String(s.system_slug || '').toLowerCase() === mappedSlug
-        );
-        if (mapped) return mapped;
+      if (!byVal) {
+        const mappedSlug = LEGACY_STAGE_MAPPING[searchVal];
+        if (mappedSlug) {
+          byVal = stagesToUse.find(s => 
+            String(s.id).toLowerCase() === mappedSlug ||
+            String(s.system_slug || '').toLowerCase() === mappedSlug
+          );
+        }
       }
     }
 
-    // 3. Fallback lookup by stageName if provided
-    if (stageName) {
+    let byName: any = null;
+    if (stageName !== undefined && stageName !== null && String(stageName).trim() !== '') {
       const sNameStr = String(stageName).trim().toLowerCase();
-      const byName = stagesToUse.find(s => 
+      byName = stagesToUse.find(s => 
         String(s.name).toLowerCase() === sNameStr ||
         String(s.name).toLowerCase().includes(sNameStr) ||
         sNameStr.includes(String(s.name).toLowerCase())
       );
-      if (byName) return byName;
     }
+
+    if (byStageId && byVal) {
+      if (byStageId.id === byVal.id) return byStageId;
+      if (byName) {
+        if (byName.id === byStageId.id) return byStageId;
+        if (byName.id === byVal.id) return byVal;
+        return byName;
+      }
+      const idxStageId = Number(byStageId.order_index ?? stagesToUse.indexOf(byStageId));
+      const idxVal = Number(byVal.order_index ?? stagesToUse.indexOf(byVal));
+      return idxVal >= idxStageId ? byVal : byStageId;
+    }
+
+    if (byStageId) return byStageId;
+    if (byVal) return byVal;
+    if (byName) return byName;
 
     return stagesToUse[0] || DEFAULT_PIPELINE_STAGES[0];
   };
@@ -3512,15 +3561,24 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       calculatedStatus = 'qualified';
     }
     
+    const targetStage = getStageFromVal(targetId);
+    const resolvedStageId = (targetStage as any)?.db_id || targetStage?.id || targetId;
+    const resolvedPipelineStatus = (targetStage as any)?.system_slug || targetId;
+    const resolvedStageName = targetStage?.name || targetLabel;
+    
     setFormData((prev: any) => ({ 
       ...prev, 
-      pipeline_status: targetId, 
+      stage_id: resolvedStageId,
+      pipeline_status: resolvedPipelineStatus, 
+      stage_name: resolvedStageName,
       status: calculatedStatus 
     }));
     
     try {
       await api.put(`/contacts/${effectiveContactId}`, { 
-        pipeline_status: targetId, 
+        stage_id: resolvedStageId,
+        pipeline_status: resolvedPipelineStatus, 
+        stage_name: resolvedStageName,
         status: calculatedStatus,
         ttl1_completed: formData.ttl1_completed,
         ttl1_data: formData.ttl1_data
@@ -3539,12 +3597,15 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       });
       fetchData();
       addToast(`Đã cập nhật trạng thái pipeline của ${fullName || 'khách hàng'} sang "${targetLabel}" thành công!`, 'success');
-      onUpdate?.({ ...formData, pipeline_status: targetId, status: calculatedStatus });
-      window.dispatchEvent(new CustomEvent('contact-updated'));
+      const updatedPayload = { ...formData, stage_id: resolvedStageId, pipeline_status: resolvedPipelineStatus, stage_name: resolvedStageName, status: calculatedStatus };
+      onUpdate?.(updatedPayload);
+      window.dispatchEvent(new CustomEvent('contact-updated', { detail: updatedPayload }));
     } catch (e: any) {
       setFormData((prev: any) => ({ 
         ...prev, 
+        stage_id: contact.stage_id,
         pipeline_status: contact.pipeline_status, 
+        stage_name: contact.stage_name,
         status: contact.status 
       }));
       addToast(e?.response?.data?.message || `Không thể chuyển trạng thái pipeline sang "${targetLabel}". Vui lòng thử lại.`, 'error');
@@ -4644,21 +4705,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           contact_owner_id: d.contact_owner_id
         }));
         setDeals(depositsList);
-
-        // Auto-sync contact expected_revenue & win_probability based on current deposits
-        if (depositsList.length > 0) {
-          const totalRev = depositsList.reduce((sum, d) => sum + (Number(d.value) || 0), 0);
-          const avgProb = Math.round(depositsList.reduce((total, d) => total + (Number(d.prob) || 0), 0) / depositsList.length);
-          if (totalRev !== Number(formData.expected_revenue || 0) || avgProb !== Number(formData.win_probability || 0)) {
-            api.put(`/contacts/${currentCId}`, {
-              expected_revenue: totalRev,
-              win_probability: avgProb
-            }).then(() => {
-              setFormData(prev => ({ ...prev, expected_revenue: totalRev, win_probability: avgProb }));
-              setBaseData(prev => ({ ...prev, expected_revenue: totalRev, win_probability: avgProb }));
-              onUpdate?.({ ...formData, expected_revenue: totalRev, win_probability: avgProb });
-              window.dispatchEvent(new CustomEvent('contact-updated'));
-            }).catch(err => console.error("Error syncing contact metrics:", err));
+        const urlParams = new URLSearchParams(window.location.search);
+        const openDepId = urlParams.get('open_deposit_id');
+        if (openDepId) {
+          const foundDeal = depositsList.find((dep: any) => String(dep.id) === String(openDepId));
+          if (foundDeal) {
+            setSelectedDepForManage(foundDeal);
+            setShowManageModal(true);
+            urlParams.delete('open_deposit_id');
+            const nextSearch = urlParams.toString();
+            window.history.replaceState({}, '', `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}${window.location.hash}`);
           }
         }
       }
@@ -4722,10 +4778,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         const transition = pendingPipelineTransitionRef.current;
         if (transition) {
           const { targetId, targetLabel, note } = transition;
-          const calculatedStatus = (targetId === 'hoc_vien') ? 'customer' : 'qualified';
+          const calculatedStatus = (targetId === 'hoc_vien' || targetId === 'enrolled') ? 'customer' : 'qualified';
+          const targetStage = getStageFromVal(targetId);
+          const resolvedStageId = (targetStage as any)?.db_id || targetStage?.id || targetId;
+          const resolvedPipelineStatus = (targetStage as any)?.system_slug || targetId;
+          const resolvedStageName = targetStage?.name || targetLabel;
           try {
             await api.put(`/contacts/${effectiveContactId}`, { 
-              pipeline_status: targetId, 
+              stage_id: resolvedStageId,
+              pipeline_status: resolvedPipelineStatus, 
+              stage_name: resolvedStageName,
               status: calculatedStatus,
               ttl1_completed: formData.ttl1_completed,
               ttl1_data: formData.ttl1_data
@@ -4746,13 +4808,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
             setFormData((prev: any) => ({ 
               ...prev, 
-              pipeline_status: targetId, 
+              stage_id: resolvedStageId,
+              pipeline_status: resolvedPipelineStatus, 
+              stage_name: resolvedStageName,
               status: calculatedStatus 
             }));
 
             addToast(`Đã chuyển trạng thái Pipeline thành ${targetLabel}`, 'success');
-            onUpdate?.({ ...formData, pipeline_status: targetId, status: calculatedStatus });
-            window.dispatchEvent(new CustomEvent('contact-updated'));
+            const updatedPayload = { ...formData, stage_id: resolvedStageId, pipeline_status: resolvedPipelineStatus, stage_name: resolvedStageName, status: calculatedStatus };
+            onUpdate?.(updatedPayload);
+            window.dispatchEvent(new CustomEvent('contact-updated', { detail: updatedPayload }));
           } catch (e: any) {
             addToast(e?.response?.data?.message || 'Lỗi khi chuyển trạng thái Pipeline', 'error');
           } finally {
@@ -4799,10 +4864,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           params.set('id', String(fresh.id));
           window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
         } catch (e) {}
-
-        // Fetch tab data for newly active contact
-        fetchData(activeTab, true, fresh.id);
-        fetchLinkedProfiles(fresh.id);
 
         toast.custom((t) => (
           <div
@@ -5151,7 +5212,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflowX: 'auto', padding: '2px 0', flex: 1, minWidth: 0 }}>
           {linkedProfiles.map((p: any) => {
             const isCurrent = Number(p.id) === Number(effectiveContactId);
-            const stageColor = p.stage_color || '#2563eb';
+            const isNewLeadProfile = p.pipeline_status === 'new_lead' || p.pipeline_status === 'new' || String(p.stage_id) === '31' || /^01\b|new\s*lead/i.test(p.stage_name || '');
+            const stageColor = isNewLeadProfile ? '#dc2626' : (p.stage_color || '#2563eb');
             const programTitle = p.program?.trim() || (p.pipeline_status === 'enrolled' || p.status === 'customer' ? 'Học viên chính thức' : 'Chưa đặt tên CT');
             
             return (
@@ -5202,9 +5264,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                   fontSize: '0.65rem',
                   padding: '1px 6px',
                   borderRadius: '8px',
-                  background: `${stageColor}18`,
-                  color: stageColor,
-                  fontWeight: 700
+                  background: isNewLeadProfile ? '#dc2626' : `${stageColor}18`,
+                  color: isNewLeadProfile ? '#ffffff' : stageColor,
+                  border: isNewLeadProfile ? '1px solid #b91c1c' : undefined,
+                  fontWeight: 700,
+                  boxShadow: isNewLeadProfile ? '0 1px 4px rgba(220,38,38,0.35)' : undefined
                 }}>
                   {p.stage_name || p.pipeline_status || 'Giai đoạn 1'}
                 </span>
@@ -5272,7 +5336,13 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         setDrawerExpenses([]);
         setDrawerTickets([]);
         const params = new URLSearchParams(window.location.search);
-        if (params.has('highlight_activity_id')) {
+        const rawTab = params.get('tab');
+        const targetTab = rawTab === 'files' ? 'docs' : rawTab;
+        if (targetTab) {
+          setActiveTab(targetTab);
+        } else if (params.has('open_deposit_id')) {
+          setActiveTab('deals');
+        } else if (params.has('highlight_activity_id') || params.has('highlight_comment_id')) {
           setActiveTab('timeline');
         } else if (params.has('highlight_note_id')) {
           setActiveTab('tags');
@@ -5340,12 +5410,15 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         if (isNew14Stages) {
           const mappedStages = hierarchy.map((slug: string, idx: number) => {
             const defaultStage = DEFAULT_PIPELINE_STAGES.find(s => s.id === slug || s.system_slug === slug);
+            const cachedStage = (globalStagesCache || []).find((s: any) => s.system_slug === slug || String(s.id) === slug);
+            const resolvedDbId = (cachedStage as any)?.db_id || (typeof cachedStage?.id === 'number' ? cachedStage.id : undefined) || (defaultStage as any)?.db_id || (31 + idx);
             return {
               id: slug,
+              db_id: resolvedDbId,
               name: labels[slug] || defaultStage?.name || slug,
               system_slug: slug,
-              color: defaultStage?.color || '#3b82f6',
-              order_index: idx,
+              color: slug === 'new_lead' ? '#dc2626' : (defaultStage?.color || '#3b82f6'),
+              order_index: defaultStage?.order_index ?? (idx + 1),
               definition: defaultStage?.definition || '',
               target_goal: defaultStage?.target_goal || '',
               sales_actions: defaultStage?.sales_actions || '',
@@ -6626,10 +6699,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       // 3. Complete pipeline stage transition if pending
       if (pendingPipelineTransition) {
         const { targetId, targetLabel, note } = pendingPipelineTransition;
-        const calculatedStatus = (targetId === 'hoc_vien') ? 'customer' : 'qualified';
+        const calculatedStatus = (targetId === 'hoc_vien' || targetId === 'enrolled') ? 'customer' : 'qualified';
+        const targetStage = getStageFromVal(targetId);
+        const resolvedStageId = (targetStage as any)?.db_id || targetStage?.id || targetId;
+        const resolvedPipelineStatus = (targetStage as any)?.system_slug || targetId;
+        const resolvedStageName = targetStage?.name || targetLabel;
 
         await api.put(`/contacts/${effectiveContactId}`, { 
-          pipeline_status: targetId, 
+          stage_id: resolvedStageId,
+          pipeline_status: resolvedPipelineStatus, 
+          stage_name: resolvedStageName,
           status: calculatedStatus,
           ttl1_completed: formData.ttl1_completed,
           ttl1_data: formData.ttl1_data
@@ -6647,6 +6726,17 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           due_date: new Date().toISOString().slice(0, 19).replace('T', ' '),
           done_at: new Date().toISOString().slice(0, 19).replace('T', ' ')
         });
+
+        setFormData((prev: any) => ({
+          ...prev,
+          stage_id: resolvedStageId,
+          pipeline_status: resolvedPipelineStatus,
+          stage_name: resolvedStageName,
+          status: calculatedStatus
+        }));
+        const updatedPayload = { ...formData, stage_id: resolvedStageId, pipeline_status: resolvedPipelineStatus, stage_name: resolvedStageName, status: calculatedStatus };
+        onUpdate?.(updatedPayload);
+        window.dispatchEvent(new CustomEvent('contact-updated', { detail: updatedPayload }));
 
         setPendingPipelineTransition(null);
       }
@@ -7163,6 +7253,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
               const isCurrent = i === safeIndex && !isCurrentlyNurture && !isCurrentlyLost;
               const isBackward = i < safeIndex;
               const isPrecedingOfHocVien = isHocVien && isBackward && !isPrivileged;
+              const isNewLeadStage = st.id === 'new_lead' || st.system_slug === 'new_lead' || String((st as any).db_id) === '31' || String(st.id) === '31' || /^01\b|new\s*lead/i.test(st.name || '');
+              const isActiveNewLead = isNewLeadStage && (isCurrent || i === safeIndex);
               const stColor = overridePurpleColor(st.color);
               return (
                 <div
@@ -7182,13 +7274,13 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                 >
                   <div style={{
                     position: 'relative', zIndex: 2, flex: 1,
-                    background: isCurrent ? 'var(--color-primary)' : (isPrecedingOfHocVien ? '#f1f5f9' : (isBackward ? 'rgba(163, 20, 34, 0.03)' : 'var(--color-surface)')),
-                    color: isCurrent ? '#fff' : (isPrecedingOfHocVien ? '#94a3b8' : (isBackward ? 'rgba(163, 20, 34, 0.65)' : 'var(--color-text-muted)')),
-                    border: isCurrent ? '2px solid var(--color-primary)' : (isPrecedingOfHocVien ? '1px solid #cbd5e1' : (isBackward ? '1px solid rgba(163, 20, 34, 0.25)' : '1px solid var(--color-border-light)')),
+                    background: isActiveNewLead ? '#dc2626' : (isCurrent ? 'var(--color-primary)' : (isPrecedingOfHocVien ? '#f1f5f9' : (isBackward ? 'rgba(163, 20, 34, 0.03)' : 'var(--color-surface)'))),
+                    color: (isActiveNewLead || isCurrent) ? '#ffffff' : (isPrecedingOfHocVien ? '#94a3b8' : (isBackward ? 'rgba(163, 20, 34, 0.65)' : 'var(--color-text-muted)')),
+                    border: isActiveNewLead ? '2px solid #b91c1c' : (isCurrent ? '2px solid var(--color-primary)' : (isPrecedingOfHocVien ? '1px solid #cbd5e1' : (isBackward ? '1px solid rgba(163, 20, 34, 0.25)' : '1px solid var(--color-border-light)'))),
                     padding: '4px 10px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 800,
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
                     whiteSpace: 'nowrap',
-                    boxShadow: isCurrent ? '0 4px 12px rgba(189, 29, 45, 0.2)' : 'none',
+                    boxShadow: isActiveNewLead ? '0 4px 12px rgba(220, 38, 38, 0.35)' : (isCurrent ? '0 4px 12px rgba(189, 29, 45, 0.2)' : 'none'),
                     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                     pointerEvents: isPrecedingOfHocVien ? 'none' : 'auto'
                   }}>
@@ -7210,7 +7302,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     </div>
   );
 
-  const effectiveZIndex = zIndex || 2147483645;
+  const effectiveZIndex = zIndex || 2147483620;
 
   return createPortal(
     <>
@@ -7683,11 +7775,28 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             style={{ padding: '4px 10px', fontSize: '0.75rem', height: '28px', color: 'white', display: 'flex', alignItems: 'center', gap: '4px' }}
                             onClick={async () => {
                               try {
-                                const res = await api.put(`/contacts/${effectiveContactId}`, { pipeline_status: 'not_lead' });
+                                const targetStage = getStageFromVal('not_lead');
+                                const resolvedStageId = (targetStage as any)?.db_id || targetStage?.id;
+                                const res = await api.put(`/contacts/${effectiveContactId}`, {
+                                  stage_id: resolvedStageId,
+                                  pipeline_status: 'not_lead',
+                                  lead_status: 'lost',
+                                  not_lead_proposed: 0
+                                });
                                 if (res.data.success) {
-                                  setFormData((prev: any) => ({ ...prev, pipeline_status: 'not_lead', not_lead_proposed: 0 }));
+                                  const resData = res.data?.data;
+                                  const updatedPayload = {
+                                    ...formData,
+                                    stage_id: resData?.stage_id || resolvedStageId,
+                                    pipeline_status: 'not_lead',
+                                    stage_name: resData?.stage_name || targetStage?.name || formData.stage_name,
+                                    lead_status: resData?.lead_status || 'lost',
+                                    not_lead_proposed: 0
+                                  };
+                                  setFormData((prev: any) => ({ ...prev, ...updatedPayload }));
                                   addToast('Đã phê duyệt Not Lead thành công!', 'success');
-                                  onUpdate?.({ ...formData, pipeline_status: 'not_lead', not_lead_proposed: 0 });
+                                  onUpdate?.(updatedPayload);
+                                  window.dispatchEvent(new CustomEvent('contact-updated', { detail: updatedPayload }));
                                 }
                               } catch (err: any) {
                                 addToast(err.response?.data?.message || 'Lỗi khi phê duyệt', 'error');
@@ -8786,7 +8895,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 700 }}>Trạng thái:</span>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                   {(() => {
-                                    const currentStageObj = getStageFromVal(formData.pipeline_status || 'chua_xac_dinh');
+                                    const currentStageObj = getStageFromVal(formData.pipeline_status || contact?.pipeline_status || 'chua_xac_dinh', formData.stage_id || contact?.stage_id, formData.stage_name || contact?.stage_name);
+                                    const isNewLeadMobile = Boolean(
+                                      currentStageObj && (
+                                        currentStageObj.id === 'new_lead' ||
+                                        currentStageObj.system_slug === 'new_lead' ||
+                                        String((currentStageObj as any).db_id) === '31' ||
+                                        String(currentStageObj.id) === '31' ||
+                                        /^01\b|new\s*lead/i.test(currentStageObj.name || '')
+                                      )
+                                    );
                                     const stColor = currentStageObj ? overridePurpleColor(currentStageObj.color) : 'var(--color-text-muted)';
                                     return (
                                       <button 
@@ -8795,15 +8913,15 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                           padding: '4px 10px',
                                           fontSize: '0.75rem',
                                           borderRadius: '6px',
-                                          fontWeight: 800,
-                                          background: currentStageObj ? `${stColor}1a` : 'var(--color-bg)',
-                                          color: stColor,
-                                          border: `1px solid ${stColor}33`,
+                                          fontWeight: isNewLeadMobile ? 700 : 800,
+                                          background: isNewLeadMobile ? '#dc2626' : (currentStageObj ? `${stColor}1a` : 'var(--color-bg)'),
+                                          color: isNewLeadMobile ? '#ffffff' : stColor,
+                                          border: isNewLeadMobile ? '1px solid #b91c1c' : `1px solid ${stColor}33`,
                                           display: 'inline-flex',
                                           alignItems: 'center',
                                           gap: '4px',
                                           cursor: 'pointer',
-                                          boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                                          boxShadow: isNewLeadMobile ? '0 1px 4px rgba(220,38,38,0.35)' : '0 1px 2px rgba(0,0,0,0.03)'
                                         }}
                                       >
                                         <span>{currentStageObj?.name || 'Chưa xác định'}</span>
@@ -15902,8 +16020,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
       <AnimatePresence>
         {pipelineModal.isOpen && (() => {
-          const currentStage = getStageFromVal(formData.pipeline_status || 'new_lead');
-          const targetStage = pipelineStages.find(x => String(x.id) === String(pipelineModal.targetId) || x.system_slug === pipelineModal.targetId) || {
+          const currentStage = getStageFromVal(formData.pipeline_status || contact?.pipeline_status || 'new_lead', formData.stage_id || contact?.stage_id, formData.stage_name || contact?.stage_name);
+          const targetStage = getStageFromVal(pipelineModal.targetId, pipelineModal.targetId, pipelineModal.targetLabel) || {
             name: pipelineModal.targetLabel,
             color: 'var(--color-primary)',
             definition: '',
@@ -16429,12 +16547,12 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                       if (targetId === 'dong_le_phi_ho_so' || targetId === 'deposit_tuition_payment' || targetId === 'hoc_vien' || targetId === 'enrolled') {
                         if (targetId === 'dong_le_phi_ho_so' || targetId === 'deposit_tuition_payment') {
                           try {
-                            const targetStage = pipelineStages.find((s: any) => 
-                              String(s.system_slug) === String(targetId) || String(s.id) === String(targetId)
-                            );
-                            await api.put(`/contacts/${effectiveContactId}/move-stage`, {
-                              stage_id: targetStage?.id || targetId,
-                              pipeline_status: targetId,
+                            const targetStagePos = getStageFromVal(targetId, targetId, targetLabel);
+                            const resolvedStageIdPos = (targetStagePos as any)?.db_id || targetStagePos?.id || targetId;
+                            const resolvedPipelineStatusPos = (targetStagePos as any)?.system_slug || targetId;
+                            const moveResPos = await api.put(`/contacts/${effectiveContactId}/move-stage`, {
+                              stage_id: resolvedStageIdPos,
+                              pipeline_status: resolvedPipelineStatusPos,
                               lead_status: pipelineModal.leadStatus,
                               lead_temperature: pipelineModal.leadTemperature,
                               next_action: pipelineModal.nextAction,
@@ -16446,8 +16564,19 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               note: note || '',
                               notify_user_ids: pipelineModal.notifyUserIds || []
                             });
+                            const resDataPos = moveResPos?.data?.data;
+                            const updatedPosFields = {
+                              stage_id: resDataPos?.stage_id || (targetStagePos as any)?.db_id || targetStagePos?.id,
+                              pipeline_status: resDataPos?.pipeline_status || (targetStagePos as any)?.system_slug || targetId,
+                              stage_name: resDataPos?.stage_name || targetStagePos?.name || targetLabel,
+                              lead_status: resDataPos?.lead_status || pipelineModal.leadStatus
+                            };
+                            setFormData((prev: any) => ({ ...prev, ...updatedPosFields }));
+                            setBaseData((prev: any) => ({ ...prev, ...updatedPosFields }));
+                            const updatedContactPos = { ...formData, ...updatedPosFields, id: effectiveContactId };
+                            onUpdate?.(updatedContactPos);
                             addToast(`Đã chuyển bước sang "${targetLabel}" và gửi thông báo thành công!`, 'success');
-                            window.dispatchEvent(new CustomEvent('contact-updated'));
+                            window.dispatchEvent(new CustomEvent('contact-updated', { detail: updatedContactPos }));
                             window.dispatchEvent(new CustomEvent('notification-trigger'));
                           } catch (err: any) {
                             console.error('Failed to move-stage before opening POS:', err);
@@ -16548,13 +16677,14 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           calculatedStatus = 'qualified';
                         }
 
-                        const resolvedStageId = targetStage?.id ? (isNaN(Number(targetStage.id)) ? targetStage.id : Number(targetStage.id)) : targetId;
+                        const resolvedStageId = (targetStage as any)?.db_id || (targetStage?.id ? (isNaN(Number(targetStage.id)) ? targetStage.id : Number(targetStage.id)) : targetId);
+                        const resolvedPipelineStatus = (targetStage as any)?.system_slug || targetId;
                         const resolvedStageName = targetStage?.name || targetLabel;
                         const resolvedStageColor = targetStage?.color;
 
                         // Optimistically update UI
                         const updatedFields: any = {
-                          pipeline_status: targetId,
+                          pipeline_status: resolvedPipelineStatus,
                           stage_id: resolvedStageId,
                           stage_name: resolvedStageName,
                           stage_color: resolvedStageColor,
@@ -16575,14 +16705,14 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                         setBaseData((prev: any) => ({ ...prev, ...updatedFields }));
                         setLinkedProfiles((prev: any[]) => prev.map(p => 
                           Number(p.id) === Number(effectiveContactId)
-                            ? { ...p, stage_id: resolvedStageId, stage_name: resolvedStageName, pipeline_status: targetId, stage_color: resolvedStageColor }
+                            ? { ...p, stage_id: resolvedStageId, stage_name: resolvedStageName, pipeline_status: resolvedPipelineStatus, stage_color: resolvedStageColor }
                             : p
                         ));
 
                         // Persist to backend via move-stage on the currently viewed/active contact
-                        await api.put(`/contacts/${effectiveContactId}/move-stage`, {
-                          stage_id: targetStage?.id || targetId,
-                          pipeline_status: targetId,
+                        const moveRes = await api.put(`/contacts/${effectiveContactId}/move-stage`, {
+                          stage_id: resolvedStageId,
+                          pipeline_status: resolvedPipelineStatus,
                           lead_status: pipelineModal.leadStatus,
                           lead_temperature: pipelineModal.leadTemperature,
                           next_action: pipelineModal.nextAction,
@@ -16596,6 +16726,15 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           note: note || '',
                           notify_user_ids: pipelineModal.notifyUserIds || []
                         });
+                        const resData = moveRes?.data?.data;
+                        const finalUpdatedFields = {
+                          ...updatedFields,
+                          stage_id: resData?.stage_id || (targetStage as any)?.db_id || targetStage?.id || resolvedStageId,
+                          pipeline_status: resData?.pipeline_status || (targetStage as any)?.system_slug || targetId,
+                          stage_name: resData?.stage_name || targetStage?.name || targetLabel
+                        };
+                        setFormData((prev: any) => ({ ...prev, ...finalUpdatedFields }));
+                        setBaseData((prev: any) => ({ ...prev, ...finalUpdatedFields }));
 
                         await fetchData(activeTab || 'timeline', true, effectiveContactId);
                         if (effectiveContactId) {
@@ -16605,14 +16744,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                         if (targetId === 'enrolled' || targetId === 'hoc_vien') {
                           triggerFullConfetti();
                         }
-                        const updatedContactData = { ...formData, ...updatedFields, id: effectiveContactId };
+                        const updatedContactData = { ...formData, ...finalUpdatedFields, id: effectiveContactId };
                         onUpdate?.(updatedContactData);
-                        window.dispatchEvent(new CustomEvent('contact-updated'));
+                        window.dispatchEvent(new CustomEvent('contact-updated', { detail: updatedContactData }));
                       } catch (e: any) {
                         // Rollback optimistic update
                         setFormData((prev: any) => ({ 
                           ...prev, 
+                          stage_id: baseData?.stage_id || contact.stage_id,
                           pipeline_status: baseData?.pipeline_status || contact.pipeline_status, 
+                          stage_name: baseData?.stage_name || contact.stage_name,
                           status: baseData?.status || contact.status 
                         }));
                         addToast(e?.response?.data?.message || 'Lỗi khi cập nhật Pipeline', 'error');
@@ -16735,7 +16876,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
               fetchData();
             }}
             users={users}
-            zIndex={zIndex ? zIndex + 100 : Math.min(effectiveZIndex + 10, 2147483640)}
+            zIndex={Math.min(effectiveZIndex + 20, 2147483646)}
             onOpenContact={(cid) => {
               setSelectedTaskForDetails(null);
               if (cid && String(cid) !== String(effectiveContactId || contact?.id)) {
@@ -17915,7 +18056,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto' }} className="no-scrollbar">
               {(() => {
-                const currentStage = getStageFromVal(formData.pipeline_status || 'chua_xac_dinh');
+                const currentStage = getStageFromVal(formData.pipeline_status || contact?.pipeline_status || 'chua_xac_dinh', formData.stage_id || contact?.stage_id, formData.stage_name || contact?.stage_name);
                 const currentIdx = currentStage ? pipelineStages.indexOf(currentStage) : -1;
                 return pipelineStages.map((st, idx) => {
                   const isCurrent = currentStage ? st.id === currentStage.id : false;

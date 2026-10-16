@@ -549,7 +549,8 @@ class NotificationService {
                 }
 
                 $refId = $payload['ref_id'] ?? '';
-                $link = $refId ? "/approvals?open_id={$refId}&open_type=attendance_bulk" : "/attendance";
+                $openType = !empty($payload['open_type']) ? $payload['open_type'] : (!empty($payload['is_bulk']) ? 'attendance_bulk' : 'checkin');
+                $link = $refId ? "/approvals?open_id={$refId}&open_type={$openType}" : "/attendance";
                 $procCode = !empty($payload['code']) ? $payload['code'] : (!empty($refId) ? "#ATT-" . $refId : '');
                 $codePrefix = !empty($procCode) ? "[$procCode] " : "";
 
@@ -1067,7 +1068,7 @@ class NotificationService {
                     'title' => "Yêu cầu hỗ trợ mới (Ticket #$ticketId)",
                     'body' => "Có yêu cầu hỗ trợ mới từ $userName: $subjectText",
                     'type' => "ticket_assignment",
-                    'link' => "/support-tickets",
+                    'link' => !empty($payload['ticket_id']) ? '/tickets?id=' . $payload['ticket_id'] : '/tickets',
                     'zalo_msg' => "🎫 [ TICKET HỖ TRỢ MỚI ]\n\n"
                         . "Có yêu cầu hỗ trợ mới từ $userName:\n"
                         . "  • Ticket: #$ticketId\n"
@@ -1103,7 +1104,7 @@ class NotificationService {
                     'title' => "Yêu cầu phê duyệt phiếu hợp tác",
                     'body' => "Phiếu hợp tác #" . $slipId . " đã thu thập đủ chữ ký và đang chờ phê duyệt",
                     'type' => "cooperation",
-                    'link' => "/cooperation-slips",
+                    'link' => !empty($payload['slip_id']) ? '/cooperations?id=' . $payload['slip_id'] : '/cooperations',
                     'zalo_msg' => "✍️ [ YÊU CẦU PHÊ DUYỆT PHIẾU HỢP TÁC ]\n\n"
                         . "Phiếu hợp tác chia sẻ hoa hồng #$slipId đã thu thập đầy đủ chữ ký của các thành viên.\n"
                         . "  • Mã phiếu: #$slipId\n"
@@ -1136,7 +1137,7 @@ class NotificationService {
                     'title' => "Yêu cầu duyệt Sale Order mới",
                     'body' => "Nhân viên " . $userName . " vừa tạo Sale Order cho khách hàng " . $customerName . " (" . $depAmount . ")",
                     'type' => "deposit",
-                    'link' => "/deposits",
+                    'link' => !empty($payload['deposit_id']) ? '/deposits?open_id=' . $payload['deposit_id'] : '/deposits',
                     'zalo_msg' => "🏠 [ YÊU CẦU DUYỆT SALE ORDER MỚI ]\n\n"
                         . "Nhân viên $userName vừa tạo yêu cầu Sale Order mới:\n"
                         . "  • Mã Sale Order: #$depId\n"
@@ -1167,7 +1168,7 @@ class NotificationService {
                     'title' => "Cập nhật Sale Order #$depId",
                     'body' => "Sale Order cho khách hàng $customerName đã $statusText",
                     'type' => "deposit",
-                    'link' => "/deposits",
+                    'link' => !empty($payload['deposit_id']) ? '/deposits?open_id=' . $payload['deposit_id'] : '/deposits',
                     'zalo_msg' => "💳 [ CẬP NHẬT SALE ORDER ]\n\n"
                         . "Sale Order #$depId (KH $customerName) đã $statusText.\n"
                         . (!empty($reason) ? "  • Ghi chú: \"$reason\"\n" : "")
@@ -1192,7 +1193,7 @@ class NotificationService {
                 $currency = $payload['currency'] ?? 'VND';
                 $amtStr = number_format((float)($payload['amount'] ?? 0), 0, ',', '.') . ' ' . $currency;
                 $contactId = $payload['contact_id'] ?? '';
-                $link = $contactId ? "/contacts?id=$contactId" : "/deposits";
+                $link = $contactId ? "/contacts?open_contact_id=$contactId" : "/deposits";
                 return [
                     'recipients' => $recipients,
                     'title' => "Đơn thanh toán / SO mới cho khách hàng",
@@ -1222,7 +1223,7 @@ class NotificationService {
                 ];
 
             case 'SO_WAITING_APPROVAL':
-                $targetApproverId = (int)($payload['approver_id'] ?? 0);
+                $targetApproverId = (int)($payload['approver_id'] ?? $payload['target_user_id'] ?? 0);
                 if ($targetApproverId > 0) {
                     $recipients = self::getRecipientById($db, $targetApproverId);
                 } else {
@@ -1261,7 +1262,7 @@ class NotificationService {
             case 'SO_APPROVED':
             case 'SO_REJECTED':
                 $isApproved = ($eventType === 'SO_APPROVED');
-                $targetUserId = (int)($payload['target_user_id'] ?? 0);
+                $targetUserId = (int)($payload['target_user_id'] ?? $payload['creator_id'] ?? 0);
                 $recipients = $targetUserId > 0 ? self::getRecipientById($db, $targetUserId) : [];
                 $soId = $payload['so_id'] ?? '0';
                 $soNumber = $payload['so_number'] ?? "#SO-$soId";
@@ -1446,7 +1447,7 @@ class NotificationService {
                         'title' => "✍️ Yêu cầu ký xác nhận Phiếu hợp tác",
                         'body' => "Bạn nhận được yêu cầu ký xác nhận Phiếu hợp tác #$slipId cho khách hàng $custName.",
                         'type' => "cooperation",
-                        'link' => "/sale-portal",
+                        'link' => !empty($payload['link']) ? $payload['link'] : "/cooperations?id=" . $slipId,
                         'zalo_msg' => "✍️ [ YÊU CẦU KÝ XÁC NHẬN PHIẾU HỢP TÁC ]\n\n"
                             . "Một phiếu hợp tác chia sẻ hoa hồng mới (#$slipId) đã được tạo cho khách hàng: $custName.\n"
                             . "Vui lòng truy cập CRM để xem chi tiết và ký xác nhận.",
@@ -1465,7 +1466,7 @@ class NotificationService {
                         'title' => "🤝 Lời mời hợp tác chăm sóc (Co-care)",
                         'body' => "Sale $inviterName vừa mời bạn hợp tác chăm sóc khách hàng $custName$shareText.",
                         'type' => "cooperation",
-                        'link' => "/contacts?id=" . ($payload['contact_id'] ?? ''),
+                        'link' => !empty($payload['link']) ? $payload['link'] : (!empty($payload['contact_id']) ? "/contacts?open_contact_id=" . $payload['contact_id'] : "/contacts"),
                         'zalo_msg' => "🤝 [ LỜI MỜI HỢP TÁC CHĂM SÓC ]\n\n"
                             . "Sale $inviterName vừa thêm bạn làm nhân sự hợp tác (Co-care):\n"
                             . "  • Khách hàng: $custName\n"
@@ -1698,7 +1699,7 @@ class NotificationService {
 
                 $stmtFe = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'frontend_url' LIMIT 1");
                 $frontendUrl = $stmtFe ? ($stmtFe->fetchColumn() ?: 'https://myerp.ideas.edu.vn') : 'https://myerp.ideas.edu.vn';
-                $taskLink = $payload['link'] ?? "/activities";
+                $taskLink = $payload['link'] ?? "/workspace";
                 $fullTaskLink = rtrim($frontendUrl, '/') . '/' . ltrim($taskLink, '/');
 
                 return [
@@ -1750,14 +1751,17 @@ class NotificationService {
                 ];
 
             case 'PROJECT_ROSTER_UPDATE':
-                $recipients = self::getAdminsAndManagers($db, $tenantId);
+                $recipients = !empty($payload['user_id'])
+                    ? (self::getRecipientById($db, (int)$payload['user_id']) ?: [['id' => (int)$payload['user_id']]])
+                    : self::getAdminsAndManagers($db, $tenantId);
                 $projectName = $payload['project_name'] ?? 'Dự án';
+                $projectId = $payload['project_id'] ?? '';
                 return [
                     'recipients' => $recipients,
                     'title' => "Cập nhật lịch Roster dự án",
                     'body' => "Lịch trực Roster dự án $projectName vừa được cập nhật mới.",
                     'type' => "project",
-                    'link' => "/projects",
+                    'link' => !empty($projectId) ? "/projects?id=" . $projectId : "/projects",
                     'zalo_msg' => "🏢 [ CẬP NHẬT ROSTER DỰ ÁN ]\n\n"
                         . "Lịch trực ca và phân công nhân sự dự án $projectName vừa được cập nhật.\n"
                         . "Vui lòng xem chi tiết trên bảng Roster CRM.",
@@ -1769,53 +1773,6 @@ class NotificationService {
                     'email_content' => "Chào quản trị viên,<br/><br/>" .
                                     "Danh sách phân công Roster dự án <strong>" . htmlspecialchars($projectName) . "</strong> vừa có thay đổi.<br/>" .
                                     "Vui lòng truy cập CRM để xem chi tiết."
-                ];
-
-            case 'MONTHLY_ATTENDANCE_REPORT':
-                $recipients = !empty($payload['user_id']) ? self::getRecipientById($db, (int)$payload['user_id']) : self::getAllUsers($db, $tenantId);
-                $periodText = $payload['period'] ?? 'Tháng vừa qua';
-                $workDays = $payload['work_days'] ?? 0;
-                $lateDays = $payload['late_days'] ?? 0;
-                $lateMins = $payload['late_minutes'] ?? 0;
-                $missingDays = $payload['missing_days'] ?? 0;
-                $nightShifts = $payload['night_shifts'] ?? 0;
-                $weekendShifts = $payload['weekend_shifts'] ?? 0;
-                $holidayShifts = $payload['holiday_shifts'] ?? 0;
-
-                $reportSummary = "• Ngày chấm công: $workDays ngày\n"
-                    . "• Đi trễ: $lateDays lần ($lateMins phút)\n"
-                    . "• Quên chấm (giờ hành chính): $missingDays ngày\n"
-                    . "• Trực đêm: $nightShifts ca\n"
-                    . "• Trực cuối tuần: $weekendShifts ca\n"
-                    . ($holidayShifts > 0 ? "• Trực lễ: $holidayShifts ca\n" : "");
-
-                return [
-                    'recipients' => $recipients,
-                    'title' => "Báo cáo Chấm công & Ca trực ($periodText)",
-                    'body' => "Tổng kết $periodText: $workDays ngày công, $lateDays lần trễ ($lateMins phút), $missingDays ngày chưa chấm.",
-                    'type' => "attendance_report",
-                    'link' => "/sale-portal",
-                    'zalo_msg' => "📊 [ BÁO CÁO CHẤM CÔNG & CA TRỰC - $periodText ]\n\n"
-                        . "Chi tiết tổng kết cá nhân:\n"
-                        . $reportSummary
-                        . "\nVui lòng xem thêm chi tiết tại Sale Portal.",
-                    'tg_msg' => "📊 <b>[ BÁO CÁO CHẤM CÔNG & CA TRỰC - $periodText ]</b>\n\n"
-                        . "Chi tiết tổng kết cá nhân:\n"
-                        . nl2br(htmlspecialchars($reportSummary))
-                        . "\nVui lòng xem thêm chi tiết tại Sale Portal.",
-                    'email_subject' => "[IDEAS] Báo cáo Chấm công & Ca trực - $periodText",
-                    'email_title' => "BÁO CÁO CHẤM CÔNG & CA TRỰC",
-                    'email_content' => "Chào <strong>$userName</strong>,<br/><br/>" .
-                                    "Dưới đây là chi tiết báo cáo chấm công & ca trực kỳ <strong>$periodText</strong> của bạn:<br/>" .
-                                    "<ul>" .
-                                    "<li>Ngày đã chấm công hợp lệ: <strong>$workDays ngày</strong></li>" .
-                                    "<li>Số lần đi trễ: <strong>$lateDays lần ($lateMins phút)</strong></li>" .
-                                    "<li>Số ngày vắng/chưa chấm (giờ hành chính): <strong style='color:red;'>$missingDays ngày</strong></li>" .
-                                    "<li>Ca trực đêm: <strong>$nightShifts ca</strong></li>" .
-                                    "<li>Ca trực cuối tuần: <strong>$weekendShifts ca</strong></li>" .
-                                    ($holidayShifts > 0 ? "<li>Ca trực lễ/tết: <strong>$holidayShifts ca</strong></li>" : "") .
-                                    "</ul><br/>" .
-                                    "Vui lòng truy cập hệ thống để đối soát thông tin."
                 ];
 
             case 'HOLIDAY_ROSTER_OPEN':
@@ -2113,6 +2070,47 @@ class NotificationService {
                                     "Vui lòng kiểm tra lịch sử ký trên hệ thống CRM."
                 ];
 
+            case 'HRM_PAYSLIP_DISPUTED':
+                $stmtHr = $db->prepare("
+                    SELECT u.id, u.email, u.role, u.full_name,
+                           COALESCE(NULLIF(NULLIF(TRIM(u.zalo_chat_id), 'chưa liên kết'), 'Chưa liên kết'), NULLIF(NULLIF(TRIM(c.zalo_chat_id), 'chưa liên kết'), 'Chưa liên kết')) AS zalo_chat_id,
+                           COALESCE(NULLIF(NULLIF(TRIM(u.telegram_chat_id), 'chưa liên kết'), 'Chưa liên kết'), NULLIF(NULLIF(TRIM(c.telegram_chat_id), 'chưa liên kết'), 'Chưa liên kết')) AS telegram_chat_id
+                    FROM users u
+                    LEFT JOIN consultants c ON (u.email = c.email OR u.id = c.id)
+                    WHERE u.tenant_id = ? AND u.is_active = 1 AND u.role IN ('hr', 'accountant')
+                ");
+                $stmtHr->execute([$tenantId]);
+                $recipients = $stmtHr->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                if (empty($recipients)) {
+                    $recipients = self::getAdminsAndManagers($db, $tenantId);
+                }
+                $monthYear = $payload['month_year'] ?? '';
+                $empName = !empty($payload['user_name']) ? $payload['user_name'] : $userName;
+                $disputeNote = $payload['note'] ?? $reason;
+                return [
+                    'recipients' => $recipients,
+                    'title' => "Khiếu nại phiếu lương tháng $monthYear",
+                    'body' => "Nhân viên $empName yêu cầu kiểm tra lại phiếu lương tháng $monthYear" . (!empty($disputeNote) ? ": \"$disputeNote\"" : "."),
+                    'type' => "account",
+                    'link' => "/hrm?tab=payroll",
+                    'zalo_msg' => "⚠️ [ KHIẾU NẠI PHIẾU LƯƠNG ]\n\n"
+                        . "Nhân viên: $empName\n"
+                        . "Kỳ lương: Tháng $monthYear\n"
+                        . (!empty($disputeNote) ? "Nội dung phản hồi: \"$disputeNote\"\n" : "")
+                        . "Vui lòng truy cập trang Quản lý lương để rà soát.",
+                    'tg_msg' => "⚠️ <b>[ KHIẾU NẠI PHIẾU LƯƠNG ]</b>\n\n"
+                        . "Nhân viên: <b>" . htmlspecialchars($empName) . "</b>\n"
+                        . "Kỳ lương: <b>Tháng $monthYear</b>\n"
+                        . (!empty($disputeNote) ? "Nội dung phản hồi: <i>\"" . htmlspecialchars($disputeNote) . "\"</i>\n" : "")
+                        . "Vui lòng truy cập trang Quản lý lương để rà soát.",
+                    'email_subject' => "[IDEAS] Nhân viên $empName phản hồi phiếu lương tháng $monthYear",
+                    'email_title' => "PHẢN HỒI PHIẾU LƯƠNG",
+                    'email_content' => "Chào bộ phận Nhân sự / Kế toán,<br/><br/>" .
+                                    "Nhân viên <strong>" . htmlspecialchars($empName) . "</strong> vừa gửi phản hồi kiểm tra lại phiếu lương tháng <strong>$monthYear</strong>.<br/>" .
+                                    (!empty($disputeNote) ? "Nội dung: <em>\"" . htmlspecialchars($disputeNote) . "\"</em>.<br/>" : "") .
+                                    "Vui lòng kiểm tra trên hệ thống CRM."
+                ];
+
             case 'ATTENDANCE_CONFIRMATION_REQUESTED':
                 $recipients = self::getRecipientById($db, (int)($payload['user_id'] ?? 0));
                 $empGreetingName = !empty($payload['user_name']) ? $payload['user_name'] : (!empty($recipients[0]['full_name']) ? $recipients[0]['full_name'] : $userName);
@@ -2270,72 +2268,6 @@ class NotificationService {
                         . "Vui lòng truy cập hệ thống MYERP để kiểm tra."
                 ];
 
-            case 'SO_WAITING_APPROVAL':
-                $recipients = self::getRecipientById($db, (int)($payload['target_user_id'] ?? 0));
-                if (empty($recipients)) {
-                    $recipients = self::getApproversForEvent($db, $tenantId, 'finance', (int)($payload['creator_id'] ?? 0));
-                }
-                $soNumber = $payload['so_number'] ?? (!empty($payload['so_id']) ? "SO-" . $payload['so_id'] : '');
-                $procCode = !empty($soNumber) ? (str_starts_with($soNumber, '#') ? $soNumber : "#$soNumber") : '';
-                $codePrefix = !empty($procCode) ? "[$procCode] " : "";
-                $soId = $payload['so_id'] ?? 0;
-                $creatorName = $payload['creator_name'] ?? 'Nhân viên kinh doanh';
-                $totalText = !empty($payload['total']) ? number_format((float)$payload['total'], 0, ',', '.') . 'đ' : '';
-                return [
-                    'recipients' => $recipients,
-                    'title' => "{$codePrefix}Yêu cầu duyệt đơn bán hàng $soNumber",
-                    'body' => "{$codePrefix}$creatorName vừa tạo đơn bán hàng $soNumber ($totalText) cần bạn phê duyệt.",
-                    'type' => "sales_order",
-                    'link' => "/companies",
-                    'zalo_msg' => "📑 [ YÊU CẦU DUYỆT ĐƠN BÁN HÀNG ]\n\n"
-                        . (!empty($procCode) ? "  • Mã quy trình: $procCode\n" : "")
-                        . "$creatorName vừa tạo đơn bán hàng $soNumber:\n"
-                        . "  • Mã SO: $soNumber\n"
-                        . "  • Giá trị: $totalText\n\n"
-                        . "Vui lòng truy cập hệ thống để kiểm tra và phê duyệt.",
-                    'tg_msg' => "📑 <b>[ YÊU CẦU DUYỆT ĐƠN BÁN HÀNG ]</b>\n\n"
-                        . (!empty($procCode) ? "  • Mã quy trình: <code>$procCode</code>\n" : "")
-                        . "<b>$creatorName</b> vừa tạo đơn bán hàng <code>$soNumber</code>:\n"
-                        . "  • Mã SO: <code>$soNumber</code>\n"
-                        . "  • Giá trị: <b>$totalText</b>\n\n"
-                        . "Vui lòng truy cập hệ thống để kiểm tra và phê duyệt.",
-                    'email_subject' => "[IDEAS] {$codePrefix}Đơn bán hàng $soNumber cần duyệt - $creatorName",
-                    'email_title' => "DUYỆT ĐƠN BÁN HÀNG" . (!empty($procCode) ? " ($procCode)" : ""),
-                    'email_content' => "Chào bạn,<br/><br/>"
-                        . (!empty($procCode) ? "Mã quy trình: <strong>$procCode</strong>.<br/>" : "")
-                        . "<strong>$creatorName</strong> vừa tạo đơn bán hàng <strong>$soNumber</strong> (Giá trị: <strong>$totalText</strong>).<br/>"
-                        . "Vui lòng truy cập hệ thống để phê duyệt."
-                ];
-
-            case 'SO_APPROVED':
-                $recipients = self::getRecipientById($db, (int)($payload['target_user_id'] ?? $payload['creator_id'] ?? 0));
-                $soNumber = $payload['so_number'] ?? (!empty($payload['so_id']) ? "SO-" . $payload['so_id'] : '');
-                $procCode = !empty($soNumber) ? (str_starts_with($soNumber, '#') ? $soNumber : "#$soNumber") : '';
-                $codePrefix = !empty($procCode) ? "[$procCode] " : "";
-                $soId = $payload['so_id'] ?? 0;
-                $approverName = !empty($payload['approver_name']) ? trim($payload['approver_name']) : 'Quản lý';
-                return [
-                    'recipients' => $recipients,
-                    'title' => "{$codePrefix}Đơn bán hàng $soNumber đã được phê duyệt",
-                    'body' => "{$codePrefix}$approverName đã phê duyệt đơn bán hàng $soNumber của bạn.",
-                    'type' => "sales_order",
-                    'link' => "/companies",
-                    'zalo_msg' => "✅ [ ĐƠN BÁN HÀNG $soNumber ]\n\n"
-                        . (!empty($procCode) ? "  • Mã quy trình: $procCode\n" : "")
-                        . "$approverName đã phê duyệt đơn bán hàng $soNumber của bạn.\n"
-                        . "Vui lòng kiểm tra trên hệ thống MYERP.",
-                    'tg_msg' => "✅ <b>[ ĐƠN BÁN HÀNG <code>$soNumber</code> ]</b>\n\n"
-                        . (!empty($procCode) ? "  • Mã quy trình: <code>$procCode</code>\n" : "")
-                        . "<b>$approverName</b> đã phê duyệt đơn bán hàng <code>$soNumber</code> của bạn.\n"
-                        . "Vui lòng kiểm tra trên hệ thống MYERP.",
-                    'email_subject' => "[IDEAS] {$codePrefix}Đơn bán hàng $soNumber đã được duyệt",
-                    'email_title' => "ĐƠN BÁN HÀNG ĐÃ ĐƯỢC DUYỆT" . (!empty($procCode) ? " ($procCode)" : ""),
-                    'email_content' => "Chào bạn,<br/><br/>"
-                        . (!empty($procCode) ? "Mã quy trình: <strong>$procCode</strong>.<br/>" : "")
-                        . "<strong>$approverName</strong> đã phê duyệt đơn bán hàng <strong>$soNumber</strong> của bạn.<br/>"
-                        . "Bạn có thể tiến hành xuất hóa đơn hoặc giao hàng."
-                ];
-
             case 'COOP_SLIP_APPROVED':
             case 'COOP_SLIP_REJECTED':
                 $isApproved = ($eventType === 'COOP_SLIP_APPROVED');
@@ -2353,7 +2285,7 @@ class NotificationService {
                     'title' => "[$procCode] " . ($isApproved ? "Phiếu hợp tác $procCode đã được duyệt" : "Phiếu hợp tác $procCode bị từ chối"),
                     'body' => "[$procCode] $approverName đã $statusText Phiếu hợp tác $procCode của bạn." . (!empty($reason) ? " Lý do: \"$reason\"" : ""),
                     'type' => "approval",
-                    'link' => "/cooperation-slips",
+                    'link' => $slipId > 0 ? "/cooperations?id=" . $slipId : "/cooperations",
                     'zalo_msg' => "$icon [ PHIẾU HỢP TÁC $procCode ]\n\n  • Mã quy trình: $procCode\n$approverName đã $statusText Phiếu hợp tác $procCode.\n" . (!empty($reason) ? "Lý do: \"$reason\"\n" : ""),
                     'tg_msg' => "$icon <b>[ PHIẾU HỢP TÁC <code>$procCode</code> ]</b>\n\n  • Mã quy trình: <code>$procCode</code>\n<b>$approverName</b> đã <b>$statusText</b> Phiếu hợp tác $procCode.\n" . (!empty($reason) ? "Lý do: <i>\"" . htmlspecialchars($reason) . "\"</i>\n" : ""),
                     'email_subject' => "[IDEAS] [$procCode] $approverName đã $statusText Phiếu hợp tác $procCode",

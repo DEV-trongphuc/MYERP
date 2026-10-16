@@ -192,24 +192,44 @@ export const SuppliersPage: React.FC = () => {
     }
   }, [activeTab, showModal, selectedSupplier?.id]);
 
+  const suppliersAbortRef = useRef<AbortController | null>(null);
+  const inFlightRef = useRef(false);
+
   const fetchSuppliers = async () => {
+    if (suppliersAbortRef.current) {
+      suppliersAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    suppliersAbortRef.current = controller;
+    const { signal } = controller;
     setLoading(true);
     try {
       const params: any = { page, limit: 12, search: searchTerm };
       if (filters.prestige_tier) params.prestige_tier = filters.prestige_tier;
       if (filters.cooperation_status) params.cooperation_status = filters.cooperation_status;
-      const res = await api.get('/suppliers', { params });
+      const res = await api.get('/suppliers', { params, signal });
+      if (signal.aborted) return;
       const data = res.data.data;
       setSuppliers(data.items || []);
       setTotal(data.total || 0);
     } catch (err: any) {
+      if (err?.name === 'AbortError' || err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return;
       addToast('Lỗi khi tải danh sách đối tác', 'error');
     } finally {
-      setLoading(false);
+      if (!signal.aborted) {
+        setLoading(false);
+      }
     }
   };
 
-  useEffect(() => { fetchSuppliers(); }, [page, filters]);
+  useEffect(() => {
+    fetchSuppliers();
+    return () => {
+      if (suppliersAbortRef.current) {
+        suppliersAbortRef.current.abort();
+      }
+    };
+  }, [page, filters]);
 
   // Reset page when filters change
   useEffect(() => {
@@ -242,6 +262,9 @@ export const SuppliersPage: React.FC = () => {
   const [isReadOnly, setIsReadOnly] = useState(false);
 
   const handleOpenModal = (s: any = null, readOnly: boolean = false) => {
+    setActivities([]);
+    setPurchaseOrders([]);
+    setInvoices([]);
     setSelectedSupplier(s);
     setFormData(s || {
       name: '', contact_name: '', email: '', phone: '', address: '', tax_code: '', notes: '',
@@ -278,7 +301,8 @@ export const SuppliersPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSaving) return;
+    if (isSaving || inFlightRef.current) return;
+    inFlightRef.current = true;
     try {
       setIsSaving(true);
       if (selectedSupplier) {
@@ -295,6 +319,7 @@ export const SuppliersPage: React.FC = () => {
     } catch (err: any) {
       addToast(err.response?.data?.message || 'Lỗi khi lưu dữ liệu', 'error');
     } finally {
+      inFlightRef.current = false;
       setIsSaving(false);
     }
   };
@@ -305,6 +330,8 @@ export const SuppliersPage: React.FC = () => {
       message: 'Bạn có chắc chắn muốn xóa đối tác này?',
       isDanger: true,
       onConfirm: async () => {
+        if (inFlightRef.current) return;
+        inFlightRef.current = true;
         try {
           await api.delete(`/suppliers/${id}`);
           setSuppliers(prev => prev.filter(s => s.id !== id));
@@ -315,6 +342,7 @@ export const SuppliersPage: React.FC = () => {
         } catch (e: any) {
           addToast('Lỗi khi xóa đối tác', 'error');
         } finally {
+          inFlightRef.current = false;
           closeConfirm();
         }
       }
@@ -322,7 +350,8 @@ export const SuppliersPage: React.FC = () => {
   };
 
   const handleExport = async () => {
-    if (isExporting) return;
+    if (isExporting || inFlightRef.current) return;
+    inFlightRef.current = true;
     try {
       setIsExporting(true);
       if (!suppliers || suppliers.length === 0) {
@@ -365,6 +394,7 @@ export const SuppliersPage: React.FC = () => {
     } catch (e: any) {
       addToast('Lỗi khi xuất danh sách đối tác: ' + e.message, 'error');
     } finally {
+      inFlightRef.current = false;
       setIsExporting(false);
     }
   };

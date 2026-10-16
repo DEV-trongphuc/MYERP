@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
+import React, { useState, useEffect, useRef, useImperativeHandle, forwardRef, useMemo } from 'react';
 import { 
   Smile, Sparkles, Image as ImageIcon, Paperclip, Briefcase, 
-  Send, X, Loader2, Film, CornerDownRight, ExternalLink, Globe
+  Send, X, Loader2, Film, CornerDownRight, ExternalLink, Globe, Square
 } from 'lucide-react';
+import { useChatStore } from '../../store/chatStore';
 import { Avatar } from '../ui/Avatar';
 import { extractFirstUrl } from '../../utils/chatFileUtils';
 import { compressImageFile } from '../../utils/imageCompressor';
@@ -11,6 +12,82 @@ import toast from 'react-hot-toast';
 import type { ChatMessage, ChatConversation, MessageType } from '../../types/chat';
 
 const linkPreviewCache = new Map<string, { title: string; description: string; image: string; domain: string }>();
+
+interface SlashCommand {
+  command: string;
+  label: string;
+  description: string;
+  icon: string;
+  template: string;
+  category: 'crm' | 'finance' | 'hrm' | 'tasks' | 'system';
+}
+
+const AI_SLASH_COMMANDS: SlashCommand[] = [
+  {
+    command: '/lead',
+    label: 'Truy vấn CRM Leads đa tầng',
+    description: 'Lọc học viên theo chương trình, giai đoạn, tiền cọc & nguồn',
+    icon: '🎯',
+    template: 'Lọc dữ liệu học viên chương trình MBA theo giai đoạn và tiền cọc',
+    category: 'crm'
+  },
+  {
+    command: '/po',
+    label: 'Phân tích Chi phí & PO',
+    description: 'Bóc tách chi phí, đề xuất PO, trễ hạn & ngân sách phòng ban',
+    icon: '💰',
+    template: 'Phân tích chi phí và đề xuất ngân sách tháng này, kiểm tra khoản trễ hạn',
+    category: 'finance'
+  },
+  {
+    command: '/chamcong',
+    label: 'Tình hình chấm công hôm nay',
+    description: 'Xem ai có mặt tại văn phòng, ai WFH, ai chưa check-in',
+    icon: '⏰',
+    template: 'Tình hình đi làm và chấm công hôm nay thế nào?',
+    category: 'hrm'
+  },
+  {
+    command: '/viec',
+    label: 'Công việc & Deadline của tôi',
+    description: 'Xem các task đang mở, việc trễ hạn hoặc sắp tới hạn',
+    icon: '📋',
+    template: 'Xem các công việc của tôi đang mở hoặc sắp trễ hạn',
+    category: 'tasks'
+  },
+  {
+    command: '/duyet',
+    label: 'Đơn từ & Đề xuất chờ duyệt',
+    description: 'Kiểm tra phiếu nghỉ phép, tạm ứng, PO đang chờ tôi duyệt',
+    icon: '✍️',
+    template: 'Kiểm tra các đơn và đề xuất đang chờ tôi phê duyệt',
+    category: 'hrm'
+  },
+  {
+    command: '/leaderboard',
+    label: 'Bảng xếp hạng Doanh số Sale',
+    description: 'Xem xếp hạng doanh số tư vấn tuyển sinh tháng này',
+    icon: '🏆',
+    template: 'Bảng xếp hạng doanh số sale tháng này',
+    category: 'crm'
+  },
+  {
+    command: '/kho',
+    label: 'Cảnh báo tồn kho & Quà tặng',
+    description: 'Kiểm tra vật phẩm tuyển sinh sắp hết hàng',
+    icon: '📦',
+    template: 'Kiểm tra cảnh báo tồn kho và quà phẩm tuyển sinh',
+    category: 'system'
+  },
+  {
+    command: '/clear',
+    label: 'Làm sạch cửa sổ trò chuyện',
+    description: 'Xóa lịch sử tin nhắn tạm thời để bắt đầu chủ đề mới',
+    icon: '🧹',
+    template: 'CLEAR_ACTION',
+    category: 'system'
+  }
+];
 
 // Rich Link Preview inside Input Composer (Live Detection on Paste/Type)
 const ComposerLinkPreview: React.FC<{ url: string; onDismiss: () => void }> = ({ url, onDismiss }) => {
@@ -171,6 +248,7 @@ export interface ChatComposerProps {
     message_type: MessageType;
     reply_to_id?: number | null;
     metadata?: any;
+    conversation_id?: number;
   }) => Promise<boolean | any>;
   onSendTyping: (convId: number, isTyping: boolean) => void;
   staffDirectory: any[];
@@ -199,10 +277,78 @@ export const ChatComposer = forwardRef<ChatComposerRef, ChatComposerProps>(({
   showStickerPicker,
 }, ref) => {
   // Local isolated input state (guarantees 120 FPS typing without re-rendering parent message lists & sidebars)
-  const [inputText, setInputText] = useState('');
+  // Rehydrate draft from store so user never loses un-sent prompt when modal is closed/minimized
+  const [inputText, setInputText] = useState(() => useChatStore.getState().composerDraftsByConvId[activeConversation?.id] || '');
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [dismissedPreviewUrl, setDismissedPreviewUrl] = useState<string | null>(null);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+
+  // Slash commands popup state
+  const [showSlashMenu, setShowSlashMenu] = useState(false);
+  const [selectedSlashIndex, setSelectedSlashIndex] = useState(0);
+  const slashMenuRef = useRef<HTMLDivElement>(null);
+  const slashButtonRef = useRef<HTMLButtonElement>(null);
+
+  const isAiConversation = useMemo(() => {
+    if (!activeConversation) return false;
+    const otherId = Number(activeConversation.other_user?.id || 0);
+    const otherRole = String(activeConversation.other_user?.role || '').toLowerCase();
+    const title = String(activeConversation.title || activeConversation.other_user?.full_name || '');
+    return otherId === 9000001 || otherRole === 'bot' || Number(activeConversation.created_by) === 9000001 || /IDEAS/i.test(title);
+  }, [activeConversation]);
+
+  // Auto-trigger slash menu ONLY in AI conversations when typing a single-token command (no spaces/newlines), or when explicitly opened via LỆNH AI button
+  const isTypingSlashToken = isAiConversation && inputText.startsWith('/') && !inputText.includes('\n') && !/^\/\S*\s/.test(inputText);
+  const isSlashActive = (isTypingSlashToken || showSlashMenu) && !inputText.includes('\n');
+  const slashKeyword = inputText.startsWith('/') && !/^\/\S*\s/.test(inputText) ? inputText.slice(1).trim().toLowerCase() : '';
+
+  const filteredSlashCommands = useMemo(() => {
+    if (!slashKeyword) return AI_SLASH_COMMANDS;
+    return AI_SLASH_COMMANDS.filter((cmd) =>
+      cmd.command.toLowerCase().includes(slashKeyword) ||
+      cmd.label.toLowerCase().includes(slashKeyword) ||
+      cmd.description.toLowerCase().includes(slashKeyword)
+    );
+  }, [slashKeyword]);
+
+  useEffect(() => {
+    if (!showSlashMenu) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        slashMenuRef.current && !slashMenuRef.current.contains(target) &&
+        slashButtonRef.current && !slashButtonRef.current.contains(target)
+      ) {
+        setShowSlashMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showSlashMenu]);
+
+  const handleSelectSlash = (cmd: SlashCommand) => {
+    if (cmd.template === 'CLEAR_ACTION') {
+      useChatStore.getState().clearConversationHistory(activeConversation.id);
+      setInputText('');
+      useChatStore.getState().clearComposerDraft(activeConversation.id);
+      setShowSlashMenu(false);
+      toast.success('Đã làm sạch lịch sử hội thoại tạm thời!');
+      return;
+    }
+
+    setInputText(cmd.template);
+    useChatStore.getState().setComposerDraft(activeConversation.id, cmd.template);
+    setShowSlashMenu(false);
+    setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 40);
+  };
+
+  // AI Streaming state & stop handler
+  const isAiThinking = useChatStore((s) => s.isAiThinkingByConvId[activeConversation.id]);
+  const isAiTyping = useChatStore((s) => s.isAiTypingByConvId[activeConversation.id]);
+  const stopGenerating = useChatStore((s) => s.stopGenerating);
+  const isAiStreaming = Boolean(isAiThinking || isAiTyping);
 
   // Attachments review & upload states
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
@@ -226,14 +372,17 @@ export const ChatComposer = forwardRef<ChatComposerRef, ChatComposerProps>(({
     if (prevConvIdRef.current !== activeConversation.id) {
       if (inputText.trim()) {
         draftsByConvRef.current.set(prevConvIdRef.current, inputText);
+        useChatStore.getState().setComposerDraft(prevConvIdRef.current, inputText);
       } else {
         draftsByConvRef.current.delete(prevConvIdRef.current);
+        useChatStore.getState().clearComposerDraft(prevConvIdRef.current);
       }
 
-      const existingDraft = draftsByConvRef.current.get(activeConversation.id) || '';
+      const existingDraft = useChatStore.getState().composerDraftsByConvId[activeConversation.id] ?? (draftsByConvRef.current.get(activeConversation.id) || '');
       setInputText(existingDraft);
       setMentionQuery(null);
       setDismissedPreviewUrl(null);
+      setShowSlashMenu(false);
       prevConvIdRef.current = activeConversation.id;
 
       setTimeout(() => {
@@ -307,6 +456,9 @@ export const ChatComposer = forwardRef<ChatComposerRef, ChatComposerProps>(({
     },
     setText: (text: string) => {
       setInputText(text);
+      if (activeConversation?.id) {
+        useChatStore.getState().setComposerDraft(activeConversation.id, text);
+      }
       setTimeout(() => {
         textareaRef.current?.focus();
       }, 30);
@@ -317,6 +469,9 @@ export const ChatComposer = forwardRef<ChatComposerRef, ChatComposerProps>(({
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setInputText(val);
+    if (activeConversation?.id) {
+      useChatStore.getState().setComposerDraft(activeConversation.id, val);
+    }
 
     if (activeConversation?.type === 'group') {
       const lastAtPos = val.lastIndexOf('@');
@@ -420,6 +575,35 @@ export const ChatComposer = forwardRef<ChatComposerRef, ChatComposerProps>(({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // 0. Slash commands keyboard navigation
+    if (isSlashActive && filteredSlashCommands.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedSlashIndex((prev) => (prev + 1) % filteredSlashCommands.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedSlashIndex((prev) => (prev - 1 + filteredSlashCommands.length) % filteredSlashCommands.length);
+        return;
+      }
+      if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+        if ((e.nativeEvent as any).isComposing) return;
+        e.preventDefault();
+        const targetCmd = filteredSlashCommands[selectedSlashIndex] || filteredSlashCommands[0];
+        if (targetCmd) {
+          handleSelectSlash(targetCmd);
+          return;
+        }
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowSlashMenu(false);
+        if (inputText === '/') setInputText('');
+        return;
+      }
+    }
+
     // 1. Mobile virtual keyboard: Return key should insert newline, NOT auto-send!
     if (isMobile && e.key === 'Enter') {
       return;
@@ -443,11 +627,15 @@ export const ChatComposer = forwardRef<ChatComposerRef, ChatComposerProps>(({
     if (now - lastSendTimeRef.current < 60) return;
     lastSendTimeRef.current = now;
 
+    const targetConvId = activeConversation?.id;
     const textToSend = inputText.trim();
     const attachmentsToSend = [...pendingAttachments];
 
     // Reset local state & clean draft
-    draftsByConvRef.current.delete(activeConversation.id);
+    if (targetConvId) {
+      draftsByConvRef.current.delete(targetConvId);
+      useChatStore.getState().clearComposerDraft(targetConvId);
+    }
     setInputText('');
     setMentionQuery(null);
     setPendingAttachments([]);
@@ -510,6 +698,7 @@ export const ChatComposer = forwardRef<ChatComposerRef, ChatComposerProps>(({
               content: contentCaption,
               message_type: msgType,
               reply_to_id: (isLast && replyingTo) ? replyingTo.id : null,
+              conversation_id: targetConvId,
               metadata: {
                 url: fileData.url,
                 file_name: fileData.file_name,
@@ -532,7 +721,8 @@ export const ChatComposer = forwardRef<ChatComposerRef, ChatComposerProps>(({
       await onSendMessage({
         content: textToSend,
         message_type: 'text',
-        reply_to_id: replyingTo ? replyingTo.id : null
+        reply_to_id: replyingTo ? replyingTo.id : null,
+        conversation_id: targetConvId
       });
       if (replyingTo) onClearReplyingTo();
     }
@@ -542,6 +732,93 @@ export const ChatComposer = forwardRef<ChatComposerRef, ChatComposerProps>(({
 
   return (
     <div style={{ borderTop: '1px solid #e2e8f0', background: '#ffffff', position: 'relative' }}>
+      {/* AI Slash Commands & Quick Prompt Suggestions Popup */}
+      {isSlashActive && filteredSlashCommands.length > 0 && (
+        <div
+          ref={slashMenuRef}
+          style={{
+            position: 'absolute',
+            bottom: '100%',
+            left: 0,
+            right: 0,
+            maxHeight: '270px',
+            overflowY: 'auto',
+            background: '#ffffff',
+            borderTop: '1px solid #e2e8f0',
+            boxShadow: '0 -6px 20px rgba(0,0,0,0.12)',
+            borderRadius: '14px 14px 0 0',
+            zIndex: 45
+          }}
+        >
+          <div style={{
+            padding: '7px 14px',
+            fontSize: '0.7rem',
+            fontWeight: 800,
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px',
+            color: '#6b21a8',
+            background: 'linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%)',
+            borderBottom: '1px solid #f3e8ff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Sparkles size={13} color="#9333ea" />
+              <span>Gợi ý Lệnh Nhanh & Mẫu Điều Hành (Gõ hoặc bấm để chọn)</span>
+            </div>
+            <span style={{ fontSize: '0.65rem', color: '#9333ea', fontWeight: 600 }}>Phím [↑] [↓] [Enter]</span>
+          </div>
+
+          <div style={{ padding: '4px' }}>
+            {filteredSlashCommands.map((cmd, idx) => {
+              const isSelected = idx === selectedSlashIndex;
+              return (
+                <div
+                  key={cmd.command}
+                  onClick={() => handleSelectSlash(cmd)}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    backgroundColor: isSelected ? '#f5f3ff' : 'transparent',
+                    border: isSelected ? '1px solid #ddd6fe' : '1px solid transparent',
+                    transition: 'all 0.12s ease'
+                  }}
+                  onMouseEnter={() => setSelectedSlashIndex(idx)}
+                >
+                  <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>{cmd.icon}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{
+                        fontSize: '0.78rem',
+                        fontWeight: 800,
+                        color: isSelected ? '#7c3aed' : '#1e293b',
+                        fontFamily: 'monospace',
+                        background: isSelected ? '#ede9fe' : '#f1f5f9',
+                        padding: '1px 6px',
+                        borderRadius: '4px'
+                      }}>
+                        {cmd.command}
+                      </span>
+                      <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155' }}>
+                        {cmd.label}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {cmd.description}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Mentions Dropdown - ONLY IN GROUP CHATS */}
       {activeConversation.type === 'group' && mentionQuery !== null && (
         <div style={{
@@ -891,11 +1168,53 @@ export const ChatComposer = forwardRef<ChatComposerRef, ChatComposerProps>(({
             <Paperclip size={18} />
           </button>
 
+          {/* AI Slash Commands Trigger Button */}
+          <button
+            ref={slashButtonRef}
+            type="button"
+            onClick={() => {
+              if (showSlashMenu) {
+                setShowSlashMenu(false);
+                if (inputText === '/') setInputText('');
+              } else {
+                setShowSlashMenu(true);
+                if (!inputText.trim()) {
+                  setInputText('/');
+                }
+                setTimeout(() => {
+                  textareaRef.current?.focus();
+                }, 30);
+              }
+            }}
+            style={{
+              marginLeft: 'auto',
+              marginRight: '6px',
+              background: isSlashActive ? 'linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%)' : '#f8fafc',
+              border: isSlashActive ? '1px solid #c084fc' : '1px solid #e2e8f0',
+              borderRadius: '7px',
+              color: isSlashActive ? '#7e22ce' : '#6b21a8',
+              cursor: 'pointer',
+              padding: '4px 9px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontSize: '0.74rem',
+              fontWeight: 800,
+              boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.04)')}
+            onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+            title="Mở bảng Lệnh nhanh AI Copilot (Phím tắt: Gõ '/')"
+          >
+            <Sparkles size={13} color="#9333ea" />
+            <span>LỆNH AI</span>
+          </button>
+
           <button
             type="button"
             onClick={onOpenErpModal}
             style={{
-              marginLeft: 'auto',
               background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
               border: 'none',
               borderRadius: '7px',
@@ -1010,37 +1329,65 @@ export const ChatComposer = forwardRef<ChatComposerRef, ChatComposerProps>(({
             }}
           />
 
-          <button
-            type="button"
-            disabled={!inputText.trim() && pendingAttachments.length === 0}
-            onClick={(e) => {
-              e.stopPropagation();
-              handleSend();
-            }}
-            style={{
-              flexShrink: 0,
-              width: isMobile ? '34px' : '36px',
-              height: isMobile ? '34px' : '36px',
-              borderRadius: '50%',
-              border: 'none',
-              background: (inputText.trim() || pendingAttachments.length > 0)
-                ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
-                : '#e2e8f0',
-              color: (inputText.trim() || pendingAttachments.length > 0) ? '#ffffff' : '#94a3b8',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: (inputText.trim() || pendingAttachments.length > 0) ? 'pointer' : 'not-allowed',
-              transition: 'all 0.18s cubic-bezier(0.16, 1, 0.3, 1)',
-              boxShadow: (inputText.trim() || pendingAttachments.length > 0)
-                ? '0 3px 10px rgba(220, 38, 38, 0.35)'
-                : 'none',
-              transform: (inputText.trim() || pendingAttachments.length > 0) ? 'scale(1)' : 'scale(0.92)'
-            }}
-            title="Gửi tin nhắn (Enter)"
-          >
-            <Send size={16} />
-          </button>
+          {isAiStreaming ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                stopGenerating(activeConversation.id);
+              }}
+              style={{
+                flexShrink: 0,
+                width: isMobile ? '34px' : '36px',
+                height: isMobile ? '34px' : '36px',
+                borderRadius: '50%',
+                border: 'none',
+                background: '#fee2e2',
+                color: '#b91c1c',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'all 0.18s cubic-bezier(0.16, 1, 0.3, 1)',
+                boxShadow: '0 2px 8px rgba(185, 28, 28, 0.25)'
+              }}
+              title="Dừng tạo câu trả lời"
+            >
+              <Square size={13} fill="currentColor" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={!inputText.trim() && pendingAttachments.length === 0}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleSend();
+              }}
+              style={{
+                flexShrink: 0,
+                width: isMobile ? '34px' : '36px',
+                height: isMobile ? '34px' : '36px',
+                borderRadius: '50%',
+                border: 'none',
+                background: (inputText.trim() || pendingAttachments.length > 0)
+                  ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
+                  : '#e2e8f0',
+                color: (inputText.trim() || pendingAttachments.length > 0) ? '#ffffff' : '#94a3b8',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: (inputText.trim() || pendingAttachments.length > 0) ? 'pointer' : 'not-allowed',
+                transition: 'all 0.18s cubic-bezier(0.16, 1, 0.3, 1)',
+                boxShadow: (inputText.trim() || pendingAttachments.length > 0)
+                  ? '0 3px 10px rgba(220, 38, 38, 0.35)'
+                  : 'none',
+                transform: (inputText.trim() || pendingAttachments.length > 0) ? 'scale(1)' : 'scale(0.92)'
+              }}
+              title="Gửi tin nhắn (Enter)"
+            >
+              <Send size={16} />
+            </button>
+          )}
         </div>
       </div>
     </div>

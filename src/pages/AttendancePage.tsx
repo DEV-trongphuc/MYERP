@@ -898,7 +898,11 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       if (draft) {
         sessionStorage.removeItem('pending_leave_draft');
         const parsed = JSON.parse(draft);
-        handleOpenLeaveModal({ detail: parsed } as any);
+        const createdAt = parsed._draft_created_at || 0;
+        // TTL 10 minutes: only apply draft if created within the last 10 minutes
+        if (!createdAt || Date.now() - createdAt < 10 * 60 * 1000) {
+          handleOpenLeaveModal({ detail: parsed } as any);
+        }
       }
     } catch {}
 
@@ -925,8 +929,10 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     }
   }, [showCreateLeaveModal, createLeaveType, otTypeField, user]);
 
+  const createLeaveInFlightRef = useRef(false);
   const handleCreateLeaveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (createLeaveInFlightRef.current) return;
     if (!approverIdField) {
       toast.error(t('Vui lòng chọn người duyệt!'));
       return;
@@ -938,6 +944,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       return;
     }
 
+    createLeaveInFlightRef.current = true;
     setSubmittingLeave(true);
     try {
       let payload: any = {};
@@ -1060,6 +1067,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
 
         if (res && res.data && (res.data.success !== false)) {
           toast.success(t('Đã gửi yêu cầu cập nhật công thành công! Vui lòng đợi quản lý phê duyệt.'));
+          window.dispatchEvent(new CustomEvent('erp-action-completed', { detail: { actionType: 'supplementary' } }));
           setShowCreateLeaveModal(false);
           fetchCalendarCheckIns();
           fetchCheckInsList();
@@ -1074,6 +1082,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       
       if (res && res.data && res.data.success) {
         toast.success(t('Gửi đề xuất thành công!'));
+        window.dispatchEvent(new CustomEvent('erp-action-completed', { detail: { actionType: 'leave' } }));
         setShowCreateLeaveModal(false);
         setRelatedUserIds([]);
         fetchMyPendingConfirmation();
@@ -1086,6 +1095,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       console.error(err);
       toast.error(err?.response?.data?.message || err?.message || t('Lỗi kết nối máy chủ!'));
     } finally {
+      createLeaveInFlightRef.current = false;
       setSubmittingLeave(false);
     }
   };
@@ -2531,7 +2541,10 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     }
   };
 
+  const approveBulkInFlightRef = useRef(false);
   const handleApproveBulk = async (reqId: number, status: 'approved' | 'rejected') => {
+    if (approveBulkInFlightRef.current) return;
+    approveBulkInFlightRef.current = true;
     setBulkApprovingId(reqId);
     try {
       const res = await fetchAPI(`check-ins/${reqId}/bulk-approve`, {
@@ -2555,6 +2568,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       console.error(err);
       toast.error(t('Lỗi kết nối máy chủ'));
     } finally {
+      approveBulkInFlightRef.current = false;
       setBulkApprovingId(null);
     }
   };
@@ -2967,9 +2981,6 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   useEffect(() => {
     fetchCheckInsList();
     setCurrentPage(1);
-    if (calendarShifts.length === 0) {
-      fetchCalendarCheckIns();
-    }
   }, [period, customRange, filterUser, filterStatus]);
 
   useEffect(() => {
@@ -3114,7 +3125,10 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     }
   };
 
+  const approveRejectLeaveInFlightRef = useRef(false);
   const handleApproveRejectLeave = async (id: number, status: 'approved' | 'rejected') => {
+    if (approveRejectLeaveInFlightRef.current) return;
+    approveRejectLeaveInFlightRef.current = true;
     try {
       const res = await fetchAPI('hrm/leaves', {
         method: 'PUT',
@@ -3132,6 +3146,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       }
     } catch (err: any) {
       toast.error(err?.message || t('Lỗi kết nối máy chủ.'));
+    } finally {
+      approveRejectLeaveInFlightRef.current = false;
     }
   };
 
@@ -3243,6 +3259,43 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   const overtimeShiftsCount = useMemo(() => shiftList.filter((s: any) => s.shift_type === 'overtime').length, [shiftList]);
   const totalShiftsCount = shiftList.length;
 
+  const checkInsByDateMap = useMemo(() => {
+    const map = new Map<string, any[]>();
+    for (const c of calendarCheckIns) {
+      const d = c.check_in_date;
+      if (!d) continue;
+      const arr = map.get(d);
+      if (arr) arr.push(c);
+      else map.set(d, [c]);
+    }
+    return map;
+  }, [calendarCheckIns]);
+
+  const shiftsByDateMap = useMemo(() => {
+    const map = new Map<string, any[]>();
+    for (const s of calendarShifts) {
+      const d = s.shift_date;
+      if (!d) continue;
+      const arr = map.get(d);
+      if (arr) arr.push(s);
+      else map.set(d, [s]);
+    }
+    return map;
+  }, [calendarShifts]);
+
+  const leavesByDateMap = useMemo(() => {
+    const map = new Map<string, any[]>();
+    const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const matched = calendarLeaves.filter(l => l.start_date_only <= dateStr && l.end_date_only >= dateStr);
+      if (matched.length > 0) {
+        map.set(dateStr, matched);
+      }
+    }
+    return map;
+  }, [calendarLeaves, currentYear, currentMonth]);
+
   const renderCalendarView = () => {
     const firstDayIndex = new Date(currentYear, currentMonth - 1, 1).getDay();
     const adjustedFirstDayIndex = firstDayIndex === 0 ? 6 : firstDayIndex - 1;
@@ -3284,17 +3337,17 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
 
     const getCellData = (dateStr: string) => {
       if (!dateStr) return null;
-      return calendarCheckIns.filter(c => c.check_in_date === dateStr);
+      return checkInsByDateMap.get(dateStr) || [];
     };
 
     const getCellShifts = (dateStr: string) => {
       if (!dateStr) return [];
-      return calendarShifts.filter(s => s.shift_date === dateStr);
+      return shiftsByDateMap.get(dateStr) || [];
     };
 
     const getCellLeaves = (dateStr: string) => {
       if (!dateStr) return [];
-      return calendarLeaves.filter(l => l.start_date_only <= dateStr && l.end_date_only >= dateStr);
+      return leavesByDateMap.get(dateStr) || [];
     };
 
     return (

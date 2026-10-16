@@ -61,6 +61,9 @@ export const useAuthStore = create<AuthStore>()(
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
         clearApiCache();
+        try {
+          import('./chatStore').then((m) => m.useChatStore.getState().resetChatState()).catch(() => {});
+        } catch {}
         set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false });
       },
     }),
