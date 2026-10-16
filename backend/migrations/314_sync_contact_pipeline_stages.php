@@ -10,10 +10,9 @@
  *   ưu tiên stage có order_index cao hơn (phản ánh đúng tiến độ thực tế của hồ sơ).
  */
 
-$dbConnectPath = file_exists(__DIR__ . '/../db_connect.php')
-    ? __DIR__ . '/../db_connect.php'
-    : '/home/vhvxoigh/myerp.ideas.edu.vn/backend/db_connect.php';
-require_once $dbConnectPath;
+require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../config/Database.php';
+$pdo = Database::getInstance();
 
 echo "=== MIGRATION 314: SYNC CONTACT PIPELINE STAGES (stage_id <=> pipeline_status) ===\n";
 
