@@ -858,8 +858,6 @@ class ActivityController {
 
             $this->db->prepare("UPDATE contacts SET last_contact = NOW(), security_expires_at = ? WHERE id = ? AND tenant_id = ?")
                  ->execute([$securityExpires, $cid, $auth['tenant_id']]);
-
-            autoAdvanceContactOnInteraction($this->db, (int)$auth['tenant_id'], (int)$cid, (int)$auth['user_id']);
         } else if (($b['related_type'] ?? '') === 'deal') {
             $sDeal = $this->db->prepare("SELECT contact_id FROM deals WHERE id = ? AND tenant_id = ?");
             $sDeal->execute([(int)$b['related_id'], $auth['tenant_id']]);
@@ -872,8 +870,6 @@ class ActivityController {
 
                 $this->db->prepare("UPDATE contacts SET last_contact = NOW(), security_expires_at = ? WHERE id = ? AND tenant_id = ?")
                      ->execute([$securityExpires, $cid, $auth['tenant_id']]);
-
-                autoAdvanceContactOnInteraction($this->db, (int)$auth['tenant_id'], (int)$cid, (int)$auth['user_id']);
             }
         }
 

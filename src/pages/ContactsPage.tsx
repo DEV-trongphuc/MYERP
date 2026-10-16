@@ -1045,21 +1045,22 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   const [filterDateField, setFilterDateField] = useState<'created_at' | 'updated_at' | 'last_contact' | 'admission_date'>('created_at');
   const [dateFilterActive, setDateFilterActive] = useState(false);
   
-  const storageKey = `contacts_page_columns_v6_${segment === 'customer' ? 'student' : 'lead'}_${isSale ? 'sale' : 'admin'}`;
+  const storageKey = `contacts_page_columns_v7_${segment === 'customer' ? 'student' : 'lead'}_${isSale ? 'sale' : 'admin'}`;
 
   const getDefaultContactColumns = (seg: string, saleRole: boolean): ColumnDef[] => [
-    { id: 'student_code', label: 'Mã học viên', visible: seg === 'customer' },
+    { id: 'student_code', label: 'Mã HV / Nhập học', visible: seg === 'customer' },
     { id: 'name', label: 'Họ tên', visible: true },
     { id: 'email', label: 'Email', visible: true },
     { id: 'phone', label: 'SĐT', visible: true },
     { id: 'company', label: 'Công ty', visible: false },
     { id: 'tags', label: 'Phân loại (Tags)', visible: seg !== 'customer' },
-    { id: 'program', label: 'Tên chương trình', visible: true },
-    { id: 'admission_date', label: 'Ngày nhập học', visible: seg === 'customer' },
+    { id: 'program', label: 'Tên chương trình', visible: seg === 'customer' },
+    { id: 'last_note', label: 'Nhật ký (gần nhất)', visible: seg !== 'customer' },
+    { id: 'admission_date', label: 'Ngày nhập học', visible: false },
     { id: 'status', label: 'Trạng thái', visible: true },
     { id: 'contact', label: 'Liên lạc cuối', visible: false },
     { id: 'deal', label: 'Deal hiện tại', visible: false },
-    { id: 'total_deposit', label: 'Thực thu / Đã đóng', visible: seg === 'customer' },
+    { id: 'total_deposit', label: 'Thực thu / Đã đóng', visible: false },
     { id: 'owner', label: 'Sale phụ trách', visible: true },
     { id: 'distribution', label: 'Nguồn phân bổ', visible: false },
     { id: 'ticket_action', label: 'Helpdesk (Ticket)', visible: false },
@@ -4431,8 +4432,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                       </th>
                     )}
                     {visibleColsMap['student_code'] && (
-                      <th style={{ width: '115px', maxWidth: '135px', padding: '0.85rem 0.6rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
-                        Mã học viên
+                      <th style={{ width: '135px', maxWidth: '155px', padding: '0.85rem 0.6rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
+                        Mã HV / Nhập học
                       </th>
                     )}
                     {visibleColsMap['name'] && (
@@ -4456,6 +4457,11 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                         Tên chương trình
                       </th>
                     )}
+                    {visibleColsMap['last_note'] && (
+                      <th style={{ width: '230px', maxWidth: '280px', padding: '0.85rem 0.6rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
+                        Nhật ký (gần nhất)
+                      </th>
+                    )}
                     {visibleColsMap['admission_date'] && (
                       <th style={{ width: '140px', maxWidth: '160px', padding: '0.85rem 0.6rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
                         Ngày nhập học
@@ -4472,8 +4478,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                     {visibleColsMap['deal'] && <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>Deal đang mở</th>}
                     {visibleColsMap['total_deposit'] && <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>Thực thu / Đã đóng</th>}
                     {visibleColsMap['owner'] && (
-                      <th style={{ width: isSale ? '250px' : '180px', maxWidth: isSale ? '280px' : '200px', padding: '0.85rem 0.6rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
-                        {isSale ? 'Tương tác gần nhất' : 'Sale phụ trách'}
+                      <th style={{ width: (isSale && !visibleColsMap['last_note']) ? '250px' : '180px', maxWidth: (isSale && !visibleColsMap['last_note']) ? '280px' : '200px', padding: '0.85rem 0.6rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
+                        {(isSale && !visibleColsMap['last_note']) ? 'Tương tác gần nhất' : 'Sale phụ trách'}
                       </th>
                     )}
                     {visibleColsMap['distribution'] && <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Phân bổ</th>}
@@ -4530,10 +4536,31 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                           </td>
                         )}
                         {visibleColsMap['student_code'] && (
-                          <td style={{ width: '115px', maxWidth: '135px', padding: '0.85rem 0.6rem', borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
-                            <span style={{ fontSize: '0.76rem', fontWeight: 700, fontFamily: 'monospace', padding: '2px 7px', borderRadius: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-primary)' }}>
-                              {c.student_code || c.student_id || ('KH' + String(c.id).padStart(6, '0'))}
-                            </span>
+                          <td
+                            style={{ width: '135px', maxWidth: '155px', padding: '0.85rem 0.6rem', borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}
+                            onMouseEnter={(e) => setHoveredCell({ contact: c, rect: e.currentTarget.getBoundingClientRect() })}
+                            onMouseLeave={() => setHoveredCell(null)}
+                          >
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
+                              <span style={{ fontSize: '0.75rem', fontWeight: 700, fontFamily: 'monospace', padding: '2px 7px', borderRadius: '6px', background: 'rgba(37, 99, 235, 0.08)', color: 'var(--color-primary)' }}>
+                                {c.student_code || c.student_id || ('KH' + String(c.id).padStart(6, '0'))}
+                              </span>
+                              {c.admission_date ? (() => {
+                                const d = new Date(c.admission_date);
+                                const pad = (n: number) => String(n).padStart(2, '0');
+                                const formatted = isNaN(d.getTime())
+                                  ? String(c.admission_date).slice(0, 10)
+                                  : `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+                                return (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>
+                                    <Calendar size={11} style={{ color: '#059669', flexShrink: 0 }} />
+                                    <span>{formatted}</span>
+                                  </span>
+                                );
+                              })() : (
+                                <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Chưa có ngày NH</span>
+                              )}
+                            </div>
                           </td>
                         )}
                         {visibleColsMap['name'] && (() => {
@@ -4823,6 +4850,46 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                           </td>
                         )}
 
+                        {visibleColsMap['last_note'] && (
+                          <td
+                            style={{ width: '230px', maxWidth: '280px', padding: '0.85rem 0.6rem', borderBottom: '1px solid var(--color-border)' }}
+                            onMouseEnter={(e) => setHoveredCell({ contact: c, rect: e.currentTarget.getBoundingClientRect() })}
+                            onMouseLeave={() => setHoveredCell(null)}
+                          >
+                            {(() => {
+                              const noteText = cleanInteractionText(c.last_interaction || c.notes || '');
+                              if (!noteText) {
+                                return <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Chưa có nhật ký</span>;
+                              }
+                              return (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: '180px', maxWidth: '265px' }}>
+                                  <div
+                                    style={{
+                                      fontSize: '0.76rem',
+                                      color: 'var(--color-text)',
+                                      fontWeight: 500,
+                                      lineHeight: 1.4,
+                                      display: '-webkit-box',
+                                      WebkitLineClamp: 2,
+                                      WebkitBoxOrient: 'vertical',
+                                      overflow: 'hidden',
+                                      wordBreak: 'break-word'
+                                    }}
+                                  >
+                                    {noteText}
+                                  </div>
+                                  {(c.last_interaction_at || c.last_contact) && (
+                                    <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                      <Clock size={10} style={{ flexShrink: 0 }} />
+                                      <span>{formatTimeAgo(c.last_interaction_at || c.last_contact)}</span>
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </td>
+                        )}
+
                         {visibleColsMap['admission_date'] && (
                           <td
                             style={{ width: '140px', maxWidth: '160px', padding: '0.85rem 0.6rem', borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}
@@ -4994,11 +5061,11 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                         )}
                         {visibleColsMap['owner'] && (
                           <td
-                            style={{ width: isSale ? '250px' : '210px', maxWidth: isSale ? '280px' : '240px', padding: '0.85rem 0.6rem', borderBottom: '1px solid var(--color-border)' }}
+                            style={{ width: (isSale && !visibleColsMap['last_note']) ? '250px' : '210px', maxWidth: (isSale && !visibleColsMap['last_note']) ? '280px' : '240px', padding: '0.85rem 0.6rem', borderBottom: '1px solid var(--color-border)' }}
                             onMouseEnter={(e) => setHoveredCell({ contact: c, rect: e.currentTarget.getBoundingClientRect() })}
                             onMouseLeave={() => setHoveredCell(null)}
                           >
-                            {isSale ? (
+                            {isSale && !visibleColsMap['last_note'] ? (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                 {renderInteractionInfo(c, setReportingContact)}
                                 <div 
@@ -5028,7 +5095,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                 .filter(Boolean)
                                 .map((id: string) => users.find(u => String(u.id) === String(id)))
                                 .filter(Boolean);
-                              const notePreview = cleanInteractionText(c.last_interaction || c.notes || '');
+                              const notePreview = visibleColsMap['last_note'] ? '' : cleanInteractionText(c.last_interaction || c.notes || '');
                               
                               if (collabs.length > 0) {
                                 return (
@@ -5085,7 +5152,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
                                   <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Chưa giao</span>
                                   {renderInteractionInfo(c, setReportingContact)}
-                                  {cleanInteractionText(c.last_interaction || c.notes || '') && (
+                                  {!visibleColsMap['last_note'] && cleanInteractionText(c.last_interaction || c.notes || '') && (
                                     <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', maxWidth: '165px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
                                       <MessageSquare size={10} style={{ flexShrink: 0 }} />
                                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{cleanInteractionText(c.last_interaction || c.notes || '')}</span>

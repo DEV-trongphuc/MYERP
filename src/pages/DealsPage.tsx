@@ -2723,25 +2723,6 @@ export const DealsPage: React.FC = () => {
                           whileHover={{ y: -2, boxShadow: '0 8px 16px rgba(0,0,0,0.08)' }}
                           whileTap={{ cursor: 'grabbing' }}
                         >
-                          {/* Top Stage Badge for 01 - New Lead */}
-                          {isNewLeadCol && (
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                              <span style={{
-                                background: '#dc2626',
-                                color: '#ffffff',
-                                fontWeight: 700,
-                                padding: '2px 8px',
-                                borderRadius: 99,
-                                fontSize: 11,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px'
-                              }}>
-                                {stage.name || '01 – New Lead'}
-                              </span>
-                            </div>
-                          )}
-
                           {/* Header: Avatar and Name */}
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '0.65rem' }}>
                             <Avatar name={itemName} src={item.avatar_url} size={36} />
