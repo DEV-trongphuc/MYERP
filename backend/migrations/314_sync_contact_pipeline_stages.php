@@ -1,183 +1,104 @@
 <?php
 // backend/migrations/314_sync_contact_pipeline_stages.php
 /**
- * Migration 314: Đồng bộ hóa toàn diện stage_id và pipeline_status trên bảng contacts.
- * - Giải quyết triệt để tình trạng lệch pha giữa stage_id (hiển thị ở bảng ngoài / Kanban)
- *   và pipeline_status (hiển thị trong Drawer chi tiết, ví dụ: Huỳnh Nguyên Thảo 0785242434).
- * - Chuẩn hóa toàn bộ các legacy slug (nop_ho_so, dat_coc, co_nhu_cau, chua_xac_dinh, hoc_vien, ...)
- *   về system_slug chuẩn trong bảng pipeline_stages.
- * - Khi cả stage_id và pipeline_status đều tồn tại nhưng trỏ tới 2 stage khác nhau,
- *   ưu tiên stage có order_index cao hơn (phản ánh đúng tiến độ thực tế của hồ sơ).
+ * Migration 314:
+ * 1. Khôi phục nguyên trạng (stage_id, pipeline_status, updated_at) cho mọi bản ghi bị
+ *    auto-reconcile cập nhật nhầm thời gian updated_at trong ngày 2026-10-16 từ bản đối chiếu vhvxoigh_erpstagging.contacts.
+ * 2. Chỉ đồng bộ chính xác các hồ sơ có pipeline_status = 'nop_ho_so' / 'dat_coc' đang bị lệch stage_id (ví dụ Huỳnh Nguyên Thảo 0785242434),
+ *    và BẮT BUỘC giữ nguyên `updated_at = updated_at` để không bao giờ đẩy hồ sơ cũ lên đầu trang!
  */
 
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../config/Database.php';
 $pdo = Database::getInstance();
 
-echo "=== MIGRATION 314: SYNC CONTACT PIPELINE STAGES (stage_id <=> pipeline_status) ===\n";
-
-function normalizeStageSlug314(?string $slug): string {
-    $s = strtolower(trim((string)$slug));
-    if ($s === '') return '';
-    $aliases = [
-        'new' => 'new_lead',
-        'chua_xac_dinh' => 'new_lead',
-        'lead_moi' => 'new_lead',
-        'moi' => 'new_lead',
-        '1' => 'new_lead',
-        '01' => 'new_lead',
-        'da_lien_he' => 'contact_attempted',
-        'lien_he_lan_1' => 'contact_attempted',
-        '2' => 'contact_attempted',
-        '02' => 'contact_attempted',
-        'ket_noi' => 'connected',
-        'da_ket_noi' => 'connected',
-        '3' => 'connected',
-        '03' => 'connected',
-        'co_nhu_cau' => 'needed',
-        'nhu_cau' => 'needed',
-        '4' => 'needed',
-        '04' => 'needed',
-        'kham_pha' => 'discovery_completed',
-        'da_kham_pha' => 'discovery_completed',
-        '5' => 'discovery_completed',
-        '05' => 'discovery_completed',
-        'phu_hop' => 'program_matched',
-        '6' => 'program_matched',
-        '06' => 'program_matched',
-        'gui_de_xuat' => 'proposal_sent',
-        'bao_gia' => 'proposal_sent',
-        'dong_y_gap' => 'proposal_sent',
-        'da_gap' => 'proposal_sent',
-        '7' => 'proposal_sent',
-        '07' => 'proposal_sent',
-        'danh_gia' => 'evaluation_objection',
-        'xu_ly_tu_choi' => 'evaluation_objection',
-        '8' => 'evaluation_objection',
-        '08' => 'evaluation_objection',
-        'nop_ho_so' => 'application_started',
-        'bat_dau_ho_so' => 'application_started',
-        'lam_ho_so' => 'application_started',
-        '9' => 'application_started',
-        '09' => 'application_started',
-        'hoan_tat_ho_so' => 'application_completed',
-        '10' => 'application_completed',
-        'duyet_nhap_hoc' => 'admission_approved',
-        '11' => 'admission_approved',
-        'chap_nhan_offer' => 'offer_accepted',
-        '12' => 'offer_accepted',
-        'dong_le_phi_ho_so' => 'deposit_tuition_payment',
-        'dat_coc' => 'deposit_tuition_payment',
-        'da_coc' => 'deposit_tuition_payment',
-        'coc' => 'deposit_tuition_payment',
-        '13' => 'deposit_tuition_payment',
-        'dong_deal' => 'enrolled',
-        'thanh_cong' => 'enrolled',
-        'hoc_vien' => 'enrolled',
-        'nhap_hoc' => 'enrolled',
-        '14' => 'enrolled',
-    ];
-    return $aliases[$s] ?? $s;
-}
+echo "=== MIGRATION 314 V2: RESTORE & SURGICAL STAGE SYNC (PRESERVING updated_at) ===\n";
 
 try {
-    $stageRows = $pdo->query("SELECT id, tenant_id, name, system_slug, order_index FROM pipeline_stages ORDER BY tenant_id ASC, order_index ASC, id ASC")->fetchAll(PDO::FETCH_ASSOC) ?: [];
-    $stagesByTenant = [];
-    foreach ($stageRows as $sr) {
-        $tid = (int)($sr['tenant_id'] ?: 1);
-        if (!isset($stagesByTenant[$tid])) {
-            $stagesByTenant[$tid] = [
-                'by_id' => [],
-                'by_slug' => [],
-                'first' => null,
-            ];
-        }
-        $sid = (int)$sr['id'];
-        $slug = strtolower(trim((string)($sr['system_slug'] ?? '')));
-        $item = [
-            'id' => $sid,
-            'name' => (string)$sr['name'],
-            'system_slug' => (string)$sr['system_slug'],
-            'order_index' => (int)$sr['order_index'],
-        ];
-        $stagesByTenant[$tid]['by_id'][$sid] = $item;
-        if ($slug !== '') {
-            $stagesByTenant[$tid]['by_slug'][$slug] = $item;
-        }
-        if ($stagesByTenant[$tid]['first'] === null) {
-            $stagesByTenant[$tid]['first'] = $item;
-        }
+    // 1. Check and restore any rows in vhvxoigh_myerp.contacts whose updated_at was bumped today (>= 2026-10-16 11:00:00) compared to vhvxoigh_erpstagging.contacts
+    $chkStmt = $pdo->query("
+        SELECT p.id, p.full_name, p.phone, p.owner_id, u.full_name as owner_name, u.role as owner_role,
+               p.stage_id as p_stage, s.stage_id as s_stage,
+               p.pipeline_status as p_pipe, s.pipeline_status as s_pipe,
+               p.updated_at as p_upd, s.updated_at as s_upd
+        FROM vhvxoigh_myerp.contacts p
+        JOIN vhvxoigh_erpstagging.contacts s ON p.id = s.id
+        LEFT JOIN vhvxoigh_myerp.users u ON p.owner_id = u.id
+        WHERE p.updated_at >= '2026-10-16 11:00:00'
+          AND p.updated_at != s.updated_at
+        ORDER BY p.updated_at DESC
+    ");
+    $mutatedRows = $chkStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    echo "Found " . count($mutatedRows) . " rows with altered updated_at since 11:00:00:\n";
+    foreach (array_slice($mutatedRows, 0, 25) as $r) {
+        echo sprintf(
+            "  #%d %s (Owner: %s [%s]): stage %s->%s, pipe '%s'->'%s', updated_at '%s' -> '%s'\n",
+            $r['id'],
+            $r['full_name'],
+            $r['owner_name'] ?? 'NULL',
+            $r['owner_role'] ?? '',
+            $r['s_stage'] ?? 'NULL',
+            $r['p_stage'] ?? 'NULL',
+            $r['s_pipe'] ?? 'NULL',
+            $r['p_pipe'] ?? 'NULL',
+            $r['s_upd'],
+            $r['p_upd']
+        );
     }
 
-    $contacts = $pdo->query("SELECT id, tenant_id, full_name, phone, stage_id, pipeline_status FROM contacts WHERE deleted_at IS NULL")->fetchAll(PDO::FETCH_ASSOC) ?: [];
-    $updStmt = $pdo->prepare("UPDATE contacts SET stage_id = ?, pipeline_status = ? WHERE id = ?");
+    $restoreStmt = $pdo->prepare("
+        UPDATE vhvxoigh_myerp.contacts p
+        JOIN vhvxoigh_erpstagging.contacts s ON p.id = s.id
+        SET p.stage_id = s.stage_id,
+            p.pipeline_status = s.pipeline_status,
+            p.updated_at = s.updated_at
+        WHERE p.updated_at >= '2026-10-16 11:00:00'
+          AND p.updated_at != s.updated_at
+    ");
+    $restoreStmt->execute();
+    echo "Restored " . $restoreStmt->rowCount() . " rows to their exact original stage_id, pipeline_status, and updated_at!\n";
 
-    $updatedCount = 0;
-    foreach ($contacts as $c) {
-        $cid = (int)$c['id'];
-        $tid = (int)($c['tenant_id'] ?: 1);
-        $rawSid = !empty($c['stage_id']) ? (int)$c['stage_id'] : null;
-        $rawSlug = isset($c['pipeline_status']) ? trim((string)$c['pipeline_status']) : '';
-        if ($rawSlug === 'not_lead') {
-            continue;
-        }
+    // 2. Surgical sync ONLY for rows where pipeline_status = 'nop_ho_so' and stage_id < 39, preserving updated_at = updated_at!
+    $syncNopHoSo = $pdo->prepare("
+        UPDATE contacts
+        SET stage_id = 39,
+            pipeline_status = 'application_started',
+            updated_at = updated_at
+        WHERE deleted_at IS NULL
+          AND pipeline_status = 'nop_ho_so'
+          AND (stage_id IS NULL OR stage_id < 39)
+    ");
+    $syncNopHoSo->execute();
+    echo "Surgically synced 'nop_ho_so' rows (keeping original updated_at): " . $syncNopHoSo->rowCount() . "\n";
 
-        $tMap = $stagesByTenant[$tid] ?? ($stagesByTenant[1] ?? null);
-        if (!$tMap) {
-            continue;
-        }
-
-        $sById = ($rawSid && isset($tMap['by_id'][$rawSid])) ? $tMap['by_id'][$rawSid] : null;
-        $normSlug = normalizeStageSlug314($rawSlug);
-        $sBySlug = ($normSlug !== '' && isset($tMap['by_slug'][$normSlug])) ? $tMap['by_slug'][$normSlug] : null;
-        if (!$sBySlug && $rawSlug !== '' && is_numeric($rawSlug) && isset($tMap['by_id'][(int)$rawSlug])) {
-            $sBySlug = $tMap['by_id'][(int)$rawSlug];
-        }
-
-        $eff = null;
-        if ($sById && $sBySlug) {
-            if ((int)$sById['id'] === (int)$sBySlug['id']) {
-                $eff = $sById;
-            } else {
-                $eff = ((int)$sBySlug['order_index'] >= (int)$sById['order_index']) ? $sBySlug : $sById;
-            }
-        } elseif ($sById) {
-            $eff = $sById;
-        } elseif ($sBySlug) {
-            $eff = $sBySlug;
-        } else {
-            $eff = $tMap['first'];
-        }
-
-        if (!$eff) {
-            continue;
-        }
-
-        $effId = (int)$eff['id'];
-        $effSlug = (string)($eff['system_slug'] ?: 'new_lead');
-
-        if ($rawSid !== $effId || $rawSlug !== $effSlug) {
-            $updStmt->execute([$effId, $effSlug, $cid]);
-            $updatedCount++;
-            echo sprintf(
-                "  [SYNCED] Contact #%d (%s - %s): stage_id %s -> %d, pipeline_status '%s' -> '%s' (%s)\n",
-                $cid,
-                $c['full_name'] ?? '',
-                $c['phone'] ?? '',
-                $rawSid ?? 'NULL',
-                $effId,
-                $rawSlug,
-                $effSlug,
-                $eff['name']
-            );
-        }
+    // 3. Verify specific records mentioned by user
+    $verifyStmt = $pdo->query("
+        SELECT c.id, c.full_name, c.phone, c.owner_id, u.full_name as owner_name, u.role as owner_role,
+               c.status, c.stage_id, c.pipeline_status, c.created_at, c.updated_at
+        FROM contacts c
+        LEFT JOIN users u ON c.owner_id = u.id
+        WHERE c.full_name IN ('Nguyễn Đức Thịnh', 'Nguyễn Anh Quang', 'Huỳnh Thị Hồng Hạnh', 'Nguyễn Xuân Hiệp', 'Đặng Thuỳ Linh', 'Techcombank, Nguyen Thanh Hong', 'Huỳnh Nguyên Thảo')
+           OR c.phone LIKE '%0785242434%'
+        ORDER BY c.id DESC
+    ");
+    echo "\nVerification of key records after restore:\n";
+    foreach ($verifyStmt->fetchAll(PDO::FETCH_ASSOC) as $vr) {
+        echo sprintf(
+            "  #%d %-30s | phone=%-12s | owner=%s (%s) | status=%s | stage_id=%s | pipe=%s | created=%s | updated=%s\n",
+            $vr['id'],
+            $vr['full_name'],
+            $vr['phone'] ?? '',
+            $vr['owner_name'] ?? 'NULL',
+            $vr['owner_role'] ?? '',
+            $vr['status'] ?? '',
+            $vr['stage_id'] ?? 'NULL',
+            $vr['pipeline_status'] ?? 'NULL',
+            $vr['created_at'],
+            $vr['updated_at']
+        );
     }
 
-    $flagStmt = $pdo->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES ('migration_314_stage_sync_v1', '1') ON DUPLICATE KEY UPDATE setting_value = '1'");
-    $flagStmt->execute();
-
-    echo "=== HOÀN TẤT: Đã đồng bộ $updatedCount hồ sơ liên hệ ===\n";
 } catch (Throwable $e) {
-    echo "LỖI MIGRATION 314: " . $e->getMessage() . "\n";
+    echo "ERROR: " . $e->getMessage() . "\n";
     exit(1);
 }

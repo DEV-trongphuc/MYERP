@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef, lazy, Suspense } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { Plus, Search, Phone, PhoneOff, Mail, Eye, EyeOff, Clock, Ban, CheckCircle2, Trash2, X, Download, Upload, ChevronDown, Users, Tag as TagIcon, UserCheck, RefreshCw, Filter, LayoutGrid, List, ArrowDownUp, Columns, Building2, Briefcase, Loader2, User, UserPlus, Calendar, AlertTriangle, AlertCircle, CheckSquare, Layers, MoreHorizontal, ChevronRight, ChevronLeft, GraduationCap, SlidersHorizontal, RotateCcw, Sparkles, BarChart3 } from 'lucide-react';
+import { Plus, Search, Phone, PhoneOff, Mail, Eye, EyeOff, Clock, Ban, CheckCircle2, Trash2, X, Download, Upload, ChevronDown, Users, Tag as TagIcon, UserCheck, RefreshCw, Filter, LayoutGrid, List, ArrowDownUp, Columns, Building2, Briefcase, Loader2, User, UserPlus, Calendar, AlertTriangle, AlertCircle, CheckSquare, Layers, MoreHorizontal, ChevronRight, ChevronLeft, GraduationCap, SlidersHorizontal, RotateCcw, Sparkles, BarChart3, MessageSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar, getColorFromName } from '../components/ui/Avatar';
 import { useUIStore } from '../store/uiStore';
@@ -4615,7 +4615,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                     fontWeight: 700,
                                     background: 'rgba(37, 99, 235, 0.08)',
                                     color: '#2563eb',
-                                    border: '1px solid rgba(37, 99, 235, 0.25)',
                                     maxWidth: '220px',
                                     whiteSpace: 'nowrap',
                                     overflow: 'hidden',
@@ -4662,7 +4661,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                 style={{ 
                                   backgroundColor: 'rgba(239, 68, 68, 0.12)', 
                                   color: '#dc2626', 
-                                  border: '1px solid rgba(239, 68, 68, 0.25)',
                                   borderRadius: '9999px',
                                   padding: '3.5px 12px',
                                   fontSize: '0.76rem',
@@ -4681,7 +4679,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                 style={{ 
                                   backgroundColor: '#fef3c7', 
                                   color: '#d97706', 
-                                  border: '1px solid rgba(245, 158, 11, 0.28)',
                                   borderRadius: '9999px',
                                   padding: '3.5px 12px',
                                   fontSize: '0.76rem',
@@ -4700,7 +4697,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                 style={{ 
                                   backgroundColor: 'rgba(2, 132, 199, 0.12)', 
                                   color: '#0284c7', 
-                                  border: '1px solid rgba(2, 132, 199, 0.25)',
                                   borderRadius: '9999px',
                                   padding: '3.5px 12px',
                                   fontSize: '0.76rem',
@@ -4719,7 +4715,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                 style={{ 
                                   backgroundColor: 'rgba(239, 68, 68, 0.12)', 
                                   color: '#dc2626', 
-                                  border: '1px solid rgba(239, 68, 68, 0.25)',
                                   borderRadius: '9999px',
                                   padding: '3.5px 12px',
                                   fontSize: '0.76rem',
@@ -4741,7 +4736,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                     style={{ 
                                       backgroundColor: 'rgba(239, 68, 68, 0.12)', 
                                       color: '#dc2626', 
-                                      border: '1px solid rgba(239, 68, 68, 0.25)',
                                       borderRadius: '9999px',
                                       padding: '3.5px 12px',
                                       fontSize: '0.76rem',
@@ -4762,8 +4756,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                   style={{ 
                                     backgroundColor: stageInfo.isNewLead ? '#dc2626' : `${stageInfo.color}15`, 
                                     color: stageInfo.isNewLead ? '#ffffff' : stageInfo.color, 
-                                    border: stageInfo.isNewLead ? '1px solid #b91c1c' : `1px solid ${stageInfo.color}30`,
-                                    boxShadow: stageInfo.isNewLead ? '0 2px 6px rgba(220, 38, 38, 0.35)' : undefined,
                                     borderRadius: '9999px',
                                     padding: '3.5px 12px',
                                     fontSize: '0.76rem',
@@ -4866,8 +4858,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                       </span>
                                       {renderInteractionInfo(c, setReportingContact)}
                                       {notePreview && (
-                                        <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', maxWidth: '165px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                          💬 {notePreview}
+                                        <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', maxWidth: '165px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                          <MessageSquare size={10} style={{ flexShrink: 0 }} />
+                                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{notePreview}</span>
                                         </span>
                                       )}
                                     </div>
@@ -4882,8 +4875,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                     <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)', whiteSpace: 'nowrap' }}>{c.owner_name}</span>
                                     {renderInteractionInfo(c, setReportingContact)}
                                     {notePreview && (
-                                      <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', maxWidth: '165px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                        💬 {notePreview}
+                                      <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', maxWidth: '165px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                        <MessageSquare size={10} style={{ flexShrink: 0 }} />
+                                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{notePreview}</span>
                                       </span>
                                     )}
                                   </div>
@@ -4898,8 +4892,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                   <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Chưa giao</span>
                                   {renderInteractionInfo(c, setReportingContact)}
                                   {cleanInteractionText(c.last_interaction || c.notes || '') && (
-                                    <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', maxWidth: '165px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                      💬 {cleanInteractionText(c.last_interaction || c.notes || '')}
+                                    <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', maxWidth: '165px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                      <MessageSquare size={10} style={{ flexShrink: 0 }} />
+                                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{cleanInteractionText(c.last_interaction || c.notes || '')}</span>
                                     </span>
                                   )}
                                 </div>
@@ -5289,8 +5284,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                     fontSize: '0.72rem', 
                                     fontWeight: 700,
                                     backgroundColor: 'rgba(239, 68, 68, 0.1)', 
-                                    color: 'var(--color-danger)', 
-                                    border: '1px solid rgba(239, 68, 68, 0.2)'
+                                    color: 'var(--color-danger)'
                                   }}
                                 >
                                   Ticket lỗi
@@ -5305,7 +5299,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                     fontWeight: 650,
                                     backgroundColor: 'rgba(2, 132, 199, 0.12)', 
                                     color: '#0284c7', 
-                                    border: '1px solid rgba(2, 132, 199, 0.25)',
                                     display: 'inline-flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
@@ -5327,7 +5320,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                         fontWeight: 650,
                                         backgroundColor: 'rgba(239, 68, 68, 0.12)', 
                                         color: '#dc2626', 
-                                        border: '1px solid rgba(239, 68, 68, 0.25)',
                                         display: 'inline-flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
@@ -5348,8 +5340,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                       fontWeight: stageInfo.isNewLead ? 700 : 650,
                                       backgroundColor: stageInfo.isNewLead ? '#dc2626' : `${stageInfo.color}15`, 
                                       color: stageInfo.isNewLead ? '#ffffff' : stageInfo.color, 
-                                      border: stageInfo.isNewLead ? '1px solid #b91c1c' : `1px solid ${stageInfo.color}30`,
-                                      boxShadow: stageInfo.isNewLead ? '0 2px 6px rgba(220, 38, 38, 0.35)' : undefined,
                                       display: 'inline-flex',
                                       alignItems: 'center',
                                       justifyContent: 'center',
@@ -5749,7 +5739,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
         onDelete={canAddOrAssign ? handleContextDelete : undefined}
       />
 
-      {/* Rich Floating Hover Tooltip for Interaction Note, Program, Admission Date & Tags */}
+      {/* Rich Floating Hover Tooltip for Interaction Note, Program, Admission Date & Tags (Light Surface, No Badge Border, Lucide Icons) */}
       {typeof document !== 'undefined' && hoveredCell && (() => {
         const hc = hoveredCell.contact;
         const rect = hoveredCell.rect;
@@ -5775,7 +5765,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
           return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
         })() : '';
 
-        const tooltipWidth = 340;
+        const tooltipWidth = 350;
         let left = rect.left + rect.width / 2 - tooltipWidth / 2;
         if (left < 12) left = 12;
         if (typeof window !== 'undefined' && left + tooltipWidth > window.innerWidth - 12) {
@@ -5794,29 +5784,28 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
               width: tooltipWidth,
               zIndex: 99999,
               pointerEvents: 'none',
-              background: '#0f172a',
-              color: '#f8fafc',
-              borderRadius: '12px',
+              background: '#ffffff',
+              color: '#0f172a',
+              borderRadius: '14px',
               padding: '12px 14px',
-              boxShadow: '0 16px 36px rgba(15, 23, 42, 0.45)',
-              border: '1px solid rgba(255,255,255,0.12)',
+              boxShadow: '0 14px 34px rgba(15, 23, 42, 0.14)',
+              border: '1px solid #e2e8f0',
               fontSize: '0.75rem',
               lineHeight: 1.45
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '8px', paddingBottom: '6px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-              <div style={{ fontWeight: 800, fontSize: '0.82rem', color: '#ffffff' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '8px', paddingBottom: '6px', borderBottom: '1px solid #f1f5f9' }}>
+              <div style={{ fontWeight: 800, fontSize: '0.84rem', color: '#0f172a' }}>
                 {hc.full_name || hc.name || 'Khách hàng'}
               </div>
               <span
                 style={{
-                  fontSize: '0.65rem',
+                  fontSize: '0.68rem',
                   fontWeight: 700,
                   padding: '2px 8px',
                   borderRadius: '999px',
-                  background: stageInfo.isNewLead ? '#dc2626' : `${stageInfo.color}30`,
-                  color: stageInfo.isNewLead ? '#ffffff' : '#60a5fa',
-                  border: stageInfo.isNewLead ? '1px solid #ef4444' : '1px solid rgba(96,165,250,0.35)',
+                  background: stageInfo.isNewLead ? '#dc2626' : `${stageInfo.color}18`,
+                  color: stageInfo.isNewLead ? '#ffffff' : stageInfo.color,
                   whiteSpace: 'nowrap'
                 }}
               >
@@ -5824,22 +5813,51 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
               </span>
             </div>
 
+            {(displayProg || admDateStr) && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+                {displayProg && (
+                  <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '2px 8px',
+                    borderRadius: '6px',
+                    fontSize: '0.7rem',
+                    fontWeight: 700,
+                    background: 'rgba(37, 99, 235, 0.1)',
+                    color: '#2563eb'
+                  }}>
+                    <GraduationCap size={12} style={{ flexShrink: 0 }} />
+                    <span>{displayProg}</span>
+                  </span>
+                )}
+                {admDateStr && (
+                  <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '2px 8px',
+                    borderRadius: '6px',
+                    fontSize: '0.7rem',
+                    fontWeight: 700,
+                    background: 'rgba(16, 185, 129, 0.1)',
+                    color: '#059669'
+                  }}>
+                    <Calendar size={12} style={{ flexShrink: 0 }} />
+                    <span>{admDateStr}</span>
+                  </span>
+                )}
+              </div>
+            )}
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 10px', marginBottom: '8px' }}>
               <div>
-                <span style={{ color: '#94a3b8', fontSize: '0.68rem' }}>Chương trình: </span>
-                <strong style={{ color: '#60a5fa' }}>{displayProg || '—'}</strong>
+                <span style={{ color: '#64748b', fontSize: '0.68rem' }}>Phụ trách: </span>
+                <strong style={{ color: '#0f172a' }}>{hc.owner_name || 'Chưa giao'}</strong>
               </div>
               <div>
-                <span style={{ color: '#94a3b8', fontSize: '0.68rem' }}>Nhập học: </span>
-                <strong style={{ color: '#c084fc' }}>{admDateStr || '—'}</strong>
-              </div>
-              <div>
-                <span style={{ color: '#94a3b8', fontSize: '0.68rem' }}>Phụ trách: </span>
-                <strong style={{ color: '#e2e8f0' }}>{hc.owner_name || 'Chưa giao'}</strong>
-              </div>
-              <div>
-                <span style={{ color: '#94a3b8', fontSize: '0.68rem' }}>Nguồn: </span>
-                <strong style={{ color: '#e2e8f0' }}>{hc.source || '—'}</strong>
+                <span style={{ color: '#64748b', fontSize: '0.68rem' }}>Nguồn: </span>
+                <strong style={{ color: '#0f172a' }}>{hc.source || '—'}</strong>
               </div>
             </div>
 
@@ -5851,10 +5869,10 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                     style={{
                       fontSize: '0.65rem',
                       fontWeight: 600,
-                      padding: '1px 6px',
-                      borderRadius: '4px',
-                      background: 'rgba(255,255,255,0.1)',
-                      color: '#cbd5e1'
+                      padding: '2px 7px',
+                      borderRadius: '6px',
+                      background: '#f1f5f9',
+                      color: '#334155'
                     }}
                   >
                     #{t}
@@ -5863,16 +5881,17 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
               </div>
             )}
 
-            <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: '8px', padding: '8px 10px', borderLeft: '3px solid #38bdf8' }}>
-              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#38bdf8', marginBottom: '3px' }}>
-                💬 Tương tác / Ghi chú gần nhất
+            <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '8px 10px' }}>
+              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#2563eb', marginBottom: '3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <MessageSquare size={12} style={{ flexShrink: 0 }} />
+                <span>Tương tác / Ghi chú gần nhất</span>
               </div>
-              <div style={{ color: '#f1f5f9', whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '140px', overflow: 'hidden' }}>
+              <div style={{ color: '#0f172a', whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '140px', overflow: 'hidden' }}>
                 {lastNote || initialNote || 'Chưa có ghi chú tương tác'}
               </div>
               {lastNote && initialNote && initialNote !== lastNote && (
-                <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed rgba(255,255,255,0.12)', fontSize: '0.7rem', color: '#cbd5e1' }}>
-                  <span style={{ color: '#94a3b8', fontWeight: 600 }}>Ghi chú gốc: </span>
+                <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #e2e8f0', fontSize: '0.7rem', color: '#334155' }}>
+                  <span style={{ color: '#64748b', fontWeight: 600 }}>Ghi chú gốc: </span>
                   {initialNote}
                 </div>
               )}

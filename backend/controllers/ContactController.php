@@ -12,7 +12,6 @@ class ContactController {
 
     public function index(array $auth): void {
         $tid    = $auth['tenant_id'];
-        $this->ensureTenantStagesReconciled((int)$tid);
         $page   = max(1, (int)($_GET['page']   ?? 1));
         $limit  = min(2000, max(10, (int)($_GET['limit']  ?? 20)));
         $offset = ($page - 1) * $limit;
@@ -290,10 +289,10 @@ class ContactController {
         if (!$isGlobalPipelineSearch) {
             switch ($segment) {
                 case 'tiem_nang':
-                    // By default, exclude pipeline 14 (enrolled / customer) from Tiềm năng list.
+                    // By default, exclude pipeline 14 (enrolled / customer / won) from Tiềm năng list.
                     // If searching ($isGlobalPipelineSearch) or filtering explicitly by stage 14, it remains accessible.
                     if (empty($stage) && empty($stageSlug) && empty($_GET['stage_id'])) {
-                        $where[] = "(c.stage_id != 44 AND (c.pipeline_status IS NULL OR c.pipeline_status NOT IN ('enrolled', 'hoc_vien')) AND c.status != 'customer')";
+                        $where[] = "(c.stage_id != 44 AND (c.pipeline_status IS NULL OR c.pipeline_status NOT IN ('enrolled', 'hoc_vien', 'won')) AND c.status != 'customer')";
                     }
                     break;
                 case 'hot':        $where[] = 'c.lead_score >= 80'; break;
@@ -399,7 +398,7 @@ class ContactController {
                         if (!empty($resolvedSlug)) {
                             $stageCounts[(string)$resolvedSlug] = ($stageCounts[(string)$resolvedSlug] ?? 0) + $cnt;
                         }
-                        $isEnrolledStage = ($resolvedId == 44) || in_array($resolvedSlug, ['enrolled', 'hoc_vien'], true) || (!empty($effStage['is_won']));
+                        $isEnrolledStage = ($resolvedId == 44) || in_array($resolvedSlug, ['enrolled', 'hoc_vien', 'won'], true) || (!empty($effStage['is_won']));
                         if ($segment !== 'tiem_nang' || !$isEnrolledStage) {
                             $activeTotal += $cnt;
                         }
@@ -2605,6 +2604,7 @@ class ContactController {
             'thanh_cong' => 'enrolled',
             'hoc_vien' => 'enrolled',
             'nhap_hoc' => 'enrolled',
+            'won' => 'enrolled',
             '14' => 'enrolled',
         ];
         return $aliases[$s] ?? $s;
@@ -2659,25 +2659,37 @@ class ContactController {
     private function resolveEffectiveStage(?int $stageId, ?string $pipelineStatus, int $tenantId): ?array {
         $map = $this->getStagesMap($tenantId);
         $sById = ($stageId && isset($map['by_id'][$stageId])) ? $map['by_id'][$stageId] : null;
-        $rawSlug = trim((string)($pipelineStatus ?? ''));
+        $rawSlug = strtolower(trim((string)($pipelineStatus ?? '')));
+        // Historical imported records with stage_id = NULL and pipeline_status = 'won' should not be forced into New Lead
+        if (!$sById && $rawSlug === 'won') {
+            return null;
+        }
         $normSlug = self::normalizeStageSlug($rawSlug);
         $sBySlug = ($normSlug !== '' && isset($map['by_slug'][$normSlug])) ? $map['by_slug'][$normSlug] : null;
         if (!$sBySlug && $rawSlug !== '' && is_numeric($rawSlug) && isset($map['by_id'][(int)$rawSlug])) {
             $sBySlug = $map['by_id'][(int)$rawSlug];
         }
-        // Only treat pipeline_status as an active progression override if it wasn't just the default placeholder 'chua_xac_dinh' / 'new' / 'new_lead' when stage_id is already higher
         if ($sById && $sBySlug) {
             if ((int)$sById['id'] === (int)$sBySlug['id']) {
                 return $sById;
             }
-            return ((int)$sBySlug['order_index'] >= (int)$sById['order_index']) ? $sBySlug : $sById;
+            // If pipeline_status is just a generic 'hoc_vien' marker while stage_id holds a specific valid stage, keep stage_id
+            if ($rawSlug === 'hoc_vien') {
+                return $sById;
+            }
+            // Only let pipeline_status override stage_id when pipeline_status is a specific advanced stage (e.g. nop_ho_so / dat_coc)
+            $specificOverrideSlugs = ['nop_ho_so', 'application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'dong_le_phi_ho_so', 'dat_coc', 'da_coc', 'deposit_tuition_payment', 'enrolled', 'dong_deal', 'thanh_cong'];
+            if (in_array($rawSlug, $specificOverrideSlugs, true) && (int)$sBySlug['order_index'] > (int)$sById['order_index']) {
+                return $sBySlug;
+            }
+            return $sById;
         }
         if ($sById) return $sById;
         if ($sBySlug) return $sBySlug;
-        return $map['first'] ?? null;
+        return null;
     }
 
-    private function resolveEffectiveStageRow(array &$row, int $tenantId, bool $selfHealDb = true): void {
+    private function resolveEffectiveStageRow(array &$row, int $tenantId, bool $selfHealDb = false): void {
         $rawStageId = !empty($row['stage_id']) ? (int)$row['stage_id'] : null;
         $rawSlug = isset($row['pipeline_status']) ? trim((string)$row['pipeline_status']) : null;
         if ($rawSlug === 'not_lead') {
@@ -2693,48 +2705,6 @@ class ContactController {
         $row['pipeline_status'] = $effSlug;
         $row['stage_name'] = $eff['name'];
         $row['stage_color'] = $eff['color'];
-
-        if ($selfHealDb && !empty($row['id']) && ($rawStageId !== $effId || $rawSlug !== $effSlug)) {
-            try {
-                $stmtHeal = $this->db->prepare("UPDATE contacts SET stage_id = ?, pipeline_status = ? WHERE id = ? AND tenant_id = ?");
-                $stmtHeal->execute([$effId, $effSlug, (int)$row['id'], $tenantId]);
-            } catch (\Throwable $e) {
-                // Ignore read-time self-heal failure
-            }
-        }
-    }
-
-    private function ensureTenantStagesReconciled(int $tenantId): void {
-        if (self::$autoReconciled) return;
-        self::$autoReconciled = true;
-        try {
-            $flagKey = 'migration_314_stage_sync_v1';
-            $chk = $this->db->prepare("SELECT setting_value FROM system_settings WHERE setting_key = ? LIMIT 1");
-            $chk->execute([$flagKey]);
-            if ($chk->fetchColumn() === '1') {
-                return;
-            }
-            $stmt = $this->db->prepare("SELECT id, stage_id, pipeline_status FROM contacts WHERE tenant_id = ? AND deleted_at IS NULL");
-            $stmt->execute([$tenantId]);
-            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-            $upd = $this->db->prepare("UPDATE contacts SET stage_id = ?, pipeline_status = ? WHERE id = ? AND tenant_id = ?");
-            foreach ($rows as $r) {
-                $rawSid = !empty($r['stage_id']) ? (int)$r['stage_id'] : null;
-                $rawSlug = isset($r['pipeline_status']) ? trim((string)$r['pipeline_status']) : '';
-                if ($rawSlug === 'not_lead') continue;
-                $eff = $this->resolveEffectiveStage($rawSid, $rawSlug, $tenantId);
-                if (!$eff) continue;
-                $effId = (int)$eff['id'];
-                $effSlug = (string)($eff['system_slug'] ?: 'new_lead');
-                if ($rawSid !== $effId || $rawSlug !== $effSlug) {
-                    $upd->execute([$effId, $effSlug, (int)$r['id'], $tenantId]);
-                }
-            }
-            $saveFlag = $this->db->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES (?, '1') ON DUPLICATE KEY UPDATE setting_value = '1'");
-            $saveFlag->execute([$flagKey]);
-        } catch (\Throwable $e) {
-            // Ignore reconciliation errors
-        }
     }
 
     private function getSlugFromStageId(int $stageId, int $tenantId): string {

@@ -2467,7 +2467,7 @@ export const DealsPage: React.FC = () => {
                           initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
                           style={{ 
                             background: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', padding: '0.85rem 0.95rem', 
-                            boxShadow: 'var(--shadow-sm)', border: isNewLeadCol ? '1px solid rgba(220, 38, 38, 0.28)' : '1px solid var(--color-border-light)', 
+                            boxShadow: 'var(--shadow-sm)', border: '1px solid var(--color-border-light)', 
                             cursor: canDrag ? 'grab' : 'default', userSelect: 'none', position: 'relative'
                           }}
                           onClick={() => {
@@ -2489,12 +2489,11 @@ export const DealsPage: React.FC = () => {
                                 padding: '2px 8px',
                                 borderRadius: 99,
                                 fontSize: 11,
-                                boxShadow: '0 2px 6px rgba(220,38,38,0.35)',
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '4px'
                               }}>
-                                ● {stage.name || '01 – New Lead'}
+                                {stage.name || '01 – New Lead'}
                               </span>
                             </div>
                           )}
@@ -2538,37 +2537,37 @@ export const DealsPage: React.FC = () => {
                                 <span style={{
                                   display: 'inline-flex',
                                   alignItems: 'center',
-                                  gap: '3px',
+                                  gap: '4px',
                                   padding: '2px 7px',
                                   borderRadius: '6px',
                                   fontSize: '0.68rem',
                                   fontWeight: 700,
                                   background: 'rgba(37, 99, 235, 0.1)',
                                   color: '#2563eb',
-                                  border: '1px solid rgba(37, 99, 235, 0.25)',
                                   maxWidth: '100%',
                                   overflow: 'hidden',
                                   textOverflow: 'ellipsis',
                                   whiteSpace: 'nowrap'
                                 }}>
-                                  🎓 {cardProgram}
+                                  <GraduationCap size={11} style={{ flexShrink: 0 }} />
+                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{cardProgram}</span>
                                 </span>
                               )}
                               {cardAdmission && (
                                 <span style={{
                                   display: 'inline-flex',
                                   alignItems: 'center',
-                                  gap: '3px',
+                                  gap: '4px',
                                   padding: '2px 7px',
                                   borderRadius: '6px',
                                   fontSize: '0.68rem',
                                   fontWeight: 700,
                                   background: 'rgba(16, 185, 129, 0.1)',
                                   color: '#059669',
-                                  border: '1px solid rgba(16, 185, 129, 0.25)',
                                   whiteSpace: 'nowrap'
                                 }}>
-                                  📅 {cardAdmission}
+                                  <Calendar size={11} style={{ flexShrink: 0 }} />
+                                  <span>{cardAdmission}</span>
                                 </span>
                               )}
                               {cardTags.slice(0, 3).map((tag, idx) => (
@@ -2613,17 +2612,23 @@ export const DealsPage: React.FC = () => {
                               padding: '6px 8px',
                               borderRadius: '8px',
                               background: 'var(--color-bg-alt, rgba(0,0,0,0.03))',
-                              borderLeft: '2.5px solid var(--color-primary)',
                               fontSize: '0.73rem',
                               color: 'var(--color-text-muted)',
                               lineHeight: 1.35,
-                              display: '-webkit-box',
-                              WebkitLineClamp: 2,
-                              WebkitBoxOrient: 'vertical',
-                              overflow: 'hidden',
-                              wordBreak: 'break-word'
+                              display: 'flex',
+                              alignItems: 'flex-start',
+                              gap: '5px'
                             }}>
-                              💬 {cardNote}
+                              <MessageSquare size={12} style={{ flexShrink: 0, marginTop: '2px', color: 'var(--color-text-light)' }} />
+                              <span style={{
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical',
+                                overflow: 'hidden',
+                                wordBreak: 'break-word'
+                              }}>
+                                {cardNote}
+                              </span>
                             </div>
                           )}
                           
@@ -2840,10 +2845,10 @@ export const DealsPage: React.FC = () => {
                               fontSize: '0.74rem',
                               fontWeight: 700,
                               background: 'rgba(37, 99, 235, 0.08)',
-                              color: '#2563eb',
-                              border: '1px solid rgba(37, 99, 235, 0.25)'
+                              color: '#2563eb'
                             }}>
-                              🎓 {progName}
+                              <GraduationCap size={12} style={{ flexShrink: 0 }} />
+                              <span>{progName}</span>
                             </span>
                           ) : <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>—</span>}
                         </td>
@@ -2852,7 +2857,8 @@ export const DealsPage: React.FC = () => {
                         <td style={{ padding: '0.85rem 0.75rem', whiteSpace: 'nowrap' }}>
                           {admStr ? (
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text)' }}>
-                              📅 {admStr}
+                              <Calendar size={12} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+                              <span>{admStr}</span>
                             </span>
                           ) : <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>—</span>}
                         </td>
@@ -2866,7 +2872,6 @@ export const DealsPage: React.FC = () => {
                             padding: '3px 10px',
                             borderRadius: 99,
                             fontSize: 11,
-                            boxShadow: '0 2px 6px rgba(220,38,38,0.35)',
                             display: 'inline-flex',
                             alignItems: 'center'
                           } : {
@@ -2985,7 +2990,7 @@ export const DealsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Single Floating Hover Tooltip for Kanban Cards & List Rows */}
+      {/* Single Floating Hover Tooltip for Kanban Cards & List Rows (Light Surface, No Badge Border, Lucide Icons) */}
       {hoveredCard && createPortal(
         (() => {
           const { item, stage, rect } = hoveredCard;
@@ -3021,11 +3026,11 @@ export const DealsPage: React.FC = () => {
                 width: tooltipWidth,
                 zIndex: 9999,
                 pointerEvents: 'none',
-                background: 'var(--color-surface, #ffffff)',
-                color: 'var(--color-text, #0f172a)',
-                border: '1px solid var(--color-border)',
+                background: '#ffffff',
+                color: '#0f172a',
+                border: '1px solid #e2e8f0',
                 borderRadius: '14px',
-                boxShadow: '0 16px 38px rgba(0, 0, 0, 0.18)',
+                boxShadow: '0 14px 34px rgba(15, 23, 42, 0.14)',
                 padding: '0.95rem 1.05rem',
                 display: 'flex',
                 flexDirection: 'column',
@@ -3034,13 +3039,13 @@ export const DealsPage: React.FC = () => {
               }}
             >
               {/* Header: Name + Stage Badge + Owner */}
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.5rem' }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--color-text)', lineHeight: 1.25 }}>
+                  <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#0f172a', lineHeight: 1.25 }}>
                     {itemName || 'Khách hàng'}
                   </div>
-                  <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '3px' }}>
-                    Sale phụ trách: <strong style={{ color: 'var(--color-text)' }}>{item.owner_name || 'Chưa phân bổ'}</strong>
+                  <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '3px' }}>
+                    Sale phụ trách: <strong style={{ color: '#0f172a' }}>{item.owner_name || 'Chưa phân bổ'}</strong>
                   </div>
                 </div>
                 <span style={isNewLead ? {
@@ -3050,13 +3055,11 @@ export const DealsPage: React.FC = () => {
                   padding: '2px 8px',
                   borderRadius: 99,
                   fontSize: 11,
-                  boxShadow: '0 2px 6px rgba(220,38,38,0.35)',
                   whiteSpace: 'nowrap',
                   flexShrink: 0
                 } : {
-                  background: stageObj?.color ? `${stageObj.color}18` : 'var(--color-bg)',
-                  color: stageObj?.color || 'var(--color-primary)',
-                  border: `1px solid ${stageObj?.color || 'var(--color-border)'}40`,
+                  background: stageObj?.color ? `${stageObj.color}18` : '#f1f5f9',
+                  color: stageObj?.color || '#2563eb',
                   fontWeight: 700,
                   padding: '2px 8px',
                   borderRadius: 99,
@@ -3070,9 +3073,19 @@ export const DealsPage: React.FC = () => {
 
               {/* Contact: Phone & Email */}
               {(item.phone || item.email) && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', fontSize: '0.76rem', color: 'var(--color-text)' }}>
-                  {item.phone && <span>📞 <strong>{item.phone}</strong></span>}
-                  {item.email && <span style={{ color: 'var(--color-text-muted)' }}>✉️ {item.email}</span>}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', fontSize: '0.76rem', color: '#0f172a' }}>
+                  {item.phone && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <Phone size={12} style={{ color: '#64748b' }} />
+                      <strong>{item.phone}</strong>
+                    </span>
+                  )}
+                  {item.email && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#64748b' }}>
+                      <Mail size={12} style={{ color: '#64748b' }} />
+                      <span>{item.email}</span>
+                    </span>
+                  )}
                 </div>
               )}
 
@@ -3089,10 +3102,10 @@ export const DealsPage: React.FC = () => {
                       fontSize: '0.73rem',
                       fontWeight: 700,
                       background: 'rgba(37, 99, 235, 0.1)',
-                      color: '#2563eb',
-                      border: '1px solid rgba(37, 99, 235, 0.25)'
+                      color: '#2563eb'
                     }}>
-                      🎓 Chương trình: {prog}
+                      <GraduationCap size={12} style={{ flexShrink: 0 }} />
+                      <span>Chương trình: {prog}</span>
                     </span>
                   )}
                   {admDate && (
@@ -3105,10 +3118,10 @@ export const DealsPage: React.FC = () => {
                       fontSize: '0.73rem',
                       fontWeight: 700,
                       background: 'rgba(16, 185, 129, 0.1)',
-                      color: '#059669',
-                      border: '1px solid rgba(16, 185, 129, 0.25)'
+                      color: '#059669'
                     }}>
-                      📅 Nhập học: {admDate}
+                      <Calendar size={12} style={{ flexShrink: 0 }} />
+                      <span>Nhập học: {admDate}</span>
                     </span>
                   )}
                 </div>
@@ -3125,8 +3138,8 @@ export const DealsPage: React.FC = () => {
                           borderRadius: '6px',
                           fontSize: '0.68rem',
                           fontWeight: 600,
-                          background: 'rgba(59, 130, 246, 0.12)',
-                          color: '#2563eb'
+                          background: '#f1f5f9',
+                          color: '#334155'
                         }}>
                           #{tg}
                         </span>
@@ -3134,10 +3147,10 @@ export const DealsPage: React.FC = () => {
                     </div>
                   )}
                   {(item.source || item.campaign_name || item.utm_campaign) && (
-                    <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
-                      {item.source && <span>Nguồn: <strong>{item.source}</strong></span>}
+                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                      {item.source && <span>Nguồn: <strong style={{ color: '#0f172a' }}>{item.source}</strong></span>}
                       {(item.campaign_name || item.utm_campaign) && (
-                        <span> · Chiến dịch: <strong>{item.campaign_name || item.utm_campaign}</strong></span>
+                        <span> · Chiến dịch: <strong style={{ color: '#0f172a' }}>{item.campaign_name || item.utm_campaign}</strong></span>
                       )}
                     </div>
                   )}
@@ -3146,8 +3159,7 @@ export const DealsPage: React.FC = () => {
 
               {/* Full Multi-line Interaction Note & Initial Note */}
               <div style={{
-                background: 'var(--color-bg-alt, rgba(0,0,0,0.03))',
-                border: '1px solid var(--color-border-light)',
+                background: '#f8fafc',
                 borderRadius: '8px',
                 padding: '8px 10px',
                 display: 'flex',
@@ -3155,24 +3167,27 @@ export const DealsPage: React.FC = () => {
                 gap: '6px'
               }}>
                 <div>
-                  <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-primary)', marginBottom: '2px', display: 'flex', justifyContent: 'space-between' }}>
-                    <span>💬 Tương tác gần nhất</span>
+                  <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#2563eb', marginBottom: '2px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <MessageSquare size={12} style={{ flexShrink: 0 }} />
+                      <span>Tương tác gần nhất</span>
+                    </span>
                     {(item.last_interaction_at || item.last_contact) && (
-                      <span style={{ fontWeight: 500, color: 'var(--color-text-muted)' }}>
+                      <span style={{ fontWeight: 500, color: '#64748b' }}>
                         {String(item.last_interaction_at || item.last_contact).slice(0, 16)}
                       </span>
                     )}
                   </div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.4, maxHeight: '140px', overflow: 'hidden' }}>
+                  <div style={{ fontSize: '0.75rem', color: '#0f172a', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.4, maxHeight: '140px', overflow: 'hidden' }}>
                     {interactionNote || 'Chưa có ghi chú tương tác'}
                   </div>
                 </div>
                 {initialNote && initialNote !== interactionNote && (
-                  <div style={{ borderTop: '1px dashed var(--color-border)', paddingTop: '5px' }}>
-                    <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: '2px' }}>
-                      📝 Ghi chú hồ sơ:
+                  <div style={{ borderTop: '1px dashed #e2e8f0', paddingTop: '5px' }}>
+                    <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b', marginBottom: '2px' }}>
+                      Ghi chú hồ sơ:
                     </div>
-                    <div style={{ fontSize: '0.74rem', color: 'var(--color-text)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.35, maxHeight: '90px', overflow: 'hidden' }}>
+                    <div style={{ fontSize: '0.74rem', color: '#334155', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.35, maxHeight: '90px', overflow: 'hidden' }}>
                       {initialNote}
                     </div>
                   </div>
@@ -3180,7 +3195,7 @@ export const DealsPage: React.FC = () => {
               </div>
 
               {/* Footer: Expected Revenue & Total Deposit */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--color-border-light)', paddingTop: '0.45rem', fontSize: '0.74rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #f1f5f9', paddingTop: '0.45rem', fontSize: '0.74rem', color: '#64748b' }}>
                 <span>Dự kiến: <strong style={{ color: 'var(--color-primary)' }}>{FMT_VND(expectedRev)}</strong></span>
                 <span>Đã cọc: <strong style={{ color: '#059669' }}>{FMT_VND(totalDep)}</strong></span>
               </div>
