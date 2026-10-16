@@ -5011,6 +5011,39 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                   </span>
                                 );
                               }
+                              if (segment === 'customer' && studentSubTab === 'chinh_thuc' && c.study_status) {
+                                const stMap: Record<string, { label: string; color: string; bg: string }> = {
+                                  studying: { label: 'Đang học', color: '#16a34a', bg: '#dcfce7' },
+                                  dang_hoc: { label: 'Đang học', color: '#16a34a', bg: '#dcfce7' },
+                                  completed: { label: 'Đã hoàn thành', color: '#2563eb', bg: '#dbeafe' },
+                                  reserved: { label: 'Bảo lưu', color: '#d97706', bg: '#fef3c7' },
+                                  bao_luu: { label: 'Bảo lưu', color: '#d97706', bg: '#fef3c7' },
+                                  suspended: { label: 'Tạm ngưng', color: '#dc2626', bg: '#fee2e2' },
+                                  tam_ngung: { label: 'Tạm ngưng', color: '#dc2626', bg: '#fee2e2' }
+                                };
+                                const stMeta = stMap[String(c.study_status).toLowerCase()];
+                                if (stMeta) {
+                                  return (
+                                    <span
+                                      className="stage-badge"
+                                      style={{
+                                        backgroundColor: stMeta.bg,
+                                        color: stMeta.color,
+                                        borderRadius: '9999px',
+                                        padding: '3.5px 12px',
+                                        fontSize: '0.76rem',
+                                        fontWeight: 700,
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        lineHeight: '1.2'
+                                      }}
+                                    >
+                                      {stMeta.label}
+                                    </span>
+                                  );
+                                }
+                              }
                               return (
                                 <span 
                                   className="stage-badge" 

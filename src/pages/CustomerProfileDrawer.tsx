@@ -4032,7 +4032,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   // Study Status Transition Modal State
   const [studyStatusModal, setStudyStatusModal] = useState<{
     isOpen: boolean;
-    targetStatus: 'studying' | 'completed' | 'reserved';
+    targetStatus: 'studying' | 'completed' | 'reserved' | 'suspended';
     targetLabel: string;
     note: string;
     notifyUserIds: number[];
@@ -4062,14 +4062,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     };
   }, [showStudyStatusNotifyDropdown]);
 
-  const handleOpenStudyStatusModal = (targetStatus: 'studying' | 'completed' | 'reserved') => {
-    const currentStatus = (formData.study_status || 'studying') as 'studying' | 'completed' | 'reserved';
+  const handleOpenStudyStatusModal = (targetStatus: 'studying' | 'completed' | 'reserved' | 'suspended') => {
+    const rawCurrent = formData.study_status === 'tam_ngung' ? 'suspended' : (formData.study_status || 'studying');
+    const currentStatus = rawCurrent as 'studying' | 'completed' | 'reserved' | 'suspended';
     if (currentStatus === targetStatus) return;
 
     const statusLabels: Record<string, string> = {
       studying: 'Đang học',
       completed: 'Đã hoàn thành',
-      reserved: 'Bảo lưu'
+      reserved: 'Bảo lưu',
+      suspended: 'Tạm ngưng'
     };
 
     // Default recipients: include contact assigned sale (owner) and Mai Thị Nữ
@@ -4494,7 +4496,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       const shouldFetchContact = forceFreshContact || !targetTab || currentCId !== lastLoadedContactIdRef.current;
       const needActivities = shouldFetchContact || tabToLoad === 'tasks' || tabToLoad === 'timeline';
       const needNotes = shouldFetchContact || tabToLoad === 'timeline' || tabToLoad === 'tags';
-      const needProjects = tabToLoad === 'info' && (!globalProjectsCache || globalProjectsCache.length === 0) && projectsList.length === 0;
+      const needProjects = (!globalProjectsCache || globalProjectsCache.length === 0) && projectsList.length === 0;
       const needCompanies = tabToLoad === 'info' && (!globalCompaniesCache || globalCompaniesCache.length === 0) && companiesList.length === 0;
       const needContacts = tabToLoad === 'info' && contactsList.length === 0;
       const needStages = (!globalStagesCache || globalStagesCache.length === 0) && stages.length === 0;
@@ -4511,7 +4513,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       ] = await Promise.all([
         shouldFetchContact ? api.get(`/contacts/${currentCId}`) : Promise.resolve(null),
         needStages ? api.get('/pipeline-stages') : Promise.resolve(null),
-        needProjects ? api.get(`/projects${currentUser?.role === 'sale' ? '' : '?bypass_roster=1'}`) : Promise.resolve(null),
+        needProjects ? api.get('/projects?bypass_roster=1') : Promise.resolve(null),
         needCompanies ? api.get('/companies?limit=100') : Promise.resolve(null),
         needContacts ? api.get('/contacts?limit=30') : Promise.resolve(null),
         needNotes ? api.get(`/notes?entity_type=contact&entity_id=${currentCId}`) : Promise.resolve(null),
@@ -5354,17 +5356,179 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     }
   }, [contact, prevContactId, initialTab, isMobileOrTablet]);
 
+  const findMatchingProjectByProgram = useCallback((progName: string | null | undefined, list: any[] = projectsList) => {
+    const raw = String(progName || '').trim();
+    if (!raw || !Array.isArray(list) || list.length === 0) return null;
+    const lower = raw.toLowerCase();
+    const norm = lower.replace(/[\s\-_]+/g, '');
+    const exact = list.find(p => {
+      const pName = String(p.name || '').trim().toLowerCase();
+      const pCode = String(p.code || '').trim().toLowerCase();
+      return pName === lower || (pCode && pCode === lower);
+    });
+    if (exact) return exact;
+    const normalizedMatch = list.find(p => {
+      const pNameNorm = String(p.name || '').trim().toLowerCase().replace(/[\s\-_]+/g, '');
+      const pCodeNorm = String(p.code || '').trim().toLowerCase().replace(/[\s\-_]+/g, '');
+      return (pNameNorm && pNameNorm === norm) || (pCodeNorm && pCodeNorm === norm);
+    });
+    if (normalizedMatch) return normalizedMatch;
+    const partial = list.filter(p => {
+      const pName = String(p.name || '').trim().toLowerCase();
+      return pName && (pName.includes(lower) || lower.includes(pName));
+    });
+    if (partial.length === 1) return partial[0];
+    return null;
+  }, [projectsList]);
+
+  const getDefaultCampaignForProject = useCallback((projId: number | null | undefined, currentCampId?: number | null) => {
+    if (!projId || !Array.isArray(allowedCampaigns) || allowedCampaigns.length === 0) return null;
+    const projCamps = allowedCampaigns.filter(c => Number(c.project_id) === Number(projId));
+    if (projCamps.length === 0) return null;
+    if (currentCampId && projCamps.some(c => Number(c.id) === Number(currentCampId))) {
+      return Number(currentCampId);
+    }
+    const bestCamp =
+      projCamps.find(c => c.status === 'active' && c.subjects_json && c.subjects_json !== '[]') ||
+      projCamps.find(c => c.status === 'active') ||
+      projCamps.find(c => c.subjects_json && c.subjects_json !== '[]') ||
+      projCamps[0];
+    return bestCamp ? Number(bestCamp.id) : null;
+  }, [allowedCampaigns]);
+
+  const persistProgramSyncToBackend = useCallback(async (updates: Record<string, any>) => {
+    if (!effectiveContactId) return;
+    try {
+      await api.put(`/contacts/${effectiveContactId}`, updates);
+      setBaseData((prev: any) => ({ ...prev, ...updates }));
+      onUpdate?.({ ...formData, ...updates });
+      window.dispatchEvent(new CustomEvent('contact-updated'));
+    } catch (err) {
+      console.error('Failed to sync program/project:', err);
+    }
+  }, [effectiveContactId, formData, onUpdate]);
+
+  const handleSelectProgramEverywhere = useCallback((nextProgramName: string, persist = true) => {
+    const trimmed = String(nextProgramName || '').trim();
+    const matchedProj = trimmed ? findMatchingProjectByProgram(trimmed, projectsList) : null;
+    const nextProjectId = matchedProj ? Number(matchedProj.id) : null;
+    const canonicalProgram = matchedProj?.name ? String(matchedProj.name).trim() : trimmed;
+    const nextCampaignId = nextProjectId ? getDefaultCampaignForProject(nextProjectId, formData.campaign_id) : null;
+    const updates = {
+      program: canonicalProgram,
+      project_id: nextProjectId,
+      campaign_id: nextCampaignId
+    };
+    setFormData((prev: any) => ({ ...prev, ...updates }));
+    if (persist && effectiveContactId) {
+      persistProgramSyncToBackend(updates);
+    }
+  }, [findMatchingProjectByProgram, projectsList, getDefaultCampaignForProject, formData.campaign_id, effectiveContactId, persistProgramSyncToBackend]);
+
+  const handleSelectProjectEverywhere = useCallback((rawVal: string | number | null, persist = true) => {
+    const valStr = String(rawVal || '').trim();
+    if (!valStr) {
+      const updates = { project_id: null, program: '', campaign_id: null };
+      setFormData((prev: any) => ({ ...prev, ...updates }));
+      if (persist && effectiveContactId) {
+        persistProgramSyncToBackend(updates);
+      }
+      return;
+    }
+    if (valStr.startsWith('__prog__:')) {
+      const progName = valStr.replace('__prog__:', '').trim();
+      handleSelectProgramEverywhere(progName, persist);
+      return;
+    }
+    const selectedId = Number(valStr);
+    const matchedProj = projectsList.find(p => Number(p.id) === selectedId);
+    const nextProgram = matchedProj?.name ? String(matchedProj.name).trim() : (formData.program || '');
+    const nextCampaignId = getDefaultCampaignForProject(selectedId, formData.campaign_id);
+    const updates = {
+      project_id: selectedId,
+      program: nextProgram,
+      campaign_id: nextCampaignId
+    };
+    setFormData((prev: any) => ({ ...prev, ...updates }));
+    if (persist && effectiveContactId) {
+      persistProgramSyncToBackend(updates);
+    }
+  }, [projectsList, formData.program, formData.campaign_id, getDefaultCampaignForProject, effectiveContactId, persistProgramSyncToBackend, handleSelectProgramEverywhere]);
+
+  // Keep programSuggestions enriched with projectsList names
   useEffect(() => {
-    if (formData.campaign_id && !formData.project_id && allowedCampaigns.length > 0) {
-      const camp = allowedCampaigns.find(c => Number(c.id) === Number(formData.campaign_id));
-      if (camp && camp.project_id) {
-        setFormData((prev: any) => ({
-          ...prev,
-          project_id: Number(camp.project_id)
-        }));
+    if (projectsList.length > 0) {
+      const projNames = projectsList
+        .map((p: any) => String(p.name || '').trim())
+        .filter((n: string) => n.length > 0);
+      if (projNames.length > 0) {
+        setProgramSuggestions(prev => {
+          const combined = [...prev];
+          let added = false;
+          projNames.forEach(n => {
+            if (!combined.some(existing => existing.toLowerCase() === n.toLowerCase())) {
+              combined.push(n);
+              added = true;
+            }
+          });
+          return added ? combined : prev;
+        });
       }
     }
-  }, [allowedCampaigns, formData.campaign_id, formData.project_id]);
+  }, [projectsList]);
+
+  // Bidirectional auto-resolution between program, project_id, and campaign_id on data load
+  useEffect(() => {
+    let nextProjectId = formData.project_id ? Number(formData.project_id) : null;
+    let nextProgram = String(formData.program || '').trim();
+    let nextCampaignId = formData.campaign_id ? Number(formData.campaign_id) : null;
+    let changed = false;
+
+    if (nextCampaignId && !nextProjectId && allowedCampaigns.length > 0) {
+      const camp = allowedCampaigns.find(c => Number(c.id) === nextCampaignId);
+      if (camp && camp.project_id) {
+        nextProjectId = Number(camp.project_id);
+        changed = true;
+      }
+    }
+
+    if (nextProgram && !nextProjectId && projectsList.length > 0) {
+      const matchedProj = findMatchingProjectByProgram(nextProgram, projectsList);
+      if (matchedProj && matchedProj.id) {
+        nextProjectId = Number(matchedProj.id);
+        changed = true;
+      }
+    } else if (nextProjectId && !nextProgram && projectsList.length > 0) {
+      const matchedProj = projectsList.find(p => Number(p.id) === nextProjectId);
+      if (matchedProj && matchedProj.name) {
+        nextProgram = String(matchedProj.name).trim();
+        changed = true;
+      }
+    }
+
+    if (nextProjectId && !nextCampaignId && allowedCampaigns.length > 0) {
+      const resolvedCampId = getDefaultCampaignForProject(nextProjectId, null);
+      if (resolvedCampId) {
+        nextCampaignId = resolvedCampId;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      setFormData((prev: any) => ({
+        ...prev,
+        project_id: nextProjectId,
+        program: nextProgram || prev.program,
+        campaign_id: nextCampaignId
+      }));
+      setBaseData((prev: any) => ({
+        ...prev,
+        project_id: prev.project_id || nextProjectId,
+        program: prev.program || nextProgram,
+        campaign_id: prev.campaign_id || nextCampaignId
+      }));
+    }
+  }, [allowedCampaigns, projectsList, formData.campaign_id, formData.project_id, formData.program, findMatchingProjectByProgram, getDefaultCampaignForProject]);
 
   const applySettingsData = useCallback((data: any) => {
     if (!data) return;
@@ -5472,14 +5636,12 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         }).catch(() => {});
       }
 
-      // 3. Projects cache check
+      // 3. Projects cache check (always bypass_roster=1 so all programs are available)
       if (globalProjectsCache && globalProjectsCache.length > 0) {
         setAllowedProjects(globalProjectsCache);
         setProjectsList(globalProjectsCache);
       } else {
-        const isRosterRestricted = ['sale', 'sales', 'manager', 'director'].includes(currentUser?.role || '');
-        const bypassProj = isRosterRestricted ? '' : '?bypass_roster=1';
-        api.get(`/projects${bypassProj}`).then(r => {
+        api.get('/projects?bypass_roster=1').then(r => {
           const data = r.data.data || r.data || [];
           globalProjectsCache = data;
           setAllowedProjects(data);
@@ -8155,16 +8317,20 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                     return;
                                   }
                                   setShowProgramDropdown(false);
+                                  if (String(formData.program || '').trim() !== String(baseData.program || '').trim()) {
+                                    handleSelectProgramEverywhere(formData.program || '', true);
+                                  }
                                 }}
                                 onChange={e => {
                                   const val = e.target.value;
-                                  setFormData((prev: any) => ({ ...prev, program: val }));
+                                  handleSelectProgramEverywhere(val, false);
                                   setShowProgramDropdown(true);
                                 }}
                                 onKeyDown={e => {
                                   if (e.key === 'Enter') {
                                     e.preventDefault();
                                     setShowProgramDropdown(false);
+                                    handleSelectProgramEverywhere(formData.program || '', true);
                                   } else if (e.key === 'Escape') {
                                     setShowProgramDropdown(false);
                                   }
@@ -8228,7 +8394,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                     type="button"
                                     onMouseDown={(e) => {
                                       e.preventDefault();
-                                      setFormData((prev: any) => ({ ...prev, program: '' }));
+                                      handleSelectProgramEverywhere('', true);
                                       setShowProgramDropdown(false);
                                     }}
                                     style={{
@@ -8256,7 +8422,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                       type="button"
                                       onMouseDown={(e) => {
                                         e.preventDefault();
-                                        setFormData((prev: any) => ({ ...prev, program: isSelected ? '' : prog }));
+                                        handleSelectProgramEverywhere(isSelected ? '' : prog, true);
                                         setShowProgramDropdown(false);
                                       }}
                                       style={{
@@ -8508,30 +8674,34 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                   flexWrap: 'wrap',
                   zIndex: 99
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: '260px' }}>
-                    <div style={{ 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'center', 
-                      width: 28, 
-                      height: 28, 
-                      borderRadius: '50%', 
-                      background: '#f59e0b', 
-                      color: '#fff', 
-                      flexShrink: 0,
-                      boxShadow: '0 2px 4px rgba(245, 158, 11, 0.3)'
-                    }}>
-                      <Users size={15} />
-                    </div>
-                    <div>
-                      <span style={{ fontWeight: 800, color: '#78350f', letterSpacing: '0.2px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                        <AlertTriangle size={14} style={{ flexShrink: 0 }} />
-                        <span>CẢNH BÁO TRÙNG LẶP CHĂM SÓC:</span>
-                      </span>{' '}
-                      <span>
-                        Đồng nghiệp <strong style={{ color: '#1e293b' }}>{activeViewers.map(v => v.full_name).join(', ')}</strong> cũng đang cùng mở xem hồ sơ này.
-                      </span>
-                    </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '260px', flexWrap: 'wrap' }}>
+                    <span>Đồng nghiệp</span>
+                    {activeViewers.map((v, idx) => {
+                      const viewerName = v.full_name || v.name || 'Nhân sự';
+                      return (
+                        <span
+                          key={v.user_id || idx}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '2px 9px 2px 3px',
+                            borderRadius: '9999px',
+                            background: 'rgba(255, 255, 255, 0.9)',
+                            border: '1px solid rgba(245, 158, 11, 0.4)',
+                            boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
+                          }}
+                        >
+                          <Avatar
+                            src={v.avatar_url || v.avatar}
+                            name={viewerName}
+                            size={20}
+                          />
+                          <strong style={{ color: '#1e293b', fontSize: '0.8125rem' }}>{viewerName}</strong>
+                        </span>
+                      );
+                    })}
+                    <span>đang mở xem hồ sơ này.</span>
                   </div>
                   <div style={{ 
                     display: 'flex',
@@ -8692,16 +8862,20 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                           return;
                                         }
                                         setShowProgramDropdown(false);
+                                        if (String(formData.program || '').trim() !== String(baseData.program || '').trim()) {
+                                          handleSelectProgramEverywhere(formData.program || '', true);
+                                        }
                                       }}
                                       onChange={e => {
                                         const val = e.target.value;
-                                        setFormData((prev: any) => ({ ...prev, program: val }));
+                                        handleSelectProgramEverywhere(val, false);
                                         setShowProgramDropdown(true);
                                       }}
                                       onKeyDown={e => {
                                         if (e.key === 'Enter') {
                                           e.preventDefault();
                                           setShowProgramDropdown(false);
+                                          handleSelectProgramEverywhere(formData.program || '', true);
                                         } else if (e.key === 'Escape') {
                                           setShowProgramDropdown(false);
                                         }
@@ -8760,7 +8934,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                             type="button"
                                             onMouseDown={(e) => {
                                               e.preventDefault();
-                                              setFormData((prev: any) => ({ ...prev, program: '' }));
+                                              handleSelectProgramEverywhere('', true);
                                               setShowProgramDropdown(false);
                                             }}
                                             style={{
@@ -8788,7 +8962,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                               type="button"
                                               onMouseDown={(e) => {
                                                 e.preventDefault();
-                                                setFormData((prev: any) => ({ ...prev, program: isSelected ? '' : prog }));
+                                                handleSelectProgramEverywhere(isSelected ? '' : prog, true);
                                                 setShowProgramDropdown(false);
                                               }}
                                               style={{
@@ -10151,15 +10325,19 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                         return;
                                       }
                                       setShowBodyProgramDropdown(false);
+                                      if ((formData.program || '').trim()) {
+                                        handleSelectProgramEverywhere(formData.program, true);
+                                      }
                                     }}
                                     onChange={e => {
                                       const val = e.target.value;
-                                      setFormData((prev: any) => ({ ...prev, program: val }));
+                                      handleSelectProgramEverywhere(val, false);
                                     }}
                                     onKeyDown={e => {
                                       if (e.key === 'Enter') {
                                         e.preventDefault();
                                         setShowBodyProgramDropdown(false);
+                                        handleSelectProgramEverywhere(formData.program || '', true);
                                       } else if (e.key === 'Escape') {
                                         setShowBodyProgramDropdown(false);
                                       }
@@ -10208,7 +10386,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                           type="button"
                                           onMouseDown={(e) => {
                                             e.preventDefault();
-                                            setFormData((prev: any) => ({ ...prev, program: '' }));
+                                            handleSelectProgramEverywhere('', true);
                                             setShowBodyProgramDropdown(false);
                                           }}
                                           style={{
@@ -10236,7 +10414,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                             type="button"
                                             onMouseDown={(e) => {
                                               e.preventDefault();
-                                              setFormData((prev: any) => ({ ...prev, program: isSelected ? '' : prog }));
+                                              handleSelectProgramEverywhere(isSelected ? '' : prog, true);
                                               setShowBodyProgramDropdown(false);
                                             }}
                                             style={{
@@ -10672,135 +10850,157 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           </button>
                         </div>
 
-                        {/* Trạng thái học tập của học viên */}
-                        <div style={{ padding: '12px 14px', background: 'var(--color-bg)', borderRadius: '12px', border: '1px solid var(--color-border-light)' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                              Trạng thái học tập của học viên:
-                            </span>
-                            {savingStudyStatus && (
-                              <span style={{ fontSize: '0.75rem', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <Loader2 size={12} className="animate-spin" /> Đang cập nhật...
-                              </span>
-                            )}
-                          </div>
-                          <div style={{ display: 'grid', gridTemplateColumns: isMobileOrTablet ? '1fr' : 'repeat(3, 1fr)', gap: '10px' }}>
-                            {[
-                              { id: 'studying', label: 'Đang học', color: '#16a34a', bg: '#f0fdf4', activeBg: '#dcfce7', border: '#86efac', dot: '#22c55e' },
-                              { id: 'completed', label: 'Đã hoàn thành', color: '#2563eb', bg: '#eff6ff', activeBg: '#dbeafe', border: '#93c5fd', dot: '#3b82f6' },
-                              { id: 'reserved', label: 'Bảo lưu', color: '#d97706', bg: '#fffbeb', activeBg: '#fef3c7', border: '#fde68a', dot: '#f59e0b' }
-                            ].map(st => {
-                              const currentStatus = formData.study_status || 'studying';
-                              const isSelected = currentStatus === st.id;
-                              return (
-                                <button
-                                  key={st.id}
-                                  type="button"
-                                  onClick={() => handleOpenStudyStatusModal(st.id as any)}
-                                  disabled={isSubmittingStudyStatus}
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    padding: '10px 14px',
-                                    borderRadius: '10px',
-                                    fontSize: '0.8125rem',
-                                    fontWeight: isSelected ? 800 : 600,
-                                    cursor: savingStudyStatus ? 'not-allowed' : 'pointer',
-                                    transition: 'all 0.15s ease',
-                                    border: isSelected ? `2px solid ${st.color}` : '1px solid var(--color-border)',
-                                    background: isSelected ? st.activeBg : 'var(--color-surface)',
-                                    color: isSelected ? st.color : 'var(--color-text)',
-                                    boxShadow: isSelected ? `0 2px 8px ${st.color}25` : 'none'
-                                  }}
-                                >
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <span style={{
-                                      width: '10px',
-                                      height: '10px',
-                                      borderRadius: '50%',
-                                      background: st.dot,
-                                      display: 'inline-block',
-                                      boxShadow: isSelected ? `0 0 0 3px ${st.dot}33` : 'none'
-                                    }} />
-                                    <span>{st.label}</span>
-                                  </div>
-                                  {isSelected && <Check size={16} style={{ color: st.color, strokeWidth: 3 }} />}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: isMobileOrTablet ? '1fr' : '1fr 1fr', gap: '1.25rem' }}>
-
-                        <div className="form-group">
-                          <label className="form-label">Chương trình</label>
-                          <CustomSelect
-                            searchable
-                            options={[
-                              { value: '', label: '— Không chọn —' },
-                              ...projectsList.map(p => ({ value: String(p.id), label: p.name }))
-                            ]}
-                            value={String(formData.project_id || '')}
-                            onChange={val => {
-                              const selectedId = val ? Number(val) : null;
-                              let nextCampaignId = formData.campaign_id;
-                              if (!selectedId) {
-                                nextCampaignId = null;
-                              } else if (nextCampaignId) {
-                                const campObj = allowedCampaigns.find(c => Number(c.id) === Number(nextCampaignId));
-                                if (campObj && Number(campObj.project_id) !== selectedId) {
-                                  nextCampaignId = null;
+                        {/* Trạng thái học tập, Chương trình & Khóa học */}
+                        <div style={{ display: 'grid', gridTemplateColumns: isMobileOrTablet ? '1fr' : 'repeat(3, 1fr)', gap: '1.25rem' }}>
+                          <div className="form-group">
+                            <label className="form-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <span>Trạng thái học tập của học viên</span>
+                              {savingStudyStatus && (
+                                <span style={{ fontSize: '0.72rem', color: 'var(--color-primary)', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+                                  <Loader2 size={12} className="animate-spin" /> Đang lưu...
+                                </span>
+                              )}
+                            </label>
+                            <CustomSelect
+                              disabled={isSubmittingStudyStatus || savingStudyStatus}
+                              options={[
+                                {
+                                  value: 'studying',
+                                  label: 'Đang học',
+                                  icon: <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#22c55e', display: 'inline-block', boxShadow: '0 0 0 2px rgba(34, 197, 94, 0.2)' }} />
+                                },
+                                {
+                                  value: 'completed',
+                                  label: 'Đã hoàn thành',
+                                  icon: <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#3b82f6', display: 'inline-block', boxShadow: '0 0 0 2px rgba(59, 130, 246, 0.2)' }} />
+                                },
+                                {
+                                  value: 'reserved',
+                                  label: 'Bảo lưu',
+                                  icon: <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#f59e0b', display: 'inline-block', boxShadow: '0 0 0 2px rgba(245, 158, 11, 0.2)' }} />
+                                },
+                                {
+                                  value: 'suspended',
+                                  label: 'Tạm ngưng',
+                                  icon: <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#ef4444', display: 'inline-block', boxShadow: '0 0 0 2px rgba(239, 68, 68, 0.2)' }} />
                                 }
-                              }
-                              setFormData((prev: any) => ({
-                                ...prev,
-                                project_id: selectedId,
-                                campaign_id: nextCampaignId
-                              }));
-                            }}
-                          />
-                        </div>
-                        <div className="form-group">
-                          <label className="form-label">Khóa học</label>
-                          {(() => {
-                            const filteredCamps = formData.project_id
-                              ? allowedCampaigns.filter(c => Number(c.project_id) === Number(formData.project_id))
-                              : allowedCampaigns;
-                            return (
-                              <CustomSelect
-                                searchable
-                                options={[
-                                  { value: '', label: '— Không chọn —' },
-                                  ...filteredCamps.map(c => ({ value: String(c.id), label: c.name, faded: c.status !== 'active' }))
-                                ]}
-                                value={formData.campaign_id ? String(formData.campaign_id) : ''}
-                                onChange={val => {
-                                  const nextCampaign = val ? Number(val) : null;
-                                  let nextProjectId = formData.project_id;
-                                  if (nextCampaign) {
-                                    const campObj = allowedCampaigns.find(c => Number(c.id) === nextCampaign);
-                                    if (campObj && campObj.project_id) {
-                                      nextProjectId = Number(campObj.project_id);
+                              ]}
+                              value={formData.study_status || 'studying'}
+                              onChange={val => {
+                                if (val) {
+                                  handleOpenStudyStatusModal(val as 'studying' | 'completed' | 'reserved' | 'suspended');
+                                }
+                              }}
+                            />
+                          </div>
+
+                          <div className="form-group">
+                            <label className="form-label">Chương trình</label>
+                            {(() => {
+                              const resolvedProj = formData.project_id
+                                ? projectsList.find(p => Number(p.id) === Number(formData.project_id))
+                                : findMatchingProjectByProgram(formData.program);
+                              const currentProjValue = resolvedProj
+                                ? String(resolvedProj.id)
+                                : (formData.program ? `__custom__:${formData.program}` : '');
+                              const extraOptions = (!resolvedProj && formData.program)
+                                ? [{ value: `__custom__:${formData.program}`, label: String(formData.program) }]
+                                : [];
+
+                              return (
+                                <CustomSelect
+                                  searchable
+                                  options={[
+                                    { value: '', label: '— Không chọn —' },
+                                    ...extraOptions,
+                                    ...projectsList.map(p => ({ value: String(p.id), label: p.name }))
+                                  ]}
+                                  value={currentProjValue}
+                                  onChange={val => {
+                                    const strVal = String(val || '');
+                                    if (strVal.startsWith('__custom__:')) {
+                                      handleSelectProgramEverywhere(strVal.replace('__custom__:', ''), true);
+                                      return;
                                     }
-                                  }
-                                  setFormData((prev: any) => ({
-                                    ...prev,
-                                    campaign_id: nextCampaign,
-                                    project_id: nextProjectId
-                                  }));
-                                }}
-                              />
-                            );
-                          })()}
+                                    const selectedId = strVal ? Number(strVal) : null;
+                                    handleSelectProjectEverywhere(selectedId, true);
+                                  }}
+                                />
+                              );
+                            })()}
+                          </div>
+
+                          <div className="form-group">
+                            <label className="form-label">Khóa học</label>
+                            {(() => {
+                              const resolvedProj = formData.project_id
+                                ? projectsList.find(p => Number(p.id) === Number(formData.project_id))
+                                : findMatchingProjectByProgram(formData.program);
+                              const effectiveProjId = resolvedProj ? Number(resolvedProj.id) : (formData.project_id ? Number(formData.project_id) : null);
+                              const filteredCamps = effectiveProjId
+                                ? allowedCampaigns.filter(c => Number(c.project_id) === effectiveProjId)
+                                : allowedCampaigns;
+                              const defaultCampId = (!formData.campaign_id && effectiveProjId)
+                                ? getDefaultCampaignForProject(effectiveProjId)
+                                : null;
+                              const effectiveCampId = formData.campaign_id || defaultCampId;
+
+                              return (
+                                <CustomSelect
+                                  searchable
+                                  options={[
+                                    { value: '', label: '— Không chọn —' },
+                                    ...filteredCamps.map(c => ({ value: String(c.id), label: c.name, faded: c.status !== 'active' }))
+                                  ]}
+                                  value={effectiveCampId ? String(effectiveCampId) : ''}
+                                  onChange={val => {
+                                    const nextCampaign = val ? Number(val) : null;
+                                    let nextProjectId = effectiveProjId;
+                                    let nextProgramName = formData.program || '';
+                                    if (nextCampaign) {
+                                      const campObj = allowedCampaigns.find(c => Number(c.id) === nextCampaign);
+                                      if (campObj && campObj.project_id) {
+                                        nextProjectId = Number(campObj.project_id);
+                                        const projObj = projectsList.find(p => Number(p.id) === nextProjectId);
+                                        if (projObj?.name) {
+                                          nextProgramName = String(projObj.name);
+                                        }
+                                      }
+                                    }
+                                    setFormData((prev: any) => ({
+                                      ...prev,
+                                      campaign_id: nextCampaign,
+                                      project_id: nextProjectId,
+                                      program: nextProgramName
+                                    }));
+                                    setContact((prev: any) => prev ? ({
+                                      ...prev,
+                                      campaign_id: nextCampaign,
+                                      project_id: nextProjectId,
+                                      program: nextProgramName
+                                    }) : prev);
+                                    persistProgramSyncToBackend({
+                                      program: nextProgramName,
+                                      project_id: nextProjectId,
+                                      campaign_id: nextCampaign
+                                    });
+                                  }}
+                                />
+                              );
+                            })()}
                           </div>
                         </div>
                       </div>
 
                       {/* Display subjects & schedule here */}
                       {(() => {
-                        if (!formData.campaign_id) {
+                        const resolvedProj = formData.project_id
+                          ? projectsList.find(p => Number(p.id) === Number(formData.project_id))
+                          : findMatchingProjectByProgram(formData.program);
+                        const effectiveProjId = resolvedProj ? Number(resolvedProj.id) : (formData.project_id ? Number(formData.project_id) : null);
+                        const effectiveCampId = formData.campaign_id || (effectiveProjId ? getDefaultCampaignForProject(effectiveProjId) : null);
+
+                        if (!effectiveCampId) {
                           return (
                             <div style={{ padding: '3rem 2rem', textAlign: 'center', background: 'var(--color-surface)', border: '1px dashed var(--color-border)', borderRadius: '16px' }}>
                               <BookOpen size={40} style={{ color: 'var(--color-text-light)', marginBottom: '12px' }} />
@@ -10809,7 +11009,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           );
                         }
 
-                        const selectedCamp = allowedCampaigns.find(c => Number(c.id) === Number(formData.campaign_id));
+                        const selectedCamp = allowedCampaigns.find(c => Number(c.id) === Number(effectiveCampId));
                         const subjects = selectedCamp?.subjects_json
                           ? (typeof selectedCamp.subjects_json === 'string'
                             ? JSON.parse(selectedCamp.subjects_json)
@@ -11277,14 +11477,14 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   { value: '', label: '— Không chọn —' },
                                   ...projectsList.map(p => ({ value: String(p.id), label: p.name }))
                                 ]}
-                                value={String(formData.project_id || '')}
+                                value={String(
+                                  formData.project_id ||
+                                  findMatchingProjectByProgram(formData.program)?.id ||
+                                  ''
+                                )}
                                 onChange={val => {
                                   const selectedId = val ? Number(val) : null;
-                                  setFormData((prev: any) => ({
-                                    ...prev,
-                                    project_id: selectedId,
-                                    campaign_id: null
-                                  }));
+                                  handleSelectProjectEverywhere(selectedId, true);
                                 }}
                               />
                             </div>
@@ -19069,7 +19269,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
               const statusMeta: Record<string, { label: string; color: string; bg: string }> = {
                 studying: { label: 'Đang học', color: '#16a34a', bg: '#dcfce7' },
                 completed: { label: 'Đã hoàn thành', color: '#2563eb', bg: '#dbeafe' },
-                reserved: { label: 'Bảo lưu', color: '#d97706', bg: '#fef3c7' }
+                reserved: { label: 'Bảo lưu', color: '#d97706', bg: '#fef3c7' },
+                suspended: { label: 'Tạm ngưng', color: '#dc2626', bg: '#fee2e2' }
               };
               const cur = statusMeta[currentStatus] || { label: currentStatus, color: '#64748b', bg: '#f1f5f9' };
               const target = statusMeta[studyStatusModal.targetStatus] || { label: studyStatusModal.targetLabel, color: '#BD1D2D', bg: '#fee2e2' };
@@ -19131,6 +19332,12 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                       'Bảo lưu chuyển tiếp sang khóa sau',
                       'Chờ hoàn tất thủ tục tài chính'
                     ],
+                    suspended: [
+                      'Tạm ngưng học tập do chưa hoàn tất học phí',
+                      'Tạm ngưng theo đơn xin phép của học viên',
+                      'Tạm ngưng do vi phạm quy chế học vụ / vắng quá số buổi',
+                      'Tạm ngưng chờ xét duyệt học lại'
+                    ],
                     completed: [
                       'Đã hoàn thành toàn bộ chương trình và đồ án',
                       'Đã bảo vệ luận văn & đủ điều kiện tốt nghiệp',
@@ -19138,7 +19345,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                       'Hoàn tất khóa học xuất sắc'
                     ],
                     studying: [
-                      'Quay trở lại học tập sau thời gian bảo lưu',
+                      'Quay trở lại học tập sau thời gian bảo lưu / tạm ngưng',
                       'Bắt đầu học kỳ mới chính thức',
                       'Cập nhật lại trạng thái theo dõi học vụ'
                     ]

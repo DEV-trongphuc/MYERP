@@ -1392,8 +1392,12 @@ class ExportController {
                     // 16. Friendly study_status
                     $studyStatusMap = [
                         'studying' => 'Đang học',
+                        'completed' => 'Đã hoàn thành',
                         'graduated' => 'Đã tốt nghiệp',
+                        'reserved' => 'Bảo lưu',
                         'deferred' => 'Bảo lưu',
+                        'suspended' => 'Tạm ngưng',
+                        'tam_ngung' => 'Tạm ngưng',
                         'dropped' => 'Thôi học',
                         'enrolled' => 'Mới nhập học'
                     ];

@@ -231,7 +231,7 @@ class AgentToolRegistry {
                                 ],
                                 'study_status' => [
                                     'type' => 'STRING',
-                                    'enum' => ['all', 'studying', 'graduated', 'deferred', 'dropped'],
+                                    'enum' => ['all', 'studying', 'completed', 'reserved', 'suspended', 'graduated', 'deferred', 'dropped'],
                                     'description' => 'Tình trạng học tập'
                                 ],
                                 'missing_doc' => [

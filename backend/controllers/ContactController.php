@@ -1343,6 +1343,32 @@ class ContactController {
             }
         }
         $row['tags'] = json_decode($row['tags'] ?? '[]');
+        // Synchronize project_id <-> program on read so Header & Learning tab always match
+        $progTrim = trim((string)($row['program'] ?? ''));
+        $projIdVal = !empty($row['project_id']) ? (int)$row['project_id'] : 0;
+        if ($projIdVal <= 0 && $progTrim !== '') {
+            $stmtMatchProj = $this->db->prepare("
+                SELECT id, name FROM projects
+                WHERE tenant_id = ?
+                  AND (
+                      LOWER(TRIM(name)) = LOWER(?)
+                      OR REPLACE(REPLACE(LOWER(TRIM(name)), ' ', ''), '-', '') = REPLACE(REPLACE(LOWER(?), ' ', ''), '-', '')
+                  )
+                LIMIT 1
+            ");
+            $stmtMatchProj->execute([$auth['tenant_id'], $progTrim, $progTrim]);
+            $matchedProj = $stmtMatchProj->fetch(PDO::FETCH_ASSOC);
+            if ($matchedProj) {
+                $row['project_id'] = (int)$matchedProj['id'];
+            }
+        } elseif ($projIdVal > 0 && $progTrim === '') {
+            $stmtProjName = $this->db->prepare("SELECT name FROM projects WHERE id = ? AND tenant_id = ? LIMIT 1");
+            $stmtProjName->execute([$projIdVal, $auth['tenant_id']]);
+            $projName = $stmtProjName->fetchColumn();
+            if ($projName) {
+                $row['program'] = trim((string)$projName);
+            }
+        }
         $this->resolveEffectiveStageRow($row, (int)$auth['tenant_id']);
         $row['custom_fields'] = getCustomFields($this->db, $auth['tenant_id'], $id, 'contact');
         respond(200, $row);
@@ -1504,6 +1530,34 @@ class ContactController {
             $campProjId = $stmtCampProj->fetchColumn();
             if ($campProjId) {
                 $b['project_id'] = (int)$campProjId;
+                $reqProjectId = (int)$campProjId;
+            }
+        }
+
+        // Bidirectional sync between project_id and program name
+        $reqProgramStr = array_key_exists('program', $b) ? trim((string)($b['program'] ?? '')) : null;
+        if ($reqProgramStr !== null && $reqProgramStr !== '' && (!$reqProjectId || $reqProjectId <= 0)) {
+            $stmtMatchProj = $this->db->prepare("
+                SELECT id FROM projects
+                WHERE tenant_id = ?
+                  AND (
+                      LOWER(TRIM(name)) = LOWER(?)
+                      OR REPLACE(REPLACE(LOWER(TRIM(name)), ' ', ''), '-', '') = REPLACE(REPLACE(LOWER(?), ' ', ''), '-', '')
+                  )
+                LIMIT 1
+            ");
+            $stmtMatchProj->execute([$auth['tenant_id'], $reqProgramStr, $reqProgramStr]);
+            $matchedProjId = $stmtMatchProj->fetchColumn();
+            if ($matchedProjId) {
+                $b['project_id'] = (int)$matchedProjId;
+                $reqProjectId = (int)$matchedProjId;
+            }
+        } elseif ($reqProjectId && $reqProjectId > 0 && ($reqProgramStr === null || $reqProgramStr === '')) {
+            $stmtProjName = $this->db->prepare("SELECT name FROM projects WHERE id = ? AND tenant_id = ? LIMIT 1");
+            $stmtProjName->execute([$reqProjectId, $auth['tenant_id']]);
+            $projName = $stmtProjName->fetchColumn();
+            if ($projName) {
+                $b['program'] = trim((string)$projName);
             }
         }
 
@@ -3847,9 +3901,12 @@ class ContactController {
 
         $body = getBody();
         $targetStatus = trim($body['study_status'] ?? '');
-        $allowedStatuses = ['studying', 'completed', 'reserved'];
+        $allowedStatuses = ['studying', 'completed', 'reserved', 'suspended', 'tam_ngung'];
         if (!in_array($targetStatus, $allowedStatuses, true)) {
             respond(422, null, 'Trạng thái học tập không hợp lệ', false);
+        }
+        if ($targetStatus === 'tam_ngung') {
+            $targetStatus = 'suspended';
         }
 
         $userNote = trim($body['note'] ?? '');
@@ -3861,7 +3918,9 @@ class ContactController {
         $statusLabels = [
             'studying' => 'Đang học',
             'completed' => 'Đã hoàn thành',
-            'reserved' => 'Bảo lưu'
+            'reserved' => 'Bảo lưu',
+            'suspended' => 'Tạm ngưng',
+            'tam_ngung' => 'Tạm ngưng'
         ];
         $oldStatusLabel = $statusLabels[$oldStatus] ?? $oldStatus;
         $newStatusLabel = $statusLabels[$targetStatus] ?? $targetStatus;

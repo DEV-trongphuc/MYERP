@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef, lazy, Suspense } from 'rea
 import { useNavigate, useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { Pagination } from '../components/ui/Pagination';
-import { Plus, GripVertical, Pencil, Trash2, Calendar, Target, DollarSign, MessageSquare, Building2, Loader2, Search, Filter, Users, User, CheckCircle2, Phone, Mail, LayoutGrid, List, Clock, Download, Upload, RefreshCw, X, AlertCircle, AlertTriangle, ShieldAlert, ChevronRight, ChevronLeft, ChevronDown, MoreHorizontal, Columns, ArrowDownUp, GraduationCap, Tag as TagIcon, SlidersHorizontal, ArrowRight, Flag } from 'lucide-react';
+import { Plus, GripVertical, Pencil, Trash2, Calendar, Target, DollarSign, MessageSquare, Building2, Loader2, Search, Filter, Users, User, CheckCircle2, Phone, Mail, LayoutGrid, List, Clock, Download, Upload, RefreshCw, X, AlertCircle, AlertTriangle, ShieldAlert, ChevronRight, ChevronLeft, ChevronDown, MoreHorizontal, Columns, ArrowDownUp, GraduationCap, Tag as TagIcon, SlidersHorizontal, ArrowRight, Flag, Layers, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar } from '../components/ui/Avatar';
 import { triggerFullConfetti } from '../utils/confettiHelper';
@@ -1518,7 +1518,7 @@ export const DealsPage: React.FC = () => {
 
   return (
     <div style={{ height: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column' }}>
-      <div className="page-header" style={{ marginBottom: '1rem', flexShrink: 0 }}>
+      <div className="page-header" style={{ marginBottom: '1rem', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
         <div>
           <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Target size={24} color="var(--color-primary)" />
@@ -1528,7 +1528,138 @@ export const DealsPage: React.FC = () => {
             <strong>{total || Object.values(items).flat().length}</strong> thẻ đang quản lý · Tổng giá trị dự kiến: <strong style={{ color: 'var(--color-primary)', fontSize: '1.25rem', marginLeft: '4px' }}>{FMT(totalExpectedRevenue || totalRevenue)}</strong>
           </p>
         </div>
-        <div style={{ flex: 1 }} />
+
+        {!isMobile && currentUser?.role !== 'viewer' && currentUser?.role !== 'sale' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+            <button
+              type="button"
+              className="btn outline sm"
+              onClick={() => setShowImportExport(true)}
+              title="Nhập dữ liệu từ Excel/CSV"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                whiteSpace: 'nowrap',
+                borderRadius: '8px',
+                padding: '6px 12px',
+                fontSize: '0.8rem',
+                fontWeight: 600
+              }}
+            >
+              <Upload size={14} />
+              <span>Nhập dữ liệu</span>
+            </button>
+
+            <div ref={exportDropdownRef} style={{ position: 'relative' }}>
+              <button
+                type="button"
+                className="btn outline sm"
+                onClick={() => setShowExportDropdown(prev => !prev)}
+                disabled={isExporting}
+                title="Xuất dữ liệu ra Excel/CSV"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  whiteSpace: 'nowrap',
+                  borderRadius: '8px',
+                  padding: '6px 12px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  background: showExportDropdown ? 'var(--color-bg-light)' : undefined,
+                  borderColor: showExportDropdown ? 'var(--color-primary)' : undefined
+                }}
+              >
+                {isExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
+                <span>{isExporting ? 'Đang xuất...' : 'Xuất dữ liệu'}</span>
+                <ChevronDown size={13} style={{ opacity: 0.7, transform: showExportDropdown ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }} />
+              </button>
+
+              <AnimatePresence>
+                {showExportDropdown && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                    transition={{ duration: 0.15 }}
+                    style={{
+                      position: 'absolute',
+                      right: 0,
+                      top: 'calc(100% + 6px)',
+                      width: '270px',
+                      background: 'var(--color-surface)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: '10px',
+                      boxShadow: 'var(--shadow-lg, 0 10px 25px rgba(0,0,0,0.12))',
+                      padding: '6px',
+                      zIndex: 1000,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '2px'
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowExportDropdown(false);
+                        bulkExport('filtered');
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '10px',
+                        padding: '8px 10px',
+                        border: 'none',
+                        background: 'transparent',
+                        color: 'var(--color-text)',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        transition: 'background-color 0.15s'
+                      }}
+                      className="hover-bg-alt"
+                    >
+                      <Filter size={15} style={{ marginTop: 2, color: 'var(--color-primary)', flexShrink: 0 }} />
+                      <div>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>Xuất theo bộ lọc đang xem</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: 2 }}>Khớp 100% với bộ lọc đang xem</div>
+                      </div>
+                    </button>
+                    <div style={{ height: 1, background: 'var(--color-border-light)', margin: '2px 0' }} />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowExportDropdown(false);
+                        bulkExport('full');
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '10px',
+                        padding: '8px 10px',
+                        border: 'none',
+                        background: 'transparent',
+                        color: 'var(--color-text)',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        transition: 'background-color 0.15s'
+                      }}
+                      className="hover-bg-alt"
+                    >
+                      <Download size={15} style={{ marginTop: 2, color: 'var(--color-success)', flexShrink: 0 }} />
+                      <div>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>Xuất toàn bộ</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: 2 }}>Toàn bộ dữ liệu đầy đủ 100% trường</div>
+                      </div>
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+        )}
       </div>
 
       <ImportExportModal 
@@ -1826,7 +1957,7 @@ export const DealsPage: React.FC = () => {
                     position: 'relative',
                     flexShrink: 0
                   }}
-                  title="Bộ lọc nâng cao"
+                  title="Bộ lọc chuyên sâu"
                 >
                   <SlidersHorizontal size={14} />
                   {!isMobile && <span>Bộ lọc</span>}
@@ -1869,7 +2000,7 @@ export const DealsPage: React.FC = () => {
                   </div>
                 )}
 
-                {/* 5. View Toggle (Kanban / Danh sách) */}
+                {/* 5. View Toggle (Icon-only matching ContactsPage) */}
                 {!isMobile && (
                   <div style={{
                     display: 'flex',
@@ -1888,50 +2019,46 @@ export const DealsPage: React.FC = () => {
                       onClick={() => setViewMode('kanban')}
                       title="Dạng bảng (Kanban)"
                       style={{
-                        padding: '0 8px',
+                        padding: 0,
                         height: '32px',
-                        display: 'inline-flex',
+                        width: '32px',
+                        display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: '4px',
                         borderRadius: '6px',
                         border: 'none',
                         outline: 'none',
                         boxShadow: viewMode === 'kanban' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                         background: viewMode === 'kanban' ? 'var(--color-surface)' : 'transparent',
                         color: viewMode === 'kanban' ? 'var(--color-text)' : 'var(--color-text-light)',
-                        fontSize: '0.76rem',
-                        fontWeight: 600,
-                        cursor: 'pointer'
+                        cursor: 'pointer',
+                        transition: 'all 0.2s'
                       }}
                     >
-                      <LayoutGrid size={15} />
-                      <span>Kanban</span>
+                      <LayoutGrid size={16} />
                     </button>
                     <button
                       type="button"
                       onClick={() => setViewMode('list')}
                       title="Dạng danh sách"
                       style={{
-                        padding: '0 8px',
+                        padding: 0,
                         height: '32px',
-                        display: 'inline-flex',
+                        width: '32px',
+                        display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: '4px',
                         borderRadius: '6px',
                         border: 'none',
                         outline: 'none',
                         boxShadow: viewMode === 'list' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                         background: viewMode === 'list' ? 'var(--color-surface)' : 'transparent',
                         color: viewMode === 'list' ? 'var(--color-text)' : 'var(--color-text-light)',
-                        fontSize: '0.76rem',
-                        fontWeight: 600,
-                        cursor: 'pointer'
+                        cursor: 'pointer',
+                        transition: 'all 0.2s'
                       }}
                     >
-                      <List size={15} />
-                      <span>Danh sách</span>
+                      <List size={16} />
                     </button>
                   </div>
                 )}
@@ -1958,140 +2085,6 @@ export const DealsPage: React.FC = () => {
                   >
                     <Columns size={16} />
                   </button>
-                )}
-
-                {/* 7. Xuất dữ liệu Dropdown + Nhập dữ liệu Button */}
-                {!isMobile && currentUser?.role !== 'viewer' && currentUser?.role !== 'sale' && (
-                  <>
-                    <div ref={exportDropdownRef} style={{ position: 'relative', flexShrink: 0 }}>
-                      <button
-                        type="button"
-                        onClick={() => setShowExportDropdown(prev => !prev)}
-                        disabled={isExporting}
-                        title="Xuất dữ liệu ra Excel/CSV"
-                        style={{
-                          height: '38px',
-                          padding: '0 12px',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          borderRadius: '8px',
-                          border: '1px solid var(--color-border)',
-                          background: showExportDropdown ? 'var(--color-bg-light)' : 'var(--color-surface)',
-                          color: 'var(--color-text)',
-                          fontSize: '0.8rem',
-                          fontWeight: 600,
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {isExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
-                        <span>{isExporting ? 'Đang xuất...' : 'Xuất dữ liệu'}</span>
-                        <ChevronDown size={13} style={{ transform: showExportDropdown ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
-                      </button>
-
-                      <AnimatePresence>
-                        {showExportDropdown && (
-                          <motion.div
-                            initial={{ opacity: 0, y: 6, scale: 0.96 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: 6, scale: 0.96 }}
-                            transition={{ duration: 0.15 }}
-                            style={{
-                              position: 'absolute',
-                              right: 0,
-                              top: 'calc(100% + 6px)',
-                              width: '265px',
-                              background: 'var(--color-surface)',
-                              border: '1px solid var(--color-border)',
-                              borderRadius: '10px',
-                              boxShadow: '0 10px 25px rgba(0,0,0,0.14)',
-                              padding: '6px',
-                              zIndex: 1000,
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: '2px'
-                            }}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setShowExportDropdown(false);
-                                bulkExport('filtered');
-                              }}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'flex-start',
-                                gap: '10px',
-                                padding: '8px 10px',
-                                border: 'none',
-                                background: 'transparent',
-                                color: 'var(--color-text)',
-                                borderRadius: '8px',
-                                cursor: 'pointer',
-                                textAlign: 'left'
-                              }}
-                            >
-                              <Filter size={15} style={{ marginTop: 2, color: 'var(--color-primary)', flexShrink: 0 }} />
-                              <div>
-                                <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>Xuất theo bộ lọc hiện tại</div>
-                                <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: 2 }}>Khớp 100% với bộ lọc đang xem</div>
-                              </div>
-                            </button>
-                            <div style={{ height: 1, background: 'var(--color-border-light)', margin: '2px 0' }} />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setShowExportDropdown(false);
-                                bulkExport('full');
-                              }}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'flex-start',
-                                gap: '10px',
-                                padding: '8px 10px',
-                                border: 'none',
-                                background: 'transparent',
-                                color: 'var(--color-text)',
-                                borderRadius: '8px',
-                                cursor: 'pointer',
-                                textAlign: 'left'
-                              }}
-                            >
-                              <Download size={15} style={{ marginTop: 2, color: 'var(--color-success)', flexShrink: 0 }} />
-                              <div>
-                                <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>Xuất toàn bộ</div>
-                                <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: 2 }}>Toàn bộ dữ liệu đầy đủ 100% trường</div>
-                              </div>
-                            </button>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setShowImportExport(true)}
-                      title="Nhập dữ liệu từ Excel/CSV"
-                      style={{
-                        height: '38px',
-                        padding: '0 12px',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        borderRadius: '8px',
-                        border: '1px solid var(--color-border)',
-                        background: 'var(--color-surface)',
-                        color: 'var(--color-text)',
-                        fontSize: '0.8rem',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        flexShrink: 0
-                      }}
-                    >
-                      <Upload size={14} />
-                      <span>Nhập dữ liệu</span>
-                    </button>
-                  </>
                 )}
               </div>
 
@@ -2197,144 +2190,566 @@ export const DealsPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Expanded Filter Panel */}
-              {showFilterPanel && (
-                <div style={{ borderTop: '1px solid var(--color-border-light)', paddingTop: '1rem', marginTop: '0.25rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                  {/* Loại đối tượng */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.025em' }}>Loại đối tượng</label>
-                    <CustomSelect 
-                      options={[
-                        { value: 'contacts', label: 'Khách hàng / Học viên' },
-                        { value: 'companies', label: 'Doanh nghiệp' },
-                        { value: 'deals', label: 'Cơ hội (Deals)' }
-                      ]} 
-                      value={pipelineView} 
-                      onChange={v => {
-                        setPipelineView(v as any);
-                        setPage(1);
-                      }} 
-                    />
-                  </div>
-                  {/* Trạng thái Lead */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.025em' }}>Trạng thái Lead</label>
-                    <CustomSelect
-                      options={[
-                        { value: '', label: 'Đang chăm sóc' },
-                        { value: 'nurture', label: 'Nuôi dưỡng (Nurture)' },
-                        { value: 'lost', label: 'Ngừng chăm sóc (Lost)' },
-                        { value: 'all', label: 'Tất cả' }
-                      ]}
-                      value={filterLeadStatus}
-                      onChange={v => setFilterLeadStatus(v as string)}
-                    />
-                  </div>
-                  {/* Sale phụ trách */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.025em' }}>Sale phụ trách</label>
-                    <CustomSelect 
-                      options={[{value: '', label: 'Tất cả Sale'}, ...allUsers.map(u => ({
-                        value: String(u.id), 
-                        label: u.full_name,
-                        avatar: u.avatar_url,
-                        sublabel: [u.phone, u.email, u.role].filter(Boolean).join(' - ')
-                      }))]} 
-                      value={filterAssignee} 
-                      onChange={v => setFilterAssignee(v as string)} 
-                      showAvatars
-                      searchable
-                    />
-                  </div>
-                  {/* Giai đoạn */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.025em' }}>Giai đoạn</label>
-                    <CustomSelect
-                      options={[{value: '', label: 'Tất cả giai đoạn'}, ...stages.map(s => ({value: String(s.id), label: s.name}))]}
-                      value={filterStage}
-                      onChange={v => {
-                        const val = v as string;
-                        setFilterStage(val);
-                        setActiveStageFilter(val ? (Number(val) || val) : 'all');
-                      }}
-                    />
-                  </div>
-                  {/* Chương trình */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.025em' }}>Chương trình</label>
-                    <CustomSelect 
-                      options={[{value: '', label: 'Tất cả chương trình'}, ...projects.map(p => ({value: String(p.id), label: p.name}))]} 
-                      value={filterProject} 
-                      onChange={v => {
-                        setFilterProject(v as string);
-                        setFilterCampaign('');
-                      }} 
-                      searchable
-                    />
-                  </div>
-                  {/* Chiến dịch */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.025em' }}>Chiến dịch</label>
-                    <CustomSelect 
-                      options={[{value: '', label: 'Tất cả chiến dịch'}, ...filteredCampaigns.map(c => ({value: String(c.id), label: c.name}))]} 
-                      value={filterCampaign} 
-                      onChange={v => setFilterCampaign(v as string)} 
-                      searchable
-                    />
-                  </div>
-                  {/* Nguồn dữ liệu */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.025em' }}>Nguồn dữ liệu</label>
-                    <CustomSelect 
-                      options={[{value: '', label: 'Tất cả nguồn'}, ...sources.map(s => ({value: String(s), label: String(s)}))]} 
-                      value={filterSource} 
-                      onChange={v => setFilterSource(v as string)} 
-                      searchable
-                    />
-                  </div>
-                  {/* Phân loại Tag */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.025em' }}>Phân loại Tag</label>
-                    <CustomSelect
-                      options={[{ value: '', label: 'Tất cả Tag' }, ...tagOptions]}
-                      value={filterTag}
-                      onChange={v => setFilterTag(v as string)}
-                      searchable
-                    />
-                  </div>
-                  {/* Trạng thái tương tác */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.025em' }}>Trạng thái tương tác</label>
-                    <CustomSelect
-                      options={[
-                        { value: '', label: 'Tất cả' },
-                        { value: 'uncontacted', label: 'Chưa liên hệ' },
-                        { value: 'contacted', label: 'Đã liên hệ' }
-                      ]}
-                      value={filterInteractionStatus}
-                      onChange={v => setFilterInteractionStatus(v as string)}
-                    />
-                  </div>
-                  {/* Khoảng ngày nhập học */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', gridColumn: isMobile ? undefined : 'span 2' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.025em' }}>Khoảng ngày nhập học</label>
-                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                      <div style={{ flex: 1 }}>
-                        <VietnameseDateInput size="sm" value={admissionFrom} onChange={val => setAdmissionFrom(val)} />
-                      </div>
-                      <span style={{ color: 'var(--color-text-muted)' }}>→</span>
-                      <div style={{ flex: 1 }}>
-                        <VietnameseDateInput size="sm" value={admissionTo} onChange={val => setAdmissionTo(val)} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
             </motion.div>
           )}
         </AnimatePresence>
       </div>
+
+      {/* Right-Side Slide-Over Drawer for Advanced Filters (Synchronized with ContactsPage.tsx) */}
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {showFilterPanel && (
+            <div style={{ position: 'fixed', inset: 0, zIndex: 2147483640, display: 'flex', justifyContent: 'flex-end', overflow: 'hidden' }}>
+              {/* Backdrop */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowFilterPanel(false)}
+                style={{
+                  position: 'fixed',
+                  inset: 0,
+                  background: 'rgba(15, 23, 42, 0.55)',
+                  backdropFilter: 'blur(3px)',
+                  zIndex: 2147483639
+                }}
+              />
+
+              {/* Drawer Panel */}
+              <motion.div
+                initial={{ x: '100%' }}
+                animate={{ x: 0 }}
+                exit={{ x: '100%' }}
+                transition={{ type: 'spring', damping: 26, stiffness: 260 }}
+                style={{
+                  position: 'relative',
+                  width: '100%',
+                  maxWidth: '540px',
+                  height: '100%',
+                  background: 'var(--color-surface, #ffffff)',
+                  boxShadow: '-8px 0 36px rgba(0, 0, 0, 0.28)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  zIndex: 2147483640,
+                  overflow: 'hidden'
+                }}
+              >
+                {/* Drawer Header */}
+                <div style={{
+                  padding: '1.25rem 1.5rem',
+                  borderBottom: '1px solid var(--color-border)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  background: 'var(--color-surface)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '10px',
+                      background: 'rgba(37, 99, 235, 0.1)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'var(--color-primary, #2563eb)'
+                    }}>
+                      <SlidersHorizontal size={18} />
+                    </div>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--color-text)' }}>Bộ lọc chuyên sâu</h3>
+                      <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Tùy chỉnh tiêu chí lọc danh sách khách hàng</p>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {activeFilterCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleClearFilters}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '6px 10px',
+                          borderRadius: '8px',
+                          border: '1px solid var(--color-border)',
+                          background: 'transparent',
+                          color: 'var(--color-danger, #ef4444)',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <RotateCcw size={12} /> Đặt lại
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setShowFilterPanel(false)}
+                      style={{
+                        width: '34px',
+                        height: '34px',
+                        borderRadius: '8px',
+                        border: '1px solid var(--color-border)',
+                        background: 'var(--color-surface)',
+                        color: 'var(--color-text-muted)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Drawer Body */}
+                <div style={{
+                  flex: 1,
+                  overflowY: 'auto',
+                  padding: '1.25rem 1.5rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '1.25rem'
+                }}>
+                  {/* Card 1: Học vụ & Mốc thời gian */}
+                  <div style={{
+                    padding: '1.1rem',
+                    borderRadius: '14px',
+                    background: 'var(--color-bg-alt, rgba(0,0,0,0.02))',
+                    border: '1px solid var(--color-border-light)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.875rem' }}>
+                      <GraduationCap size={16} color="var(--color-text, #0f172a)" /> Học vụ & Mốc thời gian
+                    </div>
+
+                    {/* Khoảng ngày nhập học */}
+                    <div style={{ marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px solid var(--color-border-light)' }}>
+                      <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '6px' }}>Khoảng ngày nhập học</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px', marginBottom: '8px' }}>
+                        {[
+                          { id: 'this_month', label: 'Tháng này' },
+                          { id: 'next_month', label: 'Tháng sau' },
+                          { id: 'this_quarter', label: 'Quý này' },
+                          { id: 'this_year', label: 'Năm nay' }
+                        ].map(p => {
+                          const now = new Date();
+                          const y = now.getFullYear();
+                          const m = now.getMonth();
+                          let pFrom = '';
+                          let pTo = '';
+                          if (p.id === 'this_month') {
+                            pFrom = formatLocalDate(new Date(y, m, 1));
+                            pTo = formatLocalDate(new Date(y, m + 1, 0));
+                          } else if (p.id === 'next_month') {
+                            pFrom = formatLocalDate(new Date(y, m + 1, 1));
+                            pTo = formatLocalDate(new Date(y, m + 2, 0));
+                          } else if (p.id === 'this_quarter') {
+                            const qStart = Math.floor(m / 3) * 3;
+                            pFrom = formatLocalDate(new Date(y, qStart, 1));
+                            pTo = formatLocalDate(new Date(y, qStart + 3, 0));
+                          } else if (p.id === 'this_year') {
+                            pFrom = formatLocalDate(new Date(y, 0, 1));
+                            pTo = formatLocalDate(new Date(y, 11, 31));
+                          }
+                          const isSelected = Boolean(pFrom && admissionFrom === pFrom && admissionTo === pTo);
+                          return (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => {
+                                if (isSelected) {
+                                  setAdmissionFrom('');
+                                  setAdmissionTo('');
+                                } else {
+                                  setAdmissionFrom(pFrom);
+                                  setAdmissionTo(pTo);
+                                }
+                              }}
+                              style={{
+                                padding: '6px 4px',
+                                fontSize: '0.72rem',
+                                fontWeight: isSelected ? 700 : 500,
+                                borderRadius: '6px',
+                                border: isSelected ? '1.5px solid var(--color-primary)' : '1px solid var(--color-border)',
+                                background: 'var(--color-surface, #ffffff)',
+                                color: isSelected ? 'var(--color-primary)' : 'var(--color-text)',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {p.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                        <div>
+                          <label style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '2px' }}>Từ ngày</label>
+                          <input
+                            type="date"
+                            className="form-input"
+                            value={admissionFrom}
+                            onChange={e => setAdmissionFrom(e.target.value)}
+                            style={{ height: '36px', fontSize: '0.8125rem', borderRadius: '8px' }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '2px' }}>Đến ngày</label>
+                          <input
+                            type="date"
+                            className="form-input"
+                            value={admissionTo}
+                            onChange={e => setAdmissionTo(e.target.value)}
+                            style={{ height: '36px', fontSize: '0.8125rem', borderRadius: '8px' }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Lọc theo ngày */}
+                    <div>
+                      <div style={{ marginBottom: '0.75rem' }}>
+                        <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Lọc theo ngày</label>
+                        <CustomSelect
+                          value={dateField}
+                          onChange={v => setDateField(v as any)}
+                          options={[
+                            { value: 'created_at', label: 'Ngày tạo' },
+                            { value: 'updated_at', label: 'Ngày cập nhật' },
+                            { value: 'last_contact', label: 'Ngày tương tác cuối' },
+                            { value: 'admission_date', label: 'Ngày nhập học' }
+                          ]}
+                        />
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px', marginBottom: '8px' }}>
+                        {[
+                          { id: 'today', label: 'Hôm nay' },
+                          { id: 'last_7_days', label: '7 ngày' },
+                          { id: 'this_month', label: 'Tháng này' },
+                          { id: 'last_30_days', label: '30 ngày' }
+                        ].map(p => {
+                          const isSel = dateFilterType === p.id;
+                          return (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => {
+                                if (isSel) {
+                                  setDateFilterType('');
+                                  setFilterDateFrom('');
+                                  setFilterDateTo('');
+                                } else {
+                                  const range = computeDateRange(p.id, '', '');
+                                  setDateFilterType(p.id);
+                                  setFilterDateFrom(range.from);
+                                  setFilterDateTo(range.to);
+                                }
+                              }}
+                              style={{
+                                padding: '5px 4px',
+                                fontSize: '0.72rem',
+                                fontWeight: isSel ? 700 : 500,
+                                borderRadius: '6px',
+                                border: isSel ? '1.5px solid var(--color-primary)' : '1px solid var(--color-border)',
+                                background: '#ffffff',
+                                color: isSel ? 'var(--color-primary)' : 'var(--color-text)',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {p.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                        <div>
+                          <label style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '2px' }}>Từ ngày</label>
+                          <input
+                            type="date"
+                            className="form-input"
+                            value={filterDateFrom}
+                            onChange={e => {
+                              setFilterDateFrom(e.target.value);
+                              setDateFilterType(e.target.value || filterDateTo ? 'custom' : '');
+                            }}
+                            style={{ height: '36px', fontSize: '0.8125rem', borderRadius: '8px' }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '2px' }}>Đến ngày</label>
+                          <input
+                            type="date"
+                            className="form-input"
+                            value={filterDateTo}
+                            onChange={e => {
+                              setFilterDateTo(e.target.value);
+                              setDateFilterType(filterDateFrom || e.target.value ? 'custom' : '');
+                            }}
+                            style={{ height: '36px', fontSize: '0.8125rem', borderRadius: '8px' }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 2: Tiến trình & Trạng thái Lead */}
+                  <div style={{
+                    padding: '1.1rem',
+                    borderRadius: '14px',
+                    background: 'var(--color-bg-alt, rgba(0,0,0,0.02))',
+                    border: '1px solid var(--color-border-light)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.875rem' }}>
+                      <Layers size={16} color="var(--color-text, #0f172a)" /> Tiến trình & Trạng thái Lead
+                    </div>
+
+                    {/* Loại đối tượng */}
+                    <div style={{ marginBottom: '1rem' }}>
+                      <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '6px' }}>Loại đối tượng</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+                        {[
+                          { id: 'contacts', label: 'Khách hàng / HV' },
+                          { id: 'companies', label: 'Doanh nghiệp' },
+                          { id: 'deals', label: 'Cơ hội (Deals)' }
+                        ].map(opt => {
+                          const isSelected = pipelineView === opt.id;
+                          return (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => {
+                                setPipelineView(opt.id as any);
+                                setPage(1);
+                              }}
+                              style={{
+                                padding: '7px 8px',
+                                fontSize: '0.76rem',
+                                fontWeight: isSelected ? 700 : 500,
+                                borderRadius: '8px',
+                                border: isSelected ? '1.5px solid var(--color-primary)' : '1px solid var(--color-border)',
+                                background: 'var(--color-surface, #ffffff)',
+                                color: isSelected ? 'var(--color-primary)' : 'var(--color-text)',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Trạng thái Lead */}
+                    <div style={{ marginBottom: '1rem' }}>
+                      <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '6px' }}>Trạng thái Lead</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
+                        {[
+                          { id: 'all', label: 'Tất cả', color: 'var(--color-primary)' },
+                          { id: '', label: 'Hoạt động', color: '#10b981' },
+                          { id: 'nurture', label: 'Nuôi dưỡng', color: '#d97706' },
+                          { id: 'lost', label: 'Data Lost', color: '#ef4444' }
+                        ].map(st => {
+                          const isSelected = filterLeadStatus === st.id;
+                          return (
+                            <button
+                              key={st.id || 'active'}
+                              type="button"
+                              onClick={() => setFilterLeadStatus(st.id)}
+                              style={{
+                                padding: '7px 6px',
+                                fontSize: '0.76rem',
+                                fontWeight: isSelected ? 700 : 500,
+                                borderRadius: '8px',
+                                border: isSelected ? `1.5px solid ${st.color}` : '1px solid var(--color-border)',
+                                background: 'var(--color-surface, #ffffff)',
+                                color: isSelected ? st.color : 'var(--color-text)',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {st.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Giai đoạn Pipeline */}
+                    <div style={{ marginBottom: '1rem' }}>
+                      <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Giai đoạn Pipeline</label>
+                      <CustomSelect
+                        options={[{ value: '', label: 'Tất cả giai đoạn' }, ...stages.map(s => ({ value: String(s.id), label: s.name }))]}
+                        value={filterStage}
+                        onChange={v => {
+                          const val = v as string;
+                          setFilterStage(val);
+                          setActiveStageFilter(val ? (Number(val) || val) : 'all');
+                        }}
+                        searchable
+                      />
+                    </div>
+
+                    {/* Trạng thái tương tác */}
+                    <div>
+                      <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '6px' }}>Trạng thái tương tác</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+                        {[
+                          { id: '', label: 'Tất cả' },
+                          { id: 'uncontacted', label: 'Chưa liên hệ' },
+                          { id: 'contacted', label: 'Đã liên hệ' }
+                        ].map(opt => {
+                          const isSelected = filterInteractionStatus === opt.id;
+                          return (
+                            <button
+                              key={opt.id || 'all'}
+                              type="button"
+                              onClick={() => setFilterInteractionStatus(opt.id)}
+                              style={{
+                                padding: '7px 8px',
+                                fontSize: '0.78rem',
+                                fontWeight: isSelected ? 700 : 500,
+                                borderRadius: '8px',
+                                border: isSelected ? '1.5px solid var(--color-primary)' : '1px solid var(--color-border)',
+                                background: 'var(--color-surface, #ffffff)',
+                                color: isSelected ? 'var(--color-primary)' : 'var(--color-text)',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 3: Phụ trách & Nguồn dữ liệu */}
+                  <div style={{
+                    padding: '1.1rem',
+                    borderRadius: '14px',
+                    background: 'var(--color-bg-alt, rgba(0,0,0,0.02))',
+                    border: '1px solid var(--color-border-light)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.875rem' }}>
+                      <Users size={16} color="var(--color-text, #0f172a)" /> Phụ trách & Nguồn dữ liệu
+                    </div>
+
+                    {/* Sale phụ trách */}
+                    {currentUser?.role !== 'sale' && currentUser?.role !== 'sales' && (
+                      <div style={{ marginBottom: '0.875rem' }}>
+                        <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Sale phụ trách</label>
+                        <CustomSelect
+                          options={[{ value: '', label: 'Tất cả Sale' }, ...allUsers.map(u => ({
+                            value: String(u.id),
+                            label: u.full_name,
+                            avatar: u.avatar_url,
+                            sublabel: [u.phone, u.email, u.role].filter(Boolean).join(' - ')
+                          }))]}
+                          value={filterAssignee}
+                          onChange={v => setFilterAssignee(v as string)}
+                          showAvatars
+                          searchable
+                        />
+                      </div>
+                    )}
+
+                    {/* Dự án & Chiến dịch */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '0.875rem' }}>
+                      <div>
+                        <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Chương trình / Dự án</label>
+                        <CustomSelect
+                          options={[{ value: '', label: 'Tất cả chương trình' }, ...projects.map(p => ({ value: String(p.id), label: p.name }))]}
+                          value={filterProject}
+                          onChange={v => {
+                            setFilterProject(v as string);
+                            setFilterCampaign('');
+                          }}
+                          searchable
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Chiến dịch</label>
+                        <CustomSelect
+                          options={[{ value: '', label: 'Tất cả chiến dịch' }, ...filteredCampaigns.map(c => ({ value: String(c.id), label: c.name }))]}
+                          value={filterCampaign}
+                          onChange={v => setFilterCampaign(v as string)}
+                          searchable
+                        />
+                      </div>
+                    </div>
+
+                    {/* Nguồn & Phân loại Tag */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      <div>
+                        <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Nguồn khách hàng</label>
+                        <CustomSelect
+                          options={[{ value: '', label: 'Tất cả nguồn' }, ...sources.map(s => ({ value: String(s), label: String(s) }))]}
+                          value={filterSource}
+                          onChange={v => setFilterSource(v as string)}
+                          searchable
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Phân loại (Tag)</label>
+                        <CustomSelect
+                          options={[{ value: '', label: 'Tất cả Tag' }, ...tagOptions]}
+                          value={filterTag}
+                          onChange={v => setFilterTag(v as string)}
+                          searchable
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Drawer Footer */}
+                <div style={{
+                  padding: '1rem 1.5rem',
+                  borderTop: '1px solid var(--color-border)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  background: 'var(--color-surface)',
+                  gap: '0.75rem'
+                }}>
+                  <button
+                    type="button"
+                    className="btn outline"
+                    onClick={handleClearFilters}
+                    style={{ borderRadius: '10px', fontWeight: 600, fontSize: '0.85rem' }}
+                  >
+                    Đặt lại
+                  </button>
+
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button
+                      type="button"
+                      className="btn outline"
+                      onClick={() => setShowFilterPanel(false)}
+                      style={{ borderRadius: '10px', fontWeight: 600, fontSize: '0.85rem' }}
+                    >
+                      Hủy
+                    </button>
+                    <button
+                      type="button"
+                      className="btn primary"
+                      onClick={() => setShowFilterPanel(false)}
+                      style={{ borderRadius: '10px', fontWeight: 600, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <CheckCircle2 size={16} /> Áp dụng bộ lọc
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
 
       {viewMode === 'list' && (
         <div 
