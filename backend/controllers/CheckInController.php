@@ -2676,10 +2676,33 @@ class CheckInController {
         respond(200, $row);
     }
 
+    private function resolveEmployeeLateGraceMinutes(?string $gender, ?string $fullName, int $graceMale = 30, int $graceFemale = 60): array {
+        $g = mb_strtolower(trim((string)$gender), 'UTF-8');
+        $isMale = in_array($g, ['male', 'nam', 'm', '1', 'boy', 'man'], true);
+        $isFemale = in_array($g, ['female', 'nữ', 'nu', 'f', '0', 'girl', 'woman'], true);
+        if (!$isMale && !$isFemale && !empty($fullName)) {
+            $n = ' ' . mb_strtolower(trim($fullName), 'UTF-8') . ' ';
+            if (strpos($n, ' thị ') !== false || strpos($n, ' nữ ') !== false || strpos($n, ' ngọc ') !== false || strpos($n, ' tuyết ') !== false || strpos($n, ' trâm ') !== false || strpos($n, ' thảo ') !== false || strpos($n, ' uyên ') !== false || strpos($n, ' nhi ') !== false || strpos($n, ' trân ') !== false || strpos($n, ' lan ') !== false || strpos($n, ' huyền ') !== false || strpos($n, ' ái ') !== false || strpos($n, ' thoa ') !== false || strpos($n, ' thương ') !== false || strpos($n, ' ngân ') !== false || strpos($n, ' linh ') !== false || strpos($n, ' thi ') !== false) {
+                $isFemale = true;
+            } elseif (strpos($n, ' văn ') !== false || strpos($n, ' đình ') !== false || strpos($n, ' trọng ') !== false || strpos($n, ' hoàng ') !== false || strpos($n, ' gia ') !== false || strpos($n, ' trí ') !== false || strpos($n, ' quốc ') !== false || strpos($n, ' trùng ') !== false || strpos($n, ' quang ') !== false) {
+                $isMale = true;
+            }
+        }
+        $resolvedGender = $isMale ? 'male' : 'female';
+        $graceMinutes = $isMale ? $graceMale : $graceFemale;
+        return [
+            'gender' => $resolvedGender,
+            'gender_label' => $isMale ? 'Nam' : 'Nữ',
+            'grace_minutes' => $graceMinutes,
+        ];
+    }
+
     public function getStats(array $auth): void {
         $tid = (int)($auth['tenant_id'] ?? 1);
         $today = date('Y-m-d');
-        $month = date('Y-m');
+        $reqMonth = trim((string)($_GET['month'] ?? $_GET['month_year'] ?? ''));
+        $month = (preg_match('/^\d{4}-\d{2}$/', $reqMonth)) ? $reqMonth : date('Y-m');
+        $targetUserId = !empty($_GET['user_id']) ? (int)$_GET['user_id'] : (int)($auth['user_id'] ?? $auth['id'] ?? 0);
 
         $stmtToday = $this->db->prepare("
             SELECT COUNT(DISTINCT check_ins.user_id) as total_present,
@@ -2696,14 +2719,98 @@ class CheckInController {
         $stmtUsers->execute([$tid]);
         $totalEmployees = (int)$stmtUsers->fetchColumn();
 
+        // Fetch system settings for grace minutes (Nam: 30p, Nữ: 60p)
+        $graceMale = 30;
+        $graceFemale = 60;
+        try {
+            $stmtGrace = $this->db->prepare("SELECT setting_value FROM system_settings WHERE setting_key = ? LIMIT 1");
+            $stmtGrace->execute(['hrm_late_grace_male']);
+            $graceMale = (int)($stmtGrace->fetchColumn() ?: 30);
+            $stmtGrace->execute(['hrm_late_grace_female']);
+            $graceFemale = (int)($stmtGrace->fetchColumn() ?: 60);
+        } catch (\Throwable $eG) {}
+
+        // Resolve gender & monthly late quota for the requested user
+        $userGender = null;
+        $userFullName = $auth['full_name'] ?? $auth['name'] ?? null;
+        if ($targetUserId > 0) {
+            $stmtTargetUser = $this->db->prepare("SELECT id, gender, full_name FROM users WHERE id = ? AND tenant_id = ? LIMIT 1");
+            $stmtTargetUser->execute([$targetUserId, $tid]);
+            $uRow = $stmtTargetUser->fetch(PDO::FETCH_ASSOC);
+            if ($uRow) {
+                $userGender = $uRow['gender'] ?? null;
+                $userFullName = $uRow['full_name'] ?? $userFullName;
+            } else {
+                $targetUserId = (int)($auth['user_id'] ?? $auth['id'] ?? 0);
+            }
+        }
+        $graceInfo = $this->resolveEmployeeLateGraceMinutes($userGender, $userFullName, $graceMale, $graceFemale);
+        $lateGraceMinutes = $graceInfo['grace_minutes'];
+
+        // Calculate monthly total_late_minutes for approved check-ins (excluding dates with approved late_early leave)
+        $totalLateMinutes = 0;
+        $monthlyLateCount = 0;
+        if ($targetUserId > 0) {
+            $startDateOfMonth = $month . '-01';
+            $endDateOfMonth = date('Y-m-t', strtotime($startDateOfMonth));
+            $waivedDates = [];
+            try {
+                $stmtLe = $this->db->prepare("
+                    SELECT DATE(start_date) as le_date, DATE(COALESCE(end_date, start_date)) as le_end_date
+                    FROM hrm_leave_requests
+                    WHERE user_id = ? AND status = 'approved' AND leave_type = 'late_early'
+                      AND start_date <= ? AND COALESCE(end_date, start_date) >= ?
+                ");
+                $stmtLe->execute([$targetUserId, $endDateOfMonth . ' 23:59:59', $startDateOfMonth . ' 00:00:00']);
+                while ($rLe = $stmtLe->fetch(PDO::FETCH_ASSOC)) {
+                    $curD = strtotime($rLe['le_date']);
+                    $endD = strtotime($rLe['le_end_date'] ?: $rLe['le_date']);
+                    while ($curD && $curD <= $endD) {
+                        $waivedDates[date('Y-m-d', $curD)] = true;
+                        $curD += 86400;
+                    }
+                }
+            } catch (\Throwable $eLe) {}
+
+            try {
+                $stmtCi = $this->db->prepare("
+                    SELECT c.check_in_date, c.late_minutes
+                    FROM check_ins c
+                    JOIN users u ON c.user_id = u.id
+                    WHERE u.tenant_id = ? AND c.user_id = ? AND c.status = 'approved'
+                      AND c.check_in_date >= ? AND c.check_in_date <= ?
+                ");
+                $stmtCi->execute([$tid, $targetUserId, $startDateOfMonth, $endDateOfMonth]);
+                while ($rCi = $stmtCi->fetch(PDO::FETCH_ASSOC)) {
+                    $cDate = $rCi['check_in_date'];
+                    $lMin = (int)($rCi['late_minutes'] ?? 0);
+                    if ($lMin > 0 && !isset($waivedDates[$cDate])) {
+                        $totalLateMinutes += $lMin;
+                        $monthlyLateCount++;
+                    }
+                }
+            } catch (\Throwable $eCi) {}
+        }
+
+        $remainingLateGraceMinutes = max(0, $lateGraceMinutes - $totalLateMinutes);
+        $excessLateMinutes = max(0, $totalLateMinutes - $lateGraceMinutes);
+
         $stats = [
             'date' => $today,
             'month' => $month,
+            'user_id' => $targetUserId,
             'total_employees' => $totalEmployees,
             'present_today' => (int)($todayStats['total_present'] ?? 0),
             'late_today' => (int)($todayStats['total_late'] ?? 0),
             'early_today' => (int)($todayStats['total_early'] ?? 0),
-            'attendance_rate' => $totalEmployees > 0 ? round(((int)$todayStats['total_present'] / $totalEmployees) * 100, 1) : 100
+            'attendance_rate' => $totalEmployees > 0 ? round(((int)$todayStats['total_present'] / $totalEmployees) * 100, 1) : 100,
+            'total_late_minutes' => $totalLateMinutes,
+            'monthly_late_count' => $monthlyLateCount,
+            'gender' => $graceInfo['gender'],
+            'gender_label' => $graceInfo['gender_label'],
+            'late_grace_minutes' => $lateGraceMinutes,
+            'remaining_late_grace_minutes' => $remainingLateGraceMinutes,
+            'excess_late_minutes' => $excessLateMinutes,
         ];
 
         respond(200, $stats, 'Lấy thống kê chấm công thành công');

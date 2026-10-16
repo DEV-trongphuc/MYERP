@@ -52,14 +52,28 @@ class ContactController {
         $where  = ['c.tenant_id = ?', 'c.deleted_at IS NULL', 'c.owner_id IS NOT NULL'];
         $params = [$tid];
         $role = strtolower($auth['role'] ?? '');
-        $isAcademicUser = in_array($role, ['academic', 'hoc_vu', 'hoc_thuat', 'tro_giang', 'teacher', 'giang_vien'], true);
+        $isAcademicUser = in_array($role, ['academic', 'hoc_vu', 'hoc_thuat', 'dao_tao', 'tro_giang', 'teacher', 'giang_vien', 'giao_vien', 'tutor'], true);
         if (!$isAcademicUser) {
-            $stmtDept = $this->db->prepare("SELECT department, job_title FROM users WHERE id = ? LIMIT 1");
+            $stmtDept = $this->db->prepare("SELECT u.department, u.job_title, u.team_id, t.name as team_name FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ? LIMIT 1");
             $stmtDept->execute([$auth['user_id']]);
             $uRow = $stmtDept->fetch();
             if ($uRow) {
-                $comb = mb_strtolower(($uRow['department'] ?? '') . ' ' . ($uRow['job_title'] ?? ''));
-                if (strpos($comb, 'học vụ') !== false || strpos($comb, 'học thuật') !== false || strpos($comb, 'academic') !== false || strpos($comb, 'giảng viên') !== false || strpos($comb, 'trợ giảng') !== false) {
+                $comb = mb_strtolower(($uRow['department'] ?? '') . ' ' . ($uRow['job_title'] ?? '') . ' ' . ($uRow['team_name'] ?? ''));
+                if (
+                    (int)($uRow['team_id'] ?? 0) === 5 ||
+                    strpos($comb, 'học vụ') !== false ||
+                    strpos($comb, 'hoc_vu') !== false ||
+                    strpos($comb, 'học thuật') !== false ||
+                    strpos($comb, 'hoc_thuat') !== false ||
+                    strpos($comb, 'đào tạo') !== false ||
+                    strpos($comb, 'dao_tao') !== false ||
+                    strpos($comb, 'academic') !== false ||
+                    strpos($comb, 'giảng viên') !== false ||
+                    strpos($comb, 'giáo viên') !== false ||
+                    strpos($comb, 'trợ giảng') !== false ||
+                    strpos($comb, 'tutor') !== false ||
+                    strpos($comb, 'teacher') !== false
+                ) {
                     $isAcademicUser = true;
                 }
             }
@@ -3003,15 +3017,29 @@ class ContactController {
         }
 
         $isAcademic = false;
-        if (in_array(strtolower($auth['role'] ?? ''), ['academic', 'hoc_vu', 'hoc_thuat', 'tro_giang', 'teacher', 'giang_vien'], true)) {
+        if (in_array(strtolower($auth['role'] ?? ''), ['academic', 'hoc_vu', 'hoc_thuat', 'dao_tao', 'tro_giang', 'teacher', 'giang_vien', 'giao_vien', 'tutor'], true)) {
             $isAcademic = true;
         } else {
-            $stmtDept = $this->db->prepare("SELECT department, job_title FROM users WHERE id = ? LIMIT 1");
+            $stmtDept = $this->db->prepare("SELECT u.department, u.job_title, u.team_id, t.name as team_name FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ? LIMIT 1");
             $stmtDept->execute([$auth['user_id']]);
             $uRow = $stmtDept->fetch();
             if ($uRow) {
-                $comb = mb_strtolower(($uRow['department'] ?? '') . ' ' . ($uRow['job_title'] ?? ''));
-                if (strpos($comb, 'học vụ') !== false || strpos($comb, 'học thuật') !== false || strpos($comb, 'academic') !== false || strpos($comb, 'giảng viên') !== false || strpos($comb, 'trợ giảng') !== false) {
+                $comb = mb_strtolower(($uRow['department'] ?? '') . ' ' . ($uRow['job_title'] ?? '') . ' ' . ($uRow['team_name'] ?? ''));
+                if (
+                    (int)($uRow['team_id'] ?? 0) === 5 ||
+                    strpos($comb, 'học vụ') !== false ||
+                    strpos($comb, 'hoc_vu') !== false ||
+                    strpos($comb, 'học thuật') !== false ||
+                    strpos($comb, 'hoc_thuat') !== false ||
+                    strpos($comb, 'đào tạo') !== false ||
+                    strpos($comb, 'dao_tao') !== false ||
+                    strpos($comb, 'academic') !== false ||
+                    strpos($comb, 'giảng viên') !== false ||
+                    strpos($comb, 'giáo viên') !== false ||
+                    strpos($comb, 'trợ giảng') !== false ||
+                    strpos($comb, 'tutor') !== false ||
+                    strpos($comb, 'teacher') !== false
+                ) {
                     $isAcademic = true;
                 }
             }

@@ -2461,6 +2461,18 @@ switch ($action) {
                     'exp' => time() + 86400 * 30
                 ];
                 $token = create_jwt($payload, $JWT_SECRET);
+                $uExtra = ['job_title' => null, 'department' => null, 'team_id' => null];
+                $stmtUEx = $conn->prepare("SELECT job_title, department, team_id, role FROM users WHERE id = ? LIMIT 1");
+                if ($stmtUEx) {
+                    $uidInt = (int)$user['id'];
+                    $stmtUEx->bind_param("i", $uidInt);
+                    $stmtUEx->execute();
+                    $resUEx = $stmtUEx->get_result();
+                    if ($resUEx && $rowUEx = $resUEx->fetch_assoc()) {
+                        $uExtra = $rowUEx;
+                    }
+                    $stmtUEx->close();
+                }
                 echo json_encode([
                     'success' => true,
                     'token' => $token,
@@ -2472,6 +2484,9 @@ switch ($action) {
                         'email' => $user['email'] ?? '',
                         'role' => $user['role'] === 'sales' ? 'sale' : $user['role'],
                         'name' => $user['name'],
+                        'job_title' => $uExtra['job_title'] ?? null,
+                        'department' => $uExtra['department'] ?? null,
+                        'team_id' => $uExtra['team_id'] ?? null,
                         'avatar' => $user['avatar'] ?? null
                     ]
                 ]);
@@ -2554,6 +2569,19 @@ switch ($action) {
                 $upd->close();
             }
 
+            $uExtra = ['job_title' => null, 'department' => null, 'team_id' => null];
+            $stmtUEx = $conn->prepare("SELECT job_title, department, team_id, role FROM users WHERE id = ? LIMIT 1");
+            if ($stmtUEx) {
+                $uidInt = (int)$user['id'];
+                $stmtUEx->bind_param("i", $uidInt);
+                $stmtUEx->execute();
+                $resUEx = $stmtUEx->get_result();
+                if ($resUEx && $rowUEx = $resUEx->fetch_assoc()) {
+                    $uExtra = $rowUEx;
+                }
+                $stmtUEx->close();
+            }
+
             $payload = [
                 'id' => $user['id'],
                 'user_id' => $user['id'],
@@ -2567,10 +2595,15 @@ switch ($action) {
                 'success' => true,
                 'token' => $token,
                 'user' => [
+                    'id' => $user['id'],
+                    'user_id' => $user['id'],
                     'username' => $user['username'],
                     'email' => $user['email'] ?? '',
                     'role' => $user['role'] === 'sales' ? 'sale' : $user['role'],
                     'name' => $user['name'],
+                    'job_title' => $uExtra['job_title'] ?? null,
+                    'department' => $uExtra['department'] ?? null,
+                    'team_id' => $uExtra['team_id'] ?? null,
                     'avatar' => $user['avatar'] ?? null
                 ]
             ]);

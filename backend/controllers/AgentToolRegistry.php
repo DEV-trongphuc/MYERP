@@ -5,6 +5,10 @@
  * Enforces Zero-Trust Server-Side RBAC, Aggregation & Slice Guards against Token Explosion.
  */
 
+require_once __DIR__ . '/agent_tools/AgentTaskProjectTools.php';
+require_once __DIR__ . '/agent_tools/AgentHrmAttendanceTools.php';
+require_once __DIR__ . '/agent_tools/AgentPoSoFinanceTools.php';
+
 class AgentToolRegistry {
 
     /**
@@ -1514,7 +1518,7 @@ class AgentToolRegistry {
                     ],
                     [
                         'name' => 'query_finance_multitier_analytics',
-                        'description' => 'SIÊU CÔNG CỤ PHÂN TÍCH TÀI CHÍNH, CHI PHÍ & NGÂN SÁCH ĐA TẦNG (MULTI-TIER FINANCIAL & EXPENSE ANALYTICS): Phân tích, tổng hợp và bóc tách các đề xuất chi phí (PO), tạm ứng, dòng tiền toàn viện hoặc theo phòng ban (Marketing, Tuyển sinh, Học vụ, Vận hành), hạng mục chi tiêu, và trạng thái phê duyệt (chờ duyệt L1/L2, đã duyệt, đã chi, đã hoàn ứng). Tự động tính tổng ngân sách, chi tiêu thực tế, phát hiện các khoản chi vượt hạn mức hoặc sắp đến hạn thanh toán, trích xuất ma trận phòng ban × hạng mục, kèm biểu đồ trực quan Recharts.',
+                        'description' => 'SIÊU CÔNG CỤ PHÂN TÍCH TÀI CHÍNH, CHI PHÍ & NGÂN SÁCH ĐA TẦNG (MULTI-TIER FINANCIAL & EXPENSE ANALYTICS): Phân tích, tổng hợp và bóc tách các đề xuất chi phí (PO), tạm ứng, dòng tiền toàn viện hoặc theo phòng ban (Marketing, Tuyển sinh, Học vụ, Vận hành), hạng mục chi tiêu, và trạng thái phê duyệt (chờ duyệt L1/L2/L3, đã duyệt, chờ giải ngân, đã chi, đã hoàn ứng). Hỗ trợ lọc theo nhà cung cấp, người tạo, người duyệt, hóa đơn VAT, thực thể liên kết (expense_entities) và custom_rules trên toàn bộ 40 cột bảng expenses.',
                         'parameters' => [
                             'type' => 'OBJECT',
                             'properties' => [
@@ -1528,7 +1532,40 @@ class AgentToolRegistry {
                                 ],
                                 'statuses' => [
                                     'type' => 'STRING',
-                                    'description' => 'Trạng thái duyệt: "pending, approved, paid, rejected" hoặc "pending_l1, pending_l2". Mặc định lấy tất cả.'
+                                    'description' => 'Trạng thái duyệt: "pending, approved, paid, rejected" hoặc "pending_l1, pending_l2, pending_l3, waiting_disbursement, disbursed". Mặc định lấy tất cả.'
+                                ],
+                                'vendor_name' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tên nhà cung cấp / đơn vị thụ hưởng (vendor_name).'
+                                ],
+                                'created_by_name' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tên hoặc ID người tạo đề xuất chi.'
+                                ],
+                                'approver_name' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tên hoặc ID người phê duyệt (cấp 1, cấp 2 hoặc cấp 3).'
+                                ],
+                                'has_vat_invoice' => [
+                                    'type' => 'BOOLEAN',
+                                    'description' => 'Lọc theo việc đã có hóa đơn VAT đính kèm (vat_invoice_url) hay chưa (true/false).'
+                                ],
+                                'is_vat_inclusive' => [
+                                    'type' => 'BOOLEAN',
+                                    'description' => 'Lọc theo khoản chi có bao gồm thuế VAT hay không (true/false).'
+                                ],
+                                'entity_type' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Loại thực thể phân bổ chi phí trong expense_entities (user, contact, project, marketing_campaign, department).'
+                                ],
+                                'entity_keyword' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tên thực thể phân bổ chi phí (tên nhân sự, dự án, chiến dịch, học viên).'
+                                ],
+                                'date_field' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['date', 'due_date', 'created_at', 'approved_at', 'refunded_at'],
+                                    'description' => 'Trường thời gian lọc (mặc định: date).'
                                 ],
                                 'period' => [
                                     'type' => 'STRING',
@@ -1555,6 +1592,10 @@ class AgentToolRegistry {
                                     'type' => 'BOOLEAN',
                                     'description' => 'Chỉ lọc các khoản chi/tạm ứng đã quá hạn thanh toán.'
                                 ],
+                                'custom_rules' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Chuỗi JSON quy tắc lọc động trên 40 cột bảng expenses: [{"field":"tax_rate","operator":"gt","value":0}].'
+                                ],
                                 'group_by' => [
                                     'type' => 'STRING',
                                     'enum' => ['department_category', 'department_status', 'month_department', 'category'],
@@ -1569,7 +1610,7 @@ class AgentToolRegistry {
                     ],
                     [
                         'name' => 'query_deposits_and_revenue_multitier',
-                        'description' => 'SIÊU CÔNG CỤ PHÂN TÍCH ĐA TẦNG DOANH THU, PHIẾU THU CỌC (SO) & CÔNG NỢ HỌC VIÊN: Lọc chéo và gom nhóm đa chiều theo chương trình/dự án (EMBA, MBA, DBA...), trạng thái phiếu thu (approved, pending, cancelled), chuyên viên tư vấn/người tạo, tình trạng công nợ đợt đóng tiền (deposit_milestones: overdue, due_soon, unpaid, fully_paid), khoảng tiền, khoảng ngày và tự động sinh biểu đồ kèm link tải file Excel/CSV.',
+                        'description' => 'SIÊU CÔNG CỤ PHÂN TÍCH ĐA TẦNG DOANH THU, PHIẾU THU CỌC (SO) & CÔNG NỢ HỌC VIÊN: Lọc chéo và gom nhóm đa chiều theo chương trình/dự án (EMBA, MBA, DBA...), trạng thái phiếu thu (approved, pending, pending_admin, cancelled), chuyên viên tư vấn/người tạo, kế toán duyệt, tình trạng công nợ đợt đóng tiền (deposit_milestones: overdue, due_soon, unpaid, waiting_unc_approval, fully_paid, failed), khoảng tiền, khoảng ngày và custom_rules trên toàn bộ 24 cột bảng deposits.',
                         'parameters' => [
                             'type' => 'OBJECT',
                             'properties' => [
@@ -1579,16 +1620,36 @@ class AgentToolRegistry {
                                 ],
                                 'statuses' => [
                                     'type' => 'STRING',
-                                    'description' => 'Trạng thái phiếu cọc/SO (VD: "approved", "pending", "cancelled" hoặc "approved,pending").'
+                                    'description' => 'Trạng thái phiếu cọc/SO (VD: "approved", "pending", "pending_admin", "cancelled" hoặc "approved,pending").'
                                 ],
                                 'owners' => [
                                     'type' => 'STRING',
                                     'description' => 'Tên hoặc ID chuyên viên tư vấn / người lập phiếu (cách nhau dấu phẩy).'
                                 ],
+                                'accountant_name' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tên hoặc ID kế toán phụ trách duyệt phiếu thu.'
+                                ],
+                                'unit_code' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Mã phiếu / mã khóa học (unit_code).'
+                                ],
+                                'currency' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Loại tiền tệ (VND, USD, CHF, EUR).'
+                                ],
+                                'branches_or_cities' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tỉnh/thành phố hoặc khu vực của học viên.'
+                                ],
+                                'sources' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Nguồn khách hàng (Facebook, Zalo, Data cá nhân, Referral...).'
+                                ],
                                 'milestone_status' => [
                                     'type' => 'STRING',
-                                    'enum' => ['all', 'overdue', 'due_soon', 'unpaid', 'fully_paid'],
-                                    'description' => 'Lọc theo tiến độ thanh toán các đợt cọc (deposit_milestones): overdue (Quá hạn đóng học phí), due_soon (Sắp đến hạn trong 7 ngày), unpaid (Còn đợt chưa hoàn tất), fully_paid (Đã đóng đủ các đợt).'
+                                    'enum' => ['all', 'overdue', 'due_soon', 'unpaid', 'waiting_unc_approval', 'fully_paid', 'failed'],
+                                    'description' => 'Lọc theo tiến độ thanh toán các đợt cọc (deposit_milestones): overdue (Quá hạn đóng học phí), due_soon (Sắp đến hạn trong 7 ngày), unpaid (Còn đợt chưa hoàn tất), waiting_unc_approval (Đã nộp UNC chờ Kế toán duyệt), fully_paid (Đã đóng đủ các đợt), failed (Từ chối/Thất bại).'
                                 ],
                                 'min_amount' => [
                                     'type' => 'NUMBER',
@@ -1611,6 +1672,10 @@ class AgentToolRegistry {
                                     'type' => 'STRING',
                                     'description' => 'Đến ngày (YYYY-MM-DD).'
                                 ],
+                                'custom_rules' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Chuỗi JSON quy tắc lọc động trên 24 cột bảng deposits: [{"field":"expected_commission","operator":"gt","value":0}].'
+                                ],
                                 'search_query' => [
                                     'type' => 'STRING',
                                     'description' => 'Từ khóa tìm theo tên học viên, SĐT, mã phiếu unit_code, ghi chú.'
@@ -1624,7 +1689,7 @@ class AgentToolRegistry {
                     ],
                     [
                         'name' => 'query_tasks_and_projects_multitier',
-                        'description' => 'SIÊU CÔNG CỤ PHÂN TÍCH ĐA TẦNG CÔNG VIỆC, NHIỆM VỤ & TIẾN ĐỘ DỰ ÁN/PHÒNG BAN: Lọc chéo và thống kê công việc theo trạng thái (pending, in_progress, completed, overdue, waiting_approval), mức độ ưu tiên (urgent, high, medium, low), nhân sự thực hiện, người giao, phòng ban/nhóm việc (task_groups), khoảng deadline và tự động sinh biểu đồ kèm link tải file Excel/CSV.',
+                        'description' => 'SIÊU CÔNG CỤ PHÂN TÍCH ĐA TẦNG CÔNG VIỆC, NHIỆM VỤ & TIẾN ĐỘ DỰ ÁN/PHÒNG BAN (100% SCHEMA 29 CỘT BẢNG ACTIVITIES): Lọc chéo và thống kê công việc theo trạng thái, mức độ ưu tiên, vai trò tham gia (assignee, creator, participant, approver, subtask_assignee), trạng thái phê duyệt (require_approval, approval_status), subtask/checklist, phụ thuộc (dependencies), bảng trắng (whiteboard), thời gian tập trung (Pomodoro focus), tiến độ %, số ngày không cập nhật (stale_days), thực thể liên kết (contact, deal, project, company) và custom_rules.',
                         'parameters' => [
                             'type' => 'OBJECT',
                             'properties' => [
@@ -1644,13 +1709,95 @@ class AgentToolRegistry {
                                     'type' => 'STRING',
                                     'description' => 'Tên hoặc ID người giao việc.'
                                 ],
+                                'collaborator_name' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tên hoặc ID người phối hợp (participant_ids).'
+                                ],
+                                'approver_name' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tên hoặc ID người phê duyệt công việc (approver_id).'
+                                ],
+                                'participation_role' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['all', 'assignee', 'creator', 'participant', 'approver', 'subtask_assignee'],
+                                    'description' => 'Vai trò tham gia của người dùng đối với công việc.'
+                                ],
+                                'approval_filter' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['all', 'require_approval', 'pending_approval', 'approved', 'rejected', 'no_approval'],
+                                    'description' => 'Lọc theo trạng thái phê duyệt công việc (require_approval & approval_status).'
+                                ],
+                                'subtask_filter' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['all', 'has_subtasks', 'no_subtasks', 'incomplete_subtasks', 'all_subtasks_done'],
+                                    'description' => 'Lọc theo tình trạng danh sách việc con (checklist/subtasks).'
+                                ],
+                                'dependency_filter' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['all', 'is_blocked', 'blocking_others', 'has_dependencies'],
+                                    'description' => 'Lọc theo quan hệ phụ thuộc công việc (activity_dependencies: đang bị chặn bởi việc khác hoặc đang chặn việc khác).'
+                                ],
+                                'has_whiteboard' => [
+                                    'type' => 'BOOLEAN',
+                                    'description' => 'Lọc các công việc có đính kèm bảng trắng sơ đồ tư duy (task_whiteboards).'
+                                ],
+                                'min_focus_minutes' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Tổng số phút tập trung Pomodoro tối thiểu (task_focus_logs).'
+                                ],
+                                'min_progress' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Tiến độ hoàn thành tối thiểu (0-100%).'
+                                ],
+                                'max_progress' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Tiến độ hoàn thành tối đa (0-100%).'
+                                ],
+                                'stale_days' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Số ngày công việc chưa được cập nhật hoặc bình luận.'
+                                ],
                                 'departments' => [
                                     'type' => 'STRING',
                                     'description' => 'Tên phòng ban, bộ phận hoặc nhóm công việc (task_group).'
                                 ],
+                                'task_group_id' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'ID nhóm công việc (task_groups).'
+                                ],
+                                'team_id' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'ID đội nhóm (teams).'
+                                ],
+                                'related_type' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Loại hồ sơ liên kết (contact, lead, deal, project, company, team).'
+                                ],
+                                'related_id' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'ID hồ sơ liên kết.'
+                                ],
+                                'related_entity_name' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tên khách hàng, dự án, cơ hội hoặc doanh nghiệp liên kết với công việc.'
+                                ],
+                                'tags' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Nhãn công việc (tags).'
+                                ],
                                 'overdue_only' => [
                                     'type' => 'BOOLEAN',
                                     'description' => 'Chỉ lọc các công việc đã quá hạn hoàn thành (true/false).'
+                                ],
+                                'date_field' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['due_date', 'start_date', 'created_at', 'done_at', 'updated_at'],
+                                    'description' => 'Trường thời gian áp dụng bộ lọc ngày (mặc định: due_date).'
+                                ],
+                                'period' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['today', 'this_week', 'this_month', 'last_month'],
+                                    'description' => 'Kỳ thời gian nhanh.'
                                 ],
                                 'from_date' => [
                                     'type' => 'STRING',
@@ -1659,6 +1806,10 @@ class AgentToolRegistry {
                                 'to_date' => [
                                     'type' => 'STRING',
                                     'description' => 'Hạn chót hoặc ngày tạo đến ngày (YYYY-MM-DD).'
+                                ],
+                                'custom_rules' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Chuỗi JSON quy tắc lọc động trên 29 cột của bảng activities: [{"field":"require_approval","operator":"eq","value":1}].'
                                 ],
                                 'search_query' => [
                                     'type' => 'STRING',
@@ -1777,7 +1928,7 @@ class AgentToolRegistry {
                     ],
                     [
                         'name' => 'query_hrm_workforce_and_payroll_multitier',
-                        'description' => 'SIÊU CÔNG CỤ PHÂN TÍCH ĐA TẦNG NHÂN SỰ (HRM), PHÉP NĂM, BẢO HIỂM & BẢNG LƯƠNG: Lọc chéo và thống kê đội ngũ nhân sự theo phòng ban (departments), vai trò/chức danh (roles), trạng thái làm việc (active, inactive), trạng thái đóng BHXH (has_insurance), kỳ lương (month_year), quỹ phép năm và tự động sinh biểu đồ kèm link tải file Excel/CSV.',
+                        'description' => 'SIÊU CÔNG CỤ PHÂN TÍCH ĐA TẦNG NHÂN SỰ (HRM), PHÉP NĂM, NGHỈ BÙ, ĐỊNH MỨC ĐI TRỄ (NỮ 60P / NAM 30P), BẢO HIỂM & BẢNG LƯƠNG: Lọc chéo và thống kê đội ngũ nhân sự theo phòng ban (departments), đội nhóm (team_id, team_name), vai trò/chức danh (roles), giới tính (gender), tháng sinh nhật (birthday_month), ngày vào làm (joined_from, joined_to), trạng thái làm việc (active, inactive), trạng thái nghỉ phép (vacation_mode), đóng BHXH (has_insurance), kỳ lương (month_year), khoảng lương (min_base_salary, max_base_salary, min_net_salary, max_net_salary), trạng thái phiếu lương (payslip_status), tăng ca (has_overtime), trạng thái vượt định mức đi trễ (late_quota_status) và custom_rules trên 100% cột bảng users, hrm_profiles, monthly_payslips.',
                         'parameters' => [
                             'type' => 'OBJECT',
                             'properties' => [
@@ -1785,13 +1936,42 @@ class AgentToolRegistry {
                                     'type' => 'STRING',
                                     'description' => 'Phòng ban hoặc đội nhóm (cách nhau dấu phẩy).'
                                 ],
+                                'team_id' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'ID đội nhóm (teams).'
+                                ],
+                                'team_name' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tên đội nhóm / chi nhánh.'
+                                ],
                                 'roles' => [
                                     'type' => 'STRING',
                                     'description' => 'Vai trò hoặc chức danh (sale, manager, accountant, academic, hr...).'
                                 ],
+                                'gender' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['all', 'male', 'female', 'nam', 'nữ'],
+                                    'description' => 'Giới tính nhân sự (male/nam hoặc female/nữ).'
+                                ],
+                                'birthday_month' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Tháng sinh nhật nhân sự (1-12).'
+                                ],
+                                'joined_from' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Ngày vào làm từ ngày (YYYY-MM-DD).'
+                                ],
+                                'joined_to' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Ngày vào làm đến ngày (YYYY-MM-DD).'
+                                ],
                                 'status' => [
                                     'type' => 'STRING',
                                     'description' => 'Trạng thái làm việc (active, inactive, all).'
+                                ],
+                                'vacation_mode' => [
+                                    'type' => 'BOOLEAN',
+                                    'description' => 'Lọc nhân sự đang bật chế độ nghỉ phép / tạm ngưng nhận lead (vacation_mode).'
                                 ],
                                 'has_insurance' => [
                                     'type' => 'STRING',
@@ -1801,6 +1981,47 @@ class AgentToolRegistry {
                                 'month_year' => [
                                     'type' => 'STRING',
                                     'description' => 'Kỳ bảng lương định dạng YYYY-MM (mặc định tháng hiện tại).'
+                                ],
+                                'payslip_status' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Trạng thái phiếu lương (draft, pending_approval, approved, confirmed, paid, disputed).'
+                                ],
+                                'has_overtime' => [
+                                    'type' => 'BOOLEAN',
+                                    'description' => 'Lọc nhân sự có phát sinh ngày công tăng ca (overtime_days > 0) trong kỳ.'
+                                ],
+                                'late_quota_status' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['all', 'exceeded_quota', 'within_quota'],
+                                    'description' => 'Lọc theo định mức đi trễ tháng (Điều 14 NQLĐ QĐ 001/2024: Nữ 60p/tháng, Nam 30p/tháng): exceeded_quota (vượt định mức), within_quota (trong định mức).'
+                                ],
+                                'min_deal_salary' => [
+                                    'type' => 'NUMBER',
+                                    'description' => 'Mức lương thỏa thuận tối thiểu (VNĐ).'
+                                ],
+                                'max_deal_salary' => [
+                                    'type' => 'NUMBER',
+                                    'description' => 'Mức lương thỏa thuận tối đa (VNĐ).'
+                                ],
+                                'min_base_salary' => [
+                                    'type' => 'NUMBER',
+                                    'description' => 'Lương cơ bản tối thiểu (VNĐ).'
+                                ],
+                                'max_base_salary' => [
+                                    'type' => 'NUMBER',
+                                    'description' => 'Lương cơ bản tối đa (VNĐ).'
+                                ],
+                                'min_net_salary' => [
+                                    'type' => 'NUMBER',
+                                    'description' => 'Lương thực lĩnh (net_salary) tối thiểu (VNĐ).'
+                                ],
+                                'max_net_salary' => [
+                                    'type' => 'NUMBER',
+                                    'description' => 'Lương thực lĩnh (net_salary) tối đa (VNĐ).'
+                                ],
+                                'custom_rules' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Chuỗi JSON quy tắc lọc động trên bảng users, hrm_profiles, monthly_payslips: [{"field":"annual_leave_total","operator":"gt","value":12}].'
                                 ],
                                 'search_query' => [
                                     'type' => 'STRING',
@@ -1935,6 +2156,14 @@ class AgentToolRegistry {
                     ]
                 ];
 
+        // Merge 100% Schema Modular Tool Declarations (Pillar 1: Tasks/Projects, Pillar 2: HRM/Attendance/Payroll, Pillar 3: PO/SO/Finance/Approvals)
+        $declarations = array_merge(
+            $declarations,
+            AgentTaskProjectTools::getToolDeclarations(),
+            AgentHrmAttendanceTools::getToolDeclarations(),
+            AgentPoSoFinanceTools::getToolDeclarations()
+        );
+
         if ($allowedToolNames !== null && !empty($allowedToolNames)) {
             $essential = [
                 'draft_action_proposal',
@@ -1949,6 +2178,11 @@ class AgentToolRegistry {
                 'reassign_lead_owner',
                 'smart_create_or_assign_leads',
                 'manage_lead_round_distribution',
+                'smart_manage_tasks_and_subtasks',
+                'query_and_manage_projects',
+                'manage_my_hr_profile_and_requests',
+                'smart_manage_hrm_and_payroll',
+                'smart_manage_po_so_and_approvals',
                 'query_crm_leads_multitier',
                 'query_finance_multitier_analytics',
                 'query_deposits_and_revenue_multitier',
@@ -2611,9 +2845,11 @@ class AgentToolRegistry {
                         $params[] = (string)$uid;
                     }
 
-                    // Always isolate personal tasks from other users
+                    // Always isolate personal tasks from other users & exclude hidden tasks for current user
                     $where .= " AND (NOT (IFNULL(a.tags, '') LIKE '%personal_task%' OR IFNULL(a.tags, '') LIKE '%ca_nhan%') OR a.user_id = ? OR a.created_by = ?)";
                     $params[] = $uid;
+                    $params[] = $uid;
+                    $where .= " AND NOT EXISTS (SELECT 1 FROM task_hidden_users thu WHERE thu.task_id = a.id AND thu.user_id = ?)";
                     $params[] = $uid;
 
                     if (!empty($assigneeQuery)) {
@@ -2774,113 +3010,10 @@ class AgentToolRegistry {
                 // ==========================================
                 // 2. GET PENDING APPROVALS (APPROVALS DEFENSE)
                 // ==========================================
+                case 'get_comprehensive_pending_approvals_and_blockers':
                 case 'get_pending_approvals': {
-                    $appType = $args['approval_type'] ?? 'all';
-                    $limit = min(10, max(1, (int)($args['limit'] ?? 5)));
-
-                    // A. Count leaves
-                    $stmtLv = $db->prepare("
-                        SELECT COUNT(1) FROM hrm_leave_requests l
-                        JOIN users u ON l.user_id = u.id
-                        WHERE u.tenant_id = ? AND l.status = 'pending'
-                          AND (l.user_id = ? OR l.approver_id = ? OR l.approver_id_2 = ? " . ($isGlobalAdmin ? "OR (l.approver_id IS NULL OR l.approver_id = 0)" : "") . ")
-                    ");
-                    $stmtLv->execute([$tid, $uid, $uid, $uid]);
-                    $leaveCount = (int)$stmtLv->fetchColumn();
-
-                    // B. Count advances
-                    $stmtAdv = $db->prepare("
-                        SELECT COUNT(1) FROM hrm_salary_advances sa
-                        JOIN users u ON sa.user_id = u.id
-                        WHERE u.tenant_id = ? AND sa.status = 'pending'
-                          AND (sa.user_id = ? OR sa.approver_id = ? OR sa.approver_id_2 = ? " . ($isGlobalAdmin ? "OR (sa.approver_id IS NULL OR sa.approver_id = 0)" : "") . ")
-                    ");
-                    $stmtAdv->execute([$tid, $uid, $uid, $uid]);
-                    $advanceCount = (int)$stmtAdv->fetchColumn();
-
-                    // C. Count expenses / PO
-                    $stmtExp = $db->prepare("
-                        SELECT COUNT(1) FROM expenses 
-                        WHERE tenant_id = ? AND deleted_at IS NULL AND status = 'pending'
-                          AND (created_by = ? OR approver_id = ? OR approver_id_2 = ? OR approver_id_3 = ? " . ($isGlobalAdmin ? "OR (approver_id IS NULL OR approver_id = 0)" : "") . ")
-                    ");
-                    $stmtExp->execute([$tid, $uid, $uid, $uid, $uid]);
-                    $expenseCount = (int)$stmtExp->fetchColumn();
-
-                    // D. Count checkins & bulks
-                    $stmtCi = $db->prepare("
-                        SELECT COUNT(1) FROM check_ins ci
-                        JOIN users u ON ci.user_id = u.id
-                        WHERE u.tenant_id = ? AND ci.status = 'pending_approval' " . ($isGlobalAdmin ? "" : " AND ci.user_id = ?") . "
-                    ");
-                    $stmtCi->execute($isGlobalAdmin ? [$tid] : [$tid, $uid]);
-                    $checkinCount = (int)$stmtCi->fetchColumn();
-
-                    $totalPending = $leaveCount + $advanceCount + $expenseCount + $checkinCount;
-
-                    // Fetch Top Items depending on type
-                    $items = [];
-
-                    if (in_array($appType, ['all', 'expense'], true) && $expenseCount > 0) {
-                        $stmtEList = $db->prepare("
-                            SELECT e.id, e.title, e.amount, e.vendor_name, e.created_at, u.full_name as creator_name
-                            FROM expenses e
-                            LEFT JOIN users u ON e.created_by = u.id
-                            WHERE e.tenant_id = ? AND e.deleted_at IS NULL AND e.status = 'pending'
-                              AND (e.created_by = ? OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ? " . ($isGlobalAdmin ? "OR (e.approver_id IS NULL OR e.approver_id = 0)" : "") . ")
-                            ORDER BY e.amount DESC, e.id DESC
-                            LIMIT " . (int)$limit . "
-                        ");
-                        $stmtEList->execute([$tid, $uid, $uid, $uid, $uid]);
-                        foreach ($stmtEList->fetchAll(PDO::FETCH_ASSOC) as $row) {
-                            $amt = number_format((float)$row['amount'], 0, ',', '.') . ' VND';
-                            $items[] = [
-                                'type' => 'Đề xuất chi / PO',
-                                'id' => (int)$row['id'],
-                                'title' => $row['title'],
-                                'details' => "Số tiền: {$amt} | Chi cho: " . ($row['vendor_name'] ?: 'Nội bộ'),
-                                'creator' => $row['creator_name'] ?: 'Nhân sự',
-                                'date' => date('d/m/Y', strtotime($row['created_at']))
-                            ];
-                        }
-                    }
-
-                    if (in_array($appType, ['all', 'leave'], true) && $leaveCount > 0 && count($items) < $limit) {
-                        $rem = $limit - count($items);
-                        $stmtLList = $db->prepare("
-                            SELECT l.id, l.leave_type, l.start_date, l.end_date, l.total_days, l.reason, l.created_at, u.full_name as employee_name
-                            FROM hrm_leave_requests l
-                            JOIN users u ON l.user_id = u.id
-                            WHERE u.tenant_id = ? AND l.status = 'pending'
-                              AND (l.user_id = ? OR l.approver_id = ? OR l.approver_id_2 = ? " . ($isGlobalAdmin ? "OR (l.approver_id IS NULL OR l.approver_id = 0)" : "") . ")
-                            ORDER BY l.id DESC
-                            LIMIT " . (int)$rem . "
-                        ");
-                        $stmtLList->execute([$tid, $uid, $uid, $uid]);
-                        foreach ($stmtLList->fetchAll(PDO::FETCH_ASSOC) as $row) {
-                            $items[] = [
-                                'type' => 'Đơn xin nghỉ phép',
-                                'id' => (int)$row['id'],
-                                'title' => "Nghỉ phép ({$row['total_days']} ngày: " . date('d/m', strtotime($row['start_date'])) . " - " . date('d/m/Y', strtotime($row['end_date'])) . ")",
-                                'details' => "Lý do: " . ($row['reason'] ?: 'Việc cá nhân'),
-                                'creator' => $row['employee_name'],
-                                'date' => date('d/m/Y', strtotime($row['created_at']))
-                            ];
-                        }
-                    }
-
-                    return [
-                        'success' => true,
-                        'total_pending' => $totalPending,
-                        'breakdown' => [
-                            'expense_count' => $expenseCount,
-                            'leave_count' => $leaveCount,
-                            'advance_count' => $advanceCount,
-                            'checkin_count' => $checkinCount
-                        ],
-                        'summary' => "Hiện có tổng cộng {$totalPending} phiếu đang chờ phê duyệt/xử lý trong Quy trình (trong đó: {$expenseCount} phiếu chi/PO, {$leaveCount} đơn nghỉ phép, {$advanceCount} tạm ứng, {$checkinCount} giải trình công). Dưới đây là top {$limit} phiếu ưu tiên nhất:",
-                        'top_approvals' => array_slice($items, 0, $limit)
-                    ];
+                    $comprehensive = AgentPoSoFinanceTools::getComprehensivePendingApprovalsAndBlockers($db, $args, $auth);
+                    return $comprehensive;
                 }
 
                 // ==========================================
@@ -2927,6 +3060,8 @@ class AgentToolRegistry {
                     if (!$task) {
                         return ['success' => false, 'message' => 'Không tìm thấy công việc này hoặc bạn không có quyền truy cập.'];
                     }
+
+                    $task = AgentTaskProjectTools::enrichTaskDetail360($db, $task, $tid, $uid);
 
                     // Resolve collaborators
                     $collabs = [];
@@ -2988,9 +3123,19 @@ class AgentToolRegistry {
                             'tags' => $task['tags'] ?: '',
                             'link' => $task['link'] ?: null,
                             'description' => !empty($parsed['description']) ? mb_substr($parsed['description'], 0, 3000) : '',
-                            'checklist' => $parsed['checklist'],
+                            'checklist' => $task['enriched_checklist'] ?? $parsed['checklist'],
                             'checklist_summary' => $parsed['checklist_summary'] ?: null,
-                            'links' => $parsed['links']
+                            'subtask_comment_counts' => $task['subtask_comment_counts'] ?? [],
+                            'links' => $parsed['links'],
+                            'related_type' => $task['related_type'] ?? null,
+                            'related_id' => $task['related_id'] ?? null,
+                            'related_entity_name' => $task['related_entity_name'] ?? null,
+                            'predecessors' => $task['predecessors'] ?? [],
+                            'successors' => $task['successors'] ?? [],
+                            'focus_summary' => $task['focus_summary'] ?? null,
+                            'whiteboard' => $task['whiteboard'] ?? null,
+                            'is_muted' => $task['is_muted'] ?? false,
+                            'smart_card' => $task['smart_card'] ?? null,
                         ]
                     ];
                 }
@@ -3306,6 +3451,8 @@ class AgentToolRegistry {
                     $month = min(12, max(1, (int)($args['month'] ?? date('n'))));
                     $year = (int)($args['year'] ?? date('Y'));
                     $period = sprintf('%04d-%02d', $year, $month);
+                    $rangeStart = sprintf('%04d-%02d-01', $year, $month);
+                    $rangeEnd = date('Y-m-t', strtotime($rangeStart));
 
                     // Leave balance from hrm_profiles
                     $stmtP = $db->prepare("SELECT annual_leave_total, annual_leave_used, compensatory_leave_total, compensatory_leave_used FROM hrm_profiles WHERE user_id = ? LIMIT 1");
@@ -3316,20 +3463,77 @@ class AgentToolRegistry {
                     $annualUsed = (float)($prof['annual_leave_used'] ?? 0.0);
                     $annualRemain = max(0.0, $annualTotal - $annualUsed);
 
-                    // Attendance count in this month
-                    $stmtCi = $db->prepare("SELECT COUNT(1) as total_checkins FROM check_ins WHERE user_id = ? AND check_in_date LIKE ? AND status = 'approved'");
-                    $stmtCi->execute([$uid, $period . '-%']);
-                    $totalWorkDays = (int)($stmtCi->fetchColumn() ?: 0);
+                    // Fetch gender & late grace settings (Điều 14 NQLĐ 2024: Nữ 60p/tháng, Nam 30p/tháng)
+                    $stmtUG = $db->prepare("SELECT gender, full_name FROM users WHERE id = ? LIMIT 1");
+                    $stmtUG->execute([$uid]);
+                    $uGenderRow = $stmtUG->fetch(PDO::FETCH_ASSOC) ?: [];
+                    $rawGender = mb_strtolower(trim((string)($uGenderRow['gender'] ?? '')));
+                    $empFullName = (string)($uGenderRow['full_name'] ?? $userName);
 
-                    return [
+                    $graceFemale = 60;
+                    $graceMale = 30;
+                    $stmtGrace = $db->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('hrm_late_grace_female', 'hrm_late_grace_male')");
+                    if ($stmtGrace) {
+                        foreach ($stmtGrace->fetchAll(PDO::FETCH_ASSOC) as $gRow) {
+                            if ($gRow['setting_key'] === 'hrm_late_grace_female' && is_numeric($gRow['setting_value'])) {
+                                $graceFemale = (int)$gRow['setting_value'];
+                            } elseif ($gRow['setting_key'] === 'hrm_late_grace_male' && is_numeric($gRow['setting_value'])) {
+                                $graceMale = (int)$gRow['setting_value'];
+                            }
+                        }
+                    }
+
+                    $isFemale = in_array($rawGender, ['female', 'nữ', 'nu', 'f'], true)
+                        || ($rawGender === '' && preg_match('/(\sThị\s|\sNữ|\sNhi|\sLinh|\sNgân|\sTrâm|\sTrân|\sThảo|\sUyên|\sLan|\sThoa|\sThương)/iu', $empFullName));
+                    $genderLabel = $isFemale ? 'Nữ' : 'Nam';
+                    $graceLimit = $isFemale ? $graceFemale : $graceMale;
+
+                    // Attendance count & late minutes in this month (excluding waived late_early dates)
+                    $stmtCi = $db->prepare("
+                        SELECT 
+                            COUNT(1) as total_checkins,
+                            COALESCE(SUM(
+                                CASE 
+                                    WHEN NOT EXISTS (
+                                        SELECT 1 FROM hrm_leave_requests lr 
+                                        WHERE lr.user_id = c.user_id AND lr.status = 'approved' 
+                                          AND lr.leave_type = 'late_early' AND DATE(lr.start_date) = c.check_in_date
+                                    ) THEN (
+                                        CASE 
+                                            WHEN c.late_minutes > 0 THEN c.late_minutes 
+                                            WHEN TIME(c.check_in_time) > '08:00:00' AND TIME(c.check_in_time) < '12:00:00' 
+                                                 THEN TIMESTAMPDIFF(MINUTE, '08:00:00', TIME(c.check_in_time))
+                                            ELSE 0 
+                                        END
+                                    )
+                                    ELSE 0
+                                END
+                            ), 0) as total_late_minutes
+                        FROM check_ins c
+                        WHERE c.user_id = ? AND c.check_in_date BETWEEN ? AND ? AND c.status = 'approved'
+                    ");
+                    $stmtCi->execute([$uid, $rangeStart, $rangeEnd]);
+                    $ciSummary = $stmtCi->fetch(PDO::FETCH_ASSOC) ?: [];
+                    $totalWorkDays = (int)($ciSummary['total_checkins'] ?? 0);
+                    $totalLateMinutes = (int)($ciSummary['total_late_minutes'] ?? 0);
+                    $remainingGrace = max(0, $graceLimit - $totalLateMinutes);
+                    $excessLateMinutes = max(0, $totalLateMinutes - $graceLimit);
+
+                    $baseSummary = [
                         'success' => true,
                         'month_period' => "Tháng {$month}/{$year}",
                         'worked_days' => $totalWorkDays,
+                        'gender_label' => $genderLabel,
+                        'monthly_late_grace_minutes' => $graceLimit,
+                        'total_late_minutes' => $totalLateMinutes,
+                        'remaining_late_grace_minutes' => $remainingGrace,
+                        'excess_late_minutes' => $excessLateMinutes,
                         'annual_leave_total' => $annualTotal,
                         'annual_leave_used' => $annualUsed,
                         'annual_leave_remaining' => $annualRemain,
-                        'summary' => "Trong tháng {$month}/{$year}, bạn đã ghi nhận {$totalWorkDays} ngày công thực tế. Bạn hiện còn {$annualRemain} ngày phép năm có thể sử dụng."
+                        'summary' => "Trong tháng {$month}/{$year}, bạn đã ghi nhận {$totalWorkDays} ngày công thực tế. Tổng số phút đi trễ: {$totalLateMinutes}/{$graceLimit} phút định mức ({$genderLabel} được phép {$graceLimit} phút/tháng theo Điều 14 NQLĐ QĐ 001/2024; còn lại {$remainingGrace} phút định mức, vượt định mức {$excessLateMinutes} phút). Bạn hiện còn {$annualRemain} ngày phép năm có thể sử dụng."
                     ];
+                    return AgentHrmAttendanceTools::enrichMyAttendanceSummary360($db, $uid, $month, $year, $baseSummary);
                 }
 
                 // ==========================================
@@ -3375,14 +3579,39 @@ class AgentToolRegistry {
                         $periodLabel = "Tháng {$month}/{$year}";
                     }
 
-                    // Standard Work Policy
+                    // Fetch late grace quota from system_settings (Điều 14 NQLĐ QĐ 001/2024)
+                    $graceFemale = 60;
+                    $graceMale = 30;
+                    $stmtGrace = $db->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('hrm_late_grace_female', 'hrm_late_grace_male')");
+                    if ($stmtGrace) {
+                        foreach ($stmtGrace->fetchAll(PDO::FETCH_ASSOC) as $gRow) {
+                            if ($gRow['setting_key'] === 'hrm_late_grace_female' && is_numeric($gRow['setting_value'])) {
+                                $graceFemale = (int)$gRow['setting_value'];
+                            } elseif ($gRow['setting_key'] === 'hrm_late_grace_male' && is_numeric($gRow['setting_value'])) {
+                                $graceMale = (int)$gRow['setting_value'];
+                            }
+                        }
+                    }
+
+                    $resolveGenderQuota = function(?string $rawG, string $fName) use ($graceFemale, $graceMale): array {
+                        $gClean = mb_strtolower(trim((string)$rawG));
+                        $isFem = in_array($gClean, ['female', 'nữ', 'nu', 'f'], true)
+                            || ($gClean === '' && preg_match('/(\sThị\s|\sNữ|\sNhi|\sLinh|\sNgân|\sTrâm|\sTrân|\sThảo|\sUyên|\sLan|\sThoa|\sThương)/iu', $fName));
+                        return [
+                            'gender_label' => $isFem ? 'Nữ' : 'Nam',
+                            'grace_limit' => $isFem ? $graceFemale : $graceMale
+                        ];
+                    };
+
+                    // Standard Work Policy (QĐ 001/2024 - Nội quy Lao động Viện IDEAS)
                     $workPolicy = [
                         'morning' => '08:00 - 12:00 (4.0 giờ = 0.5 công)',
-                        'lunch_break' => '12:00 - 13:00',
+                        'lunch_break' => '12:00 - 13:00 (1.0 giờ)',
                         'afternoon' => '13:00 - 17:00 (4.0 giờ = 0.5 công)',
-                        'standard_day' => '8.0 giờ = 1.0 công chuẩn',
+                        'standard_day' => '8.0 giờ = 1.0 công chuẩn (5 ngày/tuần = 40 giờ/tuần)',
                         'late_rule' => 'Check-in sau 08:00 (sáng) hoặc sau 13:00 (chiều)',
                         'early_rule' => 'Check-out trước 12:00 (sáng) hoặc trước 17:00 (chiều)',
+                        'monthly_late_grace_quota' => 'Định mức đi trễ & về sớm được phép hàng tháng (Điều 14 NQLĐ QĐ 001/2024): Nữ 60 phút/tháng, Nam 30 phút/tháng. Chỉ phần phút vượt định mức mới bị khấu trừ công/phép.',
                         'ot_rule' => 'Làm việc ngoài khung giờ hành chính (sau 17:00) hoặc đăng ký tăng ca được duyệt'
                     ];
 
@@ -3392,39 +3621,63 @@ class AgentToolRegistry {
                     if ($scope === 'top_late') {
                         // Regular staff can only see their own lateness
                         if (!$canViewAll && !$isManager) {
+                            $stmtUG = $db->prepare("SELECT gender, full_name FROM users WHERE id = ? LIMIT 1");
+                            $stmtUG->execute([$uid]);
+                            $myU = $stmtUG->fetch(PDO::FETCH_ASSOC) ?: [];
+                            $myQuotaInfo = $resolveGenderQuota($myU['gender'] ?? null, (string)($myU['full_name'] ?? $userName));
+
                             $stmtMyLate = $db->prepare("SELECT 
                                 COUNT(CASE WHEN c.late_minutes > 0 OR c.status = 'late' OR (TIME(c.check_in_time) > '08:00:00' AND TIME(c.check_in_time) < '12:00:00') THEN 1 END) as late_count,
-                                SUM(
+                                COALESCE(SUM(
                                     CASE 
                                         WHEN c.late_minutes > 0 THEN c.late_minutes 
                                         WHEN TIME(c.check_in_time) > '08:00:00' AND TIME(c.check_in_time) < '12:00:00' 
                                              THEN TIMESTAMPDIFF(MINUTE, '08:00:00', TIME(c.check_in_time))
                                         ELSE 0 
                                     END
-                                ) as total_late_minutes
+                                ), 0) as total_late_minutes
                             FROM check_ins c
-                            WHERE c.user_id = ? AND c.check_in_date BETWEEN ? AND ?");
+                            WHERE c.user_id = ? AND c.check_in_date BETWEEN ? AND ? AND c.status != 'rejected'
+                              AND NOT EXISTS (
+                                  SELECT 1 FROM hrm_leave_requests lr
+                                  WHERE lr.user_id = c.user_id AND lr.status = 'approved'
+                                    AND lr.leave_type = 'late_early' AND DATE(lr.start_date) = c.check_in_date
+                              )");
                             $stmtMyLate->execute([$uid, $rangeStart, $rangeEnd]);
                             $myLate = $stmtMyLate->fetch(PDO::FETCH_ASSOC);
+                            $myLateCount = (int)($myLate['late_count'] ?? 0);
+                            $myTotalLate = (int)($myLate['total_late_minutes'] ?? 0);
+                            $myGrace = $myQuotaInfo['grace_limit'];
+                            $myRemainGrace = max(0, $myGrace - $myTotalLate);
+                            $myExcessLate = max(0, $myTotalLate - $myGrace);
 
                             return [
                                 'success' => true,
                                 'scope' => 'top_late_personal',
                                 'period' => $periodLabel,
                                 'company_work_hours' => $workPolicy,
-                                'role_notice' => 'Bạn đang tra cứu với quyền Nhân viên cá nhân. Hệ thống hiển thị chi tiết vi phạm đi trễ của chính bạn.',
+                                'role_notice' => 'Bạn đang tra cứu với quyền Nhân viên cá nhân. Hệ thống hiển thị chi tiết đi trễ và định mức của chính bạn.',
                                 'my_lateness' => [
                                     'name' => $userName,
-                                    'late_count' => (int)($myLate['late_count'] ?? 0),
-                                    'total_late_minutes' => (int)($myLate['total_late_minutes'] ?? 0),
-                                    'summary' => "Trong {$periodLabel}, bạn đi trễ " . (int)($myLate['late_count'] ?? 0) . " lần với tổng cộng " . (int)($myLate['total_late_minutes'] ?? 0) . " phút."
+                                    'gender_label' => $myQuotaInfo['gender_label'],
+                                    'monthly_late_grace_minutes' => $myGrace,
+                                    'late_count' => $myLateCount,
+                                    'total_late_minutes' => $myTotalLate,
+                                    'remaining_late_grace_minutes' => $myRemainGrace,
+                                    'excess_late_minutes' => $myExcessLate,
+                                    'summary' => "Trong {$periodLabel}, bạn đi trễ {$myLateCount} lần với tổng cộng {$myTotalLate} phút (Định mức {$myQuotaInfo['gender_label']}: {$myGrace} phút/tháng theo Điều 14 NQLĐ 2024; còn lại {$myRemainGrace} phút định mức, vượt định mức {$myExcessLate} phút)."
                                 ],
-                                'instruction' => 'Trình bày số liệu đi trễ cá nhân cho người dùng một cách thân thiện, nhã nhặn. TUYỆT ĐỐI KHÔNG dùng từ "(Zero-Trust)". TUYỆT ĐỐI KHÔNG sinh thẻ Lead.'
+                                'instruction' => 'Trình bày số liệu đi trễ cá nhân kèm định mức được phép theo giới tính (Nữ 60p/tháng, Nam 30p/tháng) cho người dùng một cách thân thiện, nhã nhặn. TUYỆT ĐỐI KHÔNG dùng từ "(Zero-Trust)". TUYỆT ĐỐI KHÔNG sinh thẻ Lead.'
                             ];
                         }
 
                         // Admin / HR / Manager query
-                        $whereClauses = ["u.tenant_id = ?", "c.check_in_date BETWEEN ? AND ?"];
+                        $whereClauses = [
+                            "u.tenant_id = ?",
+                            "c.check_in_date BETWEEN ? AND ?",
+                            "c.status != 'rejected'",
+                            "NOT EXISTS (SELECT 1 FROM hrm_leave_requests lr WHERE lr.user_id = c.user_id AND lr.status = 'approved' AND lr.leave_type = 'late_early' AND DATE(lr.start_date) = c.check_in_date)"
+                        ];
                         $params = [$tid, $rangeStart, $rangeEnd];
 
                         if (!$canViewAll && $isManager) {
@@ -3446,6 +3699,7 @@ class AgentToolRegistry {
                         $sqlTop = "SELECT 
                                         u.id as user_id, 
                                         u.full_name, 
+                                        u.gender,
                                         COALESCE(u.job_title, u.role) as job_title,
                                         COALESCE(t.name, 'Chung') as team_name,
                                         COUNT(CASE WHEN c.late_minutes > 0 OR c.status = 'late' OR (TIME(c.check_in_time) > '08:00:00' AND TIME(c.check_in_time) < '12:00:00') THEN 1 END) as late_count,
@@ -3461,7 +3715,7 @@ class AgentToolRegistry {
                                     JOIN users u ON c.user_id = u.id
                                     LEFT JOIN teams t ON u.team_id = t.id
                                     WHERE $whereSql
-                                    GROUP BY u.id, u.full_name, u.job_title, t.name
+                                    GROUP BY u.id, u.full_name, u.gender, u.job_title, t.name
                                     HAVING total_late_minutes > 0
                                     ORDER BY total_late_minutes DESC, late_count DESC
                                     LIMIT {$limit}";
@@ -3473,13 +3727,20 @@ class AgentToolRegistry {
                         $formattedList = [];
                         $rank = 1;
                         foreach ($topList as $item) {
+                            $qInfo = $resolveGenderQuota($item['gender'] ?? null, (string)$item['full_name']);
+                            $empGrace = $qInfo['grace_limit'];
+                            $empTotalLate = (int)$item['total_late_minutes'];
                             $formattedList[] = [
                                 'rank' => $rank++,
                                 'user_id' => (int)$item['user_id'],
                                 'name' => $item['full_name'],
+                                'gender_label' => $qInfo['gender_label'],
                                 'team' => $item['team_name'],
                                 'job_title' => $item['job_title'],
-                                'total_late_minutes' => (int)$item['total_late_minutes'],
+                                'monthly_late_grace_minutes' => $empGrace,
+                                'total_late_minutes' => $empTotalLate,
+                                'remaining_late_grace_minutes' => max(0, $empGrace - $empTotalLate),
+                                'excess_late_minutes' => max(0, $empTotalLate - $empGrace),
                                 'late_count' => (int)$item['late_count'],
                                 'direct_profile_url' => "https://myerp.ideas.edu.vn/hrm?user_id=" . $item['user_id']
                             ];
@@ -3494,7 +3755,7 @@ class AgentToolRegistry {
                             'company_work_hours' => $workPolicy,
                             'top_late_staff' => $formattedList,
                             'export_download_url' => "/api/export?type=attendance&month={$month}&year={$year}",
-                            'instruction' => 'BẮT BUỘC trình bày danh sách TOP NHÂN VIÊN ĐI TRỄ dưới dạng BẢNG MARKDOWN chuẩn (| Hạng | Họ và tên | Phòng ban / Chức vụ | Tổng phút trễ | Số lần trễ |). Liệt kê trung thực đúng số liệu MySQL ở trên. TUYỆT ĐỐI KHÔNG sinh thẻ ERP_CARD Contact/Lead. TUYỆT ĐỐI KHÔNG dùng từ "(Zero-Trust)". Cuối câu kèm gợi ý xem chi tiết hoặc tải bảng công.'
+                            'instruction' => 'BẮT BUỘC trình bày danh sách TOP NHÂN VIÊN ĐI TRỄ dưới dạng BẢNG MARKDOWN chuẩn (| Hạng | Họ và tên | Giới tính (Định mức) | Phòng ban | Số lần trễ | Tổng phút trễ | Vượt định mức |). Giải thích rõ theo Điều 14 NQLĐ QĐ 001/2024: Nữ được phép 60 phút/tháng, Nam được phép 30 phút/tháng, chỉ phần phút vượt định mức mới bị khấu trừ công/phép. TUYỆT ĐỐI KHÔNG sinh thẻ ERP_CARD Contact/Lead. TUYỆT ĐỐI KHÔNG dùng từ "(Zero-Trust)". Cuối câu kèm gợi ý xem chi tiết hoặc tải bảng công.'
                         ];
                     }
 
@@ -3726,7 +3987,7 @@ class AgentToolRegistry {
                     $targetUser = null;
                     if (!empty($userQuery)) {
                         if (is_numeric($userQuery)) {
-                            $stmtU = $db->prepare("SELECT u.id, u.full_name, u.email, u.phone, u.job_title, u.role, u.team_id, t.name as team_name FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.tenant_id = ? AND u.id = ? LIMIT 1");
+                            $stmtU = $db->prepare("SELECT u.id, u.full_name, u.gender, u.email, u.phone, u.job_title, u.role, u.team_id, t.name as team_name FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.tenant_id = ? AND u.id = ? LIMIT 1");
                             $stmtU->execute([$tid, (int)$userQuery]);
                             $targetUser = $stmtU->fetch(PDO::FETCH_ASSOC);
                         }
@@ -3737,7 +3998,7 @@ class AgentToolRegistry {
                             $uParams[] = $pSearch;
                             $uParams[] = $pSearch;
                             $uParams[] = $userQuery;
-                            $stmtU = $db->prepare("SELECT u.id, u.full_name, u.email, u.phone, u.job_title, u.role, u.team_id, t.name as team_name FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.tenant_id = ? AND ({$uFuzzy} OR u.username LIKE ? OR u.email LIKE ?) ORDER BY (u.full_name = ?) DESC, u.id ASC LIMIT 5");
+                            $stmtU = $db->prepare("SELECT u.id, u.full_name, u.gender, u.email, u.phone, u.job_title, u.role, u.team_id, t.name as team_name FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.tenant_id = ? AND ({$uFuzzy} OR u.username LIKE ? OR u.email LIKE ?) ORDER BY (u.full_name = ?) DESC, u.id ASC LIMIT 5");
                             $stmtU->execute($uParams);
                             $candUsers = $stmtU->fetchAll(PDO::FETCH_ASSOC) ?: [];
                             if (!empty($candUsers)) {
@@ -3749,7 +4010,7 @@ class AgentToolRegistry {
 
                     if (!$targetUser) {
                         // Default to requesting user
-                        $stmtU = $db->prepare("SELECT u.id, u.full_name, u.email, u.phone, u.job_title, u.role, u.team_id, t.name as team_name FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ? LIMIT 1");
+                        $stmtU = $db->prepare("SELECT u.id, u.full_name, u.gender, u.email, u.phone, u.job_title, u.role, u.team_id, t.name as team_name FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ? LIMIT 1");
                         $stmtU->execute([$uid]);
                         $targetUser = $stmtU->fetch(PDO::FETCH_ASSOC);
                     }
@@ -3817,7 +4078,21 @@ class AgentToolRegistry {
                     $annualUsed = (float)($prof['annual_leave_used'] ?? 0.0);
                     $annualRemain = max(0.0, $annualTotal - $annualUsed);
 
-                    // Compute aggregates
+                    // Collect waived late_early dates & WFH / leave counts
+                    $waivedDates = [];
+                    $wfhCount = 0;
+                    $leaveDaysCount = 0;
+                    foreach ($empLRows as $l) {
+                        if ($l['leave_type'] === 'late_early') {
+                            $waivedDates[] = substr((string)$l['start_date'], 0, 10);
+                        } elseif ($l['leave_type'] === 'remote_work') {
+                            $wfhCount += (float)($l['days_count'] ?? 1.0);
+                        } else {
+                            $leaveDaysCount += (float)($l['days_count'] ?? 1.0);
+                        }
+                    }
+
+                    // Compute aggregates (excluding waived late_early dates)
                     $totalWorkDays = 0;
                     $totalLateCount = 0;
                     $totalLateMinutes = 0;
@@ -3834,7 +4109,8 @@ class AgentToolRegistry {
                             $diff = $inM - (8 * 60);
                             if ($diff > 0) $lateM = $diff;
                         }
-                        if ($lateM > 0 || $r['status'] === 'late') {
+                        $isWaived = in_array($r['check_in_date'], $waivedDates, true);
+                        if (!$isWaived && ($lateM > 0 || $r['status'] === 'late')) {
                             $totalLateCount += 1;
                             $totalLateMinutes += ($lateM > 0 ? $lateM : 15);
                         }
@@ -3849,15 +4125,11 @@ class AgentToolRegistry {
                         }
                     }
 
-                    $wfhCount = 0;
-                    $leaveDaysCount = 0;
-                    foreach ($empLRows as $l) {
-                        if ($l['leave_type'] === 'remote_work') {
-                            $wfhCount += (float)($l['days_count'] ?? 1.0);
-                        } else {
-                            $leaveDaysCount += (float)($l['days_count'] ?? 1.0);
-                        }
-                    }
+                    $targetQuota = $resolveGenderQuota($targetUser['gender'] ?? null, (string)$targetUser['full_name']);
+                    $empGenderLabel = $targetQuota['gender_label'];
+                    $empGraceLimit = $targetQuota['grace_limit'];
+                    $remainingGrace = max(0, $empGraceLimit - $totalLateMinutes);
+                    $excessLateMinutes = max(0, $totalLateMinutes - $empGraceLimit);
 
                     return [
                         'success' => true,
@@ -3866,6 +4138,8 @@ class AgentToolRegistry {
                         'employee' => [
                             'id' => $targetUid,
                             'name' => $targetUser['full_name'],
+                            'gender_label' => $empGenderLabel,
+                            'monthly_late_grace_minutes' => $empGraceLimit,
                             'job_title' => $targetUser['job_title'] ?: $targetUser['role'],
                             'team' => $targetUser['team_name'] ?: 'Chung',
                             'email' => $targetUser['email']
@@ -3873,8 +4147,12 @@ class AgentToolRegistry {
                         'company_work_hours' => $workPolicy,
                         'statistics' => [
                             'actual_worked_days' => $totalWorkDays,
+                            'gender_label' => $empGenderLabel,
+                            'monthly_late_grace_minutes' => $empGraceLimit,
                             'late_count' => $totalLateCount,
                             'total_late_minutes' => $totalLateMinutes,
+                            'remaining_late_grace_minutes' => $remainingGrace,
+                            'excess_late_minutes' => $excessLateMinutes,
                             'early_leave_minutes' => $totalEarlyMinutes,
                             'total_ot_hours' => $totalOtHours,
                             'wfh_days' => $wfhCount,
@@ -3884,7 +4162,7 @@ class AgentToolRegistry {
                         'daily_logs' => array_slice($empCiRows, 0, 31),
                         'leave_requests' => $empLRows,
                         'export_download_url' => "/api/export?type=attendance&user_id={$targetUid}&month={$month}&year={$year}",
-                        'instruction' => 'BẮT BUỘC: 1. Nêu tóm tắt bảng công nhân sự ' . $targetUser['full_name'] . ' (Số công thực tế, số lần trễ, tổng phút trễ, tăng ca OT, WFH, phép còn lại). 2. Trình bày chi tiết từng ngày dưới dạng BẢNG MARKDOWN chuẩn (| Ngày | Giờ vào | Giờ ra | Trễ/Sớm | Trạng thái |). 3. Đính kèm link tải file: `[Bấm vào đây để tải Bảng công file Excel/CSV](/api/export?type=attendance&user_id=' . $targetUid . '&month=' . $month . '&year=' . $year . ')`. TUYỆT ĐỐI KHÔNG sinh thẻ Lead/Học viên CRM. TUYỆT ĐỐI KHÔNG dùng từ "(Zero-Trust)".'
+                        'instruction' => 'BẮT BUỘC: 1. Nêu tóm tắt bảng công nhân sự ' . $targetUser['full_name'] . ' (Giới tính: ' . $empGenderLabel . ', Số công thực tế, số lần trễ, tổng phút trễ ' . $totalLateMinutes . '/' . $empGraceLimit . ' phút định mức theo Điều 14 NQLĐ 2024, còn lại ' . $remainingGrace . ' phút định mức, vượt định mức ' . $excessLateMinutes . ' phút, tăng ca OT, WFH, phép còn lại). 2. Trình bày chi tiết từng ngày dưới dạng BẢNG MARKDOWN chuẩn (| Ngày | Giờ vào | Giờ ra | Trễ/Sớm | Trạng thái |). 3. Đính kèm link tải file: `[Bấm vào đây để tải Bảng công file Excel/CSV](/api/export?type=attendance&user_id=' . $targetUid . '&month=' . $month . '&year=' . $year . ')`. TUYỆT ĐỐI KHÔNG sinh thẻ Lead/Học viên CRM. TUYỆT ĐỐI KHÔNG dùng từ "(Zero-Trust)".'
                     ];
                 }
 
@@ -4448,6 +4726,82 @@ class AgentToolRegistry {
                 // ==========================================
                 case 'search_ideas_knowledge':
                 case 'get_program_details': {
+                    $qTopic = trim((string)($args['query'] ?? $args['topic'] ?? $args['program_name'] ?? $args['keyword'] ?? ''));
+                    $matchedChunks = [];
+                    try {
+                        if (mb_strlen($qTopic) >= 2) {
+                            $stmtRag = $db->prepare("
+                                SELECT c.id, c.content, d.name AS doc_name, d.tags
+                                FROM ai_training_chunks c
+                                JOIN ai_training_docs d ON c.doc_id = d.id
+                                WHERE d.is_active = 1 AND d.status = 'trained' AND d.tenant_id = ?
+                                  AND MATCH(c.content) AGAINST(? IN NATURAL LANGUAGE MODE)
+                                ORDER BY MATCH(c.content) AGAINST(? IN NATURAL LANGUAGE MODE) DESC
+                                LIMIT 8
+                            ");
+                            $stmtRag->execute([$tid, $qTopic, $qTopic]);
+                            $matchedChunks = $stmtRag->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                            $neededRag = 8 - count($matchedChunks);
+                            if ($neededRag > 0) {
+                                $cleanTerms = preg_replace('/[^\p{L}\p{N}\s]/u', ' ', $qTopic);
+                                $words = array_values(array_filter(explode(' ', mb_strtolower($cleanTerms)), fn($w) => mb_strlen($w) >= 2));
+                                $stopwords = ['cho', 'hoi', 'hỏi', 've', 'về', 'cua', 'của', 'la', 'là', 'co', 'có', 'khong', 'không', 'thi', 'thì', 'nhu', 'như', 'the', 'thế', 'nao', 'nào', 'bao', 'nhieu', 'nhiêu', 'em', 'anh', 'chi', 'chị', 'toi', 'tôi', 'minh', 'mình', 'tai', 'tại', 'trong', 'theo', 'quy', 'dinh', 'định'];
+                                $meaningful = array_values(array_unique(array_filter($words, fn($w) => !in_array($w, $stopwords, true))));
+                                if (empty($meaningful)) $meaningful = array_values(array_unique($words));
+
+                                $searchTerms = [];
+                                if (count($meaningful) >= 2) {
+                                    $searchTerms[] = $meaningful[0] . ' ' . $meaningful[1];
+                                }
+                                foreach ($meaningful as $mw) {
+                                    if (count($searchTerms) >= 4) break;
+                                    if (!in_array($mw, $searchTerms, true)) $searchTerms[] = $mw;
+                                }
+
+                                if (!empty($searchTerms)) {
+                                    $existIds = array_column($matchedChunks, 'id') ?: [0];
+                                    $inPh = implode(',', array_fill(0, count($existIds), '?'));
+                                    $orConds = [];
+                                    $lParams = [];
+                                    foreach ($searchTerms as $st) {
+                                        $lv = '%' . $st . '%';
+                                        $orConds[] = "(c.content LIKE ? OR d.name LIKE ? OR d.tags LIKE ?)";
+                                        $lParams[] = $lv;
+                                        $lParams[] = $lv;
+                                        $lParams[] = $lv;
+                                    }
+                                    $stmtLikeRag = $db->prepare("
+                                        SELECT c.id, c.content, d.name AS doc_name, d.tags
+                                        FROM ai_training_chunks c
+                                        JOIN ai_training_docs d ON c.doc_id = d.id
+                                        WHERE d.is_active = 1 AND d.status = 'trained' AND d.tenant_id = ?
+                                          AND c.id NOT IN ($inPh)
+                                          AND (" . implode(' OR ', $orConds) . ")
+                                        ORDER BY c.id DESC
+                                        LIMIT " . (int)$neededRag
+                                    );
+                                    $stmtLikeRag->execute(array_merge([$tid], $existIds, $lParams));
+                                    $matchedChunks = array_merge($matchedChunks, $stmtLikeRag->fetchAll(PDO::FETCH_ASSOC) ?: []);
+                                }
+                            }
+                        } else {
+                            $stmtDef = $db->prepare("
+                                SELECT c.id, c.content, d.name AS doc_name, d.tags
+                                FROM ai_training_chunks c
+                                JOIN ai_training_docs d ON c.doc_id = d.id
+                                WHERE d.is_active = 1 AND d.status = 'trained' AND d.tenant_id = ?
+                                  AND (d.name LIKE 'NQLĐ-%' OR d.name LIKE 'DOC-01:%' OR d.name LIKE 'DOC-18:%')
+                                ORDER BY d.id ASC, c.chunk_index ASC
+                                LIMIT 8
+                            ");
+                            $stmtDef->execute([$tid]);
+                            $matchedChunks = $stmtDef->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                        }
+                    } catch (\Throwable $eRag) {
+                        // Safe ignore
+                    }
+
                     return [
                         'success' => true,
                         'institute' => 'Viện Quản trị & Công nghệ IDEAS (Hơn 15 năm kết nối giáo dục toàn cầu từ 2011, 2.500+ Thạc sĩ/Tiến sĩ tốt nghiệp, 74 khóa đào tạo)',
@@ -4458,6 +4812,19 @@ class AgentToolRegistry {
                             'ISTEC Paris' => 'Paris, Pháp (thành lập 1961), Hệ thống Grande École danh giá, Top 8 Le Parisien, RNCP Level 7 & 8 (EQF Level 8 cao nhất), WES Earned Doctorate tại Mỹ & Canada.',
                             'ESTIAM & RB College' => 'Chương trình song bằng Dual DBA Pháp & Anh quốc.'
                         ],
+                        'labor_regulations_qd001_2024' => [
+                            'document_title' => 'Quyết định 001/2024 - Nội quy Lao động Viện IDEAS (Ký ban hành ngày 26/03/2024 bởi Viện Trưởng Phạm Quang Vinh, gồm 7 Chương & 28 Điều)',
+                            'scope_entities' => 'Áp dụng cho toàn thể người lao động (kể cả thử việc, tập việc, học nghề) tại Viện IDEAS, Viện TIME, Công ty TSSAC và Trung tâm RICH (Điều 1, 2, 3, 4).',
+                            'work_hours_and_rest' => 'Làm việc 5 ngày/tuần (40 giờ/tuần), 8 tiếng/ngày: Sáng 08:00 - 12:00, Nghỉ trưa 12:00 - 13:00 (01 tiếng), Chiều 13:00 - 17:00. Nghỉ hàng tuần 02 ngày/tuần (Điều 5.1, 5.2).',
+                            'monthly_late_and_early_quota' => 'Định mức đi trễ và về sớm được phép hàng tháng theo giới tính (Điều 14): Lao động Nữ có 60 phút/tháng đi trễ và về sớm; Lao động Nam có 30 phút/tháng đi trễ và về sớm. Chỉ khi tổng số phút đi trễ trong tháng vượt quá định mức (Nữ > 60p, Nam > 30p) thì phần phút vượt mới bị khấu trừ vào nghỉ bù / phép năm / ngày công. Nghiêm cấm phạt tiền hoặc cắt lương thay việc xử lý kỷ luật (Điều 23.1.4).',
+                            'remote_work_wfh' => 'Chỉ áp dụng WFH và hưởng nguyên đãi ngộ đối với 4 trường hợp (Điều 5.3): (1) Phụ nữ hưởng thai sản đi làm sớm khi nuôi con từ tháng thứ 4 trở lên; (2) NLĐ mắc bệnh điều trị dài ngày theo TT 46/2016/TT-BYT; (3) Bất khả kháng thiên tai, dịch bệnh, hỏa hoạn theo Khoản 1 Điều 156 BLDS 2015; (4) Chăm sóc học viên online, trực lớp online.',
+                            'public_holidays' => '11 ngày nghỉ Lễ, Tết hưởng nguyên lương (Điều 6): Tết Dương lịch (01 ngày - 01/01), Tết Âm lịch (05 ngày), Giỗ Tổ Hùng Vương (01 ngày - 10/03 âm lịch), Giải phóng miền Nam (01 ngày - 30/04), Quốc tế Lao động (01 ngày - 01/05), Quốc khánh (02 ngày - 02/09 và 01 ngày liền kề). Trùng ngày nghỉ hàng tuần được nghỉ bù vào ngày làm việc kế tiếp.',
+                            'annual_and_compensatory_leave' => 'Phép năm chuẩn 12 ngày/năm (1 ngày/tháng cộng dồn), đủ 05 năm thâm niên tăng 01 ngày; nghỉ từ 05 ngày trở lên nộp đơn trước 02 tuần; khẩn cấp báo điện thoại trước 08h00 sáng. Phép tồn chuyển sang năm sau phải nghỉ hết trước Quý I (trước 30/03 năm sau); quá 30/03 năm sau hoặc thôi việc được thanh toán tiền lương tối đa 10 ngày phép năm (Điều 7A). Làm việc buổi tối, Thứ 7, Chủ nhật được tính vào ngày nghỉ bù và không quy đổi thành tiền lương nếu không nghỉ hết trước 30/03 năm sau (Điều 7B, Điều 12A).',
+                            'sick_maternity_personal_leave' => 'Nghỉ bệnh >3 ngày liên tục phải có giấy xác nhận Bác sĩ, nếu không trừ phép năm; hưởng BHXH tối đa 30-60 ngày/năm tùy năm đóng BHXH (Điều 8). Thai sản Nữ 06 tháng (sinh đôi thêm 1 tháng/con), đi làm sớm sau tối thiểu 4 tháng phải báo trước 7 ngày; nghỉ thêm không lương sau thai sản tối đa 30 ngày báo trước 10 ngày. Nam đóng BHXH khi vợ sinh được nghỉ 5 ngày (sinh thường), 7 ngày (phẫu thuật/<32 tuần), 10 ngày (sinh đôi), 14 ngày (sinh đôi phẫu thuật) trong 30 ngày đầu (Điều 9). Nghỉ việc riêng có lương: Bản thân kết hôn 03 ngày, con kết hôn 01 ngày, tứ thân phụ mẫu/vợ/chồng/con mất 03 ngày (Điều 10). Nghỉ không lương: Ông bà/anh chị em ruột mất hoặc bố mẹ/anh chị em ruột kết hôn nghỉ 01 ngày; nghỉ không lương thỏa thuận tối đa 14 ngày/năm (Điều 11).',
+                            'meeting_and_uniform_rules' => 'Họp toàn Viện định kỳ 01 lần/tháng (HCNS báo trước >=2 ngày); Họp phòng ban 01 lần/tuần vào Thứ 2 hoặc Thứ 6 (Điều 12B). Mặc đồng phục Viện vào Thứ 2, Thứ 7 và Chủ nhật; Thứ 3 - Thứ 6 mặc trang phục công sở lịch sự, đeo thẻ tên; dự án Thuê phòng được mặc áo thun có tay (Điều 16). Danh sách/giấy tờ hoạt động của Viện phải chuyển về Phòng HCNS để hủy giấy, cấm đem ra ngoài (Điều 15B).',
+                            'disciplinary_and_compensation' => '3 hình thức kỷ luật (Điều 24): (1) Khiển trách bằng văn bản & trừ điểm đánh giá Tháng/Quý/Năm (vi phạm lần đầu Điều 5, 13, 14, 15, 16, 19, 20 hoặc điểm a, b, c Điều 17, hậu quả <5.000.000đ); (2) Kéo dài thời hạn nâng lương <=06 tháng (tái phạm trong 1 tháng sau khiển trách, khiếm nhã với khách hàng/cấp trên, vi phạm ATVSLĐ) hoặc Cách chức (vi phạm điểm d, e Điều 17, dùng danh nghĩa Viện cho việc riêng, cản trở giao dịch, giả mạo giấy bác sĩ, lừa đảo công việc); (3) Sa thải (trộm cắp, tham ô, đánh bạc, ma túy, tiết lộ bí mật kinh doanh, tái phạm khi chưa xóa kỷ luật, hoặc tự ý bỏ việc 05 ngày cộng dồn/30 ngày hay 20 ngày cộng dồn/365 ngày). Thời hiệu xử lý 6-12 tháng (Điều 25); xóa kỷ luật sau 3 tháng (khiển trách), 6 tháng (kéo dài nâng lương), 3 năm (cách chức) (Điều 26); tạm đình chỉ tối đa 15-90 ngày, tạm ứng 50% lương (Điều 27); bồi thường thiệt hại sơ suất tối đa 3 tháng lương (Điều 28).'
+                        ],
+                        'matched_training_chunks' => $matchedChunks,
                         'lms_learning_ecosystem' => [
                             'url' => 'https://ideas.edu.vn/he-thong-ho-tro-hoc-tap-lms-ideas',
                             'highlights' => '24/7 học tập chủ động; 1.000+ tài liệu Cengage toàn cầu; 100% bổ trợ tiếng Việt chuyên sâu cuối tuần.',
@@ -4609,7 +4976,7 @@ class AgentToolRegistry {
                     // 2. Specific Employee Query (RBAC Isolation)
                     if (!empty($employeeQuery)) {
                         // Find target employee
-                        $stmtFind = $db->prepare("SELECT id, full_name, role, team_id FROM users WHERE tenant_id = ? AND (full_name LIKE ? OR id = ? OR email LIKE ?) AND status = 'active' ORDER BY (full_name = ?) DESC LIMIT 1");
+                        $stmtFind = $db->prepare("SELECT id, full_name, gender, role, team_id FROM users WHERE tenant_id = ? AND (full_name LIKE ? OR id = ? OR email LIKE ?) AND status = 'active' ORDER BY (full_name = ?) DESC LIMIT 1");
                         $stmtFind->execute([$tid, "%$employeeQuery%", (int)$employeeQuery, "%$employeeQuery%", $employeeQuery]);
                         $foundUser = $stmtFind->fetch(PDO::FETCH_ASSOC);
 
@@ -4649,6 +5016,31 @@ class AgentToolRegistry {
                         }
                     }
 
+                    // Fetch target employee gender & monthly late grace settings (Điều 14 NQLĐ 2024: Nữ 60p/tháng, Nam 30p/tháng)
+                    $stmtUG = $db->prepare("SELECT gender, full_name FROM users WHERE id = ? LIMIT 1");
+                    $stmtUG->execute([$targetUid]);
+                    $uGenderRow = $stmtUG->fetch(PDO::FETCH_ASSOC) ?: [];
+                    $rawGender = mb_strtolower(trim((string)($uGenderRow['gender'] ?? '')));
+                    $empFullName = (string)($uGenderRow['full_name'] ?? $targetUserName);
+
+                    $graceFemale = 60;
+                    $graceMale = 30;
+                    $stmtGrace = $db->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('hrm_late_grace_female', 'hrm_late_grace_male')");
+                    if ($stmtGrace) {
+                        foreach ($stmtGrace->fetchAll(PDO::FETCH_ASSOC) as $gRow) {
+                            if ($gRow['setting_key'] === 'hrm_late_grace_female' && is_numeric($gRow['setting_value'])) {
+                                $graceFemale = (int)$gRow['setting_value'];
+                            } elseif ($gRow['setting_key'] === 'hrm_late_grace_male' && is_numeric($gRow['setting_value'])) {
+                                $graceMale = (int)$gRow['setting_value'];
+                            }
+                        }
+                    }
+
+                    $isFemale = in_array($rawGender, ['female', 'nữ', 'nu', 'f'], true)
+                        || ($rawGender === '' && preg_match('/(\sThị\s|\sNữ|\sNhi|\sLinh|\sNgân|\sTrâm|\sTrân|\sThảo|\sUyên|\sLan|\sThoa|\sThương)/iu', $empFullName));
+                    $genderLabel = $isFemale ? 'Nữ' : 'Nam';
+                    $graceLimit = $isFemale ? $graceFemale : $graceMale;
+
                     // Query payslip for $targetUid
                     if ($month !== null && $month >= 1 && $month <= 12) {
                         $period = sprintf('%04d-%02d', $year, $month);
@@ -4665,10 +5057,43 @@ class AgentToolRegistry {
                         return [
                             'success' => true,
                             'has_record' => false,
+                            'gender_label' => $genderLabel,
+                            'monthly_late_grace_minutes' => $graceLimit,
                             'message' => "Hiện tại hệ thống chưa có dữ liệu bảng lương {$whoText}" . ($month ? " trong tháng {$month}/{$year}." : ".") . " Bạn có thể kiểm tra lại tại mục Phiếu lương (/my-payslips) hoặc liên hệ phòng Nhân sự.",
                             'route_url' => '/my-payslips'
                         ];
                     }
+
+                    // Calculate raw late minutes in the payslip month (excluding waived late_early dates)
+                    $psPeriod = (string)$ps['month_year'];
+                    $psStart = $psPeriod . '-01';
+                    $psEnd = date('Y-m-t', strtotime($psStart));
+                    $stmtLate = $db->prepare("
+                        SELECT COALESCE(SUM(
+                            CASE 
+                                WHEN NOT EXISTS (
+                                    SELECT 1 FROM hrm_leave_requests lr 
+                                    WHERE lr.user_id = c.user_id AND lr.status = 'approved' 
+                                      AND lr.leave_type = 'late_early' AND DATE(lr.start_date) = c.check_in_date
+                                ) THEN (
+                                    CASE 
+                                        WHEN c.late_minutes > 0 THEN c.late_minutes 
+                                        WHEN TIME(c.check_in_time) > '08:00:00' AND TIME(c.check_in_time) < '12:00:00' 
+                                             THEN TIMESTAMPDIFF(MINUTE, '08:00:00', TIME(c.check_in_time))
+                                        ELSE 0 
+                                    END
+                                )
+                                ELSE 0
+                            END
+                        ), 0) as raw_late_minutes
+                        FROM check_ins c
+                        WHERE c.user_id = ? AND c.check_in_date BETWEEN ? AND ? AND c.status != 'rejected'
+                    ");
+                    $stmtLate->execute([$targetUid, $psStart, $psEnd]);
+                    $rawLateFromCi = (int)($stmtLate->fetchColumn() ?: 0);
+                    $totalLateMinutes = $rawLateFromCi > 0 ? $rawLateFromCi : (int)($ps['lateness_minutes'] ?? 0);
+                    $remainingGrace = max(0, $graceLimit - $totalLateMinutes);
+                    $excessLateMinutes = max(0, $totalLateMinutes - $graceLimit);
 
                     $stMap = [
                         'draft' => 'Bản nháp (Đang lập)',
@@ -4681,10 +5106,15 @@ class AgentToolRegistry {
                     $stText = $stMap[$ps['status']] ?? ($ps['status'] ?: 'Đang xử lý');
                     $subjectPrefix = ($targetUid === $uid) ? "của bạn" : "của nhân sự {$targetUserName}";
 
-                    return [
+                    $basePayslip = [
                         'success' => true,
                         'has_record' => true,
                         'employee_name' => $targetUserName,
+                        'gender_label' => $genderLabel,
+                        'monthly_late_grace_minutes' => $graceLimit,
+                        'total_late_minutes' => $totalLateMinutes,
+                        'remaining_late_grace_minutes' => $remainingGrace,
+                        'excess_late_minutes' => $excessLateMinutes,
                         'is_self' => ($targetUid === $uid),
                         'month_year' => $ps['month_year'],
                         'net_salary' => number_format((float)$ps['net_salary'], 0, ',', '.') . ' VND',
@@ -4702,8 +5132,9 @@ class AgentToolRegistry {
                         'status' => $stText,
                         'is_confirmed' => !empty($ps['confirmed_at']),
                         'route_url' => '/my-payslips',
-                        'summary' => "Phiếu lương kỳ {$ps['month_year']} {$subjectPrefix}: Thực nhận " . number_format((float)$ps['net_salary'], 0, ',', '.') . " VND. Số ngày công thực tế: {$ps['work_days_actual']}/{$ps['work_days_required']} ngày. Trạng thái: {$stText}."
+                        'summary' => "Phiếu lương kỳ {$ps['month_year']} {$subjectPrefix}: Thực nhận " . number_format((float)$ps['net_salary'], 0, ',', '.') . " VND. Số ngày công thực tế: {$ps['work_days_actual']}/{$ps['work_days_required']} ngày. Đi trễ: {$totalLateMinutes}/{$graceLimit} phút định mức {$genderLabel} (còn lại {$remainingGrace} phút, vượt định mức {$excessLateMinutes} phút). Trạng thái: {$stText}."
                     ];
+                    return AgentHrmAttendanceTools::enrichMyPayslip360($db, $targetUid, (string)$ps['month_year'], $basePayslip);
                 }
 
                 // ==========================================
@@ -4920,7 +5351,7 @@ class AgentToolRegistry {
                     $resCampaigns = [];
 
                     if ($type === 'all' || $type === 'projects') {
-                        $pWhere = "p.tenant_id = ? AND p.deleted_at IS NULL AND (p.status = 'active' OR p.status IS NULL OR p.status = '1')";
+                        $pWhere = "p.tenant_id = ? AND (p.status = 'active' OR p.status IS NULL OR p.status = '1')";
                         $pParams = [$tid];
                         if (!empty($search)) {
                             $pWhere .= " AND (p.name LIKE ? OR p.code LIKE ?)";
@@ -5378,7 +5809,7 @@ class AgentToolRegistry {
                         LEFT JOIN users u ON d.created_by = u.id
                         WHERE (c.tenant_id = ? OR p.tenant_id = ? OR u.tenant_id = ?)
                           AND (c.id IS NULL OR c.deleted_at IS NULL)
-                          AND d.status = 'pending'
+                          AND d.status IN ('pending', 'pending_admin')
                     ");
                     $stmtPendingSO->execute([$tid, $tid, $tid]);
                     [$pendingSOCount, $pendingSOAmount] = $stmtPendingSO->fetch(PDO::FETCH_NUM) ?: [0, 0];
@@ -5449,9 +5880,21 @@ class AgentToolRegistry {
                             $exportType = 'asset';
                         } elseif (in_array($rawExportType, ['attendance', 'attendances', 'bang_cong', 'cham_cong'], true)) {
                             $exportType = 'attendance';
-                        } elseif (in_array($rawExportType, ['expense', 'expenses', 'chi_phi', 'phieu_chi', 'po'], true)) {
+                        } elseif (in_array($rawExportType, ['po', 'purchase_order', 'purchase_orders', 'don_mua_hang'], true)) {
+                            $exportType = 'po';
+                        } elseif (in_array($rawExportType, ['so', 'sales_order', 'sales_orders', 'don_dat_hang', 'don_hang_ban'], true)) {
+                            $exportType = 'so';
+                        } elseif (in_array($rawExportType, ['invoice', 'invoices', 'hoa_don'], true)) {
+                            $exportType = 'invoice';
+                        } elseif (in_array($rawExportType, ['quote', 'quotes', 'bao_gia'], true)) {
+                            $exportType = 'quote';
+                        } elseif (in_array($rawExportType, ['supplier', 'suppliers', 'nha_cung_cap', 'vendor', 'vendors'], true)) {
+                            $exportType = 'supplier';
+                        } elseif (in_array($rawExportType, ['salary_advance', 'salary_advances', 'tam_ung', 'tam_ung_luong'], true)) {
+                            $exportType = 'salary_advance';
+                        } elseif (in_array($rawExportType, ['expense', 'expenses', 'chi_phi', 'phieu_chi'], true)) {
                             $exportType = 'expense';
-                        } elseif (in_array($rawExportType, ['deposit', 'deposits', 'dat_coc', 'phieu_thu', 'so', 'sales_order', 'doanh_thu'], true)) {
+                        } elseif (in_array($rawExportType, ['deposit', 'deposits', 'dat_coc', 'phieu_thu', 'doanh_thu'], true)) {
                             $exportType = 'deposit';
                         } elseif (in_array($rawExportType, ['task', 'tasks', 'cong_viec', 'nhiem_vu', 'activity', 'activities'], true)) {
                             $exportType = 'task';
@@ -5648,334 +6091,18 @@ class AgentToolRegistry {
                 // 15B. DIRECT TOOL 1: APPROVE OR REJECT ERP TICKET
                 // ==========================================
                 case 'approve_or_reject_erp_ticket': {
-                    $ticketType = strtolower(trim($args['ticket_type'] ?? ''));
-                    $ticketId = (int)($args['ticket_id'] ?? 0);
-                    $decision = strtolower(trim($args['decision'] ?? 'approved'));
-                    $decision = in_array($decision, ['approved', 'rejected'], true) ? $decision : 'approved';
-                    $reason = trim($args['reason'] ?? '');
-
-                    if ($ticketId <= 0) {
-                        return ['success' => false, 'message' => 'Vui lòng cung cấp mã ID hợp lệ của phiếu duyệt cần xử lý.'];
+                    $result = AgentPoSoFinanceTools::executeUnifiedApprovalTicket($db, $args, $auth);
+                    if (!empty($result['success']) && strtolower(trim((string)($args['ticket_type'] ?? ''))) === 'leave') {
+                        try {
+                            $stmtLvU = $db->prepare("SELECT user_id FROM hrm_leave_requests WHERE id = ?");
+                            $stmtLvU->execute([(int)($args['ticket_id'] ?? 0)]);
+                            $lvUid = (int)$stmtLvU->fetchColumn();
+                            if ($lvUid > 0) {
+                                AgentHrmAttendanceTools::recalculateEmployeeLeaveBalance($db, $lvUid);
+                            }
+                        } catch (\Throwable $e) {}
                     }
-
-                    if (!in_array($ticketType, ['leave', 'salary_advance', 'expense', 'check_in'], true)) {
-                        return ['success' => false, 'message' => "Loại phiếu '{$ticketType}' không hợp lệ. Hỗ trợ: leave, salary_advance, expense, check_in."];
-                    }
-
-                    $actionVerb = ($decision === 'approved') ? 'phê duyệt' : 'từ chối';
-
-                    if ($ticketType === 'leave') {
-                        $db->beginTransaction();
-                        try {
-                            $q = $db->prepare("SELECT l.*, u.full_name as employee_name FROM hrm_leave_requests l JOIN users u ON l.user_id = u.id WHERE l.id = ? AND u.tenant_id = ? FOR UPDATE");
-                            $q->execute([$ticketId, $tid]);
-                            $ticket = $q->fetch(PDO::FETCH_ASSOC);
-                            if (!$ticket) {
-                                $db->rollBack();
-                                return ['success' => false, 'message' => "Không tìm thấy đơn nghỉ phép ID #{$ticketId} hoặc không thuộc chi nhánh của bạn."];
-                            }
-
-                            if ($ticket['status'] !== 'pending') {
-                                $db->rollBack();
-                                return ['success' => false, 'message' => "Đơn nghỉ phép #{$ticketId} đã được xử lý trước đó (Trạng thái hiện tại: {$ticket['status']})."];
-                            }
-
-                            $isCreator = ((int)$ticket['user_id'] === $uid);
-                            if ($isCreator && !$isGlobalAdmin) {
-                                $db->rollBack();
-                                return ['success' => false, 'message' => 'Người tạo đơn không được tự phê duyệt đề xuất nghỉ phép của chính mình.'];
-                            }
-
-                            $isApprover1 = ((int)($ticket['approver_id'] ?? 0) === $uid);
-                            $isApprover2 = ((int)($ticket['approver_id_2'] ?? 0) === $uid);
-                            $canApprove = $isGlobalAdmin || $isHR || $isManager || $isApprover1 || $isApprover2;
-                            if (!$canApprove) {
-                                $db->rollBack();
-                                return ['success' => false, 'message' => "Bạn không có quyền {$actionVerb} đơn nghỉ phép này."];
-                            }
-
-                            if ($isApprover2 && !$isApprover1 && !$isGlobalAdmin) {
-                                if (($ticket['status_level_1'] ?? 'pending') === 'pending') {
-                                    $db->rollBack();
-                                    return ['success' => false, 'message' => 'Cần có phê duyệt Cấp 1 trước khi người phê duyệt Cấp 2 xử lý đơn này.'];
-                                }
-                            }
-
-                            $empName = $ticket['employee_name'] ?: 'Nhân sự';
-
-                            if ($decision === 'rejected') {
-                                $upFields = ["status = 'rejected'", "updated_at = NOW()"];
-                                $upParams = [];
-                                if ($isApprover1 || $isGlobalAdmin) {
-                                    $upFields[] = "status_level_1 = 'rejected'";
-                                    $upFields[] = "approved_by = ?";
-                                    $upParams[] = $uid;
-                                }
-                                if ($isApprover2 || $isGlobalAdmin) {
-                                    $upFields[] = "status_level_2 = 'rejected'";
-                                    $upFields[] = "approved_by_2 = ?";
-                                    $upParams[] = $uid;
-                                }
-                                $upParams[] = $ticketId;
-                                $db->prepare("UPDATE hrm_leave_requests SET " . implode(', ', $upFields) . " WHERE id = ?")->execute($upParams);
-                                $db->commit();
-                                return [
-                                    'success' => true,
-                                    'ticket_type' => 'leave',
-                                    'ticket_id' => $ticketId,
-                                    'decision' => $decision,
-                                    'employee_name' => $empName,
-                                    'summary' => "Đã từ chối đơn xin nghỉ phép #{$ticketId} của {$empName}."
-                                ];
-                            } else {
-                                $hasLevel2 = !empty($ticket['approver_id_2']) && (int)$ticket['approver_id_2'] > 0;
-                                $upFields = ["updated_at = NOW()"];
-                                $upParams = [];
-
-                                if ($isApprover1 || (!$isApprover2 && ($isGlobalAdmin || $isHR || $isManager))) {
-                                    $upFields[] = "status_level_1 = 'approved'";
-                                    $upFields[] = "approved_by = ?";
-                                    $upParams[] = $uid;
-                                    if ($hasLevel2 && !$isGlobalAdmin) {
-                                        $upFields[] = "status = 'pending'";
-                                        $targetStatus = 'pending (Chờ cấp 2 duyệt)';
-                                    } else {
-                                        $upFields[] = "status = 'approved'";
-                                        $upFields[] = "approved_at = NOW()";
-                                        $targetStatus = 'approved';
-                                    }
-                                } elseif ($isApprover2) {
-                                    $upFields[] = "status_level_2 = 'approved'";
-                                    $upFields[] = "approved_by_2 = ?";
-                                    $upParams[] = $uid;
-                                    $upFields[] = "status = 'approved'";
-                                    $upFields[] = "approved_at = NOW()";
-                                    $targetStatus = 'approved';
-                                } else {
-                                    $upFields[] = "status = 'approved'";
-                                    $upFields[] = "approved_by = ?";
-                                    $upParams[] = $uid;
-                                    $targetStatus = 'approved';
-                                }
-
-                                $upParams[] = $ticketId;
-                                $db->prepare("UPDATE hrm_leave_requests SET " . implode(', ', $upFields) . " WHERE id = ?")->execute($upParams);
-                                $db->commit();
-                                return [
-                                    'success' => true,
-                                    'ticket_type' => 'leave',
-                                    'ticket_id' => $ticketId,
-                                    'decision' => $decision,
-                                    'employee_name' => $empName,
-                                    'summary' => "Đã {$actionVerb} đơn xin nghỉ phép #{$ticketId} của {$empName}. Trạng thái cập nhật: {$targetStatus}."
-                                ];
-                            }
-                        } catch (\Throwable $e) {
-                            if ($db->inTransaction()) $db->rollBack();
-                            throw $e;
-                        }
-                    } elseif ($ticketType === 'salary_advance') {
-                        $db->beginTransaction();
-                        try {
-                            $q = $db->prepare("SELECT a.*, u.full_name as employee_name FROM hrm_salary_advances a JOIN users u ON a.user_id = u.id WHERE a.id = ? AND u.tenant_id = ? FOR UPDATE");
-                            $q->execute([$ticketId, $tid]);
-                            $ticket = $q->fetch(PDO::FETCH_ASSOC);
-                            if (!$ticket) {
-                                $db->rollBack();
-                                return ['success' => false, 'message' => "Không tìm thấy đơn tạm ứng lương ID #{$ticketId} hoặc không thuộc chi nhánh của bạn."];
-                            }
-
-                            if ($ticket['status'] !== 'pending') {
-                                $db->rollBack();
-                                return ['success' => false, 'message' => "Đơn tạm ứng lương #{$ticketId} đã được xử lý trước đó (Trạng thái hiện tại: {$ticket['status']})."];
-                            }
-
-                            $isCreator = ((int)$ticket['user_id'] === $uid);
-                            if ($isCreator && !$isGlobalAdmin) {
-                                $db->rollBack();
-                                return ['success' => false, 'message' => 'Người tạo đơn không được tự phê duyệt đơn tạm ứng lương của chính mình.'];
-                            }
-
-                            $canApprove = $isGlobalAdmin || $isAccountant || $isHR || $isManager || (int)($ticket['approver_id'] ?? 0) === $uid;
-                            if (!$canApprove) {
-                                $db->rollBack();
-                                return ['success' => false, 'message' => "Bạn không có quyền {$actionVerb} đơn tạm ứng lương này."];
-                            }
-
-                            $targetStatus = ($decision === 'approved') ? 'approved' : 'rejected';
-                            $up = $db->prepare("UPDATE hrm_salary_advances SET status = ?, approver_id = COALESCE(approver_id, ?), updated_at = NOW() WHERE id = ?");
-                            $up->execute([$targetStatus, $uid, $ticketId]);
-                            $db->commit();
-
-                            $empName = $ticket['employee_name'] ?: 'Nhân sự';
-                            $amountFmt = number_format((float)($ticket['amount'] ?? 0), 0, ',', '.') . ' VND';
-                            return [
-                                'success' => true,
-                                'ticket_type' => 'salary_advance',
-                                'ticket_id' => $ticketId,
-                                'decision' => $decision,
-                                'amount' => $amountFmt,
-                                'employee_name' => $empName,
-                                'summary' => "Đã {$actionVerb} thành công đơn tạm ứng {$amountFmt} (#{$ticketId}) của {$empName}."
-                            ];
-                        } catch (\Throwable $e) {
-                            if ($db->inTransaction()) $db->rollBack();
-                            throw $e;
-                        }
-                    } elseif ($ticketType === 'expense') {
-                        $db->beginTransaction();
-                        try {
-                            $q = $db->prepare("SELECT e.*, u.full_name as creator_name FROM expenses e LEFT JOIN users u ON e.created_by = u.id WHERE e.id = ? AND e.tenant_id = ? AND e.deleted_at IS NULL FOR UPDATE");
-                            $q->execute([$ticketId, $tid]);
-                            $ticket = $q->fetch(PDO::FETCH_ASSOC);
-                            if (!$ticket) {
-                                $db->rollBack();
-                                return ['success' => false, 'message' => "Không tìm thấy phiếu chi/đề xuất chi phí ID #{$ticketId}."];
-                            }
-
-                            if ($ticket['status'] !== 'pending') {
-                                $db->rollBack();
-                                return ['success' => false, 'message' => "Phiếu chi #{$ticketId} đã được xử lý trước đó (Trạng thái hiện tại: {$ticket['status']})."];
-                            }
-
-                            $isCreator = ((int)$ticket['created_by'] === $uid);
-                            if ($isCreator && !$isGlobalAdmin && !$isAccountant && !$isManager) {
-                                $db->rollBack();
-                                return ['success' => false, 'message' => 'Người tạo đề xuất không được tự phê duyệt chi phí của chính mình.'];
-                            }
-
-                            $isApp1 = ((int)($ticket['approver_id'] ?? 0) === $uid);
-                            $isApp2 = ((int)($ticket['approver_id_2'] ?? 0) === $uid);
-                            $isApp3 = ((int)($ticket['approver_id_3'] ?? 0) === $uid);
-
-                            $canApprove = $isGlobalAdmin || $isAccountant || $isManager || $isApp1 || $isApp2 || $isApp3;
-                            if (!$canApprove) {
-                                $db->rollBack();
-                                return ['success' => false, 'message' => "Bạn không có quyền {$actionVerb} phiếu chi/PO này."];
-                            }
-
-                            $currentLevel = 0;
-                            if (($ticket['status_level_1'] ?? 'pending') === 'pending') {
-                                $currentLevel = 1;
-                            } elseif ($ticket['status_level_1'] === 'approved' && ($ticket['status_level_2'] ?? 'pending') === 'pending') {
-                                $currentLevel = 2;
-                            } elseif ($ticket['status_level_1'] === 'approved' && $ticket['status_level_2'] === 'approved' && ($ticket['status_level_3'] ?? 'pending') === 'pending') {
-                                $currentLevel = 3;
-                            }
-                            if ($currentLevel === 0 && $ticket['status'] === 'pending') {
-                                $currentLevel = 1;
-                            }
-
-                            $expectedApproverId = 0;
-                            if ($currentLevel === 1) $expectedApproverId = (int)($ticket['approver_id'] ?? 0);
-                            elseif ($currentLevel === 2) $expectedApproverId = (int)($ticket['approver_id_2'] ?? 0);
-                            elseif ($currentLevel === 3) $expectedApproverId = (int)($ticket['approver_id_3'] ?? 0);
-
-                            if ($expectedApproverId > 0 && $expectedApproverId !== $uid && !$isGlobalAdmin) {
-                                $db->rollBack();
-                                return ['success' => false, 'message' => "Bạn không có quyền duyệt cấp {$currentLevel} hoặc chưa đến lượt phê duyệt của bạn."];
-                            }
-
-                            $amountFmt = number_format((float)($ticket['amount'] ?? 0), 0, ',', '.') . ' ' . ($ticket['currency'] ?: 'VND');
-
-                            if ($decision === 'rejected') {
-                                $levelStatusField = "status_level_" . max(1, $currentLevel);
-                                $levelTimeField = ($currentLevel === 1) ? 'approved_at' : (($currentLevel === 2) ? 'approved_at_2' : 'approved_at_3');
-                                $upStmt = $db->prepare("UPDATE expenses SET status = 'rejected', approval_status = 'rejected', {$levelStatusField} = 'rejected', {$levelTimeField} = NOW(), reject_reason = ?, updated_at = NOW() WHERE id = ? AND tenant_id = ?");
-                                $upStmt->execute([$reason ?: 'Từ chối qua AI Agent', $ticketId, $tid]);
-                                $db->commit();
-                                return [
-                                    'success' => true,
-                                    'ticket_type' => 'expense',
-                                    'ticket_id' => $ticketId,
-                                    'decision' => $decision,
-                                    'title' => $ticket['title'],
-                                    'amount' => $amountFmt,
-                                    'summary' => "Đã từ chối phiếu đề xuất chi phí #{$ticketId} ('{$ticket['title']}')."
-                                ];
-                            } else {
-                                $hasLevel2 = !empty($ticket['approver_id_2']) && ($ticket['status_level_2'] ?? '') !== 'none';
-                                $hasLevel3 = !empty($ticket['approver_id_3']) && ($ticket['status_level_3'] ?? '') !== 'none';
-
-                                $levelStatusField = "status_level_" . max(1, $currentLevel);
-                                $levelTimeField = ($currentLevel === 1) ? 'approved_at' : (($currentLevel === 2) ? 'approved_at_2' : 'approved_at_3');
-
-                                $isFinalLevel = true;
-                                if ($currentLevel === 1 && $hasLevel2) $isFinalLevel = false;
-                                if ($currentLevel === 2 && $hasLevel3) $isFinalLevel = false;
-                                if ($isGlobalAdmin) $isFinalLevel = true;
-
-                                if ($isFinalLevel) {
-                                    $upStmt = $db->prepare("UPDATE expenses SET status = 'approved', approval_status = 'approved', {$levelStatusField} = 'approved', {$levelTimeField} = NOW(), approver_id = COALESCE(approver_id, ?), approved_at = NOW(), updated_at = NOW() WHERE id = ? AND tenant_id = ?");
-                                    $upStmt->execute([$uid, $ticketId, $tid]);
-                                    $statusSummary = "Đã phê duyệt hoàn tất (Trạng thái: approved)";
-                                } else {
-                                    $nextLevel = $currentLevel + 1;
-                                    $upStmt = $db->prepare("UPDATE expenses SET status = 'pending', approval_status = 'pending', {$levelStatusField} = 'approved', {$levelTimeField} = NOW(), updated_at = NOW() WHERE id = ? AND tenant_id = ?");
-                                    $upStmt->execute([$ticketId, $tid]);
-                                    $statusSummary = "Đã duyệt Cấp {$currentLevel}, đang chuyển sang Cấp {$nextLevel} phê duyệt";
-                                }
-
-                                $db->commit();
-                                return [
-                                    'success' => true,
-                                    'ticket_type' => 'expense',
-                                    'ticket_id' => $ticketId,
-                                    'decision' => $decision,
-                                    'title' => $ticket['title'],
-                                    'amount' => $amountFmt,
-                                    'summary' => "{$statusSummary} phiếu đề xuất chi phí #{$ticketId} ('{$ticket['title']}') trị giá {$amountFmt}."
-                                ];
-                            }
-                        } catch (\Throwable $e) {
-                            if ($db->inTransaction()) $db->rollBack();
-                            throw $e;
-                        }
-                    } elseif ($ticketType === 'check_in') {
-                        $db->beginTransaction();
-                        try {
-                            $q = $db->prepare("SELECT c.*, u.full_name as employee_name FROM check_ins c JOIN users u ON c.user_id = u.id WHERE c.id = ? AND u.tenant_id = ? FOR UPDATE");
-                            $q->execute([$ticketId, $tid]);
-                            $ticket = $q->fetch(PDO::FETCH_ASSOC);
-                            if (!$ticket) {
-                                $db->rollBack();
-                                return ['success' => false, 'message' => "Không tìm thấy bản ghi chấm công/giải trình ID #{$ticketId} hoặc không thuộc chi nhánh của bạn."];
-                            }
-
-                            $isCreator = ((int)$ticket['user_id'] === $uid);
-                            if ($isCreator && !$isGlobalAdmin) {
-                                $db->rollBack();
-                                return ['success' => false, 'message' => 'Không được tự phê duyệt giải trình chấm công của chính mình.'];
-                            }
-
-                            $canApprove = $isGlobalAdmin || $isHR || $isManager;
-                            if (!$canApprove) {
-                                $db->rollBack();
-                                return ['success' => false, 'message' => "Bạn không có quyền {$actionVerb} bản ghi chấm công này (yêu cầu quyền HR, Quản lý hoặc Giám đốc)."];
-                            }
-
-                            $targetStatus = ($decision === 'approved') ? 'approved' : 'rejected';
-                            $noteAppend = "[{$targetStatus} bởi {$userName} ({$uid}) lúc " . date('d/m/Y H:i') . ($reason ? ": {$reason}" : "") . "]";
-                            $adminNote = trim(($ticket['admin_note'] ?? '') . " " . $noteAppend);
-
-                            $up = $db->prepare("UPDATE check_ins SET status = ?, admin_note = ? WHERE id = ?");
-                            $up->execute([$targetStatus, $adminNote, $ticketId]);
-                            $db->commit();
-
-                            $empName = $ticket['employee_name'] ?: 'Nhân sự';
-                            return [
-                                'success' => true,
-                                'ticket_type' => 'check_in',
-                                'ticket_id' => $ticketId,
-                                'decision' => $decision,
-                                'employee_name' => $empName,
-                                'summary' => "Đã {$actionVerb} giải trình chấm công ngày {$ticket['check_in_date']} (#{$ticketId}) của {$empName}."
-                            ];
-                        } catch (\Throwable $e) {
-                            if ($db->inTransaction()) $db->rollBack();
-                            throw $e;
-                        }
-                    }
+                    return $result;
                 }
 
                 // ==========================================
@@ -6004,24 +6131,44 @@ class AgentToolRegistry {
                     $params = [];
 
                     $newStatus = isset($args['status']) ? strtolower(trim((string)$args['status'])) : null;
-                    if ($newStatus && in_array($newStatus, ['planned', 'in_progress', 'done', 'cancelled'], true)) {
-                        $updates[] = "status = ?";
-                        $params[] = $newStatus;
-                        if ($newStatus === 'done') {
-                            $updates[] = "progress = 100";
-                            $updates[] = "done_at = NOW()";
-                        } elseif ($newStatus === 'in_progress' || $newStatus === 'planned') {
-                            $updates[] = "done_at = NULL";
-                        }
-                    }
+                    $prog = (isset($args['progress']) && is_numeric($args['progress'])) ? min(100, max(0, (int)$args['progress'])) : null;
 
-                    if (isset($args['progress']) && is_numeric($args['progress'])) {
-                        $prog = min(100, max(0, (int)$args['progress']));
-                        $updates[] = "progress = ?";
-                        $params[] = $prog;
-                        if ($prog >= 100 && $newStatus !== 'done') {
-                            $updates[] = "status = 'done'";
-                            $updates[] = "done_at = NOW()";
+                    $requiresApproval = !empty($task['require_approval']);
+                    $approverId = (int)($task['approver_id'] ?? 0);
+                    $canDirectlyApprove = $isGlobalAdmin || $isManager || ($approverId > 0 && $approverId === $uid);
+                    $pendingApprovalTriggered = false;
+
+                    if (($newStatus === 'done' || ($prog !== null && $prog >= 100)) && $requiresApproval && !$canDirectlyApprove) {
+                        $updates[] = "status = 'in_progress'";
+                        $updates[] = "progress = 100";
+                        $updates[] = "approval_status = 'pending'";
+                        $updates[] = "done_at = NULL";
+                        $pendingApprovalTriggered = true;
+                    } else {
+                        if ($newStatus && in_array($newStatus, ['planned', 'in_progress', 'done', 'cancelled'], true)) {
+                            $updates[] = "status = ?";
+                            $params[] = $newStatus;
+                            if ($newStatus === 'done') {
+                                $updates[] = "progress = 100";
+                                $updates[] = "done_at = NOW()";
+                                if ($requiresApproval) {
+                                    $updates[] = "approval_status = 'approved'";
+                                }
+                            } elseif ($newStatus === 'in_progress' || $newStatus === 'planned') {
+                                $updates[] = "done_at = NULL";
+                            }
+                        }
+
+                        if ($prog !== null && !$pendingApprovalTriggered) {
+                            $updates[] = "progress = ?";
+                            $params[] = $prog;
+                            if ($prog >= 100 && $newStatus !== 'done') {
+                                $updates[] = "status = 'done'";
+                                $updates[] = "done_at = NOW()";
+                                if ($requiresApproval) {
+                                    $updates[] = "approval_status = 'approved'";
+                                }
+                            }
                         }
                     }
 
@@ -6043,6 +6190,19 @@ class AgentToolRegistry {
                         $upStmt->execute($params);
                     }
 
+                    if ($pendingApprovalTriggered && $approverId > 0) {
+                        try {
+                            $notifStmt = $db->prepare("INSERT INTO notifications (tenant_id, user_id, title, message, type, link, is_read, created_at) VALUES (?, ?, ?, ?, 'task_approval', ?, 0, NOW())");
+                            $notifStmt->execute([
+                                $tid,
+                                $approverId,
+                                "Chờ nghiệm thu công việc #{$taskId}",
+                                "{$userName} đã hoàn thành 100% công việc '{$task['subject']}' và gửi yêu cầu nghiệm thu.",
+                                "/workspace?task_id={$taskId}"
+                            ]);
+                        } catch (\Throwable $e) {}
+                    }
+
                     $note = trim((string)($args['note'] ?? ''));
                     if (!empty($note)) {
                         $cmtStmt = $db->prepare("INSERT INTO activity_comments (tenant_id, activity_id, user_id, content, created_at) VALUES (?, ?, ?, ?, NOW())");
@@ -6050,12 +6210,15 @@ class AgentToolRegistry {
                     }
 
                     // Refetch updated task
-                    $reStmt = $db->prepare("SELECT status, progress, due_date FROM activities WHERE id = ? AND tenant_id = ?");
+                    $reStmt = $db->prepare("SELECT status, progress, due_date, approval_status FROM activities WHERE id = ? AND tenant_id = ?");
                     $reStmt->execute([$taskId, $tid]);
                     $fresh = $reStmt->fetch(PDO::FETCH_ASSOC);
 
                     $statusMap = ['planned' => 'Chưa bắt đầu', 'in_progress' => 'Đang thực hiện', 'done' => 'Đã hoàn thành', 'cancelled' => 'Đã hủy'];
                     $statusText = $statusMap[$fresh['status'] ?? ''] ?? ($fresh['status'] ?? 'Cập nhật');
+                    if ($pendingApprovalTriggered || ($fresh['approval_status'] ?? '') === 'pending') {
+                        $statusText .= ' (Chờ duyệt nghiệm thu)';
+                    }
 
                     return [
                         'success' => true,
@@ -6063,6 +6226,7 @@ class AgentToolRegistry {
                         'subject' => $task['subject'],
                         'status' => $fresh['status'],
                         'status_text' => $statusText,
+                        'approval_status' => $fresh['approval_status'] ?? null,
                         'progress' => (int)($fresh['progress'] ?? 0),
                         'due_date' => $fresh['due_date'],
                         'summary' => "Đã cập nhật công việc #{$taskId} ('{$task['subject']}'): Trạng thái [{$statusText}], Tiến độ [{$fresh['progress']}%]" . ($note ? " kèm bình luận." : ".")
@@ -8041,246 +8205,14 @@ class AgentToolRegistry {
                 // 26. GET UPCOMING TUITION RECEIVABLES (FINANCE SO DEBT AUDIT)
                 // ==========================================
                 case 'get_upcoming_tuition_receivables': {
-                    $limit = max(1, min(20, (int)($args['limit'] ?? 5)));
-                    $contactId = isset($args['contact_id']) ? (int)$args['contact_id'] : 0;
-
-                    $where = "so.tenant_id = ? AND so.status != 'cancelled' AND so.payment_status != 'paid' AND (so.total - COALESCE(so.paid_amount, 0)) > 0";
-                    $params = [$tid];
-
-                    if ($contactId > 0) {
-                        $where .= " AND so.contact_id = ?";
-                        $params[] = $contactId;
-                    }
-                    if (!$isGlobalAdmin && !$isManager && !$isAccountant) {
-                        // Regular user can only see SOs created by self or contacts owned
-                        $where .= " AND (so.created_by = ? OR c.owner_id = ? OR FIND_IN_SET(?, IFNULL(c.collaborator_ids, '')))";
-                        $params[] = $uid;
-                        $params[] = $uid;
-                        $params[] = (string)$uid;
-                    }
-
-                    // 1. Calculate Aggregate Financial Pulse
-                    $sumSql = "
-                        SELECT 
-                            COUNT(1) as total_unpaid_orders,
-                            COALESCE(SUM(so.total - COALESCE(so.paid_amount, 0)), 0) as total_receivable,
-                            COALESCE(SUM(so.total), 0) as total_order_amount,
-                            COALESCE(SUM(so.paid_amount), 0) as total_collected
-                        FROM sales_orders so
-                        LEFT JOIN contacts c ON so.contact_id = c.id
-                        WHERE {$where}
-                    ";
-                    $sumStmt = $db->prepare($sumSql);
-                    $sumStmt->execute($params);
-                    $summary = $sumStmt->fetch(PDO::FETCH_ASSOC) ?: [
-                        'total_unpaid_orders' => 0,
-                        'total_receivable' => 0,
-                        'total_order_amount' => 0,
-                        'total_collected' => 0
-                    ];
-
-                    // 2. Query Top Receivables
-                    $listSql = "
-                        SELECT 
-                            so.id, so.so_number, so.total, so.paid_amount,
-                            (so.total - COALESCE(so.paid_amount, 0)) as remaining_debt,
-                            so.order_date, so.status, so.payment_status,
-                            c.id as student_id, COALESCE(c.full_name, 'Học viên') as student_name,
-                            c.phone as student_phone,
-                            u.full_name as sale_name
-                        FROM sales_orders so
-                        LEFT JOIN contacts c ON so.contact_id = c.id
-                        LEFT JOIN users u ON c.owner_id = u.id
-                        WHERE {$where}
-                        ORDER BY remaining_debt DESC, so.id DESC
-                        LIMIT " . (int)$limit . "
-                    ";
-                    $listStmt = $db->prepare($listSql);
-                    $listStmt->execute($params);
-                    $rows = $listStmt->fetchAll(PDO::FETCH_ASSOC);
-
-                    $receivables = [];
-                    foreach ($rows as $r) {
-                        $phoneMasked = $r['student_phone'] ? (substr($r['student_phone'], 0, 4) . '***' . substr($r['student_phone'], -3)) : 'Chưa có SĐT';
-                        $receivables[] = [
-                            'so_id' => (int)$r['id'],
-                            'so_number' => $r['so_number'] ?: ('SO-' . $r['id']),
-                            'student_name' => $r['student_name'],
-                            'student_phone' => $phoneMasked,
-                            'total_order' => number_format((float)$r['total'], 0, ',', '.') . ' VND',
-                            'already_paid' => number_format((float)$r['paid_amount'], 0, ',', '.') . ' VND',
-                            'remaining_due' => number_format((float)$r['remaining_debt'], 0, ',', '.') . ' VND',
-                            'order_date' => $r['order_date'] ? date('d/m/Y', strtotime($r['order_date'])) : 'Chưa rõ',
-                            'sale_in_charge' => $r['sale_name'] ?: 'Nội bộ',
-                            'payment_stage' => $r['payment_status'] === 'partial' ? 'Đã đóng 1 phần (Đang theo lịch)' : 'Chưa thanh toán'
-                        ];
-                    }
-
-                    $totalOrders = (int)$summary['total_unpaid_orders'];
-                    $totalReceivableAmt = (float)$summary['total_receivable'];
-                    $totalCollectedAmt = (float)$summary['total_collected'];
-                    $totalOrderAmt = (float)$summary['total_order_amount'];
-                    $collectRate = $totalOrderAmt > 0 ? round(($totalCollectedAmt / $totalOrderAmt) * 100, 1) . '%' : '0%';
-
-                    return [
-                        'success' => true,
-                        'summary' => [
-                            'unpaid_orders_count' => $totalOrders,
-                            'total_receivable_due' => number_format($totalReceivableAmt, 0, ',', '.') . ' VND',
-                            'total_already_collected' => number_format($totalCollectedAmt, 0, ',', '.') . ' VND',
-                            'collection_completion_rate' => $collectRate
-                        ],
-                        'top_receivables' => $receivables,
-                        'recommendation' => $totalOrders > 0 
-                            ? "Đề xuất Kế toán và Chuyên viên tư vấn đối soát các khoản nợ học phí lớn nhất để đôn đốc lịch trình thanh toán đợt 2 hoặc xuất phiếu thu."
-                            : "Hiện không ghi nhận khoản công nợ học phí nào đang bị tồn đọng chưa thu đủ."
-                    ];
+                    return AgentPoSoFinanceTools::getUnifiedTuitionReceivablesAndCashflow($db, $args, $auth);
                 }
 
                 // ==========================================
                 // 27. TRACE APPROVAL BLOCKER (MULTI-LEVEL PINPOINTING)
                 // ==========================================
                 case 'trace_approval_blocker': {
-                    $itemType = $args['item_type'] ?? 'all';
-                    $itemId = isset($args['item_id']) ? (int)$args['item_id'] : 0;
-                    $limit = max(1, min(15, (int)($args['limit'] ?? 5)));
-
-                    $blockers = [];
-
-                    // A. Trace Expenses (PO / Đề xuất chi phí)
-                    if (in_array($itemType, ['all', 'expense'], true)) {
-                        $eWhere = "e.tenant_id = ? AND e.deleted_at IS NULL AND e.status = 'pending'";
-                        $eParams = [$tid];
-
-                        if ($itemId > 0) {
-                            $eWhere .= " AND e.id = ?";
-                            $eParams[] = $itemId;
-                        }
-                        if (!$isGlobalAdmin && !$isManager && !$isAccountant) {
-                            $eWhere .= " AND (e.created_by = ? OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ?)";
-                            $eParams = array_merge($eParams, [$uid, $uid, $uid, $uid]);
-                        }
-
-                        $eSql = "
-                            SELECT 
-                                e.id, e.title, e.amount, e.created_at, e.created_by,
-                                e.approver_id, e.approver_id_2, e.approver_id_3,
-                                e.status_level_1, e.status_level_2,
-                                TIMESTAMPDIFF(HOUR, e.created_at, NOW()) as hours_pending,
-                                u_c.full_name as creator_name,
-                                u_app1.full_name as app1_name, u_app1.job_title as app1_title,
-                                u_app2.full_name as app2_name, u_app2.job_title as app2_title
-                            FROM expenses e
-                            LEFT JOIN users u_c ON e.created_by = u_c.id
-                            LEFT JOIN users u_app1 ON e.approver_id = u_app1.id
-                            LEFT JOIN users u_app2 ON e.approver_id_2 = u_app2.id
-                            WHERE {$eWhere}
-                            ORDER BY e.created_at ASC
-                            LIMIT " . (int)$limit . "
-                        ";
-                        $eStmt = $db->prepare($eSql);
-                        $eStmt->execute($eParams);
-
-                        foreach ($eStmt->fetchAll(PDO::FETCH_ASSOC) as $er) {
-                            $hours = (int)$er['hours_pending'];
-                            $days = round($hours / 24, 1);
-                            
-                            // Determine current blocker
-                            if ($er['status_level_1'] !== 'approved') {
-                                $blockerName = $er['app1_name'] ?: 'Trưởng phòng / Người duyệt Cấp 1';
-                                $blockerTitle = $er['app1_title'] ?: 'Cấp duyệt 1';
-                                $currentStep = 'Chờ duyệt Cấp 1';
-                            } elseif ($er['approver_id_2'] && $er['status_level_2'] !== 'approved') {
-                                $blockerName = $er['app2_name'] ?: 'Ban Giám Đốc / Người duyệt Cấp 2';
-                                $blockerTitle = $er['app2_title'] ?: 'Cấp duyệt 2';
-                                $currentStep = 'Chờ duyệt Cấp 2 (Ban Giám Đốc)';
-                            } else {
-                                $blockerName = 'Kế toán giải ngân';
-                                $blockerTitle = 'Phòng Kế Toán';
-                                $currentStep = 'Chờ chi tiền / Hoàn tất';
-                            }
-
-                            $urgency = $hours >= 72 ? 'BÁO ĐỘNG ĐỎ (> 3 ngày)' : ($hours >= 24 ? 'CẦN NHẮC NHỞ (> 24h)' : 'Bình thường');
-
-                            $blockers[] = [
-                                'type' => 'Đề xuất chi / PO',
-                                'id' => (int)$er['id'],
-                                'title' => $er['title'],
-                                'amount' => number_format((float)$er['amount'], 0, ',', '.') . ' VND',
-                                'creator' => $er['creator_name'] ?: 'Nhân sự',
-                                'submitted_at' => date('d/m/Y H:i', strtotime($er['created_at'])),
-                                'pending_duration' => "{$hours} giờ ({$days} ngày)",
-                                'urgency' => $urgency,
-                                'current_step' => $currentStep,
-                                'current_blocker' => "{$blockerName} ({$blockerTitle})",
-                                'recommended_action' => "Gửi tin nhắn WorkChat hoặc gọi trực tiếp cho {$blockerName} để giải phóng nút thắt."
-                            ];
-                        }
-                    }
-
-                    // B. Trace Leave Requests (Đơn xin nghỉ phép / WFH)
-                    if (in_array($itemType, ['all', 'leave'], true) && count($blockers) < $limit) {
-                        $rem = $limit - count($blockers);
-                        $lWhere = "u_c.tenant_id = ? AND l.status = 'pending'";
-                        $lParams = [$tid];
-
-                        if ($itemId > 0) {
-                            $lWhere .= " AND l.id = ?";
-                            $lParams[] = $itemId;
-                        }
-                        if (!$isGlobalAdmin && !$isManager && !$isHR) {
-                            $lWhere .= " AND (l.user_id = ? OR l.approver_id = ? OR l.approver_id_2 = ?)";
-                            $lParams = array_merge($lParams, [$uid, $uid, $uid]);
-                        }
-
-                        $lSql = "
-                            SELECT 
-                                l.id, l.leave_type, l.total_days, l.reason, l.created_at,
-                                l.approver_id, l.approver_id_2,
-                                TIMESTAMPDIFF(HOUR, l.created_at, NOW()) as hours_pending,
-                                u_c.full_name as creator_name,
-                                u_app.full_name as app_name, u_app.job_title as app_title
-                            FROM hrm_leave_requests l
-                            JOIN users u_c ON l.user_id = u_c.id
-                            LEFT JOIN users u_app ON l.approver_id = u_app.id
-                            WHERE {$lWhere}
-                            ORDER BY l.created_at ASC
-                            LIMIT " . (int)$rem . "
-                        ";
-                        $lStmt = $db->prepare($lSql);
-                        $lStmt->execute($lParams);
-
-                        foreach ($lStmt->fetchAll(PDO::FETCH_ASSOC) as $lr) {
-                            $hours = (int)$lr['hours_pending'];
-                            $days = round($hours / 24, 1);
-                            $blockerName = $lr['app_name'] ?: 'Trưởng bộ phận';
-                            $blockerTitle = $lr['app_title'] ?: 'Quản lý';
-                            $urgency = $hours >= 48 ? 'BÁO ĐỘNG ĐỎ (> 2 ngày)' : ($hours >= 24 ? 'CẦN NHẮC NHỞ' : 'Bình thường');
-
-                            $blockers[] = [
-                                'type' => 'Đơn xin nghỉ phép',
-                                'id' => (int)$lr['id'],
-                                'title' => "Nghỉ phép {$lr['total_days']} ngày (" . ($lr['leave_type'] ?: 'Nghỉ phép') . ")",
-                                'amount' => "{$lr['total_days']} ngày",
-                                'creator' => $lr['creator_name'] ?: 'Nhân sự',
-                                'submitted_at' => date('d/m/Y H:i', strtotime($lr['created_at'])),
-                                'pending_duration' => "{$hours} giờ ({$days} ngày)",
-                                'urgency' => $urgency,
-                                'current_step' => 'Chờ Quản lý trực tiếp phê duyệt',
-                                'current_blocker' => "{$blockerName} ({$blockerTitle})",
-                                'recommended_action' => "Báo cho {$blockerName} để duyệt đơn phép không ảnh hưởng chấm công."
-                            ];
-                        }
-                    }
-
-                    return [
-                        'success' => true,
-                        'total_blocked_proposals' => count($blockers),
-                        'blocked_items' => $blockers,
-                        'verdict' => count($blockers) > 0 
-                            ? "Đã truy vết được " . count($blockers) . " đề xuất đang bị nghẽn quy trình. Mọi thông tin người phê duyệt cấp 1, cấp 2 và số giờ tồn đọng đã được bóc tách chi tiết."
-                            : "Hiện không có đơn phê duyệt nào bị ách tắc vượt hạn định."
-                    ];
+                    return AgentPoSoFinanceTools::getComprehensivePendingApprovalsAndBlockers($db, $args, $auth);
                 }
 
                 // ==========================================
@@ -8720,7 +8652,9 @@ class AgentToolRegistry {
                     $where = "(c.tenant_id = ? OR p.tenant_id = ? OR u.tenant_id = ?) AND (c.id IS NULL OR c.deleted_at IS NULL)";
                     $params = [$tid, $tid, $tid];
 
-                    if ($statusFilter !== 'all') {
+                    if ($statusFilter === 'pending') {
+                        $where .= " AND d.status IN ('pending', 'pending_admin')";
+                    } elseif ($statusFilter !== 'all') {
                         $where .= " AND d.status = ?";
                         $params[] = $statusFilter;
                     }
@@ -8768,7 +8702,7 @@ class AgentToolRegistry {
 
                     $slips = [];
                     foreach ($rows as $r) {
-                        $statusText = $r['status'] === 'approved' ? 'Đã duyệt thu (Tiền đã vào tài khoản)' : ($r['status'] === 'pending' ? 'Chờ kế toán xác nhận' : $r['status']);
+                        $statusText = $r['status'] === 'approved' ? 'Đã duyệt thu (Tiền đã vào tài khoản)' : (in_array($r['status'], ['pending', 'pending_admin'], true) ? 'Chờ kế toán xác nhận' : $r['status']);
                         $phoneMasked = $r['contact_phone'] ? (substr($r['contact_phone'], 0, 4) . '***' . substr($r['contact_phone'], -3)) : 'Chưa có SĐT';
 
                         $slips[] = [
@@ -11031,6 +10965,9 @@ class AgentToolRegistry {
                         $where[] = "e.due_date IS NOT NULL AND e.due_date < CURDATE() AND (e.status != 'paid' AND (e.is_refunded = 0 OR e.is_refunded IS NULL))";
                     }
 
+                    // 7. Extended 40-Column Expense / PO Multi-Tier Filters
+                    AgentPoSoFinanceTools::applyExtendedExpensePoFilters($db, 'e.', $args, $where, $params, $tid);
+
                     $whereSql = implode(" AND ", $where);
 
                     // ==========================================
@@ -11167,6 +11104,11 @@ class AgentToolRegistry {
                     if ($minAmount > 0) $expExportParams['min_amount'] = $minAmount;
                     if ($maxAmount > 0) $expExportParams['max_amount'] = $maxAmount;
                     if ($overdueOnly) $expExportParams['overdue_only'] = '1';
+                    foreach (['vendor_name', 'created_by_name', 'approver_name', 'has_vat_invoice', 'is_vat_inclusive', 'entity_type', 'entity_keyword', 'date_field', 'custom_rules'] as $extKey) {
+                        if (isset($args[$extKey]) && $args[$extKey] !== '' && $args[$extKey] !== null) {
+                            $expExportParams[$extKey] = is_bool($args[$extKey]) ? ($args[$extKey] ? '1' : '0') : (string)$args[$extKey];
+                        }
+                    }
                     $expExportUrl = '/export?' . http_build_query($expExportParams);
 
                     return [
@@ -11257,6 +11199,8 @@ class AgentToolRegistry {
                                     $stOrs[] = "d.status NOT IN ('cancelled', 'rejected')";
                                 } elseif ($st === 'approved' || $st === 'completed') {
                                     $stOrs[] = "d.status IN ('approved', 'completed')";
+                                } elseif ($st === 'pending') {
+                                    $stOrs[] = "d.status IN ('pending', 'pending_admin')";
                                 } else {
                                     $stOrs[] = "d.status = ?";
                                     $params[] = $st;
@@ -11274,6 +11218,8 @@ class AgentToolRegistry {
                             $where[] = "EXISTS (SELECT 1 FROM deposit_milestones dm WHERE dm.deposit_id = d.id AND dm.status NOT IN ('paid', 'approved', 'completed', 'cancelled', 'rejected') AND dm.expected_pay_date IS NOT NULL AND dm.expected_pay_date < CURDATE())";
                         } elseif ($milestoneStatus === 'due_soon') {
                             $where[] = "EXISTS (SELECT 1 FROM deposit_milestones dm WHERE dm.deposit_id = d.id AND dm.status NOT IN ('paid', 'approved', 'completed', 'cancelled', 'rejected') AND dm.expected_pay_date IS NOT NULL AND dm.expected_pay_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY))";
+                        } elseif ($milestoneStatus === 'waiting_unc_approval') {
+                            $where[] = "EXISTS (SELECT 1 FROM deposit_milestones dm WHERE dm.deposit_id = d.id AND dm.status = 'paid')";
                         } elseif (in_array($milestoneStatus, ['unpaid', 'pending_approval', 'pending'], true)) {
                             $where[] = "EXISTS (SELECT 1 FROM deposit_milestones dm WHERE dm.deposit_id = d.id AND dm.status IN ('pending', 'pending_approval', 'unpaid'))";
                         } elseif (in_array($milestoneStatus, ['fully_paid', 'paid'], true)) {
@@ -11386,6 +11332,9 @@ class AgentToolRegistry {
                         array_push($params, $like, $like, $like, $like);
                     }
 
+                    // 9. Extended 24-Column Deposit / SO Multi-Tier Filters
+                    AgentPoSoFinanceTools::applyExtendedDepositSoFilters($db, 'd.', $args, $where, $params, $tid);
+
                     $whereSql = implode(' AND ', $where);
                     $baseJoins = "FROM deposits d
                                   LEFT JOIN contacts c ON d.contact_id = c.id
@@ -11398,7 +11347,7 @@ class AgentToolRegistry {
                         SELECT COUNT(DISTINCT d.id) as total_count,
                                COALESCE(SUM(CASE WHEN d.status NOT IN ('cancelled', 'rejected') THEN d.price ELSE 0 END), 0) as total_active_amount,
                                COALESCE(SUM(CASE WHEN d.status IN ('approved', 'completed') THEN d.price ELSE 0 END), 0) as approved_amount,
-                               COALESCE(SUM(CASE WHEN d.status = 'pending' THEN d.price ELSE 0 END), 0) as pending_amount
+                               COALESCE(SUM(CASE WHEN d.status IN ('pending', 'pending_admin') THEN d.price ELSE 0 END), 0) as pending_amount
                         {$baseJoins}
                         WHERE {$whereSql}
                     ");
@@ -11452,6 +11401,7 @@ class AgentToolRegistry {
                             'approved' => 'Đã duyệt / Đã thu',
                             'completed' => 'Hoàn tất',
                             'pending' => 'Chờ kế toán duyệt',
+                            'pending_admin' => 'Chờ Sale Admin duyệt',
                             'rejected' => 'Từ chối',
                             'cancelled' => 'Đã hủy'
                         ];
@@ -11537,6 +11487,11 @@ class AgentToolRegistry {
                     if ($fromDate !== '') $depExportParams['from'] = $fromDate;
                     if ($toDate !== '') $depExportParams['to'] = $toDate;
                     if ($search !== '') $depExportParams['search'] = $search;
+                    foreach (['payment_method', 'has_unc_image', 'approved_by_name', 'discount_only', 'currency', 'date_field', 'custom_rules'] as $extKey) {
+                        if (isset($args[$extKey]) && $args[$extKey] !== '' && $args[$extKey] !== null) {
+                            $depExportParams[$extKey] = is_bool($args[$extKey]) ? ($args[$extKey] ? '1' : '0') : (string)$args[$extKey];
+                        }
+                    }
                     $depExportUrl = '/export?' . http_build_query($depExportParams);
 
                     return [
@@ -11757,6 +11712,9 @@ class AgentToolRegistry {
                         array_push($params, $like, $like, $like, $like, $like);
                     }
 
+                    // 9. Extended 36-Column Task & Subtask/Dependency/Approval Multi-Tier Filters
+                    AgentTaskProjectTools::applyExtendedTaskMultiTierFilters($db, 't.', $args, $where, $params, $tid, $uid, $isTaskAdmin || $isManager);
+
                     $whereSql = implode(' AND ', $where);
                     $baseJoins = "FROM activities t
                                   LEFT JOIN users u_ass ON t.user_id = u_ass.id
@@ -11895,6 +11853,11 @@ class AgentToolRegistry {
                     if ($fromDate !== '') $taskExportParams['from'] = $fromDate;
                     if ($toDate !== '') $taskExportParams['to'] = $toDate;
                     if ($search !== '') $taskExportParams['search'] = $search;
+                    foreach (['department_or_team', 'project_name', 'approval_filter', 'approver_name', 'collaborator_name', 'tags', 'min_progress', 'max_progress', 'is_recurring', 'has_subtasks', 'blocked_by_dependency', 'custom_rules'] as $extKey) {
+                        if (isset($args[$extKey]) && $args[$extKey] !== '' && $args[$extKey] !== null) {
+                            $taskExportParams[$extKey] = is_bool($args[$extKey]) ? ($args[$extKey] ? '1' : '0') : (string)$args[$extKey];
+                        }
+                    }
                     $taskExportUrl = '/export?' . http_build_query($taskExportParams);
 
                     return [
@@ -12423,7 +12386,7 @@ class AgentToolRegistry {
                     $search           = trim((string)($args['search'] ?? $args['search_query'] ?? ''));
                     $limit            = max(1, min(100, (int)($args['limit'] ?? 20)));
 
-                    $where = ['u.tenant_id = ?', "u.role NOT IN ('superadmin', 'super_admin')"];
+                    $where = ['u.tenant_id = ?', "u.role NOT IN ('superadmin', 'super_admin', 'bot', 'system')", 'u.id != 9000001'];
                     $params = [$monthYear, $tid];
 
                     // Zero-Trust RBAC for HRM & Payroll
@@ -12484,11 +12447,14 @@ class AgentToolRegistry {
                         array_push($params, $like, $like, $like);
                     }
 
+                    // Extended 100% HRM & Payroll Schema Filters
+                    AgentHrmAttendanceTools::applyExtendedHrmMultiTierFilters($db, $args, $where, $params, $tid, $uid, $canViewFullHrm);
+
                     $whereSql = implode(' AND ', $where);
                     $baseJoins = "FROM users u
                                   LEFT JOIN hrm_profiles hp ON hp.user_id = u.id
                                   LEFT JOIN teams tm ON u.team_id = tm.id
-                                  LEFT JOIN monthly_payslips mp ON (mp.user_id = u.id AND mp.tenant_id = u.tenant_id AND mp.month_year = ?)";
+                                  LEFT JOIN monthly_payslips mp ON (mp.user_id = u.id AND mp.month_year = ?)";
 
                     $stmtAgg = $db->prepare("
                         SELECT COUNT(DISTINCT u.id) as total_staff,
@@ -12575,6 +12541,11 @@ class AgentToolRegistry {
                     if ($hasInsurance !== '' && $hasInsurance !== 'all') $staffExportParams['has_insurance'] = $hasInsurance;
                     if ($monthYear !== '') $staffExportParams['month_year'] = $monthYear;
                     if ($search !== '') $staffExportParams['search'] = $search;
+                    foreach (['gender', 'team_id', 'overtime_mode', 'vacation_mode', 'joined_from', 'joined_to', 'min_base_salary', 'max_base_salary', 'min_net_salary', 'max_net_salary', 'payslip_status', 'has_excess_late', 'min_late_minutes', 'has_active_contract', 'has_allocated_assets', 'custom_rules'] as $extKey) {
+                        if (isset($args[$extKey]) && $args[$extKey] !== '' && $args[$extKey] !== null) {
+                            $staffExportParams[$extKey] = is_bool($args[$extKey]) ? ($args[$extKey] ? '1' : '0') : (string)$args[$extKey];
+                        }
+                    }
                     $staffExportUrl = '/export?' . http_build_query($staffExportParams);
 
                     return [
@@ -12832,7 +12803,7 @@ class AgentToolRegistry {
                     $stmtDep = $db->prepare("
                         SELECT COUNT(DISTINCT d.id) as total_deposits,
                                COALESCE(SUM(CASE WHEN d.status IN ('approved', 'completed') THEN d.price ELSE 0 END), 0) as approved_revenue,
-                               COALESCE(SUM(CASE WHEN d.status = 'pending' THEN d.price ELSE 0 END), 0) as pending_revenue,
+                               COALESCE(SUM(CASE WHEN d.status IN ('pending', 'pending_admin') THEN d.price ELSE 0 END), 0) as pending_revenue,
                                COALESCE(SUM(CASE WHEN d.status NOT IN ('cancelled', 'rejected') THEN d.price ELSE 0 END), 0) as active_revenue
                         FROM deposits d
                         LEFT JOIN contacts c ON d.contact_id = c.id
@@ -12876,9 +12847,9 @@ class AgentToolRegistry {
                     $canViewFullHrm = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'hr', 'nhan_su', 'accountant', 'ke_toan'], true);
                     $stmtOps = $db->prepare("
                         SELECT
-                            (SELECT COUNT(*) FROM users u WHERE u.tenant_id = ? AND COALESCE(u.is_active, 1) = 1 AND u.role NOT IN ('superadmin', 'super_admin')) as active_staff,
+                            (SELECT COUNT(*) FROM users u WHERE u.tenant_id = ? AND COALESCE(u.is_active, 1) = 1 AND u.role NOT IN ('superadmin', 'super_admin', 'bot', 'system') AND u.id != 9000001) as active_staff,
                             (SELECT COUNT(DISTINCT ci.user_id) FROM check_ins ci JOIN users u_ci ON ci.user_id = u_ci.id WHERE u_ci.tenant_id = ? AND ci.check_in_date = CURDATE() AND ci.check_in_time IS NOT NULL) as present_today,
-                            (SELECT COALESCE(SUM(hp.base_salary), 0) FROM users u2 JOIN hrm_profiles hp ON hp.user_id = u2.id WHERE u2.tenant_id = ? AND COALESCE(u2.is_active, 1) = 1 AND u2.role NOT IN ('superadmin', 'super_admin')) as base_salary_fund,
+                            (SELECT COALESCE(SUM(hp.base_salary), 0) FROM users u2 JOIN hrm_profiles hp ON hp.user_id = u2.id WHERE u2.tenant_id = ? AND COALESCE(u2.is_active, 1) = 1 AND u2.role NOT IN ('superadmin', 'super_admin', 'bot', 'system') AND u2.id != 9000001) as base_salary_fund,
                             (SELECT COUNT(*) FROM activities t WHERE t.tenant_id = ? AND t.deleted_at IS NULL AND t.type = 'task' AND t.status NOT IN ('done', 'completed', 'cancelled')) as open_tasks,
                             (SELECT COUNT(*) FROM activities t2 WHERE t2.tenant_id = ? AND t2.deleted_at IS NULL AND t2.type = 'task' AND t2.due_date IS NOT NULL AND t2.due_date < NOW() AND t2.status NOT IN ('done', 'completed', 'cancelled')) as overdue_tasks,
                             (SELECT COUNT(*) FROM tickets tk WHERE tk.tenant_id = ? AND tk.status NOT IN ('resolved', 'closed')) as open_tickets,
@@ -12974,6 +12945,30 @@ class AgentToolRegistry {
                         'export_markdown' => "[Bấm vào đây để tải dữ liệu CRM ({$totalLeads} hồ sơ)]({$crmExportUrl}) | [Tải danh sách Đặt cọc]({$depExportUrl}) | [Tải danh sách Chi phí]({$expExportUrl})"
                     ];
                 }
+
+                // =========================================================================
+                // PILLAR 1 OMNI-SCHEMA TOOLS: TASKS, SUBTASKS, DEPENDENCIES & PROJECTS
+                // =========================================================================
+                case 'smart_manage_tasks_and_subtasks':
+                    return AgentTaskProjectTools::executeSmartManageTasks($db, $args, $auth);
+
+                case 'query_and_manage_projects':
+                    return AgentTaskProjectTools::executeQueryAndManageProjects($db, $args, $auth);
+
+                // =========================================================================
+                // PILLAR 2 OMNI-SCHEMA TOOLS: HRM, SELF-SERVICE, ATTENDANCE & PAYROLL
+                // =========================================================================
+                case 'manage_my_hr_profile_and_requests':
+                    return AgentHrmAttendanceTools::executeManageMyHrProfileAndRequests($db, $args, $auth);
+
+                case 'smart_manage_hrm_and_payroll':
+                    return AgentHrmAttendanceTools::executeSmartManageHrmAndPayroll($db, $args, $auth);
+
+                // =========================================================================
+                // PILLAR 3 OMNI-SCHEMA TOOLS: PO, SO, DEPOSITS, INVOICES, QUOTES & APPROVALS
+                // =========================================================================
+                case 'smart_manage_po_so_and_approvals':
+                    return AgentPoSoFinanceTools::executeSmartManagePoSoAndApprovals($db, $args, $auth);
 
                 default:
                     return [

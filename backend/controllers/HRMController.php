@@ -58,6 +58,40 @@ class HRMController {
         return in_array($auth['role'], ['admin', 'super_admin', 'superadmin', 'director', 'hr'], true);
     }
 
+    private function resolveEmployeeLateGraceMinutes(?string $gender, ?string $fullName, int $graceMale = 30, int $graceFemale = 60): array {
+        $g = mb_strtolower(trim((string)$gender), 'UTF-8');
+        $isMale = in_array($g, ['male', 'nam', 'm', '1', 'boy', 'man'], true);
+        $isFemale = in_array($g, ['female', 'nữ', 'nu', 'f', '0', 'girl', 'woman'], true);
+        if (!$isMale && !$isFemale && !empty($fullName)) {
+            $n = ' ' . mb_strtolower(trim($fullName), 'UTF-8') . ' ';
+            if (strpos($n, ' thị ') !== false || strpos($n, ' nữ ') !== false || strpos($n, ' ngọc ') !== false || strpos($n, ' tuyết ') !== false || strpos($n, ' trâm ') !== false || strpos($n, ' thảo ') !== false || strpos($n, ' uyên ') !== false || strpos($n, ' nhi ') !== false || strpos($n, ' trân ') !== false || strpos($n, ' lan ') !== false || strpos($n, ' huyền ') !== false || strpos($n, ' ái ') !== false || strpos($n, ' thoa ') !== false || strpos($n, ' thương ') !== false || strpos($n, ' ngân ') !== false || strpos($n, ' linh ') !== false || strpos($n, ' thi ') !== false) {
+                $isFemale = true;
+            } elseif (strpos($n, ' văn ') !== false || strpos($n, ' đình ') !== false || strpos($n, ' trọng ') !== false || strpos($n, ' hoàng ') !== false || strpos($n, ' gia ') !== false || strpos($n, ' trí ') !== false || strpos($n, ' quốc ') !== false || strpos($n, ' trùng ') !== false || strpos($n, ' quang ') !== false) {
+                $isMale = true;
+            }
+        }
+        $resolvedGender = $isMale ? 'male' : 'female';
+        $graceMinutes = $isMale ? $graceMale : $graceFemale;
+        return [
+            'gender' => $resolvedGender,
+            'gender_label' => $isMale ? 'Nam' : 'Nữ',
+            'grace_minutes' => $graceMinutes,
+        ];
+    }
+
+    private function getSystemLateGraceSettings(): array {
+        $graceMale = 30;
+        $graceFemale = 60;
+        try {
+            $stmtGrace = $this->db->prepare("SELECT setting_value FROM system_settings WHERE setting_key = ? LIMIT 1");
+            $stmtGrace->execute(['hrm_late_grace_male']);
+            $graceMale = (int)($stmtGrace->fetchColumn() ?: 30);
+            $stmtGrace->execute(['hrm_late_grace_female']);
+            $graceFemale = (int)($stmtGrace->fetchColumn() ?: 60);
+        } catch (\Throwable $e) {}
+        return [$graceMale, $graceFemale];
+    }
+
     public static function formatLeaveTypeText(string $type): string {
         $map = [
             'annual' => 'Phép năm',
@@ -139,6 +173,20 @@ class HRMController {
     // --- PROFILES & CONTRACTS ---
 
     public function indexProfiles(array $auth): void {
+        [$graceMale, $graceFemale] = $this->getSystemLateGraceSettings();
+        $enrichProfiles = function(array $rows) use ($graceMale, $graceFemale): array {
+            foreach ($rows as &$row) {
+                $graceInfo = $this->resolveEmployeeLateGraceMinutes($row['gender'] ?? null, $row['full_name'] ?? null, $graceMale, $graceFemale);
+                if (empty($row['gender'])) {
+                    $row['gender'] = $graceInfo['gender'];
+                }
+                $row['gender_label'] = $graceInfo['gender_label'];
+                $row['late_grace_minutes'] = $graceInfo['grace_minutes'];
+            }
+            unset($row);
+            return $rows;
+        };
+
         if (!$this->isAdmin($auth)) {
             // Allow individual employee to fetch their own profile
             try {
@@ -166,7 +214,7 @@ class HRMController {
                     LIMIT 1
                 ");
                 $stmt->execute([$auth['tenant_id'], $auth['user_id']]);
-                respond(200, $stmt->fetchAll(PDO::FETCH_ASSOC));
+                respond(200, $enrichProfiles($stmt->fetchAll(PDO::FETCH_ASSOC)));
             } catch (\Throwable $e) {
                 $stmt = $this->db->prepare("
                     SELECT u.id, u.full_name, u.email, u.phone, u.role, u.is_active, u.dob, u.gender, u.citizen_id, u.address, u.bank_name, u.bank_account, u.team_id,
@@ -192,7 +240,7 @@ class HRMController {
                     LIMIT 1
                 ");
                 $stmt->execute([$auth['tenant_id'], $auth['user_id']]);
-                respond(200, $stmt->fetchAll(PDO::FETCH_ASSOC));
+                respond(200, $enrichProfiles($stmt->fetchAll(PDO::FETCH_ASSOC)));
             }
             return;
         }
@@ -222,7 +270,7 @@ class HRMController {
                 ORDER BY u.full_name
             ");
             $stmt->execute([$auth['tenant_id']]);
-            respond(200, $stmt->fetchAll(PDO::FETCH_ASSOC));
+            respond(200, $enrichProfiles($stmt->fetchAll(PDO::FETCH_ASSOC)));
         } catch (\Throwable $e) {
             $stmt = $this->db->prepare("
                 SELECT u.id, u.full_name, u.email, u.phone, u.role, u.is_active, u.dob, u.gender, u.citizen_id, u.address, u.bank_name, u.bank_account, u.team_id,
@@ -248,7 +296,7 @@ class HRMController {
                 ORDER BY u.full_name
             ");
             $stmt->execute([$auth['tenant_id']]);
-            respond(200, $stmt->fetchAll(PDO::FETCH_ASSOC));
+            respond(200, $enrichProfiles($stmt->fetchAll(PDO::FETCH_ASSOC)));
         }
     }
 
@@ -260,10 +308,20 @@ class HRMController {
         }
 
         $targetUserId = (int)$b['user_id'];
-        $chkUser = $this->db->prepare("SELECT id FROM users WHERE id = ? AND tenant_id = ? LIMIT 1");
+        $chkUser = $this->db->prepare("SELECT id, full_name FROM users WHERE id = ? AND tenant_id = ? LIMIT 1");
         $chkUser->execute([$targetUserId, $auth['tenant_id']]);
-        if (!$chkUser->fetchColumn()) {
+        $targetUserRow = $chkUser->fetch(PDO::FETCH_ASSOC);
+        if (!$targetUserRow) {
             respond(404, null, 'Nhân sự không tồn tại trong hệ thống', false);
+        }
+
+        if (array_key_exists('gender', $b)) {
+            $rawGender = trim((string)($b['gender'] ?? ''));
+            if ($rawGender !== '') {
+                $graceInfo = $this->resolveEmployeeLateGraceMinutes($rawGender, $targetUserRow['full_name'] ?? null);
+                $updGenderStmt = $this->db->prepare("UPDATE users SET gender = ? WHERE id = ? AND tenant_id = ?");
+                $updGenderStmt->execute([$graceInfo['gender'], $targetUserId, $auth['tenant_id']]);
+            }
         }
 
         $stmt = $this->db->prepare("
@@ -2122,6 +2180,7 @@ class HRMController {
                 $actualWorkedDays = $isThang13 ? $workDaysRequired : 0;
                 $paidLeaveDays = 0;
                 $totalLateMinutes = 0;
+                $latenessCount = 0;
                 $overtimeDays = 0;
                 $waivedDates = [];
                 $checkinsList = [];
@@ -2130,6 +2189,7 @@ class HRMController {
                 $actualWorkedDays = (float)$workDaysRequired;
                 $paidLeaveDays = 0.0;
                 $totalLateMinutes = 0;
+                $latenessCount = 0;
                 $overtimeDays = 0.0;
                 $waivedDates = [];
                 $checkinsList = [];
@@ -2141,16 +2201,25 @@ class HRMController {
 
                 $actualWorkedDays = 0.0;
                 $totalLateMinutes = 0;
+                $latenessCount = 0;
                 foreach ($checkinsList as $ci) {
                     $cDate = $ci['check_in_date'];
                     $leaveDaysOnDate = (float)($leaveDaysMap[$cDate] ?? 0.0);
                     $actualWorkedDays += max(0.0, 1.0 - $leaveDaysOnDate);
 
                     if (!in_array($cDate, $waivedDates)) {
-                        $totalLateMinutes += (int)$ci['late_minutes'];
+                        $ciLate = (int)$ci['late_minutes'];
+                        if ($ciLate > 0) {
+                            $totalLateMinutes += $ciLate;
+                            $latenessCount++;
+                        }
                     }
                 }
             }
+
+            $graceInfo = $this->resolveEmployeeLateGraceMinutes($emp['gender'] ?? null, $emp['full_name'] ?? null, $graceMale, $graceFemale);
+            $empGraceMinutes = $graceInfo['grace_minutes'];
+            $excessLateMinutes = max(0, $totalLateMinutes - $empGraceMinutes);
 
             // 2. Add approved leaves that are paid (leave_type = 'annual', 'sick', 'compensatory', 'remote_work', 'special_paid', 'maternity', 'paternity', 'marriage', 'funeral', 'business_trip')
             if ($isSpecialPeriod) {
@@ -2197,14 +2266,15 @@ class HRMController {
 
             $totalWorkDays = min((float)$workDaysRequired, $actualWorkedDays + $paidLeaveDays + $paidHolidayDays);
 
-            // Tự động khấu trừ số phút đi trễ vào nghỉ bù -> phép năm -> ngày công
+            // Tự động khấu trừ số phút đi trễ vượt định mức vào nghỉ bù -> phép năm -> ngày công
             $deductComp = 0.0;
             $deductAnn = 0.0;
-            if (!$isSpecialPeriod && $totalLateMinutes > 0) {
+            if (!$isSpecialPeriod && $excessLateMinutes > 0) {
                 $remainComp = max(0.0, (float)($emp['compensatory_leave_total'] ?? 0.0) - (float)($emp['compensatory_leave_used'] ?? 0.0));
                 $remainAnn = max(0.0, (float)($emp['annual_leave_total'] ?? 0.0) - (float)($emp['annual_leave_used'] ?? 0.0));
                 
-                $lateDays = $totalLateMinutes / 480.0;
+                // Chỉ quy đổi số phút trễ VƯỢT ĐỊNH MỨC (Nữ > 60p, Nam > 30p) ra ngày công (1 ngày = 480 phút)
+                $lateDays = $excessLateMinutes / 480.0;
                 
                 // Trừ vào nghỉ bù
                 $deductComp = min($lateDays, $remainComp);
@@ -2436,8 +2506,14 @@ class HRMController {
             $results[] = [
                 'user_id' => $userId,
                 'full_name' => $emp['full_name'],
+                'gender' => $graceInfo['gender'],
+                'gender_label' => $graceInfo['gender_label'],
                 'work_days_actual' => $totalWorkDays,
                 'lateness_minutes' => $totalLateMinutes,
+                'lateness_count' => $latenessCount,
+                'late_grace_minutes' => $empGraceMinutes,
+                'excess_late_minutes' => $excessLateMinutes,
+                'remaining_late_grace_minutes' => max(0, $empGraceMinutes - $totalLateMinutes),
                 'net_salary' => $netSalary
             ];
         }
@@ -2456,10 +2532,26 @@ class HRMController {
         $monthYear = $_GET['month_year'] ?? '';
         if (empty($monthYear)) respond(400, null, 'Thiếu tham số tháng (month_year)', false);
 
+        [$graceMale, $graceFemale] = $this->getSystemLateGraceSettings();
+        $enrichPayslips = function(array $rows) use ($graceMale, $graceFemale): array {
+            foreach ($rows as &$row) {
+                $graceInfo = $this->resolveEmployeeLateGraceMinutes($row['gender'] ?? null, $row['employee_name'] ?? null, $graceMale, $graceFemale);
+                $graceMinutes = $graceInfo['grace_minutes'];
+                $lateMins = (int)($row['lateness_minutes'] ?? 0);
+                $row['gender'] = $graceInfo['gender'];
+                $row['gender_label'] = $graceInfo['gender_label'];
+                $row['late_grace_minutes'] = $graceMinutes;
+                $row['excess_late_minutes'] = max(0, $lateMins - $graceMinutes);
+                $row['remaining_late_grace_minutes'] = max(0, $graceMinutes - $lateMins);
+            }
+            unset($row);
+            return $rows;
+        };
+
         if ($monthYear === 'all') {
             if ($this->isAdmin($auth)) {
                 $stmt = $this->db->prepare("
-                    SELECT p.*, u.full_name as employee_name, u.email, u.phone, u.job_title
+                    SELECT p.*, u.full_name as employee_name, u.email, u.phone, u.job_title, u.gender
                     FROM monthly_payslips p
                     JOIN users u ON p.user_id = u.id
                     WHERE u.tenant_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
@@ -2468,7 +2560,7 @@ class HRMController {
                 $stmt->execute([$auth['tenant_id']]);
             } else {
                 $stmt = $this->db->prepare("
-                    SELECT p.*, u.full_name as employee_name, u.email, u.phone, u.job_title
+                    SELECT p.*, u.full_name as employee_name, u.email, u.phone, u.job_title, u.gender
                     FROM monthly_payslips p
                     JOIN users u ON p.user_id = u.id
                     WHERE u.tenant_id = ? AND p.user_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
@@ -2476,13 +2568,13 @@ class HRMController {
                 ");
                 $stmt->execute([$auth['tenant_id'], $auth['user_id']]);
             }
-            respond(200, $stmt->fetchAll(PDO::FETCH_ASSOC));
+            respond(200, $enrichPayslips($stmt->fetchAll(PDO::FETCH_ASSOC)));
             return;
         }
 
         if ($this->isAdmin($auth)) {
             $stmt = $this->db->prepare("
-                SELECT p.*, u.full_name as employee_name, u.email, u.phone, u.job_title
+                SELECT p.*, u.full_name as employee_name, u.email, u.phone, u.job_title, u.gender
                 FROM monthly_payslips p
                 JOIN users u ON p.user_id = u.id
                 WHERE u.tenant_id = ? AND p.month_year = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
@@ -2490,14 +2582,14 @@ class HRMController {
             $stmt->execute([$auth['tenant_id'], $monthYear]);
         } else {
             $stmt = $this->db->prepare("
-                SELECT p.*, u.full_name as employee_name, u.email, u.phone, u.job_title
+                SELECT p.*, u.full_name as employee_name, u.email, u.phone, u.job_title, u.gender
                 FROM monthly_payslips p
                 JOIN users u ON p.user_id = u.id
                 WHERE u.tenant_id = ? AND p.user_id = ? AND p.month_year = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
             ");
             $stmt->execute([$auth['tenant_id'], $auth['user_id'], $monthYear]);
         }
-        respond(200, $stmt->fetchAll(PDO::FETCH_ASSOC));
+        respond(200, $enrichPayslips($stmt->fetchAll(PDO::FETCH_ASSOC)));
     }
 
     public function sendPayslips(array $auth): void {
@@ -2946,7 +3038,7 @@ class HRMController {
 
         // Fetch confirmations
         $stmtList = $this->db->prepare("
-            SELECT ac.*, u.email as emp_email, u.avatar_url
+            SELECT ac.*, u.email as emp_email, u.avatar_url, u.gender, u.full_name as user_full_name
             FROM attendance_confirmations ac
             LEFT JOIN users u ON ac.user_id = u.id
             WHERE ac.batch_id = ? AND ac.tenant_id = ?
@@ -2954,6 +3046,8 @@ class HRMController {
         ");
         $stmtList->execute([$batchId, $tenantId]);
         $records = $stmtList->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        [$graceMale, $graceFemale] = $this->getSystemLateGraceSettings();
 
         $forceRecalc = (($_GET['recalculate'] ?? '') === '1');
         // Chỉ tự động tính toán lại khi có cờ ?recalculate=1 hoặc bản ghi chưa được tính toán lần nào
@@ -2963,6 +3057,19 @@ class HRMController {
                 $rec['to_date'] = $batch['to_date'];
                 self::recalculateConfirmationRecord($this->db, $tenantId, $rec);
             }
+            $graceInfo = $this->resolveEmployeeLateGraceMinutes(
+                $rec['gender'] ?? null,
+                $rec['emp_name'] ?? $rec['user_full_name'] ?? null,
+                $graceMale,
+                $graceFemale
+            );
+            $graceMinutes = $graceInfo['grace_minutes'];
+            $lateMins = (int)($rec['late_minutes'] ?? 0);
+            $rec['gender'] = $graceInfo['gender'];
+            $rec['gender_label'] = $graceInfo['gender_label'];
+            $rec['late_grace_minutes'] = $graceMinutes;
+            $rec['excess_late_minutes'] = max(0, $lateMins - $graceMinutes);
+            $rec['remaining_late_grace_minutes'] = max(0, $graceMinutes - $lateMins);
         }
         unset($rec);
 
@@ -2981,10 +3088,36 @@ class HRMController {
         $fromDate = $record['from_date'] ?? null;
         $toDate = $record['to_date'] ?? null;
 
+        $instance = new self($db);
+        [$graceMale, $graceFemale] = $instance->getSystemLateGraceSettings();
+        $userGender = $record['gender'] ?? null;
+        $userFullName = $record['emp_name'] ?? $record['user_full_name'] ?? null;
+        if (($userGender === null || $userFullName === null) && $userId > 0) {
+            try {
+                $stmtU = $db->prepare("SELECT gender, full_name FROM users WHERE id = ? LIMIT 1");
+                $stmtU->execute([$userId]);
+                $uRow = $stmtU->fetch(PDO::FETCH_ASSOC);
+                if ($uRow) {
+                    if ($userGender === null) $userGender = $uRow['gender'] ?? null;
+                    if ($userFullName === null) $userFullName = $uRow['full_name'] ?? null;
+                }
+            } catch (\Throwable $eU) {}
+        }
+        $graceInfo = $instance->resolveEmployeeLateGraceMinutes($userGender, $userFullName, $graceMale, $graceFemale);
+        $graceMinutes = $graceInfo['grace_minutes'];
+
         if ($confId <= 0 || $userId <= 0 || empty($fromDate) || empty($toDate)) return;
 
         // Chỉ tự động tính lại nếu bản ghi chưa bị chốt (vẫn pending hoặc disputed)
-        if (!in_array($record['status'], ['pending', 'disputed'], true)) return;
+        if (!in_array($record['status'], ['pending', 'disputed'], true)) {
+            $curLateMins = (int)($record['late_minutes'] ?? 0);
+            $record['gender'] = $graceInfo['gender'];
+            $record['gender_label'] = $graceInfo['gender_label'];
+            $record['late_grace_minutes'] = $graceMinutes;
+            $record['excess_late_minutes'] = max(0, $curLateMins - $graceMinutes);
+            $record['remaining_late_grace_minutes'] = max(0, $graceMinutes - $curLateMins);
+            return;
+        }
 
         // 1. Quét các đơn nghỉ phép / WFH / đi muộn về sớm đã được duyệt
         $stmtLeaves = $db->prepare("
@@ -3161,6 +3294,11 @@ class HRMController {
         $record['ot_hours'] = $otHours;
         $record['night_shifts'] = $nightShifts;
         $record['weekend_shifts'] = $weekendShifts;
+        $record['gender'] = $graceInfo['gender'];
+        $record['gender_label'] = $graceInfo['gender_label'];
+        $record['late_grace_minutes'] = $graceMinutes;
+        $record['excess_late_minutes'] = max(0, $lateMins - $graceMinutes);
+        $record['remaining_late_grace_minutes'] = max(0, $graceMinutes - $lateMins);
     }
 
     /**
@@ -3175,6 +3313,8 @@ class HRMController {
 
         $stmt = $this->db->prepare("
             SELECT ac.*, 
+                   u.gender,
+                   u.full_name as user_full_name,
                    b.title as batch_title, 
                    b.period_type, 
                    b.month, 
@@ -3187,6 +3327,7 @@ class HRMController {
                    CASE WHEN b.deadline_at <= NOW() THEN 1 ELSE 0 END as is_expired
             FROM attendance_confirmations ac
             JOIN attendance_confirmation_batches b ON ac.batch_id = b.id
+            LEFT JOIN users u ON ac.user_id = u.id
             WHERE ac.user_id = ? AND ac.tenant_id = ?
             ORDER BY b.id DESC
             LIMIT 1
@@ -3195,7 +3336,7 @@ class HRMController {
         $record = $stmt->fetch(PDO::FETCH_ASSOC);
 
         // Tự động tính lại số liệu công mới nhất từ các đơn / bổ sung công vừa được duyệt
-        if ($record && in_array($record['status'], ['pending', 'disputed'], true)) {
+        if ($record) {
             self::recalculateConfirmationRecord($this->db, $tenantId, $record);
         }
 
@@ -3220,9 +3361,10 @@ class HRMController {
 
         // Find confirmation record
         $stmtFind = $this->db->prepare("
-            SELECT ac.*, b.title as batch_title, b.from_date, b.to_date, b.deadline_at, b.status as batch_status
+            SELECT ac.*, u.gender, u.full_name as user_full_name, b.title as batch_title, b.from_date, b.to_date, b.deadline_at, b.status as batch_status
             FROM attendance_confirmations ac
             JOIN attendance_confirmation_batches b ON ac.batch_id = b.id
+            LEFT JOIN users u ON ac.user_id = u.id
             WHERE " . ($id > 0 ? "ac.id = ?" : "ac.batch_id = ? AND ac.user_id = ?") . " 
               AND ac.user_id = ? AND ac.tenant_id = ?
         ");
@@ -3262,9 +3404,7 @@ class HRMController {
             respond(200, ['success' => true], 'Đã gửi phản hồi sai lệch công về Phòng Nhân sự để xử lý');
         } else {
             // Action: confirm -> Tự động tính toán lại trước khi chốt để số liệu chính xác 100%
-            if (in_array($row['status'], ['pending', 'disputed'], true)) {
-                self::recalculateConfirmationRecord($this->db, $tenantId, $row);
-            }
+            self::recalculateConfirmationRecord($this->db, $tenantId, $row);
 
             $stmtUpdate = $this->db->prepare("
                 UPDATE attendance_confirmations

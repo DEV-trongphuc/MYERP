@@ -252,6 +252,9 @@ export function isMarketing(input: RoleInput): boolean {
 export function isAcademic(input: RoleInput): boolean {
   if (typeof input === 'object' && input !== null) {
     const u = input as any;
+    if (Number(u.team_id) === 5) {
+      return true;
+    }
     const combined = [
       u.role,
       u.job_title,
@@ -263,6 +266,8 @@ export function isAcademic(input: RoleInput): boolean {
       combined.includes('hoc_vu') ||
       combined.includes('học thuật') ||
       combined.includes('hoc_thuat') ||
+      combined.includes('đào tạo') ||
+      combined.includes('dao_tao') ||
       combined.includes('academic') ||
       combined.includes('giảng viên') ||
       combined.includes('giang_vien') ||

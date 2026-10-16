@@ -21,6 +21,7 @@ import { CustomSelect } from '../components/ui/CustomSelect';
 import { CustomCheckbox } from '../components/ui/CustomCheckbox';
 import { useDebounce } from '../hooks/useDebounce';
 import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
+import { isAcademic } from '../utils/roleUtils';
 const LEAD_SOURCES = [
   { value: 'facebook', label: 'Facebook' },
   { value: 'google', label: 'Google Ads' },
@@ -630,14 +631,23 @@ export const DealsPage: React.FC = () => {
       Number((currentUser as any).team_id) === 3 || 
       String((currentUser as any).job_title || '').toLowerCase().includes('marketing') ||
       String((currentUser as any).team_name || '').toLowerCase().includes('marketing');
-    if (isMarketing || ['admin', 'superadmin', 'super_admin', 'director', 'sale_admin', 'saleadmin'].includes(currentUser.role || '')) {
+    if (
+      isMarketing ||
+      isAcademic(currentUser) ||
+      ['admin', 'superadmin', 'super_admin', 'director', 'sale_admin', 'saleadmin', 'accountant', 'hr', 'academic', 'hoc_vu', 'hoc_thuat', 'dao_tao', 'tro_giang', 'teacher', 'giang_vien', 'giao_vien', 'tutor', 'viewer'].includes(currentUser.role || '')
+    ) {
       return null;
     }
+    const nonSalesTeamIds = [1, 2, 3, 5, 99983];
     if (currentUser.role === 'manager') {
       const managedTeam = teams.find(t => Number(t.leader_id) === Number(currentUser.id));
-      return managedTeam?.id || (currentUser as any)?.team_id || null;
+      const candidateTeamId = Number(managedTeam?.id || (currentUser as any)?.team_id || 0);
+      if (!candidateTeamId || nonSalesTeamIds.includes(candidateTeamId)) return null;
+      return candidateTeamId;
     }
-    return (currentUser as any)?.team_id || null;
+    const myTeamId = Number((currentUser as any)?.team_id || 0);
+    if (!myTeamId || nonSalesTeamIds.includes(myTeamId)) return null;
+    return myTeamId;
   };
 
   const effectiveTeamId = useMemo(() => {

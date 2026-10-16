@@ -706,6 +706,7 @@ export default function HRM() {
 
   // Edit Profile modal/drawer state
   const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [empGender, setEmpGender] = useState<'female' | 'male'>('female');
   const [joinedDate, setJoinedDate] = useState('');
   const [baseSalary, setBaseSalary] = useState(0);
   const [dealSalary, setDealSalary] = useState(0);
@@ -761,13 +762,28 @@ export default function HRM() {
 
   const topLatenessList = React.useMemo(() => {
     // 1. Ưu tiên tính Realtime từ danh sách chấm công của tháng được chọn
-    const map: Record<string, { id: any; name: string; avatar?: string; department?: string; count: number; value: number }> = {};
-    
+    const map: Record<string, { id: any; name: string; avatar?: string; department?: string; count: number; value: number; totalMinutes: number; grace: number; genderLabel: string; excess: number }> = {};
+
+    const waivedSet = new Set<string>();
+    (dashboardLeaves || []).forEach((lv: any) => {
+      if (lv.leave_type === 'late_early' && (lv.status === 'approved' || Number(lv.approved) === 1)) {
+        const d = lv.start_date_only || String(lv.start_date || lv.from_date || '').slice(0, 10);
+        const uid = lv.user_id || lv.userId;
+        if (d && uid) waivedSet.add(`${uid}:${d}`);
+      }
+    });
+
     if (dashboardCheckIns && dashboardCheckIns.length > 0) {
       dashboardCheckIns.forEach((c: any) => {
+        const uid = c.user_id;
+        const cDate = c.check_in_date ? String(c.check_in_date).slice(0, 10) : '';
+        if (uid && cDate && waivedSet.has(`${uid}:${cDate}`)) {
+          return;
+        }
+        const hasExplicitLate = c.late_minutes !== undefined && c.late_minutes !== null;
         const lateness = Number(c.late_minutes ?? c.lateness_minutes ?? 0);
         let actualLate = lateness;
-        if (actualLate <= 0 && c.check_in_time && c.work_start_time) {
+        if (!hasExplicitLate && actualLate <= 0 && c.check_in_time && c.work_start_time) {
           const inStr = c.check_in_time.length > 8 ? c.check_in_time.substring(11, 16) : c.check_in_time.substring(0, 5);
           const startStr = String(c.work_start_time).substring(0, 5);
           const [ih, im] = inStr.split(':').map(Number);
@@ -777,10 +793,13 @@ export default function HRM() {
             if (diff > 0) actualLate = diff;
           }
         }
-        const isLate = actualLate > 0 || c.status === 'late';
+        const isLate = actualLate > 0 || (!hasExplicitLate && c.status === 'late');
         if (isLate) {
-          const uid = c.user_id;
           const prof = profilesMap.get(Number(uid));
+          const gRaw = String(prof?.gender || c.gender || '').toLowerCase().trim();
+          const isMale = gRaw === 'male' || gRaw === 'nam';
+          const grace = isMale ? 30 : 60;
+          const genderLabel = isMale ? 'Nam' : 'Nữ';
           if (!map[uid]) {
             map[uid] = {
               id: uid,
@@ -788,12 +807,18 @@ export default function HRM() {
               avatar: c.user_avatar || prof?.avatar_url || prof?.avatar,
               department: prof?.department || prof?.team_name || t('Chung'),
               count: 0,
-              value: 0
+              value: 0,
+              totalMinutes: 0,
+              grace,
+              genderLabel,
+              excess: 0
             };
           }
           const addVal = actualLate > 0 ? actualLate : 0;
           map[uid].count += 1;
           map[uid].value += addVal;
+          map[uid].totalMinutes = map[uid].value;
+          map[uid].excess = Math.max(0, map[uid].value - map[uid].grace);
         }
       });
     }
@@ -813,13 +838,22 @@ export default function HRM() {
       .filter(p => Number(p.lateness_minutes || 0) > 0)
       .map(p => {
         const prof = profilesMap.get(Number(p.user_id));
+        const gRaw = String(p.gender || prof?.gender || '').toLowerCase().trim();
+        const isMale = gRaw === 'male' || gRaw === 'nam';
+        const grace = Number(p.late_grace_minutes) || (isMale ? 30 : 60);
+        const genderLabel = isMale ? 'Nam' : 'Nữ';
+        const val = Number(p.lateness_minutes || 0);
         return {
           id: p.user_id || p.id,
           name: p.employee_name,
           avatar: prof?.avatar_url || prof?.avatar,
           department: prof?.department || prof?.team_name || t('Chung'),
           count: p.lateness_count || 1,
-          value: Number(p.lateness_minutes || 0)
+          value: val,
+          totalMinutes: val,
+          grace,
+          genderLabel,
+          excess: Math.max(0, val - grace)
         };
       });
 
@@ -833,7 +867,7 @@ export default function HRM() {
     }
 
     return [];
-  }, [dashboardPayslips, dashboardCheckIns, profilesMap, t]);
+  }, [dashboardPayslips, dashboardCheckIns, dashboardLeaves, profilesMap, t]);
 
   const topOTList = React.useMemo(() => {
     // 1. Ưu tiên tính Realtime từ dashboardShifts và dashboardLeaves (đã duyệt trong tháng được chọn)
@@ -1038,6 +1072,8 @@ export default function HRM() {
 
   const handleEditProfile = (user: any) => {
     setSelectedUser(user);
+    const g = String(user.gender || '').toLowerCase().trim();
+    setEmpGender((g === 'male' || g === 'nam') ? 'male' : 'female');
     setJoinedDate(user.joined_date || new Date().toISOString().substring(0, 10));
     setBaseSalary(Number(user.base_salary || 0));
     setDealSalary(Number(user.deal_salary || 0));
@@ -1076,6 +1112,7 @@ export default function HRM() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_id: selectedUser.id,
+          gender: empGender,
           joined_date: joinedDate,
           base_salary: baseSalary,
           deal_salary: dealSalary,
@@ -1197,13 +1234,12 @@ export default function HRM() {
           : 0;
       }
       
-      // 3. Recalculate lateness_penalty if lateness_minutes changes
+      // 3. Recalculate excess_late_minutes if lateness_minutes changes (Điều 23.1.4 NQLĐ: không phạt tiền/cắt lương)
       if (field === 'lateness_minutes') {
-        // Fetch grace minutes based on profile gender
-        const gender = (profile?.gender || '').toLowerCase().trim();
-        const grace = (gender === 'male' || gender === 'nam') ? 30 : 60;
-        const penalized = Math.max(0, value - grace);
-        updated.lateness_penalty = penalized * 5000;
+        const gender = String(profile?.gender || ps.gender || '').toLowerCase().trim();
+        const grace = Number(ps.late_grace_minutes) || ((gender === 'male' || gender === 'nam') ? 30 : 60);
+        updated.excess_late_minutes = Math.max(0, value - grace);
+        updated.lateness_penalty = 0;
       }
       
       // 4. Recalculate net_salary
@@ -1691,9 +1727,12 @@ export default function HRM() {
                     ) : topLatenessList && topLatenessList.length > 0 ? topLatenessList.map((item, i) => {
                       const colors = ['#8b5cf6', '#3b82f6', '#f59e0b', '#10b981', '#06b6d4', '#ec4899', '#64748b'];
                       const barColor = colors[i % colors.length];
+                      const grace = item.grace || 60;
+                      const totalMins = item.totalMinutes ?? item.value ?? 0;
+                      const isExceeded = totalMins > grace;
                       return (
                         <div key={item.id || i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', fontWeight: 600, alignItems: 'center' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', fontWeight: 600, alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
                             <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                               <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', width: 16 }}>#{i + 1}</span>
                               <Avatar src={item.avatar} name={item.name} size={24} />
@@ -1702,9 +1741,22 @@ export default function HRM() {
                                 <BarChart2 size={14} style={{ opacity: 0.35, color: barColor }} />
                               </span>
                             </span>
-                            <span style={{ color: 'var(--color-text)', fontSize: '0.875rem', fontWeight: 600 }}>
-                              {item.value} {t('phút')}
-                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ color: isExceeded ? '#ef4444' : 'var(--color-text)', fontSize: '0.85rem', fontWeight: 700 }}>
+                                {`${totalMins}/${grace}p`}
+                              </span>
+                              <span style={{
+                                fontSize: '0.68rem',
+                                fontWeight: 700,
+                                padding: '2px 7px',
+                                borderRadius: '999px',
+                                border: 'none',
+                                backgroundColor: isExceeded ? 'rgba(239, 68, 68, 0.14)' : 'rgba(16, 185, 129, 0.14)',
+                                color: isExceeded ? '#b91c1c' : '#065f46'
+                              }}>
+                                {isExceeded ? `Vượt ${totalMins - grace}p` : `Trong hạn mức (${item.genderLabel || 'Nữ'})`}
+                              </span>
+                            </div>
                           </div>
                           <div style={{ height: 6, background: 'var(--color-bg)', borderRadius: 4, overflow: 'hidden', marginLeft: 24 }}>
                             <div style={{ width: `${item.percent}%`, height: '100%', background: barColor, borderRadius: 4 }} />
@@ -1958,7 +2010,26 @@ export default function HRM() {
                               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                 <Avatar src={user.avatar_url || user.avatar} name={user.full_name} size={38} />
                                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                  <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>{user.full_name}</span>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                    <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>{user.full_name}</span>
+                                    {(() => {
+                                      const gRaw = String(user.gender || '').toLowerCase().trim();
+                                      const isMale = gRaw === 'male' || gRaw === 'nam';
+                                      return (
+                                        <span style={{
+                                          fontSize: '0.65rem',
+                                          fontWeight: 700,
+                                          padding: '1px 6px',
+                                          borderRadius: '999px',
+                                          border: 'none',
+                                          backgroundColor: isMale ? 'rgba(59, 130, 246, 0.12)' : 'rgba(236, 72, 153, 0.12)',
+                                          color: isMale ? '#1d4ed8' : '#be185d'
+                                        }}>
+                                          {isMale ? 'Nam • Trễ 30p/tháng' : 'Nữ • Trễ 60p/tháng'}
+                                        </span>
+                                      );
+                                    })()}
+                                  </div>
                                   <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
                                     {user.email || user.phone || t('Chưa cập nhật')}
                                   </span>
@@ -2482,12 +2553,25 @@ export default function HRM() {
             </h3>
             
             <div style={{ display: 'grid', gap: '1rem', marginBottom: '1.5rem' }}>
-              <div>
-                <label className="form-label">{t('Ngày vào làm chính thức')}</label>
-                <VietnameseDateInput
-                  value={joinedDate}
-                  onChange={val => setJoinedDate(val)}
-                />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label className="form-label">{t('Ngày vào làm chính thức')}</label>
+                  <VietnameseDateInput
+                    value={joinedDate}
+                    onChange={val => setJoinedDate(val)}
+                  />
+                </div>
+                <div>
+                  <label className="form-label">{t('Giới tính (Hạn mức trễ)')}</label>
+                  <select
+                    className="form-input"
+                    value={empGender}
+                    onChange={e => setEmpGender(e.target.value as 'female' | 'male')}
+                  >
+                    <option value="female">{t('Nữ (Hạn mức trễ 60p/tháng)')}</option>
+                    <option value="male">{t('Nam (Hạn mức trễ 30p/tháng)')}</option>
+                  </select>
+                </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div>
@@ -3111,16 +3195,50 @@ export default function HRM() {
                               </div>
                             </td>
                             <td style={{ padding: '14px 8px' }}>
-                              {isLocked ? (
-                                <span>{ps.lateness_minutes}</span>
-                              ) : (
-                                <input
-                                  type="number"
-                                  value={ps.lateness_minutes}
-                                  onChange={e => handleCellChange(ps.id, 'lateness_minutes', Number(e.target.value))}
-                                  style={{ width: '56px', padding: '2px 4px', textAlign: 'center', border: '1px solid var(--color-border)', borderRadius: '4px', background: 'var(--color-surface)', color: 'var(--color-text)', fontSize: '0.8rem' }}
-                                />
-                              )}
+                              {(() => {
+                                const empProf = profilesMap.get(Number(ps.user_id));
+                                const gRaw = String(ps.gender || empProf?.gender || '').toLowerCase().trim();
+                                const isMale = gRaw === 'male' || gRaw === 'nam';
+                                const genderLabel = isMale ? 'Nam' : 'Nữ';
+                                const grace = Number(ps.late_grace_minutes) || (isMale ? 30 : 60);
+                                const lateVal = Number(ps.lateness_minutes || 0);
+                                const isOver = lateVal > grace;
+                                return (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-start' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      {isLocked ? (
+                                        <span style={{ fontWeight: 700, color: isOver ? '#ef4444' : 'var(--color-text)' }}>
+                                          {`${lateVal}p / ${grace}p`}
+                                        </span>
+                                      ) : (
+                                        <>
+                                          <input
+                                            type="number"
+                                            value={ps.lateness_minutes}
+                                            onChange={e => handleCellChange(ps.id, 'lateness_minutes', Number(e.target.value))}
+                                            style={{ width: '52px', padding: '2px 4px', textAlign: 'center', border: '1px solid var(--color-border)', borderRadius: '4px', background: 'var(--color-surface)', color: 'var(--color-text)', fontSize: '0.8rem' }}
+                                          />
+                                          <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
+                                            {`/ ${grace}p`}
+                                          </span>
+                                        </>
+                                      )}
+                                    </div>
+                                    <span style={{
+                                      fontSize: '0.62rem',
+                                      fontWeight: 700,
+                                      padding: '1px 6px',
+                                      borderRadius: '999px',
+                                      border: 'none',
+                                      backgroundColor: isOver ? 'rgba(239, 68, 68, 0.14)' : 'rgba(16, 185, 129, 0.14)',
+                                      color: isOver ? '#b91c1c' : '#065f46',
+                                      whiteSpace: 'nowrap'
+                                    }}>
+                                      {isOver ? `Vượt ${lateVal - grace}p` : `Miễn trừ (${grace}p ${genderLabel})`}
+                                    </span>
+                                  </div>
+                                );
+                              })()}
                             </td>
                             <td style={{ padding: '14px 8px' }}>
                               {isLocked ? (

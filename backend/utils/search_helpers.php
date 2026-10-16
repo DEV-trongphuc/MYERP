@@ -700,6 +700,9 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
     }
 
     // Team filter (`team_id` / `teams`)
+    // Exclude non-sales department teams (1=HCNS, 2=Kế toán, 3=Marketing, 5=Học vụ - học thuật, 99983=Ban Giám đốc)
+    // that do not own CRM contacts so Academic/Accountant/HR/Marketing users never get 0 results.
+    $nonSalesDeptTeamIds = [1, 2, 3, 5, 99983];
     $teamTokens = array_values(array_unique(array_merge(
         parseCrmMultiFilterValues($input['team_id'] ?? null),
         parseCrmMultiFilterValues($input['teams'] ?? null)
@@ -709,9 +712,22 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
         $teamNames = [];
         foreach ($teamTokens as $tt) {
             if (is_numeric($tt) && (int)$tt > 0) {
-                $teamIds[] = (int)$tt;
+                $tidInt = (int)$tt;
+                if (!in_array($tidInt, $nonSalesDeptTeamIds, true)) {
+                    $teamIds[] = $tidInt;
+                }
             } else {
-                $teamNames[] = $tt;
+                $tLower = mb_strtolower(trim((string)$tt), 'UTF-8');
+                if (
+                    strpos($tLower, 'học vụ') === false &&
+                    strpos($tLower, 'học thuật') === false &&
+                    strpos($tLower, 'kế toán') === false &&
+                    strpos($tLower, 'nhân sự') === false &&
+                    strpos($tLower, 'marketing') === false &&
+                    strpos($tLower, 'giám đốc') === false
+                ) {
+                    $teamNames[] = $tt;
+                }
             }
         }
         $tmSubConds = [];

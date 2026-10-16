@@ -3666,11 +3666,14 @@ class ChatController {
                         ? "• PHÂN QUYỀN CRM LEADS / HỌC VIÊN: Người dùng là Quản lý/Leader nhóm, được quyền tra cứu toàn bộ lead/học viên của các thành viên trong team mình quản lý và của chính mình.\n"
                         : "• PHÂN QUYỀN CRM LEADS / HỌC VIÊN: Nhân sự chỉ xem và thao tác dữ liệu khách hàng được phân công cho mình hoặc đồng phụ trách.\n"))
                 . "• Tuyệt đối không tiết lộ bảng lương cá nhân hoặc quỹ nội bộ ngoài quyền hạn.\n"
-                . "• QUY ĐỊNH GIỜ LÀM VIỆC & CHẤM CÔNG CÔNG TY:\n"
-                . "  - Buổi sáng: 08:00 - 12:00. Nghỉ trưa: 12:00 - 13:00. Buổi chiều: 13:00 - 17:00.\n"
-                . "  - Chuẩn: 1 ngày công = 8.0 tiếng (0.5 công sáng + 0.5 công chiều).\n"
-                . "  - Đi trễ: Sau 08:00 (sáng) hoặc sau 13:00 (chiều). Về sớm: Trước 12:00 (sáng) hoặc trước 17:00 (chiều).\n"
-                . "  - Tăng ca (OT): Làm việc sau 17:00 hoặc ca trực/OT cuối tuần, ngày lễ. WFH: Đơn làm việc từ xa được duyệt.\n"
+                . "• QUY ĐỊNH GIỜ LÀM VIỆC, CHẤM CÔNG & NỘI QUY LAO ĐỘNG VIỆN IDEAS (QĐ 001/2024 - KÝ NGÀY 26/03/2024):\n"
+                . "  - Khung giờ làm việc chuẩn (Điều 5): 5 ngày/tuần (40 giờ/tuần), 8 tiếng/ngày (1.0 ngày công chuẩn = 0.5 công sáng + 0.5 công chiều). Buổi sáng: 08:00 - 12:00. Nghỉ trưa: 12:00 - 13:00 (1 tiếng). Buổi chiều: 13:00 - 17:00.\n"
+                . "  - Đi trễ: Check-in sau 08:00 (sáng) hoặc sau 13:00 (chiều). Về sớm: Check-out trước 12:00 (sáng) hoặc trước 17:00 (chiều).\n"
+                . "  - ĐỊNH MỨC ĐI TRỄ & VỀ SỚM ĐƯỢC PHÉP HÀNG THÁNG (Điều 14): **Lao động Nữ được phép 60 phút/tháng**, **Lao động Nam được phép 30 phút/tháng** đi trễ và về sớm mà không bị trừ công/phép. Chỉ khi tổng số phút đi trễ trong tháng vượt quá định mức (Nữ > 60p, Nam > 30p) thì số phút vượt (`max(0, tổng_phút_trễ - định_mức)`) mới bị quy đổi trừ vào Nghỉ bù -> Phép năm -> Ngày công thực tế (Điều 23.1.4 nghiêm cấm phạt tiền hay cắt lương thay việc xử lý kỷ luật).\n"
+                . "  - Làm việc từ xa - WFH (Điều 5.3): Chỉ áp dụng cho 4 trường hợp: (1) Phụ nữ hưởng thai sản đi làm sớm khi nuôi con từ tháng thứ 4 trở lên; (2) NLĐ mắc bệnh điều trị dài ngày theo TT 46/2016/TT-BYT; (3) Trường hợp bất khả kháng thiên tai/dịch bệnh/hỏa hoạn theo Khoản 1 Điều 156 BLDS 2015; (4) Chăm sóc học viên online / trực lớp online.\n"
+                . "  - Nghỉ phép năm & Nghỉ bù (Điều 7, Điều 12): 12 ngày phép/năm (1 ngày/tháng cộng dồn), đủ 5 năm thâm niên tăng 1 ngày; nghỉ >=5 ngày nộp đơn trước 2 tuần; khẩn cấp báo điện thoại trước 8h00 sáng; phép tồn chuyển sang năm sau phải nghỉ hết trước Quý I (trước 30/03 năm sau), quá 30/03 năm sau hoặc thôi việc thanh toán tiền tối đa 10 ngày phép. Làm buổi tối/Thứ 7/Chủ nhật tính vào ngày nghỉ bù và không quy đổi thành tiền lương nếu không nghỉ hết trước 30/03 năm sau (riêng Bảo vệ làm ngày lễ hưởng 300%).\n"
+                . "  - Nghỉ bệnh, Thai sản & Việc riêng (Điều 8, 9, 10, 11): Nghỉ bệnh >3 ngày liên tục phải có giấy xác nhận Bác sĩ (nếu không trừ phép năm). Thai sản Nữ 6 tháng (đi làm sớm sau >=4 tháng báo trước 7 ngày); Nam đóng BHXH khi vợ sinh nghỉ 5 ngày (sinh thường), 7 ngày (phẫu thuật/<32 tuần), 10 ngày (sinh đôi), 14 ngày (sinh đôi phẫu thuật) trong 30 ngày đầu. Nghỉ việc riêng có lương: Bản thân kết hôn 03 ngày, con kết hôn 01 ngày, tứ thân phụ mẫu/vợ/chồng/con mất 03 ngày. Nghỉ không lương: Ông bà/anh chị em ruột mất hoặc bố mẹ/anh chị em ruột kết hôn nghỉ 01 ngày; nghỉ không lương thỏa thuận tối đa 14 ngày/năm.\n"
+                . "  - Chế độ họp, Đồng phục & Kỷ luật (Điều 12B, 16, 22-28): Họp toàn Viện định kỳ 1 lần/tháng (HCNS báo trước >=2 ngày); Họp phòng 1 lần/tuần vào Thứ 2 hoặc Thứ 6. Mặc đồng phục Viện vào Thứ 2, Thứ 7 và Chủ nhật (Thứ 3-Thứ 6 trang phục công sở lịch sự, đeo thẻ tên; dự án Thuê phòng được mặc áo thun có tay). 3 mức kỷ luật: (1) Khiển trách bằng văn bản & trừ điểm đánh giá Tháng/Quý/Năm; (2) Kéo dài thời hạn nâng lương <=6 tháng hoặc Cách chức; (3) Sa thải (trộm cắp, tham ô, tiết lộ bí mật kinh doanh, hoặc tự ý bỏ việc 05 ngày cộng dồn/30 ngày hay 20 ngày cộng dồn/365 ngày).\n"
                 . "• PHÂN QUYỀN TRA CỨU CHẤM CÔNG & NHÂN SỰ:\n"
                 . "  - Giám đốc / Admin / Nhân sự (HR): TOÀN QUYỀN tra cứu mọi thông tin, đi trễ, về sớm, tăng ca, nghỉ off, WFH của bất kỳ nhân sự nào hoặc toàn công ty.\n"
                 . "  - Quản lý (Manager/Trưởng phòng): Được quyền tra cứu thông tin của nhân sự thuộc team mình quản lý hoặc chính mình.\n"
@@ -3698,9 +3701,16 @@ class ChatController {
                 . "  - Quản lý (Manager/Trưởng phòng): Được quyền tra cứu phiếu lương của nhân sự thuộc team mình quản lý (gọi `get_my_payslip` với `employee_query`).\n"
                 . "  - Cá nhân (Mọi nhân viên): Chỉ tra cứu phiếu lương của chính mình (gọi `get_my_payslip` không truyền employee_query).\n"
                 . "  - TUYỆT ĐỐI KHÔNG trả về thông tin lương của người hỏi khi họ đang hỏi về nhân sự khác!\n"
-                . "• QUẢN LÝ CÔNG VIỆC (WORKSPACE TASKS) & BẢN TIN ĐIỀU HÀNH:\n"
-                . "  - Khi Quản lý / Trưởng phòng hỏi về công việc của team: BẮT BUỘC gọi `get_my_tasks` với `scope='team'` để bao quát toàn bộ việc của các thành viên trong nhóm.\n"
+                . "• QUẢN LÝ CÔNG VIỆC, VIỆC CON (SUBTASKS/CHECKLIST), PHÊ DUYỆT TASK & DỰ ÁN (`smart_manage_tasks_and_subtasks`, `query_and_manage_projects`, `query_tasks_and_projects_multitier`):\n"
+                . "  - Khi Quản lý / Trưởng phòng hỏi về công việc của team: BẮT BUỘC gọi `get_my_tasks` với `scope='team'` hoặc `query_tasks_and_projects_multitier`.\n"
                 . "  - Khi Giám đốc / Quản lý hỏi tóm tắt sáng / morning brief / việc khẩn cấp đầu ngày: BẮT BUỘC gọi `get_executive_morning_brief`.\n"
+                . "  - Khi người dùng yêu cầu tạo công việc mới kèm checklist/việc con, cập nhật công việc, thêm/sửa/hoàn thành việc con (subtask/checklist), gửi duyệt hoặc phê duyệt/từ chối công việc (`approval_status`), thêm phụ thuộc công việc (`task_dependencies`), ghi nhận phiên tập trung (`task_focus_logs`), quản lý nhóm việc (`task_groups`) hoặc ẩn việc: BẮT BUỘC gọi `smart_manage_tasks_and_subtasks`.\n"
+                . "  - Khi người dùng hỏi tra cứu danh sách dự án, xem chi tiết 360° dự án (tiến độ, thành viên, số lượng task, tiền cọc liên kết), hoặc tạo/cập nhật dự án và thêm thành viên dự án: BẮT BUỘC gọi `query_and_manage_projects`.\n"
+                . "• QUẢN LÝ HỒ SƠ CÁ NHÂN, XÁC NHẬN CÔNG/LƯƠNG, TẠO ĐƠN TỪ & QUẢN TRỊ HRM/PAYROLL (`manage_my_hr_profile_and_requests`, `smart_manage_hrm_and_payroll`):\n"
+                . "  - Khi người dùng hỏi hoặc thao tác cá nhân: xem hồ sơ HR 360 của chính mình (`get_my_hr_profile_360`), cập nhật SĐT/ngân hàng/CCCD/liên hệ khẩn cấp (`update_my_hr_profile`), xác nhận bảng công tháng (`confirm_my_attendance_sheet`), xác nhận phiếu lương (`confirm_my_payslip`), tạo trực tiếp đơn xin nghỉ phép (`create_leave_request`), đơn giải trình công (`create_attendance_explanation`), đăng ký OT/WFH (`create_ot_or_wfh_request`), tạo đơn tạm ứng lương (`create_salary_advance_request`), xem hợp đồng lao động & tài sản đang giữ (`get_my_contracts_and_assets`): BẮT BUỘC gọi `manage_my_hr_profile_and_requests`.\n"
+                . "  - Khi Quản lý / HR / Kế toán / Ban Giám đốc yêu cầu duyệt/từ chối đơn từ nhân sự (nghỉ phép, giải trình công, OT/WFH, tạm ứng lương), tạo/cập nhật hợp đồng lao động, cấp phát/thu hồi tài sản, cập nhật lương cơ bản/lương Deal hoặc quỹ phép năm/nghỉ bù, đối soát định mức đi trễ (Nữ 60p/tháng, Nam 30p/tháng): BẮT BUỘC gọi `smart_manage_hrm_and_payroll`.\n"
+                . "• QUẢN LÝ ĐƠN MUA HÀNG (PO), ĐỀ XUẤT CHI 3 CẤP, ĐƠN BÁN HÀNG (SO), ĐẶT CỌC & ĐỢT ĐÓNG HỌC PHÍ (`smart_manage_po_so_and_approvals`):\n"
+                . "  - Khi người dùng yêu cầu tạo/cập nhật/duyệt/giải ngân UNC cho Đề xuất chi phí (`expenses` 3 cấp duyệt), Đơn mua hàng (`purchase_orders` PO), Nhà cung cấp (`suppliers`), Đơn đặt hàng/bán hàng (`sales_orders` SO), Phiếu đặt cọc/hợp tác (`deposits`), cập nhật hoặc kế toán duyệt UNC cho Đợt đóng học phí (`deposit_milestones`), tạo Báo giá (`quotes`) hoặc Hóa đơn (`invoices`): BẮT BUỘC gọi `smart_manage_po_so_and_approvals`.\n"
                 . "• THÊM DATA CÁ NHÂN, NHẬP DANH SÁCH LEAD HÀNG LOẠT & GIAO DATA CHO ĐỒNG NGHIỆP (`smart_create_or_assign_leads` & `reassign_lead_owner`):\n"
                 . "  - Khi người dùng yêu cầu thêm data cá nhân, tạo lead mới (1 người hoặc danh sách nhiều dòng gồm tên + SĐT), hoặc giao/phân bổ data mới hay có sẵn cho đồng nghiệp (ví dụ: 'thêm data cá nhân Nguyễn Văn A 0901234567', 'tạo 3 lead này cho Linh Đan', 'giao data Trần Thị B cho Thanh Trúc'):\n"
                 . "    * BẮT BUỘC gọi ngay công cụ `smart_create_or_assign_leads` (truyền `leads` hoặc `raw_text`, kèm `assign_to_name` nếu giao cho đồng nghiệp, hoặc để trống `assign_to_name` nếu là data cá nhân của người đang chat).\n"
@@ -3719,13 +3729,13 @@ class ChatController {
                 . "    2. BẢNG THÁP CẤP BẬC QUẢN LÝ (C-Level & Ban Lãnh Đạo | Quản lý cấp trung | Chuyên gia / Kỹ sư | Chủ DN / Khởi nghiệp | Chưa cập nhật).\n"
                 . "    3. BẢNG TOP NGÀNH NGHỀ KINH DOANH PHỔ BIẾN.\n"
                 . "    4. Đính kèm Smart Tag biểu đồ trực quan `<<<DYNAMIC_CHART: {...}>>>` và Link tải file: `[Bấm vào đây để tải tệp dữ liệu chi tiết kèm chức vụ]({download_export_url})`.\n"
-                . "• THỰC THI TRỰC TIẾP (DIRECT EXECUTION): Với việc trong thẩm quyền (tạo/phân bổ data cá nhân, chuyển giao lead cho đồng nghiệp, duyệt/từ chối đơn từ, cập nhật task/checklist, log CRM), BẮT BUỘC gọi ngay công cụ thực thi (`smart_create_or_assign_leads`, `reassign_lead_owner`, `approve_or_reject_erp_ticket`, `update_task_progress_and_status`, `complete_task_checklist_item`, `quick_log_crm_activity`). CẤM bảo người dùng tự đi thao tác.\n"
+                . "• THỰC THI TRỰC TIẾP (DIRECT EXECUTION): Với việc trong thẩm quyền (tạo/phân bổ data cá nhân, chuyển giao lead cho đồng nghiệp, duyệt/từ chối đơn từ, tạo/cập nhật task & việc con, xác nhận công/phiếu lương, tạo đơn nghỉ phép/OT/WFH/tạm ứng, duyệt PO/SO/chi phí/đợt cọc, log CRM), BẮT BUỘC gọi ngay công cụ thực thi (`smart_create_or_assign_leads`, `reassign_lead_owner`, `smart_manage_tasks_and_subtasks`, `query_and_manage_projects`, `manage_my_hr_profile_and_requests`, `smart_manage_hrm_and_payroll`, `smart_manage_po_so_and_approvals`, `approve_or_reject_erp_ticket`, `update_task_progress_and_status`, `complete_task_checklist_item`, `quick_log_crm_activity`). CẤM bảo người dùng tự đi thao tác.\n"
                 . "• ĐIỀU PHỐI VÒNG LEAD & BÙ DATA: BẮT BUỘC dùng `manage_lead_round_distribution`:\n"
                 . "  - Khi hỏi tình hình vòng / giao vòng nào: Gọi action 'get_round_load_audit'.\n"
                 . "  - Khi yêu cầu giao lead theo vòng xoay: Gọi action 'distribute_lead'.\n"
                 . "  - Khi bảo bù data (vd: 'bù cho Phúc 1 data vòng BBA'): Gọi action 'compensate_consultant'.\n"
                 . "  - Khi bật/tắt ca trực: Gọi action 'toggle_consultant_shift'.\n"
-                . "• THẺ HÀNH ĐỘNG ĐỀ XUẤT (SMART PROPOSAL): Với thao tác tạo đơn từ / tài chính / hợp đồng / xuất file (tạo việc, tạo đơn nghỉ phép, tạm ứng, đề xuất chi PO, đơn SO đóng cọc, export Excel): Hãy gọi `draft_action_proposal` để điền sẵn 100% dữ liệu vào Thẻ Hành Động `<<<ACTION_PROPOSAL: {...}>>>` chuẩn ERP Tag để người dùng ấn mở và tự tay xác nhận lưu.\n"
+                . "• THẺ HÀNH ĐỘNG ĐỀ XUẤT (SMART PROPOSAL): Với thao tác mở form điền sẵn hoặc xuất file (tạo việc, tạo đơn nghỉ phép, tạm ứng, đề xuất chi PO, đơn SO đóng cọc, export Excel): Hãy gọi `draft_action_proposal` hoặc các công cụ quản trị tương ứng để điền sẵn 100% dữ liệu vào Thẻ Hành Động `<<<ACTION_PROPOSAL: {...}>>>` chuẩn ERP Tag để người dùng ấn mở và tự tay xác nhận lưu.\n"
                 . "  - Khi giao việc: Người tạo là {$cleanCallName}. Nếu trùng tên nhân sự, hãy hỏi lại để làm rõ.\n"
                 . "  - Khi tạo đơn SO: Kiểm tra pipeline học viên. Nếu chưa tới bước cọc/SO (< 13), hãy gợi ý chuyển pipeline kèm đề xuất đơn.\n\n"
                 . "• GIAO THỨC HỎI LẠI THÔNG MINH KHI GẶP NHIỀU LỰA CHỌN HOẶC THIẾU THÔNG TIN (PROACTIVE HUMAN-LIKE DISAMBIGUATION PROTOCOL):\n"
@@ -3747,12 +3757,12 @@ class ChatController {
                 . "      + Nhân khẩu học & Hồ sơ nghề nghiệp: `gender` ('male', 'female', 'unknown'), `age_min` / `age_max` (độ tuổi), `birth_year_from` / `birth_year_to` (năm sinh), `birthday_month` (tháng sinh nhật 1-12), `job_titles` (CEO, Giám đốc, Trưởng phòng... hoặc 'has_job_title'/'no_job_title'), `companies` (tên công ty hoặc 'has_company'/'no_company'), `industries` (ngành nghề/phòng ban), `education_or_degree` (chuyên ngành/bằng cấp).\n"
                 . "      + Học vụ & Hồ sơ đính kèm: `record_type` ('lead', 'customer'/'student'), `study_status` ('studying', 'reserved'/'bảo lưu', 'graduated', 'dropped'), `student_code`, `expected_intake`, `missing_document` ('id_card' thiếu CCCD/Hộ chiếu, 'degree' thiếu bằng, 'translation' thiếu bản dịch, 'contract' thiếu hợp đồng, 'incomplete' thiếu hồ sơ, 'complete' đủ hồ sơ).\n"
                 . "      + Quy tắc tùy biến động: `custom_rules` (JSON array `[{\"field\":\"...\",\"operator\":\"...\",\"value\":\"...\"}]`) khi cần lọc nâng cao trên bất kỳ cột nào của bảng `contacts`.\n"
-                . "    * Đối với Chi phí / PO / Tạm ứng / Ngân sách phòng ban: BẮT BUỘC gọi `query_finance_multitier_analytics`.\n"
-                . "    * Đối với Đặt cọc / Đơn hàng SO / Doanh thu thu tiền / Đợt đóng học phí (`deposit_milestones`): BẮT BUỘC gọi `query_deposits_and_revenue_multitier`.\n"
-                . "    * Đối với Công việc / Lịch hẹn / Dự án (`activities`, `tasks`, `projects`): BẮT BUỘC gọi `query_tasks_and_projects_multitier`.\n"
+                . "    * Đối với Chi phí / PO / Nhà cung cấp / Tạm ứng / Ngân sách phòng ban / Hóa đơn / Báo giá: BẮT BUỘC gọi `query_finance_multitier_analytics` hoặc `smart_manage_po_so_and_approvals`.\n"
+                . "    * Đối với Đặt cọc / Đơn hàng SO / Doanh thu thu tiền / Đợt đóng học phí (`deposit_milestones`): BẮT BUỘC gọi `query_deposits_and_revenue_multitier` hoặc `smart_manage_po_so_and_approvals`.\n"
+                . "    * Đối với Công việc / Việc con / Checklist / Phê duyệt việc / Lịch hẹn / Dự án (`activities`, `tasks`, `projects`): BẮT BUỘC gọi `query_tasks_and_projects_multitier`, `smart_manage_tasks_and_subtasks` hoặc `query_and_manage_projects`.\n"
                 . "    * Đối với Cơ hội B2B / Deals / Doanh nghiệp đối tác (`deals`, `companies`): BẮT BUỘC gọi `query_deals_and_b2b_multitier`.\n"
                 . "    * Đối với Ticket hỗ trợ / Khiếu nại / Vi phạm SLA (`tickets`): BẮT BUỘC gọi `query_tickets_and_sla_multitier`.\n"
-                . "    * Đối với Nhân sự 360 / Nghỉ phép / Bảng lương (`users`, `hrm_profiles`, `hrm_leave_requests`, `monthly_payslips`): BẮT BUỘC gọi `query_hrm_workforce_and_payroll_multitier`.\n"
+                . "    * Đối với Nhân sự 360 / Nghỉ phép / Giải trình công / Định mức đi trễ / Bảng lương (`users`, `hrm_profiles`, `hrm_leave_requests`, `monthly_payslips`): BẮT BUỘC gọi `query_hrm_workforce_and_payroll_multitier`, `manage_my_hr_profile_and_requests` hoặc `smart_manage_hrm_and_payroll`.\n"
                 . "    * Đối với Tồn kho / Sản phẩm / Tài sản cấp phát (`products`, `inventory_items`, `assets`): BẮT BUỘC gọi `query_inventory_and_assets_multitier`.\n"
                 . "  - QUY CHUẨN TRÌNH BÀY GIAO DIỆN ENTERPRISE (KHÔNG EMOJI & CẤM THẺ ĐƠN LẺ DƯỚI BẢNG NHIỀU DÒNG):\n"
                 . "    * TUYỆT ĐỐI KHÔNG sử dụng icon/emoji trong các tiêu đề `###` hoặc trong nội dung báo cáo để giữ chuẩn mực Enterprise SaaS trang trọng, sạch sẽ.\n"
@@ -4967,21 +4977,66 @@ class ChatController {
                     return mb_strlen($w) >= 2;
                 }));
 
-                if (!empty($words)) {
+                $stopwords = [
+                    'cho', 'hoi', 'hỏi', 've', 'về', 'cua', 'của', 'la', 'là', 'co', 'có',
+                    'khong', 'không', 'thi', 'thì', 'nhu', 'như', 'the', 'thế', 'nao', 'nào',
+                    'bao', 'nhieu', 'nhiêu', 'em', 'anh', 'chi', 'chị', 'toi', 'tôi', 'minh', 'mình',
+                    'tai', 'tại', 'trong', 'theo', 'quy', 'dinh', 'định'
+                ];
+                $meaningfulWords = array_values(array_unique(array_filter($words, function($w) use ($stopwords) {
+                    return !in_array($w, $stopwords, true);
+                })));
+                if (empty($meaningfulWords)) {
+                    $meaningfulWords = array_values(array_unique($words));
+                }
+
+                $searchTerms = [];
+                if (count($meaningfulWords) >= 2) {
+                    $searchTerms[] = $meaningfulWords[0] . ' ' . $meaningfulWords[1];
+                }
+                foreach ($meaningfulWords as $mw) {
+                    if (count($searchTerms) >= 4) break;
+                    if (!in_array($mw, $searchTerms, true)) {
+                        $searchTerms[] = $mw;
+                    }
+                }
+
+                if (!empty($searchTerms)) {
                     $existingIds = array_column($results, 'id') ?: [0];
                     $inPlaceholders = implode(',', array_fill(0, count($existingIds), '?'));
-                    $firstWord = '%' . $words[0] . '%';
+
+                    $orClauses = [];
+                    $scoreClauses = [];
+                    $likeParams = [];
+                    $scoreParams = [];
+
+                    foreach ($searchTerms as $term) {
+                        $likeVal = '%' . $term . '%';
+                        $orClauses[] = "(c.content LIKE ? OR d.name LIKE ? OR d.tags LIKE ?)";
+                        $likeParams[] = $likeVal;
+                        $likeParams[] = $likeVal;
+                        $likeParams[] = $likeVal;
+
+                        $scoreClauses[] = "(CASE WHEN c.content LIKE ? OR d.name LIKE ? OR d.tags LIKE ? THEN 1 ELSE 0 END)";
+                        $scoreParams[] = $likeVal;
+                        $scoreParams[] = $likeVal;
+                        $scoreParams[] = $likeVal;
+                    }
+
+                    $orSql = implode(' OR ', $orClauses);
+                    $scoreSql = implode(' + ', $scoreClauses);
+
                     $stmtLike = $this->db->prepare("
                         SELECT c.id, c.content, d.name AS doc_name, d.tags
                         FROM ai_training_chunks c
                         JOIN ai_training_docs d ON c.doc_id = d.id
                         WHERE d.is_active = 1 AND d.status = 'trained' AND d.tenant_id = ?
                           AND c.id NOT IN ($inPlaceholders)
-                          AND (c.content LIKE ? OR d.name LIKE ? OR d.tags LIKE ?)
-                        ORDER BY c.id DESC
+                          AND ($orSql)
+                        ORDER BY ($scoreSql) DESC, c.id DESC
                         LIMIT " . (int)$needed
                     );
-                    $params = array_merge([$tid], $existingIds, [$firstWord, $firstWord, $firstWord]);
+                    $params = array_merge([$tid], $existingIds, $likeParams, $scoreParams);
                     $stmtLike->execute($params);
                     $likeResults = $stmtLike->fetchAll(PDO::FETCH_ASSOC) ?: [];
                     $results = array_merge($results, $likeResults);
@@ -5198,22 +5253,31 @@ class ChatController {
                 'lead', 'khach hang', 'hoc vien', 'tu van', 'crm', 'pipeline', 'pheu', 'chia so', 'vong xoay',
                 'bu data', 'trung lead', 'cham soc', 'ngam lead', 'stale', 'chot sale', 'chot deal', 'lich hen',
                 'goi lai', 'sale', 'tuyen sinh', 'nguon lead', 'chua coc', 'da coc', 'trang thai lead', 'phan bo',
-                'them data', 'data ca nhan', 'tao data', 'them lead', 'giao data', 'giao lead', 'chuyen lead'
+                'them data', 'data ca nhan', 'tao data', 'them lead', 'giao data', 'giao lead', 'chuyen lead',
+                'don hang so', 'don dat hang', 'dot thu', 'lich dong hoc phi', 'bao gia', 'phieu hop tac', 'co hoi b2b'
             ],
             'finance' => [
                 'thu chi', 'chi phi', 'phieu chi', 'phieu thu', 'po', 'purchase order', 'so', 'sales order',
                 'dat coc', 'tien coc', 'hoc phi', 'cong no', 'phai thu', 'tam ung', 'dong tien', 'ngan sach',
-                'hoa don', 'doanh thu', 'giai ngan', 'thanh toan', 'so quy', 'ke toan', 'duyet chi'
+                'hoa don', 'doanh thu', 'giai ngan', 'thanh toan', 'so quy', 'ke toan', 'duyet chi',
+                'don mua hang', 'nha cung cap', 'supplier', 'vendor', 'de xuat chi', 'duyet chi cap 1',
+                'duyet chi cap 2', 'duyet chi cap 3', 'unc', 'uy nhiem chi', 'giai ngan unc', 'dot dong hoc phi',
+                'milestone', 'duyet unc', 'bao gia', 'quote', 'phieu hop tac'
             ],
             'hrm' => [
                 'nhan su', 'nhan vien', 'cham cong', 'di tre', 've som', 'tang ca', 'ot', 'wfh', 'nghi phep',
                 'phep nam', 'giai trinh', 'quen cham', 'bo sung cong', 'doi ca', 'bang luong', 'phieu luong',
                 'luong', 'danh ba', 'so do phong ban', 'truong phong', 'quan ly', 'nghi viec', 'vang mat',
-                'ai nghi', 'ai off', 'ket don', 'giu don', 'phe duyet', 'duyet don', 'hop dong lao dong'
+                'ai nghi', 'ai off', 'ket don', 'giu don', 'phe duyet', 'duyet don', 'hop dong lao dong',
+                'ho so ca nhan', 'so tai khoan', 'ngan hang', 'cccd', 'xac nhan cong', 'chot cong',
+                'xac nhan phieu luong', 'xac nhan luong', 'nghi bu', 'dinh muc di tre', 'tam ung luong',
+                'luong deal', 'luong thoa thuan', 'tai san cua toi', 'hop dong cua toi', 'tao don nghi', 'xin ot', 'xin wfh'
             ],
             'tasks' => [
                 'task', 'cong viec', 'viec con', 'subtask', 'tien do', 'deadline', 'qua han', 'overdue',
-                'checklist', 'giao viec', 'du an', 'project', 'ban lam viec', 'ke hoach'
+                'checklist', 'giao viec', 'du an', 'project', 'ban lam viec', 'ke hoach',
+                'duyet viec', 'duyet task', 'viec cho duyet', 'phu thuoc', 'dependency', 'blocked by',
+                'focus', 'pomodoro', 'deep work', 'nhom viec', 'task group', 'an viec', 'wbs'
             ],
             'academic' => [
                 'emba', 'mba', 'msc', 'dba', 'istec', 'umef', 'thuy si', 'phap', 'tin chi', 'ects',
@@ -5366,18 +5430,23 @@ class ChatController {
             require_once __DIR__ . '/AgentToolRegistry.php';
 
             $agentToolMap = [
-                'sales' => ['query_crm_leads_multitier', 'query_deposits_and_revenue_multitier', 'query_deals_and_b2b_multitier', 'query_cross_domain_executive_synthesis', 'smart_create_or_assign_leads', 'get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_sales_leaderboard', 'check_lead_duplicate_and_fairshare_status', 'schedule_contact_activity', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'manage_lead_round_distribution', 'lookup_recent_cash_receipts_and_deposits', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'quick_log_crm_activity', 'reassign_lead_owner', 'get_company_staff_directory', 'draft_action_proposal', 'get_system_navigation'],
-                'finance' => ['query_finance_multitier_analytics', 'query_deposits_and_revenue_multitier', 'query_cross_domain_executive_synthesis', 'filter_expenses_advanced', 'get_sales_leaderboard', 'get_contact_financial_summary', 'lookup_recent_cash_receipts_and_deposits', 'get_my_payment_proposals', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'approve_or_reject_erp_ticket', 'draft_action_proposal', 'get_system_navigation'],
-                'hrm' => ['query_hrm_workforce_and_payroll_multitier', 'get_staff_directory_advanced', 'query_company_attendance_and_work_hours', 'get_company_staff_directory', 'get_company_leave_and_absence', 'get_my_attendance_summary', 'get_my_payslip', 'get_pending_approvals', 'trace_approval_blocker', 'approve_or_reject_erp_ticket', 'update_task_progress_and_status', 'draft_action_proposal', 'get_system_navigation'],
-                'tasks' => ['query_tasks_and_projects_multitier', 'get_my_tasks', 'get_task_detail', 'get_company_staff_directory', 'schedule_contact_activity', 'update_task_progress_and_status', 'complete_task_checklist_item', 'draft_action_proposal', 'get_system_navigation'],
-                'academic' => ['query_crm_leads_multitier', 'get_academic_students_filter', 'get_program_details', 'get_academic_schedule_and_intakes', 'get_active_projects_and_campaigns', 'search_contacts', 'export_crm_leads_advanced', 'search_ideas_knowledge', 'draft_action_proposal', 'get_system_navigation'],
+                'sales' => ['query_crm_leads_multitier', 'query_deposits_and_revenue_multitier', 'query_deals_and_b2b_multitier', 'query_cross_domain_executive_synthesis', 'smart_create_or_assign_leads', 'smart_manage_tasks_and_subtasks', 'query_and_manage_projects', 'manage_my_hr_profile_and_requests', 'smart_manage_po_so_and_approvals', 'get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_sales_leaderboard', 'check_lead_duplicate_and_fairshare_status', 'schedule_contact_activity', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'manage_lead_round_distribution', 'lookup_recent_cash_receipts_and_deposits', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'quick_log_crm_activity', 'reassign_lead_owner', 'get_company_staff_directory', 'draft_action_proposal', 'get_system_navigation'],
+                'finance' => ['query_finance_multitier_analytics', 'query_deposits_and_revenue_multitier', 'query_cross_domain_executive_synthesis', 'smart_manage_po_so_and_approvals', 'smart_manage_hrm_and_payroll', 'manage_my_hr_profile_and_requests', 'smart_manage_tasks_and_subtasks', 'filter_expenses_advanced', 'get_sales_leaderboard', 'get_contact_financial_summary', 'lookup_recent_cash_receipts_and_deposits', 'get_my_payment_proposals', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'approve_or_reject_erp_ticket', 'draft_action_proposal', 'get_system_navigation'],
+                'hrm' => ['query_hrm_workforce_and_payroll_multitier', 'manage_my_hr_profile_and_requests', 'smart_manage_hrm_and_payroll', 'smart_manage_tasks_and_subtasks', 'get_staff_directory_advanced', 'query_company_attendance_and_work_hours', 'get_company_staff_directory', 'get_company_leave_and_absence', 'get_my_attendance_summary', 'get_my_payslip', 'get_pending_approvals', 'trace_approval_blocker', 'approve_or_reject_erp_ticket', 'update_task_progress_and_status', 'draft_action_proposal', 'get_system_navigation'],
+                'tasks' => ['query_tasks_and_projects_multitier', 'smart_manage_tasks_and_subtasks', 'query_and_manage_projects', 'manage_my_hr_profile_and_requests', 'smart_manage_po_so_and_approvals', 'get_my_tasks', 'get_task_detail', 'get_company_staff_directory', 'schedule_contact_activity', 'update_task_progress_and_status', 'complete_task_checklist_item', 'draft_action_proposal', 'get_system_navigation'],
+                'academic' => ['query_crm_leads_multitier', 'smart_manage_tasks_and_subtasks', 'query_and_manage_projects', 'manage_my_hr_profile_and_requests', 'get_academic_students_filter', 'get_program_details', 'get_academic_schedule_and_intakes', 'get_active_projects_and_campaigns', 'search_contacts', 'export_crm_leads_advanced', 'search_ideas_knowledge', 'draft_action_proposal', 'get_system_navigation'],
                 'records_legal' => ['check_student_admission_records', 'get_academic_students_filter', 'get_contact_360_profile', 'attach_files_to_contact', 'draft_action_proposal', 'get_system_navigation'],
                 'assets_inventory' => ['query_inventory_and_assets_multitier', 'get_inventory_health_check', 'get_inventory_and_asset_status', 'draft_action_proposal', 'get_system_navigation'],
                 'b2b_partner' => ['query_deals_and_b2b_multitier', 'get_b2b_partner_and_contract_summary', 'draft_action_proposal', 'get_system_navigation'],
-                'marketing_campaigns' => ['query_crm_leads_multitier', 'query_deposits_and_revenue_multitier', 'query_deals_and_b2b_multitier', 'query_cross_domain_executive_synthesis', 'smart_create_or_assign_leads', 'get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_sales_leaderboard', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'check_lead_duplicate_and_fairshare_status', 'get_campaign_marketing_stats', 'get_active_projects_and_campaigns', 'get_company_staff_directory', 'draft_action_proposal', 'get_system_navigation'],
-                'executive_bi' => ['query_cross_domain_executive_synthesis', 'query_crm_leads_multitier', 'query_finance_multitier_analytics', 'query_deposits_and_revenue_multitier', 'query_tasks_and_projects_multitier', 'query_deals_and_b2b_multitier', 'query_tickets_and_sla_multitier', 'query_hrm_workforce_and_payroll_multitier', 'query_inventory_and_assets_multitier', 'smart_create_or_assign_leads', 'get_executive_morning_brief', 'get_sales_leaderboard', 'filter_expenses_advanced', 'get_staff_directory_advanced', 'get_inventory_health_check', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'query_company_attendance_and_work_hours', 'get_executive_financial_pulse', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'lookup_recent_cash_receipts_and_deposits', 'get_my_tasks', 'get_system_health_status', 'manage_lead_round_distribution', 'approve_or_reject_erp_ticket', 'update_task_progress_and_status', 'reassign_lead_owner', 'draft_action_proposal', 'get_system_navigation'],
+                'marketing_campaigns' => ['query_crm_leads_multitier', 'query_deposits_and_revenue_multitier', 'query_deals_and_b2b_multitier', 'query_cross_domain_executive_synthesis', 'smart_create_or_assign_leads', 'smart_manage_tasks_and_subtasks', 'query_and_manage_projects', 'manage_my_hr_profile_and_requests', 'get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_sales_leaderboard', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'check_lead_duplicate_and_fairshare_status', 'get_campaign_marketing_stats', 'get_active_projects_and_campaigns', 'get_company_staff_directory', 'draft_action_proposal', 'get_system_navigation'],
+                'executive_bi' => ['query_cross_domain_executive_synthesis', 'query_crm_leads_multitier', 'query_finance_multitier_analytics', 'query_deposits_and_revenue_multitier', 'query_tasks_and_projects_multitier', 'query_deals_and_b2b_multitier', 'query_tickets_and_sla_multitier', 'query_hrm_workforce_and_payroll_multitier', 'query_inventory_and_assets_multitier', 'smart_create_or_assign_leads', 'smart_manage_tasks_and_subtasks', 'query_and_manage_projects', 'manage_my_hr_profile_and_requests', 'smart_manage_hrm_and_payroll', 'smart_manage_po_so_and_approvals', 'get_executive_morning_brief', 'get_sales_leaderboard', 'filter_expenses_advanced', 'get_staff_directory_advanced', 'get_inventory_health_check', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'query_company_attendance_and_work_hours', 'get_executive_financial_pulse', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'lookup_recent_cash_receipts_and_deposits', 'get_my_tasks', 'get_system_health_status', 'manage_lead_round_distribution', 'approve_or_reject_erp_ticket', 'update_task_progress_and_status', 'reassign_lead_owner', 'draft_action_proposal', 'get_system_navigation'],
                 'system_it' => ['query_tickets_and_sla_multitier', 'get_system_health_status', 'get_ticket_status_and_sla_breaches', 'draft_action_proposal', 'get_system_navigation']
             ];
+            // Domain key aliases for seamless compatibility across UI and router conventions
+            $agentToolMap['operations_tasks'] = $agentToolMap['tasks'];
+            $agentToolMap['academic_Admissions'] = $agentToolMap['academic'];
+            $agentToolMap['hr_admin'] = $agentToolMap['hrm'];
+            $agentToolMap['finance_accounting'] = $agentToolMap['finance'];
 
             // Extract last user message
             $lastMsgText = '';
@@ -5454,7 +5523,7 @@ class ChatController {
 
             // Detect whether user is asking to mutate state or draft an action proposal (which may need search -> draft 2-step chain)
             $lastMsgAscii = AgentToolRegistry::removeVietnameseAccents(mb_strtolower($lastMsgText, 'UTF-8'));
-            $isMutationOrProposalIntent = (bool)preg_match('/\b(tao|lap|them|sua|cap nhat|chuyen|chia|bu|duyet|tu choi|xin nghi|nghi phep|giai trinh|doi ca|dat lich|hen goi|ghi chu|note|dinh kem|ban giao|nhap kho|de xuat)\b/u', $lastMsgAscii);
+            $isMutationOrProposalIntent = (bool)preg_match('/\b(tao|lap|them|sua|cap nhat|chuyen|chia|bu|duyet|tu choi|xac nhan|chot|giai ngan|xin nghi|nghi phep|giai trinh|doi ca|dat lich|hen goi|ghi chu|note|dinh kem|ban giao|nhap kho|de xuat)\b/u', $lastMsgAscii);
 
             // ==========================================
             // AUTONOMOUS MULTI-TURN TOOL LOOP (UP TO 6 TURNS + PARALLEL TOOL EXECUTION)
@@ -5666,6 +5735,11 @@ class ChatController {
                     $isActionTerminalTool = in_array($toolName, [
                         'draft_action_proposal',
                         'smart_create_or_assign_leads',
+                        'smart_manage_tasks_and_subtasks',
+                        'query_and_manage_projects',
+                        'manage_my_hr_profile_and_requests',
+                        'smart_manage_hrm_and_payroll',
+                        'smart_manage_po_so_and_approvals',
                         'approve_or_reject_erp_ticket',
                         'update_task_progress_and_status',
                         'complete_task_checklist_item',
@@ -5687,6 +5761,7 @@ class ChatController {
                         'query_finance_multitier_analytics',
                         'query_deposits_and_revenue_multitier',
                         'query_tasks_and_projects_multitier',
+                        'query_and_manage_projects',
                         'query_deals_and_b2b_multitier',
                         'query_tickets_and_sla_multitier',
                         'query_hrm_workforce_and_payroll_multitier',

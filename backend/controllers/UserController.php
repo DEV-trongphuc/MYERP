@@ -137,11 +137,11 @@ class UserController {
         $this->show($auth, $newId);
     }
     public function show(array $auth,int $id): void {
-        if (!in_array($auth['role'], ['admin', 'super_admin', 'superadmin', 'director', 'manager', 'sales', 'sale', 'assistant', 'viewer', 'hr', 'sale_admin', 'saleadmin', 'accountant', 'marketing', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true)) {
+        if (!in_array($auth['role'], ['admin', 'super_admin', 'superadmin', 'director', 'manager', 'sales', 'sale', 'assistant', 'viewer', 'hr', 'sale_admin', 'saleadmin', 'accountant', 'marketing', 'academic', 'hoc_vu', 'hoc_thuat', 'dao_tao', 'tro_giang', 'teacher', 'giang_vien', 'giao_vien', 'tutor', 'staff', 'employee'], true)) {
             respond(403, null, 'Quyền truy cập không đủ', false);
         }
         try {
-            $stmt=$this->db->prepare("SELECT id,email,full_name,role,job_title,avatar_url,signature_url,phone,is_active,last_login_at,created_at,dob,gender,citizen_id,address,bank_name,bank_account,two_factor_enabled,two_factor_type,permissions_json,bio,extra_fields_json,manager_behavior_mode,work_start_time,work_end_time,work_schedule,vacation_mode,overtime_mode,use_custom_work_hours,leave_start,leave_end,team_id FROM users WHERE id=? AND tenant_id=?");
+            $stmt=$this->db->prepare("SELECT id,email,full_name,role,job_title,department,avatar_url,signature_url,phone,is_active,last_login_at,created_at,dob,gender,citizen_id,address,bank_name,bank_account,two_factor_enabled,two_factor_type,permissions_json,bio,extra_fields_json,manager_behavior_mode,work_start_time,work_end_time,work_schedule,vacation_mode,overtime_mode,use_custom_work_hours,leave_start,leave_end,team_id FROM users WHERE id=? AND tenant_id=?");
             $stmt->execute([$id,$auth['tenant_id']]); $row=$stmt->fetch();
         } catch (PDOException $e) {
             $stmt=$this->db->prepare("SELECT id,email,full_name,role,avatar_url,signature_url,phone,is_active,last_login_at,created_at FROM users WHERE id=? AND tenant_id=?");

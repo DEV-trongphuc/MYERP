@@ -118,13 +118,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const latestName = data.full_name || data.name;
             const latestSignatureUrl = data.signature_url !== undefined ? data.signature_url : (data.signature_img || user.signature_url);
             const latestJobTitle = data.job_title || (data.address ? (() => { try { return JSON.parse(data.address)?.erp_profile?.job_title; } catch(e) { return null; } })() : null) || data.title || data.position;
+            const latestDepartment = data.department !== undefined ? data.department : (user as any).department;
+            const latestTeamId = data.team_id !== undefined ? data.team_id : (user as any).team_id;
             if (
               (latestAvatar && latestAvatar !== user.avatar) || 
               (latestName && latestName !== user.name) ||
               (latestJobTitle !== undefined && latestJobTitle !== user.job_title) ||
+              (latestDepartment !== undefined && latestDepartment !== (user as any).department) ||
+              (latestTeamId !== undefined && latestTeamId !== (user as any).team_id) ||
               (latestSignatureUrl !== undefined && latestSignatureUrl !== user.signature_url)
             ) {
-              updateUser({ avatar: latestAvatar, name: latestName, job_title: latestJobTitle || '', signature_url: latestSignatureUrl });
+              updateUser({
+                avatar: latestAvatar,
+                name: latestName,
+                job_title: latestJobTitle || '',
+                department: latestDepartment || '',
+                team_id: latestTeamId ?? null,
+                signature_url: latestSignatureUrl
+              } as any);
             }
           }
         } catch (err) {

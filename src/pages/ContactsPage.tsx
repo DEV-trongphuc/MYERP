@@ -1132,14 +1132,23 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       Number((user as any)?.team_id) === 3 || 
       String((user as any)?.job_title || '').toLowerCase().includes('marketing') ||
       String((user as any)?.team_name || '').toLowerCase().includes('marketing');
-    if (isMarketing || ['admin', 'superadmin', 'super_admin', 'director', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'viewer'].includes(user?.role || '')) {
+    if (
+      isMarketing ||
+      isAcademic(user) ||
+      ['admin', 'superadmin', 'super_admin', 'director', 'sale_admin', 'saleadmin', 'accountant', 'hr', 'academic', 'hoc_vu', 'hoc_thuat', 'dao_tao', 'tro_giang', 'teacher', 'giang_vien', 'giao_vien', 'tutor', 'viewer'].includes(user?.role || '')
+    ) {
       return null;
     }
+    const nonSalesTeamIds = [1, 2, 3, 5, 99983];
     if (user?.role === 'manager') {
       const managedTeam = teams.find(t => Number(t.leader_id) === Number(user.id));
-      return managedTeam?.id || (user as any)?.team_id || null;
+      const candidateTeamId = Number(managedTeam?.id || (user as any)?.team_id || 0);
+      if (!candidateTeamId || nonSalesTeamIds.includes(candidateTeamId)) return null;
+      return candidateTeamId;
     }
-    return (user as any)?.team_id || null;
+    const myTeamId = Number((user as any)?.team_id || 0);
+    if (!myTeamId || nonSalesTeamIds.includes(myTeamId)) return null;
+    return myTeamId;
   };
 
   const [activeFilters, setActiveFilters] = useState({

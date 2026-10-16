@@ -81,15 +81,23 @@ export const ReportsPage: React.FC = () => {
       Number((user as any)?.team_id) === 3 || 
       String((user as any)?.job_title || '').toLowerCase().includes('marketing') ||
       String((user as any)?.team_name || '').toLowerCase().includes('marketing');
-    if (isMarketing || ['admin', 'superadmin', 'super_admin', 'director', 'sale_admin', 'saleadmin'].includes(user?.role || '')) {
+    const comb = `${(user as any)?.role || ''} ${(user as any)?.job_title || ''} ${(user as any)?.department || ''} ${(user as any)?.team_name || ''}`.toLowerCase();
+    const isAcademicUser = Number((user as any)?.team_id) === 5 || comb.includes('học vụ') || comb.includes('hoc_vu') || comb.includes('học thuật') || comb.includes('hoc_thuat') || comb.includes('đào tạo') || comb.includes('academic');
+    if (
+      isMarketing ||
+      isAcademicUser ||
+      ['admin', 'superadmin', 'super_admin', 'director', 'sale_admin', 'saleadmin', 'accountant', 'hr', 'academic', 'hoc_vu', 'hoc_thuat', 'dao_tao', 'tro_giang', 'teacher', 'giang_vien', 'giao_vien', 'tutor', 'viewer'].includes(user?.role || '')
+    ) {
       return null;
     }
+    const nonSalesTeamIds = [1, 2, 3, 5, 99983];
     const me = users.find(u => Number(u.id) === Number(user?.id));
-    if (me?.team_id) return me.team_id;
-    if ((user as any)?.team_id) return (user as any).team_id;
+    if (me?.team_id && !nonSalesTeamIds.includes(Number(me.team_id))) return me.team_id;
+    if ((user as any)?.team_id && !nonSalesTeamIds.includes(Number((user as any).team_id))) return (user as any).team_id;
     if (user?.role === 'manager') {
       const managedTeam = teams.find(t => Number(t.leader_id) === Number(user.id));
-      return managedTeam?.id || null;
+      if (managedTeam?.id && !nonSalesTeamIds.includes(Number(managedTeam.id))) return managedTeam.id;
+      return null;
     }
     return null;
   };

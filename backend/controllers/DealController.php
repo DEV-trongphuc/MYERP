@@ -207,6 +207,8 @@ class DealController {
         }
 
         // Multi-Team on deals (`team_id`, `teams`)
+        // Exclude non-sales department teams (1=HCNS, 2=Kế toán, 3=Marketing, 5=Học vụ - học thuật, 99983=Ban Giám đốc)
+        $nonSalesDeptTeamIds = [1, 2, 3, 5, 99983];
         $dealTeams = array_values(array_unique(array_merge(
             parseCrmMultiFilterValues($_GET['team_id'] ?? null),
             parseCrmMultiFilterValues($_GET['teams'] ?? null)
@@ -216,9 +218,22 @@ class DealController {
             $dTeamNames = [];
             foreach ($dealTeams as $dt) {
                 if (is_numeric($dt) && (int)$dt > 0) {
-                    $dTeamIds[] = (int)$dt;
+                    $dtInt = (int)$dt;
+                    if (!in_array($dtInt, $nonSalesDeptTeamIds, true)) {
+                        $dTeamIds[] = $dtInt;
+                    }
                 } else {
-                    $dTeamNames[] = $dt;
+                    $dtLower = mb_strtolower(trim((string)$dt), 'UTF-8');
+                    if (
+                        strpos($dtLower, 'học vụ') === false &&
+                        strpos($dtLower, 'học thuật') === false &&
+                        strpos($dtLower, 'kế toán') === false &&
+                        strpos($dtLower, 'nhân sự') === false &&
+                        strpos($dtLower, 'marketing') === false &&
+                        strpos($dtLower, 'giám đốc') === false
+                    ) {
+                        $dTeamNames[] = $dt;
+                    }
                 }
             }
             $dtOrs = [];
@@ -852,26 +867,47 @@ class DealController {
         }
 
         $isMarketing = false;
+        $isAcademic = in_array(strtolower($auth['role'] ?? ''), ['academic', 'hoc_vu', 'hoc_thuat', 'dao_tao', 'tro_giang', 'teacher', 'giang_vien', 'giao_vien', 'tutor'], true);
         if (strtolower($auth['role'] ?? '') === 'marketing') {
             $isMarketing = true;
-        } else {
-            $stmtM = $this->db->prepare("SELECT u.team_id, t.name as team_name, u.job_title FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ? LIMIT 1");
+        }
+        if (!$isMarketing || !$isAcademic) {
+            $stmtM = $this->db->prepare("SELECT u.team_id, t.name as team_name, u.job_title, u.department FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ? LIMIT 1");
             $stmtM->execute([$auth['user_id']]);
             $uInfo = $stmtM->fetch(PDO::FETCH_ASSOC);
             if ($uInfo) {
                 $tName = mb_strtolower($uInfo['team_name'] ?? '');
                 $jTitle = mb_strtolower($uInfo['job_title'] ?? '');
+                $dept = mb_strtolower($uInfo['department'] ?? '');
+                $comb = $dept . ' ' . $jTitle . ' ' . $tName;
                 if ((int)$uInfo['team_id'] === 3 || strpos($tName, 'marketing') !== false || strpos($jTitle, 'marketing') !== false) {
                     $isMarketing = true;
+                }
+                if (
+                    (int)$uInfo['team_id'] === 5 ||
+                    strpos($comb, 'học vụ') !== false ||
+                    strpos($comb, 'hoc_vu') !== false ||
+                    strpos($comb, 'học thuật') !== false ||
+                    strpos($comb, 'hoc_thuat') !== false ||
+                    strpos($comb, 'đào tạo') !== false ||
+                    strpos($comb, 'dao_tao') !== false ||
+                    strpos($comb, 'academic') !== false ||
+                    strpos($comb, 'giảng viên') !== false ||
+                    strpos($comb, 'giáo viên') !== false ||
+                    strpos($comb, 'trợ giảng') !== false ||
+                    strpos($comb, 'tutor') !== false ||
+                    strpos($comb, 'teacher') !== false
+                ) {
+                    $isAcademic = true;
                 }
             }
         }
 
-        if (in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'sale_admin', 'saleadmin', 'marketing', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true) || $isMarketing) {
+        if (in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'sale_admin', 'saleadmin', 'marketing', 'accountant', 'academic', 'hoc_vu', 'hoc_thuat', 'dao_tao', 'tro_giang', 'teacher', 'giang_vien', 'giao_vien', 'tutor'], true) || $isMarketing || $isAcademic) {
             if (($isMarketing || strtolower($auth['role'] ?? '') === 'marketing') && $action === 'delete') {
                 return 'none';
             }
-            if (in_array(strtolower($auth['role'] ?? ''), ['academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true) && $action === 'delete') {
+            if ($isAcademic && $action === 'delete') {
                 return 'own';
             }
             return 'all';

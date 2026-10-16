@@ -33,10 +33,22 @@ class ExportController {
             $type = 'asset';
         } elseif (in_array($rawType, ['attendance', 'attendances', 'bang_cong', 'cham_cong'], true)) {
             $type = 'attendance';
-        } elseif (in_array($rawType, ['expense', 'expenses', 'chi_phi', 'phieu_chi', 'po'], true)) {
+        } elseif (in_array($rawType, ['expense', 'expenses', 'chi_phi', 'phieu_chi'], true)) {
             $type = 'expense';
-        } elseif (in_array($rawType, ['deposit', 'deposits', 'phieu_thu', 'dat_coc', 'so', 'sales_order', 'sales_orders', 'doanh_thu'], true)) {
+        } elseif (in_array($rawType, ['purchase_order', 'purchase_orders', 'po', 'don_mua_hang'], true)) {
+            $type = 'purchase_order';
+        } elseif (in_array($rawType, ['deposit', 'deposits', 'phieu_thu', 'dat_coc', 'doanh_thu'], true)) {
             $type = 'deposit';
+        } elseif (in_array($rawType, ['sales_order', 'sales_orders', 'so', 'don_dat_hang', 'don_hang_ban'], true)) {
+            $type = 'sales_order';
+        } elseif (in_array($rawType, ['invoice', 'invoices', 'hoa_don'], true)) {
+            $type = 'invoice';
+        } elseif (in_array($rawType, ['quote', 'quotes', 'bao_gia'], true)) {
+            $type = 'quote';
+        } elseif (in_array($rawType, ['supplier', 'suppliers', 'nha_cung_cap', 'vendor', 'vendors'], true)) {
+            $type = 'supplier';
+        } elseif (in_array($rawType, ['salary_advance', 'salary_advances', 'advance', 'tam_ung', 'tam_ung_luong'], true)) {
+            $type = 'salary_advance';
         } elseif (in_array($rawType, ['task', 'tasks', 'cong_viec', 'nhiem_vu'], true)) {
             $type = 'task';
         } elseif (in_array($rawType, ['ticket', 'tickets', 'sla', 'yeu_cau', 'ho_tro'], true)) {
@@ -53,15 +65,51 @@ class ExportController {
             return;
         }
 
-        // Expense / PO export handler
+        // Expense export handler
         if ($type === 'expense') {
             $this->exportExpenses($auth);
             return;
         }
 
-        // Deposit / SO export handler
+        // Purchase Order (PO) export handler
+        if ($type === 'purchase_order') {
+            $this->exportPurchaseOrders($auth);
+            return;
+        }
+
+        // Deposit export handler
         if ($type === 'deposit') {
             $this->exportDeposits($auth);
+            return;
+        }
+
+        // Sales Order (SO) export handler
+        if ($type === 'sales_order') {
+            $this->exportSalesOrders($auth);
+            return;
+        }
+
+        // Invoice export handler
+        if ($type === 'invoice') {
+            $this->exportInvoices($auth);
+            return;
+        }
+
+        // Quote export handler
+        if ($type === 'quote') {
+            $this->exportQuotes($auth);
+            return;
+        }
+
+        // Supplier export handler
+        if ($type === 'supplier') {
+            $this->exportSuppliers($auth);
+            return;
+        }
+
+        // HRM Salary Advance export handler
+        if ($type === 'salary_advance') {
+            $this->exportSalaryAdvances($auth);
             return;
         }
 
@@ -1769,12 +1817,15 @@ class ExportController {
             'Tiêu đề / Nội dung chi',
             'Danh mục',
             'Số tiền (VNĐ)',
+            'VAT (VNĐ)',
             'Trạng thái',
+            'Trạng thái giải ngân (UNC)',
             'Ngày đề xuất',
             'Hạn thanh toán',
             'Người đề xuất',
             'Người duyệt Cấp 1',
             'Người duyệt Cấp 2',
+            'Người duyệt Cấp 3',
             'Nhà cung cấp / Đối tác',
             'Ghi chú'
         ];
@@ -1813,6 +1864,8 @@ class ExportController {
         $search           = trim((string)($_GET['search'] ?? ''));
         $creatorId        = trim((string)($_GET['created_by'] ?? $_GET['creator_id'] ?? ''));
         $createdByName    = trim((string)($_GET['created_by_name'] ?? ''));
+        $vendorNameParam  = trim((string)($_GET['vendor_name'] ?? ''));
+        $hasVatInvoice    = strtolower(trim((string)($_GET['has_vat_invoice'] ?? '')));
 
         if ($creatorId !== '' && is_numeric($creatorId)) {
             $where[] = "e.created_by = ?";
@@ -1821,6 +1874,17 @@ class ExportController {
         if ($createdByName !== '') {
             $where[] = "u.full_name LIKE ?";
             $params[] = "%{$createdByName}%";
+        }
+        if ($vendorNameParam !== '') {
+            $where[] = "e.vendor_name LIKE ?";
+            $params[] = "%{$vendorNameParam}%";
+        }
+        if ($hasVatInvoice !== '' && $hasVatInvoice !== 'all') {
+            if (in_array($hasVatInvoice, ['1', 'true', 'yes'], true)) {
+                $where[] = "(e.has_vat_invoice = 1 OR COALESCE(e.vat_amount, 0) > 0)";
+            } elseif (in_array($hasVatInvoice, ['0', 'false', 'no'], true)) {
+                $where[] = "(COALESCE(e.has_vat_invoice, 0) = 0 AND COALESCE(e.vat_amount, 0) <= 0)";
+            }
         }
 
         if ($departmentsParam !== '' && $departmentsParam !== 'all') {
@@ -1857,16 +1921,18 @@ class ExportController {
                         $stOrs[] = "(e.status = 'pending' OR e.status = 'level1_approved')";
                     } elseif ($st === 'approved') {
                         $stOrs[] = "e.status = 'approved'";
-                    } elseif ($st === 'unpaid' || $st === 'approved_unpaid') {
-                        $stOrs[] = "(e.status = 'approved' AND (e.is_refunded IS NULL OR e.is_refunded = 0))";
-                    } elseif ($st === 'paid') {
-                        $stOrs[] = "(e.status = 'paid' OR e.status = 'refunded' OR (e.status = 'approved' AND e.is_refunded = 1))";
+                    } elseif ($st === 'unpaid' || $st === 'approved_unpaid' || $st === 'waiting_disbursement') {
+                        $stOrs[] = "(e.status = 'approved' AND COALESCE(e.is_refunded, 0) = 0)";
+                    } elseif ($st === 'paid' || $st === 'disbursed') {
+                        $stOrs[] = "(e.is_refunded = 1 OR e.status IN ('paid', 'refunded'))";
                     } elseif ($st === 'rejected') {
                         $stOrs[] = "e.status = 'rejected'";
                     } elseif ($st === 'pending_l1') {
                         $stOrs[] = "(e.status = 'pending' AND (e.status_level_1 = 'pending' OR e.status_level_1 IS NULL))";
                     } elseif ($st === 'pending_l2') {
                         $stOrs[] = "(e.status = 'pending' AND e.status_level_1 = 'approved' AND (e.status_level_2 = 'pending' OR e.status_level_2 IS NULL))";
+                    } elseif ($st === 'pending_l3') {
+                        $stOrs[] = "(e.status = 'pending' AND e.status_level_2 = 'approved' AND (e.status_level_3 = 'pending' OR e.status_level_3 IS NULL))";
                     } else {
                         $stOrs[] = "e.status = ?";
                         $params[] = $st;
@@ -1943,15 +2009,26 @@ class ExportController {
             $params[] = $like;
         }
 
-        $sql = "SELECT e.id, e.title, e.category, e.amount, e.status, e.is_refunded, e.date, e.due_date, e.created_at,
+        if (file_exists(__DIR__ . '/agent_tools/AgentPoSoFinanceTools.php')) {
+            require_once __DIR__ . '/agent_tools/AgentPoSoFinanceTools.php';
+            if (class_exists('AgentPoSoFinanceTools') && method_exists('AgentPoSoFinanceTools', 'applyExtendedExpensePoFilters')) {
+                AgentPoSoFinanceTools::applyExtendedExpensePoFilters($this->db, 'e.', $_GET, $where, $params, $tid, $uid, $isGlobalAdmin || $isAccountant);
+            }
+        }
+
+        $sql = "SELECT e.id, e.title, e.category, e.amount, e.vat_amount, e.has_vat_invoice,
+                       e.status, e.status_level_1, e.status_level_2, e.status_level_3,
+                       e.is_refunded, e.date, e.due_date, e.created_at,
                        e.vendor_name, e.notes,
                        u.full_name as creator_name,
                        app1.full_name as approver_name_1,
-                       app2.full_name as approver_name_2
+                       app2.full_name as approver_name_2,
+                       app3.full_name as approver_name_3
                 FROM expenses e
                 LEFT JOIN users u ON e.created_by = u.id
                 LEFT JOIN users app1 ON e.approver_id = app1.id
                 LEFT JOIN users app2 ON e.approver_id_2 = app2.id
+                LEFT JOIN users app3 ON e.approver_id_3 = app3.id
                 WHERE " . implode(' AND ', $where) . "
                 ORDER BY e.date DESC, e.id DESC";
 
@@ -1961,7 +2038,8 @@ class ExportController {
         $stt = 1;
         while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $statusLabel = 'Chờ duyệt';
-            if ($r['status'] === 'paid' || ((int)($r['is_refunded'] ?? 0) === 1 && $r['status'] === 'approved')) {
+            $isDisbursed = ($r['status'] === 'paid' || $r['status'] === 'refunded' || (int)($r['is_refunded'] ?? 0) === 1);
+            if ($isDisbursed) {
                 $statusLabel = 'Đã thanh toán / Đã chi';
             } elseif ($r['status'] === 'approved') {
                 $statusLabel = 'Đã duyệt (Chờ chi)';
@@ -1969,6 +2047,7 @@ class ExportController {
                 $statusLabel = 'Từ chối';
             }
 
+            $uncLabel = $isDisbursed ? 'Đã giải ngân (Có UNC)' : ($r['status'] === 'approved' ? 'Chờ kế toán giải ngân' : 'Chưa giải ngân');
             $dateStr = !empty($r['date']) ? date('d/m/Y', strtotime($r['date'])) : (!empty($r['created_at']) ? date('d/m/Y', strtotime($r['created_at'])) : '');
             $dueStr = !empty($r['due_date']) ? date('d/m/Y', strtotime($r['due_date'])) : '';
 
@@ -1978,12 +2057,15 @@ class ExportController {
                 $r['title'] ?: '',
                 $r['category'] ?: 'Chi phí khác',
                 number_format((float)($r['amount'] ?? 0), 0, ',', '.'),
+                number_format((float)($r['vat_amount'] ?? 0), 0, ',', '.'),
                 $statusLabel,
+                $uncLabel,
                 $dateStr,
                 $dueStr,
                 $r['creator_name'] ?: '',
                 $r['approver_name_1'] ?: '',
                 $r['approver_name_2'] ?: '',
+                $r['approver_name_3'] ?: '',
                 $r['vendor_name'] ?: '',
                 trim(preg_replace('/\s+/', ' ', strip_tags((string)($r['notes'] ?? ''))))
             ]);
@@ -2026,6 +2108,7 @@ class ExportController {
             'Chương trình / Dự án',
             'Mã căn / Mã lớp',
             'Số tiền đặt cọc (VNĐ)',
+            'Loại tiền',
             'Trạng thái',
             'Sale phụ trách',
             'Nguồn khách hàng',
@@ -2040,6 +2123,8 @@ class ExportController {
         $ownersParam     = trim((string)($_GET['owners'] ?? $_GET['sale_id'] ?? $_GET['owner_id'] ?? ''));
         $citiesParam     = trim((string)($_GET['city'] ?? $_GET['branches_or_cities'] ?? ''));
         $sourcesParam    = trim((string)($_GET['source'] ?? $_GET['sources'] ?? ''));
+        $unitCodeParam   = trim((string)($_GET['unit_code'] ?? ''));
+        $currencyParam   = strtoupper(trim((string)($_GET['currency'] ?? '')));
         $minAmount       = isset($_GET['min_amount']) && is_numeric($_GET['min_amount']) ? (float)$_GET['min_amount'] : 0;
         $maxAmount       = isset($_GET['max_amount']) && is_numeric($_GET['max_amount']) ? (float)$_GET['max_amount'] : 0;
         $period          = strtolower(trim((string)($_GET['period'] ?? '')));
@@ -2065,6 +2150,15 @@ class ExportController {
             }
         }
 
+        if ($unitCodeParam !== '') {
+            $where[] = "d.unit_code LIKE ?";
+            $params[] = '%' . $unitCodeParam . '%';
+        }
+        if ($currencyParam !== '' && $currencyParam !== 'ALL') {
+            $where[] = "COALESCE(d.currency, 'VND') = ?";
+            $params[] = $currencyParam;
+        }
+
         if ($programsParam !== '' && $programsParam !== 'all') {
             $progList = array_filter(array_map('trim', explode(',', $programsParam)));
             if (!empty($progList)) {
@@ -2087,6 +2181,8 @@ class ExportController {
                         $stOrs[] = "d.status NOT IN ('cancelled', 'rejected')";
                     } elseif ($st === 'approved' || $st === 'completed') {
                         $stOrs[] = "d.status IN ('approved', 'completed')";
+                    } elseif ($st === 'pending' || $st === 'pending_admin') {
+                        $stOrs[] = "d.status IN ('pending', 'pending_admin')";
                     } else {
                         $stOrs[] = "d.status = ?";
                         $params[] = $st;
@@ -2103,6 +2199,8 @@ class ExportController {
                 $where[] = "EXISTS (SELECT 1 FROM deposit_milestones dm WHERE dm.deposit_id = d.id AND dm.status NOT IN ('paid', 'approved', 'completed', 'cancelled', 'rejected') AND dm.expected_pay_date IS NOT NULL AND dm.expected_pay_date < CURDATE())";
             } elseif ($milestoneStatus === 'due_soon') {
                 $where[] = "EXISTS (SELECT 1 FROM deposit_milestones dm WHERE dm.deposit_id = d.id AND dm.status NOT IN ('paid', 'approved', 'completed', 'cancelled', 'rejected') AND dm.expected_pay_date IS NOT NULL AND dm.expected_pay_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY))";
+            } elseif ($milestoneStatus === 'waiting_unc_approval') {
+                $where[] = "EXISTS (SELECT 1 FROM deposit_milestones dm WHERE dm.deposit_id = d.id AND dm.status = 'paid')";
             } elseif (in_array($milestoneStatus, ['unpaid', 'pending_approval', 'pending'], true)) {
                 $where[] = "EXISTS (SELECT 1 FROM deposit_milestones dm WHERE dm.deposit_id = d.id AND dm.status IN ('pending', 'pending_approval', 'unpaid'))";
             } elseif (in_array($milestoneStatus, ['fully_paid', 'paid'], true)) {
@@ -2207,7 +2305,14 @@ class ExportController {
             array_push($params, $like, $like, $like, $like, $like);
         }
 
-        $sql = "SELECT d.id, d.price, d.status, d.unit_code, d.created_at,
+        if (file_exists(__DIR__ . '/agent_tools/AgentPoSoFinanceTools.php')) {
+            require_once __DIR__ . '/agent_tools/AgentPoSoFinanceTools.php';
+            if (class_exists('AgentPoSoFinanceTools') && method_exists('AgentPoSoFinanceTools', 'applyExtendedDepositSoFilters')) {
+                AgentPoSoFinanceTools::applyExtendedDepositSoFilters($this->db, 'd.', $_GET, $where, $params, $tid, $uid, $isFinAdmin);
+            }
+        }
+
+        $sql = "SELECT d.id, d.price, d.currency, d.status, d.unit_code, d.created_at,
                        c.full_name as customer_name, c.phone as customer_phone, c.email as customer_email,
                        c.program as contact_program, c.source as contact_source, c.city as contact_city,
                        p.name as project_name,
@@ -2227,6 +2332,7 @@ class ExportController {
             'approved' => 'Đã duyệt / Đã thu',
             'completed' => 'Hoàn tất',
             'pending' => 'Chờ kế toán duyệt',
+            'pending_admin' => 'Chờ Admin / Kế toán duyệt',
             'rejected' => 'Từ chối',
             'cancelled' => 'Đã hủy'
         ];
@@ -2246,6 +2352,7 @@ class ExportController {
                 $prog,
                 $r['unit_code'] ?: '',
                 number_format((float)($r['price'] ?? 0), 0, ',', '.'),
+                $r['currency'] ?: 'VND',
                 $stLabel,
                 $r['sale_name'] ?: '',
                 $r['contact_source'] ?: '',
@@ -2317,13 +2424,18 @@ class ExportController {
         $where = ['t.tenant_id = ?', 't.deleted_at IS NULL', "t.type = 'task'"];
         $params = [$tid];
 
+        // Exclude tasks hidden by this user
+        $where[] = "NOT EXISTS (SELECT 1 FROM task_hidden_users thu WHERE thu.task_id = t.id AND thu.user_id = ?)";
+        $params[] = $uid;
+
         // Always exclude other users' personal tasks
         $where[] = "(NOT (IFNULL(t.tags, '') LIKE '%personal_task%' OR IFNULL(t.tags, '') LIKE '%ca_nhan%') OR t.user_id = ? OR t.created_by = ?)";
         $params[] = $uid;
         $params[] = $uid;
 
-        $isTaskAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'hr', 'sale_admin', 'saleadmin'], true);
-        $isManager   = in_array($role, ['manager', 'truong_phong', 'leader', 'team_lead'], true);
+        $isTaskAdmin  = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'hr', 'sale_admin', 'saleadmin'], true);
+        $isManager    = in_array($role, ['manager', 'truong_phong', 'leader', 'team_lead'], true);
+        $isAdminOrMgr = $isTaskAdmin || $isManager;
         if (!$isTaskAdmin) {
             if ($isManager) {
                 $where[] = "(t.user_id = ? OR t.created_by = ? OR t.approver_id = ? OR FIND_IN_SET(?, IFNULL(t.participant_ids, '')) > 0 OR t.user_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))) OR t.created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))))";
@@ -2473,6 +2585,13 @@ class ExportController {
             $like = "%{$search}%";
             $where[] = "(t.subject LIKE ? OR t.body LIKE ? OR u_ass.full_name LIKE ? OR p.name LIKE ? OR c.full_name LIKE ?)";
             array_push($params, $like, $like, $like, $like, $like);
+        }
+
+        if (file_exists(__DIR__ . '/agent_tools/AgentTaskProjectTools.php')) {
+            require_once __DIR__ . '/agent_tools/AgentTaskProjectTools.php';
+            if (class_exists('AgentTaskProjectTools') && method_exists('AgentTaskProjectTools', 'applyExtendedTaskMultiTierFilters')) {
+                AgentTaskProjectTools::applyExtendedTaskMultiTierFilters($this->db, 't.', $_GET, $where, $params, $tid, $uid, $isAdminOrMgr);
+            }
         }
 
         $sql = "SELECT t.id, t.subject as title, t.body as description, t.status, t.priority, t.progress, t.due_date, t.done_at as completed_at, t.created_at,
@@ -2769,9 +2888,14 @@ class ExportController {
             'Email',
             'Ngày vào làm',
             'Trạng thái BHXH',
-            'Phép năm còn lại',
+            'Quỹ phép năm còn lại',
+            'Quỹ nghỉ bù còn lại',
+            'Số phút đi trễ',
+            'Định mức trễ cho phép (60p Nữ / 30p Nam)',
             'Lương cơ bản (VNĐ)',
+            'Lương thỏa thuận (Deal)',
             'Lương thực lĩnh kỳ này (VNĐ)',
+            'Trạng thái phiếu lương',
             'Trạng thái làm việc'
         ]);
 
@@ -2782,7 +2906,11 @@ class ExportController {
         $monthYear        = trim((string)($_GET['month_year'] ?? date('Y-m')));
         $search           = trim((string)($_GET['search'] ?? $_GET['search_query'] ?? ''));
 
-        $where = ['u.tenant_id = ?', "u.role NOT IN ('superadmin', 'super_admin')"];
+        $where = [
+            'u.tenant_id = ?',
+            "u.role NOT IN ('superadmin', 'super_admin', 'bot', 'system')",
+            'u.id != 9000001'
+        ];
         $params = [$monthYear, $tid];
 
         $canViewFullHrm = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'hr', 'nhan_su', 'accountant', 'ke_toan'], true);
@@ -2841,11 +2969,19 @@ class ExportController {
             array_push($params, $like, $like, $like, $like);
         }
 
-        $sql = "SELECT u.id, u.full_name, u.email, u.phone, u.role, u.job_title, u.department, COALESCE(u.is_active, 1) as is_active,
+        if (file_exists(__DIR__ . '/agent_tools/AgentHrmAttendanceTools.php')) {
+            require_once __DIR__ . '/agent_tools/AgentHrmAttendanceTools.php';
+            if (class_exists('AgentHrmAttendanceTools') && method_exists('AgentHrmAttendanceTools', 'applyExtendedHrmMultiTierFilters')) {
+                AgentHrmAttendanceTools::applyExtendedHrmMultiTierFilters($this->db, $_GET, $where, $params, $tid, $uid, $canViewFullHrm);
+            }
+        }
+
+        $sql = "SELECT u.id, u.full_name, u.email, u.phone, u.gender, u.role, u.job_title, u.department, COALESCE(u.is_active, 1) as is_active,
                        COALESCE(tm.name, '') as team_name,
-                       hp.joined_date, hp.base_salary, hp.has_insurance,
+                       hp.joined_date, hp.base_salary, hp.deal_salary, hp.has_insurance,
                        hp.annual_leave_total, hp.annual_leave_used,
-                       mp.net_salary
+                       hp.compensatory_leave_total, hp.compensatory_leave_used,
+                       mp.net_salary, mp.lateness_minutes, mp.status as payslip_status
                 FROM users u
                 LEFT JOIN hrm_profiles hp ON hp.user_id = u.id
                 LEFT JOIN teams tm ON u.team_id = tm.id
@@ -2862,6 +2998,22 @@ class ExportController {
             $canSeeSalary = $canViewFullHrm || $sid === $uid;
             $dept = $r['department'] ?: ($r['team_name'] ?: '');
             $leaveRem = max(0, (float)($r['annual_leave_total'] ?? 12) - (float)($r['annual_leave_used'] ?? 0));
+            $compLeaveRem = max(0, (float)($r['compensatory_leave_total'] ?? 0) - (float)($r['compensatory_leave_used'] ?? 0));
+            $latenessMins = (int)($r['lateness_minutes'] ?? 0);
+            $genderNorm = strtolower(trim((string)($r['gender'] ?? '')));
+            $isFemale = in_array($genderNorm, ['female', 'nu', 'nữ', 'f'], true);
+            $latenessQuotaLabel = $isFemale ? '60 phút (Nữ)' : '30 phút (Nam)';
+
+            $psStatusRaw = strtolower((string)($r['payslip_status'] ?? ''));
+            $psStatusLabel = 'Chưa chốt';
+            if ($psStatusRaw === 'confirmed' || $psStatusRaw === 'paid') {
+                $psStatusLabel = 'Đã xác nhận';
+            } elseif ($psStatusRaw === 'sent' || $psStatusRaw === 'published') {
+                $psStatusLabel = 'Đã gửi (Chờ xác nhận)';
+            } elseif ($psStatusRaw !== '') {
+                $psStatusLabel = $r['payslip_status'];
+            }
+
             fputcsv($output, [
                 $stt++,
                 '#' . $sid,
@@ -2874,8 +3026,13 @@ class ExportController {
                 $r['joined_date'] ?: '',
                 !empty($r['has_insurance']) ? 'Có BHXH' : 'Chưa đóng',
                 $leaveRem,
+                $compLeaveRem,
+                $latenessMins,
+                $latenessQuotaLabel,
                 $canSeeSalary ? number_format((float)($r['base_salary'] ?? 0), 0, ',', '.') : 'Bảo mật',
+                $canSeeSalary ? number_format((float)($r['deal_salary'] ?? 0), 0, ',', '.') : 'Bảo mật',
                 $canSeeSalary && $r['net_salary'] !== null ? number_format((float)$r['net_salary'], 0, ',', '.') : ($canSeeSalary ? 'Chưa chốt' : 'Bảo mật'),
+                $psStatusLabel,
                 (int)($r['is_active'] ?? 1) === 1 ? 'Đang làm việc' : 'Ngừng hoạt động'
             ]);
         }
@@ -2953,6 +3110,739 @@ class ExportController {
         }
 
         fclose($output);
+        exit;
+    }
+
+    /**
+     * Export Purchase Orders (PO) with 100% Filter & RBAC Parity
+     */
+    private function exportPurchaseOrders(array $auth): void {
+        $tid  = (int)($auth['tenant_id'] ?? 1);
+        $uid  = (int)($auth['user_id'] ?? ($auth['id'] ?? 0));
+        $role = strtolower(trim((string)($auth['role'] ?? 'user')));
+
+        while (ob_get_level() > 0) {
+            @ob_end_clean();
+        }
+
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="danh_sach_don_mua_hang_po_' . date('Ymd_His') . '.csv"');
+        header('Cache-Control: no-cache, no-store, must-revalidate');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+
+        $output = fopen('php://output', 'w');
+        fputs($output, "\xEF\xBB\xBF");
+
+        fputcsv($output, [
+            'STT',
+            'Mã PO',
+            'Nhà cung cấp',
+            'Ngày đặt',
+            'Ngày giao dự kiến',
+            'Tổng tiền (VNĐ)',
+            'Trạng thái',
+            'Duyệt Cấp 1',
+            'Duyệt Cấp 2',
+            'Duyệt Cấp 3',
+            'Trạng thái thanh toán',
+            'Người tạo',
+            'Ghi chú'
+        ]);
+
+        $where = ['po.tenant_id = ?'];
+        $params = [$tid];
+
+        $isGlobalAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo'], true);
+        $isAccountant  = in_array($role, ['accountant', 'ke_toan'], true);
+        $isManager     = in_array($role, ['manager', 'truong_phong', 'leader', 'team_lead'], true);
+
+        if (!$isGlobalAdmin && !$isAccountant) {
+            if ($isManager) {
+                $where[] = "(po.created_by = ? OR po.approver_id = ? OR po.approver_id_2 = ? OR po.approver_id_3 = ? OR po.created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))))";
+                array_push($params, $uid, $uid, $uid, $uid, $uid);
+            } else {
+                $where[] = "(po.created_by = ? OR po.approver_id = ? OR po.approver_id_2 = ? OR po.approver_id_3 = ?)";
+                array_push($params, $uid, $uid, $uid, $uid);
+            }
+        }
+
+        $statusesParam = trim((string)($_GET['status'] ?? $_GET['statuses'] ?? ''));
+        $supplierId    = isset($_GET['supplier_id']) && is_numeric($_GET['supplier_id']) ? (int)$_GET['supplier_id'] : 0;
+        $vendorName    = trim((string)($_GET['vendor_name'] ?? $_GET['supplier_name'] ?? ''));
+        $fromDate      = trim((string)($_GET['from'] ?? $_GET['from_date'] ?? ''));
+        $toDate        = trim((string)($_GET['to'] ?? $_GET['to_date'] ?? ''));
+        $minAmount     = isset($_GET['min_amount']) && is_numeric($_GET['min_amount']) ? (float)$_GET['min_amount'] : 0;
+        $maxAmount     = isset($_GET['max_amount']) && is_numeric($_GET['max_amount']) ? (float)$_GET['max_amount'] : 0;
+        $search        = trim((string)($_GET['search'] ?? $_GET['search_query'] ?? ''));
+
+        if ($statusesParam !== '' && $statusesParam !== 'all') {
+            $stList = array_filter(array_map('trim', explode(',', strtolower($statusesParam))));
+            if (!empty($stList)) {
+                $ph = implode(',', array_fill(0, count($stList), '?'));
+                $where[] = "po.status IN ({$ph})";
+                foreach ($stList as $st) {
+                    $params[] = $st;
+                }
+            }
+        }
+        if ($supplierId > 0) {
+            $where[] = 'po.supplier_id = ?';
+            $params[] = $supplierId;
+        }
+        if ($vendorName !== '') {
+            $where[] = 's.name LIKE ?';
+            $params[] = '%' . $vendorName . '%';
+        }
+        if ($fromDate !== '' && $toDate !== '') {
+            $where[] = 'po.order_date BETWEEN ? AND ?';
+            $params[] = $fromDate;
+            $params[] = $toDate;
+        } elseif ($fromDate !== '') {
+            $where[] = 'po.order_date >= ?';
+            $params[] = $fromDate;
+        } elseif ($toDate !== '') {
+            $where[] = 'po.order_date <= ?';
+            $params[] = $toDate;
+        }
+        if ($minAmount > 0) {
+            $where[] = 'po.total >= ?';
+            $params[] = $minAmount;
+        }
+        if ($maxAmount > 0) {
+            $where[] = 'po.total <= ?';
+            $params[] = $maxAmount;
+        }
+        if ($search !== '') {
+            $like = "%{$search}%";
+            $where[] = '(po.order_number LIKE ? OR s.name LIKE ? OR po.notes LIKE ? OR u.full_name LIKE ?)';
+            array_push($params, $like, $like, $like, $like);
+        }
+
+        $sql = "SELECT po.id, po.order_number, po.order_date, po.expected_delivery_date,
+                       po.total, po.status, po.status_level_1, po.status_level_2, po.status_level_3,
+                       po.payment_status, po.notes,
+                       COALESCE(s.name, '') as supplier_name,
+                       COALESCE(u.full_name, '') as creator_name,
+                       COALESCE(app1.full_name, '') as approver_name_1,
+                       COALESCE(app2.full_name, '') as approver_name_2,
+                       COALESCE(app3.full_name, '') as approver_name_3
+                FROM purchase_orders po
+                LEFT JOIN suppliers s ON po.supplier_id = s.id
+                LEFT JOIN users u ON po.created_by = u.id
+                LEFT JOIN users app1 ON po.approver_id = app1.id
+                LEFT JOIN users app2 ON po.approver_id_2 = app2.id
+                LEFT JOIN users app3 ON po.approver_id_3 = app3.id
+                WHERE " . implode(' AND ', $where) . "
+                ORDER BY po.id DESC";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+
+        $stt = 1;
+        while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $l1 = ($r['approver_name_1'] ?: 'Cấp 1') . (!empty($r['status_level_1']) ? ' (' . $r['status_level_1'] . ')' : '');
+            $l2 = ($r['approver_name_2'] ?: '') !== '' ? $r['approver_name_2'] . (!empty($r['status_level_2']) ? ' (' . $r['status_level_2'] . ')' : '') : '';
+            $l3 = ($r['approver_name_3'] ?: '') !== '' ? $r['approver_name_3'] . (!empty($r['status_level_3']) ? ' (' . $r['status_level_3'] . ')' : '') : '';
+
+            fputcsv($output, [
+                $stt++,
+                $r['order_number'] ?: ('PO-' . $r['id']),
+                $r['supplier_name'],
+                $r['order_date'] ?: '',
+                $r['expected_delivery_date'] ?: '',
+                number_format((float)($r['total'] ?? 0), 0, ',', '.'),
+                $r['status'] ?: 'draft',
+                $l1,
+                $l2,
+                $l3,
+                $r['payment_status'] ?: 'unpaid',
+                $r['creator_name'],
+                trim(preg_replace('/\s+/', ' ', strip_tags((string)($r['notes'] ?? ''))))
+            ]);
+        }
+
+        fclose($output);
+        if (function_exists('logActivity')) {
+            logActivity($this->db, $tid, $uid, "Export Data (purchase_order)", 'purchase_order', null, "Exported " . ($stt - 1) . " purchase orders");
+        }
+        exit;
+    }
+
+    /**
+     * Export Sales Orders (SO) with 100% Filter & RBAC Parity
+     */
+    private function exportSalesOrders(array $auth): void {
+        $tid  = (int)($auth['tenant_id'] ?? 1);
+        $uid  = (int)($auth['user_id'] ?? ($auth['id'] ?? 0));
+        $role = strtolower(trim((string)($auth['role'] ?? 'user')));
+
+        while (ob_get_level() > 0) {
+            @ob_end_clean();
+        }
+
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="danh_sach_don_dat_hang_so_' . date('Ymd_His') . '.csv"');
+        header('Cache-Control: no-cache, no-store, must-revalidate');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+
+        $output = fopen('php://output', 'w');
+        fputs($output, "\xEF\xBB\xBF");
+
+        fputcsv($output, [
+            'STT',
+            'Mã SO',
+            'Khách hàng / Học viên',
+            'Số điện thoại',
+            'Công ty',
+            'Ngày đặt',
+            'Tổng tiền (VNĐ)',
+            'Trạng thái',
+            'Trạng thái thanh toán',
+            'Người tạo',
+            'Ghi chú'
+        ]);
+
+        $where = ['so.tenant_id = ?'];
+        $params = [$tid];
+
+        $isFinAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'accountant', 'ke_toan', 'sale_admin', 'saleadmin'], true);
+        $isManager  = in_array($role, ['manager', 'truong_phong', 'leader', 'team_lead'], true);
+        if (!$isFinAdmin) {
+            if ($isManager) {
+                $where[] = "(so.created_by = ? OR c.owner_id = ? OR so.created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))) OR c.owner_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))))";
+                array_push($params, $uid, $uid, $uid, $uid);
+            } else {
+                $where[] = "(so.created_by = ? OR c.owner_id = ?)";
+                array_push($params, $uid, $uid);
+            }
+        }
+
+        $statusesParam  = trim((string)($_GET['status'] ?? $_GET['statuses'] ?? ''));
+        $paymentStatus  = trim((string)($_GET['payment_status'] ?? ''));
+        $contactId      = isset($_GET['contact_id']) && is_numeric($_GET['contact_id']) ? (int)$_GET['contact_id'] : 0;
+        $fromDate       = trim((string)($_GET['from'] ?? $_GET['from_date'] ?? ''));
+        $toDate         = trim((string)($_GET['to'] ?? $_GET['to_date'] ?? ''));
+        $minAmount      = isset($_GET['min_amount']) && is_numeric($_GET['min_amount']) ? (float)$_GET['min_amount'] : 0;
+        $maxAmount      = isset($_GET['max_amount']) && is_numeric($_GET['max_amount']) ? (float)$_GET['max_amount'] : 0;
+        $search         = trim((string)($_GET['search'] ?? $_GET['search_query'] ?? ''));
+
+        if ($statusesParam !== '' && $statusesParam !== 'all') {
+            $stList = array_filter(array_map('trim', explode(',', strtolower($statusesParam))));
+            if (!empty($stList)) {
+                $ph = implode(',', array_fill(0, count($stList), '?'));
+                $where[] = "so.status IN ({$ph})";
+                foreach ($stList as $st) {
+                    $params[] = $st;
+                }
+            }
+        }
+        if ($paymentStatus !== '' && $paymentStatus !== 'all') {
+            $where[] = 'so.payment_status = ?';
+            $params[] = $paymentStatus;
+        }
+        if ($contactId > 0) {
+            $where[] = 'so.contact_id = ?';
+            $params[] = $contactId;
+        }
+        if ($fromDate !== '' && $toDate !== '') {
+            $where[] = 'so.order_date BETWEEN ? AND ?';
+            $params[] = $fromDate;
+            $params[] = $toDate;
+        } elseif ($fromDate !== '') {
+            $where[] = 'so.order_date >= ?';
+            $params[] = $fromDate;
+        } elseif ($toDate !== '') {
+            $where[] = 'so.order_date <= ?';
+            $params[] = $toDate;
+        }
+        if ($minAmount > 0) {
+            $where[] = 'so.total >= ?';
+            $params[] = $minAmount;
+        }
+        if ($maxAmount > 0) {
+            $where[] = 'so.total <= ?';
+            $params[] = $maxAmount;
+        }
+        if ($search !== '') {
+            $like = "%{$search}%";
+            $where[] = '(so.order_number LIKE ? OR c.full_name LIKE ? OR c.phone LIKE ? OR comp.name LIKE ? OR so.notes LIKE ?)';
+            array_push($params, $like, $like, $like, $like, $like);
+        }
+
+        $sql = "SELECT so.id, so.order_number, so.order_date, so.total, so.status, so.payment_status, so.notes,
+                       COALESCE(c.full_name, '') as customer_name,
+                       COALESCE(c.phone, '') as customer_phone,
+                       COALESCE(comp.name, '') as company_name,
+                       COALESCE(u.full_name, '') as creator_name
+                FROM sales_orders so
+                LEFT JOIN contacts c ON so.contact_id = c.id
+                LEFT JOIN companies comp ON so.company_id = comp.id
+                LEFT JOIN users u ON so.created_by = u.id
+                WHERE " . implode(' AND ', $where) . "
+                ORDER BY so.id DESC";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+
+        $stt = 1;
+        while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            fputcsv($output, [
+                $stt++,
+                $r['order_number'] ?: ('SO-' . $r['id']),
+                $r['customer_name'],
+                $r['customer_phone'],
+                $r['company_name'],
+                $r['order_date'] ?: '',
+                number_format((float)($r['total'] ?? 0), 0, ',', '.'),
+                $r['status'] ?: 'draft',
+                $r['payment_status'] ?: 'unpaid',
+                $r['creator_name'],
+                trim(preg_replace('/\s+/', ' ', strip_tags((string)($r['notes'] ?? ''))))
+            ]);
+        }
+
+        fclose($output);
+        if (function_exists('logActivity')) {
+            logActivity($this->db, $tid, $uid, "Export Data (sales_order)", 'sales_order', null, "Exported " . ($stt - 1) . " sales orders");
+        }
+        exit;
+    }
+
+    /**
+     * Export Invoices with 100% Filter & RBAC Parity
+     */
+    private function exportInvoices(array $auth): void {
+        $tid  = (int)($auth['tenant_id'] ?? 1);
+        $uid  = (int)($auth['user_id'] ?? ($auth['id'] ?? 0));
+        $role = strtolower(trim((string)($auth['role'] ?? 'user')));
+
+        while (ob_get_level() > 0) {
+            @ob_end_clean();
+        }
+
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="danh_sach_hoa_don_invoices_' . date('Ymd_His') . '.csv"');
+        header('Cache-Control: no-cache, no-store, must-revalidate');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+
+        $output = fopen('php://output', 'w');
+        fputs($output, "\xEF\xBB\xBF");
+
+        fputcsv($output, [
+            'STT',
+            'Số hóa đơn',
+            'Khách hàng / Học viên',
+            'Công ty',
+            'Ngày phát hành',
+            'Hạn thanh toán',
+            'Tổng tiền',
+            'Loại tiền',
+            'Trạng thái',
+            'Người tạo',
+            'Ghi chú'
+        ]);
+
+        $where = ['i.tenant_id = ?', 'i.deleted_at IS NULL'];
+        $params = [$tid];
+
+        $isFinAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'accountant', 'ke_toan', 'sale_admin', 'saleadmin', 'manager', 'truong_phong', 'leader'], true);
+        if (!$isFinAdmin) {
+            $where[] = '(i.created_by = ? OR ct.owner_id = ?)';
+            array_push($params, $uid, $uid);
+        }
+
+        $statusesParam = trim((string)($_GET['status'] ?? $_GET['statuses'] ?? ''));
+        $fromDate      = trim((string)($_GET['from'] ?? $_GET['from_date'] ?? ''));
+        $toDate        = trim((string)($_GET['to'] ?? $_GET['to_date'] ?? ''));
+        $overdueOnly   = !empty($_GET['overdue_only']) && in_array(strtolower((string)$_GET['overdue_only']), ['1', 'true', 'yes'], true);
+        $search        = trim((string)($_GET['search'] ?? $_GET['search_query'] ?? ''));
+
+        if ($statusesParam !== '' && $statusesParam !== 'all') {
+            $stList = array_filter(array_map('trim', explode(',', strtolower($statusesParam))));
+            if (!empty($stList)) {
+                $ph = implode(',', array_fill(0, count($stList), '?'));
+                $where[] = "i.status IN ({$ph})";
+                foreach ($stList as $st) {
+                    $params[] = $st;
+                }
+            }
+        }
+        if ($fromDate !== '' && $toDate !== '') {
+            $where[] = 'i.issue_date BETWEEN ? AND ?';
+            $params[] = $fromDate;
+            $params[] = $toDate;
+        } elseif ($fromDate !== '') {
+            $where[] = 'i.issue_date >= ?';
+            $params[] = $fromDate;
+        } elseif ($toDate !== '') {
+            $where[] = 'i.issue_date <= ?';
+            $params[] = $toDate;
+        }
+        if ($overdueOnly) {
+            $where[] = "i.due_date IS NOT NULL AND i.due_date < CURDATE() AND i.status NOT IN ('paid', 'cancelled')";
+        }
+        if ($search !== '') {
+            $like = "%{$search}%";
+            $where[] = '(i.invoice_number LIKE ? OR ct.full_name LIKE ? OR c.name LIKE ? OR i.notes LIKE ?)';
+            array_push($params, $like, $like, $like, $like);
+        }
+
+        $sql = "SELECT i.id, i.invoice_number, i.issue_date, i.due_date, i.total, i.currency, i.status, i.notes,
+                       COALESCE(ct.full_name, '') as contact_name,
+                       COALESCE(c.name, '') as company_name,
+                       COALESCE(u.full_name, '') as creator_name
+                FROM invoices i
+                LEFT JOIN companies c ON i.company_id = c.id
+                LEFT JOIN contacts ct ON i.contact_id = ct.id
+                LEFT JOIN users u ON i.created_by = u.id
+                WHERE " . implode(' AND ', $where) . "
+                ORDER BY i.id DESC";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+
+        $stt = 1;
+        while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            fputcsv($output, [
+                $stt++,
+                $r['invoice_number'] ?: ('INV-' . $r['id']),
+                $r['contact_name'],
+                $r['company_name'],
+                $r['issue_date'] ?: '',
+                $r['due_date'] ?: '',
+                number_format((float)($r['total'] ?? 0), 0, ',', '.'),
+                $r['currency'] ?: 'VND',
+                $r['status'] ?: 'draft',
+                $r['creator_name'],
+                trim(preg_replace('/\s+/', ' ', strip_tags((string)($r['notes'] ?? ''))))
+            ]);
+        }
+
+        fclose($output);
+        if (function_exists('logActivity')) {
+            logActivity($this->db, $tid, $uid, "Export Data (invoice)", 'invoice', null, "Exported " . ($stt - 1) . " invoices");
+        }
+        exit;
+    }
+
+    /**
+     * Export Quotes with 100% Filter & RBAC Parity
+     */
+    private function exportQuotes(array $auth): void {
+        $tid  = (int)($auth['tenant_id'] ?? 1);
+        $uid  = (int)($auth['user_id'] ?? ($auth['id'] ?? 0));
+        $role = strtolower(trim((string)($auth['role'] ?? 'user')));
+
+        while (ob_get_level() > 0) {
+            @ob_end_clean();
+        }
+
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="danh_sach_bao_gia_quotes_' . date('Ymd_His') . '.csv"');
+        header('Cache-Control: no-cache, no-store, must-revalidate');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+
+        $output = fopen('php://output', 'w');
+        fputs($output, "\xEF\xBB\xBF");
+
+        fputcsv($output, [
+            'STT',
+            'Mã báo giá',
+            'Tiêu đề',
+            'Khách hàng',
+            'Số điện thoại',
+            'Tổng tiền (VNĐ)',
+            'Hiệu lực đến',
+            'Trạng thái',
+            'Người tạo',
+            'Ngày tạo'
+        ]);
+
+        $where = ['q.tenant_id = ?'];
+        $params = [$tid];
+
+        $isAdminOrMgr = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'accountant', 'ke_toan', 'sale_admin', 'saleadmin', 'manager', 'truong_phong', 'leader', 'team_lead'], true);
+        if (!$isAdminOrMgr) {
+            $where[] = '(q.created_by = ? OR c.owner_id = ?)';
+            array_push($params, $uid, $uid);
+        }
+
+        $statusesParam = trim((string)($_GET['status'] ?? $_GET['statuses'] ?? ''));
+        $fromDate      = trim((string)($_GET['from'] ?? $_GET['from_date'] ?? ''));
+        $toDate        = trim((string)($_GET['to'] ?? $_GET['to_date'] ?? ''));
+        $search        = trim((string)($_GET['search'] ?? $_GET['search_query'] ?? ''));
+
+        if ($statusesParam !== '' && $statusesParam !== 'all') {
+            $stList = array_filter(array_map('trim', explode(',', strtolower($statusesParam))));
+            if (!empty($stList)) {
+                $ph = implode(',', array_fill(0, count($stList), '?'));
+                $where[] = "q.status IN ({$ph})";
+                foreach ($stList as $st) {
+                    $params[] = $st;
+                }
+            }
+        }
+        if ($fromDate !== '' && $toDate !== '') {
+            $where[] = 'q.created_at BETWEEN ? AND ?';
+            $params[] = $fromDate . ' 00:00:00';
+            $params[] = $toDate . ' 23:59:59';
+        } elseif ($fromDate !== '') {
+            $where[] = 'q.created_at >= ?';
+            $params[] = $fromDate . ' 00:00:00';
+        } elseif ($toDate !== '') {
+            $where[] = 'q.created_at <= ?';
+            $params[] = $toDate . ' 23:59:59';
+        }
+        if ($search !== '') {
+            $like = "%{$search}%";
+            $where[] = '(q.title LIKE ? OR c.full_name LIKE ? OR c.phone LIKE ? OR u.full_name LIKE ?)';
+            array_push($params, $like, $like, $like, $like);
+        }
+
+        $sql = "SELECT q.id, q.title, q.total, q.valid_until, q.status, q.created_at,
+                       COALESCE(c.full_name, '') as customer_name,
+                       COALESCE(c.phone, '') as customer_phone,
+                       COALESCE(u.full_name, '') as creator_name
+                FROM quotes q
+                LEFT JOIN contacts c ON q.contact_id = c.id
+                LEFT JOIN users u ON q.created_by = u.id
+                WHERE " . implode(' AND ', $where) . "
+                ORDER BY q.id DESC";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+
+        $stt = 1;
+        while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            fputcsv($output, [
+                $stt++,
+                '#' . $r['id'],
+                $r['title'] ?: '',
+                $r['customer_name'],
+                $r['customer_phone'],
+                number_format((float)($r['total'] ?? 0), 0, ',', '.'),
+                $r['valid_until'] ?: '',
+                $r['status'] ?: 'draft',
+                $r['creator_name'],
+                !empty($r['created_at']) ? date('d/m/Y H:i', strtotime($r['created_at'])) : ''
+            ]);
+        }
+
+        fclose($output);
+        if (function_exists('logActivity')) {
+            logActivity($this->db, $tid, $uid, "Export Data (quote)", 'quote', null, "Exported " . ($stt - 1) . " quotes");
+        }
+        exit;
+    }
+
+    /**
+     * Export Suppliers with 100% Filter Parity
+     */
+    private function exportSuppliers(array $auth): void {
+        $tid = (int)($auth['tenant_id'] ?? 1);
+        $uid = (int)($auth['user_id'] ?? ($auth['id'] ?? 0));
+
+        while (ob_get_level() > 0) {
+            @ob_end_clean();
+        }
+
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="danh_sach_nha_cung_cap_suppliers_' . date('Ymd_His') . '.csv"');
+        header('Cache-Control: no-cache, no-store, must-revalidate');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+
+        $output = fopen('php://output', 'w');
+        fputs($output, "\xEF\xBB\xBF");
+
+        fputcsv($output, [
+            'STT',
+            'Mã NCC',
+            'Tên nhà cung cấp',
+            'Người liên hệ',
+            'Số điện thoại',
+            'Email',
+            'Mã số thuế',
+            'Danh mục',
+            'Ngân hàng',
+            'Số tài khoản',
+            'Chủ tài khoản',
+            'Trạng thái'
+        ]);
+
+        $where = ['s.tenant_id = ?', 's.deleted_at IS NULL'];
+        $params = [$tid];
+
+        $statusParam   = trim((string)($_GET['status'] ?? ''));
+        $categoryParam = trim((string)($_GET['category'] ?? ''));
+        $search        = trim((string)($_GET['search'] ?? $_GET['search_query'] ?? ''));
+
+        if ($statusParam !== '' && $statusParam !== 'all') {
+            $where[] = 's.status = ?';
+            $params[] = $statusParam;
+        }
+        if ($categoryParam !== '' && $categoryParam !== 'all') {
+            $where[] = 's.category LIKE ?';
+            $params[] = '%' . $categoryParam . '%';
+        }
+        if ($search !== '') {
+            $like = "%{$search}%";
+            $where[] = '(s.name LIKE ? OR s.code LIKE ? OR s.phone LIKE ? OR s.email LIKE ? OR s.tax_code LIKE ?)';
+            array_push($params, $like, $like, $like, $like, $like);
+        }
+
+        $sql = "SELECT s.id, s.code, s.name, s.contact_person, s.phone, s.email, s.tax_code,
+                       s.category, s.bank_name, s.bank_account, s.bank_holder, s.status
+                FROM suppliers s
+                WHERE " . implode(' AND ', $where) . "
+                ORDER BY s.name ASC";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+
+        $stt = 1;
+        while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            fputcsv($output, [
+                $stt++,
+                $r['code'] ?: ('NCC-' . $r['id']),
+                $r['name'] ?: '',
+                $r['contact_person'] ?: '',
+                $r['phone'] ?: '',
+                $r['email'] ?: '',
+                $r['tax_code'] ?: '',
+                $r['category'] ?: '',
+                $r['bank_name'] ?: '',
+                $r['bank_account'] ?: '',
+                $r['bank_holder'] ?: '',
+                $r['status'] ?: 'active'
+            ]);
+        }
+
+        fclose($output);
+        if (function_exists('logActivity')) {
+            logActivity($this->db, $tid, $uid, "Export Data (supplier)", 'supplier', null, "Exported " . ($stt - 1) . " suppliers");
+        }
+        exit;
+    }
+
+    /**
+     * Export HRM Salary Advances with 100% Filter & RBAC Parity
+     */
+    private function exportSalaryAdvances(array $auth): void {
+        $tid  = (int)($auth['tenant_id'] ?? 1);
+        $uid  = (int)($auth['user_id'] ?? ($auth['id'] ?? 0));
+        $role = strtolower(trim((string)($auth['role'] ?? 'user')));
+
+        while (ob_get_level() > 0) {
+            @ob_end_clean();
+        }
+
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="danh_sach_tam_ung_luong_' . date('Ymd_His') . '.csv"');
+        header('Cache-Control: no-cache, no-store, must-revalidate');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+
+        $output = fopen('php://output', 'w');
+        fputs($output, "\xEF\xBB\xBF");
+
+        fputcsv($output, [
+            'STT',
+            'Mã đơn',
+            'Nhân viên',
+            'Phòng ban',
+            'Số tiền tạm ứng (VNĐ)',
+            'Tháng khấu trừ',
+            'Lý do',
+            'Trạng thái',
+            'Người duyệt Cấp 1',
+            'Người duyệt Cấp 2',
+            'Ngày tạo'
+        ]);
+
+        $where = ['u.tenant_id = ?'];
+        $params = [$tid];
+
+        $canViewAll = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'hr', 'nhan_su', 'accountant', 'ke_toan'], true);
+        $isManager  = in_array($role, ['manager', 'truong_phong', 'leader', 'team_lead'], true);
+        if (!$canViewAll) {
+            if ($isManager) {
+                $where[] = "(a.user_id = ? OR a.approver_id = ? OR a.approver_id_2 = ? OR u.team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))))";
+                array_push($params, $uid, $uid, $uid, $uid);
+            } else {
+                $where[] = '(a.user_id = ? OR a.approver_id = ? OR a.approver_id_2 = ?)';
+                array_push($params, $uid, $uid, $uid);
+            }
+        }
+
+        $statusParam    = trim((string)($_GET['status'] ?? $_GET['statuses'] ?? ''));
+        $deductionMonth = trim((string)($_GET['deduction_month'] ?? $_GET['month_year'] ?? ''));
+        $targetUserId   = isset($_GET['user_id']) && is_numeric($_GET['user_id']) ? (int)$_GET['user_id'] : 0;
+        $search         = trim((string)($_GET['search'] ?? $_GET['search_query'] ?? ''));
+
+        if ($statusParam !== '' && $statusParam !== 'all') {
+            $stList = array_filter(array_map('trim', explode(',', strtolower($statusParam))));
+            if (!empty($stList)) {
+                $ph = implode(',', array_fill(0, count($stList), '?'));
+                $where[] = "a.status IN ({$ph})";
+                foreach ($stList as $st) {
+                    $params[] = $st;
+                }
+            }
+        }
+        if ($deductionMonth !== '') {
+            $where[] = 'a.deduction_month = ?';
+            $params[] = $deductionMonth;
+        }
+        if ($targetUserId > 0) {
+            $where[] = 'a.user_id = ?';
+            $params[] = $targetUserId;
+        }
+        if ($search !== '') {
+            $like = "%{$search}%";
+            $where[] = '(u.full_name LIKE ? OR a.reason LIKE ? OR u.department LIKE ?)';
+            array_push($params, $like, $like, $like);
+        }
+
+        $sql = "SELECT a.id, a.amount, a.deduction_month, a.reason, a.status, a.created_at,
+                       u.full_name, u.department,
+                       COALESCE(app1.full_name, '') as approver_name_1,
+                       COALESCE(app2.full_name, '') as approver_name_2
+                FROM hrm_salary_advances a
+                JOIN users u ON a.user_id = u.id
+                LEFT JOIN users app1 ON a.approver_id = app1.id
+                LEFT JOIN users app2 ON a.approver_id_2 = app2.id
+                WHERE " . implode(' AND ', $where) . "
+                ORDER BY a.id DESC";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+
+        $stt = 1;
+        while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            fputcsv($output, [
+                $stt++,
+                '#' . $r['id'],
+                $r['full_name'] ?: '',
+                $r['department'] ?: '',
+                number_format((float)($r['amount'] ?? 0), 0, ',', '.'),
+                $r['deduction_month'] ?: '',
+                trim(preg_replace('/\s+/', ' ', strip_tags((string)($r['reason'] ?? '')))),
+                $r['status'] ?: 'pending',
+                $r['approver_name_1'],
+                $r['approver_name_2'],
+                !empty($r['created_at']) ? date('d/m/Y H:i', strtotime($r['created_at'])) : ''
+            ]);
+        }
+
+        fclose($output);
+        if (function_exists('logActivity')) {
+            logActivity($this->db, $tid, $uid, "Export Data (salary_advance)", 'salary_advance', null, "Exported " . ($stt - 1) . " salary advances");
+        }
         exit;
     }
 }

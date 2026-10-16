@@ -484,12 +484,17 @@ export const computeEmployeeAttendanceSummary = (
     sumWeekendShifts += weekendShifts;
     sumTotalPaidDays += totalPaidDays;
 
+    const empGenderRaw = String(emp.gender || '').toLowerCase().trim();
+    const empIsMale = empGenderRaw === 'male' || empGenderRaw === 'nam';
+    const empLateGrace = empIsMale ? 30 : 60;
+
     records.push({
       user_id: uid,
       emp_name: empName,
       emp_dept: empDept,
       emp_title: empTitle,
       emp_email: empEmail,
+      gender: empIsMale ? 'male' : 'female',
       standard_days: stdDays,
       actual_days: actualDays,
       annual_leave_days: annualDays,
@@ -501,6 +506,8 @@ export const computeEmployeeAttendanceSummary = (
       diff_days: diffDays,
       late_count: lateCount,
       late_minutes: lateMins,
+      late_grace_minutes: empLateGrace,
+      excess_late_minutes: Math.max(0, lateMins - empLateGrace),
       early_minutes: earlyMins,
       supp_count: suppCount,
       ot_hours: otHours,
@@ -3284,8 +3291,37 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   const pendingCount = useMemo(() => activeCheckIns.filter(c => c.status === 'pending_approval').length, [activeCheckIns]);
   const rejectedCount = useMemo(() => activeCheckIns.filter(c => c.status === 'rejected').length, [activeCheckIns]);
 
-  const getLateMinutes = (checkInTimeStr: string, workStartTimeStr: string = '08:00') => {
-    if (!checkInTimeStr) return 0;
+  const waivedDatesMap = useMemo(() => {
+    const set = new Set<string>();
+    const allLv = [...calendarLeaves, ...leavesList];
+    allLv.forEach((lv: any) => {
+      if (lv.leave_type === 'late_early' && (lv.status === 'approved' || Number(lv.approved) === 1)) {
+        const d = lv.start_date_only || String(lv.start_date || lv.from_date || '').slice(0, 10);
+        const uid = lv.user_id || lv.userId;
+        if (d) {
+          set.add(d);
+          if (uid) set.add(`${uid}:${d}`);
+        }
+      }
+    });
+    return set;
+  }, [calendarLeaves, leavesList]);
+
+  const getLateMinutes = (checkInOrTime: any, workStartTimeStr: string = '08:00'): number => {
+    if (!checkInOrTime) return 0;
+    if (typeof checkInOrTime === 'object') {
+      const c = checkInOrTime;
+      const cDate = c.check_in_date ? String(c.check_in_date).slice(0, 10) : '';
+      const uid = c.user_id || c.userId;
+      if (cDate && ((uid && waivedDatesMap.has(`${uid}:${cDate}`)) || (!uid && waivedDatesMap.has(cDate)))) {
+        return 0;
+      }
+      if (c.late_minutes !== undefined && c.late_minutes !== null) {
+        return Math.max(0, Number(c.late_minutes) || 0);
+      }
+      return getLateMinutes(c.check_in_time, c.work_start_time || workStartTimeStr);
+    }
+    const checkInTimeStr = String(checkInOrTime);
     const [ciH, ciM] = checkInTimeStr.split(':').map(Number);
     const [wsH, wsM] = workStartTimeStr.split(':').map(Number);
     const checkInMins = (ciH || 0) * 60 + (ciM || 0);
@@ -3300,20 +3336,36 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
 
   const lateCheckIns = useMemo(() => {
     return activeCheckIns.filter(c => {
-      const isLate = c.check_in_time > (c.work_start_time || '08:00');
+      const isLate = getLateMinutes(c) > 0;
       return isLate || c.status === 'pending_approval';
     });
-  }, [activeCheckIns]);
+  }, [activeCheckIns, waivedDatesMap]);
 
   const lateDays = lateCheckIns.length;
-  const onTimeDays = Math.max(0, approvedCount - activeCheckIns.filter(c => c.status === 'approved' && c.check_in_time > (c.work_start_time || '08:00')).length);
+  const onTimeDays = Math.max(0, approvedCount - activeCheckIns.filter(c => c.status === 'approved' && getLateMinutes(c) > 0).length);
   const onTimeRate = workDaysCount > 0 ? Math.round((onTimeDays / workDaysCount) * 100) : (lateDays === 0 ? 100 : 0);
 
   const totalLateMinutes = useMemo(() => {
     return activeCheckIns.reduce((acc, c) => {
-      return acc + getLateMinutes(c.check_in_time, c.work_start_time || '08:00');
+      return acc + getLateMinutes(c);
     }, 0);
-  }, [activeCheckIns]);
+  }, [activeCheckIns, waivedDatesMap]);
+
+  const selectedUserObj = useMemo(() => {
+    if (filterUser && filterUser !== 'all') {
+      return usersList.find((u: any) => String(u.id) === String(filterUser))
+        || consultants.find((u: any) => String(u.id) === String(filterUser))
+        || (String(user?.id) === String(filterUser) ? user : null);
+    }
+    return user;
+  }, [filterUser, usersList, consultants, user]);
+
+  const targetGenderRaw = String((selectedUserObj as any)?.gender || (user as any)?.gender || '').toLowerCase().trim();
+  const isTargetMale = targetGenderRaw === 'male' || targetGenderRaw === 'nam';
+  const genderLabel = isTargetMale ? 'Nam: 30p/tháng' : 'Nữ: 60p/tháng';
+  const lateGraceMinutes = Number(myConfirmation?.late_grace_minutes) || (isTargetMale ? Number(sysSettings?.late_grace_minutes_male || 30) : Number(sysSettings?.late_grace_minutes_female || 60));
+  const excessLateMinutes = Math.max(0, totalLateMinutes - lateGraceMinutes);
+  const remainingGraceMinutes = Math.max(0, lateGraceMinutes - totalLateMinutes);
 
   const shiftList = viewMode === 'calendar' ? calendarShifts : (registrations || []);
   const nightShiftsCount = useMemo(() => shiftList.filter((s: any) => s.shift_type === 'night').length, [shiftList]);
@@ -7392,24 +7444,46 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
               </div>
 
               {/* Metric 5: Đi trễ & Về sớm */}
-              <div style={{
-                background: 'var(--color-bg-light)',
-                border: '1px solid var(--color-border-light)',
-                borderRadius: '8px',
-                padding: '8px 10px',
-                display: 'flex',
-                flexDirection: 'column'
-              }}>
-                <span style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-                  {t('Đi trễ / Về sớm')}
-                </span>
-                <span style={{ fontSize: '0.95rem', fontWeight: 800, color: Number(myConfirmation.late_minutes) > 0 ? '#ef4444' : 'var(--color-text)', marginTop: '2px' }}>
-                  {myConfirmation.late_count} <span style={{ fontSize: '0.7rem', fontWeight: 500 }}>lần</span> ({myConfirmation.late_minutes}p)
-                </span>
-                <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>
-                  Về sớm: {myConfirmation.early_minutes}p | OT: {myConfirmation.ot_hours}h
-                </span>
-              </div>
+              {(() => {
+                const confGrace = Number(myConfirmation.late_grace_minutes) || lateGraceMinutes;
+                const confLate = Number(myConfirmation.late_minutes) || 0;
+                const confExcess = Math.max(0, confLate - confGrace);
+                const confRemain = Math.max(0, confGrace - confLate);
+                return (
+                  <div style={{
+                    background: 'var(--color-bg-light)',
+                    border: '1px solid var(--color-border-light)',
+                    borderRadius: '8px',
+                    padding: '8px 10px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '2px'
+                  }}>
+                    <span style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                      {t('Đi trễ / Về sớm')}
+                    </span>
+                    <span style={{ fontSize: '0.92rem', fontWeight: 800, color: confExcess > 0 ? '#ef4444' : (confLate > 0 ? '#f59e0b' : 'var(--color-text)') }}>
+                      {myConfirmation.late_count} <span style={{ fontSize: '0.7rem', fontWeight: 500 }}>lần</span> ({confLate}/{confGrace}p)
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                      <span style={{
+                        fontSize: '0.6rem',
+                        fontWeight: 700,
+                        padding: '1px 6px',
+                        borderRadius: '10px',
+                        border: 'none',
+                        backgroundColor: confExcess > 0 ? 'rgba(239, 68, 68, 0.14)' : 'rgba(16, 185, 129, 0.14)',
+                        color: confExcess > 0 ? '#b91c1c' : '#065f46'
+                      }}>
+                        {confExcess > 0 ? `Vượt hạn mức ${confExcess}p` : `Trong hạn mức (còn ${confRemain}p)`}
+                      </span>
+                      <span style={{ fontSize: '0.62rem', color: 'var(--color-text-muted)' }}>
+                        • Sớm: {myConfirmation.early_minutes}p | OT: {myConfirmation.ot_hours}h
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Metric 6: TỔNG CÔNG TÍNH LƯƠNG (HIGHLIGHT) */}
               <div style={{
@@ -8197,7 +8271,28 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                                 </td>
                                 <td style={{ padding: '8px 8px', textAlign: 'center' }}>{r.wfh_days}</td>
                                 <td style={{ padding: '8px 8px', textAlign: 'center', color: Number(r.late_minutes) > 0 ? '#ef4444' : 'inherit' }}>
-                                  {r.late_minutes > 0 ? `${r.late_count} (${r.late_minutes}p)` : '0'}
+                                  {(() => {
+                                    const rGender = String(r.gender || usersMap.get(Number(r.user_id))?.gender || '').toLowerCase().trim();
+                                    const rGrace = Number(r.late_grace_minutes) || ((rGender === 'male' || rGender === 'nam') ? 30 : 60);
+                                    const rLate = Number(r.late_minutes) || 0;
+                                    const rExcess = Math.max(0, rLate - rGrace);
+                                    return (
+                                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                                        <span>{rLate > 0 ? `${r.late_count} (${rLate}/${rGrace}p)` : `0/${rGrace}p`}</span>
+                                        <span style={{
+                                          fontSize: '0.6rem',
+                                          fontWeight: 700,
+                                          padding: '1px 6px',
+                                          borderRadius: '10px',
+                                          border: 'none',
+                                          backgroundColor: rExcess > 0 ? 'rgba(239, 68, 68, 0.14)' : 'rgba(16, 185, 129, 0.12)',
+                                          color: rExcess > 0 ? '#b91c1c' : '#065f46'
+                                        }}>
+                                          {rExcess > 0 ? `Vượt ${rExcess}p` : `Hạn mức ${rGrace}p`}
+                                        </span>
+                                      </div>
+                                    );
+                                  })()}
                                 </td>
                                 <td style={{ padding: '8px 8px', textAlign: 'center', fontWeight: 800, color: '#059669', fontSize: '0.85rem' }}>
                                   {r.total_paid_days}
@@ -8650,11 +8745,30 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                   <div className="skeleton-pulse" style={{ width: isMobile ? '60px' : '85px', height: isMobile ? '12px' : '14px', borderRadius: '4px' }} />
                 ) : (
                   <div style={{ fontSize: isMobile ? '0.625rem' : '0.75rem', color: 'var(--color-text-muted)', display: 'flex', gap: '6px' }}>
-                    <span>{t('Trễ')}: <strong style={{ color: totalLateMinutes > 0 ? '#ef4444' : '#10b981' }}>{totalLateMinutes}p</strong></span>
+                    <span>{t('Trễ')}: <strong style={{ color: excessLateMinutes > 0 ? '#ef4444' : (totalLateMinutes > 0 ? '#f59e0b' : '#10b981') }}>{totalLateMinutes}/{lateGraceMinutes}p</strong></span>
                     <span>{t('Chờ duyệt')}: <strong style={{ color: '#f59e0b' }}>{pendingCount}</strong></span>
                   </div>
                 )}
               </div>
+              {!isStatsLoading && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px', marginTop: isMobile ? '3px' : '6px' }}>
+                  <span style={{ fontSize: isMobile ? '0.58rem' : '0.68rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
+                    {`Tổng trễ: ${totalLateMinutes} / ${lateGraceMinutes} phút cho phép (${genderLabel})`}
+                  </span>
+                  <span style={{
+                    fontSize: isMobile ? '0.56rem' : '0.65rem',
+                    fontWeight: 700,
+                    padding: '2px 7px',
+                    borderRadius: '999px',
+                    border: 'none',
+                    backgroundColor: excessLateMinutes > 0 ? 'rgba(239, 68, 68, 0.14)' : 'rgba(16, 185, 129, 0.14)',
+                    color: excessLateMinutes > 0 ? '#b91c1c' : '#065f46',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {excessLateMinutes > 0 ? `Vượt hạn mức ${excessLateMinutes}p` : `Trong hạn mức (còn ${remainingGraceMinutes}p)`}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Card 3: Leave Requests & Status */}
@@ -9010,7 +9124,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                     </tr>
                   ) : (
                     paginatedCheckIns.map((row) => {
-                      const isLate = row.check_in_time > (row.work_start_time || '08:00');
+                      const isLate = getLateMinutes(row) > 0;
                       const formattedDate = row.check_in_date ? row.check_in_date.split('-').reverse().join('/') : '--';
                       const dayName = row.check_in_date ? getDayOfWeek(row.check_in_date) : '';
                       return (
@@ -9720,7 +9834,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                       </div>
                     ) : (
                       calendarCheckIns.filter(c => c.check_in_date === selectedDateForDetail).map((row) => {
-                        const isLate = row.check_in_time > (row.work_start_time || '08:00');
+                        const isLate = getLateMinutes(row) > 0;
                         return (
                           <div key={row.id} style={{
                             padding: '12px',

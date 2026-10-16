@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useAuth } from '../contexts/AuthContext';
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { EmptyCard } from '../components/ui/EmptyCard';
 import { Avatar } from '../components/ui/Avatar';
@@ -17,6 +18,7 @@ import { AnimatePresence } from 'framer-motion';
 
 export default function MyPayslips() {
   const { t } = useLanguage();
+  const { user } = useAuth();
   const [activeSubTab, setActiveSubTab] = useState<'payslip' | 'leaves' | 'advances'>('payslip');
 
   const [disputeModalOpen, setDisputeModalOpen] = useState(false);
@@ -972,7 +974,20 @@ export default function MyPayslips() {
                       <span style={{ color: '#64748b' }}>{t('Số ngày công làm việc')}:</span> <strong>{payslip.work_days_actual} / {payslip.work_days_required}</strong>
                     </div>
                     <div>
-                      <span style={{ color: '#64748b' }}>{t('Đi muộn')}:</span> <strong style={{ color: payslip.lateness_minutes > 0 ? '#ef4444' : 'inherit' }}>{payslip.lateness_minutes} {t('phút')}</strong>
+                      {(() => {
+                        const gRaw = String(payslip.gender || (user as any)?.gender || '').toLowerCase().trim();
+                        const isMale = gRaw === 'male' || gRaw === 'nam';
+                        const grace = Number(payslip.late_grace_minutes) || (isMale ? 30 : 60);
+                        const lateVal = Number(payslip.lateness_minutes || 0);
+                        return (
+                          <>
+                            <span style={{ color: '#64748b' }}>{t('Đi muộn')}:</span>{' '}
+                            <strong style={{ color: lateVal > grace ? '#ef4444' : (lateVal > 0 ? '#f59e0b' : 'inherit') }}>
+                              {`${lateVal} phút (Định mức cho phép: ${grace} phút/tháng${lateVal > grace ? ` — Vượt ${lateVal - grace} phút` : ' — Trong định mức'})`}
+                            </strong>
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>

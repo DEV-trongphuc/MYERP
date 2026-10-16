@@ -384,6 +384,7 @@ class AuthController {
                 'role'        => $user['role'],
                 'team_id'     => $user['team_id'] ?? null,
                 'job_title'   => $user['job_title'] ?? null,
+                'department'  => $user['department'] ?? null,
                 'avatar_url'  => $user['avatar_url'],
                 'signature_url' => $user['signature_url'] ?? null,
                 'two_factor_enabled' => (int)($user['two_factor_enabled'] ?? 0),
@@ -453,7 +454,7 @@ class AuthController {
 
     public function me(array $auth): void {
         $stmt = $this->db->prepare(
-            'SELECT u.id, u.email, u.full_name, u.role, u.job_title, u.avatar_url, u.signature_url, u.phone, 
+            'SELECT u.id, u.email, u.full_name, u.role, u.job_title, u.department, u.avatar_url, u.signature_url, u.phone, 
                     u.dob, u.gender, u.citizen_id, u.address, u.bank_name, u.bank_account, u.bio, 
                     u.team_id, u.permissions_json, u.extra_fields_json, u.manager_behavior_mode,
                     u.work_start_time, u.work_end_time, u.work_schedule, u.vacation_mode, u.overtime_mode, u.use_custom_work_hours, u.leave_start, u.leave_end,

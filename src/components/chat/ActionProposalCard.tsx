@@ -171,6 +171,16 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
               notes: p.notes || p.reason || '',
               approver_id: p.approver_id,
               approver_id_2: p.approver_id_2,
+              approver_id_3: p.approver_id_3,
+              due_date: p.due_date || '',
+              vat_amount: p.vat_amount !== undefined ? Number(p.vat_amount) : undefined,
+              has_vat_invoice: p.has_vat_invoice !== undefined ? Boolean(p.has_vat_invoice) : undefined,
+              is_vat_inclusive: p.is_vat_inclusive !== undefined ? Boolean(p.is_vat_inclusive) : undefined,
+              items: Array.isArray(p.items) ? p.items : undefined,
+              entities: Array.isArray(p.entities) ? p.entities : undefined,
+              bank_name: p.bank_name || '',
+              bank_account: p.bank_account || '',
+              bank_holder: p.bank_holder || '',
               vendor_name: p.vendor_name || ''
             }
           }));
@@ -244,6 +254,11 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
             notes: p.notes || p.description || 'Khởi tạo từ AI IDEAS Agent',
             milestones: mappedMilestones,
             projectId: p.project_id || p.course_id || p.program_id || '',
+            unit_code: p.unit_code || '',
+            expected_commission: p.expected_commission !== undefined ? String(p.expected_commission) : undefined,
+            accountant_id: p.accountant_id ? Number(p.accountant_id) : undefined,
+            participant_ids: p.participant_ids || '',
+            exchange_rate: p.exchange_rate !== undefined ? Number(p.exchange_rate) : undefined,
             currency: p.currency || 'VND'
           });
           toast.success('Đã mở Phiếu thu/Đơn hàng (SO) và điền sẵn thông tin! Bạn hãy kiểm tra và lưu nhé.');
@@ -288,6 +303,11 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
             price: depositAmount ? String(depositAmount) : '',
             notes: p.notes || p.description || 'Phiếu đặt cọc/giữ chỗ từ AI IDEAS Agent',
             projectId: p.project_id || p.course_id || p.program_id || '',
+            unit_code: p.unit_code || '',
+            expected_commission: p.expected_commission !== undefined ? String(p.expected_commission) : undefined,
+            accountant_id: p.accountant_id ? Number(p.accountant_id) : undefined,
+            participant_ids: p.participant_ids || '',
+            exchange_rate: p.exchange_rate !== undefined ? Number(p.exchange_rate) : undefined,
             currency: p.currency || 'VND'
           });
           toast.success('Đã mở Phiếu Đặt Cọc / Giữ Chỗ và điền sẵn thông tin! Bạn hãy kiểm tra và bấm Lưu nhé.');
@@ -544,8 +564,15 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
         }
 
         case 'deal': {
-          navigate('/deals');
-          toast.success('Đã mở phân hệ Cơ hội tuyển sinh / Deal!');
+          sessionStorage.setItem('ai_draft_deal', JSON.stringify(p));
+          window.dispatchEvent(new CustomEvent('open-create-deal-modal', { detail: p }));
+          if (!window.location.pathname.startsWith('/deals')) {
+            navigate('/deals?create=1');
+          }
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent('open-create-deal-modal', { detail: p }));
+          }, 120);
+          toast.success('Đã mở Cơ hội tuyển sinh / Deal và điền sẵn thông tin!');
           break;
         }
 
@@ -556,20 +583,38 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
           let expType = 'contact';
           if (['company', 'companies', 'doanh_nghiep'].includes(rawType)) {
             expType = 'company';
-          } else if (['deal', 'deals', 'co_hoi'].includes(rawType)) {
+          } else if (['deal', 'deals', 'co_hoi', 'b2b'].includes(rawType)) {
             expType = 'deal';
           } else if (['product', 'products', 'san_pham'].includes(rawType)) {
             expType = 'product';
           } else if (['inventory', 'inventories', 'kho', 'vat_tu'].includes(rawType)) {
             expType = 'inventory';
+          } else if (['asset', 'assets', 'tai_san'].includes(rawType)) {
+            expType = 'asset';
           } else if (['attendance', 'attendances', 'bang_cong', 'cham_cong'].includes(rawType)) {
             expType = 'attendance';
-          } else if (['expense', 'expenses', 'chi_phi', 'phieu_chi', 'po'].includes(rawType)) {
+          } else if (['expense', 'expenses', 'chi_phi', 'phieu_chi'].includes(rawType)) {
             expType = 'expense';
-          } else if (['deposit', 'deposits', 'dat_coc', 'so'].includes(rawType)) {
+          } else if (['purchase_order', 'purchase_orders', 'po', 'don_mua_hang'].includes(rawType)) {
+            expType = 'purchase_order';
+          } else if (['deposit', 'deposits', 'phieu_thu', 'dat_coc', 'doanh_thu'].includes(rawType)) {
             expType = 'deposit';
-          } else if (['task', 'tasks', 'cong_viec'].includes(rawType)) {
+          } else if (['sales_order', 'sales_orders', 'so', 'don_dat_hang', 'don_hang_ban'].includes(rawType)) {
+            expType = 'sales_order';
+          } else if (['invoice', 'invoices', 'hoa_don'].includes(rawType)) {
+            expType = 'invoice';
+          } else if (['quote', 'quotes', 'bao_gia'].includes(rawType)) {
+            expType = 'quote';
+          } else if (['supplier', 'suppliers', 'nha_cung_cap', 'vendor', 'vendors'].includes(rawType)) {
+            expType = 'supplier';
+          } else if (['salary_advance', 'salary_advances', 'advance', 'tam_ung', 'tam_ung_luong'].includes(rawType)) {
+            expType = 'salary_advance';
+          } else if (['task', 'tasks', 'cong_viec', 'nhiem_vu'].includes(rawType)) {
             expType = 'task';
+          } else if (['ticket', 'tickets', 'sla', 'yeu_cau', 'ho_tro'].includes(rawType)) {
+            expType = 'ticket';
+          } else if (['staff', 'employee', 'employees', 'hrm', 'nhan_su', 'payroll', 'bang_luong'].includes(rawType)) {
+            expType = 'staff';
           }
 
           toast.loading('Đang trích xuất và tải tệp Excel...', { id: 'export-action-toast' });
@@ -597,16 +642,19 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
             }
           } else {
             const forwardKeys = [
-              'search', 'segment', 'lead_status', 'status', 'from', 'to',
+              'search', 'segment', 'lead_status', 'status', 'statuses', 'from', 'to',
               'owner_id', 'owners', 'team_id', 'tag', 'data_type', 'student_sub_tab',
               'multi_program', 'export_mode', 'limit', 'stages', 'gender', 'program',
-              'source', 'city', 'financial_filter', 'min_deposit', 'stale_days',
-              'interaction_status', 'date_field', 'departments', 'category',
-              'period', 'min_amount', 'max_amount', 'overdue_only'
+              'programs', 'source', 'sources', 'city', 'branches_or_cities',
+              'financial_filter', 'min_deposit', 'stale_days',
+              'interaction_status', 'date_field', 'departments', 'department_or_team', 'category',
+              'period', 'min_amount', 'max_amount', 'overdue_only',
+              'milestone_status', 'priorities', 'close_date_status', 'min_value', 'max_value',
+              'unit_code', 'vendor_name', 'approval_filter', 'subtask_filter', 'custom_rules'
             ];
             forwardKeys.forEach((k) => {
               if (p[k] !== undefined && p[k] !== null && p[k] !== '') {
-                paramsObj[k] = String(p[k]);
+                paramsObj[k] = typeof p[k] === 'object' ? JSON.stringify(p[k]) : String(p[k]);
               }
             });
           }

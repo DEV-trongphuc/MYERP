@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 322;
+$targetVersion = 323;
 $currentVersion = 186;
 
 // Query current DB version
@@ -4638,10 +4638,22 @@ try {
         $logMsg("Nâng cấp lên phiên bản 322 hoàn tất.", "success");
     }
 
-    // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '322') ON DUPLICATE KEY UPDATE setting_value = '322'");
+    // --- PHIÊN BẢN 323: HUẤN LUYỆN NỘI QUY LAO ĐỘNG VIỆN IDEAS 2024 (QĐ 001/2024) & ĐỊNH MỨC ĐI TRỄ VỀ SỚM THEO GIỚI TÍNH (NỮ 60P / NAM 30P) ---
+    if ($currentVersion < 323 || $isForce) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 323: Huấn luyện Nội quy Lao động Viện IDEAS 2024 (QĐ 001/2024) & chuẩn hóa định mức đi trễ về sớm (Nữ 60p / Nam 30p)...", "info");
+        try {
+            require_once __DIR__ . '/migrations/323_seed_ideas_labor_regulations_2024_and_late_quota.php';
+            $logMsg("Huấn luyện Nội quy Lao động Viện IDEAS 2024 và chuẩn hóa định mức đi trễ phiên bản 323 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi chạy migration 323: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 323 hoàn tất.", "success");
+    }
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 322", "success");
+    // Update DB version in system_settings
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '323') ON DUPLICATE KEY UPDATE setting_value = '323'");
+
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 323", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");
