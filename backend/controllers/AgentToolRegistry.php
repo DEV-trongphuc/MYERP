@@ -726,13 +726,21 @@ class AgentToolRegistry {
                     ],
                     [
                         'name' => 'reassign_lead_owner',
-                        'description' => 'Bàn giao quyền phụ trách học viên/khách hàng (chuyển Lead Owner) cho chuyên viên tư vấn khác dành cho Quản lý / Sale Admin hoặc nhân sự bàn giao.',
+                        'description' => 'Bàn giao quyền phụ trách học viên/khách hàng (chuyển Lead Owner) cho chuyên viên tư vấn khác theo ID, Họ tên hoặc Số điện thoại khách hàng.',
                         'parameters' => [
                             'type' => 'OBJECT',
                             'properties' => [
                                 'contact_id' => [
                                     'type' => 'INTEGER',
-                                    'description' => 'Mã ID học viên/khách hàng cần bàn giao'
+                                    'description' => 'Mã ID học viên/khách hàng cần bàn giao (nếu đã biết ID)'
+                                ],
+                                'contact_name' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Họ tên học viên/khách hàng cần bàn giao (nếu chưa biết contact_id)'
+                                ],
+                                'phone' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Số điện thoại của học viên/khách hàng cần bàn giao (nếu chưa biết contact_id)'
                                 ],
                                 'new_owner_id' => [
                                     'type' => 'INTEGER',
@@ -740,14 +748,14 @@ class AgentToolRegistry {
                                 ],
                                 'new_owner_name' => [
                                     'type' => 'STRING',
-                                    'description' => 'Họ tên nhân viên tiếp nhận mới để hệ thống tự tra cứu'
+                                    'description' => 'Họ tên nhân viên tiếp nhận mới để hệ thống tự tra cứu (hỗ trợ tiếng Việt có dấu hoặc không dấu)'
                                 ],
                                 'reassign_reason' => [
                                     'type' => 'STRING',
                                     'description' => 'Lý do bàn giao (vd: Chuyển cơ sở, chuyên viên nghỉ phép, tái phân bổ nguồn lead)'
                                 ]
                             ],
-                            'required' => ['contact_id']
+                            'required' => ['new_owner_name']
                         ]
                     ],
                     [
@@ -1753,6 +1761,57 @@ class AgentToolRegistry {
                                 ]
                             ]
                         ]
+                    ],
+                    [
+                        'name' => 'smart_create_or_assign_leads',
+                        'description' => 'Tạo mới hoặc giao/chuyển giao 1 hoặc nhiều Data Lead / Khách hàng (Data cá nhân hoặc giao cho đồng nghiệp/Sale khác). Hỗ trợ: (1) Tự thêm Data cá nhân cho chính mình (source mặc định "Data cá nhân"), (2) Tạo mới Data và giao trực tiếp cho đồng nghiệp (ví dụ: "Tạo lead Nguyễn Văn A 0901234567 chương trình MBA giao cho Linh Đan"), (3) Tạo hàng loạt nhiều Data cùng lúc từ danh sách văn bản/file, (4) Chuyển giao/giao lại Data đã có sẵn trong CRM cho đồng nghiệp theo tên hoặc SĐT. BẮT BUỘC gọi công cụ này khi người dùng yêu cầu thêm data, tạo lead mới, nhập danh sách khách hàng hoặc giao data cho nhân sự tư vấn.',
+                        'parameters' => [
+                            'type' => 'OBJECT',
+                            'properties' => [
+                                'leads' => [
+                                    'type' => 'ARRAY',
+                                    'description' => 'Danh sách các Lead/Khách hàng cần tạo mới hoặc chuyển giao. Nếu chỉ có 1 người, truyền mảng 1 phần tử.',
+                                    'items' => [
+                                        'type' => 'OBJECT',
+                                        'properties' => [
+                                            'contact_id' => ['type' => 'INTEGER', 'description' => 'ID của lead nếu đã biết sẵn trong hệ thống (tùy chọn)'],
+                                            'full_name' => ['type' => 'STRING', 'description' => 'Họ và tên khách hàng / học viên'],
+                                            'phone' => ['type' => 'STRING', 'description' => 'Số điện thoại liên hệ'],
+                                            'email' => ['type' => 'STRING', 'description' => 'Địa chỉ Email (nếu có)'],
+                                            'program' => ['type' => 'STRING', 'description' => 'Chương trình quan tâm (VD: MBA, DBA, EMBA, MSc AI, BBA, Swiss UMEF, Rushford, SBS...)'],
+                                            'source' => ['type' => 'STRING', 'description' => 'Nguồn data (VD: Data cá nhân, Facebook, Referral, Zalo, Sự kiện...). Mặc định: "Data cá nhân"'],
+                                            'job_title' => ['type' => 'STRING', 'description' => 'Chức vụ (nếu có)'],
+                                            'company' => ['type' => 'STRING', 'description' => 'Công ty / Đơn vị công tác (nếu có)'],
+                                            'notes' => ['type' => 'STRING', 'description' => 'Ghi chú tư vấn ban đầu hoặc yêu cầu đặc biệt (nếu có)'],
+                                            'assign_to_name' => ['type' => 'STRING', 'description' => 'Tên nhân sự Sale / đồng nghiệp nhận lead này (nếu giao riêng từng người)'],
+                                            'assign_to_user_id' => ['type' => 'INTEGER', 'description' => 'ID nhân sự nhận lead (nếu đã biết sẵn ID)']
+                                        ]
+                                    ]
+                                ],
+                                'default_assign_to_name' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Tên đồng nghiệp / Sale nhận toàn bộ danh sách lead này (VD: "Linh Đan", "Thanh Trúc", "Phúc"). Bỏ trống hoặc truyền "self" nếu người dùng tự thêm data cá nhân cho chính mình.'
+                                ],
+                                'default_assign_to_user_id' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'ID đồng nghiệp nhận toàn bộ danh sách lead (nếu đã biết sẵn user_id sau bước chọn disambiguation).'
+                                ],
+                                'default_program' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Chương trình mặc định cho các lead trong danh sách (nếu áp dụng chung, VD: MBA, DBA).'
+                                ],
+                                'default_source' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Nguồn mặc định (mặc định là "Data cá nhân").'
+                                ],
+                                'mode' => [
+                                    'type' => 'STRING',
+                                    'enum' => ['auto', 'create_only', 'assign_existing'],
+                                    'description' => 'Chế độ xử lý: auto (tự động kiểm tra SĐT/tên: chưa có thì tạo mới + gán owner, đã có thì cập nhật/chuyển giao owner), create_only (chỉ tạo mới), assign_existing (chuyển giao các lead đã có sẵn).'
+                                ]
+                            ],
+                            'required' => ['leads']
+                        ]
                     ]
                 ];
 
@@ -1768,6 +1827,7 @@ class AgentToolRegistry {
                 'complete_task_checklist_item',
                 'quick_log_crm_activity',
                 'reassign_lead_owner',
+                'smart_create_or_assign_leads',
                 'manage_lead_round_distribution',
                 'query_crm_leads_multitier',
                 'query_finance_multitier_analytics',
@@ -1906,12 +1966,43 @@ class AgentToolRegistry {
     }
 
     /**
-     * Format contact disambiguation payload with Smart Cards, CLARIFY_OPTIONS and NEXT_BEST_ACTIONS
+     * Build structured <<<ERP_CARD:...>>> tag for a single entity
+     */
+    public static function buildEntitySmartCard(string $entityType, array $data): string {
+        $id = (int)($data['id'] ?? ($data['entity_id'] ?? 0));
+        $title = (string)($data['title'] ?? ($data['name'] ?? 'Hồ sơ'));
+        $subtitle = (string)($data['subtitle'] ?? '');
+        if (!empty($data['meta'])) {
+            $subtitle = $subtitle !== '' ? ($subtitle . ' • ' . $data['meta']) : (string)$data['meta'];
+        }
+        $status = (string)($data['status'] ?? '');
+        $link = (string)($data['direct_url'] ?? ($data['url'] ?? ($data['link'] ?? '/contacts?id=' . $id)));
+        if (str_starts_with($link, '/')) {
+            $directUrl = 'https://myerp.ideas.edu.vn' . $link;
+        } else {
+            $directUrl = $link;
+        }
+        $actionLabel = (string)($data['action_label'] ?? 'Xem chi tiết 360°');
+        $payload = json_encode([
+            'entity_type' => $entityType,
+            'entity_id' => $id,
+            'title' => $title,
+            'subtitle' => $subtitle,
+            'status' => $status,
+            'direct_url' => $directUrl,
+            'action_label' => $actionLabel
+        ], JSON_UNESCAPED_UNICODE);
+        return "<<<ERP_CARD:{$payload}>>>";
+    }
+
+    /**
+     * Format contact disambiguation payload with CLARIFY_OPTIONS and NEXT_BEST_ACTIONS
      */
     private static function formatContactDisambiguationPayload(array $rows, string $query, string $actionContext): array {
         $candidates = [];
         $clarifyOptions = [];
         $nextBestActions = [];
+        $rowCount = count($rows);
         foreach ($rows as $r) {
             $cid = (int)$r['id'];
             $name = $r['full_name'] ?: ($r['name'] ?? 'Khách hàng');
@@ -1921,7 +2012,7 @@ class AgentToolRegistry {
             $stage = !empty($r['stage_name']) ? $r['stage_name'] : (!empty($r['pipeline_status']) ? $r['pipeline_status'] : 'Mới');
             $owner = !empty($r['owner_name']) ? $r['owner_name'] : 'Chưa gán';
 
-            $candidates[] = [
+            $candItem = [
                 'id' => $cid,
                 'student_code' => $code,
                 'full_name' => $name,
@@ -1930,15 +2021,19 @@ class AgentToolRegistry {
                 'program' => $prog,
                 'stage' => $stage,
                 'owner_name' => $owner,
-                'smart_card' => self::buildEntitySmartCard('contact', [
+                'url' => "/contacts?id={$cid}"
+            ];
+            if ($rowCount === 1) {
+                $candItem['smart_card'] = self::buildEntitySmartCard('contact', [
                     'id' => $cid,
                     'name' => "{$name} ({$code})",
                     'subtitle' => "{$prog} • SĐT: {$phone}",
                     'status' => $stage,
                     'meta' => "Sale: {$owner}",
                     'link' => "/contacts?id={$cid}"
-                ])
-            ];
+                ]);
+            }
+            $candidates[] = $candItem;
             $clarifyOptions[] = [
                 'label' => "{$name} ({$code} - {$phone})",
                 'prompt' => "Thực hiện {$actionContext} cho khách hàng {$name} (ID: {$cid}, Mã: {$code})"
@@ -1960,7 +2055,7 @@ class AgentToolRegistry {
             'candidate_count' => count($candidates),
             'candidates' => $candidates,
             'message' => "Tìm thấy " . count($candidates) . " hồ sơ khách hàng/học viên khớp với '{$query}'. Vui lòng chọn chính xác hồ sơ cần {$actionContext}.",
-            'ai_rendering_directive' => "PHÁT HIỆN NHIỀU HỒ SƠ TRÙNG KHỚP VỚI '{$query}': Tuyệt đối KHÔNG tự ý đoán hoặc chọn đại 1 người. Hãy liệt kê danh sách ứng viên bên dưới (kèm thẻ Smart Card) để người dùng chọn chính xác hồ sơ cần {$actionContext}, và BẮT BUỘC giữ nguyên khối <<<CLARIFY_OPTIONS: {$clarifyJson}>>> cùng <<<NEXT_BEST_ACTIONS: {$nbaJson}>>> ở cuối câu trả lời.",
+            'ai_rendering_directive' => "PHÁT HIỆN NHIỀU HỒ SƠ TRÙNG KHỚP VỚI '{$query}': Tuyệt đối KHÔNG tự ý đoán hoặc chọn đại 1 người. Hãy liệt kê danh sách ứng viên bên dưới bằng BẢNG MARKDOWN (`| ID | HỌ VÀ TÊN | SĐT | CHƯƠNG TRÌNH | GIAI ĐOẠN | SALE PHỤ TRÁCH |`) có link `[Tên](/contacts?id=ID)` để người dùng chọn chính xác hồ sơ cần {$actionContext}, TUYỆT ĐỐI KHÔNG sinh thẻ <<<ERP_CARD:...>>> bên dưới bảng nhiều dòng, và BẮT BUỘC giữ nguyên khối <<<CLARIFY_OPTIONS: {$clarifyJson}>>> cùng <<<NEXT_BEST_ACTIONS: {$nbaJson}>>> ở cuối câu trả lời.",
             'clarify_options_block' => "<<<CLARIFY_OPTIONS: {$clarifyJson}>>>",
             'next_best_actions_block' => "<<<NEXT_BEST_ACTIONS: {$nbaJson}>>>"
         ];
@@ -5362,14 +5457,8 @@ class AgentToolRegistry {
                                         'role' => $s['role'] ?? '',
                                         'title' => $sTitle,
                                         'department' => $sDept,
-                                        'smart_card' => self::buildEntitySmartCard('staff', [
-                                            'id' => $sid,
-                                            'name' => $sName,
-                                            'subtitle' => "{$sTitle} • {$sDept}",
-                                            'status' => 'Đang làm việc',
-                                            'meta' => $s['email'] ?? '',
-                                            'link' => "/hrm?user_id={$sid}"
-                                        ])
+                                        'email' => $s['email'] ?? '',
+                                        'url' => "/hrm?user_id={$sid}"
                                     ];
                                     $clarifyOpts[] = [
                                         'label' => "{$sName} ({$sTitle} - {$sDept})",
@@ -5390,7 +5479,7 @@ class AgentToolRegistry {
                                     'candidate_count' => count($candidates),
                                     'candidates' => $candidates,
                                     'message' => "Có " . count($candidates) . " nhân sự trùng tên '{$targetAssignee}'. Vui lòng chọn chính xác người nhận việc trước khi khởi tạo phiếu.",
-                                    'ai_rendering_directive' => "PHÁT HIỆN NHIỀU NHÂN SỰ TRÙNG TÊN '{$targetAssignee}': Tuyệt đối KHÔNG xuất thẻ <<<ACTION_PROPOSAL>>> lúc này. Hãy hiển thị danh sách nhân sự bên dưới (kèm Smart Card) để người dùng chọn chính xác người nhận việc, và BẮT BUỘC giữ nguyên khối <<<CLARIFY_OPTIONS: {$clarifyJson}>>> cùng <<<NEXT_BEST_ACTIONS: {$nbaJson}>>> ở cuối câu trả lời.",
+                                    'ai_rendering_directive' => "PHÁT HIỆN NHIỀU NHÂN SỰ TRÙNG TÊN '{$targetAssignee}': Tuyệt đối KHÔNG xuất thẻ <<<ACTION_PROPOSAL>>> lúc này và TUYỆT ĐỐI KHÔNG sinh thẻ <<<ERP_CARD:...>>> bên dưới khi có nhiều người. Hãy hiển thị danh sách nhân sự bên dưới bằng BẢNG MARKDOWN để người dùng chọn chính xác người nhận việc, và BẮT BUỘC giữ nguyên khối <<<CLARIFY_OPTIONS: {$clarifyJson}>>> cùng <<<NEXT_BEST_ACTIONS: {$nbaJson}>>> ở cuối câu trả lời.",
                                     'clarify_options_block' => "<<<CLARIFY_OPTIONS: {$clarifyJson}>>>",
                                     'next_best_actions_block' => "<<<NEXT_BEST_ACTIONS: {$nbaJson}>>>"
                                 ];
@@ -6094,46 +6183,118 @@ class AgentToolRegistry {
                 // ==========================================
                 case 'reassign_lead_owner': {
                     $contactId = (int)($args['contact_id'] ?? 0);
+                    $contactName = trim((string)($args['contact_name'] ?? ''));
+                    $phoneArg = trim((string)($args['phone'] ?? ''));
                     $newOwnerId = (int)($args['new_owner_id'] ?? 0);
                     $newOwnerName = trim((string)($args['new_owner_name'] ?? ''));
                     $reason = trim((string)($args['reassign_reason'] ?? 'Điều phối nguồn khách hàng'));
 
-                    if ($contactId <= 0) {
-                        return ['success' => false, 'message' => 'Vui lòng cung cấp mã contact_id của học viên cần bàn giao.'];
+                    $contact = null;
+                    if ($contactId > 0) {
+                        $cStmt = $db->prepare("SELECT c.id, c.full_name, c.phone, c.program, c.owner_id, c.created_by, ps.name as stage_name, u.full_name as current_owner_name FROM contacts c LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id LEFT JOIN users u ON c.owner_id = u.id WHERE c.id = ? AND c.tenant_id = ? AND c.deleted_at IS NULL");
+                        $cStmt->execute([$contactId, $tid]);
+                        $contact = $cStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+                    } elseif ($phoneArg !== '') {
+                        $cleanPhone = preg_replace('/[^\d+]/', '', $phoneArg);
+                        $digitsPhone = preg_replace('/\D+/', '', $cleanPhone);
+                        $cStmt = $db->prepare("SELECT c.id, c.full_name, c.phone, c.program, c.owner_id, c.created_by, ps.name as stage_name, u.full_name as current_owner_name FROM contacts c LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id LEFT JOIN users u ON c.owner_id = u.id WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND (c.phone = ? OR c.mobile = ? OR c.phone = ? OR c.mobile = ?) ORDER BY c.id DESC LIMIT 5");
+                        $cStmt->execute([$tid, $cleanPhone, $cleanPhone, $digitsPhone, $digitsPhone]);
+                        $phoneMatches = $cStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                        if (count($phoneMatches) === 1) {
+                            $contact = $phoneMatches[0];
+                            $contactId = (int)$contact['id'];
+                        } elseif (count($phoneMatches) > 1) {
+                            return self::formatContactDisambiguationPayload($phoneMatches, $phoneArg, "bàn giao cho {$newOwnerName}");
+                        }
+                    } elseif ($contactName !== '') {
+                        $resolvedC = self::resolveContactWithDisambiguation($db, $tid, $leadRbac, $uid, $contactName, "bàn giao cho {$newOwnerName}");
+                        if (($resolvedC['status'] ?? '') === 'ambiguous') {
+                            return $resolvedC['disambiguation_payload'];
+                        } elseif (($resolvedC['status'] ?? '') === 'not_found') {
+                            return ['success' => false, 'message' => $resolvedC['message'] ?? "Không tìm thấy khách hàng '{$contactName}'."];
+                        } elseif (($resolvedC['status'] ?? '') === 'resolved' && !empty($resolvedC['contact'])) {
+                            $contactId = (int)$resolvedC['contact']['id'];
+                            $cStmt = $db->prepare("SELECT c.id, c.full_name, c.phone, c.program, c.owner_id, c.created_by, ps.name as stage_name, u.full_name as current_owner_name FROM contacts c LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id LEFT JOIN users u ON c.owner_id = u.id WHERE c.id = ? AND c.tenant_id = ? AND c.deleted_at IS NULL");
+                            $cStmt->execute([$contactId, $tid]);
+                            $contact = $cStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+                        }
                     }
 
-                    $cStmt = $db->prepare("SELECT c.id, c.full_name, c.phone, c.owner_id, u.full_name as current_owner_name FROM contacts c LEFT JOIN users u ON c.owner_id = u.id WHERE c.id = ? AND c.tenant_id = ? AND c.deleted_at IS NULL");
-                    $cStmt->execute([$contactId, $tid]);
-                    $contact = $cStmt->fetch(PDO::FETCH_ASSOC);
-                    if (!$contact) {
-                        return ['success' => false, 'message' => "Không tìm thấy học viên ID #{$contactId}."];
+                    if (!$contact || $contactId <= 0) {
+                        return ['success' => false, 'message' => 'Không tìm thấy hồ sơ học viên/khách hàng cần bàn giao. Vui lòng cung cấp họ tên, số điện thoại hoặc mã contact_id.'];
                     }
 
-                    $canReassign = $isGlobalAdmin || $isManager || (int)$contact['owner_id'] === $uid;
+                    $canReassign = $isGlobalAdmin || $isManager || $isSaleAdmin || $isMarketing || $canViewAllLeads || (int)$contact['owner_id'] === $uid || (int)($contact['created_by'] ?? 0) === $uid || (int)$contact['owner_id'] === 0;
                     if (!$canReassign) {
-                        return ['success' => false, 'message' => "Bạn không có quyền bàn giao học viên này (chỉ Trưởng phòng, Quản lý hoặc chính người đang phụ trách mới có quyền bàn giao)."];
+                        return ['success' => false, 'message' => "Bạn không có quyền bàn giao học viên này (chỉ Trưởng phòng, Quản lý, Sale Admin, Marketing hoặc chính người đang phụ trách mới có quyền bàn giao)."];
                     }
 
-                    // Resolve new owner
+                    // Resolve new owner using Vietnamese accent-insensitive fuzzy matching
                     if ($newOwnerId <= 0 && !empty($newOwnerName)) {
-                        $uStmt = $db->prepare("SELECT id, full_name, email FROM users WHERE tenant_id = ? AND is_active = 1 AND (full_name LIKE ? OR email LIKE ?)");
-                        $uStmt->execute([$tid, '%' . $newOwnerName . '%', '%' . $newOwnerName . '%']);
+                        $uParams = [$tid];
+                        $fzOwner = self::buildVietnameseFuzzyNameWhere('full_name', $newOwnerName, $uParams);
+                        $uParams[] = '%' . $newOwnerName . '%';
+                        $uStmt = $db->prepare("
+                            SELECT id, full_name, email, phone, role, job_title, department
+                            FROM users
+                            WHERE tenant_id = ?
+                              AND is_active = 1
+                              AND (status IS NULL OR status != 'inactive')
+                              AND deleted_at IS NULL
+                              AND id != 9000001
+                              AND ({$fzOwner} OR email LIKE ?)
+                            LIMIT 10
+                        ");
+                        $uStmt->execute($uParams);
                         $candidates = $uStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
+                        if (count($candidates) > 1) {
+                            foreach ($candidates as &$cItem) {
+                                $cItem['_fuzzy_score'] = self::scoreFuzzyNameMatch((string)($cItem['full_name'] ?? ''), $newOwnerName);
+                            }
+                            unset($cItem);
+                            usort($candidates, fn($a, $b) => ($b['_fuzzy_score'] <=> $a['_fuzzy_score']) ?: ((int)$a['id'] <=> (int)$b['id']));
+                            $exactStaff = array_values(array_filter($candidates, fn($c) => ($c['_fuzzy_score'] ?? 0) >= 95));
+                            if (count($exactStaff) === 1) {
+                                $candidates = [$exactStaff[0]];
+                            }
+                        }
+
                         if (count($candidates) === 0) {
-                            return ['success' => false, 'message' => "Không tìm thấy nhân viên đang hoạt động nào có tên '{$newOwnerName}'. Vui lòng kiểm tra lại danh bạ."];
+                            return ['success' => false, 'message' => "Không tìm thấy nhân viên đang hoạt động nào có tên '{$newOwnerName}'. Vui lòng kiểm tra lại họ tên đồng nghiệp."];
                         } elseif (count($candidates) > 1) {
-                            $candidateList = array_map(fn($c) => "#{$c['id']} - {$c['full_name']} ({$c['email']})", $candidates);
+                            $clarifyOpts = [];
+                            $nbaOpts = [];
+                            foreach ($candidates as $c) {
+                                $sid = (int)$c['id'];
+                                $sName = $c['full_name'];
+                                $sDept = $c['department'] ?: ($c['job_title'] ?: $c['role']);
+                                $clarifyOpts[] = [
+                                    'label' => "{$sName} (#{$sid} - {$sDept})",
+                                    'prompt' => "Bàn giao khách hàng {$contact['full_name']} (#{$contactId}) cho {$sName} (new_owner_id: {$sid})"
+                                ];
+                                $nbaOpts[] = [
+                                    'label' => "Giao cho {$sName} (#{$sid})",
+                                    'prompt' => "Bàn giao khách hàng {$contact['full_name']} (#{$contactId}) cho {$sName} (new_owner_id: {$sid})"
+                                ];
+                            }
+                            $clarifyJson = json_encode($clarifyOpts, JSON_UNESCAPED_UNICODE);
+                            $nbaJson = json_encode(array_slice($nbaOpts, 0, 4), JSON_UNESCAPED_UNICODE);
                             return [
                                 'success' => false,
+                                'status' => 'requires_disambiguation',
+                                'requires_disambiguation' => true,
                                 'ambiguous' => true,
-                                'message' => "Tìm thấy " . count($candidates) . " nhân sự trùng tên '{$newOwnerName}': " . implode(', ', $candidateList) . ". Bạn muốn bàn giao cho ai? Vui lòng cung cấp mã ID chính xác."
+                                'candidates' => $candidates,
+                                'message' => "Tìm thấy " . count($candidates) . " nhân sự trùng tên '{$newOwnerName}'. Vui lòng chọn chính xác đồng nghiệp nhận bàn giao.",
+                                'clarify_options_block' => "<<<CLARIFY_OPTIONS: {$clarifyJson}>>>",
+                                'next_best_actions_block' => "<<<NEXT_BEST_ACTIONS: {$nbaJson}>>>"
                             ];
                         }
                         $newOwnerId = (int)$candidates[0]['id'];
                         $resolvedName = $candidates[0]['full_name'];
                     } else {
-                        $uStmt = $db->prepare("SELECT id, full_name FROM users WHERE id = ? AND tenant_id = ? AND is_active = 1");
+                        $uStmt = $db->prepare("SELECT id, full_name FROM users WHERE id = ? AND tenant_id = ? AND is_active = 1 AND deleted_at IS NULL");
                         $uStmt->execute([$newOwnerId, $tid]);
                         $found = $uStmt->fetch(PDO::FETCH_ASSOC);
                         if (!$found) {
@@ -6155,14 +6316,40 @@ class AgentToolRegistry {
                             status, progress, related_type, related_id, contact_id,
                             done_at, created_at, updated_at
                         ) VALUES (
-                            ?, ?, ?, 'task', ?, ?,
-                            'done', 100, 'contact', ?, ?,
+                            ?, ?, ?, 'note', ?, ?,
+                            'completed', 100, 'contacts', ?, ?,
                             NOW(), NOW(), NOW()
                         )
                     ");
                     $auditSubject = "Bàn giao học viên: {$contact['full_name']}";
                     $auditBody = "Chuyển giao quyền phụ trách từ [{$oldOwnerName}] sang [{$resolvedName}].\nNgười thực hiện: {$userName} ({$uid})\nLý do: {$reason}";
                     $auditStmt->execute([$tid, $newOwnerId, $uid, $auditSubject, $auditBody, $contactId, $contactId]);
+
+                    if ($newOwnerId !== $uid) {
+                        try {
+                            $stmtNotif = $db->prepare("
+                                INSERT INTO notifications (user_id, tenant_id, title, body, type, link, is_read, created_at)
+                                VALUES (?, ?, ?, ?, 'lead_assigned', ?, 0, NOW())
+                            ");
+                            $stmtNotif->execute([
+                                $newOwnerId,
+                                $tid,
+                                "{$userName} vừa bàn giao Lead cho bạn",
+                                "Khách hàng: {$contact['full_name']}" . (!empty($contact['phone']) ? " ({$contact['phone']})" : "") . (!empty($contact['program']) ? " • CT: {$contact['program']}" : ""),
+                                "/contacts?id={$contactId}"
+                            ]);
+                        } catch (\Throwable $eN) {}
+                    }
+
+                    $smartCard = self::buildEntitySmartCard('contact', [
+                        'id' => $contactId,
+                        'title' => $contact['full_name'],
+                        'subtitle' => ($contact['program'] ?: 'CRM') . ' • ' . ($contact['phone'] ?: 'Chưa có SĐT'),
+                        'status' => $contact['stage_name'] ?: 'Đã chuyển giao',
+                        'meta' => "Sale mới: {$resolvedName}",
+                        'direct_url' => "https://myerp.ideas.edu.vn/contacts?id={$contactId}",
+                        'action_label' => 'Mở hồ sơ'
+                    ]);
 
                     return [
                         'success' => true,
@@ -6171,8 +6358,17 @@ class AgentToolRegistry {
                         'old_owner' => $oldOwnerName,
                         'new_owner' => $resolvedName,
                         'new_owner_id' => $newOwnerId,
+                        'smart_card' => $smartCard,
+                        'message' => "Đã bàn giao học viên {$contact['full_name']} (#{$contactId}) từ [{$oldOwnerName}] sang cho [{$resolvedName}] thành công.\n\n{$smartCard}",
                         'summary' => "Đã bàn giao học viên {$contact['full_name']} (#{$contactId}) từ [{$oldOwnerName}] sang cho [{$resolvedName}] thành công."
                     ];
+                }
+
+                // ==========================================
+                // 15G. SMART CREATE OR ASSIGN LEADS (PERSONAL & COLLEAGUE LEAD CREATION / BATCH ASSIGNMENT)
+                // ==========================================
+                case 'smart_create_or_assign_leads': {
+                    return self::smartCreateOrAssignLeads($db, $args, $auth, $leadRbac);
                 }
 
                 // ==========================================
@@ -10266,10 +10462,13 @@ class AgentToolRegistry {
                     $stageSql = "SELECT 
                                    COALESCE(ps.name, c.status, 'Mới') as stage_name,
                                    COALESCE(ps.order_index, 0) as stage_order,
-                                   COUNT(DISTINCT c.id) as lead_count
+                                   COUNT(DISTINCT c.id) as lead_count,
+                                   COUNT(DISTINCT dep.id) as deposit_count,
+                                   COALESCE(SUM(dep.price), 0) as deposit_amount
                                  FROM contacts c
                                  LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
                                  LEFT JOIN users u ON c.owner_id = u.id
+                                 LEFT JOIN deposits dep ON dep.contact_id = c.id AND dep.status NOT IN ('cancelled', 'rejected')
                                  WHERE {$whereSql}
                                  GROUP BY stage_name, stage_order
                                  ORDER BY stage_order ASC, lead_count DESC
@@ -10282,7 +10481,8 @@ class AgentToolRegistry {
                     $srcSql = "SELECT 
                                  COALESCE(NULLIF(TRIM(c.source), ''), 'Chưa rõ nguồn') as source_name,
                                  COUNT(DISTINCT c.id) as lead_count,
-                                 COUNT(DISTINCT dep.id) as deposit_count
+                                 COUNT(DISTINCT dep.id) as deposit_count,
+                                 COALESCE(SUM(dep.price), 0) as deposit_amount
                                FROM contacts c
                                LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
                                LEFT JOIN users u ON c.owner_id = u.id
@@ -10314,36 +10514,90 @@ class AgentToolRegistry {
                     $ownerFacets = $ownerStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
                     // ==========================================
-                    // 3. SYNTHESIZE DYNAMIC CHART DATA
+                    // 3. SYNTHESIZE DYNAMIC CHART DATA & MULTI-TAB DATASETS
                     // ==========================================
+                    $chartDatasets = [];
+                    if (!empty($progFacets)) {
+                        $chartDatasets[] = [
+                            'key' => 'by_program',
+                            'label' => 'Theo Chương trình',
+                            'type' => 'bar',
+                            'title' => 'Phân bổ Lead & Đặt cọc theo Chương trình',
+                            'xAxisKey' => 'name',
+                            'data' => array_map(fn($f) => [
+                                'name' => mb_substr((string)$f['program_name'], 0, 18),
+                                'count' => (int)$f['lead_count'],
+                                'deposit_million' => round(((float)($f['deposit_amount'] ?? 0)) / 1000000, 2)
+                            ], $progFacets),
+                            'series' => [
+                                ['dataKey' => 'count', 'name' => 'Số lượng Lead', 'color' => '#3b82f6'],
+                                ['dataKey' => 'deposit_million', 'name' => 'Tiền cọc (Tr. VNĐ)', 'color' => '#10b981']
+                            ]
+                        ];
+                    }
+                    if (!empty($stageFacets)) {
+                        $chartDatasets[] = [
+                            'key' => 'by_stage',
+                            'label' => 'Theo Giai đoạn (Pipeline)',
+                            'type' => 'bar',
+                            'title' => 'Phân bổ Lead theo Giai đoạn Pipeline',
+                            'xAxisKey' => 'name',
+                            'data' => array_map(fn($f) => [
+                                'name' => mb_substr((string)$f['stage_name'], 0, 20),
+                                'count' => (int)$f['lead_count'],
+                                'deposit_million' => round(((float)($f['deposit_amount'] ?? 0)) / 1000000, 2)
+                            ], $stageFacets),
+                            'series' => [
+                                ['dataKey' => 'count', 'name' => 'Số lượng Lead', 'color' => '#6366f1'],
+                                ['dataKey' => 'deposit_million', 'name' => 'Tiền cọc (Tr. VNĐ)', 'color' => '#10b981']
+                            ]
+                        ];
+                    }
+                    if (!empty($srcFacets)) {
+                        $chartDatasets[] = [
+                            'key' => 'by_source',
+                            'label' => 'Theo Nguồn (Source)',
+                            'type' => 'pie',
+                            'title' => 'Cơ cấu Lead theo Nguồn (Source)',
+                            'xAxisKey' => 'name',
+                            'data' => array_map(fn($f) => [
+                                'name' => mb_substr((string)$f['source_name'], 0, 18),
+                                'count' => (int)$f['lead_count'],
+                                'deposit_million' => round(((float)($f['deposit_amount'] ?? 0)) / 1000000, 2)
+                            ], $srcFacets),
+                            'series' => [
+                                ['dataKey' => 'count', 'name' => 'Số lượng Lead', 'color' => '#f59e0b']
+                            ]
+                        ];
+                    }
+                    if (!empty($ownerFacets)) {
+                        $chartDatasets[] = [
+                            'key' => 'by_consultant',
+                            'label' => 'Theo Sale phụ trách',
+                            'type' => 'bar',
+                            'title' => 'Phân bổ Lead & Đặt cọc theo Sale tư vấn',
+                            'xAxisKey' => 'name',
+                            'data' => array_map(fn($f) => [
+                                'name' => mb_substr((string)$f['owner_name'], 0, 18),
+                                'count' => (int)$f['lead_count'],
+                                'deposit_million' => round(((float)($f['deposit_amount'] ?? 0)) / 1000000, 2)
+                            ], $ownerFacets),
+                            'series' => [
+                                ['dataKey' => 'count', 'name' => 'Số lượng Lead', 'color' => '#8b5cf6'],
+                                ['dataKey' => 'deposit_million', 'name' => 'Tiền cọc (Tr. VNĐ)', 'color' => '#10b981']
+                            ]
+                        ];
+                    }
+
                     $chartData = [];
                     $chartSeries = [];
                     $chartTitle = "Phân tích Phễu & Cơ cấu Lead CRM";
 
-                    if (!empty($progFacets) && count($progFacets) > 1) {
-                        foreach ($progFacets as $pf) {
-                            $chartData[] = [
-                                'name' => $pf['program_name'],
-                                'leads' => (int)$pf['lead_count'],
-                                'deposits' => (int)$pf['deposit_count']
-                            ];
-                        }
-                        $chartSeries = [
-                            ['dataKey' => 'leads', 'name' => 'Tổng số Lead', 'color' => '#3b82f6'],
-                            ['dataKey' => 'deposits', 'name' => 'Đã đóng cọc', 'color' => '#10b981']
-                        ];
-                        $chartTitle = "Cơ cấu Lead & Số lượng Đóng cọc theo Chương trình";
-                    } elseif (!empty($stageFacets)) {
-                        foreach ($stageFacets as $sf) {
-                            $chartData[] = [
-                                'name' => $sf['stage_name'],
-                                'leads' => (int)$sf['lead_count']
-                            ];
-                        }
-                        $chartSeries = [
-                            ['dataKey' => 'leads', 'name' => 'Số lượng Lead', 'color' => '#6366f1']
-                        ];
-                        $chartTitle = "Phân bổ Lead theo Giai đoạn Pipeline";
+                    if (!empty($chartDatasets)) {
+                        $primaryChart = $chartDatasets[0];
+                        $chartData = $primaryChart['data'];
+                        $chartSeries = $primaryChart['series'];
+                        $chartTitle = $primaryChart['title'];
                     }
 
                     // ==========================================
@@ -10370,15 +10624,16 @@ class AgentToolRegistry {
                     $previewStmt->execute($params);
                     $previewRows = $previewStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-                    $formattedPreviews = array_map(function($r) {
+                    $singleSmartCardTag = '';
+                    $formattedPreviews = array_map(function($r) use ($totalMatching, &$singleSmartCardTag) {
                         $cId = (int)$r['id'];
                         $cName = $r['full_name'];
                         $directUrl = "https://myerp.ideas.edu.vn/contacts?id={$cId}";
-                        $depAmt = (float)($r['total_deposit'] ?? 0);
+                        $depAmt = (float)($r['total_deposit'] ?? $r['contact_deposit_amount'] ?? 0);
                         $depStr = $depAmt > 0 ? number_format($depAmt, 0, ',', '.') . ' VNĐ' : 'Chưa cọc';
-                        $card = "<<<ERP_CARD:{\"entity_type\":\"contact\",\"entity_id\":{$cId},\"title\":\"" . addslashes($cName) . "\",\"subtitle\":\"" . ($r['phone'] ?: '') . " • " . ($r['program'] ?: 'CRM') . "\",\"status\":\"in_progress\",\"direct_url\":\"{$directUrl}\",\"action_label\":\"Mở hồ sơ\"}>>>";
+                        $ownerDisplay = $r['owner_name'] ?: 'Chưa gán';
 
-                        return [
+                        $item = [
                             'id' => $cId,
                             'name' => $cName,
                             'phone' => $r['phone'] ?: 'Chưa có',
@@ -10386,13 +10641,32 @@ class AgentToolRegistry {
                             'company' => $r['company'] ?: 'Chưa cập nhật',
                             'program' => $r['program'] ?: 'Chưa phân loại',
                             'stage' => $r['stage_name'],
-                            'owner' => $r['owner_name'],
+                            'owner' => $ownerDisplay,
+                            'owner_name' => $ownerDisplay,
+                            'deposit_amount' => $depAmt,
                             'total_deposit' => $depStr,
                             'created_at' => date('d/m/Y', strtotime($r['created_at'])),
                             'latest_note' => $r['latest_note'] ?: 'Chưa có ghi chú',
-                            'url' => $directUrl,
-                            'smart_card' => $card
+                            'url' => $directUrl
                         ];
+
+                        // Suppress single-person <<<ERP_CARD:...>>> when $totalMatching > 1 (table already displays rows)
+                        if ($totalMatching === 1) {
+                            $cardPayload = json_encode([
+                                'entity_type' => 'contact',
+                                'entity_id' => $cId,
+                                'title' => $cName ?: 'Học viên',
+                                'subtitle' => ($r['program'] ?: 'Chưa rõ CT') . ' • ' . ($r['phone'] ?: 'Chưa có SĐT'),
+                                'status' => $r['stage_name'] ?: 'Mới',
+                                'direct_url' => $directUrl,
+                                'action_label' => 'Xem hồ sơ 360°'
+                            ], JSON_UNESCAPED_UNICODE);
+                            $card = "<<<ERP_CARD:{$cardPayload}>>>";
+                            $item['smart_card'] = $card;
+                            $singleSmartCardTag = $card;
+                        }
+
+                        return $item;
                     }, $previewRows);
 
                     // ==========================================
@@ -10418,6 +10692,16 @@ class AgentToolRegistry {
                     if (!empty($searchQuery)) $exportParams['search'] = $searchQuery;
                     $exportUrl = '/export?' . http_build_query($exportParams);
 
+                    $dynamicChartObj = !empty($chartData) ? [
+                        'type' => 'bar',
+                        'title' => $chartTitle,
+                        'xAxisKey' => 'name',
+                        'data' => $chartData,
+                        'series' => $chartSeries,
+                        'datasets' => $chartDatasets
+                    ] : null;
+                    $dynamicChartTag = $dynamicChartObj ? ('<<<DYNAMIC_CHART:' . json_encode($dynamicChartObj, JSON_UNESCAPED_UNICODE) . '>>>') : '';
+
                     return [
                         'success' => true,
                         'total_matching' => $totalMatching,
@@ -10436,16 +10720,14 @@ class AgentToolRegistry {
                             'by_source' => $srcFacets,
                             'by_owner' => $ownerFacets
                         ],
-                        'dynamic_chart' => !empty($chartData) ? [
-                            'type' => 'bar',
-                            'title' => $chartTitle,
-                            'xAxisKey' => 'name',
-                            'data' => $chartData,
-                            'series' => $chartSeries
-                        ] : null,
+                        'dynamic_chart' => $dynamicChartObj,
                         'preview_leads' => $formattedPreviews,
                         'export_url' => $exportUrl,
-                        'export_markdown' => "[Bấm vào đây để tải toàn bộ {$totalMatching} học viên/lead (File Excel/CSV)]({$exportUrl})"
+                        'export_link_markdown' => "[Bấm vào đây để tải toàn bộ {$totalMatching} học viên/lead (File Excel/CSV)]({$exportUrl})",
+                        'export_markdown' => "[Bấm vào đây để tải toàn bộ {$totalMatching} học viên/lead (File Excel/CSV)]({$exportUrl})",
+                        'instruction_for_ai' => ($totalMatching > 1
+                            ? "BẮT BUỘC hiển thị danh sách mẫu dưới dạng BẢNG MARKDOWN chuẩn (`| ID | HỌ VÀ TÊN | SĐT | CHƯƠNG TRÌNH | GIAI ĐOẠN | SALE PHỤ TRÁCH | TIỀN CỌC |`) với link `[Tên](/contacts?id=ID)`. TUYỆT ĐỐI KHÔNG sinh bất kỳ thẻ `<<<ERP_CARD:...>>>` lẻ tẻ nào bên dưới khi có từ 2 bản ghi trở lên! Không dùng emoji trong tiêu đề `###`. Giữ nguyên biểu đồ đa chiều {$dynamicChartTag}"
+                            : "Hiển thị thông tin chi tiết của hồ sơ duy nhất này kèm thẻ {$singleSmartCardTag} và {$dynamicChartTag}")
                     ];
                 }
 
@@ -10626,6 +10908,37 @@ class AgentToolRegistry {
                         ];
                     }
 
+                    $finChartDatasets = [];
+                    if (!empty($chartData)) {
+                        $finChartDatasets[] = [
+                            'key' => 'by_category',
+                            'label' => 'Theo Hạng mục',
+                            'type' => 'bar',
+                            'title' => 'Cơ cấu Chi phí theo Hạng mục (Đơn vị: Triệu VNĐ)',
+                            'xAxisKey' => 'name',
+                            'data' => $chartData,
+                            'series' => [
+                                ['dataKey' => 'amount', 'name' => 'Chi phí (Tr. VNĐ)', 'color' => '#ef4444'],
+                                ['dataKey' => 'count', 'name' => 'Số phiếu chi', 'color' => '#f59e0b']
+                            ]
+                        ];
+                    }
+                    $finStatusData = [
+                        ['name' => 'Đã chi', 'amount' => round($paidAmount / 1000000, 1)],
+                        ['name' => 'Chờ duyệt', 'amount' => round($pendingAmount / 1000000, 1)]
+                    ];
+                    $finChartDatasets[] = [
+                        'key' => 'by_status',
+                        'label' => 'Theo Trạng thái',
+                        'type' => 'pie',
+                        'title' => 'Tỷ trọng Chi phí Đã chi vs Chờ duyệt (Triệu VNĐ)',
+                        'xAxisKey' => 'name',
+                        'data' => $finStatusData,
+                        'series' => [
+                            ['dataKey' => 'amount', 'name' => 'Chi phí (Tr. VNĐ)', 'color' => '#10b981']
+                        ]
+                    ];
+
                     // ==========================================
                     // 3. TOP EXPENSE RECORDS PREVIEW
                     // ==========================================
@@ -10640,13 +10953,12 @@ class AgentToolRegistry {
                     $topStmt->execute($params);
                     $topExpenses = $topStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-                    $formattedTop = array_map(function($e) {
+                    $formattedTop = array_map(function($e) use ($totalCount) {
                         $eId = (int)$e['id'];
                         $directUrl = "https://myerp.ideas.edu.vn/expenses?id={$eId}";
                         $amtStr = number_format((float)$e['amount'], 0, ',', '.') . ' VNĐ';
-                        $card = "<<<ERP_CARD:{\"entity_type\":\"expense\",\"entity_id\":{$eId},\"title\":\"" . addslashes($e['title']) . "\",\"subtitle\":\"{$amtStr} • " . ($e['category'] ?: 'Chi phí') . "\",\"status\":\"in_progress\",\"direct_url\":\"{$directUrl}\",\"action_label\":\"Xem phiếu chi\"}>>>";
 
-                        return [
+                        $item = [
                             'id' => $eId,
                             'title' => $e['title'],
                             'amount' => $amtStr,
@@ -10655,8 +10967,12 @@ class AgentToolRegistry {
                             'date' => date('d/m/Y', strtotime($e['date'] ?: $e['created_at'])),
                             'due_date' => $e['due_date'] ? date('d/m/Y', strtotime($e['due_date'])) : 'Không đặt',
                             'status' => $e['status'] === 'approved' ? 'Đã duyệt' : ($e['status'] === 'paid' ? 'Đã chi' : ($e['status'] === 'pending' ? 'Chờ duyệt' : $e['status'])),
-                            'smart_card' => $card
+                            'url' => $directUrl
                         ];
+                        if ($totalCount === 1) {
+                            $item['smart_card'] = "<<<ERP_CARD:{\"entity_type\":\"expense\",\"entity_id\":{$eId},\"title\":\"" . addslashes($e['title']) . "\",\"subtitle\":\"{$amtStr} • " . ($e['category'] ?: 'Chi phí') . "\",\"status\":\"in_progress\",\"direct_url\":\"{$directUrl}\",\"action_label\":\"Xem phiếu chi\"}>>>";
+                        }
+                        return $item;
                     }, $topExpenses);
 
                     // 4. Build Expense Export URL (100% Filter Parity)
@@ -10690,7 +11006,8 @@ class AgentToolRegistry {
                             'data' => $chartData,
                             'series' => [
                                 ['dataKey' => 'amount', 'name' => 'Chi phí (Tr. VNĐ)', 'color' => '#ef4444']
-                            ]
+                            ],
+                            'datasets' => $finChartDatasets
                         ] : null,
                         'top_expenses' => $formattedTop,
                         'export_url' => $expExportUrl,
@@ -10949,7 +11266,7 @@ class AgentToolRegistry {
                     $stmtRows->execute($params);
                     $rows = $stmtRows->fetchAll(PDO::FETCH_ASSOC);
 
-                    $formattedDeposits = array_map(function($r) {
+                    $formattedDeposits = array_map(function($r) use ($totalCount) {
                         $statusMap = [
                             'approved' => 'Đã duyệt / Đã thu',
                             'completed' => 'Hoàn tất',
@@ -10959,21 +11276,7 @@ class AgentToolRegistry {
                         ];
                         $stLabel = $statusMap[$r['status'] ?? 'pending'] ?? ($r['status'] ?? 'Chờ duyệt');
                         $prog = $r['contact_program'] ?: ($r['project_name'] ?: 'N/A');
-                        $card = self::buildEntitySmartCard('deposit', [
-                            'id' => $r['id'],
-                            'title' => 'Phiếu thu / Đặt cọc #' . $r['id'] . ' - ' . ($r['customer_name'] ?: 'Khách hàng'),
-                            'subtitle' => number_format((float)$r['price'], 0, ',', '.') . ' VNĐ • ' . $prog,
-                            'status' => $stLabel,
-                            'status_color' => in_array($r['status'], ['approved', 'completed'], true) ? 'emerald' : ($r['status'] === 'pending' ? 'amber' : 'red'),
-                            'metrics' => [
-                                ['label' => 'Khách hàng', 'value' => ($r['customer_name'] ?: 'N/A') . ($r['customer_phone'] ? ' (' . $r['customer_phone'] . ')' : '')],
-                                ['label' => 'Số tiền', 'value' => number_format((float)$r['price'], 0, ',', '.') . ' VNĐ'],
-                                ['label' => 'Chương trình', 'value' => $prog],
-                                ['label' => 'Sale phụ trách', 'value' => $r['sale_name']]
-                            ],
-                            'url' => '/sales-orders?id=' . $r['id']
-                        ]);
-                        return [
+                        $item = [
                             'id' => (int)$r['id'],
                             'customer_name' => $r['customer_name'] ?: 'N/A',
                             'customer_phone' => $r['customer_phone'] ?: '',
@@ -10982,8 +11285,19 @@ class AgentToolRegistry {
                             'status' => $stLabel,
                             'sale_name' => $r['sale_name'],
                             'created_at' => $r['created_at'],
-                            'smart_card' => $card
+                            'url' => '/sales-orders?id=' . $r['id']
                         ];
+                        if ($totalCount === 1) {
+                            $item['smart_card'] = self::buildEntitySmartCard('deposit', [
+                                'id' => $r['id'],
+                                'title' => 'Phiếu thu / Đặt cọc #' . $r['id'] . ' - ' . ($r['customer_name'] ?: 'Khách hàng'),
+                                'subtitle' => number_format((float)$r['price'], 0, ',', '.') . ' VNĐ • ' . $prog,
+                                'status' => $stLabel,
+                                'meta' => 'Sale: ' . $r['sale_name'],
+                                'url' => '/sales-orders?id=' . $r['id']
+                            ]);
+                        }
+                        return $item;
                     }, $rows);
 
                     $chartData = [];
@@ -10992,6 +11306,39 @@ class AgentToolRegistry {
                             'name' => mb_substr((string)$pf['program_name'], 0, 22),
                             'amount' => round(((float)$pf['total_amount']) / 1000000, 2),
                             'count' => (int)$pf['count']
+                        ];
+                    }
+
+                    $depChartDatasets = [];
+                    if (!empty($chartData)) {
+                        $depChartDatasets[] = [
+                            'key' => 'by_program',
+                            'label' => 'Theo Chương trình',
+                            'type' => 'bar',
+                            'title' => 'Doanh thu Đặt cọc theo Chương trình (Triệu VNĐ)',
+                            'xAxisKey' => 'name',
+                            'data' => $chartData,
+                            'series' => [
+                                ['dataKey' => 'amount', 'name' => 'Doanh thu (Tr. VNĐ)', 'color' => '#10b981'],
+                                ['dataKey' => 'count', 'name' => 'Số phiếu cọc', 'color' => '#3b82f6']
+                            ]
+                        ];
+                    }
+                    if (!empty($statusFacets)) {
+                        $depChartDatasets[] = [
+                            'key' => 'by_status',
+                            'label' => 'Theo Trạng thái',
+                            'type' => 'pie',
+                            'title' => 'Cơ cấu Phiếu thu / Đặt cọc theo Trạng thái',
+                            'xAxisKey' => 'name',
+                            'data' => array_map(fn($sf) => [
+                                'name' => (string)$sf['status'],
+                                'amount' => round(((float)$sf['total_amount']) / 1000000, 2),
+                                'count' => (int)$sf['count']
+                            ], $statusFacets),
+                            'series' => [
+                                ['dataKey' => 'amount', 'name' => 'Giá trị (Tr. VNĐ)', 'color' => '#f59e0b']
+                            ]
                         ];
                     }
 
@@ -11029,7 +11376,8 @@ class AgentToolRegistry {
                             'data' => $chartData,
                             'series' => [
                                 ['dataKey' => 'amount', 'name' => 'Doanh thu (Tr. VNĐ)', 'color' => '#10b981']
-                            ]
+                            ],
+                            'datasets' => $depChartDatasets
                         ] : null,
                         'sample_deposits' => $formattedDeposits,
                         'export_url' => $depExportUrl,
@@ -11317,6 +11665,38 @@ class AgentToolRegistry {
                         ];
                     }
 
+                    $taskChartDatasets = [];
+                    if (!empty($chartData)) {
+                        $taskChartDatasets[] = [
+                            'key' => 'by_assignee',
+                            'label' => 'Theo Nhân sự',
+                            'type' => 'bar',
+                            'title' => 'Phân bổ Công việc & Quá hạn theo Nhân sự',
+                            'xAxisKey' => 'name',
+                            'data' => $chartData,
+                            'series' => [
+                                ['dataKey' => 'total', 'name' => 'Tổng việc', 'color' => '#3b82f6'],
+                                ['dataKey' => 'overdue', 'name' => 'Quá hạn', 'color' => '#ef4444']
+                            ]
+                        ];
+                    }
+                    if (!empty($statusFacets)) {
+                        $taskChartDatasets[] = [
+                            'key' => 'by_status',
+                            'label' => 'Theo Trạng thái',
+                            'type' => 'pie',
+                            'title' => 'Cơ cấu Công việc theo Trạng thái',
+                            'xAxisKey' => 'name',
+                            'data' => array_map(fn($sf) => [
+                                'name' => (string)$sf['status'],
+                                'count' => (int)$sf['count']
+                            ], $statusFacets),
+                            'series' => [
+                                ['dataKey' => 'count', 'name' => 'Số lượng công việc', 'color' => '#6366f1']
+                            ]
+                        ];
+                    }
+
                     // Build 100% Parity Export URL
                     $taskExportParams = ['type' => 'task'];
                     if ($statusesParam !== '' && $statusesParam !== 'all') $taskExportParams['status'] = $statusesParam;
@@ -11356,7 +11736,8 @@ class AgentToolRegistry {
                             'series' => [
                                 ['dataKey' => 'total', 'name' => 'Tổng việc', 'color' => '#3b82f6'],
                                 ['dataKey' => 'overdue', 'name' => 'Quá hạn', 'color' => '#ef4444']
-                            ]
+                            ],
+                            'datasets' => $taskChartDatasets
                         ] : null,
                         'sample_tasks' => $formattedTasks,
                         'export_url' => $taskExportUrl,
@@ -11543,18 +11924,10 @@ class AgentToolRegistry {
                     $stmtRows->execute($params);
                     $rows = $stmtRows->fetchAll(PDO::FETCH_ASSOC);
 
-                    $formattedDeals = array_map(function($r) {
+                    $formattedDeals = array_map(function($r) use ($totalCount) {
                         $valStr = number_format((float)$r['value'], 0, ',', '.') . ' ' . ($r['currency'] ?: 'VND');
                         $clientLabel = $r['company_name'] ?: ($r['contact_name'] ?: 'Khách hàng B2B');
-                        $card = self::buildEntitySmartCard('deal', [
-                            'id' => $r['id'],
-                            'title' => $r['title'],
-                            'subtitle' => "{$valStr} • {$clientLabel}",
-                            'status' => $r['stage_name'],
-                            'meta' => 'Sale: ' . $r['owner_name'] . ' (' . (int)($r['probability'] ?? 0) . '%)',
-                            'url' => '/deals?id=' . $r['id']
-                        ]);
-                        return [
+                        $item = [
                             'id' => (int)$r['id'],
                             'title' => $r['title'],
                             'value_formatted' => $valStr,
@@ -11563,9 +11936,19 @@ class AgentToolRegistry {
                             'company_name' => $r['company_name'],
                             'contact_name' => $r['contact_name'],
                             'owner_name' => $r['owner_name'],
-                            'expected_close_date' => $r['expected_close_date'],
-                            'smart_card' => $card
+                            'expected_close_date' => $r['expected_close_date']
                         ];
+                        if ($totalCount === 1) {
+                            $item['smart_card'] = self::buildEntitySmartCard('deal', [
+                                'id' => $r['id'],
+                                'title' => $r['title'],
+                                'subtitle' => "{$valStr} • {$clientLabel}",
+                                'status' => $r['stage_name'],
+                                'meta' => 'Sale: ' . $r['owner_name'] . ' (' . (int)($r['probability'] ?? 0) . '%)',
+                                'url' => '/deals?id=' . $r['id']
+                            ]);
+                        }
+                        return $item;
                     }, $rows);
 
                     $chartData = [];
@@ -11964,13 +12347,13 @@ class AgentToolRegistry {
                     $stmtRows->execute($params);
                     $rows = $stmtRows->fetchAll(PDO::FETCH_ASSOC);
 
-                    $formattedStaff = array_map(function($r) use ($canViewFullHrm, $uid) {
+                    $formattedStaff = array_map(function($r) use ($canViewFullHrm, $uid, $totalCount) {
                         $sid = (int)$r['id'];
                         $canSeeSalary = $canViewFullHrm || $sid === $uid;
                         $dept = $r['department'] ?: ($r['team_name'] ?: 'Chưa phân phòng');
                         $leaveRem = max(0, (float)($r['annual_leave_total'] ?? 12) - (float)($r['annual_leave_used'] ?? 0));
                         $isActive = (int)($r['is_active'] ?? 1) === 1;
-                        return [
+                        $item = [
                             'id' => $sid,
                             'full_name' => $r['full_name'],
                             'job_title' => $r['job_title'] ?: $r['role'],
@@ -11981,16 +12364,19 @@ class AgentToolRegistry {
                             'has_insurance' => !empty($r['has_insurance']) ? 'Có BHXH' : 'Chưa đóng',
                             'remaining_annual_leave' => $leaveRem,
                             'base_salary' => $canSeeSalary ? number_format((float)($r['base_salary'] ?? 0), 0, ',', '.') . ' VNĐ' : 'Bảo mật',
-                            'net_salary_month' => $canSeeSalary && $r['net_salary'] !== null ? number_format((float)$r['net_salary'], 0, ',', '.') . ' VNĐ' : ($canSeeSalary ? 'Chưa chốt bảng lương' : 'Bảo mật'),
-                            'smart_card' => self::buildEntitySmartCard('staff', [
+                            'net_salary_month' => $canSeeSalary && $r['net_salary'] !== null ? number_format((float)$r['net_salary'], 0, ',', '.') . ' VNĐ' : ($canSeeSalary ? 'Chưa chốt bảng lương' : 'Bảo mật')
+                        ];
+                        if ($totalCount === 1) {
+                            $item['smart_card'] = self::buildEntitySmartCard('staff', [
                                 'id' => $sid,
                                 'name' => $r['full_name'],
                                 'subtitle' => ($r['job_title'] ?: $r['role']) . ' • ' . $dept,
                                 'status' => $isActive ? 'Đang làm việc' : 'Ngừng hoạt động',
                                 'meta' => "Phép còn: {$leaveRem} ngày",
                                 'link' => "/hrm?user_id={$sid}"
-                            ])
-                        ];
+                            ]);
+                        }
+                        return $item;
                     }, $rows);
 
                     $chartData = [];
@@ -12421,5 +12807,492 @@ class AgentToolRegistry {
                 'error' => "Lỗi thực thi công cụ: " . $e->getMessage()
             ];
         }
+    }
+
+    /**
+     * Smart Personal Lead Creation, Batch Text Parsing & Colleague Lead Assignment
+     */
+    private static function smartCreateOrAssignLeads(PDO $db, array $args, array $auth, array $leadRbac): array
+    {
+        $uid = (int)($auth['id'] ?? $auth['user_id'] ?? $auth['sub'] ?? 0);
+        $tid = (int)($auth['tenant_id'] ?? 1);
+        $userName = trim((string)($auth['full_name'] ?? 'Nhân viên'));
+        $isAdminOrMgr = !empty($leadRbac['is_admin']) || !empty($leadRbac['is_manager']);
+
+        $assignToName = trim((string)($args['assign_to_name'] ?? ''));
+        $assignToId   = (int)($args['assign_to_id'] ?? 0);
+        $defaultSource  = trim((string)($args['default_source'] ?? ''));
+        $defaultProgram = trim((string)($args['default_program'] ?? ''));
+        $rawText        = trim((string)($args['raw_text'] ?? ''));
+        $leadsInput     = is_array($args['leads'] ?? null) ? $args['leads'] : [];
+
+        // 1. Resolve Target Owner (Self vs Colleague)
+        $selfTokens = ['', 'me', 'self', 'tôi', 'mình', 'ca nhan', 'cá nhân', 'data ca nhan', 'data cá nhân'];
+        $isSelfTarget = ($assignToId <= 0 || $assignToId === $uid) && in_array(mb_strtolower($assignToName, 'UTF-8'), $selfTokens, true);
+
+        $targetOwnerId = $uid;
+        $targetOwnerName = $userName;
+
+        if ($assignToId > 0 && $assignToId !== $uid) {
+            $stmtU = $db->prepare("SELECT id, full_name, email, role, COALESCE(department, '') as department FROM users WHERE id = ? AND tenant_id = ? LIMIT 1");
+            $stmtU->execute([$assignToId, $tid]);
+            $uRow = $stmtU->fetch(PDO::FETCH_ASSOC);
+            if (!$uRow) {
+                return [
+                    'success' => false,
+                    'error' => "Không tìm thấy nhân sự có ID #{$assignToId} trong hệ thống."
+                ];
+            }
+            $targetOwnerId = (int)$uRow['id'];
+            $targetOwnerName = (string)$uRow['full_name'];
+        } elseif (!$isSelfTarget && $assignToName !== '') {
+            $uParams = [$tid];
+            $fzWhere = self::buildVietnameseFuzzyNameWhere('u.full_name', $assignToName, $uParams);
+            $stmtU = $db->prepare("
+                SELECT u.id, u.full_name, u.email, u.role, COALESCE(u.department, tm.name, '') as department
+                FROM users u
+                LEFT JOIN teams tm ON u.team_id = tm.id
+                WHERE u.tenant_id = ? AND COALESCE(u.is_active, 1) = 1
+                  AND {$fzWhere}
+                LIMIT 15
+            ");
+            $stmtU->execute($uParams);
+            $staffCandidates = $stmtU->fetchAll(PDO::FETCH_ASSOC);
+
+            if (empty($staffCandidates)) {
+                return [
+                    'success' => false,
+                    'error' => "Không tìm thấy đồng nghiệp nào khớp với tên '{$assignToName}'. Vui lòng kiểm tra lại họ tên nhân viên nhận Data."
+                ];
+            }
+
+            foreach ($staffCandidates as &$sc) {
+                $sc['_score'] = self::scoreFuzzyNameMatch($assignToName, (string)$sc['full_name']);
+            }
+            unset($sc);
+            usort($staffCandidates, fn($a, $b) => $b['_score'] <=> $a['_score']);
+
+            $topScore = $staffCandidates[0]['_score'];
+            $topTies = array_values(array_filter($staffCandidates, fn($c) => $c['_score'] >= max(75, $topScore - 5)));
+
+            if (count($topTies) > 1 && $topTies[0]['_score'] === $topTies[1]['_score']) {
+                $candList = array_map(fn($c) => [
+                    'id' => (int)$c['id'],
+                    'full_name' => $c['full_name'],
+                    'role' => $c['role'],
+                    'department' => $c['department'] ?: 'Chưa phân phòng',
+                    'email' => $c['email'] ?: ''
+                ], array_slice($topTies, 0, 8));
+
+                return [
+                    'success' => true,
+                    'disambiguation_required' => true,
+                    'entity_type' => 'staff',
+                    'query_name' => $assignToName,
+                    'matched_count' => count($candList),
+                    'candidates' => $candList,
+                    'message' => "Tìm thấy " . count($candList) . " đồng nghiệp trùng tên '{$assignToName}'. Vui lòng xác nhận chính xác người nhận Data."
+                ];
+            }
+
+            $targetOwnerId = (int)$staffCandidates[0]['id'];
+            $targetOwnerName = (string)$staffCandidates[0]['full_name'];
+        }
+
+        $isAssigningToColleague = ($targetOwnerId !== $uid);
+        if ($defaultSource === '') {
+            $defaultSource = $isAssigningToColleague ? 'Data phân bổ nội bộ' : 'Data cá nhân';
+        }
+
+        // 2. Parse & Normalize Leads from Structured Array + Raw Text + Top-Level Fallback
+        $parsedLeads = [];
+        $seenPhones = [];
+
+        foreach ($leadsInput as $item) {
+            if (!is_array($item)) continue;
+            $fName = trim((string)($item['full_name'] ?? $item['name'] ?? ''));
+            $rawPh = trim((string)($item['phone'] ?? $item['mobile'] ?? ''));
+            $normPh = preg_replace('/[^0-9]/', '', $rawPh);
+            if (str_starts_with($normPh, '84') && strlen($normPh) >= 11) {
+                $normPh = '0' . substr($normPh, 2);
+            }
+            if ($fName === '' && $normPh === '' && empty($item['contact_id'])) {
+                continue;
+            }
+            if ($normPh !== '') {
+                $seenPhones[$normPh] = true;
+            }
+            $parsedLeads[] = [
+                'contact_id' => (int)($item['contact_id'] ?? 0),
+                'full_name' => $fName,
+                'phone' => $normPh,
+                'email' => trim((string)($item['email'] ?? '')),
+                'program' => trim((string)($item['program'] ?? $defaultProgram)),
+                'source' => trim((string)($item['source'] ?? $defaultSource)),
+                'city' => trim((string)($item['city'] ?? '')),
+                'notes' => trim((string)($item['notes'] ?? ''))
+            ];
+        }
+
+        // Parse multi-line raw_text if provided
+        if ($rawText !== '') {
+            $lines = preg_split('/[\r\n;]+/', $rawText) ?: [];
+            $knownPrograms = [
+                'Du học nghề Đức', 'Du học Đức', 'Du học Nhật', 'Du học Hàn', 'Du học Đài Loan',
+                'Du học Úc', 'Du học Canada', 'XKLĐ Nhật', 'XKLĐ Đài Loan', 'Tiếng Đức', 'Tiếng Nhật', 'Tiếng Hàn'
+            ];
+            foreach ($lines as $line) {
+                $line = trim($line);
+                if ($line === '') continue;
+
+                $normPh = '';
+                $matchedPhoneRaw = '';
+                if (preg_match('/(?:\+?84|0)\d[\d\.\-\s]{7,11}\d/', $line, $mPh)) {
+                    $matchedPhoneRaw = $mPh[0];
+                    $normPh = preg_replace('/[^0-9]/', '', $matchedPhoneRaw);
+                    if (str_starts_with($normPh, '84') && strlen($normPh) >= 11) {
+                        $normPh = '0' . substr($normPh, 2);
+                    }
+                }
+
+                if ($normPh !== '' && isset($seenPhones[$normPh])) {
+                    continue;
+                }
+
+                $emailFound = '';
+                if (preg_match('/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/', $line, $mEm)) {
+                    $emailFound = $mEm[0];
+                }
+
+                $progFound = $defaultProgram;
+                foreach ($knownPrograms as $kp) {
+                    if (mb_stripos($line, $kp, 0, 'UTF-8') !== false) {
+                        $progFound = $kp;
+                        break;
+                    }
+                }
+
+                // Clean line to extract customer name & notes
+                $rem = $line;
+                if ($matchedPhoneRaw !== '') {
+                    $rem = str_replace($matchedPhoneRaw, ' | ', $rem);
+                }
+                if ($emailFound !== '') {
+                    $rem = str_replace($emailFound, ' | ', $rem);
+                }
+                $rem = preg_replace('/^[\d]+[\.\)\-\s]+/', '', $rem);
+                $rem = preg_replace('/\b(họ và tên|họ tên|tên|khách hàng|học viên|sđt|điện thoại|phone|tel|email|data cá nhân|thêm data|giao data)\b\s*[:\-]?/iu', ' ', $rem);
+
+                $segments = array_values(array_filter(array_map('trim', preg_split('/[\|\-\–\,\/]+/', (string)$rem))));
+                $fName = $segments[0] ?? '';
+                $extraNotes = count($segments) > 1 ? implode(' - ', array_slice($segments, 1)) : '';
+
+                if ($fName === '' && $normPh === '') {
+                    continue;
+                }
+                if ($normPh !== '') {
+                    $seenPhones[$normPh] = true;
+                }
+                $parsedLeads[] = [
+                    'contact_id' => 0,
+                    'full_name' => $fName !== '' ? $fName : ("Khách hàng " . $normPh),
+                    'phone' => $normPh,
+                    'email' => $emailFound,
+                    'program' => $progFound,
+                    'source' => $defaultSource,
+                    'city' => '',
+                    'notes' => $extraNotes
+                ];
+            }
+        }
+
+        // Top-level fallback if LLM passed full_name / phone directly in $args
+        if (empty($parsedLeads)) {
+            $topName = trim((string)($args['full_name'] ?? $args['name'] ?? $args['contact_name'] ?? ''));
+            $topPhone = preg_replace('/[^0-9]/', '', (string)($args['phone'] ?? $args['mobile'] ?? ''));
+            if (str_starts_with($topPhone, '84') && strlen($topPhone) >= 11) {
+                $topPhone = '0' . substr($topPhone, 2);
+            }
+            if ($topName !== '' || $topPhone !== '') {
+                $parsedLeads[] = [
+                    'contact_id' => (int)($args['contact_id'] ?? 0),
+                    'full_name' => $topName !== '' ? $topName : ("Khách hàng " . $topPhone),
+                    'phone' => $topPhone,
+                    'email' => trim((string)($args['email'] ?? '')),
+                    'program' => $defaultProgram,
+                    'source' => $defaultSource,
+                    'city' => trim((string)($args['city'] ?? '')),
+                    'notes' => trim((string)($args['notes'] ?? ''))
+                ];
+            }
+        }
+
+        if (empty($parsedLeads)) {
+            return [
+                'success' => false,
+                'error' => 'Chưa tìm thấy thông tin Họ tên hoặc Số điện thoại khách hàng để tạo hoặc phân bổ Data. Vui lòng cung cấp Họ tên và SĐT khách hàng.'
+            ];
+        }
+
+        // 3. Fetch Default Pipeline Stage
+        $stmtStage = $db->prepare("SELECT id, name FROM pipeline_stages WHERE tenant_id = ? ORDER BY sort_order ASC, id ASC LIMIT 1");
+        $stmtStage->execute([$tid]);
+        $firstStage = $stmtStage->fetch(PDO::FETCH_ASSOC);
+        $defaultStageId = $firstStage ? (int)$firstStage['id'] : null;
+        $defaultStageName = $firstStage ? (string)$firstStage['name'] : 'Mới (New)';
+
+        $createdLeads = [];
+        $reassignedLeads = [];
+        $skippedDuplicates = [];
+
+        foreach ($parsedLeads as $lead) {
+            $cid = (int)($lead['contact_id'] ?? 0);
+            $fName = trim((string)($lead['full_name'] ?? ''));
+            $phone = trim((string)($lead['phone'] ?? ''));
+            $email = trim((string)($lead['email'] ?? ''));
+            $program = trim((string)($lead['program'] ?? $defaultProgram));
+            $source = trim((string)($lead['source'] ?? $defaultSource));
+            $city = trim((string)($lead['city'] ?? ''));
+            $notes = trim((string)($lead['notes'] ?? ''));
+
+            // Check if lead already exists by contact_id or phone
+            $existing = null;
+            if ($cid > 0) {
+                $stmtEx = $db->prepare("
+                    SELECT c.id, c.full_name, c.phone, c.program, c.source, c.owner_id,
+                           COALESCE(ps.name, c.pipeline_status, 'Mới') as stage_name,
+                           COALESCE(u.full_name, 'Chưa gán') as owner_name
+                    FROM contacts c
+                    LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
+                    LEFT JOIN users u ON c.owner_id = u.id
+                    WHERE c.id = ? AND c.tenant_id = ? AND c.deleted_at IS NULL
+                    LIMIT 1
+                ");
+                $stmtEx->execute([$cid, $tid]);
+                $existing = $stmtEx->fetch(PDO::FETCH_ASSOC) ?: null;
+            } elseif ($phone !== '') {
+                $stmtEx = $db->prepare("
+                    SELECT c.id, c.full_name, c.phone, c.program, c.source, c.owner_id,
+                           COALESCE(ps.name, c.pipeline_status, 'Mới') as stage_name,
+                           COALESCE(u.full_name, 'Chưa gán') as owner_name
+                    FROM contacts c
+                    LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
+                    LEFT JOIN users u ON c.owner_id = u.id
+                    WHERE c.tenant_id = ? AND c.deleted_at IS NULL
+                      AND (c.phone = ? OR c.mobile = ?)
+                    ORDER BY c.id DESC
+                    LIMIT 1
+                ");
+                $stmtEx->execute([$tid, $phone, $phone]);
+                $existing = $stmtEx->fetch(PDO::FETCH_ASSOC) ?: null;
+            }
+
+            if ($existing) {
+                $exId = (int)$existing['id'];
+                $exOwnerId = (int)($existing['owner_id'] ?? 0);
+                $exOwnerName = (string)($existing['owner_name'] ?? 'Chưa gán');
+
+                // If existing contact already belongs to targetOwnerId, report as existing/skipped
+                if ($exOwnerId === $targetOwnerId) {
+                    $skippedDuplicates[] = [
+                        'id' => $exId,
+                        'full_name' => $existing['full_name'],
+                        'phone' => $existing['phone'],
+                        'program' => $existing['program'] ?: ($program ?: 'Chưa chọn'),
+                        'stage_name' => $existing['stage_name'],
+                        'owner_name' => $targetOwnerName,
+                        'reason' => "Đã tồn tại trên hệ thống và đang do {$targetOwnerName} phụ trách"
+                    ];
+                    continue;
+                }
+
+                // If existing contact belongs to another user and current user is neither owner nor manager/admin
+                if ($exOwnerId > 0 && $exOwnerId !== $uid && !$isAdminOrMgr) {
+                    $skippedDuplicates[] = [
+                        'id' => $exId,
+                        'full_name' => $existing['full_name'],
+                        'phone' => $existing['phone'],
+                        'program' => $existing['program'] ?: 'Chưa chọn',
+                        'stage_name' => $existing['stage_name'],
+                        'owner_name' => $exOwnerName,
+                        'reason' => "SĐT trùng với hồ sơ #{$exId} đang thuộc quyền quản lý của {$exOwnerName}"
+                    ];
+                    continue;
+                }
+
+                // Reassign existing contact to targetOwnerId
+                $updFields = ['owner_id = ?', 'updated_at = NOW()'];
+                $updParams = [$targetOwnerId];
+                if ($program !== '' && empty($existing['program'])) {
+                    $updFields[] = 'program = ?';
+                    $updParams[] = $program;
+                }
+                $updParams[] = $exId;
+                $updParams[] = $tid;
+
+                $db->prepare("UPDATE contacts SET " . implode(', ', $updFields) . " WHERE id = ? AND tenant_id = ?")->execute($updParams);
+
+                $actSubject = "Chuyển giao quyền phụ trách hồ sơ sang {$targetOwnerName}";
+                $actBody = "Người thực hiện: {$userName}. Chuyển từ {$exOwnerName} sang {$targetOwnerName}." . ($notes !== '' ? " Ghi chú: {$notes}" : "");
+                $db->prepare("
+                    INSERT INTO activities (tenant_id, type, subject, body, status, progress, contact_id, related_type, related_id, user_id, created_by, done_at, created_at, updated_at)
+                    VALUES (?, 'note', ?, ?, 'done', 100, ?, 'contact', ?, ?, ?, NOW(), NOW(), NOW())
+                ")->execute([$tid, $actSubject, $actBody, $exId, $exId, $targetOwnerId, $uid]);
+
+                if ($isAssigningToColleague) {
+                    $notifTitle = "Bạn được phân bổ Data: " . $existing['full_name'];
+                    $notifBody = "{$userName} vừa giao hồ sơ khách hàng {$existing['full_name']} (" . ($existing['phone'] ?: 'Chưa có SĐT') . ") cho bạn phụ trách.";
+                    $db->prepare("
+                        INSERT INTO notifications (user_id, tenant_id, title, body, type, link, is_read, created_at)
+                        VALUES (?, ?, ?, ?, 'lead_assigned', ?, 0, NOW())
+                    ")->execute([$targetOwnerId, $tid, $notifTitle, $notifBody, "/contacts?id={$exId}"]);
+                }
+
+                $reassignedLeads[] = [
+                    'id' => $exId,
+                    'full_name' => $existing['full_name'],
+                    'phone' => $existing['phone'] ?: $phone,
+                    'program' => $existing['program'] ?: ($program ?: 'Chưa chọn'),
+                    'source' => $existing['source'] ?: $source,
+                    'stage_name' => $existing['stage_name'],
+                    'owner_name' => $targetOwnerName,
+                    'deposit_amount' => '0 đ',
+                    'status_action' => "Chuyển giao từ {$exOwnerName} -> {$targetOwnerName}"
+                ];
+                continue;
+            }
+
+            // Create New Lead
+            if ($fName === '') {
+                $fName = "Khách hàng " . ($phone !== '' ? $phone : 'Mới');
+            }
+
+            // Resolve or create person_id
+            $personId = null;
+            if ($phone !== '' || $email !== '') {
+                $pWhere = [];
+                $pParams = [];
+                if ($phone !== '') {
+                    $pWhere[] = "phone = ?";
+                    $pParams[] = $phone;
+                }
+                if ($email !== '') {
+                    $pWhere[] = "email = ?";
+                    $pParams[] = $email;
+                }
+                $stmtP = $db->prepare("SELECT id FROM persons WHERE " . implode(' OR ', $pWhere) . " LIMIT 1");
+                $stmtP->execute($pParams);
+                $personId = $stmtP->fetchColumn() ?: null;
+            }
+            if (!$personId) {
+                $stmtInsP = $db->prepare("INSERT INTO persons (phone, email, full_name, is_public) VALUES (?, ?, ?, 1)");
+                $stmtInsP->execute([$phone !== '' ? $phone : null, $email !== '' ? $email : null, $fName]);
+                $personId = (int)$db->lastInsertId();
+            }
+
+            $stmtInsC = $db->prepare("
+                INSERT INTO contacts (
+                    tenant_id, person_id, full_name, email, phone, mobile,
+                    lead_status, stage_id, pipeline_status, status,
+                    source, program, city, notes,
+                    owner_id, created_by, last_contact, created_at, updated_at
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?,
+                    'new', ?, 'new', 'new',
+                    ?, ?, ?, ?,
+                    ?, ?, CURDATE(), NOW(), NOW()
+                )
+            ");
+            $stmtInsC->execute([
+                $tid,
+                $personId,
+                $fName,
+                $email !== '' ? $email : null,
+                $phone !== '' ? $phone : null,
+                $phone !== '' ? $phone : null,
+                $defaultStageId,
+                $source,
+                $program !== '' ? $program : null,
+                $city !== '' ? $city : null,
+                $notes !== '' ? $notes : null,
+                $targetOwnerId,
+                $uid
+            ]);
+            $newContactId = (int)$db->lastInsertId();
+
+            // Log activity
+            $actSubject = $isAssigningToColleague
+                ? "Tạo mới & phân bổ Data cho {$targetOwnerName}"
+                : "Thêm Data cá nhân mới qua Trợ lý AI";
+            $actBody = "Khách hàng: {$fName} (" . ($phone ?: 'Chưa có SĐT') . "). Nguồn: {$source}."
+                . ($program !== '' ? " Chương trình: {$program}." : "")
+                . ($notes !== '' ? " Ghi chú: {$notes}." : "")
+                . " Người tạo: {$userName}. Người phụ trách: {$targetOwnerName}.";
+            $db->prepare("
+                INSERT INTO activities (tenant_id, type, subject, body, status, progress, contact_id, related_type, related_id, user_id, created_by, done_at, created_at, updated_at)
+                VALUES (?, 'note', ?, ?, 'done', 100, ?, 'contact', ?, ?, ?, NOW(), NOW(), NOW())
+            ")->execute([$tid, $actSubject, $actBody, $newContactId, $newContactId, $targetOwnerId, $uid]);
+
+            // Send notification if assigned to colleague
+            if ($isAssigningToColleague) {
+                $notifTitle = "Bạn nhận được Data mới: {$fName}";
+                $notifBody = "{$userName} vừa tạo và giao hồ sơ khách hàng {$fName} (" . ($phone ?: 'Chưa có SĐT') . ") cho bạn phụ trách.";
+                $db->prepare("
+                    INSERT INTO notifications (user_id, tenant_id, title, body, type, link, is_read, created_at)
+                    VALUES (?, ?, ?, ?, 'lead_assigned', ?, 0, NOW())
+                ")->execute([$targetOwnerId, $tid, $notifTitle, $notifBody, "/contacts?id={$newContactId}"]);
+            }
+
+            $createdLeads[] = [
+                'id' => $newContactId,
+                'full_name' => $fName,
+                'phone' => $phone ?: 'Chưa cập nhật',
+                'program' => $program ?: 'Chưa chọn',
+                'source' => $source,
+                'stage_name' => $defaultStageName,
+                'owner_name' => $targetOwnerName,
+                'deposit_amount' => '0 đ',
+                'status_action' => $isAssigningToColleague ? "Tạo mới & giao cho {$targetOwnerName}" : "Tạo Data cá nhân ({$targetOwnerName})"
+            ];
+        }
+
+        $allProcessed = array_merge($createdLeads, $reassignedLeads);
+        $totalProcessed = count($allProcessed);
+
+        // STRICT SINGLE-CARD SUPPRESSION RULE:
+        // Only attach smart_card when exactly 1 record was processed and 0 duplicates skipped.
+        if ($totalProcessed === 1 && empty($skippedDuplicates)) {
+            $single = $allProcessed[0];
+            $allProcessed[0]['smart_card'] = self::buildEntitySmartCard('contact', [
+                'id' => $single['id'],
+                'name' => $single['full_name'],
+                'subtitle' => $single['phone'] . ' • ' . $single['program'],
+                'status' => $single['stage_name'],
+                'meta' => "Sale: {$single['owner_name']} • Nguồn: {$single['source']}",
+                'link' => "/contacts?id={$single['id']}"
+            ]);
+        }
+
+        $exportUrl = "/export?type=contact&export_mode=full&assigned_to={$targetOwnerId}&period=today";
+
+        return [
+            'success' => $totalProcessed > 0 || !empty($skippedDuplicates),
+            'action_type' => $isAssigningToColleague ? 'assign_leads_to_colleague' : 'create_personal_leads',
+            'target_owner' => [
+                'id' => $targetOwnerId,
+                'full_name' => $targetOwnerName
+            ],
+            'created_count' => count($createdLeads),
+            'reassigned_count' => count($reassignedLeads),
+            'skipped_duplicates_count' => count($skippedDuplicates),
+            'total_processed' => $totalProcessed,
+            'processed_leads' => $allProcessed,
+            'skipped_duplicates' => $skippedDuplicates,
+            'export_url' => $totalProcessed > 1 ? $exportUrl : null,
+            'export_markdown' => $totalProcessed > 1 ? "[Bấm vào đây để tải danh sách Data vừa tạo/phân bổ ({$totalProcessed} hồ sơ)]({$exportUrl})" : null,
+            'message' => $isAssigningToColleague
+                ? "Đã xử lý phân bổ cho {$targetOwnerName}: Tạo mới " . count($createdLeads) . " hồ sơ, chuyển giao " . count($reassignedLeads) . " hồ sơ" . (!empty($skippedDuplicates) ? ", bỏ qua " . count($skippedDuplicates) . " hồ sơ trùng." : ".")
+                : "Đã thêm Data cá nhân cho {$targetOwnerName}: Tạo mới " . count($createdLeads) . " hồ sơ, cập nhật " . count($reassignedLeads) . " hồ sơ" . (!empty($skippedDuplicates) ? ", bỏ qua " . count($skippedDuplicates) . " hồ sơ trùng." : ".")
+        ];
     }
 }

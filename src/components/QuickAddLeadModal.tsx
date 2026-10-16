@@ -977,14 +977,45 @@ export const QuickAddLeadModal = () => {
       const detail = custom?.detail;
       setIsOpen(true);
       if (detail) {
-        setManualData({
-          name: detail.full_name || detail.name || '',
-          phone: detail.phone || '',
-          email: detail.email || '',
-          source: detail.source || (isSale ? 'ca_nhan' : ''),
-          type: detail.type || '',
-          note: detail.note || detail.notes || ''
-        });
+        const isPersonalLead = Boolean(detail.is_personal || detail.source === 'ca_nhan' || detail.distribution_mode === 'self_assign');
+        const resolvedSource = (detail.source === 'ca_nhan' || detail.is_personal)
+          ? 'ca_nhan'
+          : (detail.source || (isSale ? 'ca_nhan' : ''));
+        const resolvedProgram = detail.program || detail.type || ((detail.full_name || detail.name || detail.phone) ? 'THẠC SĨ' : '');
+
+        if (Array.isArray(detail.bulk_leads) && detail.bulk_leads.length > 0) {
+          setActiveTab('bulk');
+          setBulkParsedLeads(
+            detail.bulk_leads.map((item: any) => ({
+              name: item.name || item.full_name || 'Khách hàng',
+              phone: beautifyPhone(item.phone || ''),
+              email: item.email || '',
+              source: item.source || resolvedSource || 'Bulk_Import',
+              type: item.program || item.type || resolvedProgram || 'THẠC SĨ',
+              note: item.note || item.notes || detail.note || detail.notes || ''
+            }))
+          );
+        } else {
+          setActiveTab('single');
+          setManualData({
+            name: detail.full_name || detail.name || '',
+            phone: beautifyPhone(detail.phone || ''),
+            email: detail.email || '',
+            source: resolvedSource,
+            type: resolvedProgram,
+            note: detail.note || detail.notes || ''
+          });
+        }
+
+        if (isPersonalLead) {
+          setDistributionMode('self_assign');
+          setOverrideConsId('');
+          setShowOverrideSelector(false);
+        } else if (detail.owner_id) {
+          setDistributionMode('auto_round');
+          setOverrideConsId(String(Number(detail.owner_id)));
+          setShowOverrideSelector(true);
+        }
       } else if (isSale) {
         setManualData(prev => ({ ...prev, source: 'ca_nhan' }));
       }
@@ -1001,7 +1032,9 @@ export const QuickAddLeadModal = () => {
 
     if (manualData.phone.length < 8 && !manualData.email) {
       setPreviewCons(null);
-      setOverrideConsId('');
+      if (!showOverrideSelector) {
+        setOverrideConsId('');
+      }
       return;
     }
 

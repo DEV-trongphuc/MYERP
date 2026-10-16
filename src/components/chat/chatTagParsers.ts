@@ -7,15 +7,29 @@ export interface DynamicChartSeries {
   dataKey: string;
   name: string;
   color?: string;
+  type?: 'bar' | 'line' | 'area';
+}
+
+export interface DynamicChartDataset {
+  key: string;
+  label: string;
+  type?: 'bar' | 'line' | 'pie' | 'area' | 'composed' | 'hbar' | 'funnel' | 'table';
+  title?: string;
+  subtitle?: string;
+  xAxisKey?: string;
+  data: Record<string, any>[];
+  series?: DynamicChartSeries[];
 }
 
 export interface DynamicChartData {
-  type: 'bar' | 'line' | 'pie' | 'area';
+  type: 'bar' | 'line' | 'pie' | 'area' | 'composed' | 'hbar' | 'funnel' | 'table';
   title: string;
+  subtitle?: string;
   description?: string;
   xAxisKey?: string;
-  data: Array<Record<string, any>>;
+  data: Record<string, any>[];
   series?: DynamicChartSeries[];
+  datasets?: DynamicChartDataset[];
 }
 
 export interface ProactiveInsightData {
@@ -145,21 +159,50 @@ export function parseAllChatTags(rawContent: string): ParsedChatTags {
   const proposal: ActionProposal | null = proposals[0] || null;
 
   // 2. Parse & Strip DYNAMIC_CHART
-  const chartMatch = text.match(/<<<DYNAMIC_CHART:\s*(\{[\s\S]*?\})\s*>>>/);
+  const chartMatch = text.match(/<<<DYNAMIC_CHART:\s*(\{[\s\S]*?\})\s*>>>/) || text.match(/\[\[DYNAMIC_CHART:\s*(\{[\s\S]*?\})\s*\]\]/);
   if (chartMatch) {
     text = text.replace(chartMatch[0], '').trim();
     const rawChart = safeParseJson<any>(chartMatch[1]);
-    if (rawChart && Array.isArray(rawChart.data) && rawChart.data.length > 0) {
-      chart = {
-        type: ['bar', 'line', 'pie', 'area'].includes(rawChart.type) ? rawChart.type : 'bar',
-        title: rawChart.title || 'Biểu đồ phân tích số liệu',
-        description: rawChart.description || '',
-        xAxisKey: rawChart.xAxisKey || 'name',
-        data: rawChart.data,
-        series: Array.isArray(rawChart.series) && rawChart.series.length > 0
-          ? rawChart.series
-          : [{ dataKey: 'value', name: 'Số lượng' }],
-      };
+    if (rawChart) {
+      const validTypes = ['bar', 'line', 'pie', 'area', 'composed', 'hbar', 'funnel', 'table'];
+      const validDatasets: DynamicChartDataset[] = Array.isArray(rawChart.datasets)
+        ? rawChart.datasets
+            .filter((ds: any) => ds && Array.isArray(ds.data) && ds.data.length > 0)
+            .map((ds: any, idx: number) => ({
+              key: String(ds.key || `ds_${idx}`),
+              label: String(ds.label || ds.title || `Góc nhìn #${idx + 1}`),
+              type: validTypes.includes(ds.type) ? ds.type : undefined,
+              title: ds.title ? String(ds.title) : undefined,
+              subtitle: ds.subtitle || ds.description ? String(ds.subtitle || ds.description) : undefined,
+              xAxisKey: ds.xAxisKey || 'name',
+              data: ds.data,
+              series: Array.isArray(ds.series) && ds.series.length > 0
+                ? ds.series
+                : [{ dataKey: 'value', name: 'Số lượng' }],
+            }))
+        : [];
+
+      const primaryData = Array.isArray(rawChart.data) && rawChart.data.length > 0
+        ? rawChart.data
+        : (validDatasets[0]?.data || []);
+
+      if (primaryData.length > 0) {
+        const primaryType = validTypes.includes(rawChart.type)
+          ? rawChart.type
+          : (validDatasets[0]?.type || 'bar');
+        chart = {
+          type: primaryType,
+          title: rawChart.title || validDatasets[0]?.title || 'Biểu đồ phân tích số liệu',
+          subtitle: rawChart.subtitle || rawChart.description || validDatasets[0]?.subtitle || '',
+          description: rawChart.description || rawChart.subtitle || validDatasets[0]?.subtitle || '',
+          xAxisKey: rawChart.xAxisKey || validDatasets[0]?.xAxisKey || 'name',
+          data: primaryData,
+          series: Array.isArray(rawChart.series) && rawChart.series.length > 0
+            ? rawChart.series
+            : (validDatasets[0]?.series || [{ dataKey: 'value', name: 'Số lượng' }]),
+          datasets: validDatasets.length > 0 ? validDatasets : undefined,
+        };
+      }
     }
   }
 

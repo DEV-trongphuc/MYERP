@@ -123,7 +123,7 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
     badgeBg: '#fef3c7',
     description: 'Tra cứu khách hàng 360°, lịch sử tương tác, kịch bản tư vấn, 12 tình huống chốt sale.',
     statusText: 'Đang phân tích dữ liệu khách hàng & kịch bản tư vấn...',
-    keywords: ['lead', 'tiềm năng', 'khách hàng', 'crm', 'tư vấn', 'chốt sale', 'từ chối', 'học viên', 'phễu', 'pipeline', 'chăm sóc', 'từ lúc nào', 'ai chăm sóc', 'note cái gì', 'chuẩn hết chưa', 'bỏ quên', 'ngâm lead', 'hiệu suất sale', 'tỷ lệ chốt'],
+    keywords: ['lead', 'tiềm năng', 'khách hàng', 'crm', 'tư vấn', 'chốt sale', 'từ chối', 'học viên', 'phễu', 'pipeline', 'chăm sóc', 'từ lúc nào', 'ai chăm sóc', 'note cái gì', 'chuẩn hết chưa', 'bỏ quên', 'ngâm lead', 'hiệu suất sale', 'tỷ lệ chốt', 'thêm data', 'data cá nhân', 'tạo data', 'giao data', 'giao lead', 'phân bổ lead'],
     suggestedPrompt: 'Có bao nhiêu Lead đang bị ngâm quá 3 ngày không ai gọi chăm sóc?',
     permissions: [
       'Tra cứu hồ sơ khách hàng 360° (ngày tạo, nguồn lead, người chăm sóc, note, hồ sơ, cọc)',
@@ -133,7 +133,7 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
       'Cập nhật bước chuyển phễu Pipeline & thêm ghi chú chăm sóc',
       'Cập nhật thông tin liên hệ (chức danh, công ty, địa chỉ)'
     ],
-    allowedTools: ['query_crm_leads_multitier', 'query_deposits_and_revenue_multitier', 'query_deals_and_b2b_multitier', 'query_cross_domain_executive_synthesis', 'get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_sales_leaderboard', 'check_lead_duplicate_and_fairshare_status', 'schedule_contact_activity', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'manage_lead_round_distribution', 'lookup_recent_cash_receipts_and_deposits', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'quick_log_crm_activity', 'reassign_lead_owner', 'draft_action_proposal'],
+    allowedTools: ['query_crm_leads_multitier', 'query_deposits_and_revenue_multitier', 'query_deals_and_b2b_multitier', 'query_cross_domain_executive_synthesis', 'get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_sales_leaderboard', 'check_lead_duplicate_and_fairshare_status', 'schedule_contact_activity', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'manage_lead_round_distribution', 'lookup_recent_cash_receipts_and_deposits', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'quick_log_crm_activity', 'reassign_lead_owner', 'smart_create_or_assign_leads', 'draft_action_proposal'],
     actionProposals: [
       'Thẻ Thêm học viên / Khách tiềm năng (lead)',
       'Thẻ Đơn hàng bán / Lịch thu học phí (sales_order)',
@@ -284,7 +284,7 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
       'Phân tích nội dung quảng cáo, copywriting, brochure và kế hoạch truyền thông',
       'Đề xuất Khởi tạo chiến dịch Marketing mới hoặc sự kiện tuyển sinh EduFair'
     ],
-    allowedTools: ['query_crm_leads_multitier', 'query_deposits_and_revenue_multitier', 'query_deals_and_b2b_multitier', 'query_cross_domain_executive_synthesis', 'analyze_leads_demographics_and_job_titles', 'get_campaign_marketing_stats', 'get_active_projects_and_campaigns', 'draft_action_proposal'],
+    allowedTools: ['query_crm_leads_multitier', 'query_deposits_and_revenue_multitier', 'query_deals_and_b2b_multitier', 'query_cross_domain_executive_synthesis', 'analyze_leads_demographics_and_job_titles', 'get_campaign_marketing_stats', 'get_active_projects_and_campaigns', 'smart_create_or_assign_leads', 'draft_action_proposal'],
     actionProposals: ['Thẻ Khởi tạo chiến dịch Marketing (marketing_campaign)'],
     synergyWith: ['sales', 'assets_inventory', 'tasks'],
     securityGuardrails: [
@@ -312,7 +312,7 @@ export const SPECIALIZED_AGENTS: SpecializedAgent[] = [
       'Tổng hợp số lượng đơn cọc mới và tiến độ hoàn thành KPI tuyển sinh toàn viện',
       'Báo cáo P&L thời gian thực phục vụ Ban Giám đốc ra quyết định điều hành'
     ],
-    allowedTools: ['query_cross_domain_executive_synthesis', 'query_crm_leads_multitier', 'query_finance_multitier_analytics', 'query_deposits_and_revenue_multitier', 'query_tasks_and_projects_multitier', 'query_deals_and_b2b_multitier', 'query_tickets_and_sla_multitier', 'query_hrm_workforce_and_payroll_multitier', 'query_inventory_and_assets_multitier', 'get_executive_morning_brief', 'get_sales_leaderboard', 'filter_expenses_advanced', 'get_staff_directory_advanced', 'get_inventory_health_check', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'query_company_attendance_and_work_hours', 'get_executive_financial_pulse', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'get_system_health_status'],
+    allowedTools: ['query_cross_domain_executive_synthesis', 'query_crm_leads_multitier', 'query_finance_multitier_analytics', 'query_deposits_and_revenue_multitier', 'query_tasks_and_projects_multitier', 'query_deals_and_b2b_multitier', 'query_tickets_and_sla_multitier', 'query_hrm_workforce_and_payroll_multitier', 'query_inventory_and_assets_multitier', 'get_executive_morning_brief', 'get_sales_leaderboard', 'filter_expenses_advanced', 'get_staff_directory_advanced', 'get_inventory_health_check', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'query_company_attendance_and_work_hours', 'get_executive_financial_pulse', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'get_system_health_status', 'smart_create_or_assign_leads'],
     actionProposals: ['Thẻ Báo cáo điều hành P&L', 'Thẻ Khuyến nghị can thiệp dòng tiền'],
     synergyWith: ['finance', 'sales', 'hrm', 'master'],
     securityGuardrails: [
@@ -362,7 +362,7 @@ export function detectActiveAgent(query: string, toolName?: string, actionType?:
     if (['query_finance_multitier_analytics', 'query_deposits_and_revenue_multitier', 'filter_expenses_advanced', 'get_financial_overview', 'get_my_payment_proposals', 'lookup_recent_cash_receipts_and_deposits', 'get_upcoming_tuition_receivables'].includes(toolName)) {
       return SPECIALIZED_AGENTS.find(a => a.id === 'finance')!;
     }
-    if (['query_crm_leads_multitier', 'query_deals_and_b2b_multitier', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_sales_leaderboard', 'get_contact_360_profile', 'search_contacts', 'get_contact_financial_summary', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'manage_lead_round_distribution', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'quick_log_crm_activity', 'reassign_lead_owner', 'schedule_contact_activity'].includes(toolName)) {
+    if (['query_crm_leads_multitier', 'query_deals_and_b2b_multitier', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_sales_leaderboard', 'get_contact_360_profile', 'search_contacts', 'get_contact_financial_summary', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'manage_lead_round_distribution', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'quick_log_crm_activity', 'reassign_lead_owner', 'smart_create_or_assign_leads', 'schedule_contact_activity'].includes(toolName)) {
       return SPECIALIZED_AGENTS.find(a => a.id === 'sales')!;
     }
     if (['query_hrm_workforce_and_payroll_multitier', 'get_staff_directory_advanced', 'query_company_attendance_and_work_hours', 'get_pending_approvals', 'trace_approval_blocker', 'get_my_attendance_summary', 'get_my_payslip', 'get_company_staff_directory', 'get_company_leave_and_absence'].includes(toolName)) {
@@ -415,7 +415,7 @@ export function detectActiveAgent(query: string, toolName?: string, actionType?:
   if (q.includes('chuẩn hết chưa') || q.includes('chuẩn chưa') || q.includes('hồ sơ có gì') || q.includes('thiếu giấy tờ') || q.includes('bằng cấp') || q.includes('cccd') || q.includes('hộ chiếu') || q.includes('bảng điểm') || q.includes('dịch thuật') || q.includes('công chứng') || q.includes('cv tiếng anh') || q.includes('hợp đồng đào tạo') || q.includes('phụ lục hợp đồng')) {
     return SPECIALIZED_AGENTS.find(a => a.id === 'records_legal')!;
   }
-  if (q.includes('từ lúc nào') || q.includes('ai chăm sóc') || q.includes('note cái gì') || q.includes('lịch sử tư vấn') || q.includes('lead') || q.includes('tiềm năng') || q.includes('khách hàng') || q.includes('crm') || q.includes('tư vấn sale') || q.includes('chốt sale') || q.includes('từ chối') || q.includes('chăm sóc')) {
+  if (q.includes('thêm data') || q.includes('data cá nhân') || q.includes('tạo data') || q.includes('giao data') || q.includes('giao lead') || q.includes('phân bổ lead') || q.includes('từ lúc nào') || q.includes('ai chăm sóc') || q.includes('note cái gì') || q.includes('lịch sử tư vấn') || q.includes('lead') || q.includes('tiềm năng') || q.includes('khách hàng') || q.includes('crm') || q.includes('tư vấn sale') || q.includes('chốt sale') || q.includes('từ chối') || q.includes('chăm sóc')) {
     return SPECIALIZED_AGENTS.find(a => a.id === 'sales')!;
   }
   if (q.includes('tồn kho') || q.includes('ấn phẩm') || q.includes('balo') || q.includes('áo polo') || q.includes('sổ tay') || q.includes('quà tặng') || q.includes('giáo trình') || q.includes('tài sản') || q.includes('bàn giao laptop') || q.includes('thu hồi tài sản')) {

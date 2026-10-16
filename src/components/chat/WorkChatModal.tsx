@@ -469,10 +469,20 @@ const handleErpLinkClick = (e: React.MouseEvent, url: string) => {
   }
 };
 
-const renderInlineTokens = (rawText: string, isMine?: boolean, keyPrefix: string = 'inl') => {
+const DECORATIVE_HEADING_EMOJI_REGEX = /^[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\s📌📊🔍📋⚡📈📉💡🎯🏆🚀✨🔥👉📥]+/gu;
+
+const stripDecorativeHeadingEmojis = (str: string): string => {
+  return str
+    .replace(DECORATIVE_HEADING_EMOJI_REGEX, '')
+    .replace(/^\*\*[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\s📌📊🔍📋⚡📈📉💡🎯🏆🚀✨🔥👉📥]+/gu, '**')
+    .replace(/[📌📊🔍📋⚡📈📉💡🎯🏆🚀✨🔥👉📥]\uFE0F?\s*/gu, '')
+    .trim();
+};
+
+const renderInlineTokens = (rawText: string, isMine?: boolean, keyPrefix: string = 'inl'): React.ReactNode => {
   if (!rawText) return null;
-  // Action tag [[type:id:name]], Mention, markdown link [text](url), raw URL, and bold pattern
-  const parts = rawText.split(/(\[\[[a-z_]+:[^:]+:[^\]]+\]\]|@[\w\u00C0-\u1EF9]+(?:[^\S\r\n]+[\w\u00C0-\u1EF9]+){0,4}(?=[^\S\r\n]|$|\n)|\[[^\]]+\]\s*\([^\s)]+\)|https?:\/\/[^\s()<>]+|\*\*[^*]+\*\*)/g);
+  // Action tag [[type:id:name]], Mention, markdown link [text](url), raw URL, bold (**...**), inline code (`...`), and italic (*...*)
+  const parts = rawText.split(/(\[\[[a-z_]+:[^:]+:[^\]]+\]\]|@[\w\u00C0-\u1EF9]+(?:[^\S\r\n]+[\w\u00C0-\u1EF9]+){0,4}(?=[^\S\r\n]|$|\n)|\[[^\]]+\]\s*\([^\s)]+\)|https?:\/\/[^\s()<>]+|\*\*[\s\S]+?\*\*|`[^`\n]+`|\*[^*\n]+\*)/g);
   return parts.map((part, idx) => {
     if (!part) return null;
     const tokenKey = `${keyPrefix}_${idx}`;
@@ -614,6 +624,7 @@ const renderInlineTokens = (rawText: string, isMine?: boolean, keyPrefix: string
       );
     }
     if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
+      const innerBold = part.slice(2, -2);
       return (
         <strong
           key={tokenKey}
@@ -622,12 +633,220 @@ const renderInlineTokens = (rawText: string, isMine?: boolean, keyPrefix: string
             color: isMine ? '#ffffff' : '#0f172a'
           }}
         >
-          {part.slice(2, -2)}
+          {renderInlineTokens(innerBold, isMine, `${tokenKey}_b`)}
         </strong>
+      );
+    }
+    if (part.startsWith('`') && part.endsWith('`') && part.length >= 2) {
+      return (
+        <code
+          key={tokenKey}
+          style={{
+            padding: '1px 5px',
+            borderRadius: 4,
+            background: isMine ? 'rgba(255,255,255,0.18)' : '#f1f5f9',
+            color: isMine ? '#fff' : '#0f172a',
+            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+            fontSize: '0.9em'
+          }}
+        >
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    if (part.startsWith('*') && part.endsWith('*') && !part.startsWith('**') && part.length >= 3) {
+      const innerItalic = part.slice(1, -1);
+      return (
+        <em
+          key={tokenKey}
+          style={{
+            fontStyle: 'italic',
+            color: isMine ? '#f8fafc' : '#334155'
+          }}
+        >
+          {renderInlineTokens(innerItalic, isMine, `${tokenKey}_i`)}
+        </em>
       );
     }
     return <span key={tokenKey}>{part}</span>;
   });
+};
+
+const renderNonTableBlock = (block: string, isOwn?: boolean, blockKeyPrefix: string = 'blk') => {
+  const lines = block.split('\n');
+  const elements: React.ReactNode[] = [];
+  let prevWasEmpty = false;
+
+  lines.forEach((rawLine, lIdx) => {
+    const lineKey = `${blockKeyPrefix}_ln_${lIdx}`;
+    const trimmed = rawLine.trim();
+
+    // 6. Empty lines -> collapse consecutive empty lines to max 1 compact spacer
+    if (!trimmed) {
+      if (!prevWasEmpty && elements.length > 0 && lIdx < lines.length - 1) {
+        elements.push(<div key={lineKey} style={{ height: 6 }} />);
+        prevWasEmpty = true;
+      }
+      return;
+    }
+    prevWasEmpty = false;
+
+    // 1. Horizontal Rule (^\s*(?:---+|\*\*\*+|___+)\s*$)
+    if (/^\s*(?:---+|\*\*\*+|___+)\s*$/.test(rawLine)) {
+      elements.push(
+        <hr
+          key={lineKey}
+          style={{
+            border: 'none',
+            borderTop: isOwn ? '1px solid rgba(255,255,255,0.2)' : '1px solid #e2e8f0',
+            margin: '10px 0'
+          }}
+        />
+      );
+      return;
+    }
+
+    // 2. Markdown Headings (^\s*(#{1,4})\s+(.+)$)
+    const headingMatch = rawLine.match(/^\s*(#{1,4})\s+(.+)$/);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const rawHeadingText = headingMatch[2].replace(/^\*\*(.+)\*\*$/, '$1').trim();
+      const cleanHeadingText = stripDecorativeHeadingEmojis(rawHeadingText) || rawHeadingText;
+      elements.push(
+        <div
+          key={lineKey}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            fontSize: level === 1 ? 15 : level === 2 ? 14 : 13,
+            fontWeight: 800,
+            color: isOwn ? '#ffffff' : '#0f172a',
+            letterSpacing: '0.01em',
+            marginTop: 12,
+            marginBottom: 6,
+            paddingBottom: 4,
+            borderBottom: isOwn ? '1px solid rgba(255,255,255,0.15)' : '1px solid #f1f5f9'
+          }}
+        >
+          <span
+            style={{
+              width: 3,
+              height: 14,
+              borderRadius: 2,
+              background: isOwn ? '#ffffff' : '#2563eb',
+              flexShrink: 0
+            }}
+          />
+          <span style={{ flex: 1, minWidth: 0 }}>
+            {renderInlineTokens(cleanHeadingText, isOwn, `${lineKey}_h`)}
+          </span>
+        </div>
+      );
+      return;
+    }
+
+    // 3. Bullet List Items (^\s*([-*•])\s+(.+)$)
+    const bulletMatch = rawLine.match(/^\s*([-*•])\s+(.+)$/);
+    if (bulletMatch) {
+      const itemText = bulletMatch[2];
+      elements.push(
+        <div
+          key={lineKey}
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 8,
+            margin: '3px 0',
+            paddingLeft: 4
+          }}
+        >
+          <span
+            style={{
+              width: 5,
+              height: 5,
+              borderRadius: '50%',
+              background: isOwn ? 'rgba(255,255,255,0.8)' : '#2563eb',
+              marginTop: 7,
+              flexShrink: 0
+            }}
+          />
+          <div style={{ flex: 1, minWidth: 0, lineHeight: 1.55 }}>
+            {renderInlineTokens(itemText, isOwn, `${lineKey}_ul`)}
+          </div>
+        </div>
+      );
+      return;
+    }
+
+    // 4. Numbered List Items (^\s*(\d+[\.\)])\s+(.+)$)
+    const numMatch = rawLine.match(/^\s*(\d+[\.\)])\s+(.+)$/);
+    if (numMatch) {
+      const numLabel = numMatch[1];
+      const itemText = numMatch[2];
+      elements.push(
+        <div
+          key={lineKey}
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 6,
+            margin: '4px 0',
+            paddingLeft: 2
+          }}
+        >
+          <span
+            style={{
+              fontWeight: 700,
+              color: isOwn ? '#fff' : '#2563eb',
+              minWidth: 18,
+              flexShrink: 0,
+              lineHeight: 1.55
+            }}
+          >
+            {numLabel}
+          </span>
+          <div style={{ flex: 1, minWidth: 0, lineHeight: 1.55 }}>
+            {renderInlineTokens(itemText, isOwn, `${lineKey}_ol`)}
+          </div>
+        </div>
+      );
+      return;
+    }
+
+    // 5. Blockquote (^\s*>\s*(.+)$)
+    const quoteMatch = rawLine.match(/^\s*>\s*(.+)$/);
+    if (quoteMatch) {
+      const quoteText = quoteMatch[1];
+      elements.push(
+        <div
+          key={lineKey}
+          style={{
+            padding: '6px 10px',
+            borderRadius: 6,
+            background: isOwn ? 'rgba(255,255,255,0.1)' : '#f8fafc',
+            borderLeft: isOwn ? '3px solid rgba(255,255,255,0.4)' : '3px solid #cbd5e1',
+            color: isOwn ? '#f1f5f9' : '#475569',
+            margin: '4px 0',
+            fontSize: '0.95em',
+            lineHeight: 1.55
+          }}
+        >
+          {renderInlineTokens(quoteText, isOwn, `${lineKey}_bq`)}
+        </div>
+      );
+      return;
+    }
+
+    // 6. Normal text line
+    elements.push(
+      <div key={lineKey} style={{ lineHeight: 1.55, margin: '2px 0' }}>
+        {renderInlineTokens(rawLine, isOwn, `${lineKey}_p`)}
+      </div>
+    );
+  });
+
+  return <div key={blockKeyPrefix}>{elements}</div>;
 };
 
 const TABLE_BLOCK_REGEX = /((?:^|\n)\|[^\n]+\|\r?\n\|[ \t]*:?[-]+:?[ \t]*(?:\|[ \t]*:?[-]+:?[ \t]*)+\|(?:\r?\n\|[^\n]+\|)+)/g;
@@ -733,11 +952,7 @@ const renderFormattedText = (text: string, isMine?: boolean) => {
               );
             }
           }
-          return (
-            <span key={`txt_${bIdx}`} style={{ whiteSpace: 'pre-wrap' }}>
-              {renderInlineTokens(block, isMine, `b_${bIdx}`)}
-            </span>
-          );
+          return renderNonTableBlock(block, isMine, `txt_${bIdx}`);
         })}
       </div>
     );
@@ -750,9 +965,9 @@ const renderFormattedText = (text: string, isMine?: boolean) => {
   }
 
   const result = (
-    <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-      {renderInlineTokens(cleanText, isMine, 'std')}
-    </span>
+    <div style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+      {renderNonTableBlock(cleanText, isMine, 'std')}
+    </div>
   );
 
   if (formattedTextCache.size > 500) {
@@ -4991,10 +5206,35 @@ export const WorkChatModal: React.FC = () => {
                                     const parsedTags = getMemoizedParsedTags(msg);
                                     const { cleanContent, proposal, proposals, chart, nextBestActions, clarifyOptions, proactiveInsight, erpCard, erpCards } = parsedTags;
                                     const allErpCards = erpCards && erpCards.length > 0 ? erpCards : (erpCard ? [erpCard] : []);
+                                    const hasMultiRowMarkdownTable = (() => {
+                                      if (!cleanContent || !cleanContent.includes('|')) return false;
+                                      const tableLines = cleanContent
+                                        .split('\n')
+                                        .map(l => l.trim())
+                                        .filter(l => l.startsWith('|') && l.endsWith('|') && l.length > 2);
+                                      // A markdown table with header + separator + at least 2 data rows has >= 4 table lines
+                                      const dataLines = tableLines.filter(l => !/^\|[\s:|-]+\|$/.test(l));
+                                      return dataLines.length >= 3; // 1 header row + >= 2 data rows
+                                    })();
+                                    const isDisambiguation = Boolean(
+                                      cleanContent && (
+                                        cleanContent.includes('trùng tên') ||
+                                        cleanContent.includes('chọn đúng hồ sơ') ||
+                                        cleanContent.includes('Xác nhận chọn')
+                                      )
+                                    );
+                                    const visibleErpCards = (hasMultiRowMarkdownTable && !isDisambiguation)
+                                      ? (allErpCards.length <= 1
+                                          ? []
+                                          : allErpCards.filter(card => {
+                                              const cType = String(card.entity_type || (card as any).type || '').toLowerCase();
+                                              return cType !== 'contact' && cType !== 'lead' && cType !== 'student';
+                                            }))
+                                      : allErpCards;
                                     const allProposals = proposals && proposals.length > 0 ? proposals : (proposal ? [proposal] : []);
                                     const extractedUrl = extractFirstUrl(cleanContent);
                                     return (
-                                      <div style={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap', lineHeight: '1.45', minWidth: 0, maxWidth: '100%' }}>
+                                      <div style={{ wordBreak: 'break-word', lineHeight: '1.45', minWidth: 0, maxWidth: '100%' }}>
                                         {proactiveInsight && (
                                           <ProactiveInsightCard
                                             insight={proactiveInsight}
@@ -5020,9 +5260,9 @@ export const WorkChatModal: React.FC = () => {
                                             />
                                           )}
                                         </div>
-                                        {allErpCards.length > 0 && (
+                                        {visibleErpCards.length > 0 && (
                                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                            {allErpCards.map((cardItem, cardIdx) => (
+                                            {visibleErpCards.map((cardItem, cardIdx) => (
                                               <ChatSmartErpCard
                                                 key={`${cardItem.entity_type}_${cardItem.entity_id ?? cardIdx}_${cardIdx}`}
                                                 card={cardItem}
@@ -5074,7 +5314,7 @@ export const WorkChatModal: React.FC = () => {
                                             clarifyOptions={clarifyOptions}
                                             isDisambiguation={Boolean(
                                               (clarifyOptions && clarifyOptions.length > 0) ||
-                                              allErpCards.length > 1 ||
+                                              visibleErpCards.length > 1 ||
                                               /vui lòng chọn|chọn chính xác|trùng tên|hồ sơ trùng/i.test(cleanContent)
                                             )}
                                             disabled={Boolean(

@@ -3692,7 +3692,7 @@ class ChatController {
                 . "• PHÂN BIỆT NHÂN VIÊN VỚI HỌC VIÊN / LEAD CRM:\n"
                 . "  - TUYỆT ĐỐI KHÔNG sinh thẻ <<<ERP_CARD: {\"entity_type\": \"contact\", ...}>>> cho nhân sự/nhân viên công ty (như Huỳnh Trọng Phúc, nhân viên các phòng ban). Thẻ contact CHỈ DÀNH RIÊNG cho Khách hàng / Học viên CRM.\n"
                 . "• XUẤT BÁO CÁO BẢNG CÔNG:\n"
-                . "  - Khi người dùng bảo xuất file / download công của công ty hoặc nhân sự: Gọi `query_company_attendance_and_work_hours` với scope 'export_link' hoặc 'month_summary', cung cấp link tải Markdown `[📥 Bấm vào đây để tải Bảng công ...]` và đề xuất Thẻ Hành Động xuất file.\n"
+                . "  - Khi người dùng bảo xuất file / download công của công ty hoặc nhân sự: Gọi `query_company_attendance_and_work_hours` với scope 'export_link' hoặc 'month_summary', cung cấp link tải Markdown `[Bấm vào đây để tải Bảng công ...]` và đề xuất Thẻ Hành Động xuất file.\n"
                 . "• TRA CỨU TIỀN LƯƠNG & PHIẾU LƯƠNG (PAYSLIP & PAYROLL RBAC):\n"
                 . "  - Giám đốc / Admin / Nhân sự (HR): Được quyền tra cứu phiếu lương của bất kỳ nhân sự nào hoặc xem tổng quan quỹ lương toàn viện (gọi `get_my_payslip` với `employee_query` hoặc `summary_all=true`).\n"
                 . "  - Quản lý (Manager/Trưởng phòng): Được quyền tra cứu phiếu lương của nhân sự thuộc team mình quản lý (gọi `get_my_payslip` với `employee_query`).\n"
@@ -3701,35 +3701,39 @@ class ChatController {
                 . "• QUẢN LÝ CÔNG VIỆC (WORKSPACE TASKS) & BẢN TIN ĐIỀU HÀNH:\n"
                 . "  - Khi Quản lý / Trưởng phòng hỏi về công việc của team: BẮT BUỘC gọi `get_my_tasks` với `scope='team'` để bao quát toàn bộ việc của các thành viên trong nhóm.\n"
                 . "  - Khi Giám đốc / Quản lý hỏi tóm tắt sáng / morning brief / việc khẩn cấp đầu ngày: BẮT BUỘC gọi `get_executive_morning_brief`.\n"
-                . "  - Khi người dùng bảo tạo lead mới: BẮT BUỘC gọi `draft_action_proposal` với `action_type='lead'` để sinh Thẻ đề xuất lưu vào ERP. CẤM nói dối là đã lưu CSDL khi người dùng chưa bấm xác nhận thẻ.\n"
+                . "• THÊM DATA CÁ NHÂN, NHẬP DANH SÁCH LEAD HÀNG LOẠT & GIAO DATA CHO ĐỒNG NGHIỆP (`smart_create_or_assign_leads` & `reassign_lead_owner`):\n"
+                . "  - Khi người dùng yêu cầu thêm data cá nhân, tạo lead mới (1 người hoặc danh sách nhiều dòng gồm tên + SĐT), hoặc giao/phân bổ data mới hay có sẵn cho đồng nghiệp (ví dụ: 'thêm data cá nhân Nguyễn Văn A 0901234567', 'tạo 3 lead này cho Linh Đan', 'giao data Trần Thị B cho Thanh Trúc'):\n"
+                . "    * BẮT BUỘC gọi ngay công cụ `smart_create_or_assign_leads` (truyền `leads` hoặc `raw_text`, kèm `assign_to_name` nếu giao cho đồng nghiệp, hoặc để trống `assign_to_name` nếu là data cá nhân của người đang chat).\n"
+                . "    * Khi người dùng yêu cầu chuyển quyền phụ trách một hồ sơ khách hàng đã có sẵn trên hệ thống sang đồng nghiệp khác (theo ID, SĐT hoặc Họ tên khách hàng): Gọi `reassign_lead_owner` hoặc `smart_create_or_assign_leads`.\n"
+                . "    * Sau khi công cụ thực thi xong: Báo cáo rõ số lượng hồ sơ đã tạo mới / chuyển giao / bỏ qua do trùng SĐT, và hiển thị bảng danh sách kết quả chuẩn gồm các cột: `| ID | HỌ VÀ TÊN | SĐT | CHƯƠNG TRÌNH | GIAI ĐOẠN | SALE PHỤ TRÁCH | TIỀN CỌC |`.\n"
                 . "• XUẤT DỮ LIỆU LEAD CRM THEO YÊU CẦU (MULTI-STAGE & ADVANCED LEAD EXPORT):\n"
                 . "  - Khi người dùng yêu cầu xuất file, tải danh sách, lọc lead theo pipeline (vd: 'từ pipeline 1 đến 4 hoặc 13', 'pipeline 1-4', 'stage mới'), theo giới tính ('nam', 'nữ'), theo số lượng (vd: '100 lead gần đây', '50 lead'), hoặc theo thời gian/chương trình:\n"
-                . "  - BẮT BUỘC gọi công cụ `export_crm_leads_advanced` với các tham số tương ứng (`stages`, `gender`, `from_date`, `to_date`, `program`, `limit`).\n"
-                . "  - Khi công cụ trả về kết quả: Báo cáo rõ số lượng lead theo yêu cầu (vd: 100 lead gần đây trên tổng số CSDL), hiển thị BẢNG XEM TRƯỚC (Preview) ĐẦY ĐỦ CÁC CỘT: `| ID | HỌ VÀ TÊN | CHỨC VỤ | CÔNG TY | SĐT | GIAI ĐOẠN | SALE PHỤ TRÁCH | NGÀY TẠO |`. Cột HỌ VÀ TÊN dùng link `[Tên](/contact/ID)`. BẮT BUỘC hiển thị rõ cột CHỨC VỤ của từng lead.\n"
-                . "  - Cung cấp link tải Markdown chuẩn: `[📥 Bấm vào đây để tải danh sách Lead (File Excel/CSV)]({download_url})`.\n"
+                . "  - BẮT BUỘC gọi công cụ `export_crm_leads_advanced` hoặc `query_crm_leads_multitier` với các tham số tương ứng (`stages`, `gender`, `from_date`, `to_date`, `program`, `limit`).\n"
+                . "  - Khi công cụ trả về kết quả: Báo cáo rõ số lượng lead theo yêu cầu, hiển thị BẢNG XEM TRƯỚC (Preview) ĐẦY ĐỦ CÁC CỘT: `| ID | HỌ VÀ TÊN | SĐT | CHƯƠNG TRÌNH | GIAI ĐOẠN | SALE PHỤ TRÁCH | TIỀN CỌC |`. Cột HỌ VÀ TÊN dùng link `[Tên](/contacts?id=ID)`.\n"
+                . "  - Cung cấp link tải Markdown chuẩn: `[Bấm vào đây để tải danh sách Lead (File Excel/CSV)]({download_url})`.\n"
                 . "• PHÂN TÍCH NHÂN KHẨU HỌC, CƠ CẤU CHỨC VỤ & NHÓM NGÀNH NGHỀ MARKETING (DATA DEMOGRAPHICS & SENIORITY ANALYTICS):\n"
                 . "  - Khi người dùng yêu cầu: 'phân tích data', 'có chức vụ gì', 'phân tích chức vụ', 'phân tích ngành nghề', 'bao nhiêu data có chức vụ', 'cơ cấu học viên/lead', 'chức vụ của 100 lead gần đây':\n"
                 . "  - BẮT BUỘC gọi công cụ `analyze_leads_demographics_and_job_titles` (kèm `limit` nếu người dùng yêu cầu số lượng cụ thể, vd: 100).\n"
                 . "  - Trình bày câu trả lời chuẩn chỉ gồm 4 PHẦN:\n"
                 . "    1. BẢNG TỔNG QUAN ĐỘ ĐẦY ĐỦ DỮ LIỆU (Tổng lead phân tích | Có chức vụ | Chưa có chức vụ | Tỷ lệ % điền chức vụ).\n"
-                . "    2. BẢNG THÁP CẤP BẬC QUẢN LÝ (👑 C-Level & Ban Lãnh Đạo | 💼 Quản lý cấp trung | 🔬 Chuyên gia / Kỹ sư | 🏢 Chủ DN / Khởi nghiệp | ❓ Chưa cập nhật).\n"
+                . "    2. BẢNG THÁP CẤP BẬC QUẢN LÝ (C-Level & Ban Lãnh Đạo | Quản lý cấp trung | Chuyên gia / Kỹ sư | Chủ DN / Khởi nghiệp | Chưa cập nhật).\n"
                 . "    3. BẢNG TOP NGÀNH NGHỀ KINH DOANH PHỔ BIẾN.\n"
-                . "    4. Đính kèm Smart Tag biểu đồ trực quan `<<<DYNAMIC_CHART: {...}>>>` và Link tải file: `[📥 Bấm vào đây để tải tệp dữ liệu chi tiết kèm chức vụ]({download_export_url})`.\n"
-                . "• THỰC THI TRỰC TIẾP (DIRECT EXECUTION): Với việc trong thẩm quyền (duyệt/từ chối đơn từ, cập nhật task/checklist, log CRM, điều phối lead), BẮT BUỘC gọi ngay công cụ thực thi (`approve_or_reject_erp_ticket`, `update_task_progress_and_status`, `complete_task_checklist_item`, `quick_log_crm_activity`, `reassign_lead_owner`). CẤM bảo người dùng tự đi thao tác.\n"
+                . "    4. Đính kèm Smart Tag biểu đồ trực quan `<<<DYNAMIC_CHART: {...}>>>` và Link tải file: `[Bấm vào đây để tải tệp dữ liệu chi tiết kèm chức vụ]({download_export_url})`.\n"
+                . "• THỰC THI TRỰC TIẾP (DIRECT EXECUTION): Với việc trong thẩm quyền (tạo/phân bổ data cá nhân, chuyển giao lead cho đồng nghiệp, duyệt/từ chối đơn từ, cập nhật task/checklist, log CRM), BẮT BUỘC gọi ngay công cụ thực thi (`smart_create_or_assign_leads`, `reassign_lead_owner`, `approve_or_reject_erp_ticket`, `update_task_progress_and_status`, `complete_task_checklist_item`, `quick_log_crm_activity`). CẤM bảo người dùng tự đi thao tác.\n"
                 . "• ĐIỀU PHỐI VÒNG LEAD & BÙ DATA: BẮT BUỘC dùng `manage_lead_round_distribution`:\n"
                 . "  - Khi hỏi tình hình vòng / giao vòng nào: Gọi action 'get_round_load_audit'.\n"
-                . "  - Khi yêu cầu giao lead: Gọi action 'distribute_lead'.\n"
+                . "  - Khi yêu cầu giao lead theo vòng xoay: Gọi action 'distribute_lead'.\n"
                 . "  - Khi bảo bù data (vd: 'bù cho Phúc 1 data vòng BBA'): Gọi action 'compensate_consultant'.\n"
                 . "  - Khi bật/tắt ca trực: Gọi action 'toggle_consultant_shift'.\n"
-                . "• THẺ HÀNH ĐỘNG ĐỀ XUẤT (SMART PROPOSAL): Với thao tác tạo mới / tài chính / hợp đồng / xuất file (tạo việc, tạo đơn nghỉ phép, tạm ứng, đề xuất chi PO, đơn SO đóng cọc, export Excel): Hãy gọi `draft_action_proposal` để điền sẵn 100% dữ liệu vào Thẻ Hành Động `<<<ACTION_PROPOSAL: {...}>>>` chuẩn ERP Tag để người dùng ấn mở và tự tay xác nhận lưu.\n"
+                . "• THẺ HÀNH ĐỘNG ĐỀ XUẤT (SMART PROPOSAL): Với thao tác tạo đơn từ / tài chính / hợp đồng / xuất file (tạo việc, tạo đơn nghỉ phép, tạm ứng, đề xuất chi PO, đơn SO đóng cọc, export Excel): Hãy gọi `draft_action_proposal` để điền sẵn 100% dữ liệu vào Thẻ Hành Động `<<<ACTION_PROPOSAL: {...}>>>` chuẩn ERP Tag để người dùng ấn mở và tự tay xác nhận lưu.\n"
                 . "  - Khi giao việc: Người tạo là {$cleanCallName}. Nếu trùng tên nhân sự, hãy hỏi lại để làm rõ.\n"
                 . "  - Khi tạo đơn SO: Kiểm tra pipeline học viên. Nếu chưa tới bước cọc/SO (< 13), hãy gợi ý chuyển pipeline kèm đề xuất đơn.\n\n"
                 . "• GIAO THỨC HỎI LẠI THÔNG MINH KHI GẶP NHIỀU LỰA CHỌN HOẶC THIẾU THÔNG TIN (PROACTIVE HUMAN-LIKE DISAMBIGUATION PROTOCOL):\n"
-                . "  - Khi công cụ trả về `requires_disambiguation: true` (hoặc `status: 'DISAMBIGUATION_REQUIRED'`, `status: 'MISSING_INFO_REQUIRED'`) hoặc khi có từ 2 hồ sơ Khách hàng / Học viên / Nhân viên / Vòng chia Lead / Công việc trùng tên mà {$cleanCallName} chỉ yêu cầu thao tác trên 1 đối tượng:\n"
+                . "  - Khi công cụ trả về `disambiguation_required: true` hoặc `requires_disambiguation: true` (hoặc `status: 'DISAMBIGUATION_REQUIRED'`, `status: 'MISSING_INFO_REQUIRED'`) hoặc khi có từ 2 hồ sơ Khách hàng / Học viên / Nhân viên / Vòng chia Lead / Công việc trùng tên mà {$cleanCallName} chỉ yêu cầu thao tác trên 1 đối tượng:\n"
                 . "    * TUYỆT ĐỐI KHÔNG ĐƯỢC TỰ Ý ĐOÁN MÒ HAY LẤY ĐẠI 1 HỒ SƠ!\n"
                 . "    * Hãy hỏi lại thật tự nhiên, lễ phép như một người trợ lý tận tâm (ví dụ: 'Dạ {$cleanCallName} ơi, em tìm thấy X hồ sơ trùng tên trong hệ thống. {$cleanCallName} muốn em thao tác trên hồ sơ nào dưới đây ạ?').\n"
                 . "    * Trình bày bảng so sánh ngắn gọn các hồ sơ trùng (Mã/ID, Họ tên, SĐT/Phòng ban, Chương trình/Giai đoạn, Người phụ trách).\n"
-                . "    * BẮT BUỘC GIỮ NGUYÊN 100% các thẻ `<<<ERP_CARD: {...}>>>`, `<<<CLARIFY_OPTIONS: [...]>>>` và `<<<NEXT_BEST_ACTIONS: [...]>>>` do công cụ trả về ở cuối câu trả lời để {$cleanCallName} bấm chọn 1 chạm!\n"
+                . "    * Giữ nguyên các thẻ `<<<CLARIFY_OPTIONS: [...]>>>` và `<<<NEXT_BEST_ACTIONS: [...]>>>` ở cuối câu trả lời để {$cleanCallName} bấm chọn 1 chạm.\n"
                 . "  - Khi kết quả truy vấn lần đầu trả về 0 bản ghi (`total_matching = 0`) do bộ lọc quá hẹp: Hãy chủ động gọi lại công cụ với bộ lọc mở rộng hơn (hoặc dựa vào `zero_result_diagnostics`) và giải thích rõ cho {$cleanCallName}.\n\n"
                 . "• TRUY VẤN DỮ LIỆU ĐA TẦNG, ĐA CẤP & BÓC TÁCH MA TRẬN ĐIỀU HÀNH TOÀN DIỆN 100% DATABASE (MULTI-TIER QUERY & BI FACET MATRIX):\n"
                 . "  - KHI NGƯỜI DÙNG HỎI LỌC DỮ LIỆU ĐA TẦNG / NHIỀU ĐIỀU KIỆN PHỨC TẠP:\n"
@@ -3741,29 +3745,32 @@ class ChatController {
                 . "    * Đối với Ticket hỗ trợ / Khiếu nại / Vi phạm SLA (`tickets`): BẮT BUỘC gọi `query_tickets_and_sla_multitier`.\n"
                 . "    * Đối với Nhân sự 360 / Nghỉ phép / Bảng lương (`users`, `hrm_profiles`, `hrm_leave_requests`, `monthly_payslips`): BẮT BUỘC gọi `query_hrm_workforce_and_payroll_multitier`.\n"
                 . "    * Đối với Tồn kho / Sản phẩm / Tài sản cấp phát (`products`, `inventory_items`, `assets`): BẮT BUỘC gọi `query_inventory_and_assets_multitier`.\n"
+                . "  - QUY CHUẨN TRÌNH BÀY GIAO DIỆN ENTERPRISE (KHÔNG EMOJI & CẤM THẺ ĐƠN LẺ DƯỚI BẢNG NHIỀU DÒNG):\n"
+                . "    * TUYỆT ĐỐI KHÔNG sử dụng icon/emoji trong các tiêu đề `###` hoặc trong nội dung báo cáo để giữ chuẩn mực Enterprise SaaS trang trọng, sạch sẽ.\n"
+                . "    * QUY TẮC CẤM SINH THẺ ĐƠN LẺ (`<<<ERP_CARD:...>>>`) KHI CÓ NHIỀU BẢN GHI: Khi danh sách kết quả có từ 2 đối tượng trở lên (`total_matching > 1` hoặc bảng có >= 2 dòng), CHỈ hiển thị BẢNG MARKDOWN và Link tải Excel; TUYỆT ĐỐI CẤM đính kèm thẻ `<<<ERP_CARD: {...}>>>` của một người đơn lẻ bên dưới bảng! Chỉ sinh `<<<ERP_CARD: {...}>>>` khi kết quả tra cứu/thao tác chỉ có ĐÚNG 1 đối tượng duy nhất (`total_matching = 1`).\n"
                 . "  - KHUNG PHẢN HỒI ĐIỀU HÀNH CHUẨN MỰC (EXECUTIVE PRESENTATION FRAMEWORK) — BẮT BUỘC ĐỦ 5 PHẦN:\n"
-                . "    1. 📌 TỔNG QUAN ĐIỀU HÀNH (Executive Metric Strip): Đưa ra ngay các chỉ số cốt lõi ở đầu câu trả lời (Tổng số đối tượng khớp bộ lọc, Tổng tiền / cọc, Tỷ lệ chuyển đổi %, Giá trị trung bình).\n"
-                . "    2. 📊 MA TRẬN BÓC TÁCH ĐA TẦNG (Faceted Breakdown Table): Định dạng BẢNG MARKDOWN 2 chiều thể hiện rõ mối tương quan Cấp 1 ➔ Cấp 2 (vd: Chương trình × Số lượng × Tiền cọc, hoặc Nguồn lead × Tỷ lệ chốt deal). BẮT BUỘC có tỷ lệ % để làm rõ cơ cấu.\n"
-                . "    3. 🔍 CHẨN ĐOÁN ĐIỂM NGHẼN & ĐỘT BIẾN (Diagnostic Insight): Chỉ rõ điểm sáng (top chương trình/kênh hiệu quả nhất) và điểm nghẽn (số lead bị ngâm/bỏ quên, các khoản chi sắp trễ hạn hoặc vượt mức).\n"
-                . "    4. 📈 TRỰC QUAN HÓA MICRO-BI: BẮT BUỘC đính kèm thẻ biểu đồ `<<<DYNAMIC_CHART: {...}>>>` (dùng dữ liệu do công cụ trả về hoặc số liệu từ ma trận bóc tách) để giao diện hiển thị biểu đồ trực quan.\n"
-                . "    5. 📋 XEM TRƯỚC TIÊU BIỂU, THẺ ERP & LINK TẢI EXCEL: Hiển thị bảng xem trước 3-5 đối tượng tiêu biểu với link `[👉 Tên](url)`, đính kèm thẻ `<<<ERP_CARD: {...}>>>` và Link tải toàn bộ dữ liệu UTF-8 BOM: `[📥 Bấm vào đây để tải danh sách (File Excel/CSV)]({export_url})`.\n"
-                . "    6. ⚡ GỢI Ý BƯỚC TIẾP THEO THÔNG MINH: Luôn kèm thẻ `<<<NEXT_BEST_ACTIONS: [...]>>>` chứa 2-3 nút gợi ý đào sâu hơn (vd: [\"Bóc tách riêng nhóm MBA\", \"Xem các lead chưa cọc\", \"Tải file Excel đầy đủ\"]).\n\n"
+                . "    1. TỔNG QUAN ĐIỀU HÀNH (Executive Metric Strip): Đưa ra ngay các chỉ số cốt lõi ở đầu câu trả lời (Tổng số đối tượng khớp bộ lọc, Tổng tiền / cọc, Tỷ lệ chuyển đổi %, Giá trị trung bình).\n"
+                . "    2. MA TRẬN BÓC TÁCH ĐA TẦNG (Faceted Breakdown Table): Định dạng BẢNG MARKDOWN 2 chiều thể hiện rõ mối tương quan Cấp 1 -> Cấp 2 (vd: Chương trình × Số lượng × Tiền cọc, hoặc Nguồn lead × Tỷ lệ chốt deal). BẮT BUỘC có tỷ lệ % để làm rõ cơ cấu.\n"
+                . "    3. CHẨN ĐOÁN ĐIỂM NGHẼN & ĐỘT BIẾN (Diagnostic Insight): Chỉ rõ điểm sáng (top chương trình/kênh hiệu quả nhất) và điểm nghẽn (số lead bị ngâm/bỏ quên, các khoản chi sắp trễ hạn hoặc vượt mức).\n"
+                . "    4. TRỰC QUAN HÓA MICRO-BI ĐA CHIỀU: BẮT BUỘC đính kèm nguyên vẹn thẻ biểu đồ `<<<DYNAMIC_CHART: {...}>>>` do công cụ trả về (giữ nguyên thuộc tính `datasets` để người dùng chuyển tab xem theo Chương trình, Giai đoạn, Nguồn, Tư vấn viên).\n"
+                . "    5. BẢNG XEM TRƯỚC TIÊU BIỂU & LINK TẢI EXCEL: Hiển thị bảng xem trước các đối tượng tiêu biểu. Với danh sách CRM Lead/Học viên, BẮT BUỘC dùng đúng các cột: `| ID | HỌ VÀ TÊN | SĐT | CHƯƠNG TRÌNH | GIAI ĐOẠN | SALE PHỤ TRÁCH | TIỀN CỌC |` với link `[Tên](/contacts?id=ID)` và Link tải toàn bộ dữ liệu UTF-8 BOM: `[Bấm vào đây để tải danh sách (File Excel/CSV)]({export_url})`.\n"
+                . "    6. GỢI Ý BƯỚC TIẾP THEO THÔNG MINH: Luôn kèm thẻ `<<<NEXT_BEST_ACTIONS: [...]>>>` chứa 2-3 nút gợi ý đào sâu hơn (vd: [\"Bóc tách riêng nhóm MBA\", \"Xem các lead chưa cọc\", \"Tải file Excel đầy đủ\"]).\n\n"
                 . "ĐIỀU HÀNH THÔNG MINH & ĐỊNH DẠNG ERP TAGS:\n"
                 . "1. GỢI Ý BƯỚC TIẾP THEO (BẮT BUỘC Ở CUỐI MỌI CÂU TRẢ LỜI): Đính kèm `<<<NEXT_BEST_ACTIONS: [\"Gợi ý 1\", \"Gợi ý 2\", \"Gợi ý 3\"]>>>` (2-3 nút ngắn gọn 3-8 từ để user click 1 chạm).\n"
                 . "2. CẢNH BÁO CHỦ ĐỘNG: Khi phát hiện rủi ro (lead bỏ quên, task trễ hạn, đơn kẹt duyệt), đính kèm `<<<PROACTIVE_INSIGHT: {\"type\": \"warning|urgent|opportunity\", \"title\": \"...\", \"description\": \"...\", \"actionPrompt\": \"...\", \"actionLabel\": \"...\"}>>>`.\n"
-                . "3. BIỂU ĐỒ TRỰC QUAN MICRO-BI: Khi so sánh số liệu/xu hướng/phễu CRM, đính kèm `<<<DYNAMIC_CHART: {\"type\": \"bar|line|pie\", \"title\": \"...\", \"xAxisKey\": \"name\", \"data\": [...], \"series\": [...]}>>>`.\n"
+                . "3. BIỂU ĐỒ TRỰC QUAN MICRO-BI: Khi so sánh số liệu/xu hướng/phễu CRM, đính kèm `<<<DYNAMIC_CHART: {\"type\": \"bar|line|pie\", \"title\": \"...\", \"xAxisKey\": \"name\", \"data\": [...], \"series\": [...], \"datasets\": {...}}>>>`.\n"
                 . "4. GHI NHỚ THÓI QUEN: Đính kèm `<<<SAVE_MEMORY: {\"key\": \"...\", \"value\": \"...\", \"category\": \"preference|working_context\"}>>>` khi user chia sẻ sở thích làm việc.\n"
-                . "5. MỞ TAB / MỞ HỒ SƠ ĐỐI TƯỢNG (BẮT BUỘC KHI USER BẢO MỞ TAB HOẶC NHẮC ĐẾN HỌC VIÊN/KHÁCH/PO/SO/QUY TRÌNH/TASK CỤ THỂ):\n"
+                . "5. MỞ TAB / MỞ HỒ SƠ ĐỐI TƯỢNG ĐƠN LẺ (KHI USER HỎI ĐÍCH DANH 1 HỒ SƠ CỤ THỂ):\n"
                 . "   - BẮT BUỘC gọi tool phù hợp (`get_system_navigation`, `search_contacts`, `get_my_tasks`,...) để lấy ID và đường dẫn trực tiếp.\n"
-                . "   - Trong câu trả lời, LUÔN LUÔN đính kèm đường link Markdown tuyệt đối chuẩn xác: `[👉 Bấm để mở {Tên đối tượng}]({direct_url})` (CẤM có khoảng trắng giữa `]` và `(`, viết liền `](`!).\n"
-                . "   - ĐỒNG THỜI đính kèm Smart Tag `<<<ERP_CARD: {\"entity_type\": \"contact|po|so|workflow|task\", \"entity_id\": 123, \"title\": \"Tên hiển thị\", \"subtitle\": \"SĐT hoặc ghi chú ngắn\", \"direct_url\": \"https://myerp.ideas.edu.vn/...\", \"action_label\": \"Mở hồ sơ ngay\"}>>>` để giao diện hiển thị ngay thẻ tương tác một chạm cho người dùng!\n\n"
+                . "   - Trong câu trả lời, đính kèm đường link Markdown chuẩn xác: `[Bấm để mở {Tên đối tượng}]({direct_url})` (CẤM có khoảng trắng giữa `]` và `(`, viết liền `](`!).\n"
+                . "   - Nếu kết quả chỉ có ĐÚNG 1 đối tượng duy nhất, đính kèm Smart Tag `<<<ERP_CARD: {\"entity_type\": \"contact|po|so|workflow|task\", \"entity_id\": 123, \"title\": \"Tên hiển thị\", \"subtitle\": \"SĐT hoặc ghi chú ngắn\", \"direct_url\": \"https://myerp.ideas.edu.vn/...\", \"action_label\": \"Mở hồ sơ ngay\"}>>>`.\n\n"
                 . "6. TRÍCH XUẤT LỊCH SỬ TƯƠNG TÁC / GHI CHÚ CHĂM SÓC KHÁCH HÀNG:\n"
                 . "   - Khi người dùng hỏi xem lịch sử tư vấn/tương tác/chăm sóc học viên/khách hàng: MẶC ĐỊNH trích xuất ĐẦY ĐỦ TOP 3 tương tác gần nhất (không được chỉ nêu duy nhất 1 mục!).\n"
                 . "   - Nếu người dùng yêu cầu xem thêm (ví dụ 'lấy 5 cái', 'lấy 10 cái', 'lấy hết / tất cả'): BẮT BUỘC truyền tham số `notes_limit` tương ứng (5, 10, tối đa 50) vào công cụ `get_contact_360_profile` để lấy đầy đủ dữ liệu.\n"
                 . "   - Luôn trình bày rõ ràng: Thời gian, Chuyên viên thực hiện, Kênh/Loại tương tác (cuộc gọi, ghi chú, gặp mặt, nộp hồ sơ) và Nội dung vắn tắt.\n\n"
                 . "7. ĐỊNH DẠNG BẢNG MARKDOWN CHO DANH SÁCH DỮ LIỆU (MARKDOWN TABLES):\n"
                 . "   - Khi phản hồi danh sách từ 2 đối tượng trở lên (danh sách công việc, danh sách học viên/lead, phiếu duyệt PO/SO, công nợ/đặt cọc, lịch sử tương tác nhiều mốc...): BẮT BUỘC định dạng dưới dạng BẢNG MARKDOWN chuẩn (| Cột 1 | Cột 2 | ...) có header, phân cách căn lề rõ ràng.\n"
-                . "   - Đính kèm các đường link mở hồ sơ `[👉 Tên](action/url)` ngay trong ô của bảng để người dùng có thể nhấp trực tiếp.\n"
+                . "   - Đính kèm các đường link mở hồ sơ `[Tên](action/url)` ngay trong ô của bảng để người dùng có thể nhấp trực tiếp.\n"
                 . "   - Tránh tuyệt đối việc liệt kê text thô dài dòng khi có dữ liệu dạng bảng.\n\n"
                 . "8. TỪ ĐIỂN TỪ LÓNG & CÔNG CỤ TÌM KIẾM / LỌC CHUYÊN SÂU (VIETNAMESE BUSINESS & CRM SLANG DICTIONARY):\n"
                 . "   - 'củ', 'chai': Triệu đồng VNĐ (ví dụ: '5 củ' = 5.000.000 VNĐ, '10 chai' = 10.000.000 VNĐ, '50 củ' = 50.000.000 VNĐ).\n"
@@ -5057,24 +5064,26 @@ class ChatController {
      * Strips redundant metadata, nulls, oversized strings, and limits oversized arrays to save tokens.
      */
     private function compactToolResultForModel(mixed $data, int $depth = 0): mixed {
-        if ($depth > 5) {
+        if ($depth > 6) {
             return $data;
         }
 
         if (is_array($data)) {
             $isAssoc = array_keys($data) !== range(0, count($data) - 1);
 
-            // If it's a huge sequential array (e.g. 50 items list), keep top 8 and add summary note
-            if (!$isAssoc && count($data) > 8) {
+            // If it's a huge sequential array at top/second level (e.g. > 15 items list), keep top 15
+            if (!$isAssoc && count($data) > 15) {
                 $totalCount = count($data);
-                $sliced = array_slice($data, 0, 8);
+                $sliced = array_slice($data, 0, 15);
                 $compactedList = [];
                 foreach ($sliced as $item) {
                     $compactedList[] = $this->compactToolResultForModel($item, $depth + 1);
                 }
-                $compactedList[] = [
-                    '_summary' => "Đã hiển thị 8 bản ghi tiêu biểu nhất trong tổng số {$totalCount} bản ghi thực tế."
-                ];
+                if ($depth <= 1) {
+                    $compactedList[] = [
+                        '_summary' => "Đã hiển thị 15 bản ghi tiêu biểu nhất trong tổng số {$totalCount} bản ghi thực tế."
+                    ];
+                }
                 return $compactedList;
             }
 
@@ -5175,7 +5184,8 @@ class ChatController {
             'sales' => [
                 'lead', 'khach hang', 'hoc vien', 'tu van', 'crm', 'pipeline', 'pheu', 'chia so', 'vong xoay',
                 'bu data', 'trung lead', 'cham soc', 'ngam lead', 'stale', 'chot sale', 'chot deal', 'lich hen',
-                'goi lai', 'sale', 'tuyen sinh', 'nguon lead', 'chua coc', 'da coc', 'trang thai lead', 'phan bo'
+                'goi lai', 'sale', 'tuyen sinh', 'nguon lead', 'chua coc', 'da coc', 'trang thai lead', 'phan bo',
+                'them data', 'data ca nhan', 'tao data', 'them lead', 'giao data', 'giao lead', 'chuyen lead'
             ],
             'finance' => [
                 'thu chi', 'chi phi', 'phieu chi', 'phieu thu', 'po', 'purchase order', 'so', 'sales order',
@@ -5343,7 +5353,7 @@ class ChatController {
             require_once __DIR__ . '/AgentToolRegistry.php';
 
             $agentToolMap = [
-                'sales' => ['query_crm_leads_multitier', 'query_deposits_and_revenue_multitier', 'query_deals_and_b2b_multitier', 'query_cross_domain_executive_synthesis', 'get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_sales_leaderboard', 'check_lead_duplicate_and_fairshare_status', 'schedule_contact_activity', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'manage_lead_round_distribution', 'lookup_recent_cash_receipts_and_deposits', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'quick_log_crm_activity', 'reassign_lead_owner', 'get_company_staff_directory', 'draft_action_proposal', 'get_system_navigation'],
+                'sales' => ['query_crm_leads_multitier', 'query_deposits_and_revenue_multitier', 'query_deals_and_b2b_multitier', 'query_cross_domain_executive_synthesis', 'smart_create_or_assign_leads', 'get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_sales_leaderboard', 'check_lead_duplicate_and_fairshare_status', 'schedule_contact_activity', 'get_my_crm_inbox', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'manage_lead_round_distribution', 'lookup_recent_cash_receipts_and_deposits', 'update_contact_pipeline', 'add_contact_consultation_note', 'update_contact_profile', 'quick_log_crm_activity', 'reassign_lead_owner', 'get_company_staff_directory', 'draft_action_proposal', 'get_system_navigation'],
                 'finance' => ['query_finance_multitier_analytics', 'query_deposits_and_revenue_multitier', 'query_cross_domain_executive_synthesis', 'filter_expenses_advanced', 'get_sales_leaderboard', 'get_contact_financial_summary', 'lookup_recent_cash_receipts_and_deposits', 'get_my_payment_proposals', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'approve_or_reject_erp_ticket', 'draft_action_proposal', 'get_system_navigation'],
                 'hrm' => ['query_hrm_workforce_and_payroll_multitier', 'get_staff_directory_advanced', 'query_company_attendance_and_work_hours', 'get_company_staff_directory', 'get_company_leave_and_absence', 'get_my_attendance_summary', 'get_my_payslip', 'get_pending_approvals', 'trace_approval_blocker', 'approve_or_reject_erp_ticket', 'update_task_progress_and_status', 'draft_action_proposal', 'get_system_navigation'],
                 'tasks' => ['query_tasks_and_projects_multitier', 'get_my_tasks', 'get_task_detail', 'get_company_staff_directory', 'schedule_contact_activity', 'update_task_progress_and_status', 'complete_task_checklist_item', 'draft_action_proposal', 'get_system_navigation'],
@@ -5351,8 +5361,8 @@ class ChatController {
                 'records_legal' => ['check_student_admission_records', 'get_academic_students_filter', 'get_contact_360_profile', 'attach_files_to_contact', 'draft_action_proposal', 'get_system_navigation'],
                 'assets_inventory' => ['query_inventory_and_assets_multitier', 'get_inventory_health_check', 'get_inventory_and_asset_status', 'draft_action_proposal', 'get_system_navigation'],
                 'b2b_partner' => ['query_deals_and_b2b_multitier', 'get_b2b_partner_and_contract_summary', 'draft_action_proposal', 'get_system_navigation'],
-                'marketing_campaigns' => ['query_crm_leads_multitier', 'query_deposits_and_revenue_multitier', 'query_deals_and_b2b_multitier', 'query_cross_domain_executive_synthesis', 'get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_sales_leaderboard', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'check_lead_duplicate_and_fairshare_status', 'get_campaign_marketing_stats', 'get_active_projects_and_campaigns', 'get_company_staff_directory', 'draft_action_proposal', 'get_system_navigation'],
-                'executive_bi' => ['query_cross_domain_executive_synthesis', 'query_crm_leads_multitier', 'query_finance_multitier_analytics', 'query_deposits_and_revenue_multitier', 'query_tasks_and_projects_multitier', 'query_deals_and_b2b_multitier', 'query_tickets_and_sla_multitier', 'query_hrm_workforce_and_payroll_multitier', 'query_inventory_and_assets_multitier', 'get_executive_morning_brief', 'get_sales_leaderboard', 'filter_expenses_advanced', 'get_staff_directory_advanced', 'get_inventory_health_check', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'query_company_attendance_and_work_hours', 'get_executive_financial_pulse', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'lookup_recent_cash_receipts_and_deposits', 'get_my_tasks', 'get_system_health_status', 'manage_lead_round_distribution', 'approve_or_reject_erp_ticket', 'update_task_progress_and_status', 'reassign_lead_owner', 'draft_action_proposal', 'get_system_navigation'],
+                'marketing_campaigns' => ['query_crm_leads_multitier', 'query_deposits_and_revenue_multitier', 'query_deals_and_b2b_multitier', 'query_cross_domain_executive_synthesis', 'smart_create_or_assign_leads', 'get_contact_360_profile', 'search_contacts', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'get_sales_leaderboard', 'get_sales_performance_and_stale_leads', 'get_consultant_shift_and_fairshare_audit', 'check_lead_duplicate_and_fairshare_status', 'get_campaign_marketing_stats', 'get_active_projects_and_campaigns', 'get_company_staff_directory', 'draft_action_proposal', 'get_system_navigation'],
+                'executive_bi' => ['query_cross_domain_executive_synthesis', 'query_crm_leads_multitier', 'query_finance_multitier_analytics', 'query_deposits_and_revenue_multitier', 'query_tasks_and_projects_multitier', 'query_deals_and_b2b_multitier', 'query_tickets_and_sla_multitier', 'query_hrm_workforce_and_payroll_multitier', 'query_inventory_and_assets_multitier', 'smart_create_or_assign_leads', 'get_executive_morning_brief', 'get_sales_leaderboard', 'filter_expenses_advanced', 'get_staff_directory_advanced', 'get_inventory_health_check', 'export_crm_leads_advanced', 'analyze_leads_demographics_and_job_titles', 'query_company_attendance_and_work_hours', 'get_executive_financial_pulse', 'get_financial_overview', 'get_upcoming_tuition_receivables', 'lookup_recent_cash_receipts_and_deposits', 'get_my_tasks', 'get_system_health_status', 'manage_lead_round_distribution', 'approve_or_reject_erp_ticket', 'update_task_progress_and_status', 'reassign_lead_owner', 'draft_action_proposal', 'get_system_navigation'],
                 'system_it' => ['query_tickets_and_sla_multitier', 'get_system_health_status', 'get_ticket_status_and_sla_breaches', 'draft_action_proposal', 'get_system_navigation']
             ];
 
@@ -5441,6 +5451,7 @@ class ChatController {
             $generateUrl = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key=" . urlencode($apiKey);
             $collectedExportMarkdowns = [];
             $collectedStructuredTags = [];
+            $suppressSingleErpCard = false;
 
             while ($toolTurn < $maxToolTurns) {
                 $toolTurn++;
@@ -5503,7 +5514,7 @@ class ChatController {
                 // If Gemini didn't call any tool, we have our final text answer!
                 if (empty($functionCalls)) {
                     $finalText = trim($directText);
-                    $finalText = $this->appendMissingDeterministicArtifacts($finalText, $collectedExportMarkdowns, $collectedStructuredTags);
+                    $finalText = $this->appendMissingDeterministicArtifacts($finalText, $collectedExportMarkdowns, $collectedStructuredTags, $suppressSingleErpCard);
                     if ($isStream && is_callable($onChunk)) {
                         $onChunk($finalText);
                     }
@@ -5546,10 +5557,29 @@ class ChatController {
                         $this->autoRecordEntityFromTool($ctxUid, $ctxTid, $toolName, $toolArgs, $toolResult);
                     }
 
+                    $isDisambig = is_array($toolResult) && (
+                        !empty($toolResult['requires_disambiguation']) ||
+                        !empty($toolResult['disambiguation_required']) ||
+                        ($toolResult['status'] ?? '') === 'DISAMBIGUATION_REQUIRED' ||
+                        ($toolResult['status'] ?? '') === 'MISSING_INFO_REQUIRED'
+                    );
+                    if ($isDisambig) {
+                        $requiresDisambiguationSynthesis = true;
+                    }
+
                     // Collect deterministic export markdown links & structured widget tags from tool result
                     if (is_array($toolResult)) {
-                        if (!empty($toolResult['export_link_markdown']) && is_string($toolResult['export_link_markdown'])) {
-                            $collectedExportMarkdowns[] = trim($toolResult['export_link_markdown']);
+                        foreach (['export_link_markdown', 'export_markdown'] as $expField) {
+                            if (!empty($toolResult[$expField]) && is_string($toolResult[$expField])) {
+                                $collectedExportMarkdowns[] = trim($toolResult[$expField]);
+                            }
+                        }
+                        if (!empty($toolResult['dynamic_chart']) && is_array($toolResult['dynamic_chart'])) {
+                            $collectedStructuredTags[] = '<<<DYNAMIC_CHART: ' . json_encode($toolResult['dynamic_chart'], JSON_UNESCAPED_UNICODE) . '>>>';
+                        }
+                        $rowCountReturned = (int)($toolResult['total_matching'] ?? $toolResult['total_processed'] ?? $toolResult['matched_count'] ?? 0);
+                        if ($rowCountReturned > 1 && !$isDisambig) {
+                            $suppressSingleErpCard = true;
                         }
                         foreach (['voice_summary_hint', 'instruction_for_ai', 'message', 'proposal_block'] as $strField) {
                             if (!empty($toolResult[$strField]) && is_string($toolResult[$strField])) {
@@ -5560,11 +5590,6 @@ class ChatController {
                                 }
                             }
                         }
-                    }
-
-                    $isDisambig = is_array($toolResult) && (!empty($toolResult['requires_disambiguation']) || ($toolResult['status'] ?? '') === 'DISAMBIGUATION_REQUIRED' || ($toolResult['status'] ?? '') === 'MISSING_INFO_REQUIRED');
-                    if ($isDisambig) {
-                        $requiresDisambiguationSynthesis = true;
                     }
 
                     $stepStatus = 'completed';
@@ -5596,7 +5621,7 @@ class ChatController {
                     $compactResult = $this->compactToolResultForModel($toolResult);
                     if (is_array($compactResult)) {
                         $lockFacts = [];
-                        foreach (['total_matching', 'total_leads', 'total_Filtered_Records', 'total_records', 'total_expenses_vnd', 'total_deposit_vnd', 'net_cashflow_vnd', 'total_headcount'] as $k) {
+                        foreach (['total_matching', 'total_leads', 'total_Filtered_Records', 'total_records', 'total_expenses_vnd', 'total_deposit_vnd', 'net_cashflow_vnd', 'total_headcount', 'created_count', 'reassigned_count'] as $k) {
                             if (isset($compactResult[$k])) {
                                 $lockFacts[$k] = $compactResult[$k];
                             }
@@ -5609,7 +5634,7 @@ class ChatController {
                             }
                         }
                         $compactResult['_ground_truth_lock'] = [
-                            'mandate' => 'STRICT_DATABASE_GROUND_TRUTH: Bắt buộc dùng chính xác 100% con số từ kết quả SQL này. Tuyệt đối không tự cộng nhẩm lại từ preview_top_15 hay bịa số liệu. Giữ nguyên link [Tải file Excel...](/export?...) và các thẻ <<<DYNAMIC_CHART:...>>> / <<<ACTION_PROPOSAL:...>>> / <<<ERP_CARD:...>>>.',
+                            'mandate' => 'STRICT_DATABASE_GROUND_TRUTH: Bắt buộc dùng chính xác 100% con số từ kết quả SQL này. Tuyệt đối không tự cộng nhẩm lại từ preview_top_15 hay bịa số liệu. Giữ nguyên link [Tải file Excel...](/export?...) và các thẻ <<<DYNAMIC_CHART:...>>> / <<<ACTION_PROPOSAL:...>>>. Không dùng emoji trong tiêu đề ###. Nếu kết quả có > 1 bản ghi, cấm sinh thẻ <<<ERP_CARD:...>>> đơn lẻ dưới bảng.',
                             'verified_metrics' => $lockFacts
                         ];
                     }
@@ -5627,6 +5652,7 @@ class ChatController {
 
                     $isActionTerminalTool = in_array($toolName, [
                         'draft_action_proposal',
+                        'smart_create_or_assign_leads',
                         'approve_or_reject_erp_ticket',
                         'update_task_progress_and_status',
                         'complete_task_checklist_item',
@@ -5794,8 +5820,8 @@ class ChatController {
                             }
                         }
 
-                        $withArtifacts = $this->appendMissingDeterministicArtifacts($accumulatedText, $collectedExportMarkdowns, $collectedStructuredTags);
-                        if ($withArtifacts !== $accumulatedText) {
+                        $withArtifacts = $this->appendMissingDeterministicArtifacts($accumulatedText, $collectedExportMarkdowns, $collectedStructuredTags, $suppressSingleErpCard);
+                        if ($withArtifacts !== $accumulatedText && strpos($withArtifacts, $accumulatedText) === 0) {
                             $suffix = substr($withArtifacts, strlen($accumulatedText));
                             if ($suffix !== '') {
                                 $onChunk($suffix);
@@ -5829,7 +5855,7 @@ class ChatController {
                     if (!$textFinal) {
                         return null;
                     }
-                    $textFinal = $this->appendMissingDeterministicArtifacts(trim($textFinal), $collectedExportMarkdowns, $collectedStructuredTags);
+                    $textFinal = $this->appendMissingDeterministicArtifacts(trim($textFinal), $collectedExportMarkdowns, $collectedStructuredTags, $suppressSingleErpCard);
                     return trim($textFinal);
                 }
             }
@@ -5843,12 +5869,17 @@ class ChatController {
 
     /**
      * Deterministically preserve /export links and <<<DYNAMIC_CHART:...>>> / <<<ACTION_PROPOSAL:...>>> / <<<ERP_CARD:...>>> tags
-     * if the LLM omitted them during Turn 2 synthesis.
+     * if the LLM omitted them during Turn 2 synthesis, and suppress stray single ERP_CARD below multi-row tables.
      */
-    private function appendMissingDeterministicArtifacts(string $text, array $exportMarkdowns, array $structuredTags): string {
+    private function appendMissingDeterministicArtifacts(string $text, array $exportMarkdowns, array $structuredTags, bool $suppressSingleErpCard = false): string {
         if ($text === '') {
             return $text;
         }
+        // If multi-row result was returned, strip any hallucinated single <<<ERP_CARD:...>>> below the table
+        if ($suppressSingleErpCard && strpos($text, '<<<ERP_CARD:') !== false) {
+            $text = trim((string)preg_replace('/<<<ERP_CARD:\s*[\s\S]*?>>>/', '', $text));
+        }
+
         $appendParts = [];
         $uniqueExports = array_values(array_unique(array_filter($exportMarkdowns)));
         if (!empty($uniqueExports) && strpos($text, '/export?') === false) {
@@ -5858,11 +5889,16 @@ class ChatController {
         }
         $uniqueTags = array_values(array_unique(array_filter($structuredTags)));
         foreach ($uniqueTags as $tagBlock) {
-            if (strpos($tagBlock, '<<<DYNAMIC_CHART:') === 0 && strpos($text, '<<<DYNAMIC_CHART:') === false) {
-                $appendParts[] = $tagBlock;
+            if (strpos($tagBlock, '<<<DYNAMIC_CHART:') === 0) {
+                if (strpos($text, '<<<DYNAMIC_CHART:') === false) {
+                    $appendParts[] = $tagBlock;
+                } elseif (strpos($tagBlock, '"datasets"') !== false && strpos($text, '"datasets"') === false) {
+                    // Replace LLM's partial chart with the full multi-dataset chart from the tool
+                    $text = (string)preg_replace('/<<<DYNAMIC_CHART:\s*[\s\S]*?>>>/', $tagBlock, $text, 1);
+                }
             } elseif (strpos($tagBlock, '<<<ACTION_PROPOSAL:') === 0 && strpos($text, '<<<ACTION_PROPOSAL:') === false) {
                 $appendParts[] = $tagBlock;
-            } elseif (strpos($tagBlock, '<<<ERP_CARD:') === 0 && strpos($text, '<<<ERP_CARD:') === false) {
+            } elseif (!$suppressSingleErpCard && strpos($tagBlock, '<<<ERP_CARD:') === 0 && strpos($text, '<<<ERP_CARD:') === false) {
                 $appendParts[] = $tagBlock;
             }
         }

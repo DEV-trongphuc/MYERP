@@ -354,13 +354,23 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
         }
 
         case 'lead': {
+          const leadName = p.name || p.full_name || p.contact_name || '';
           window.dispatchEvent(new CustomEvent('open-quick-add-lead', {
             detail: {
-              full_name: p.name || p.full_name || '',
+              name: leadName,
+              full_name: leadName,
               phone: p.phone || '',
               email: p.email || '',
-              source: p.source || 'AI IDEAS Super Intelligent',
-              notes: p.notes || ''
+              company: p.company || '',
+              source: p.source || (p.is_personal ? 'ca_nhan' : ''),
+              program: p.program || p.type || '',
+              type: p.program || p.type || '',
+              notes: p.notes || p.description || '',
+              owner_id: p.owner_id || p.assigned_to || p.target_owner_id || '',
+              assignee_name: p.assignee_name || p.owner_name || p.target_owner_name || '',
+              distribution_mode: p.distribution_mode || (p.is_personal ? 'self_assign' : (p.owner_id || p.assigned_to || p.target_owner_id ? 'direct_assign' : '')),
+              is_personal: Boolean(p.is_personal),
+              bulk_leads: Array.isArray(p.bulk_leads) ? p.bulk_leads : undefined,
             }
           }));
           toast.success('Đã mở Form thêm học viên và điền sẵn thông tin!');
@@ -817,9 +827,14 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
   const senderAvatar = p.created_by_avatar || p.creator_avatar || currentUser?.avatar_url || '';
   const createdAtStr = p.created_at || (proposal as any).created_at || '';
 
-  const approverOrAssigneeName = p.approver_name || p.assignee_name || p.user_name || (p.approver_id ? `Người duyệt #${p.approver_id}` : null);
+  const leadAssigneeName = p.assignee_name || p.owner_name || p.target_owner_name || null;
+  const approverOrAssigneeName = p.approver_name || leadAssigneeName || p.user_name || (p.approver_id ? `Người duyệt #${p.approver_id}` : null);
   const approverAvatar = p.approver_avatar || p.assignee_avatar || '';
-  const approverLabel = p.approver_name ? 'Người duyệt' : (p.assignee_name || p.user_name ? 'Người thực hiện' : 'Người duyệt');
+  const approverLabel = proposal.action_type === 'lead'
+    ? 'Giao cho Sale'
+    : p.approver_name
+      ? 'Người duyệt'
+      : (p.assignee_name || p.user_name ? 'Người thực hiện' : 'Người duyệt');
 
   let summaryRowText = '';
   if (proposal.action_type === 'expense' || proposal.action_type === 'advance_payment') {
@@ -838,6 +853,15 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
     summaryRowText = `[Báo giá]: ${p.customer_name ? `KH: ${p.customer_name} • ` : ''}${p.total ? `${Number(p.total).toLocaleString('vi-VN')} đ` : ''}`;
   } else if (proposal.action_type === 'deal') {
     summaryRowText = `[Deal]: ${p.title || 'Cơ hội chốt tuyển sinh'}${p.value ? ` • ${Number(p.value).toLocaleString('vi-VN')} đ` : ''}`;
+  } else if (proposal.action_type === 'lead') {
+    const leadParts: string[] = [];
+    const leadFullName = p.name || p.full_name || p.contact_name;
+    if (leadFullName) leadParts.push(`KH: ${leadFullName}`);
+    if (p.phone) leadParts.push(`SĐT: ${p.phone}`);
+    if (p.program || p.type) leadParts.push(`Chương trình: ${p.program || p.type}`);
+    if (p.is_personal || p.source === 'ca_nhan') leadParts.push('Phân loại: Data cá nhân');
+    else if (p.source) leadParts.push(`Nguồn: ${p.source}`);
+    summaryRowText = leadParts.length > 0 ? leadParts.join(' • ') : (proposal.summary ? `[Chi tiết]: ${proposal.summary}` : '');
   } else if (proposal.summary) {
     summaryRowText = `[Chi tiết]: ${proposal.summary}`;
   }
@@ -882,6 +906,14 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
         <>
           <CheckSquare size={13} />
           <span>Mở Task & Điền sẵn thông tin</span>
+        </>
+      );
+    }
+    if (proposal.action_type === 'lead') {
+      return (
+        <>
+          <User size={13} />
+          <span>Mở Form Thêm Lead & Điền sẵn</span>
         </>
       );
     }
@@ -986,6 +1018,18 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
             <span>
               {approverLabel}: <strong style={{ color: '#334155' }}>{approverOrAssigneeName}</strong>
             </span>
+          </div>
+        )}
+
+        {/* Lead-specific Program / Personal badges */}
+        {proposal.action_type === 'lead' && (p.program || p.type) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ color: '#64748b' }}>Chương trình: <strong style={{ color: '#334155' }}>{p.program || p.type}</strong></span>
+          </div>
+        )}
+        {proposal.action_type === 'lead' && (p.is_personal || p.source === 'ca_nhan') && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ color: '#64748b' }}>Phân loại: <strong style={{ color: '#0284c7' }}>Data cá nhân</strong></span>
           </div>
         )}
 
