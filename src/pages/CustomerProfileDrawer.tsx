@@ -5266,9 +5266,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                   borderRadius: '8px',
                   background: isNewLeadProfile ? '#dc2626' : `${stageColor}18`,
                   color: isNewLeadProfile ? '#ffffff' : stageColor,
-                  border: isNewLeadProfile ? '1px solid #b91c1c' : undefined,
                   fontWeight: 700,
-                  boxShadow: isNewLeadProfile ? '0 1px 4px rgba(220,38,38,0.35)' : undefined
                 }}>
                   {p.stage_name || p.pipeline_status || 'Giai đoạn 1'}
                 </span>
@@ -8916,12 +8914,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                           fontWeight: isNewLeadMobile ? 700 : 800,
                                           background: isNewLeadMobile ? '#dc2626' : (currentStageObj ? `${stColor}1a` : 'var(--color-bg)'),
                                           color: isNewLeadMobile ? '#ffffff' : stColor,
-                                          border: isNewLeadMobile ? '1px solid #b91c1c' : `1px solid ${stColor}33`,
+                                          border: 'none',
                                           display: 'inline-flex',
                                           alignItems: 'center',
                                           gap: '4px',
                                           cursor: 'pointer',
-                                          boxShadow: isNewLeadMobile ? '0 1px 4px rgba(220,38,38,0.35)' : '0 1px 2px rgba(0,0,0,0.03)'
                                         }}
                                       >
                                         <span>{currentStageObj?.name || 'Chưa xác định'}</span>

@@ -1313,7 +1313,6 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                                     padding: '3px 10px',
                                     borderRadius: '9999px',
                                     backgroundColor: isNewLeadStage ? '#dc2626' : `${stageInfo.color}14`,
-                                    border: isNewLeadStage ? '1px solid #b91c1c' : `1px solid ${stageInfo.color}33`,
                                     color: isNewLeadStage ? '#ffffff' : stageInfo.color,
                                     fontSize: '0.74rem',
                                     fontWeight: isNewLeadStage ? 700 : 750,
