@@ -121,6 +121,8 @@ if (in_array($baseAction, [
     'campaigns',
     'marketing',
     'marketing-campaigns',
+    'domation',
+    'marketing-automation',
     'lead-distribution',
     'consultant-shifts',
     'connectors',

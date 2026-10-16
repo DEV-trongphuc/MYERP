@@ -27,8 +27,15 @@ export function pushOverlay(id: string, close: OverlayCloseHandler, priority: nu
   if (existingIdx !== -1) {
     overlayStack.splice(existingIdx, 1);
   }
-  
-  overlayStack.push({ id, close, priority });
+
+  // If WorkChatModal (priority 1000) is already open and another drawer/modal is opened on top of it
+  // with default/lower priority, elevate its effective priority above WorkChatModal so ESC closes the drawer first.
+  let effectivePriority = priority;
+  if (id !== 'work-chat-modal' && effectivePriority <= 1000 && overlayStack.some(item => item.id === 'work-chat-modal')) {
+    effectivePriority = 1500 + Math.max(0, priority);
+  }
+
+  overlayStack.push({ id, close, priority: effectivePriority });
   // Stable sort: higher priority at the end (top of stack)
   overlayStack.sort((a, b) => a.priority - b.priority);
 

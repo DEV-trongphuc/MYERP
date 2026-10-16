@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 323;
+$targetVersion = 324;
 $currentVersion = 186;
 
 // Query current DB version
@@ -4650,19 +4650,50 @@ try {
         $logMsg("Nâng cấp lên phiên bản 323 hoàn tất.", "success");
     }
 
-    // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '323') ON DUPLICATE KEY UPDATE setting_value = '323'");
+    // --- PHIÊN BẢN 324: HỢP NHẤT SCHEMA DOMATION MARKETING AUTOMATION & ĐỒNG BỘ MATCH-ONLY ("3 KHÔNG") ---
+    if ($currentVersion < 324 || $isForce) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 324: Hợp nhất Schema DOMATION Marketing Automation & đồng bộ Match-Only (3 KHÔNG) với MYERP.contacts...", "info");
+        try {
+            require_once __DIR__ . '/migrations/324_integrate_domation_schema_and_match_sync.php';
+            $logMsg("Hợp nhất Schema DOMATION và đồng bộ Match-Only phiên bản 324 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi chạy migration 324: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 324 hoàn tất.", "success");
+    }
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 323", "success");
+    // Reconnect $conn if it timed out during heavy PDO migration
+    try {
+        $alive = false;
+        try {
+            $resPing = @$conn->query("SELECT 1");
+            if ($resPing) {
+                $alive = true;
+            }
+        } catch (Throwable $ePing) {
+            $alive = false;
+        }
+        if (!$alive && isset($servername, $username, $password, $dbname)) {
+            $conn = new mysqli($servername, $username, $password, $dbname);
+            $conn->set_charset("utf8mb4");
+        }
+    } catch (Throwable $eReconn) {}
+
+    // Update DB version in system_settings
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '324') ON DUPLICATE KEY UPDATE setting_value = '324'");
+
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 324", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");
 } finally {
-    $relStmt = $conn->prepare("SELECT RELEASE_LOCK('db_migration_lock')");
-    if ($relStmt) {
-        $relStmt->execute();
-        $relStmt->close();
-    }
+    try {
+        $relStmt = @$conn->prepare("SELECT RELEASE_LOCK('db_migration_lock')");
+        if ($relStmt) {
+            @$relStmt->execute();
+            @$relStmt->close();
+        }
+    } catch (Throwable $eRel) {}
     $logMsg("Đã giải phóng khóa Advisory Lock.", "info");
 }
 

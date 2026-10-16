@@ -132,7 +132,13 @@ function getCrmTableColumnsCache(?PDO $db, string $table = 'contacts'): array {
             'study_status', 'source', 'campaign_id', 'platform', 'form_name', 'utm_source',
             'utm_campaign', 'utm_medium', 'utm_content', 'utm_term', 'tags', 'notes',
             'expected_revenue', 'budget', 'budget_range', 'last_contact', 'created_at',
-            'updated_at', 'deleted_at'
+            'updated_at', 'deleted_at',
+            'domation_subscriber_id', 'marketing_status', 'engagement_score',
+            'stats_email_sent', 'stats_email_opened', 'stats_email_clicked',
+            'last_email_open_at', 'last_email_click_at', 'last_web_visit_at',
+            'web_pageviews_count', 'max_scroll_depth', 'active_flow_count',
+            'active_flow_names', 'active_voucher_code', 'survey_completed_count',
+            'zalo_user_id', 'meta_psid'
         ];
         $cache[$table] = array_fill_keys($defaultCols, true);
         return $cache[$table];
@@ -483,7 +489,8 @@ function applyCrmDateRangeFilter(PDO $db, string $alias, array $input, array &$w
     $dateField = strtolower(trim((string)($input['date_field'] ?? 'created_at')));
     $allowedDateFields = [
         'created_at', 'updated_at', 'last_contact', 'admission_date',
-        'deposit_date', 'next_followup_date', 'expected_decision_date', 'birthday'
+        'deposit_date', 'next_followup_date', 'expected_decision_date', 'birthday',
+        'last_web_visit_at', 'last_email_open_at', 'last_email_click_at'
     ];
     if (!in_array($dateField, $allowedDateFields, true)) {
         $dateField = 'created_at';
@@ -1543,7 +1550,13 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
                 'major', 'expected_intake', 'admission_date', 'student_id', 'study_status', 'source',
                 'campaign_id', 'platform', 'form_name', 'utm_source', 'utm_campaign', 'utm_medium',
                 'utm_content', 'utm_term', 'tags', 'notes', 'expected_revenue', 'budget', 'budget_range',
-                'total_spent', 'order_count', 'last_order_at', 'last_contact', 'created_at', 'updated_at'
+                'total_spent', 'order_count', 'last_order_at', 'last_contact', 'created_at', 'updated_at',
+                'domation_subscriber_id', 'marketing_status', 'engagement_score',
+                'stats_email_sent', 'stats_email_opened', 'stats_email_clicked',
+                'last_email_open_at', 'last_email_click_at', 'last_web_visit_at',
+                'web_pageviews_count', 'max_scroll_depth', 'active_flow_count',
+                'active_flow_names', 'active_voucher_code', 'survey_completed_count',
+                'zalo_user_id', 'meta_psid'
             ];
             $whitelistMap = array_fill_keys($whitelistedColumns, true);
 
@@ -1735,3 +1748,153 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
         }
     }
 }
+
+/**
+ * 360° Omnichannel Engagement Filters for Contacts (DOMATION Sync & Tracking)
+ *
+ * Returns a standalone SQL condition string (without leading AND, or '' if empty)
+ * and appends bound parameters to $outParams.
+ */
+function buildContactOmnichannelFilterClause(PDO $db, string $alias, array $paramsInput, array &$outParams): string {
+    static $hasEngagementScoreCol = null;
+    if ($hasEngagementScoreCol === null) {
+        try {
+            $stmt = $db->query("SHOW COLUMNS FROM contacts LIKE 'engagement_score'");
+            $hasEngagementScoreCol = ($stmt && $stmt->fetch(PDO::FETCH_ASSOC)) ? true : false;
+        } catch (\Throwable $e) {
+            $hasEngagementScoreCol = false;
+        }
+    }
+
+    if (!$hasEngagementScoreCol) {
+        return '';
+    }
+
+    $a = rtrim(trim($alias), '.');
+    if ($a === '') {
+        $a = 'contacts';
+    }
+
+    $clauses = [];
+
+    // 1. Engagement Score & Tier (`engagement_level`, `min_engagement_score`, `max_engagement_score`)
+    $engagementLevel = strtolower(trim((string)($paramsInput['engagement_level'] ?? '')));
+    if ($engagementLevel === 'hot_engaged') {
+        $clauses[] = "{$a}.engagement_score >= 50";
+    } elseif ($engagementLevel === 'warm_engaged') {
+        $clauses[] = "({$a}.engagement_score >= 20 AND {$a}.engagement_score < 50)";
+    } elseif ($engagementLevel === 'cold_engaged') {
+        $clauses[] = "({$a}.engagement_score IS NULL OR {$a}.engagement_score = 0)";
+    }
+
+    if (isset($paramsInput['min_engagement_score']) && $paramsInput['min_engagement_score'] !== '' && is_numeric($paramsInput['min_engagement_score'])) {
+        $clauses[] = "COALESCE({$a}.engagement_score, 0) >= ?";
+        $outParams[] = (int)$paramsInput['min_engagement_score'];
+    }
+    if (isset($paramsInput['max_engagement_score']) && $paramsInput['max_engagement_score'] !== '' && is_numeric($paramsInput['max_engagement_score'])) {
+        $clauses[] = "COALESCE({$a}.engagement_score, 0) <= ?";
+        $outParams[] = (int)$paramsInput['max_engagement_score'];
+    }
+
+    // 2. Email Engagement (`email_engagement`)
+    $emailEngagement = strtolower(trim((string)($paramsInput['email_engagement'] ?? '')));
+    if ($emailEngagement === 'opened_any') {
+        $clauses[] = "{$a}.stats_email_opened > 0";
+    } elseif ($emailEngagement === 'clicked_any') {
+        $clauses[] = "{$a}.stats_email_clicked > 0";
+    } elseif ($emailEngagement === 'sent_not_opened') {
+        $clauses[] = "({$a}.stats_email_sent > 0 AND COALESCE({$a}.stats_email_opened, 0) = 0)";
+    } elseif ($emailEngagement === 'opened_not_clicked') {
+        $clauses[] = "({$a}.stats_email_opened > 0 AND COALESCE({$a}.stats_email_clicked, 0) = 0)";
+    } elseif ($emailEngagement === 'never_emailed') {
+        $clauses[] = "COALESCE({$a}.stats_email_sent, 0) = 0";
+    } elseif ($emailEngagement === 'bounced_or_unsub') {
+        $clauses[] = "{$a}.marketing_status IN ('unsubscribed', 'bounced', 'complained')";
+    }
+
+    // 3. Website Tracking (`web_behavior`)
+    $webBehavior = strtolower(trim((string)($paramsInput['web_behavior'] ?? '')));
+    if ($webBehavior === 'visited_any') {
+        $clauses[] = "{$a}.web_pageviews_count > 0";
+    } elseif ($webBehavior === 'visited_7d') {
+        $clauses[] = "{$a}.last_web_visit_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)";
+    } elseif ($webBehavior === 'visited_30d') {
+        $clauses[] = "{$a}.last_web_visit_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)";
+    } elseif ($webBehavior === 'high_intent_3plus') {
+        $clauses[] = "{$a}.web_pageviews_count >= 3";
+    } elseif ($webBehavior === 'deep_scroll_70') {
+        $clauses[] = "{$a}.max_scroll_depth >= 70";
+    } elseif ($webBehavior === 'never_visited') {
+        $clauses[] = "COALESCE({$a}.web_pageviews_count, 0) = 0";
+    }
+
+    // 4. Automation Flow Filter (`automation_flow_filter`)
+    $flowFilter = trim((string)($paramsInput['automation_flow_filter'] ?? ''));
+    if ($flowFilter !== '' && strtolower($flowFilter) !== 'all') {
+        $flowFilterLower = strtolower($flowFilter);
+        if ($flowFilterLower === 'in_active_flow') {
+            $clauses[] = "{$a}.active_flow_count > 0";
+        } elseif ($flowFilterLower === 'not_in_flow') {
+            $clauses[] = "COALESCE({$a}.active_flow_count, 0) = 0";
+        } else {
+            $clauses[] = "({$a}.active_flow_names LIKE ? OR EXISTS (SELECT 1 FROM domation_flow_enrollments dfe JOIN domation_flows df ON df.id = dfe.flow_id WHERE dfe.contact_id = {$a}.id AND dfe.status IN ('active','waiting') AND (df.name LIKE ? OR CAST(df.id AS CHAR) = ?)))";
+            $outParams[] = '%' . $flowFilter . '%';
+            $outParams[] = '%' . $flowFilter . '%';
+            $outParams[] = $flowFilter;
+        }
+    }
+
+    // 5. Voucher Filter (`voucher_filter`)
+    $voucherFilter = trim((string)($paramsInput['voucher_filter'] ?? ''));
+    if ($voucherFilter !== '' && strtolower($voucherFilter) !== 'all') {
+        $voucherFilterLower = strtolower($voucherFilter);
+        if ($voucherFilterLower === 'has_active_voucher') {
+            $clauses[] = "({$a}.active_voucher_code IS NOT NULL AND {$a}.active_voucher_code != '')";
+        } elseif ($voucherFilterLower === 'used_voucher') {
+            $clauses[] = "EXISTS (SELECT 1 FROM domation_vouchers dv WHERE dv.contact_id = {$a}.id AND dv.status = 'used')";
+        } elseif ($voucherFilterLower === 'expired_unredeemed') {
+            $clauses[] = "EXISTS (SELECT 1 FROM domation_vouchers dv WHERE dv.contact_id = {$a}.id AND dv.status = 'active' AND dv.expires_at < NOW())";
+        } elseif ($voucherFilterLower === 'no_voucher') {
+            $clauses[] = "(({$a}.active_voucher_code IS NULL OR {$a}.active_voucher_code = '') AND NOT EXISTS (SELECT 1 FROM domation_vouchers dv WHERE dv.contact_id = {$a}.id))";
+        } else {
+            $clauses[] = "({$a}.active_voucher_code LIKE ? OR EXISTS (SELECT 1 FROM domation_vouchers dv WHERE dv.contact_id = {$a}.id AND dv.code LIKE ?))";
+            $outParams[] = '%' . $voucherFilter . '%';
+            $outParams[] = '%' . $voucherFilter . '%';
+        }
+    }
+
+    // 6. Survey Completion (`survey_filter`)
+    $surveyFilter = strtolower(trim((string)($paramsInput['survey_filter'] ?? '')));
+    if ($surveyFilter === 'completed_any') {
+        $clauses[] = "{$a}.survey_completed_count > 0";
+    } elseif ($surveyFilter === 'not_completed') {
+        $clauses[] = "COALESCE({$a}.survey_completed_count, 0) = 0";
+    }
+
+    // 7. Marketing Subscription Status (`marketing_status`)
+    $marketingStatus = strtolower(trim((string)($paramsInput['marketing_status'] ?? '')));
+    if (in_array($marketingStatus, ['subscribed', 'unsubscribed', 'bounced', 'complained'], true)) {
+        $clauses[] = "{$a}.marketing_status = ?";
+        $outParams[] = $marketingStatus;
+    }
+
+    // 8. Channel Reachability (`channel_reachability`)
+    $channelReachability = trim((string)($paramsInput['channel_reachability'] ?? ''));
+    $channelReachabilityLower = strtolower($channelReachability);
+    if ($channelReachabilityLower === 'has_zalo') {
+        $clauses[] = "({$a}.zalo_user_id IS NOT NULL AND {$a}.zalo_user_id != '')";
+    } elseif ($channelReachabilityLower === 'has_fb_psid') {
+        $clauses[] = "({$a}.meta_psid IS NOT NULL AND {$a}.meta_psid != '')";
+    } elseif ($channelReachability === 'has_email_Valid' || $channelReachabilityLower === 'has_email_valid') {
+        $clauses[] = "({$a}.email IS NOT NULL AND {$a}.email != '' AND COALESCE({$a}.marketing_status, 'subscribed') = 'subscribed')";
+    } elseif ($channelReachabilityLower === 'omnichannel_ready') {
+        $clauses[] = "({$a}.email IS NOT NULL AND {$a}.email != '' AND {$a}.phone IS NOT NULL AND {$a}.phone != '')";
+    }
+
+    if (empty($clauses)) {
+        return '';
+    }
+
+    return '(' . implode(' AND ', $clauses) . ')';
+}
+

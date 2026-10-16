@@ -321,13 +321,6 @@ const getMemoizedParsedTags = (msg: ChatMessage) => {
   return parsed;
 };
 
-const dockChatForPeek = () => {
-  const chatState = useChatStore.getState();
-  if (chatState.isMaximized) {
-    chatState.toggleMaximize();
-  }
-};
-
 const handleErpLinkClick = (e: React.MouseEvent, url: string) => {
   if (!url) return;
 
@@ -402,66 +395,142 @@ const handleErpLinkClick = (e: React.MouseEvent, url: string) => {
     return;
   }
 
-  // 1. Contact / Lead / Student: /contact/1024976, /contacts?id=1024960, /crm/1016920, /crm/leads/1016920, /contacts/1016920
-  const contactMatch = url.match(/(?:contacts?|students?|leads?|crm)(?:\.php)?(?:[/?].*?(?:id|contact_id)=|\/)([0-9]+)/i);
+  // 1. Contact / Lead / Student / Customer: /contact/1024976, /contacts?id=1024960, /contacts?open_contact_id=1024960, /crm/1016920, /crm/leads/1016920, /contacts/1016920
+  const contactMatch = url.match(/(?:contacts?|students?|leads?|customers?|crm|data)(?:\.php)?(?:[/?].*?(?:id|open_id|contact_id|open_contact_id|customer_id|student_id|lead_id)=|\/)([0-9]+)/i);
   if (contactMatch) {
     e.preventDefault();
     e.stopPropagation();
-    dockChatForPeek();
     const contactId = Number(contactMatch[1]);
+    useUIStore.getState().openCustomerDrawer(contactId);
     window.dispatchEvent(new CustomEvent('open-global-customer', { detail: { id: contactId, contactId } }));
     return;
   }
 
-  // 2. Expense / PO: /expenses?id=123, /expenses/123, /workflow/expense?id=123
-  const expenseMatch = url.match(/(?:expenses?|workflow\/expense)(?:\.php)?(?:[/?].*?(?:id|expense_id)=|\/)([0-9]+)/i);
+  // 2. Expense / PO / Purchase Order: /expenses?id=123, /expenses/123, /workflow/expense?id=123, /purchase-orders?id=123
+  const expenseMatch = url.match(/(?:expenses?|workflow\/expense|purchase-orders?|pos?)(?:\.php)?(?:[/?].*?(?:id|open_id|expense_id|po_id)=|\/)([0-9]+)/i);
   if (expenseMatch) {
     e.preventDefault();
     e.stopPropagation();
-    dockChatForPeek();
     const expenseId = Number(expenseMatch[1]);
+    useUIStore.getState().openExpenseDrawer(expenseId);
     window.dispatchEvent(new CustomEvent('open-expense-drawer', { detail: { id: expenseId } }));
     return;
   }
 
-  // 3. Task: /tasks?id=123, /workspace?task_id=123, /tasks/123
-  const taskMatch = url.match(/(?:tasks?|workspace)(?:\.php)?(?:[/?].*?(?:id|task_id)=|\/)([0-9]+)/i);
+  // 3. Task / Activity / Workspace: /tasks?id=123, /workspace?task_id=123, /tasks/123, /activities?id=123
+  const taskMatch = url.match(/(?:tasks?|activities?|activity|workspace|sale-portal)(?:\.php)?(?:[/?].*?(?:id|open_id|task_id|open_task_id|activity_id)=|\/)([0-9]+)/i);
   if (taskMatch) {
     e.preventDefault();
     e.stopPropagation();
-    dockChatForPeek();
     const taskId = Number(taskMatch[1]);
+    useUIStore.getState().openTaskDrawer(taskId);
     window.dispatchEvent(new CustomEvent('open-global-task', { detail: { id: taskId } }));
     return;
   }
 
-  // 4. Approval / Workflow: /approvals?id=123, /approvals/123
-  const approvalMatch = url.match(/(?:approvals?)(?:\.php)?(?:[/?].*?(?:id|approval_id)=|\/)([0-9]+)/i);
+  // 4. Approval / Workflow / Leave / Advance: /approvals?id=123, /approvals/123
+  const approvalMatch = url.match(/(?:approvals?|leaves?|advances?)(?:\.php)?(?:[/?].*?(?:id|open_id|approval_id|leave_id)=|\/)([0-9]+)/i);
   if (approvalMatch) {
     e.preventDefault();
     e.stopPropagation();
-    dockChatForPeek();
     const approvalId = Number(approvalMatch[1]);
-    window.dispatchEvent(new CustomEvent('open-global-approval', { detail: { id: approvalId, type: 'leave' } }));
+    let appType = url.toLowerCase().includes('advance') ? 'advance' : 'leave';
+    try {
+      const u = new URL(url, window.location.origin);
+      appType = u.searchParams.get('type') || u.searchParams.get('open_type') || appType;
+    } catch {}
+    useUIStore.getState().openApprovalDrawer({ id: approvalId, type: appType });
+    window.dispatchEvent(new CustomEvent('open-global-approval', { detail: { id: approvalId, type: appType } }));
     return;
   }
 
-  // 5. Deposit / SO: /deposits?id=123, /deposits/123
-  const depositMatch = url.match(/deposits?(?:\.php)?(?:[/?].*?(?:id|deposit_id)=|\/)([0-9]+)/i);
+  // 5. Deposit / SO / Sales Order: /deposits?id=123, /deposits/123, /sales-orders?id=123
+  const depositMatch = url.match(/(?:deposits?|sales?-orders?|so)(?:\.php)?(?:[/?].*?(?:id|open_id|deposit_id|open_deposit_id|so_id)=|\/)([0-9]+)/i);
   if (depositMatch) {
     e.preventDefault();
     e.stopPropagation();
-    dockChatForPeek();
     const depositId = Number(depositMatch[1]);
+    useUIStore.getState().openDepositDrawer(depositId);
     window.dispatchEvent(new CustomEvent('open-deposit-drawer', { detail: { id: depositId, depositId } }));
     return;
   }
+
+  // 5b. Deal / Company links with ID: open Deal/Company drawer on top of WorkChat without closing or shrinking WorkChat
+  const dealMatch = url.match(/(?:deals?)(?:\.php)?(?:[/?].*?(?:id|open_id|deal_id|open_deal_id)=|\/)([0-9]+)/i);
+  if (dealMatch) {
+    e.preventDefault();
+    e.stopPropagation();
+    const dealId = Number(dealMatch[1]);
+    if (!window.location.pathname.startsWith('/deals')) {
+      window.history.pushState({}, '', `/deals?open_deal_id=${dealId}`);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('open-deal-drawer', { detail: { id: dealId, dealId } }));
+    }, 60);
+    return;
+  }
+
+  const companyMatch = url.match(/(?:companies|company)(?:\.php)?(?:[/?].*?(?:id|open_id|company_id|open_company_id)=|\/)([0-9]+)/i);
+  if (companyMatch) {
+    e.preventDefault();
+    e.stopPropagation();
+    const companyId = Number(companyMatch[1]);
+    if (!window.location.pathname.startsWith('/companies')) {
+      window.history.pushState({}, '', `/companies?id=${companyId}`);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('open-company-drawer', { detail: { id: companyId } }));
+    }, 60);
+    return;
+  }
+
+  // 5c. Generic query-parameter entity fallback on any internal URL
+  try {
+    const parsedUrl = new URL(url, window.location.origin);
+    const sp = parsedUrl.searchParams;
+    const cId = sp.get('contact_id') || sp.get('open_contact_id') || sp.get('customer_id') || sp.get('student_id') || sp.get('lead_id');
+    if (cId && !isNaN(Number(cId))) {
+      e.preventDefault();
+      e.stopPropagation();
+      useUIStore.getState().openCustomerDrawer(Number(cId));
+      return;
+    }
+    const tId = sp.get('task_id') || sp.get('open_task_id') || sp.get('activity_id');
+    if (tId && !isNaN(Number(tId))) {
+      e.preventDefault();
+      e.stopPropagation();
+      useUIStore.getState().openTaskDrawer(Number(tId));
+      return;
+    }
+    const expId = sp.get('expense_id') || sp.get('po_id');
+    if (expId && !isNaN(Number(expId))) {
+      e.preventDefault();
+      e.stopPropagation();
+      useUIStore.getState().openExpenseDrawer(Number(expId));
+      return;
+    }
+    const depId = sp.get('deposit_id') || sp.get('open_deposit_id') || sp.get('so_id');
+    if (depId && !isNaN(Number(depId))) {
+      e.preventDefault();
+      e.stopPropagation();
+      useUIStore.getState().openDepositDrawer(Number(depId));
+      return;
+    }
+    const appId = sp.get('approval_id');
+    if (appId && !isNaN(Number(appId))) {
+      e.preventDefault();
+      e.stopPropagation();
+      useUIStore.getState().openApprovalDrawer({ id: Number(appId), type: sp.get('type') || sp.get('open_type') || 'leave' });
+      return;
+    }
+  } catch {}
 
   // 6. Navigation to internal routes without specific ID: use SPA navigation without full page reload
   if (url.startsWith('/') || url.startsWith('https://myerp.ideas.edu.vn/')) {
     e.preventDefault();
     e.stopPropagation();
-    useChatStore.getState().minimizeChat();
     const targetPath = url.replace(/^https:\/\/myerp\.ideas\.edu\.vn/, '') || '/';
     window.history.pushState({}, '', targetPath);
     window.dispatchEvent(new PopStateEvent('popstate'));
@@ -490,7 +559,7 @@ const renderInlineTokens = (rawText: string, isMine?: boolean, keyPrefix: string
     // Action tag e.g. [[crm_profile:1024960:Ngô Quang Hưng]] or [[task:123:Việc]]
     const tagMatch = part.match(/^\[\[([a-z_]+):([^:]+):([^\]]+)\]\]$/);
     if (tagMatch) {
-      const actionType = tagMatch[1];
+      const actionType = tagMatch[1].toLowerCase();
       const entityId = tagMatch[2];
       const entityName = tagMatch[3].trim();
       const cleanEntityName = entityName.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim() || entityName;
@@ -502,15 +571,33 @@ const renderInlineTokens = (rawText: string, isMine?: boolean, keyPrefix: string
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            dockChatForPeek();
-            if (actionType === 'crm_profile' || actionType === 'contact' || actionType === 'lead') {
-              window.dispatchEvent(new CustomEvent('open-global-customer', { detail: { id: Number(entityId), contactId: Number(entityId) } }));
-            } else if (actionType === 'task') {
-              window.dispatchEvent(new CustomEvent('open-global-task', { detail: { id: Number(entityId) } }));
-            } else if (actionType === 'expense' || actionType === 'po') {
-              window.dispatchEvent(new CustomEvent('open-expense-drawer', { detail: { id: Number(entityId) } }));
-            } else if (actionType === 'deposit' || actionType === 'so') {
-              window.dispatchEvent(new CustomEvent('open-deposit-drawer', { detail: { id: Number(entityId), depositId: Number(entityId) } }));
+            const numId = Number(entityId);
+            if (actionType === 'crm_profile' || actionType === 'contact' || actionType === 'customer' || actionType === 'student' || actionType === 'lead') {
+              useUIStore.getState().openCustomerDrawer(numId);
+              window.dispatchEvent(new CustomEvent('open-global-customer', { detail: { id: numId, contactId: numId } }));
+            } else if (actionType === 'task' || actionType === 'activity') {
+              useUIStore.getState().openTaskDrawer(numId);
+              window.dispatchEvent(new CustomEvent('open-global-task', { detail: { id: numId } }));
+            } else if (actionType === 'expense' || actionType === 'po' || actionType === 'purchase_order') {
+              useUIStore.getState().openExpenseDrawer(numId);
+              window.dispatchEvent(new CustomEvent('open-expense-drawer', { detail: { id: numId } }));
+            } else if (actionType === 'deposit' || actionType === 'so' || actionType === 'sales_order') {
+              useUIStore.getState().openDepositDrawer(numId);
+              window.dispatchEvent(new CustomEvent('open-deposit-drawer', { detail: { id: numId, depositId: numId } }));
+            } else if (actionType === 'approval' || actionType === 'workflow' || actionType === 'leave' || actionType === 'advance' || actionType === 'wfh' || actionType === 'ot') {
+              const appType = actionType === 'advance' ? 'advance' : 'leave';
+              useUIStore.getState().openApprovalDrawer({ id: numId, type: appType });
+              window.dispatchEvent(new CustomEvent('open-global-approval', { detail: { id: numId, type: appType } }));
+            } else if (actionType === 'deal') {
+              if (!window.location.pathname.startsWith('/deals')) {
+                window.history.pushState({}, '', `/deals?open_deal_id=${numId}`);
+                window.dispatchEvent(new PopStateEvent('popstate'));
+              }
+              setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('open-deal-drawer', { detail: { id: numId, dealId: numId } }));
+              }, 60);
+            } else if (actionType === 'company') {
+              window.dispatchEvent(new CustomEvent('open-company-drawer', { detail: { id: numId } }));
             }
           }}
           style={{
@@ -3832,8 +3919,6 @@ export const WorkChatModal: React.FC = () => {
                                 whileHover={{ scale: 1.02 }}
                                 whileTap={{ scale: 0.98 }}
                                 onClick={() => {
-                                  if (isMobile) closeChat();
-                                  else dockChatForPeek();
                                   openTaskDrawer(taskId);
                                 }}
                                 style={{
@@ -4682,29 +4767,26 @@ export const WorkChatModal: React.FC = () => {
 
                                     const handleOpenCardEntity = (e?: React.MouseEvent) => {
                                       if (e) e.stopPropagation();
-                                      if (isMobile) {
-                                        closeChat();
-                                      } else {
-                                        dockChatForPeek();
-                                      }
-                                      if (eType === 'contact') {
-                                        openCustomerDrawer(meta.entity_id);
-                                      } else if (eType === 'task') {
-                                        openTaskDrawer(meta.entity_id);
-                                      } else if (eType === 'so') {
+                                      if (eType === 'contact' || eType === 'customer' || eType === 'student' || eType === 'lead') {
+                                        openCustomerDrawer(meta.entity_id || meta.id);
+                                      } else if (eType === 'task' || eType === 'activity') {
+                                        openTaskDrawer(meta.entity_id || meta.id);
+                                      } else if (eType === 'so' || eType === 'deposit' || eType === 'sales_order') {
                                         if (meta.contact_id) {
                                           openCustomerDrawer(meta.contact_id, 'deals');
                                         } else {
-                                          window.dispatchEvent(new CustomEvent('open-deposit-drawer', { detail: { id: Number(meta.entity_id), depositId: Number(meta.entity_id) } }));
+                                          const depId = Number(meta.entity_id || meta.id);
+                                          openDepositDrawer(depId);
+                                          window.dispatchEvent(new CustomEvent('open-deposit-drawer', { detail: { id: depId, depositId: depId } }));
                                         }
-                                      } else if (eType === 'po') {
+                                      } else if (eType === 'po' || eType === 'expense' || eType === 'purchase_order') {
                                         openExpenseDrawer(Number(meta.entity_id || meta.id));
-                                      } else if (eType === 'workflow') {
-                                        const subType = String(meta.sub_type || '').toLowerCase();
+                                      } else if (eType === 'workflow' || eType === 'approval' || eType === 'leave' || eType === 'advance') {
+                                        const subType = String(meta.sub_type || eType || '').toLowerCase();
                                         const category = String(meta.category || '').toUpperCase();
                                         if (subType === 'advance') {
                                           openApprovalDrawer({
-                                            id: Number(meta.entity_id),
+                                            id: Number(meta.entity_id || meta.id),
                                             type: 'advance',
                                             title: meta.title,
                                             status: meta.status,
@@ -4713,10 +4795,10 @@ export const WorkChatModal: React.FC = () => {
                                             approver_name_2: meta.approver_name_2
                                           });
                                         } else if (subType === 'expense' || category === 'EXPENSE' || category === 'PAYMENT') {
-                                          openExpenseDrawer(Number(meta.entity_id));
+                                          openExpenseDrawer(Number(meta.entity_id || meta.id));
                                         } else {
                                           openApprovalDrawer({
-                                            id: Number(meta.entity_id),
+                                            id: Number(meta.entity_id || meta.id),
                                             type: 'leave',
                                             title: meta.title,
                                             status: meta.status,
@@ -4726,7 +4808,7 @@ export const WorkChatModal: React.FC = () => {
                                           });
                                         }
                                       } else {
-                                        toast.success(`Đang mở đối tượng ERP #${meta.entity_id}`);
+                                        toast.success(`Đang mở đối tượng ERP #${meta.entity_id || meta.id}`);
                                       }
                                     };
 
@@ -5270,27 +5352,30 @@ export const WorkChatModal: React.FC = () => {
                                                   const entityId = Number(c.entity_id);
                                                   const entityType = (c.entity_type || '').toLowerCase();
                                                   if (entityType === 'employee' || entityType === 'staff' || entityType === 'user') {
-                                                    if (isMobile) closeChat();
-                                                    else minimizeChat();
                                                     window.history.pushState({}, '', `/hrm?user_id=${entityId}`);
                                                     window.dispatchEvent(new PopStateEvent('popstate'));
                                                     return;
                                                   }
-                                                  if (isMobile) {
-                                                    closeChat();
-                                                  } else {
-                                                    dockChatForPeek();
-                                                  }
-                                                  if (entityType === 'contact' || entityType === 'customer' || entityType === 'student' || entityType === 'lead') {
+                                                  if (entityType === 'contact' || entityType === 'customer' || entityType === 'student' || entityType === 'lead' || entityType === 'crm_profile') {
                                                     openCustomerDrawer(entityId);
-                                                  } else if (entityType === 'expense' || entityType === 'po') {
+                                                  } else if (entityType === 'expense' || entityType === 'po' || entityType === 'purchase_order') {
                                                     openExpenseDrawer(entityId);
-                                                  } else if (entityType === 'task') {
+                                                  } else if (entityType === 'task' || entityType === 'activity') {
                                                     openTaskDrawer(entityId);
-                                                  } else if (entityType === 'approval' || entityType === 'workflow' || entityType === 'leave') {
-                                                    openApprovalDrawer({ id: entityId, type: 'leave' });
-                                                  } else if (entityType === 'deposit' || entityType === 'so') {
+                                                  } else if (entityType === 'approval' || entityType === 'workflow' || entityType === 'leave' || entityType === 'advance' || entityType === 'wfh' || entityType === 'ot') {
+                                                    openApprovalDrawer({ id: entityId, type: entityType === 'advance' ? 'advance' : 'leave' });
+                                                  } else if (entityType === 'deposit' || entityType === 'so' || entityType === 'sales_order') {
                                                     openDepositDrawer(entityId);
+                                                  } else if (entityType === 'deal') {
+                                                    if (!window.location.pathname.startsWith('/deals')) {
+                                                      window.history.pushState({}, '', `/deals?open_deal_id=${entityId}`);
+                                                      window.dispatchEvent(new PopStateEvent('popstate'));
+                                                    }
+                                                    setTimeout(() => {
+                                                      window.dispatchEvent(new CustomEvent('open-deal-drawer', { detail: { id: entityId, dealId: entityId } }));
+                                                    }, 60);
+                                                  } else if (entityType === 'company') {
+                                                    window.dispatchEvent(new CustomEvent('open-company-drawer', { detail: { id: entityId } }));
                                                   } else if (c.direct_url) {
                                                     window.open(c.direct_url, '_blank');
                                                   }

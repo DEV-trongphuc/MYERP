@@ -1,3 +1,8 @@
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+/* NOTE: Tailwind utilities are emitted at the END of this file, scoped under `.mkt-scope` (Marketing workspace only). */
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *, .dark, .dark *));
+
 /* ================================================
    MOBILE RESPONSIVE OVERRIDES (SAFE)
    ================================================ */
@@ -6931,8 +6936,135 @@ tr.erp-row-focused {
   transition: outline 0.1s ease, background-color 0.1s ease;
 }
 
+/* ================================================
+   MARKETING & AUTOMATION SUITE UTILITIES & ANIMATIONS
+   ================================================ */
+.card-premium {
+  background: var(--color-surface) !important;
+  border: 1px solid var(--color-border-light) !important;
+  border-radius: var(--radius-xl) !important;
+  box-shadow: var(--shadow-sm) !important;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.card-premium:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: var(--shadow-md) !important;
+}
+
+.hover-lift-premium {
+  transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+.hover-lift-premium:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: var(--shadow-md) !important;
+}
+
+.glass-panel-premium {
+  background: rgba(255, 255, 255, 0.78) !important;
+  backdrop-filter: blur(20px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+  border: 1px solid var(--color-border-light) !important;
+}
+
+[data-theme="dark"] .glass-panel-premium {
+  background: rgba(28, 28, 30, 0.78) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
+.custom-scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
+.scrollbar-none::-webkit-scrollbar,
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-none,
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.decor-svg {
+  position: absolute;
+  bottom: -15px;
+  right: -15px;
+  width: 100px;
+  height: 100px;
+  opacity: 0.07;
+  pointer-events: none;
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.stat-card:hover .decor-svg {
+  transform: scale(1.15) rotate(6deg);
+  opacity: 0.14;
+}
+
+@keyframes modalPopIn {
+  0% { opacity: 0; transform: scale(0.94) translateY(16px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.anim-modal-in { animation: modalPopIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.anim-fade-in-up, .animate-fade-in { animation: fadeInUp 0.3s ease-out both; }
+.anim-fade-in-down { animation: fadeInDown 0.3s ease-out both; }
+.anim-scale-in { animation: scaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.anim-slide-right { animation: slideInRight 0.3s ease-out both; }
 
 
 
 
 
+
+
+/* ================================================================
+   MARKETING & AUTOMATION WORKSPACE — SCOPED TAILWIND UTILITIES
+   ----------------------------------------------------------------
+   Why scoped: MYERP's legacy CSS above is unlayered (global `*` reset,
+   `button` reset, legacy `.grid-cols-2/.flex/.p-4` aliases). Layered
+   Tailwind utilities always lose to unlayered CSS, which broke padding,
+   button backgrounds and responsive grids on the Marketing pages.
+   Emitting utilities here (end of file, unlayered, prefixed by
+   `.mkt-scope`) makes them win ONLY inside the Marketing workspace,
+   while every legacy MYERP page stays byte-for-byte unaffected.
+   `display: contents` → the wrapper never creates a layout box.
+   Usage: wrap Marketing pages AND every Marketing portal root in
+   <div className="mkt-scope">…</div>.
+   ================================================================ */
+.mkt-scope {
+  display: contents;
+}
+
+.mkt-scope {
+  @tailwind utilities;
+}

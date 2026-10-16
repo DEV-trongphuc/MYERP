@@ -8,6 +8,7 @@
 require_once __DIR__ . '/agent_tools/AgentTaskProjectTools.php';
 require_once __DIR__ . '/agent_tools/AgentHrmAttendanceTools.php';
 require_once __DIR__ . '/agent_tools/AgentPoSoFinanceTools.php';
+require_once __DIR__ . '/agent_tools/AgentAutomationMarketingTools.php';
 
 class AgentToolRegistry {
 
@@ -1504,6 +1505,30 @@ class AgentToolRegistry {
                                     'type' => 'STRING',
                                     'description' => 'Từ khóa tìm kiếm theo tên, số điện thoại, email, công ty, chức danh hoặc ghi chú.'
                                 ],
+                                'engagement_status' => [
+                                    'type' => 'STRING',
+                                    'description' => "Lọc theo hành vi tương tác số Đa kênh (Omnichannel Engagement): 'email_opened' (đã mở email), 'email_clicked' (đã click link trong email), 'web_visited' (đã truy cập website), 'high_scroll' (cuộn trang web >= 50%), 'in_active_flow' (đang trong kịch bản Automation Flow), 'has_voucher' (đang có mã voucher), 'survey_completed' (đã hoàn thành khảo sát), 'hot_engaged' (điểm tương tác engagement_score >= 50 hoặc đã click email/xem web nhiều lần), 'unsubscribed' (đã hủy đăng ký/bounced)."
+                                ],
+                                'automation_flow' => [
+                                    'type' => 'STRING',
+                                    'description' => 'Lọc các khách hàng/lead đang chạy trong kịch bản Automation Flow cụ thể (nhập tên hoặc ID kịch bản).'
+                                ],
+                                'voucher_status' => [
+                                    'type' => 'STRING',
+                                    'description' => "Lọc theo trạng thái Voucher: 'has_voucher' (có mã voucher), 'no_voucher' (chưa có voucher), hoặc nhập trực tiếp mã voucher cụ thể."
+                                ],
+                                'marketing_status' => [
+                                    'type' => 'STRING',
+                                    'description' => "Lọc theo trạng thái nhận tin Marketing: 'active', 'unsubscribed', 'bounced', 'complained'."
+                                ],
+                                'min_engagement_score' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Điểm tương tác số (engagement_score) tối thiểu.'
+                                ],
+                                'max_engagement_score' => [
+                                    'type' => 'INTEGER',
+                                    'description' => 'Điểm tương tác số (engagement_score) tối đa.'
+                                ],
                                 'group_by' => [
                                     'type' => 'STRING',
                                     'enum' => ['program_stage', 'source_stage', 'owner_stage', 'branch_program', 'month_source', 'none'],
@@ -2156,12 +2181,13 @@ class AgentToolRegistry {
                     ]
                 ];
 
-        // Merge 100% Schema Modular Tool Declarations (Pillar 1: Tasks/Projects, Pillar 2: HRM/Attendance/Payroll, Pillar 3: PO/SO/Finance/Approvals)
+        // Merge 100% Schema Modular Tool Declarations (Pillar 1: Tasks/Projects, Pillar 2: HRM/Attendance/Payroll, Pillar 3: PO/SO/Finance/Approvals, Pillar 6: Omnichannel Automation & Marketing)
         $declarations = array_merge(
             $declarations,
             AgentTaskProjectTools::getToolDeclarations(),
             AgentHrmAttendanceTools::getToolDeclarations(),
-            AgentPoSoFinanceTools::getToolDeclarations()
+            AgentPoSoFinanceTools::getToolDeclarations(),
+            AgentAutomationMarketingTools::getToolDeclarations()
         );
 
         if ($allowedToolNames !== null && !empty($allowedToolNames)) {
@@ -2183,6 +2209,9 @@ class AgentToolRegistry {
                 'manage_my_hr_profile_and_requests',
                 'smart_manage_hrm_and_payroll',
                 'smart_manage_po_so_and_approvals',
+                'query_omnichannel_journey_and_automation_analytics',
+                'get_lead_digital_footprint_360',
+                'smart_manage_automation_flows_and_campaigns',
                 'query_crm_leads_multitier',
                 'query_finance_multitier_analytics',
                 'query_deposits_and_revenue_multitier',
@@ -2640,7 +2669,7 @@ class AgentToolRegistry {
     /**
      * Resolve a contact with Smart Disambiguation ("Biết tự hỏi khi gặp nhiều lựa chọn") and Zero-Trust RBAC
      */
-    private static function resolveContactWithDisambiguation(
+    public static function resolveContactWithDisambiguation(
         PDO $db,
         int $tid,
         array $auth,
@@ -10797,7 +10826,9 @@ class AgentToolRegistry {
                         'note_keyword', 'age_min', 'age_max', 'birth_year_from', 'birth_year_to', 'birthday_month',
                         'job_titles', 'companies', 'industries', 'education_or_degree', 'teams',
                         'campaign_or_utm', 'temperature', 'min_lead_score', 'max_lead_score',
-                        'study_status', 'student_code', 'expected_intake', 'missing_document', 'custom_rules'
+                        'study_status', 'student_code', 'expected_intake', 'missing_document',
+                        'engagement_status', 'automation_flow', 'voucher_status', 'marketing_status',
+                        'min_engagement_score', 'max_engagement_score', 'custom_rules'
                     ];
                     foreach ($extendedExportKeys as $extKey) {
                         if (isset($args[$extKey]) && $args[$extKey] !== '' && $args[$extKey] !== 'all' && $args[$extKey] !== null) {
@@ -12970,6 +13001,18 @@ class AgentToolRegistry {
                 case 'smart_manage_po_so_and_approvals':
                     return AgentPoSoFinanceTools::executeSmartManagePoSoAndApprovals($db, $args, $auth);
 
+                // =========================================================================
+                // PILLAR 6 OMNI-SCHEMA TOOLS: 360° OMNICHANNEL MARKETING, FLOWS & FOOTPRINT
+                // =========================================================================
+                case 'query_omnichannel_journey_and_automation_analytics':
+                    return AgentAutomationMarketingTools::executeQueryOmnichannelAnalytics($db, $args, $auth);
+
+                case 'get_lead_digital_footprint_360':
+                    return AgentAutomationMarketingTools::executeGetLeadDigitalFootprint360($db, $args, $auth);
+
+                case 'smart_manage_automation_flows_and_campaigns':
+                    return AgentAutomationMarketingTools::executeSmartManageAutomation($db, $args, $auth);
+
                 default:
                     return [
                         'success' => false,
@@ -13852,6 +13895,75 @@ class AgentToolRegistry {
             }
         }
 
+        // 15B. Omnichannel Marketing & Automation Engagement Filters (engagement_status, automation_flow, voucher_status, marketing_status, min/max_engagement_score)
+        $engStatusRaw = trim((string)($args['engagement_status'] ?? ''));
+        if ($engStatusRaw !== '' && strtolower($engStatusRaw) !== 'all') {
+            $engTokens = array_filter(array_map('trim', preg_split('/[,;|]+/u', strtolower($engStatusRaw))));
+            $engOrs = [];
+            foreach ($engTokens as $et) {
+                if ($et === 'email_opened' || $et === 'opened_email') {
+                    $engOrs[] = "(COALESCE({$p}stats_email_opened, 0) > 0 OR {$p}last_email_open_at IS NOT NULL)";
+                } elseif ($et === 'email_clicked' || $et === 'clicked_email') {
+                    $engOrs[] = "(COALESCE({$p}stats_email_clicked, 0) > 0 OR {$p}last_email_click_at IS NOT NULL)";
+                } elseif ($et === 'web_visited' || $et === 'visited_web') {
+                    $engOrs[] = "(COALESCE({$p}web_pageviews_count, 0) > 0 OR {$p}last_web_visit_at IS NOT NULL)";
+                } elseif ($et === 'high_scroll') {
+                    $engOrs[] = "COALESCE({$p}max_scroll_depth, 0) >= 50";
+                } elseif ($et === 'in_active_flow' || $et === 'active_flow') {
+                    $engOrs[] = "(COALESCE({$p}active_flow_count, 0) > 0 OR ({$p}active_flow_names IS NOT NULL AND TRIM({$p}active_flow_names) != ''))";
+                } elseif ($et === 'has_voucher' || $et === 'voucher') {
+                    $engOrs[] = "({$p}active_voucher_code IS NOT NULL AND TRIM({$p}active_voucher_code) != '')";
+                } elseif ($et === 'survey_completed' || $et === 'completed_survey') {
+                    $engOrs[] = "COALESCE({$p}survey_completed_count, 0) > 0";
+                } elseif ($et === 'hot_engaged' || $et === 'hot') {
+                    $engOrs[] = "(COALESCE({$p}engagement_score, 0) >= 50 OR COALESCE({$p}stats_email_clicked, 0) > 0 OR COALESCE({$p}web_pageviews_count, 0) >= 3 OR ({$p}active_voucher_code IS NOT NULL AND TRIM({$p}active_voucher_code) != ''))";
+                } elseif ($et === 'unsubscribed' || $et === 'bounced') {
+                    $engOrs[] = "{$p}marketing_status IN ('unsubscribed', 'bounced', 'complained')";
+                }
+            }
+            if (!empty($engOrs)) {
+                $where[] = "(" . implode(' OR ', $engOrs) . ")";
+            }
+        }
+
+        $autoFlowRaw = trim((string)($args['automation_flow'] ?? ''));
+        if ($autoFlowRaw !== '' && strtolower($autoFlowRaw) !== 'all') {
+            $where[] = "({$p}active_flow_names LIKE ? OR EXISTS (SELECT 1 FROM subscriber_flow_states sfs_af INNER JOIN flows f_af ON f_af.id = sfs_af.flow_id WHERE sfs_af.subscriber_id = {$p}subscriber_id AND (f_af.id = ? OR f_af.name LIKE ?)))";
+            $params[] = '%' . $autoFlowRaw . '%';
+            $params[] = $autoFlowRaw;
+            $params[] = '%' . $autoFlowRaw . '%';
+        }
+
+        $voucherStatusRaw = trim((string)($args['voucher_status'] ?? ''));
+        if ($voucherStatusRaw !== '' && strtolower($voucherStatusRaw) !== 'all') {
+            $vsLow = strtolower($voucherStatusRaw);
+            if ($vsLow === 'has_voucher' || $vsLow === 'yes' || $vsLow === 'true') {
+                $where[] = "({$p}active_voucher_code IS NOT NULL AND TRIM({$p}active_voucher_code) != '')";
+            } elseif ($vsLow === 'no_voucher' || $vsLow === 'none' || $vsLow === 'false') {
+                $where[] = "({$p}active_voucher_code IS NULL OR TRIM({$p}active_voucher_code) = '')";
+            } else {
+                $where[] = "{$p}active_voucher_code LIKE ?";
+                $params[] = '%' . $voucherStatusRaw . '%';
+            }
+        }
+
+        $mktStatusRaw = strtolower(trim((string)($args['marketing_status'] ?? '')));
+        if ($mktStatusRaw !== '' && $mktStatusRaw !== 'all') {
+            $where[] = "{$p}marketing_status = ?";
+            $params[] = $mktStatusRaw;
+        }
+
+        $minEngScore = isset($args['min_engagement_score']) && $args['min_engagement_score'] !== '' ? (int)$args['min_engagement_score'] : null;
+        if ($minEngScore !== null && $minEngScore > 0) {
+            $where[] = "COALESCE({$p}engagement_score, 0) >= ?";
+            $params[] = $minEngScore;
+        }
+        $maxEngScore = isset($args['max_engagement_score']) && $args['max_engagement_score'] !== '' ? (int)$args['max_engagement_score'] : null;
+        if ($maxEngScore !== null && $maxEngScore >= 0) {
+            $where[] = "COALESCE({$p}engagement_score, 0) <= ?";
+            $params[] = $maxEngScore;
+        }
+
         // 16. Dynamic Custom Rules Engine (JSON array of {field, operator, value, valueTo} with strict schema whitelist)
         $rawRules = $args['custom_rules'] ?? ($args['rules'] ?? null);
         if (!empty($rawRules)) {
@@ -13866,7 +13978,11 @@ class AgentToolRegistry {
                     'utm_source', 'utm_campaign', 'utm_medium', 'utm_content', 'utm_term', 'platform', 'form_name',
                     'lead_status', 'lead_temperature', 'next_action', 'next_followup_date', 'expected_decision_date',
                     'expected_intake', 'nurture_reason', 'lost_reason', 'lost_stage_id', 'program', 'admission_date',
-                    'student_id', 'study_status', 'major', 'total_spent', 'order_count', 'last_order_at', 'created_at', 'updated_at'
+                    'student_id', 'study_status', 'major', 'total_spent', 'order_count', 'last_order_at', 'created_at', 'updated_at',
+                    'subscriber_id', 'engagement_score', 'stats_email_sent', 'stats_email_opened', 'stats_email_clicked',
+                    'last_email_open_at', 'last_email_click_at', 'last_web_visit_at', 'web_pageviews_count', 'max_scroll_depth',
+                    'active_flow_count', 'active_flow_names', 'active_voucher_code', 'survey_completed_count', 'marketing_status',
+                    'zalo_user_id', 'meta_psid'
                 ];
                 $ruleClauses = [];
                 foreach ($rules as $rule) {

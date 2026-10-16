@@ -889,8 +889,14 @@ switch ($resource) {
         elseif ($resourceId === 'bulk-delete' && $method === 'POST') $ctrl->bulkDelete($auth);
         elseif ($resourceId === 'pipeline-phones' && $method === 'GET') $ctrl->getPipelinePhones($auth);
         elseif ($resourceId === 'silent-avatar-sync' && $method === 'POST') $ctrl->silentAvatarSync($auth);
+        elseif ($resourceId === 'match-domation-sync' && $method === 'POST') { require_once __DIR__ . '/controllers/DomationOmnichannelController.php'; (new DomationOmnichannelController($db))->triggerSilentMatchSync($auth); }
         elseif (!$resourceId && $method === 'GET')    $ctrl->index($auth);
         elseif (!$resourceId && $method === 'POST')   $ctrl->store($auth);
+        elseif ($resourceId  && $subResource === 'omnichannel-journey' && $method === 'GET') { require_once __DIR__ . '/controllers/DomationOmnichannelController.php'; (new DomationOmnichannelController($db))->getOmnichannelJourney($auth, (int)$resourceId); }
+        elseif ($resourceId  && $subResource === 'enroll-flow' && $method === 'POST') { require_once __DIR__ . '/controllers/DomationOmnichannelController.php'; (new DomationOmnichannelController($db))->enrollContactInFlow($auth, (int)$resourceId); }
+        elseif ($resourceId  && $subResource === 'flow-state' && in_array($method, ['POST', 'PUT', 'PATCH'], true)) { require_once __DIR__ . '/controllers/DomationOmnichannelController.php'; (new DomationOmnichannelController($db))->updateContactFlowState($auth, (int)$resourceId); }
+        elseif ($resourceId  && $subResource === 'issue-voucher' && $method === 'POST') { require_once __DIR__ . '/controllers/DomationOmnichannelController.php'; (new DomationOmnichannelController($db))->issueContactVoucher($auth, (int)$resourceId); }
+        elseif ($resourceId  && $subResource === 'redeem-voucher' && $method === 'POST') { require_once __DIR__ . '/controllers/DomationOmnichannelController.php'; (new DomationOmnichannelController($db))->redeemContactVoucher($auth, (int)$resourceId); }
         elseif ($resourceId  && $subResource === 'clone' && $method === 'POST') $ctrl->cloneContact($auth, (int)$resourceId);
         elseif ($resourceId  && $subResource === 'linked-profiles' && $method === 'GET') $ctrl->getLinkedProfiles($auth, (int)$resourceId);
         elseif ($resourceId  && in_array($subResource, ['stage', 'move', 'move-stage'], true) && in_array($method, ['PATCH', 'POST', 'PUT'], true)) $ctrl->moveStage($auth, (int)$resourceId);
@@ -1920,6 +1926,37 @@ switch ($resource) {
         elseif ($resourceId === 'broadcast' && $method === 'POST') $ctrl->broadcast($auth);
         elseif ($resourceId === 'force-logout' && $subResource && $method === 'DELETE') $ctrl->forceLogout($auth, (int)$subResource);
         else respond(404, null, 'Route không tồn tại', false);
+        break;
+
+    // DOMATION / MARKETING AUTOMATION SUITE
+    case 'domation':
+    case 'marketing-automation':
+        $autoEndpoint = basename((string)($resourceId ?? 'overview_stats'));
+        $autoEndpoint = preg_replace('/[^a-zA-Z0-9_-]/', '', $autoEndpoint);
+        if ($subResource !== null && $subResource !== '') {
+            if (!isset($_GET['route'])) {
+                $_GET['route'] = $subResource;
+            }
+            if (!isset($_GET['id'])) {
+                $_GET['id'] = $subResource;
+            }
+        }
+        $autoScript = __DIR__ . '/automation/' . $autoEndpoint . '.php';
+        if (!file_exists($autoScript)) {
+            $altEndpoint = str_replace('-', '_', strtolower($autoEndpoint));
+            $altScript = __DIR__ . '/automation/' . $altEndpoint . '.php';
+            if (file_exists($altScript)) {
+                $autoScript = $altScript;
+            }
+        }
+        if ($autoEndpoint !== '' && file_exists($autoScript)) {
+            $autoDir = __DIR__ . '/automation';
+            set_include_path($autoDir . PATH_SEPARATOR . get_include_path());
+            @chdir($autoDir);
+            require $autoScript;
+            exit;
+        }
+        respond(404, null, 'Automation endpoint không tồn tại', false);
         break;
 
     default:

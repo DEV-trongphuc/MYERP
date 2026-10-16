@@ -401,8 +401,51 @@ export function canManageSystemSettings(input: RoleInput): boolean {
   return (
     isSystemAdmin(input) ||
     isExecutive(input) ||
-    ['assistant', 'tro_ly', 'manager', 'sale_admin', 'saleadmin'].includes(role)
+    isMarketing(input) ||
+    ['assistant', 'tro_ly', 'manager', 'sale_admin', 'saleadmin', 'marketing'].includes(role)
   );
+}
+
+/**
+ * Checks if user can access a specific Marketing & Automation route.
+ * - Full access to all 8 routes: marketing, admin, superadmin, super_admin, director (and isMarketing(user)).
+ * - Partial monitoring access for manager, leader, sale_admin, saleadmin:
+ *   /marketing, /marketing/flows, /marketing/surveys, /marketing/vouchers.
+ */
+export function canAccessMarketingRoute(input: RoleInput, href = '/marketing'): boolean {
+  if (!input) return false;
+  const role = normalizeRole(input);
+  if (isExecutive(input) || isMarketing(input) || ['marketing', 'admin', 'superadmin', 'super_admin', 'director'].includes(role)) {
+    return true;
+  }
+  const isSalesLeadershipOrAdmin =
+    ['manager', 'leader', 'sale_admin', 'saleadmin'].includes(role) ||
+    (typeof input === 'object' && Boolean(input.is_leader || input.is_team_leader));
+  if (isSalesLeadershipOrAdmin) {
+    const cleanPath = href.split('?')[0];
+    return ['/marketing', '/marketing/flows', '/marketing/surveys', '/marketing/vouchers'].includes(cleanPath);
+  }
+  return false;
+}
+
+/**
+ * Checks if user can view & interact with the Omnichannel 360° Customer Journey tab & actions.
+ * Visible to Sales (sale/sales), Manager Sales (manager/leader), Sale Admin (sale_admin),
+ * Marketing (marketing), Director (director), and Admin (admin/superadmin).
+ */
+export function canViewOmnichannelJourney(input: RoleInput): boolean {
+  if (!input) return false;
+  const role = normalizeRole(input);
+  if (
+    isExecutive(input) ||
+    isMarketing(input) ||
+    isSales(input) ||
+    isManagement(input) ||
+    ['sale', 'sales', 'manager', 'leader', 'sale_admin', 'saleadmin', 'marketing', 'director', 'admin', 'superadmin', 'super_admin', 'assistant'].includes(role)
+  ) {
+    return true;
+  }
+  return false;
 }
 
 /**

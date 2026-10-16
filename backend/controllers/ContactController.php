@@ -265,6 +265,11 @@ class ContactController {
         unset($baseFilterInput['uncontacted']);
         applyCrmAdvancedMultiTierFilters($this->db, 'c.', $baseFilterInput, $where, $params);
 
+        $omniClause = buildContactOmnichannelFilterClause($this->db, 'c', $_GET, $params);
+        if ($omniClause !== '') {
+            $where[] = $omniClause;
+        }
+
         $stageSlug = !empty($_GET['stage_slug']) ? trim((string)$_GET['stage_slug']) : '';
         if (!$isGlobalPipelineSearch) {
             switch ($segment) {
@@ -3337,6 +3342,11 @@ class ContactController {
         $studentFilterInput = $_GET;
         $studentFilterInput['_defer_stage_filter'] = true;
         applyCrmAdvancedMultiTierFilters($this->db, 'c.', $studentFilterInput, $where, $params);
+
+        $omniClause = buildContactOmnichannelFilterClause($this->db, 'c', $_GET, $params);
+        if ($omniClause !== '') {
+            $where[] = $omniClause;
+        }
 
         $where[] = "(c.lead_status NOT IN ('lost', 'nurture') OR c.lead_status IS NULL)";
         $baseWhereStr = implode(' AND ', $where);

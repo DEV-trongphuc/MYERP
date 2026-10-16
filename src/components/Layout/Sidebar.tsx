@@ -6,13 +6,14 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { useEffect, useState, useRef, Fragment } from 'react';
 import { fetchAPI } from '../../utils/api';
 import { hasModuleApprovalAccess } from '../../utils/approvalPermissions';
-import { isMarketing, isAcademic } from '../../utils/roleUtils';
+import { isMarketing, isAcademic, canAccessMarketingRoute } from '../../utils/roleUtils';
 import { prefetchRoute } from '../../utils/routePrefetcher';
 
 export interface SidebarItem {
   name: string;
   href: string;
   icon: any;
+  iconKey?: string;
   end?: boolean;
   adminOnly?: boolean;
   badgeKey?: string;
@@ -68,6 +69,19 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = [
     ]
   },
   {
+    title: 'MARKETING & AUTOMATION',
+    items: [
+      { name: 'Tổng quan Marketing', href: '/marketing', icon: BarChart2, iconKey: 'marketing_dashboard', end: true },
+      { name: 'Kịch bản Automation', href: '/marketing/flows', icon: GitBranch, iconKey: 'automation_flows' },
+      { name: 'Chiến dịch Email', href: '/marketing/campaigns', icon: Layers, iconKey: 'email_campaigns' },
+      { name: 'Mẫu Email & ZNS', href: '/marketing/templates', icon: FileText, iconKey: 'email_templates' },
+      { name: 'Tệp Khách hàng', href: '/marketing/audience', icon: Users, iconKey: 'audience_segments' },
+      { name: 'Khảo sát & Bài test', href: '/marketing/surveys', icon: Clipboard, iconKey: 'surveys_quiz' },
+      { name: 'Voucher & QR', href: '/marketing/vouchers', icon: Ticket, iconKey: 'vouchers_qr' },
+      { name: 'Web Tracking & Pixel', href: '/marketing/web-tracking', icon: Globe, iconKey: 'web_tracking' }
+    ]
+  },
+  {
     title: 'NHÂN SỰ',
     items: [
       { name: 'Tài khoản cá nhân', href: '/account', icon: User },
@@ -89,7 +103,7 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = [
   {
     title: 'CÀI ĐẶT HỆ THỐNG',
     items: [
-      { name: 'Cài đặt hệ thống', href: '/settings', icon: Settings, hideForRoles: ['manager', 'assistant', 'sale', 'viewer', 'sales', 'director', 'hr', 'accountant', 'marketing', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'] },
+      { name: 'Cài đặt hệ thống', href: '/settings', icon: Settings, hideForRoles: ['manager', 'assistant', 'sale', 'viewer', 'sales', 'hr', 'accountant', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'] },
       { name: 'Huấn luyện AI', href: '/ai-training', icon: Cpu },
       { name: 'Quản lý tài khoản', href: '/accounts', icon: ShieldCheck, hideForRoles: ['manager', 'assistant', 'sale', 'viewer', 'sales', 'accountant', 'marketing', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'] },
       { name: 'Vòng phân bổ', href: '/rounds', icon: GitBranch, hideForRoles: ['manager', 'assistant', 'sale', 'sales', 'hr', 'accountant', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'] },
@@ -260,17 +274,17 @@ const QUICK_NAV_BY_ROLE: Record<string, QuickNavItem[]> = {
 };
 
 const GROUP_ORDER_BY_ROLE: Record<string, string[]> = {
-  admin: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ', 'CÀI ĐẶT HỆ THỐNG'],
-  superadmin: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ', 'CÀI ĐẶT HỆ THỐNG'],
-  super_admin: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ', 'CÀI ĐẶT HỆ THỐNG'],
-  director: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ', 'CÀI ĐẶT HỆ THỐNG'],
+  admin: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'MARKETING & AUTOMATION', 'CHƯƠNG TRÌNH', 'NHÂN SỰ', 'CÀI ĐẶT HỆ THỐNG'],
+  superadmin: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'MARKETING & AUTOMATION', 'CHƯƠNG TRÌNH', 'NHÂN SỰ', 'CÀI ĐẶT HỆ THỐNG'],
+  super_admin: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'MARKETING & AUTOMATION', 'CHƯƠNG TRÌNH', 'NHÂN SỰ', 'CÀI ĐẶT HỆ THỐNG'],
+  director: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'MARKETING & AUTOMATION', 'CHƯƠNG TRÌNH', 'NHÂN SỰ', 'CÀI ĐẶT HỆ THỐNG'],
   sale: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ'],
   sales: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ'],
   accountant: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ'],
   hr: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'NHÂN SỰ', 'CHƯƠNG TRÌNH'],
-  marketing: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ', 'CÀI ĐẶT HỆ THỐNG'],
-  sale_admin: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ'],
-  saleadmin: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ'],
+  marketing: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'MARKETING & AUTOMATION', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ', 'CÀI ĐẶT HỆ THỐNG'],
+  sale_admin: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'MARKETING & AUTOMATION', 'CHƯƠNG TRÌNH', 'NHÂN SỰ'],
+  saleadmin: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'MARKETING & AUTOMATION', 'CHƯƠNG TRÌNH', 'NHÂN SỰ'],
   academic: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'CHƯƠNG TRÌNH', 'KHÁCH HÀNG', 'TÀI CHÍNH', 'NHÂN SỰ'],
   hoc_vu: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'CHƯƠNG TRÌNH', 'KHÁCH HÀNG', 'TÀI CHÍNH', 'NHÂN SỰ'],
   tro_giang: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'CHƯƠNG TRÌNH', 'KHÁCH HÀNG', 'TÀI CHÍNH', 'NHÂN SỰ'],
@@ -278,10 +292,10 @@ const GROUP_ORDER_BY_ROLE: Record<string, string[]> = {
   giang_vien: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'CHƯƠNG TRÌNH', 'KHÁCH HÀNG', 'TÀI CHÍNH', 'NHÂN SỰ'],
   assistant: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'TÀI CHÍNH', 'NHÂN SỰ'],
   viewer: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'CHƯƠNG TRÌNH', 'KHÁCH HÀNG', 'TÀI CHÍNH', 'NHÂN SỰ'],
-  manager: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ', 'CÀI ĐẶT HỆ THỐNG'],
-  leader: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'TÀI CHÍNH', 'NHÂN SỰ'],
-  staff: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'TÀI CHÍNH', 'NHÂN SỰ'],
-  employee: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'TÀI CHÍNH', 'NHÂN SỰ']
+  manager: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'MARKETING & AUTOMATION', 'CHƯƠNG TRÌNH', 'NHÂN SỰ', 'CÀI ĐẶT HỆ THỐNG'],
+  leader: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'KHÁCH HÀNG', 'MARKETING & AUTOMATION', 'CHƯƠNG TRÌNH', 'TÀI CHÍNH', 'NHÂN SỰ'],
+  staff: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'KHÁCH HÀNG', 'MARKETING & AUTOMATION', 'CHƯƠNG TRÌNH', 'TÀI CHÍNH', 'NHÂN SỰ'],
+  employee: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'KHÁCH HÀNG', 'MARKETING & AUTOMATION', 'CHƯƠNG TRÌNH', 'TÀI CHÍNH', 'NHÂN SỰ']
 };
 
 export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileClose }: { isCollapsed: boolean; onToggleCollapse: () => void; isMobileOpen?: boolean; onMobileClose?: () => void }) => {
@@ -492,6 +506,9 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
       const isAdmin = role === 'admin' || role === 'superadmin' || role === 'super_admin';
       const isManagerOrAdmin = isAdmin || role === 'manager' || role === 'director';
 
+      if (group.title === 'MARKETING & AUTOMATION' || String(item.href || '').startsWith('/marketing')) {
+        return canAccessMarketingRoute(user, item.href);
+      }
 
       // Dynamic Unlocking for Approvers / Team Leaders
       const moduleKey = getModuleKeyForHref(item.href);
@@ -499,9 +516,9 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
         return true;
       }
 
-      // Marketing users/teams always have access to AI Pre-screener and Ticket data lỗi
+      // Marketing users/teams always have access to AI Pre-screener, Ticket data lỗi, and Settings
       const isMkt = isMarketing(user);
-      if (isMkt && (item.href === '/gatekeeper' || item.href === '/tickets')) {
+      if (isMkt && (item.href === '/gatekeeper' || item.href === '/tickets' || item.href === '/settings')) {
         return true;
       }
 
@@ -773,7 +790,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
                     {t(group.title)}
                   </span>
                 )}
-                 {group.items.map(({ name, href, icon: Icon, end, badgeKey }) => {
+                 {group.items.map(({ name, href, icon: Icon, iconKey, end, badgeKey }) => {
                    const badgeCount = badgeKey === 'tickets' ? pendingTickets : badgeKey === 'supportTickets' ? supportTicketsCount : badgeKey === 'gatekeeper' ? heldLeadsCount : badgeKey === 'coopSlips' ? pendingCoopCount : badgeKey === 'pendingExpenses' ? pendingExpensesCount : badgeKey === 'pendingDeposits' ? pendingDepositsCount : badgeKey === 'pendingApprovals' ? pendingApprovalsCount : badgeKey === 'workspaceTasks' ? undoneTasksCount : badgeKey === 'nopHoSo' ? nopHoSoCount : badgeKey === 'lePhi' ? lePhiCount : 0;
                    const isAccountant = String(user?.role).toLowerCase() === 'accountant';
                    const effectiveHref = (name === 'Lịch trình' && isAccountant) ? '/data?view=calendar' : href;
@@ -851,7 +868,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             flexShrink: 0, transition: 'all 0.2s', position: 'relative'
                           }}>
-                            <AppIcon name={name} size={26} />
+                            <AppIcon name={iconKey || name} size={26} />
                             {isCollapsed && badgeCount > 0 && (
                               <div style={{
                                 position: 'absolute', top: 0, right: 0, width: 8, height: 8,

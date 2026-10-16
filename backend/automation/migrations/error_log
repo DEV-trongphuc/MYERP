@@ -1,0 +1,4 @@
+[07-Jan-2026 14:26:32 Asia/Ho_Chi_Minh] PHP Fatal error:  Uncaught Error: Failed opening required 'db_connect.php' (include_path='.:/opt/alt/php81/usr/share/pear:/opt/alt/php81/usr/share/php:/usr/share/pear:/usr/share/php') in /home/vhvxoigh/automation.ideas.edu.vn/mail_api/migrations/add_zalo_lead_score.php:5
+Stack trace:
+#0 {main}
+  thrown in /home/vhvxoigh/automation.ideas.edu.vn/mail_api/migrations/add_zalo_lead_score.php on line 5

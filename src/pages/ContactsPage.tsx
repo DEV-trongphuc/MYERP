@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef, lazy, Suspense } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { Plus, Search, Phone, PhoneOff, Mail, Eye, EyeOff, Clock, Ban, CheckCircle2, Trash2, X, Download, Upload, ChevronDown, Users, Tag as TagIcon, UserCheck, RefreshCw, Filter, LayoutGrid, List, ArrowDownUp, Columns, Building2, Briefcase, Loader2, User, UserPlus, Calendar, AlertTriangle, AlertCircle, CheckSquare, Layers, MoreHorizontal, ChevronRight, ChevronLeft, GraduationCap, SlidersHorizontal, RotateCcw, Sparkles, BarChart3, MessageSquare } from 'lucide-react';
+import { Plus, Search, Phone, PhoneOff, Mail, Eye, EyeOff, Clock, Ban, CheckCircle2, Trash2, X, Download, Upload, ChevronDown, Users, Tag as TagIcon, UserCheck, RefreshCw, Filter, LayoutGrid, List, ArrowDownUp, Columns, Building2, Briefcase, Loader2, User, UserPlus, Calendar, AlertTriangle, AlertCircle, CheckSquare, Layers, MoreHorizontal, ChevronRight, ChevronLeft, GraduationCap, SlidersHorizontal, RotateCcw, Sparkles, BarChart3, MessageSquare, Globe, GitBranch, Ticket, ClipboardList, Flame } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar, getColorFromName } from '../components/ui/Avatar';
 import { useUIStore } from '../store/uiStore';
@@ -345,6 +345,19 @@ const CONTACT_SCHEMA_FIELDS: Array<{ value: string; label: string; sublabel?: st
   { value: 'created_at', label: 'Ngày tạo (created_at)', sublabel: 'Mốc thời gian', type: 'date' },
   { value: 'updated_at', label: 'Ngày cập nhật (updated_at)', sublabel: 'Mốc thời gian', type: 'date' },
   { value: 'last_contact', label: 'Ngày liên hệ cuối (last_contact)', sublabel: 'Mốc thời gian', type: 'date' },
+  // Omnichannel & Automation 360°
+  { value: 'engagement_score', label: 'Điểm Tương Tác Số (engagement_score)', sublabel: 'Omnichannel & Automation', type: 'number' },
+  { value: 'stats_email_sent', label: 'Số Email đã gửi (stats_email_sent)', sublabel: 'Omnichannel & Automation', type: 'number' },
+  { value: 'stats_email_opened', label: 'Số lần mở Email (stats_email_opened)', sublabel: 'Omnichannel & Automation', type: 'number' },
+  { value: 'stats_email_clicked', label: 'Số lần click Email (stats_email_clicked)', sublabel: 'Omnichannel & Automation', type: 'number' },
+  { value: 'web_pageviews_count', label: 'Số lượt xem trang Web (web_pageviews_count)', sublabel: 'Omnichannel & Automation', type: 'number' },
+  { value: 'last_web_visit_at', label: 'Lần truy cập Web gần nhất (last_web_visit_at)', sublabel: 'Omnichannel & Automation', type: 'date' },
+  { value: 'last_email_open_at', label: 'Lần mở Email gần nhất (last_email_open_at)', sublabel: 'Omnichannel & Automation', type: 'date' },
+  { value: 'active_flow_count', label: 'Số luồng Automation đang chạy (active_flow_count)', sublabel: 'Omnichannel & Automation', type: 'number' },
+  { value: 'active_flow_names', label: 'Tên luồng Automation đang chạy (active_flow_names)', sublabel: 'Omnichannel & Automation', type: 'text' },
+  { value: 'active_voucher_code', label: 'Mã Voucher đang sở hữu (active_voucher_code)', sublabel: 'Omnichannel & Automation', type: 'text' },
+  { value: 'survey_completed_count', label: 'Số bài Khảo sát đã làm (survey_completed_count)', sublabel: 'Omnichannel & Automation', type: 'number' },
+  { value: 'marketing_status', label: 'Trạng thái nhận Email Marketing (marketing_status)', sublabel: 'Omnichannel & Automation', type: 'text' },
 ];
 
 const SCHEMA_OPERATORS: Array<{ value: CustomSchemaRule['operator']; label: string }> = [
@@ -840,6 +853,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [page, setPage] = useState(1);
   const [profileContact, setProfileContact] = useState<any>(null);
+  const [profileInitialTab, setProfileInitialTab] = useState<string>('info');
   const [showImportExport, setShowImportExport] = useState(false);
   const [showExportDropdown, setShowExportDropdown] = useState(false);
   const exportDropdownRef = useRef<HTMLDivElement>(null);
@@ -929,6 +943,13 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   const [filterStudyStatus, setFilterStudyStatus] = useState('');
   const [filterStudentCode, setFilterStudentCode] = useState('');
   const [filterExpectedIntake, setFilterExpectedIntake] = useState('');
+
+  // Omnichannel & Automation 360° Filters
+  const [filterEngagementStatus, setFilterEngagementStatus] = useState('');
+  const [filterAutomationFlow, setFilterAutomationFlow] = useState('');
+  const [filterVoucherStatus, setFilterVoucherStatus] = useState('');
+  const [filterMinEngagementScore, setFilterMinEngagementScore] = useState('');
+  const [filterMaxEngagementScore, setFilterMaxEngagementScore] = useState('');
 
   // Dynamic Schema Rule Builder (100% DB Schema)
   const [customRules, setCustomRules] = useState<CustomSchemaRule[]>([]);
@@ -1182,6 +1203,11 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     studyStatus: '',
     studentCode: '',
     expectedIntake: '',
+    engagementStatus: '',
+    automationFlow: '',
+    voucherStatus: '',
+    minEngagementScore: '',
+    maxEngagementScore: '',
     customRules: [] as CustomSchemaRule[],
     customRulesLogic: 'AND' as 'AND' | 'OR',
     dateField: 'created_at' as 'created_at' | 'updated_at' | 'last_contact' | 'admission_date' | 'deposit_date' | 'next_followup_date' | 'birthday',
@@ -1231,6 +1257,10 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       activeFilters.studyStatus,
       activeFilters.studentCode,
       activeFilters.expectedIntake,
+      activeFilters.engagementStatus,
+      activeFilters.automationFlow,
+      activeFilters.voucherStatus,
+      (activeFilters.minEngagementScore || activeFilters.maxEngagementScore) ? 'engagement_score' : '',
       validCustomRulesCount > 0 ? 'custom_rules' : '',
       activeFilters.dateActive ? 'date' : '',
       activeFilters.admissionActive ? 'admission' : '',
@@ -1560,6 +1590,13 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     if (activeFilters.studyStatus) params.study_status = activeFilters.studyStatus;
     if (activeFilters.studentCode) params.student_code = activeFilters.studentCode;
     if (activeFilters.expectedIntake) params.expected_intake = activeFilters.expectedIntake;
+
+    // Omnichannel & Automation 360° params
+    if (activeFilters.engagementStatus) params.engagement_status = activeFilters.engagementStatus;
+    if (activeFilters.automationFlow) params.automation_flow = activeFilters.automationFlow;
+    if (activeFilters.voucherStatus) params.voucher_status = activeFilters.voucherStatus;
+    if (activeFilters.minEngagementScore) params.min_engagement_score = activeFilters.minEngagementScore;
+    if (activeFilters.maxEngagementScore) params.max_engagement_score = activeFilters.maxEngagementScore;
 
     // Dynamic Schema Rules (100% DB Schema)
     const validRules = (activeFilters.customRules || []).filter(
@@ -2085,6 +2122,19 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     } else if (key === 'expectedIntake') {
       setFilterExpectedIntake('');
       setActiveFilters(prev => ({ ...prev, expectedIntake: '' }));
+    } else if (key === 'engagementStatus') {
+      setFilterEngagementStatus('');
+      setActiveFilters(prev => ({ ...prev, engagementStatus: '' }));
+    } else if (key === 'automationFlow') {
+      setFilterAutomationFlow('');
+      setActiveFilters(prev => ({ ...prev, automationFlow: '' }));
+    } else if (key === 'voucherStatus') {
+      setFilterVoucherStatus('');
+      setActiveFilters(prev => ({ ...prev, voucherStatus: '' }));
+    } else if (key === 'engagementScore') {
+      setFilterMinEngagementScore('');
+      setFilterMaxEngagementScore('');
+      setActiveFilters(prev => ({ ...prev, minEngagementScore: '', maxEngagementScore: '' }));
     } else if (key === 'customRules') {
       setCustomRules([]);
       setActiveFilters(prev => ({ ...prev, customRules: [] }));
@@ -2138,6 +2188,11 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       studyStatus: filterStudyStatus,
       studentCode: filterStudentCode.trim(),
       expectedIntake: filterExpectedIntake.trim(),
+      engagementStatus: filterEngagementStatus,
+      automationFlow: filterAutomationFlow,
+      voucherStatus: filterVoucherStatus,
+      minEngagementScore: filterMinEngagementScore.trim(),
+      maxEngagementScore: filterMaxEngagementScore.trim(),
       customRules: customRules.map(r => ({ ...r })),
       customRulesLogic,
       dateField: filterDateField as any,
@@ -2193,6 +2248,11 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     setFilterStudyStatus('');
     setFilterStudentCode('');
     setFilterExpectedIntake('');
+    setFilterEngagementStatus('');
+    setFilterAutomationFlow('');
+    setFilterVoucherStatus('');
+    setFilterMinEngagementScore('');
+    setFilterMaxEngagementScore('');
     setCustomRules([]);
     setCustomRulesLogic('AND');
     setFilterDateField('created_at');
@@ -2236,6 +2296,11 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       studyStatus: '',
       studentCode: '',
       expectedIntake: '',
+      engagementStatus: '',
+      automationFlow: '',
+      voucherStatus: '',
+      minEngagementScore: '',
+      maxEngagementScore: '',
       customRules: [],
       customRulesLogic: 'AND',
       dateField: 'created_at',
@@ -5288,6 +5353,88 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                   </div>
                 </div>
 
+                {/* Card 5B: Hành trình số & Automation 360° */}
+                <div style={{
+                  padding: '1.1rem',
+                  borderRadius: '14px',
+                  background: 'var(--color-bg-alt, rgba(37, 99, 235, 0.03))',
+                  border: '1px solid var(--color-border-light)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.875rem' }}>
+                    <Sparkles size={15} color="#2563eb" /> Hành trình số & Automation 360°
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '0.75rem' }}>
+                    <div>
+                      <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Tương tác số (Digital Engagement)</label>
+                      <CustomSelect
+                        value={filterEngagementStatus || 'all'}
+                        onChange={v => setFilterEngagementStatus(v === 'all' ? '' : v)}
+                        options={[
+                          { value: 'all', label: 'Tất cả tín hiệu' },
+                          { value: 'email_opened', label: 'Đã mở Email (stats_email_opened > 0)' },
+                          { value: 'email_clicked', label: 'Đã click link Email (stats_email_clicked > 0)' },
+                          { value: 'web_visited_7d', label: 'Đã truy cập Web 7 ngày qua' },
+                          { value: 'survey_completed', label: 'Đã làm Khảo sát / Quiz' },
+                          { value: 'voucher_issued', label: 'Đang có Voucher' }
+                        ]}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Luồng Automation</label>
+                      <CustomSelect
+                        value={filterAutomationFlow || 'all'}
+                        onChange={v => setFilterAutomationFlow(v === 'all' ? '' : v)}
+                        options={[
+                          { value: 'all', label: 'Tất cả luồng' },
+                          { value: 'active_any', label: 'Đang chạy bất kỳ luồng nào' },
+                          { value: 'completed_any', label: 'Đã hoàn thành luồng' },
+                          { value: 'none', label: 'Chưa vào luồng' }
+                        ]}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <div>
+                      <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Trạng thái Voucher</label>
+                      <CustomSelect
+                        value={filterVoucherStatus || 'all'}
+                        onChange={v => setFilterVoucherStatus(v === 'all' ? '' : v)}
+                        options={[
+                          { value: 'all', label: 'Tất cả' },
+                          { value: 'has_active', label: 'Có Voucher chưa dùng' },
+                          { value: 'redeemed', label: 'Đã sử dụng Voucher' },
+                          { value: 'none', label: 'Chưa cấp Voucher' }
+                        ]}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', marginBottom: '4px' }}>Điểm Tương Tác Số (Engagement)</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                        <input
+                          type="number"
+                          min={0}
+                          className="form-input"
+                          placeholder="Từ điểm..."
+                          value={filterMinEngagementScore}
+                          onChange={e => setFilterMinEngagementScore(e.target.value)}
+                          style={{ height: '38px', fontSize: '0.8125rem', borderRadius: '8px' }}
+                        />
+                        <input
+                          type="number"
+                          min={0}
+                          className="form-input"
+                          placeholder="Đến..."
+                          value={filterMaxEngagementScore}
+                          onChange={e => setFilterMaxEngagementScore(e.target.value)}
+                          style={{ height: '38px', fontSize: '0.8125rem', borderRadius: '8px' }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Card 6: Bộ lọc nâng cao theo trường dữ liệu (100% DB Schema) */}
                 <div style={{
                   padding: '1.1rem',
@@ -5734,12 +5881,29 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                     const days = AGO_DAYS(c.last_contact);
                     const fullName = c.full_name || '';
                     const isUncontacted = isLeadUncontacted(c);
+                    const hasOmniSignals = Boolean(
+                      c.last_web_visit_at ||
+                      Number(c.web_pageviews_count || 0) > 0 ||
+                      Number(c.stats_email_opened || 0) > 0 ||
+                      Number(c.active_flow_count || 0) > 0 ||
+                      c.active_voucher_code ||
+                      Number(c.survey_completed_count || 0) > 0 ||
+                      Number(c.engagement_score || 0) > 0
+                    );
+                    const openJourney360 = (e: React.MouseEvent) => {
+                      e.stopPropagation();
+                      setProfileInitialTab('journey360');
+                      setProfileContact(c);
+                    };
                     return (
                       <motion.tr key={c.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                          style={{ transition: 'background 0.2s', cursor: 'pointer' }}
                          className="table-row-hover"
                          title={isUncontacted ? 'Lead mới giao hoặc giao lại chưa có tương tác mới' : undefined}
-                         onClick={() => setProfileContact(c)}
+                         onClick={() => {
+                           setProfileInitialTab('info');
+                           setProfileContact(c);
+                         }}
                          onContextMenu={(e) => {
                            e.preventDefault();
                            e.stopPropagation();
@@ -5835,6 +5999,70 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                   <p style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                     {c.company_name} {c.job_title ? `• ${c.job_title}` : ''}
                                   </p>
+                                )}
+                                {hasOmniSignals && (
+                                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
+                                    {(c.last_web_visit_at || Number(c.web_pageviews_count || 0) > 0) && (
+                                      <span
+                                        onClick={openJourney360}
+                                        title="Xem phiên truy cập Web trong Hành trình 360°"
+                                        style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.6rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.2 }}
+                                      >
+                                        <Globe size={9} />
+                                        {c.last_web_visit_at ? `Web: ${formatTimeAgo(c.last_web_visit_at)}` : `Web (${c.web_pageviews_count})`}
+                                      </span>
+                                    )}
+                                    {Number(c.stats_email_opened || 0) > 0 && (
+                                      <span
+                                        onClick={openJourney360}
+                                        title="Xem lịch sử mở & click Email trong Hành trình 360°"
+                                        style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.6rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.2 }}
+                                      >
+                                        <Mail size={9} />
+                                        Mở: {c.stats_email_opened}{Number(c.stats_email_clicked || 0) > 0 ? ` • Click: ${c.stats_email_clicked}` : ''}
+                                      </span>
+                                    )}
+                                    {Number(c.active_flow_count || 0) > 0 && (
+                                      <span
+                                        onClick={openJourney360}
+                                        title={c.active_flow_names ? `Đang chạy Flow: ${c.active_flow_names}` : 'Xem luồng Automation đang chạy'}
+                                        style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.6rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.2 }}
+                                      >
+                                        <GitBranch size={9} />
+                                        Flow ({c.active_flow_count})
+                                      </span>
+                                    )}
+                                    {c.active_voucher_code && (
+                                      <span
+                                        onClick={openJourney360}
+                                        title={`Mã Voucher: ${c.active_voucher_code}`}
+                                        style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.6rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.2 }}
+                                      >
+                                        <Ticket size={9} />
+                                        {c.active_voucher_code}
+                                      </span>
+                                    )}
+                                    {Number(c.survey_completed_count || 0) > 0 && (
+                                      <span
+                                        onClick={openJourney360}
+                                        title="Xem câu trả lời Khảo sát / Quiz"
+                                        style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.6rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.2 }}
+                                      >
+                                        <ClipboardList size={9} />
+                                        KS ({c.survey_completed_count})
+                                      </span>
+                                    )}
+                                    {Number(c.engagement_score || 0) > 0 && (
+                                      <span
+                                        onClick={openJourney360}
+                                        title="Điểm tương tác số Omnichannel"
+                                        style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.6rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.2 }}
+                                      >
+                                        <Flame size={9} />
+                                        +{c.engagement_score} pts
+                                      </span>
+                                    )}
+                                  </div>
                                 )}
                               </div>
                             </div>
@@ -6609,12 +6837,29 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                 {paged.map(c => {
                   const days = AGO_DAYS(c.last_contact);
                   const fullName = c.full_name || '';
+                  const hasOmniSignals = Boolean(
+                    c.last_web_visit_at ||
+                    Number(c.web_pageviews_count || 0) > 0 ||
+                    Number(c.stats_email_opened || 0) > 0 ||
+                    Number(c.active_flow_count || 0) > 0 ||
+                    c.active_voucher_code ||
+                    Number(c.survey_completed_count || 0) > 0 ||
+                    Number(c.engagement_score || 0) > 0
+                  );
+                  const openJourney360 = (e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    setProfileInitialTab('journey360');
+                    setProfileContact(c);
+                  };
                   return (
                     <motion.div 
                       key={c.id} 
                       initial={{ opacity: 0, scale: 0.95 }} 
                       animate={{ opacity: 1, scale: 1 }}
-                      onClick={() => setProfileContact(c)}
+                      onClick={() => {
+                        setProfileInitialTab('info');
+                        setProfileContact(c);
+                      }}
                       onContextMenu={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
@@ -6777,6 +7022,64 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                   <Mail size={12} style={{ color: 'var(--color-text-muted)' }} />
                                   <span>{c.email}</span>
+                                </div>
+                              )}
+                              {hasOmniSignals && (
+                                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px', marginTop: '2px' }}>
+                                  {(c.last_web_visit_at || Number(c.web_pageviews_count || 0) > 0) && (
+                                    <span
+                                      onClick={openJourney360}
+                                      style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.6rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.2 }}
+                                    >
+                                      <Globe size={9} />
+                                      {c.last_web_visit_at ? `Web: ${formatTimeAgo(c.last_web_visit_at)}` : `Web (${c.web_pageviews_count})`}
+                                    </span>
+                                  )}
+                                  {Number(c.stats_email_opened || 0) > 0 && (
+                                    <span
+                                      onClick={openJourney360}
+                                      style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.6rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.2 }}
+                                    >
+                                      <Mail size={9} />
+                                      Mở: {c.stats_email_opened}
+                                    </span>
+                                  )}
+                                  {Number(c.active_flow_count || 0) > 0 && (
+                                    <span
+                                      onClick={openJourney360}
+                                      style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.6rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.2 }}
+                                    >
+                                      <GitBranch size={9} />
+                                      Flow ({c.active_flow_count})
+                                    </span>
+                                  )}
+                                  {c.active_voucher_code && (
+                                    <span
+                                      onClick={openJourney360}
+                                      style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.6rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.2 }}
+                                    >
+                                      <Ticket size={9} />
+                                      {c.active_voucher_code}
+                                    </span>
+                                  )}
+                                  {Number(c.survey_completed_count || 0) > 0 && (
+                                    <span
+                                      onClick={openJourney360}
+                                      style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.6rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.2 }}
+                                    >
+                                      <ClipboardList size={9} />
+                                      KS ({c.survey_completed_count})
+                                    </span>
+                                  )}
+                                  {Number(c.engagement_score || 0) > 0 && (
+                                    <span
+                                      onClick={openJourney360}
+                                      style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', color: 'var(--color-text-muted, #64748b)', border: '1px solid var(--color-border, rgba(0,0,0,0.08))', fontSize: '0.6rem', fontWeight: 600, cursor: 'pointer', lineHeight: 1.2 }}
+                                    >
+                                      <Flame size={9} />
+                                      +{c.engagement_score} pts
+                                    </span>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -6963,9 +7266,11 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
             isOpen={!!profileContact}
             onClose={() => {
               setProfileContact(null);
+              setProfileInitialTab('info');
               fetchData(true);
             }}
             contact={profileContact}
+            initialTab={profileInitialTab as any}
             onUpdate={updated => {
               if (updated === null) {
                 setContacts(p => p.filter(c => c.id !== profileContact?.id));

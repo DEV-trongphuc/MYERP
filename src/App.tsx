@@ -70,6 +70,16 @@ const SplashPreviewPage = lazy(() => import('./pages/SplashPreviewPage').then(mo
 const DocumentationPage = lazy(() => import('./pages/DocumentationPage'));
 const ApiDocumentationPage = lazy(() => import('./pages/ApiDocumentationPage'));
 const ApiV1DocumentationPage = lazy(() => import('./pages/ApiV1DocumentationPage'));
+const MarketingDashboardPage = lazy(() => import('./pages/marketing/MarketingDashboardPage'));
+const AutomationFlowsPage = lazy(() => import('./pages/marketing/AutomationFlowsPage'));
+const EmailCampaignsPage = lazy(() => import('./pages/marketing/EmailCampaignsPage'));
+const EmailTemplatesPage = lazy(() => import('./pages/marketing/EmailTemplatesPage'));
+const AudienceSegmentsPage = lazy(() => import('./pages/marketing/AudienceSegmentsPage'));
+const SurveysQuizPage = lazy(() => import('./pages/marketing/SurveysQuizPage'));
+const PublicSurveyPage = lazy(() => import('./pages/marketing/PublicSurveyPage'));
+const VouchersQrPage = lazy(() => import('./pages/marketing/VouchersQrPage'));
+const PublicVoucherClaimPage = lazy(() => import('./pages/marketing/PublicVoucherClaimPage'));
+const WebTrackingOmnichannelPage = lazy(() => import('./pages/marketing/WebTrackingOmnichannelPage'));
 import { RouteTabSkeleton } from './components/ui/Skeleton';
 
 // Instant route-aware skeleton fallback so no tab ever flashes a blank white screen while lazy chunks load
@@ -254,7 +264,26 @@ const AppTabs = () => {
           return <AccessDeniedView key="access-denied-financial" />;
         }
         return <FinancialDashboard key="financial-dashboard" />;
+      case '/marketing':
+        return <div className="mkt-scope" key="marketing-dashboard"><MarketingDashboardPage /></div>;
+      case '/marketing/flows':
+        return <div className="mkt-scope" key="marketing-flows"><AutomationFlowsPage /></div>;
+      case '/marketing/campaigns':
+        return <div className="mkt-scope" key="marketing-campaigns"><EmailCampaignsPage /></div>;
+      case '/marketing/templates':
+        return <div className="mkt-scope" key="marketing-templates"><EmailTemplatesPage /></div>;
+      case '/marketing/audience':
+        return <div className="mkt-scope" key="marketing-audience"><AudienceSegmentsPage /></div>;
+      case '/marketing/surveys':
+        return <div className="mkt-scope" key="marketing-surveys"><SurveysQuizPage /></div>;
+      case '/marketing/vouchers':
+        return <div className="mkt-scope" key="marketing-vouchers"><VouchersQrPage /></div>;
+      case '/marketing/web-tracking':
+        return <div className="mkt-scope" key="marketing-web-tracking"><WebTrackingOmnichannelPage /></div>;
       default:
+        if (path.startsWith('/marketing/surveys/') && path.endsWith('/edit')) {
+          return <div className="mkt-scope" key={path}><SurveysQuizPage /></div>;
+        }
         return <SalePortal embedMode={true} activeTabProp="workspace" key="workspace" />;
     }
   };
@@ -723,6 +752,8 @@ export default function App() {
                   <Route path="/api-v1-docs" element={<ApiV1DocumentationPage />} />
                   <Route path="/api/v1/docs" element={<ApiV1DocumentationPage />} />
                   <Route path="/api-docs-legacy" element={<ApiDocumentationPage />} />
+                  <Route path="/s/:slug" element={<div className="mkt-scope"><PublicSurveyPage /></div>} />
+                  <Route path="/claim/:id" element={<div className="mkt-scope"><PublicVoucherClaimPage /></div>} />
 
                   {/* All authenticated users (sharing a single persistent AppTabs instance) */}
                   <Route element={<ProtectedRoute />}>

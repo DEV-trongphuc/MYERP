@@ -296,6 +296,16 @@ class ExportController {
                     'created_at' => 'Ngày tạo'
                 ];
             }
+
+            $contactSchemaCols = getCrmTableColumnsCache($this->db, 'contacts');
+            if (isset($contactSchemaCols['engagement_score'])) {
+                $baseColumns['engagement_score']       = 'Điểm tương tác (Engagement)';
+                $baseColumns['email_stats_summary']    = 'Email Đã gửi / Mở / Click';
+                $baseColumns['web_pageviews_count']    = 'Lượt xem Web';
+                $baseColumns['active_flow_names']      = 'Kịch bản Automation đang chạy';
+                $baseColumns['active_voucher_code']    = 'Mã Voucher';
+                $baseColumns['survey_completed_count'] = 'Số khảo sát đã làm';
+            }
             
             $search        = trim((string)($_GET['search'] ?? ($_GET['search_query'] ?? '')));
             $status        = $_GET['status'] ?? '';
@@ -714,6 +724,11 @@ class ExportController {
             // Shared Multi-Tier Extended Filters (stale_days, interacted_within_days, call counts, note_keyword, age/birthday, job_titles, companies, industries, education, teams, campaign_or_utm, temperature, lead_score, study_status, missing_document, max_deposit, overdue_milestone, custom_rules)
             AgentToolRegistry::applyMultitierExtendedContactFilters($this->db, 't.', $_GET, $where, $params);
 
+            $omniClause = buildContactOmnichannelFilterClause($this->db, 't', $_GET, $params);
+            if ($omniClause !== '') {
+                $where[] = $omniClause;
+            }
+
             $admissionFrom = $_GET['admission_from'] ?? '';
             $admissionTo   = $_GET['admission_to'] ?? '';
 
@@ -740,7 +755,15 @@ class ExportController {
                     $params[] = $to . ' 23:59:59';
                 }
             } else {
-                $targetDateField = ($dateField === 'last_contact') ? 't.last_contact' : (($dateField === 'updated_at') ? 't.updated_at' : 't.created_at');
+                if (in_array($dateField, ['last_contact', 'updated_at', 'last_web_visit_at', 'last_email_open_at', 'last_email_click_at'], true) && isset($contactSchemaCols[$dateField])) {
+                    $targetDateField = "t.{$dateField}";
+                } elseif ($dateField === 'last_contact') {
+                    $targetDateField = 't.last_contact';
+                } elseif ($dateField === 'updated_at') {
+                    $targetDateField = 't.updated_at';
+                } else {
+                    $targetDateField = 't.created_at';
+                }
                 if ($from !== '' && $to !== '') {
                     $where[] = "{$targetDateField} BETWEEN ? AND ?";
                     $params[] = $from . ' 00:00:00';
@@ -1528,6 +1551,19 @@ class ExportController {
                     // 18. Stage name fallback
                     if (empty($record['stage_name']) && !empty($record['pipeline_status'])) {
                         $record['stage_name'] = $record['pipeline_status'];
+                    }
+
+                    // 19. Omnichannel Engagement columns
+                    if (array_key_exists('engagement_score', $record) || isset($baseColumns['engagement_score'])) {
+                        $eSent  = (int)($record['stats_email_sent'] ?? 0);
+                        $eOpen  = (int)($record['stats_email_opened'] ?? 0);
+                        $eClick = (int)($record['stats_email_clicked'] ?? 0);
+                        $record['email_stats_summary']    = "{$eSent} / {$eOpen} / {$eClick}";
+                        $record['engagement_score']       = (int)($record['engagement_score'] ?? 0);
+                        $record['web_pageviews_count']    = (int)($record['web_pageviews_count'] ?? 0);
+                        $record['active_flow_names']      = (string)($record['active_flow_names'] ?? '');
+                        $record['active_voucher_code']    = (string)($record['active_voucher_code'] ?? '');
+                        $record['survey_completed_count'] = (int)($record['survey_completed_count'] ?? 0);
                     }
                 }
 

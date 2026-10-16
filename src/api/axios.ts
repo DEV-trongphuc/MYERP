@@ -197,15 +197,19 @@ api.interceptors.request.use((config) => {
     }
   }
 
+  const isAutomationPhpUrl = Boolean(
+    config.url && (config.url.startsWith('/automation/') || config.url.startsWith('automation/'))
+  );
+
   // Translate PUT, PATCH, DELETE to POST with method override header/param to bypass server restrictions
-  if (config.method && ['put', 'patch', 'delete'].includes(config.method.toLowerCase())) {
+  if (!isAutomationPhpUrl && config.method && ['put', 'patch', 'delete'].includes(config.method.toLowerCase())) {
     const originalMethod = config.method.toUpperCase();
     config.params = config.params || {};
     config.params._method = originalMethod;
     config.method = 'post';
   }
   // Rewrite URL to api.php?action=... to bypass missing web server rewrite rules
-  if (config.url && !config.url.startsWith('http') && !config.url.includes('api.php')) {
+  if (config.url && !config.url.startsWith('http') && !config.url.includes('api.php') && !isAutomationPhpUrl) {
     const cleanUrl = config.url.replace(/^\//, ''); // remove leading slash
     const qParts = cleanUrl.split('?');
     config.params = config.params || {};

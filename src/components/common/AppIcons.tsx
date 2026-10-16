@@ -7,6 +7,17 @@ interface AppIconProps {
   style?: React.CSSProperties;
 }
 
+export const NAV_ICON_MAP: Record<string, string> = {
+  marketing_dashboard: '/marketing',
+  automation_flows: '/marketing/flows',
+  email_campaigns: '/marketing/campaigns',
+  email_templates: '/marketing/templates',
+  audience_segments: '/marketing/audience',
+  surveys_quiz: '/marketing/surveys',
+  vouchers_qr: '/marketing/vouchers',
+  web_tracking: '/marketing/web-tracking'
+};
+
 export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '', style = {} }) => {
   const normName = (name || '').toLowerCase().trim();
 
@@ -16,6 +27,186 @@ export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '
       <feDropShadow dx="0" dy="2" stdDeviation="2.5" floodOpacity="0.25" />
     </filter>
   );
+
+  // MKT 1. MARKETING DASHBOARD ('marketing_dashboard' / '/marketing')
+  if (normName === 'marketing_dashboard' || normName === '/marketing' || normName.includes('tổng quan marketing') || normName.includes('marketing dashboard')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_mkt_dash_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#2563eb" />
+            <stop offset="100%" stopColor="#1e3a8a" />
+          </linearGradient>
+          {filterDef('ai_mkt_dash_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_mkt_dash_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <rect x="13" y="14" width="30" height="28" rx="5.5" fill="#ffffff" filter="url(#ai_mkt_dash_sh)" />
+        <path d="M17 34L23 27L28 30L36 20" stroke="#2563eb" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="36" cy="20" r="2.8" fill="#f59e0b" stroke="#ffffff" strokeWidth="1.2" />
+        <rect x="17" y="18" width="9" height="4" rx="1.5" fill="#dbeafe" />
+        <rect x="17" y="37" width="22" height="2" rx="1" fill="#cbd5e1" />
+      </svg>
+    );
+  }
+
+  // MKT 2. AUTOMATION FLOWS ('automation_flows' / '/marketing/flows')
+  if (normName === 'automation_flows' || normName === '/marketing/flows' || normName.includes('kịch bản automation') || normName.includes('automation flow')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_mkt_flow_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#7c3aed" />
+            <stop offset="100%" stopColor="#4c1d95" />
+          </linearGradient>
+          {filterDef('ai_mkt_flow_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_mkt_flow_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <g filter="url(#ai_mkt_flow_sh)">
+          <rect x="14" y="14" width="12" height="9" rx="3" fill="#ffffff" />
+          <rect x="30" y="23.5" width="12" height="9" rx="3" fill="#ffffff" />
+          <rect x="14" y="33" width="12" height="9" rx="3" fill="#ffffff" />
+        </g>
+        <circle cx="20" cy="18.5" r="2" fill="#7c3aed" />
+        <circle cx="36" cy="28" r="2" fill="#f59e0b" />
+        <circle cx="20" cy="37.5" r="2" fill="#10b981" />
+        <path d="M26 18.5H32C34.2 18.5 36 20.3 36 22.5V23.5" stroke="#ddd6fe" strokeWidth="2.2" strokeLinecap="round" />
+        <path d="M36 32.5V33.5C36 35.7 34.2 37.5 32 37.5H26" stroke="#ddd6fe" strokeWidth="2.2" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  // MKT 3. EMAIL CAMPAIGNS ('email_campaigns' / '/marketing/campaigns')
+  if (normName === 'email_campaigns' || normName === '/marketing/campaigns' || normName.includes('chiến dịch email')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_mkt_camp_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#ec4899" />
+            <stop offset="100%" stopColor="#9d174d" />
+          </linearGradient>
+          {filterDef('ai_mkt_camp_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_mkt_camp_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <rect x="13" y="17" width="30" height="22" rx="4.5" fill="#ffffff" filter="url(#ai_mkt_camp_sh)" />
+        <path d="M14.5 19L28 28.5L41.5 19" stroke="#db2777" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="39" cy="17" r="4.5" fill="#fbbf24" stroke="#ffffff" strokeWidth="1.5" />
+      </svg>
+    );
+  }
+
+  // MKT 4. EMAIL TEMPLATES ('email_templates' / '/marketing/templates')
+  if (normName === 'email_templates' || normName === '/marketing/templates' || normName.includes('mẫu email')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_mkt_tpl_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#0ea5e9" />
+            <stop offset="100%" stopColor="#0369a1" />
+          </linearGradient>
+          {filterDef('ai_mkt_tpl_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_mkt_tpl_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <rect x="15" y="13" width="26" height="30" rx="4.5" fill="#ffffff" filter="url(#ai_mkt_tpl_sh)" />
+        <rect x="19" y="17" width="18" height="6" rx="2" fill="#0284c7" />
+        <rect x="19" y="26" width="11" height="8" rx="1.5" fill="#bae6fd" />
+        <rect x="32" y="26" width="5" height="8" rx="1.5" fill="#e0f2fe" />
+        <rect x="19" y="37" width="18" height="2.2" rx="1.1" fill="#94a3b8" />
+      </svg>
+    );
+  }
+
+  // MKT 5. AUDIENCE SEGMENTS ('audience_segments' / '/marketing/audience')
+  if (normName === 'audience_segments' || normName === '/marketing/audience' || normName.includes('tệp khách hàng') || normName.includes('phân khúc')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_mkt_aud_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#10b981" />
+            <stop offset="100%" stopColor="#047857" />
+          </linearGradient>
+          {filterDef('ai_mkt_aud_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_mkt_aud_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <circle cx="28" cy="28" r="14" fill="#ffffff" filter="url(#ai_mkt_aud_sh)" />
+        <path d="M28 14A14 14 0 0 1 42 28H28V14Z" fill="#059669" />
+        <circle cx="24" cy="25" r="3" fill="#047857" />
+        <path d="M19 34C19 31.2 21.2 29.5 24 29.5C26.8 29.5 29 31.2 29 34" stroke="#047857" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  // MKT 6. SURVEYS & QUIZ ('surveys_quiz' / '/marketing/surveys')
+  if (normName === 'surveys_quiz' || normName === '/marketing/surveys' || normName.includes('khảo sát') || normName.includes('bài test') || normName.includes('survey')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_mkt_srv_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#f59e0b" />
+            <stop offset="100%" stopColor="#b45309" />
+          </linearGradient>
+          {filterDef('ai_mkt_srv_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_mkt_srv_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <rect x="15" y="13" width="26" height="30" rx="4.5" fill="#ffffff" filter="url(#ai_mkt_srv_sh)" />
+        <circle cx="21" cy="21" r="2.5" fill="#10b981" />
+        <rect x="26" y="19.8" width="11" height="2.4" rx="1.2" fill="#475569" />
+        <circle cx="21" cy="28.5" r="2.5" fill="#f59e0b" />
+        <rect x="26" y="27.3" width="9" height="2.4" rx="1.2" fill="#94a3b8" />
+        <circle cx="21" cy="36" r="2.5" fill="#cbd5e1" />
+        <rect x="26" y="34.8" width="11" height="2.4" rx="1.2" fill="#cbd5e1" />
+      </svg>
+    );
+  }
+
+  // MKT 7. VOUCHERS & QR ('vouchers_qr' / '/marketing/vouchers')
+  if (normName === 'vouchers_qr' || normName === '/marketing/vouchers' || normName.includes('voucher') || normName.includes('mã ưu đãi')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_mkt_vch_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#e11d48" />
+            <stop offset="100%" stopColor="#9f1239" />
+          </linearGradient>
+          {filterDef('ai_mkt_vch_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_mkt_vch_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <path d="M13 19C13 17.3431 14.3431 16 16 16H40C41.6569 16 43 17.3431 43 19V24.5C40.8 24.5 39 26.1 39 28C39 29.9 40.8 31.5 43 31.5V37C43 38.6569 41.6569 40 40 40H16C14.3431 40 13 38.6569 13 37V31.5C15.2 31.5 17 29.9 17 28C17 26.1 15.2 24.5 13 24.5V19Z" fill="#ffffff" filter="url(#ai_mkt_vch_sh)" />
+        <line x1="25" y1="18" x2="25" y2="38" stroke="#fda4af" strokeWidth="1.6" strokeDasharray="3 3" />
+        <rect x="29" y="22" width="4" height="4" rx="0.8" fill="#e11d48" />
+        <rect x="35" y="22" width="4" height="4" rx="0.8" fill="#e11d48" />
+        <rect x="29" y="28" width="4" height="4" rx="0.8" fill="#e11d48" />
+        <rect x="35" y="28" width="4" height="4" rx="0.8" fill="#fbbf24" />
+      </svg>
+    );
+  }
+
+  // MKT 8. WEB TRACKING & PIXEL ('web_tracking' / '/marketing/web-tracking' / 'journey360')
+  if (normName === 'web_tracking' || normName === '/marketing/web-tracking' || normName.includes('web tracking') || normName.includes('journey360') || normName.includes('đa kênh 360')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_mkt_web_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#2563eb" />
+            <stop offset="100%" stopColor="#0891b2" />
+          </linearGradient>
+          {filterDef('ai_mkt_web_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_mkt_web_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <circle cx="28" cy="28" r="14" fill="#ffffff" filter="url(#ai_mkt_web_sh)" />
+        <ellipse cx="28" cy="28" rx="6.5" ry="13.5" stroke="#2563eb" strokeWidth="1.6" />
+        <line x1="14.5" y1="28" x2="41.5" y2="28" stroke="#2563eb" strokeWidth="1.6" />
+        <circle cx="35" cy="21" r="3.5" fill="#ef4444" stroke="#ffffff" strokeWidth="1.2" />
+      </svg>
+    );
+  }
 
   // 1. QUY TRÌNH & PHÊ DUYỆT (Style 1B - Đỏ Ruby - Bảng kẹp hồ sơ & bút ký mạ vàng)
   if (normName.includes('quy trình') || normName.includes('phê duyệt')) {
@@ -891,6 +1082,158 @@ export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '
         {/* Incoming Grey Bubble */}
         <path d="M17 33C17 31.8954 17.8954 31 19 31H31C32.1046 31 33 31.8954 33 33V35.5C33 36.6046 32.1046 37.5 31 37.5H29L26 39.5V37.5H19C17.8954 37.5 17 36.6046 17 35.5V33Z" fill="#f1f5f9" stroke="#e2e8f0" strokeWidth="0.8" />
         <rect x="20" y="33.8" width="8" height="1.4" rx="0.7" fill="#94a3b8" />
+      </svg>
+    );
+  }
+
+  // MKT STEP: WAIT / CLOCK
+  if (normName === 'wait' || normName === 'clock' || normName.includes('chờ') || normName.includes('wait')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_wait_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#f59e0b" />
+            <stop offset="100%" stopColor="#d97706" />
+          </linearGradient>
+          {filterDef('ai_wait_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_wait_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <circle cx="28" cy="28" r="14" fill="#ffffff" filter="url(#ai_wait_sh)" />
+        <circle cx="28" cy="28" r="11" stroke="#fef3c7" strokeWidth="2" fill="#fffbeb" />
+        <path d="M28 21V28L33 31" stroke="#d97706" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="28" cy="28" r="2" fill="#d97706" />
+      </svg>
+    );
+  }
+
+  // MKT STEP: CONDITION / GIT-MERGE / BRANCH
+  if (normName === 'condition' || normName === 'git-merge' || normName === 'advanced_condition' || normName.includes('rẽ nhánh') || normName.includes('logic')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_cond_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#6366f1" />
+            <stop offset="100%" stopColor="#4338ca" />
+          </linearGradient>
+          {filterDef('ai_cond_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_cond_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <rect x="14" y="14" width="28" height="28" rx="8" fill="#ffffff" filter="url(#ai_cond_sh)" />
+        <path d="M22 19V37" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" />
+        <path d="M22 28C28 28 34 26 34 21" stroke="#818cf8" strokeWidth="2.5" strokeLinecap="round" />
+        <circle cx="22" cy="19" r="3.2" fill="#4338ca" stroke="#ffffff" strokeWidth="1.5" />
+        <circle cx="22" cy="37" r="3.2" fill="#4338ca" stroke="#ffffff" strokeWidth="1.5" />
+        <circle cx="34" cy="21" r="3.2" fill="#10b981" stroke="#ffffff" strokeWidth="1.5" />
+      </svg>
+    );
+  }
+
+  // MKT STEP: SPLIT TEST / A-B TEST / BEAKER
+  if (normName === 'split_test' || normName === 'beaker' || normName.includes('split') || normName.includes('a/b')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_ab_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#06b6d4" />
+            <stop offset="100%" stopColor="#0e7490" />
+          </linearGradient>
+          {filterDef('ai_ab_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_ab_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <rect x="14" y="14" width="28" height="28" rx="8" fill="#ffffff" filter="url(#ai_ab_sh)" />
+        <path d="M25 20H31M26 20V26L20 36H36L30 26V20" stroke="#0891b2" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M22 33H34" stroke="#06b6d4" strokeWidth="2" strokeLinecap="round" />
+        <circle cx="26" cy="30" r="1.2" fill="#0891b2" />
+        <circle cx="30" cy="31" r="1" fill="#0891b2" />
+      </svg>
+    );
+  }
+
+  // MKT STEP: REMOVE ACTION / USER MINUS / CLEANUP
+  if (normName === 'remove_action' || normName === 'user-minus' || normName.includes('dọn dẹp') || normName.includes('hủy đăng ký')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_rm_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#f43f5e" />
+            <stop offset="100%" stopColor="#be123c" />
+          </linearGradient>
+          {filterDef('ai_rm_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_rm_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <circle cx="28" cy="28" r="14" fill="#ffffff" filter="url(#ai_rm_sh)" />
+        <circle cx="25" cy="24" r="5" stroke="#f43f5e" strokeWidth="2" fill="#ffe4e6" />
+        <path d="M17 36C17 32 20.5 30 25 30C26.5 30 27.8 30.3 29 30.8" stroke="#f43f5e" strokeWidth="2" strokeLinecap="round" />
+        <path d="M33 33H39" stroke="#be123c" strokeWidth="2.5" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  // MKT STEP: LINK FLOW / CONNECT
+  if (normName === 'link_flow' || normName === 'link' || normName.includes('chuyển kịch bản')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_lf_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#475569" />
+            <stop offset="100%" stopColor="#1e293b" />
+          </linearGradient>
+          {filterDef('ai_lf_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_lf_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <rect x="14" y="14" width="28" height="28" rx="8" fill="#ffffff" filter="url(#ai_lf_sh)" />
+        <path d="M26 23H24C21.7909 23 20 24.7909 20 27C20 29.2091 21.7909 31 24 31H26" stroke="#475569" strokeWidth="2.4" strokeLinecap="round" />
+        <path d="M30 23H32C34.2091 23 36 24.7909 36 27C36 29.2091 34.2091 31 32 31H30" stroke="#475569" strokeWidth="2.4" strokeLinecap="round" />
+        <path d="M24 27H32" stroke="#3b82f6" strokeWidth="2.4" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  // MKT STEP: ZALO ZNS
+  if (normName === 'zalo_zns' || normName === 'zalo' || normName.includes('zns')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_zalo_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#0068ff" />
+            <stop offset="100%" stopColor="#0043a8" />
+          </linearGradient>
+          {filterDef('ai_zalo_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_zalo_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <circle cx="28" cy="28" r="14" fill="#ffffff" filter="url(#ai_zalo_sh)" />
+        <path d="M21 24H35C35.5 24 36 24.5 36 25V31C36 31.5 35.5 32 35 32H27L23 35V32H21C20.5 32 20 31.5 20 31V25C20 24.5 20.5 24 21 24Z" fill="#0068ff" />
+        <text x="24" y="30" fill="#ffffff" fontSize="7" fontWeight="bold" fontFamily="sans-serif">Z</text>
+      </svg>
+    );
+  }
+
+  // MKT STEP: LIST ACTION
+  if (normName === 'list_action' || normName === 'list' || normName.includes('danh sách')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_la_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#10b981" />
+            <stop offset="100%" stopColor="#047857" />
+          </linearGradient>
+          {filterDef('ai_la_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_la_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <rect x="14" y="14" width="28" height="28" rx="7" fill="#ffffff" filter="url(#ai_la_sh)" />
+        <rect x="19" y="21" width="4" height="4" rx="1" fill="#10b981" />
+        <rect x="26" y="22" width="11" height="2" rx="1" fill="#64748b" />
+        <rect x="19" y="27" width="4" height="4" rx="1" fill="#10b981" />
+        <rect x="26" y="28" width="9" height="2" rx="1" fill="#64748b" />
+        <rect x="19" y="33" width="4" height="4" rx="1" fill="#10b981" />
+        <rect x="26" y="34" width="11" height="2" rx="1" fill="#64748b" />
       </svg>
     );
   }

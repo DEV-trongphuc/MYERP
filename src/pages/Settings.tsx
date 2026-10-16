@@ -4,12 +4,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useUIStore } from '../store/uiStore';
 import { withRouterFreezer } from '../components/RouterFreezer';
-import { Mail, Settings2, Save, Send, Server, Database, Activity, ChevronDown, ChevronUp, Zap, Shield, MessageCircle, RefreshCw, Settings as SettingsIcon, BarChart2, Clock, Calendar, Users, CheckCircle, Plus, Trash2, Edit2, FileSpreadsheet, Upload, Download, X, Search, UserCheck, FileText, Tag, Scale, Layers, HelpCircle, Filter, Briefcase, GripVertical, Info, ChevronRight, ArrowLeft, ChevronLeft, CheckSquare, DollarSign, LifeBuoy, Eye } from 'lucide-react';
+import { Mail, Settings2, Save, Send, Server, Database, Activity, ChevronDown, ChevronUp, Zap, Shield, MessageCircle, RefreshCw, Settings as SettingsIcon, BarChart2, Clock, Calendar, Users, CheckCircle, Plus, Trash2, Edit2, FileSpreadsheet, Upload, Download, X, Search, UserCheck, FileText, Tag, Scale, Layers, HelpCircle, Filter, Briefcase, GripVertical, Info, ChevronRight, ArrowLeft, ChevronLeft, CheckSquare, DollarSign, LifeBuoy, Eye, Globe, Copy, ArrowUpRight, Sparkles } from 'lucide-react';
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { ToggleSwitch } from '../components/ui/ToggleSwitch';
 import { CustomModal } from '../components/ui/CustomModal';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
-import { fetchAPI } from '../utils/api';
+import { fetchAPI, clearSettingsCache } from '../utils/api';
+import api from '../api/axios';
 import toast from 'react-hot-toast';
 import { CardSkeleton, TableSkeleton, Skeleton } from '../components/ui/Skeleton';
 import { Avatar } from '../components/ui/Avatar';
@@ -121,6 +122,7 @@ const SettingsInner = () => {
     error_reasons: false,
     auto_approve_ticket: false,
     email_config: false,
+    marketing_automation: false,
     zalo_bot: false,
     telegram_bot: false,
     automated_reports: false,
@@ -200,6 +202,7 @@ const SettingsInner = () => {
       title: t('Giao tiếp & Báo cáo'),
       items: [
         { value: 'email_config', label: t('Cấu hình Gửi Email'), icon: <img src="/imgs/gmail-icon-free-png.webp" alt="Gmail" style={{ width: 15, height: 15 }} /> },
+        { value: 'marketing_automation', label: t('Automation, Pixel & Đồng bộ 360°'), icon: <Globe size={15} /> },
         { value: 'zalo_bot', label: t('Cấu hình Zalo Bot'), icon: <img src="https://stc-zpl.zdn.vn/favicon.ico" alt="Zalo" style={{ width: 15, height: 15, borderRadius: '50%' }} /> },
         { value: 'telegram_bot', label: t('Cấu hình Telegram Bot'), icon: <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/82/Telegram_logo.svg/3840px-Telegram_logo.svg.png" alt="Telegram" style={{ width: 15, height: 15, borderRadius: '50%' }} /> },
         { value: 'automated_reports', label: t('Báo cáo tự động'), icon: <BarChart2 size={15} /> }
@@ -275,18 +278,19 @@ const SettingsInner = () => {
 
     // Blacklist
     { id: 'blacklist_config', tab: 'blacklist', category: t('Dữ liệu & Vòng đời'), subtab: t('Danh sách đen & Loại trừ'), title: t('Danh sách đen (Blacklist SĐT/Email rác)'), desc: t('Chặn các số điện thoại/email spam hoặc loại trừ khỏi chiến dịch Broadcast'), keywords: ['blacklist', 'danh sách đen', 'rác', 'spam', 'broadcast', 'chặn'] },
-    { id: 'lead_scoring', tab: 'lead_scoring', category: t('Dữ liệu & Vòng đời'), subtab: t('Quy tắc Lead Scoring'), title: t('Quy tắc chấm điểm Lead Scoring'), desc: t('Cấu hình điểm số cho các tiêu chí nhân khẩu học, hành vi và suy giảm độ nhiệt'), keywords: ['scoring', 'lead score', 'điểm', 'nóng', 'lạnh', 'tiêu chí'] },
+    { id: 'lead_scoring', tab: 'lead_scoring', category: t('Dữ liệu & Vòng đời'), subtab: t('Quy tắc Lead Scoring'), title: t('Quy tắc chấm điểm Lead Scoring & Omnichannel'), desc: t('Cấu hình điểm số cho các tiêu chí nhân khẩu học, hành vi đa kênh và suy giảm độ nhiệt'), keywords: ['scoring', 'lead score', 'điểm', 'nóng', 'lạnh', 'tiêu chí', 'email open', 'click', 'voucher'] },
 
     // Giao tiếp & Báo cáo
-    { id: 'email_config', tab: 'email_config', category: t('Giao tiếp & Báo cáo'), subtab: t('Cấu hình Gửi Email'), desc: t('Cấu hình Google Apps Script hoặc Amazon SES SMTP gửi email hệ thống'), keywords: ['email', 'smtp', 'ses', 'gmail', 'appscript', 'test email'] },
-    { id: 'zalo_bot', tab: 'zalo_bot', category: t('Giao tiếp & Báo cáo'), subtab: t('Cấu hình Zalo Bot'), desc: t('Kết nối Zalo OA / Zalo Personal Bot gửi thông báo lead & báo cáo'), keywords: ['zalo', 'bot', 'zalo oa', 'webhook', 'xác thực', 'group chat'] },
-    { id: 'telegram_bot', tab: 'telegram_bot', category: t('Giao tiếp & Báo cáo'), subtab: t('Cấu hình Telegram Bot'), desc: t('Tích hợp Telegram Bot gửi tin nhắn riêng và nhóm Admin'), keywords: ['telegram', 'bot', 'chat id', 'nhóm admin', 'webhook'] },
-    { id: 'reports_config', tab: 'automated_reports', category: t('Giao tiếp & Báo cáo'), subtab: t('Báo cáo tự động'), desc: t('Đặt lịch gửi báo cáo doanh thu & hiệu suất theo ngày/tuần/tháng'), keywords: ['báo cáo tự động', 'báo cáo ngày', 'báo cáo tuần', 'báo cáo tháng'] },
+    { id: 'email_config', tab: 'email_config', category: t('Giao tiếp & Báo cáo'), subtab: t('Cấu hình Gửi Email'), title: t('Cấu hình Gửi Email & AWS SES SMTP'), desc: t('Cấu hình Google Apps Script hoặc Amazon SES SMTP gửi email hệ thống'), keywords: ['email', 'smtp', 'ses', 'gmail', 'appscript', 'test email'] },
+    { id: 'marketing_automation', tab: 'marketing_automation', category: t('Giao tiếp & Báo cáo'), subtab: t('Automation, Pixel & Đồng bộ 360°'), title: t('Marketing Automation, Tracking Pixel & Match-Only Sync'), desc: t('Cấu hình Web Tracking Pixel (tracker.js), Sandbox Mode, Verified Senders và Đồng bộ đối khớp dữ liệu Marketing ⮂ CRM'), keywords: ['marketing', 'automation', 'pixel', 'tracker.js', 'sandbox', 'domation', 'sync', 'đồng bộ', 'match-only'] },
+    { id: 'zalo_bot', tab: 'zalo_bot', category: t('Giao tiếp & Báo cáo'), subtab: t('Cấu hình Zalo Bot'), title: t('Cấu hình Zalo Bot'), desc: t('Kết nối Zalo OA / Zalo Personal Bot gửi thông báo lead & báo cáo'), keywords: ['zalo', 'bot', 'zalo oa', 'webhook', 'xác thực', 'group chat'] },
+    { id: 'telegram_bot', tab: 'telegram_bot', category: t('Giao tiếp & Báo cáo'), subtab: t('Cấu hình Telegram Bot'), title: t('Cấu hình Telegram Bot'), desc: t('Tích hợp Telegram Bot gửi tin nhắn riêng và nhóm Admin'), keywords: ['telegram', 'bot', 'chat id', 'nhóm admin', 'webhook'] },
+    { id: 'reports_config', tab: 'automated_reports', category: t('Giao tiếp & Báo cáo'), subtab: t('Báo cáo tự động'), title: t('Báo cáo tự động'), desc: t('Đặt lịch gửi báo cáo doanh thu & hiệu suất theo ngày/tuần/tháng'), keywords: ['báo cáo tự động', 'báo cáo ngày', 'báo cáo tuần', 'báo cáo tháng'] },
 
     // Tích hợp & AI
-    { id: 'ai_assistant', tab: 'ai_assistant', category: t('Tích hợp & Hệ thống'), subtab: t('Trợ lý AI (Gemini)'), desc: t('Cấu hình Gemini API Key và AI Screener tự động phân loại lead'), keywords: ['ai', 'gemini', 'api key', 'screener', 'trợ lý', 'phân loại'] },
-    { id: 'workflow_templates', tab: 'workflow_templates', category: t('Tích hợp & Hệ thống'), subtab: t('Mẫu Quy trình'), desc: t('Tạo các mẫu công việc tự động giao cho Sale theo giai đoạn'), keywords: ['workflow', 'mẫu công việc', 'quy trình', 'tự động giao'] },
-    { id: 'database_maintenance', tab: 'database_maintenance', category: t('Tích hợp & Hệ thống'), subtab: t('Bảo trì Database'), desc: t('Bảo trì Database, xóa lịch sử nhập rác và tự đồng bộ cấu trúc'), keywords: ['database', 'bảo trì', 'xóa log', 'tự đồng bộ'] }
+    { id: 'ai_assistant', tab: 'ai_assistant', category: t('Tích hợp & Hệ thống'), subtab: t('Trợ lý AI (Gemini)'), title: t('Trợ lý AI (Gemini)'), desc: t('Cấu hình Gemini API Key và AI Screener tự động phân loại lead'), keywords: ['ai', 'gemini', 'api key', 'screener', 'trợ lý', 'phân loại'] },
+    { id: 'workflow_templates', tab: 'workflow_templates', category: t('Tích hợp & Hệ thống'), subtab: t('Mẫu Quy trình'), title: t('Mẫu Quy trình'), desc: t('Tạo các mẫu công việc tự động giao cho Sale theo giai đoạn'), keywords: ['workflow', 'mẫu công việc', 'quy trình', 'tự động giao'] },
+    { id: 'database_maintenance', tab: 'database_maintenance', category: t('Tích hợp & Hệ thống'), subtab: t('Bảo trì Database'), title: t('Bảo trì Database'), desc: t('Bảo trì Database, xóa lịch sử nhập rác và tự đồng bộ cấu trúc'), keywords: ['database', 'bảo trì', 'xóa log', 'tự đồng bộ'] }
   ];
 
   // Filtered search items
@@ -295,10 +299,10 @@ const SettingsInner = () => {
     : searchableSettingsItems.filter(item => {
         const query = settingsSearchQuery.toLowerCase().trim();
         return (
-          item.title.toLowerCase().includes(query) ||
-          item.desc.toLowerCase().includes(query) ||
-          item.subtab.toLowerCase().includes(query) ||
-          item.category.toLowerCase().includes(query) ||
+          (item.title || '').toLowerCase().includes(query) ||
+          (item.desc || '').toLowerCase().includes(query) ||
+          (item.subtab || '').toLowerCase().includes(query) ||
+          (item.category || '').toLowerCase().includes(query) ||
           item.keywords.some(kw => kw.toLowerCase().includes(query))
         );
       });
@@ -450,6 +454,59 @@ const SettingsInner = () => {
   const [sesPass, setSesPass] = useState('');
   const [sesSenderEmail, setSesSenderEmail] = useState('');
   const [sesSenderName, setSesSenderName] = useState('IDEAS TEAM');
+  const [sesRegion, setSesRegion] = useState('ap-southeast-1');
+  const [sesAccessKey, setSesAccessKey] = useState('');
+  const [sesSecretKey, setSesSecretKey] = useState('');
+  const [smtpPort, setSmtpPort] = useState('587');
+  const [verifiedFromSenders, setVerifiedFromSenders] = useState('tuyensinh@ideas.edu.vn, cskh@ideas.edu.vn, marketing@ideas.edu.vn');
+  const [qaTestEmails, setQaTestEmails] = useState('qa@ideas.edu.vn');
+  const [automationSandboxMode, setAutomationSandboxMode] = useState(false);
+
+  // Web Tracking Pixel & Domain Properties
+  const [trackingSiteId, setTrackingSiteId] = useState('IDEAS-MAIN');
+  const [trackingEndpointUrl, setTrackingEndpointUrl] = useState('https://crm.ideas.edu.vn/tracker.js');
+  const [webProperties, setWebProperties] = useState<Array<{ id: string; domain: string; site_id: string; status: string; events_count?: number }>>([
+    { id: 'prop-1', domain: 'ideas.edu.vn', site_id: 'IDEAS-MAIN', status: 'active' },
+    { id: 'prop-2', domain: 'mba.ideas.edu.vn', site_id: 'IDEAS-MBA', status: 'active' }
+  ]);
+  const [newDomainInput, setNewDomainInput] = useState('');
+  const [newSiteIdInput, setNewSiteIdInput] = useState('');
+
+  // Domation Match-Only Sync state & synchronous ref guard
+  const syncInFlightRef = React.useRef(false);
+  const [syncingDomation, setSyncingDomation] = useState(false);
+  const [lastSyncResult, setLastSyncResult] = useState<null | {
+    matched_subscribers?: number;
+    matched_activities?: number;
+    matched_flows?: number;
+    matched_visitors?: number;
+    unmatched_skipped?: number;
+    synced_at?: string;
+  }>(null);
+
+  const handleRunDomationMatchSync = async () => {
+    if (syncInFlightRef.current) return;
+    syncInFlightRef.current = true;
+    setSyncingDomation(true);
+    try {
+      const res = await api.post('/contacts/match-domation-sync');
+      const data = res.data?.data || res.data || {};
+      setLastSyncResult({
+        matched_subscribers: Number(data.matched_subscribers ?? data.subscribers_matched ?? 0),
+        matched_activities: Number(data.matched_activities ?? data.activities_matched ?? 0),
+        matched_flows: Number(data.matched_flows ?? data.flows_matched ?? 0),
+        matched_visitors: Number(data.matched_visitors ?? data.visitors_matched ?? 0),
+        unmatched_skipped: Number(data.unmatched_skipped ?? 0),
+        synced_at: new Date().toLocaleString('vi-VN')
+      });
+      toast.success(res.data?.message || 'Đã đồng bộ đối khớp dữ liệu Marketing ⮂ CRM (Match-Only, không tạo mới Lead) thành công!');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.message || 'Không thể thực hiện đồng bộ đối khớp dữ liệu Marketing');
+    } finally {
+      syncInFlightRef.current = false;
+      setSyncingDomation(false);
+    }
+  };
 
   const [testEmail, setTestEmail] = useState('');
   const [testType, setTestType] = useState('system');
@@ -641,7 +698,7 @@ const SettingsInner = () => {
     quote_invoice: { enable_team_leader: true, designated_roles: ['director'], notify_admin: false }
   });
 
-  // Lead Scoring Config
+  // Lead Scoring Config (Including Omnichannel Digital Engagement Weights)
   const [leadScoringRules, setLeadScoringRules] = useState<Record<string, number>>({
     base_score: 10,
     title_c_level: 20,
@@ -668,6 +725,13 @@ const SettingsInner = () => {
     ttl1_completed: 25,
     notes_long: 10,
     has_tags: 10,
+    email_open: 5,
+    email_click: 15,
+    form_submit: 25,
+    survey_complete: 30,
+    page_view: 3,
+    voucher_claim: 20,
+    qr_scan: 15,
     decay_no_interaction: -15
   });
 
@@ -813,7 +877,10 @@ const SettingsInner = () => {
         if (json.data.accountant_lead_visibility_stage) setAccountantLeadVisibilityStage(json.data.accountant_lead_visibility_stage);
         if (json.data.lead_scoring_rules) {
           try {
-            setLeadScoringRules(JSON.parse(json.data.lead_scoring_rules));
+            const parsedRules = JSON.parse(json.data.lead_scoring_rules);
+            if (parsedRules && typeof parsedRules === 'object') {
+              setLeadScoringRules(prev => ({ ...prev, ...parsedRules }));
+            }
           } catch(e) {}
         }
         if (json.data.db_version) setDbVersion(json.data.db_version);
@@ -830,6 +897,27 @@ const SettingsInner = () => {
         if (json.data.ses_password) setSesPass(json.data.ses_password);
         if (json.data.ses_sender_email) setSesSenderEmail(json.data.ses_sender_email);
         if (json.data.ses_sender_name) setSesSenderName(json.data.ses_sender_name);
+        if (json.data.ses_region) setSesRegion(json.data.ses_region);
+        if (json.data.ses_access_key) setSesAccessKey(json.data.ses_access_key);
+        if (json.data.ses_secret_key) setSesSecretKey(json.data.ses_secret_key);
+        if (json.data.smtp_port) setSmtpPort(String(json.data.smtp_port));
+        if (json.data.verified_from_senders !== undefined) setVerifiedFromSenders(json.data.verified_from_senders);
+        if (json.data.qa_test_emails !== undefined) setQaTestEmails(json.data.qa_test_emails);
+        if (json.data.automation_sandbox_mode !== undefined) {
+          setAutomationSandboxMode(json.data.automation_sandbox_mode === '1' || json.data.automation_sandbox_mode === 1 || json.data.automation_sandbox_mode === true);
+        }
+        if (json.data.tracking_site_id) setTrackingSiteId(json.data.tracking_site_id);
+        if (json.data.tracking_endpoint_url) setTrackingEndpointUrl(json.data.tracking_endpoint_url);
+        if (json.data.web_properties) {
+          try {
+            const parsedProps = typeof json.data.web_properties === 'string'
+              ? JSON.parse(json.data.web_properties)
+              : json.data.web_properties;
+            if (Array.isArray(parsedProps) && parsedProps.length > 0) {
+              setWebProperties(parsedProps);
+            }
+          } catch {}
+        }
         if (json.data.zalo_bot_token) setZaloBotToken(json.data.zalo_bot_token);
         if (json.data.zalo_webhook_secret) setZaloWebhookSecret(json.data.zalo_webhook_secret);
         if (json.data.zalo_bot_link) setZaloBotLink(json.data.zalo_bot_link);
@@ -1426,6 +1514,16 @@ const SettingsInner = () => {
       ses_password: sesPass,
       ses_sender_email: sesSenderEmail,
       ses_sender_name: sesSenderName,
+      ses_region: sesRegion,
+      ses_access_key: sesAccessKey,
+      ses_secret_key: sesSecretKey,
+      smtp_port: smtpPort,
+      verified_from_senders: verifiedFromSenders,
+      qa_test_emails: qaTestEmails,
+      automation_sandbox_mode: automationSandboxMode ? '1' : '0',
+      tracking_site_id: trackingSiteId,
+      tracking_endpoint_url: trackingEndpointUrl,
+      web_properties: JSON.stringify(webProperties),
       zalo_bot_token: zaloBotToken,
       zalo_webhook_secret: zaloWebhookSecret,
       zalo_bot_link: zaloBotLink,
@@ -1558,6 +1656,7 @@ const SettingsInner = () => {
         method: 'POST',
         body: JSON.stringify(payload)
       });
+      clearSettingsCache();
       const tabLabels: Record<string, string> = {
         business_limits: 'Giới hạn & Bảo mật',
         time_schedule: 'Lịch hoạt động',
@@ -1573,6 +1672,8 @@ const SettingsInner = () => {
         gemini_ai: 'Cấu hình Gemini AI',
         approval_matrix: 'Ma trận phê duyệt',
         lead_scoring: 'Quy tắc Lead Scoring',
+        marketing_automation: 'Automation, Pixel & Đồng bộ 360°',
+        email_config: 'Cấu hình Gửi Email',
         company_info: 'Thông tin Công ty'
       };
       const currentTabLabel = tabLabels[activeTab] || 'Cài đặt hệ thống';
@@ -1597,6 +1698,8 @@ const SettingsInner = () => {
         capi_settings: 'Cài đặt CAPI',
         gemini_ai: 'Cấu hình Gemini AI',
         approval_matrix: 'Ma trận phê duyệt',
+        marketing_automation: 'Automation, Pixel & Đồng bộ 360°',
+        email_config: 'Cấu hình Gửi Email',
         company_info: 'Thông tin Công ty'
       };
       const currentTabLabel = tabLabels[activeTab] || 'Cài đặt hệ thống';
@@ -2132,6 +2235,7 @@ const SettingsInner = () => {
       error_reasons: '#f43f5e',
       auto_approve_ticket: '#10b981',
       email_config: '#0ea5e9',
+      marketing_automation: '#2563eb',
       zalo_bot: '#2563eb',
       telegram_bot: '#0088cc',
       automated_reports: '#f97316',
@@ -4110,40 +4214,372 @@ function doPost(e) {
                 {provider === 'ses' && (
                   <div style={{ animation: 'fadeIn 0.3s', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 12, padding: '1.25rem' }}>
                     <h4 style={{ fontSize: '0.9375rem', fontWeight: 600, marginBottom: '1rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Database size={18} color="#f59e0b" /> {t('Thông số Amazon SES (SMTP)')}
+                      <Database size={18} color="#f59e0b" /> {t('Thông số Amazon SES & SMTP Marketing')}
                     </h4>
-                    <div className="responsive-grid-1-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                    <div className="responsive-grid-1-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                       <div>
                         <label className="form-label">SMTP Host</label>
-                        <input className="form-input" placeholder="email-smtp.us-east-1.amazonaws.com" value={sesHost} onChange={e => setSesHost(e.target.value)} />
+                        <input className="form-input" placeholder="email-smtp.ap-southeast-1.amazonaws.com" value={sesHost} onChange={e => setSesHost(e.target.value)} />
                       </div>
                       <div>
-                        <label className="form-label">Port</label>
-                        <input className="form-input" value="587" disabled style={{ background: 'var(--color-bg)' }} />
+                        <label className="form-label">AWS SES Region</label>
+                        <input className="form-input" placeholder="ap-southeast-1" value={sesRegion} onChange={e => setSesRegion(e.target.value)} />
+                      </div>
+                      <div>
+                        <label className="form-label">SMTP Port</label>
+                        <input className="form-input" value={smtpPort} onChange={e => setSmtpPort(e.target.value)} placeholder="587" />
                       </div>
                     </div>
                     <div className="responsive-grid-1-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                       <div>
-                        <label className="form-label">SMTP Username</label>
-                        <input className="form-input" placeholder="AKIA..." value={sesUser} onChange={e => setSesUser(e.target.value)} />
+                        <label className="form-label">SMTP Username / Access Key</label>
+                        <input className="form-input" placeholder="AKIA..." value={sesUser} onChange={e => { setSesUser(e.target.value); setSesAccessKey(e.target.value); }} />
                       </div>
                       <div>
-                        <label className="form-label">SMTP Password</label>
-                        <input className="form-input" type="password" placeholder="BI..." value={sesPass} onChange={e => setSesPass(e.target.value)} />
+                        <label className="form-label">SMTP Password / Secret Key</label>
+                        <input className="form-input" type="password" placeholder="BI..." value={sesPass} onChange={e => { setSesPass(e.target.value); setSesSecretKey(e.target.value); }} />
                       </div>
                     </div>
-                    <div className="responsive-grid-1-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div className="responsive-grid-1-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                       <div>
-                        <label className="form-label">{t('Email Người Gửi (From Email)')}</label>
-                        <input className="form-input" placeholder="no-reply@domain.com" value={sesSenderEmail} onChange={e => setSesSenderEmail(e.target.value)} />
+                        <label className="form-label">{t('Email Người Gửi Mặc Định (From Email)')}</label>
+                        <input className="form-input" placeholder="no-reply@ideas.edu.vn" value={sesSenderEmail} onChange={e => setSesSenderEmail(e.target.value)} />
                       </div>
                       <div>
-                        <label className="form-label">{t('Tên Người Gửi (From Name)')}</label>
+                        <label className="form-label">{t('Tên Người Gửi Mặc Định (From Name)')}</label>
                         <input className="form-input" placeholder="IDEAS TEAM" value={sesSenderName} onChange={e => setSesSenderName(e.target.value)} />
+                      </div>
+                    </div>
+                    <div className="responsive-grid-1-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', paddingTop: '1rem', borderTop: '1px dashed var(--color-border-light)' }}>
+                      <div>
+                        <label className="form-label">{t('Danh sách Verified From Senders (AWS SES)')}</label>
+                        <input
+                          className="form-input"
+                          placeholder="tuyensinh@ideas.edu.vn, cskh@ideas.edu.vn"
+                          value={verifiedFromSenders}
+                          onChange={e => setVerifiedFromSenders(e.target.value)}
+                        />
+                        <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: 4 }}>
+                          {t('Các địa chỉ email đã xác thực DKIM/SPF trên AWS SES dùng cho chiến dịch Email Marketing (phân cách bằng dấu phẩy).')}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="form-label">{t('Danh sách QA Test Emails (Nhận email kiểm thử)')}</label>
+                        <input
+                          className="form-input"
+                          placeholder="qa@ideas.edu.vn, marketing@ideas.edu.vn"
+                          value={qaTestEmails}
+                          onChange={e => setQaTestEmails(e.target.value)}
+                        />
+                        <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: 4 }}>
+                          {t('Khi bật Chế độ Sandbox, toàn bộ Email/Zalo tự động sẽ định tuyến an toàn về danh sách QA này.')}
+                        </p>
                       </div>
                     </div>
                   </div>
                 )}
+              </div>
+            </div>
+
+            {/* ===== TAB: MARKETING AUTOMATION, TRACKING PIXEL & MATCH-ONLY SYNC 360° ===== */}
+            <div style={{ display: activeTab === 'marketing_automation' ? 'block' : 'none' }} className="subtab-enter-active">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                {renderHelpBanner('marketing_automation', t('Giải thích cơ chế Marketing Automation, Tracking Pixel & Đồng bộ Match-Only 360°'), (
+                  <ul style={{ paddingLeft: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <li><strong>{t('Đồng bộ Đối khớp Match-Only (Zero-Leakage):')}</strong> {t('Tự động liên kết lịch sử mở/click email, kịch bản nuôi dưỡng, câu trả lời khảo sát và phiên truy cập web vào Hồ sơ Khách hàng CRM dựa trên SĐT chuẩn hóa (9 số cuối) hoặc Email. Tuyệt đối KHÔNG tạo mới Lead, KHÔNG chia số và KHÔNG bắn thông báo làm phiền Sale.')}</li>
+                    <li><strong>{t('Web Tracking Pixel (tracker.js):')}</strong> {t('Đoạn mã nhúng nhẹ (Asynchronous) giúp ghi nhận UTM Source/Medium/Campaign, thời lượng xem trang và sự kiện điền form theo thời gian thực.')}</li>
+                    <li><strong>{t('Chế độ Hộp cát An toàn (Automation Sandbox Mode):')}</strong> {t('Khi bật, mọi hành động gửi Email/Zalo trong luồng Automation sẽ chỉ gửi tới danh sách QA Test Emails để kiểm định trước khi Golive.')}</li>
+                  </ul>
+                ))}
+
+                {/* Card 1: Domation Match-Only Sync Engine */}
+                <div className="card" style={{ padding: '1.5rem', marginTop: 0, border: '1px solid rgba(37, 99, 235, 0.25)', background: 'linear-gradient(180deg, rgba(37, 99, 235, 0.03) 0%, var(--color-surface) 100%)' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', marginBottom: '1rem' }}>
+                    <div style={{ flex: 1, minWidth: '280px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span style={{ display: 'inline-flex', background: '#2563eb', color: '#ffffff', padding: 6, borderRadius: 8 }}>
+                          <RefreshCw size={16} className={syncingDomation ? 'spin' : ''} />
+                        </span>
+                        <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: 'var(--color-text)' }}>
+                          {t('Đồng bộ đối khớp dữ liệu Marketing ⮂ CRM (Match-Only Sync)')}
+                        </h3>
+                        <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(16, 185, 129, 0.12)', color: '#059669' }}>
+                          ZERO-LEAKAGE SAFE
+                        </span>
+                      </div>
+                      <p style={{ fontSize: '0.825rem', color: 'var(--color-text-muted)', margin: '8px 0 0', lineHeight: 1.55 }}>
+                        {t('Quét và liên kết dữ liệu tương tác đa kênh (Subscribers, Email/Zalo Logs, Automation Flows, Survey Responses, Web Sessions) vào đúng Khách hàng đã tồn tại trong CRM theo SĐT (9 số cuối) hoặc Email.')}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleRunDomationMatchSync}
+                      disabled={syncingDomation}
+                      style={{
+                        height: '40px',
+                        padding: '0 18px',
+                        borderRadius: '10px',
+                        border: 'none',
+                        background: syncingDomation ? '#93c5fd' : '#2563eb',
+                        color: '#ffffff',
+                        fontWeight: 700,
+                        fontSize: '0.825rem',
+                        cursor: syncingDomation ? 'not-allowed' : 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        boxShadow: '0 4px 12px rgba(37, 99, 235, 0.22)'
+                      }}
+                    >
+                      <RefreshCw size={15} className={syncingDomation ? 'spin' : ''} />
+                      <span>{syncingDomation ? t('Đang đối khớp dữ liệu...') : t('Chạy Đồng Bộ Đối Khớp Ngay')}</span>
+                    </button>
+                  </div>
+
+                  {/* Safety Guardrail Pills */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: lastSyncResult ? '1rem' : 0 }}>
+                    <span style={{ fontSize: '0.74rem', fontWeight: 600, padding: '4px 10px', borderRadius: 8, background: 'rgba(37, 99, 235, 0.08)', color: '#2563eb' }}>
+                      ✓ Không tạo mới Lead (No Lead Creation)
+                    </span>
+                    <span style={{ fontSize: '0.74rem', fontWeight: 600, padding: '4px 10px', borderRadius: 8, background: 'rgba(37, 99, 235, 0.08)', color: '#2563eb' }}>
+                      ✓ Không chia số / Không đổi Sale phụ trách
+                    </span>
+                    <span style={{ fontSize: '0.74rem', fontWeight: 600, padding: '4px 10px', borderRadius: 8, background: 'rgba(37, 99, 235, 0.08)', color: '#2563eb' }}>
+                      ✓ Không bắn thông báo Zalo / Email (Silent Sync)
+                    </span>
+                  </div>
+
+                  {lastSyncResult && (
+                    <div style={{
+                      marginTop: '0.75rem',
+                      padding: '1rem',
+                      borderRadius: '10px',
+                      background: 'var(--color-bg)',
+                      border: '1px solid var(--color-border-light)',
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                      gap: '0.75rem'
+                    }}>
+                      <div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>{t('Subscribers đã khớp CRM')}</div>
+                        <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#2563eb' }}>{lastSyncResult.matched_subscribers ?? 0}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>{t('Tương tác Email/Zalo khớp')}</div>
+                        <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#059669' }}>{lastSyncResult.matched_activities ?? 0}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>{t('Luồng Automation khớp')}</div>
+                        <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#7c3aed' }}>{lastSyncResult.matched_flows ?? 0}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>{t('Phiên Web / UTM khớp')}</div>
+                        <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#d97706' }}>{lastSyncResult.matched_visitors ?? 0}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>{t('Cập nhật lúc')}</div>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text)', marginTop: 4 }}>{lastSyncResult.synced_at}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Card 2: Automation Sandbox Mode & Verified Senders */}
+                <div className="card" style={{ padding: '1.5rem', marginTop: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '1.25rem' }}>
+                    <div>
+                      <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Shield size={18} color="#2563eb" />
+                        {t('Chế độ Hộp cát An toàn (Automation Sandbox Mode) & Người gửi Xác thực')}
+                      </h3>
+                      <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: '4px 0 0' }}>
+                        {t('Bật chế độ Sandbox khi đang thử nghiệm kịch bản Automation để ngăn gửi nhầm tin nhắn/email tới khách hàng thật.')}
+                      </p>
+                    </div>
+                    <ToggleSwitch
+                      checked={automationSandboxMode}
+                      onChange={setAutomationSandboxMode}
+                    />
+                  </div>
+
+                  <div className="responsive-grid-1-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div>
+                      <label className="form-label">{t('Verified From Senders (Email gửi đã xác thực AWS SES)')}</label>
+                      <input
+                        className="form-input"
+                        placeholder="tuyensinh@ideas.edu.vn, cskh@ideas.edu.vn"
+                        value={verifiedFromSenders}
+                        onChange={e => setVerifiedFromSenders(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">{t('QA Test Emails (Nhận email khi bật Sandbox)')}</label>
+                      <input
+                        className="form-input"
+                        placeholder="qa@ideas.edu.vn, marketing@ideas.edu.vn"
+                        value={qaTestEmails}
+                        onChange={e => setQaTestEmails(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card 3: Web Tracking Pixel (tracker.js) & Domain Properties */}
+                <div className="card" style={{ padding: '1.5rem', marginTop: 0 }}>
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: '0 0 0.5rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Globe size={18} color="#2563eb" />
+                    {t('Mã theo dõi Web Tracking Pixel (tracker.js) & Tên miền (Web Properties)')}
+                  </h3>
+                  <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', margin: '0 0 1.25rem', lineHeight: 1.5 }}>
+                    {t('Dán đoạn mã dưới đây vào trước thẻ đóng </head> trên Landing Page / Website để tự động thu thập phiên truy cập, nguồn UTM và định danh khách hàng trên tab Hành trình 360°.')}
+                  </p>
+
+                  <div className="responsive-grid-1-1" style={{ display: 'grid', gridTemplateColumns: '1fr 220px', gap: '1rem', marginBottom: '1rem' }}>
+                    <div>
+                      <label className="form-label">{t('URL File Script Theo Dõi (tracker.js)')}</label>
+                      <input
+                        className="form-input"
+                        value={trackingEndpointUrl}
+                        onChange={e => setTrackingEndpointUrl(e.target.value)}
+                        placeholder="https://crm.ideas.edu.vn/tracker.js"
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">{t('Mã Site ID Mặc Định')}</label>
+                      <input
+                        className="form-input"
+                        value={trackingSiteId}
+                        onChange={e => setTrackingSiteId(e.target.value)}
+                        placeholder="IDEAS-MAIN"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Snippet Box */}
+                  <div style={{
+                    background: '#0f172a',
+                    color: '#e2e8f0',
+                    padding: '14px 16px',
+                    borderRadius: '10px',
+                    fontFamily: 'monospace',
+                    fontSize: '0.8rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '12px',
+                    marginBottom: '1.5rem',
+                    overflowX: 'auto'
+                  }}>
+                    <code style={{ whiteSpace: 'nowrap' }}>
+                      {`<script src="${trackingEndpointUrl || 'https://crm.ideas.edu.vn/tracker.js'}" data-site-id="${trackingSiteId || 'IDEAS-MAIN'}" async></script>`}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const snippet = `<script src="${trackingEndpointUrl || 'https://crm.ideas.edu.vn/tracker.js'}" data-site-id="${trackingSiteId || 'IDEAS-MAIN'}" async></script>`;
+                        navigator.clipboard.writeText(snippet);
+                        toast.success(t('Đã sao chép mã nhúng Web Tracking Pixel!'));
+                      }}
+                      style={{
+                        background: '#2563eb',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '6px 12px',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        flexShrink: 0
+                      }}
+                    >
+                      <Copy size={13} /> {t('Sao chép mã')}
+                    </button>
+                  </div>
+
+                  {/* Domain Properties List */}
+                  <div style={{ borderTop: '1px solid var(--color-border-light)', paddingTop: '1.25rem' }}>
+                    <label className="form-label" style={{ fontWeight: 700, marginBottom: '0.75rem', display: 'block' }}>
+                      {t('Danh sách Tên miền được phép gửi sự kiện Tracking (Web Properties)')}
+                    </label>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                      <input
+                        className="form-input"
+                        style={{ flex: 2, minWidth: '200px' }}
+                        placeholder={t('Tên miền (VD: landing.ideas.edu.vn)')}
+                        value={newDomainInput}
+                        onChange={e => setNewDomainInput(e.target.value)}
+                      />
+                      <input
+                        className="form-input"
+                        style={{ flex: 1, minWidth: '140px' }}
+                        placeholder={t('Mã Site ID (VD: IDEAS-LP)')}
+                        value={newSiteIdInput}
+                        onChange={e => setNewSiteIdInput(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="btn primary"
+                        onClick={() => {
+                          const domain = newDomainInput.trim().toLowerCase();
+                          const siteId = (newSiteIdInput.trim() || `IDEAS-${webProperties.length + 1}`).toUpperCase();
+                          if (!domain) {
+                            toast.error(t('Vui lòng nhập tên miền hợp lệ'));
+                            return;
+                          }
+                          setWebProperties(prev => [
+                            ...prev,
+                            { id: `prop-${Date.now()}`, domain, site_id: siteId, status: 'active' }
+                          ]);
+                          setNewDomainInput('');
+                          setNewSiteIdInput('');
+                          toast.success(t('Đã thêm tên miền Tracking mới (Nhấn Lưu cấu hình để hoàn tất)'));
+                        }}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                      >
+                        <Plus size={15} /> {t('Thêm Domain')}
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {webProperties.map((prop, idx) => (
+                        <div
+                          key={prop.id || idx}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '10px 14px',
+                            borderRadius: '8px',
+                            background: 'var(--color-bg)',
+                            border: '1px solid var(--color-border-light)'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                            <Globe size={15} color="#2563eb" />
+                            <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--color-text)' }}>{prop.domain}</span>
+                            <span style={{ fontSize: '0.72rem', fontFamily: 'monospace', padding: '2px 8px', borderRadius: '6px', background: 'rgba(37, 99, 235, 0.1)', color: '#2563eb', fontWeight: 700 }}>
+                              {prop.site_id}
+                            </span>
+                            <span style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: '999px', background: 'rgba(16, 185, 129, 0.12)', color: '#059669', fontWeight: 700 }}>
+                              {prop.status === 'active' ? 'Đang hoạt động' : prop.status}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setWebProperties(prev => prev.filter((_, i) => i !== idx))}
+                            style={{ background: 'transparent', border: 'none', color: 'var(--color-danger)', cursor: 'pointer', padding: '4px' }}
+                            title={t('Xóa tên miền')}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -7600,6 +8036,63 @@ function doPost(e) {
                       ))}
                     </div>
                   </div>
+
+                  {/* Category 4: Omnichannel Engagement & Automation 360 */}
+                  <div className="card" style={{ padding: '1.25rem', marginTop: 0, background: 'var(--color-surface)', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--color-border)' }}>
+                      <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: 'rgba(139, 92, 246, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8b5cf6' }}>
+                        <Zap size={16} />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <h4 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>
+                          {t('Tương tác Đa kênh & Automation 360° (Omnichannel)')}
+                        </h4>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: 0 }}>
+                          {t('Cộng điểm tự động khi Khách hàng mở Email, bấm Link, điền Form/Khảo sát, nhận Voucher hoặc truy cập Web')}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: '0.75rem' }}>
+                      {[
+                        { key: 'email_open', label: 'Mở Email chiến dịch (Open)', icon: Mail, desc: 'Mỗi lần mở email hợp lệ (+5đ mặc định)' },
+                        { key: 'email_click', label: 'Bấm Link trong Email (Click)', icon: ArrowUpRight, desc: 'Tương tác sâu qua CTA (+15đ mặc định)' },
+                        { key: 'form_submit', label: 'Điền Form / Đăng ký (Form Submit)', icon: FileText, desc: 'Chuyển đổi qua biểu mẫu (+25đ mặc định)' },
+                        { key: 'survey_complete', label: 'Hoàn thành Khảo sát / Quiz', icon: CheckSquare, desc: 'Trả lời đầy đủ bài khảo sát (+30đ mặc định)' },
+                        { key: 'page_view', label: 'Truy cập trang Web (Page View)', icon: Globe, desc: 'Xem trang đích qua Pixel (+3đ mặc định)' },
+                        { key: 'voucher_claim', label: 'Nhận mã Voucher ưu đãi', icon: Sparkles, desc: 'Sở hữu mã khuyến mãi (+20đ mặc định)' },
+                        { key: 'qr_scan', label: 'Quét mã QR / Check-in sự kiện', icon: Activity, desc: 'Quét QR tại quầy hoặc ấn phẩm (+15đ mặc định)' }
+                      ].map(item => (
+                        <div key={item.key} style={{ 
+                          padding: '0.875rem', 
+                          background: 'var(--color-bg-secondary)', 
+                          borderRadius: '10px', 
+                          border: '1px solid var(--color-border)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'space-between',
+                          gap: '0.75rem',
+                          transition: 'all 0.2s ease'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem' }}>
+                            <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text)', lineHeight: 1.3 }}>{t(item.label)}</div>
+                            <item.icon size={13} style={{ color: '#8b5cf6', flexShrink: 0, marginTop: '2px' }} />
+                          </div>
+                          
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', paddingTop: '0.375rem', borderTop: '1px dashed var(--color-border)' }}>
+                            <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('Trọng số:')}</span>
+                            <input
+                              type="number"
+                              className="input"
+                              style={{ width: '54px', textAlign: 'center', fontWeight: 700, padding: '2px 4px', height: '26px', fontSize: '0.8rem', background: 'var(--color-surface)', color: '#8b5cf6' }}
+                              value={leadScoringRules[item.key] ?? 0}
+                              onChange={e => setLeadScoringRules(prev => ({ ...prev, [item.key]: Number(e.target.value) }))}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Right Column: Dynamic Scorecard Preview */}
@@ -7626,6 +8119,10 @@ function doPost(e) {
                         'source_website', 'source_referral', 'project_id', 'company_id', 'budget_range', 
                         'revenue_high', 'revenue_medium', 'win_prob_high', 'status_qualified_customer', 
                         'ttl1_completed', 'notes_long', 'has_tags'
+                      ].reduce((sum, key) => sum + (Number(leadScoringRules[key]) || 0), 0);
+
+                      const omnichannelPositive = [
+                        'email_open', 'email_click', 'form_submit', 'survey_complete', 'page_view', 'voucher_claim', 'qr_scan'
                       ].reduce((sum, key) => sum + (Number(leadScoringRules[key]) || 0), 0);
                       
                       const baseScore = Number(leadScoringRules.base_score) || 0;
@@ -7666,6 +8163,16 @@ function doPost(e) {
                             </div>
                             <div style={{ height: '4px', background: 'var(--color-bg-secondary)', borderRadius: '2px', overflow: 'hidden' }}>
                               <div style={{ height: '100%', background: '#059669', width: `${totalPositive ? (behaviorPositive / totalPositive) * 100 : 0}%` }} />
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', color: 'var(--color-text-muted)' }}>
+                              <span>{t('Đa kênh (Omnichannel)')}</span>
+                              <span style={{ fontWeight: 600, color: '#8b5cf6' }}>{omnichannelPositive} pts</span>
+                            </div>
+                            <div style={{ height: '4px', background: 'var(--color-bg-secondary)', borderRadius: '2px', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', background: '#8b5cf6', width: `${totalPositive ? (omnichannelPositive / totalPositive) * 100 : 0}%` }} />
                             </div>
                           </div>
                         </div>

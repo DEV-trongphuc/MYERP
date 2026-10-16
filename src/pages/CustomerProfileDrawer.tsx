@@ -27,6 +27,8 @@ const ExpenseCreateDrawer = lazy(() => import('../components/ExpenseCreateDrawer
 const DepositDetailDrawer = lazy(() => import('../components/DepositDetailDrawer').then(module => ({ default: module.DepositDetailDrawer })));
 const TicketDrawer = lazy(() => import('./TicketDrawer').then(module => ({ default: module.TicketDrawer })));
 import { CustomerJourneyAIPanel } from '../components/CustomerJourneyAIPanel';
+import { CustomerOmnichannelJourneyTab } from '../components/contacts/CustomerOmnichannelJourneyTab';
+import { canViewOmnichannelJourney } from '../utils/roleUtils';
 import { ReportDataModal } from '../components/ui/ReportDataModal';
 import { Skeleton, StatRowSkeleton } from '../components/ui/Skeleton';
 import { EmptyCard } from '../components/ui/EmptyCard';
@@ -383,6 +385,7 @@ const resolveAttachmentUrl = (url: string | null | undefined): string => {
 
 const TABS = [
   { id: 'info', label: 'Thông tin chung', icon: <User size={16} /> },
+  { id: 'journey360', label: 'Hành trình & Đa kênh 360°', icon: <Activity size={14} /> },
   { id: 'timeline', label: 'Tương tác', icon: <History size={16} /> },
   { id: 'learning', label: 'Học tập & Học vụ', icon: <BookOpen size={16} /> },
   { id: 'tags', label: 'Phân loại', icon: <TagIcon size={16} /> },
@@ -1692,7 +1695,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     } else if (isOpen && hasHighlightNote) {
       setActiveTab('tags');
     } else if (isOpen) {
-      if (isMobileOrTablet) {
+      if (initialTab === 'journey360') {
+        setActiveTab('journey360');
+      } else if (isMobileOrTablet) {
         setActiveTab(''); // On mobile, always default opening to the main tab menu list
       } else {
         setActiveTab(initialTab || 'info');
@@ -9301,10 +9306,14 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
                             {/* Mobile Tab Groups */}
                             {(() => {
+                              const journeyBadgeCount =
+                                Number(formData?.active_flow_count ?? contact?.active_flow_count ?? 0) +
+                                Number(formData?.web_pageviews_count ?? contact?.web_pageviews_count ?? 0) +
+                                Number(formData?.stats_email_opened ?? contact?.stats_email_opened ?? 0);
                               const tabGroups = [
                                 {
                                   title: 'Thông tin & Nhật ký',
-                                  tabs: ['info', 'timeline', 'tags', 'tasks', 'scoring']
+                                  tabs: ['info', 'journey360', 'timeline', 'tags', 'tasks', 'scoring']
                                 },
                                 {
                                   title: 'Học tập & Học vụ',
@@ -9325,6 +9334,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   .map(id => TABS.find(tab => tab.id === id))
                                   .filter((tab): tab is any => {
                                     if (!tab) return false;
+                                    if (tab.id === 'journey360' && !canViewOmnichannelJourney(currentUser)) return false;
                                     if (tab.id === 'learning' && !isStudent) return false;
                                     if (tab.id === 'deals' && !isAtLeastDongLePhiHoSo) return false;
                                     return isOwnerOrAdmin || (tab.id !== 'quotes' && tab.id !== 'expenses');
@@ -9362,6 +9372,18 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                             <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>{tab.label}</span>
                                           </div>
                                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            {tab.id === 'journey360' && journeyBadgeCount > 0 && (
+                                              <span style={{
+                                                background: 'rgba(37, 99, 235, 0.14)',
+                                                color: '#2563eb',
+                                                fontSize: '0.65rem',
+                                                fontWeight: 800,
+                                                padding: '1px 6px',
+                                                borderRadius: '10px',
+                                              }}>
+                                                {journeyBadgeCount}
+                                              </span>
+                                            )}
                                             {tab.id === 'tasks' && tasks.filter(t => !t.done).length > 0 && (
                                               <span style={{
                                                 background: 'var(--color-danger)',
@@ -9511,10 +9533,14 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           <>
 
                             {(() => {
+                              const journeyBadgeCount =
+                                Number(formData?.active_flow_count ?? contact?.active_flow_count ?? 0) +
+                                Number(formData?.web_pageviews_count ?? contact?.web_pageviews_count ?? 0) +
+                                Number(formData?.stats_email_opened ?? contact?.stats_email_opened ?? 0);
                               const tabGroups = [
                                 {
                                   title: 'Thông tin & Nhật ký',
-                                  tabs: ['info', 'timeline', 'tags', 'tasks', 'scoring']
+                                  tabs: ['info', 'journey360', 'timeline', 'tags', 'tasks', 'scoring']
                                 },
                                 {
                                   title: 'Học tập & Học vụ',
@@ -9535,6 +9561,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   .map(id => TABS.find(tab => tab.id === id))
                                   .filter((tab): tab is any => {
                                     if (!tab) return false;
+                                    if (tab.id === 'journey360' && !canViewOmnichannelJourney(currentUser)) return false;
                                     if (tab.id === 'learning' && !isStudent) return false;
                                     if (tab.id === 'deals' && !isAtLeastDongLePhiHoSo) return false;
                                     return isOwnerOrAdmin || (tab.id !== 'quotes' && tab.id !== 'expenses');
@@ -9570,6 +9597,24 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                           {renderColoredTabIcon(tab.id, tab.icon, tab.label)}
                                           <span>{tab.label}</span>
                                         </div>
+                                        {tab.id === 'journey360' && journeyBadgeCount > 0 && (
+                                          <span style={{
+                                            background: 'rgba(37, 99, 235, 0.14)',
+                                            color: '#2563eb',
+                                            fontSize: '0.7rem',
+                                            fontWeight: 800,
+                                            padding: '1px 6px',
+                                            borderRadius: '10px',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            minWidth: '18px',
+                                            height: '18px',
+                                            lineHeight: 1
+                                          }}>
+                                            {journeyBadgeCount}
+                                          </span>
+                                        )}
                                         {tab.id === 'tasks' && tasks.filter(t => !t.done).length > 0 && (
                                           <span style={{
                                             background: 'var(--color-danger)',
@@ -15945,6 +15990,12 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                         </div>
                       )}
                     </div>
+                  )}
+                  {activeTab === 'journey360' && (
+                    <CustomerOmnichannelJourneyTab
+                      contact={{ ...contact, ...formData, id: effectiveContactId || contact?.id }}
+                      onRefreshContact={() => fetchData('info')}
+                    />
                   )}
                         </>
                       )}

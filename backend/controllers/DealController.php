@@ -311,6 +311,10 @@ class DealController {
         $cWhere = [];
         $cParams = [];
         applyCrmAdvancedMultiTierFilters($this->db, 'c.', $contactFilterInput, $cWhere, $cParams);
+        $omniClause = buildContactOmnichannelFilterClause($this->db, 'c', $contactFilterInput, $cParams);
+        if ($omniClause !== '') {
+            $cWhere[] = $omniClause;
+        }
         if (!empty($cWhere)) {
             $where[] = "d.contact_id IN (SELECT c.id FROM contacts c WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND " . implode(' AND ', $cWhere) . ")";
             $params[] = $tid;

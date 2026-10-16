@@ -3,6 +3,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useUIStore } from '../../store/uiStore';
 import { useAuthStore } from '../../store/authStore';
+import { useChatStore } from '../../store/chatStore';
+import { pushOverlay } from '../../utils/overlayStack';
 import api from '../../api/axios';
 
 const CustomerProfileDrawer = lazy(() => import('../../pages/CustomerProfileDrawer').then(module => ({ default: module.CustomerProfileDrawer })));
@@ -33,10 +35,11 @@ export const GlobalEntityDrawers: React.FC = () => {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const path = location.pathname;
+    const isWorkChatOpen = useChatStore.getState().isOpen;
 
-    // 1. Contacts: ContactsPage (/contacts, /students) handles its own local drawer
+    // 1. Contacts: ContactsPage (/contacts, /students) handles its own local drawer when WorkChat is closed
     const isContactsPage = path === '/contacts' || path === '/students' || path.startsWith('/contacts?') || path.startsWith('/students?');
-    if (isContactsPage) {
+    if (isContactsPage && !isWorkChatOpen) {
       if (customerDrawer.isOpen && (params.get('open_contact_id') || params.get('id') || params.get('contact_id'))) {
         closeCustomerDrawer();
       }
@@ -57,9 +60,9 @@ export const GlobalEntityDrawers: React.FC = () => {
       return;
     }
 
-    // 3. Tasks: SalePortal (/workspace, /sale-portal, /) and ProjectsPage (/projects) handle their own local WorkspaceTaskDrawer
+    // 3. Tasks: SalePortal (/workspace, /sale-portal, /) and ProjectsPage (/projects) handle their own local WorkspaceTaskDrawer when WorkChat is closed
     const isLocalTaskPage = path === '/' || path.startsWith('/workspace') || path.startsWith('/sale-portal') || path.startsWith('/projects');
-    if (isLocalTaskPage) {
+    if (isLocalTaskPage && !isWorkChatOpen) {
       const localUrlTaskId = params.get('task_id') || params.get('open_task_id');
       if (taskDrawer.isOpen && localUrlTaskId && String(taskDrawer.task?.id) === String(localUrlTaskId)) {
         closeTaskDrawer();
@@ -73,8 +76,8 @@ export const GlobalEntityDrawers: React.FC = () => {
       }
     }
 
-    // 4. Approvals: Approvals.tsx (/approvals) handles its own local drawer
-    if (path.startsWith('/approvals')) {
+    // 4. Approvals: Approvals.tsx (/approvals) handles its own local drawer when WorkChat is closed
+    if (path.startsWith('/approvals') && !isWorkChatOpen) {
       if (approvalDrawer.isOpen && (params.get('open_id') || params.get('id') || params.get('approval_id'))) {
         closeApprovalDrawer();
       }
@@ -86,8 +89,8 @@ export const GlobalEntityDrawers: React.FC = () => {
       }
     }
 
-    // 5. Deposits: DepositsPage.tsx (/deposits) handles its own local drawer
-    if (path.startsWith('/deposits')) {
+    // 5. Deposits: DepositsPage.tsx (/deposits) handles its own local drawer when WorkChat is closed
+    if (path.startsWith('/deposits') && !isWorkChatOpen) {
       if (depositDrawer.isOpen && (params.get('open_id') || params.get('id') || params.get('deposit_id'))) {
         closeDepositDrawer();
       }
@@ -220,32 +223,55 @@ export const GlobalEntityDrawers: React.FC = () => {
       }
     };
 
+    const handleOpenEntityDrawer = (e: Event) => {
+      const custom = e as CustomEvent;
+      const d = custom.detail;
+      if (!d) return;
+      const rawType = String(d.type || d.entityType || d.entity_type || '').toLowerCase();
+      const entityId = d.id || d.entityId || d.entity_id || d.contactId || d.taskId || d.expenseId || d.depositId;
+      if (!entityId) return;
+
+      if (['contact', 'customer', 'student', 'lead', 'crm_profile'].includes(rawType)) {
+        openCustomerDrawer(Number(entityId), d.initialTab || d.tab || 'info');
+      } else if (['task', 'activity'].includes(rawType)) {
+        openTaskDrawer(d.task || Number(entityId));
+      } else if (['expense', 'po', 'purchase_order', 'po_order'].includes(rawType)) {
+        openExpenseDrawer(Number(entityId));
+      } else if (['approval', 'workflow', 'leave', 'wfh', 'ot', 'advance'].includes(rawType)) {
+        openApprovalDrawer({ id: Number(entityId), type: rawType === 'workflow' || rawType === 'approval' ? (d.sub_type || 'leave') : rawType, ...d });
+      } else if (['deposit', 'so', 'sales_order'].includes(rawType)) {
+        openDepositDrawer(d.deposit || Number(entityId));
+      }
+    };
+
     window.addEventListener('open-global-customer', handleOpenCustomer);
+    window.addEventListener('open-customer-drawer', handleOpenCustomer);
     window.addEventListener('open-global-task', handleOpenTask);
     window.addEventListener('open-expense-drawer', handleOpenExpense);
     window.addEventListener('open-global-expense', handleOpenExpense);
     window.addEventListener('open-expense-create-drawer', handleOpenExpenseCreate);
     window.addEventListener('open-global-approval', handleOpenApproval);
     window.addEventListener('open-deposit-drawer', handleOpenDeposit);
+    window.addEventListener('open-entity-drawer', handleOpenEntityDrawer);
 
     // Global click listener for .entity-mention and .mention
     const handleGlobalEntityClick = (e: MouseEvent) => {
       const target = (e.target as HTMLElement)?.closest?.('.entity-mention, [data-entity-type]') as HTMLElement | null;
       if (!target) return;
-      const type = target.getAttribute('data-entity-type');
+      const type = (target.getAttribute('data-entity-type') || '').toLowerCase();
       const id = target.getAttribute('data-entity-id');
       if (!type || !id) return;
 
       e.preventDefault();
       e.stopPropagation();
 
-      if (type === 'contact' || type === 'customer') {
+      if (type === 'contact' || type === 'customer' || type === 'student' || type === 'lead' || type === 'crm_profile') {
         openCustomerDrawer(Number(id), 'info');
-      } else if (type === 'task') {
+      } else if (type === 'task' || type === 'activity') {
         openTaskDrawer(Number(id));
       } else if (type === 'approval' || type === 'po' || type === 'purchase_order' || type === 'po_order' || type === 'expense') {
         openExpenseDrawer(Number(id));
-      } else if (type === 'leave' || type === 'wfh' || type === 'ot' || type === 'workflow') {
+      } else if (type === 'leave' || type === 'wfh' || type === 'ot' || type === 'workflow' || type === 'advance') {
         openApprovalDrawer({ id: Number(id), type: type === 'workflow' ? 'leave' : type });
       } else if (type === 'company') {
         window.dispatchEvent(new CustomEvent('open-company-drawer', { detail: { id: Number(id) } }));
@@ -255,12 +281,8 @@ export const GlobalEntityDrawers: React.FC = () => {
         } else {
           navigate(`/deals?open_deal_id=${id}`);
         }
-      } else if (type === 'so' || type === 'deposit') {
-        if (window.location.pathname.startsWith('/deposits')) {
-          window.dispatchEvent(new CustomEvent('open-deposit-drawer', { detail: { id: Number(id), depositId: Number(id) } }));
-        } else {
-          openDepositDrawer(Number(id));
-        }
+      } else if (type === 'so' || type === 'deposit' || type === 'sales_order') {
+        openDepositDrawer(Number(id));
       }
     };
 
@@ -269,12 +291,14 @@ export const GlobalEntityDrawers: React.FC = () => {
     return () => {
       document.removeEventListener('click', handleGlobalEntityClick);
       window.removeEventListener('open-global-customer', handleOpenCustomer);
+      window.removeEventListener('open-customer-drawer', handleOpenCustomer);
       window.removeEventListener('open-global-task', handleOpenTask);
       window.removeEventListener('open-expense-drawer', handleOpenExpense);
       window.removeEventListener('open-global-expense', handleOpenExpense);
       window.removeEventListener('open-expense-create-drawer', handleOpenExpenseCreate);
       window.removeEventListener('open-global-approval', handleOpenApproval);
       window.removeEventListener('open-deposit-drawer', handleOpenDeposit);
+      window.removeEventListener('open-entity-drawer', handleOpenEntityDrawer);
     };
   }, [openCustomerDrawer, openTaskDrawer, openExpenseDrawer, openApprovalDrawer, openDepositDrawer, navigate]);
 
@@ -348,6 +372,47 @@ export const GlobalEntityDrawers: React.FC = () => {
     clearUrlEntityParams(['deposit_id', 'open_deposit_id', 'open_id', 'id']);
     closeDepositDrawer();
   };
+
+  // Register global drawers on LIFO overlayStack above WorkChatModal (priority 1000) so ESC closes only the top drawer
+  useEffect(() => {
+    if (customerDrawer.isOpen) {
+      return pushOverlay('global-customer-drawer', handleCloseCustomerDrawer, 2000);
+    }
+  }, [customerDrawer.isOpen]);
+
+  useEffect(() => {
+    if (taskDrawer.isOpen) {
+      return pushOverlay('global-task-drawer', handleCloseTaskDrawer, 2100);
+    }
+  }, [taskDrawer.isOpen]);
+
+  useEffect(() => {
+    if (expenseDrawer.isOpen) {
+      return pushOverlay('global-expense-drawer', handleCloseExpenseDrawer, 2000);
+    }
+  }, [expenseDrawer.isOpen]);
+
+  useEffect(() => {
+    if (expenseCreateOpen) {
+      return pushOverlay('global-expense-create-drawer', () => {
+        (window as any).__activeErpProposalId = null;
+        setExpenseCreateOpen(false);
+        setExpenseCreateEditItem(null);
+      }, 2000);
+    }
+  }, [expenseCreateOpen]);
+
+  useEffect(() => {
+    if (approvalDrawer.isOpen) {
+      return pushOverlay('global-approval-drawer', handleCloseApprovalDrawer, 2000);
+    }
+  }, [approvalDrawer.isOpen]);
+
+  useEffect(() => {
+    if (depositDrawer.isOpen) {
+      return pushOverlay('global-deposit-drawer', handleCloseDepositDrawer, 2000);
+    }
+  }, [depositDrawer.isOpen]);
 
   return (
     <>

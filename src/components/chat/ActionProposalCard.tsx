@@ -15,7 +15,7 @@ import { useChatStore } from '../../store/chatStore';
 import { Avatar } from '../ui/Avatar';
 
 export interface ActionProposal {
-  action_type: 'leave' | 'expense' | 'task' | 'lead' | 'sales_order' | 'deposit' | 'supplementary' | 'advance_payment' | 'inventory_receipt' | 'shift_swap' | 'admission_document_request' | 'legal_contract' | 'asset_handover' | 'marketing_campaign' | 'ticket' | 'quote' | 'deal' | 'export_data' | 'export' | (string & {});
+  action_type: 'leave' | 'expense' | 'task' | 'lead' | 'sales_order' | 'deposit' | 'supplementary' | 'advance_payment' | 'inventory_receipt' | 'shift_swap' | 'admission_document_request' | 'legal_contract' | 'asset_handover' | 'marketing_campaign' | 'automation_flow' | 'voucher_issue' | 'sync_match_only' | 'ticket' | 'quote' | 'deal' | 'export_data' | 'export' | (string & {});
   title: string;
   params: Record<string, any>;
   summary: string;
@@ -497,9 +497,6 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
           const cid = p.contact_id || p.id;
           if (cid) {
             useUIStore.getState().openCustomerDrawer(Number(cid), 'docs');
-            if (useChatStore.getState().isMaximized) {
-              useChatStore.getState().toggleMaximize();
-            }
           } else {
             navigate('/contacts');
           }
@@ -511,9 +508,6 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
           const cid = p.contact_id || p.id;
           if (cid) {
             useUIStore.getState().openCustomerDrawer(Number(cid), 'docs');
-            if (useChatStore.getState().isMaximized) {
-              useChatStore.getState().toggleMaximize();
-            }
           } else {
             navigate('/deposits');
           }
@@ -527,9 +521,17 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
           break;
         }
 
-        case 'marketing_campaign': {
-          navigate('/marketing');
-          toast.success('Đã mở phân hệ Chiến dịch & Nguồn Lead Marketing!');
+        case 'marketing_campaign':
+        case 'automation_flow':
+        case 'voucher_issue':
+        case 'sync_match_only': {
+          const targetTab = proposal.action_type === 'automation_flow'
+            ? '/marketing?tab=flows'
+            : proposal.action_type === 'voucher_issue'
+            ? '/marketing?tab=vouchers'
+            : '/marketing';
+          navigate(targetTab);
+          toast.success('Đã mở phân hệ Marketing Automation & Đa kênh!');
           break;
         }
 
@@ -650,7 +652,9 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
               'interaction_status', 'date_field', 'departments', 'department_or_team', 'category',
               'period', 'min_amount', 'max_amount', 'overdue_only',
               'milestone_status', 'priorities', 'close_date_status', 'min_value', 'max_value',
-              'unit_code', 'vendor_name', 'approval_filter', 'subtask_filter', 'custom_rules'
+              'unit_code', 'vendor_name', 'approval_filter', 'subtask_filter',
+              'engagement_status', 'automation_flow', 'voucher_status', 'marketing_status',
+              'min_engagement_score', 'max_engagement_score', 'custom_rules'
             ];
             forwardKeys.forEach((k) => {
               if (p[k] !== undefined && p[k] !== null && p[k] !== '') {
@@ -685,19 +689,20 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
         setStatus('success');
       } else if (
         proposal.action_type === 'expense' ||
+        proposal.action_type === 'advance_payment' ||
         proposal.action_type === 'task' ||
+        proposal.action_type === 'sales_order' ||
+        proposal.action_type === 'deposit' ||
+        proposal.action_type === 'deal' ||
         ((proposal.action_type === 'admission_document_request' || proposal.action_type === 'legal_contract') && (p.contact_id || p.id))
       ) {
-        // Global Drawer — dock Chat instead of minimizing completely
-        const chatState = useChatStore.getState();
-        if (chatState.isMaximized) {
-          chatState.toggleMaximize();
-        }
-        if (proposal.action_type === 'expense') {
-          toast('Đã mở phiếu chi bên cạnh cửa sổ Chat để bạn đối chiếu và lưu.', { icon: 'ℹ️' });
+        // Global Drawers (zIndex >= 2147483620) overlay directly on top of WorkChat (zIndex 2147483000).
+        // Never un-maximize (toggleMaximize) or close/minimize WorkChat so user context is preserved.
+        if (proposal.action_type === 'expense' || proposal.action_type === 'advance_payment') {
+          toast('Đã mở phiếu đề xuất chi đè lên cửa sổ Chat để bạn đối chiếu và lưu.', { icon: 'ℹ️' });
         }
       } else {
-        // Page-level modals (Leave, Task, Contact, Deposit on page): minimize Chat Modal so the opened Modal in ERP is immediately visible
+        // Page-level modals (Leave, Ticket, Quote, etc. on background page): minimize Chat Modal so the opened Modal in ERP is immediately visible
         useChatStore.getState().minimizeChat();
         toast('Đã mở form và thu nhỏ cửa sổ Chat để bạn dễ thao tác.', { icon: 'ℹ️' });
       }
@@ -790,12 +795,21 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
           icon: <Package size={13} color="#d97706" />
         };
       case 'marketing_campaign':
+      case 'automation_flow':
+      case 'voucher_issue':
+      case 'sync_match_only':
         return {
           bg: '#fdf2f8',
           text: '#be185d',
           border: '#fbcfe8',
           accent: '#db2777',
-          label: 'MARKETING',
+          label: proposal.action_type === 'automation_flow'
+            ? 'AUTOMATION FLOW'
+            : proposal.action_type === 'voucher_issue'
+            ? 'VOUCHER ƯU ĐÃI'
+            : proposal.action_type === 'sync_match_only'
+            ? 'ĐỒNG BỘ MATCH-ONLY'
+            : 'MARKETING',
           icon: <Sparkles size={13} color="#db2777" />
         };
       case 'ticket':
