@@ -1052,8 +1052,52 @@ class ProjectController {
         respond(200, null, 'Xóa bình luận thành công');
     }
 
+    private function canAccessTaskRow(array $auth, array $task): bool {
+        $uid = (int)($auth['user_id'] ?? 0);
+        $role = strtolower($auth['role'] ?? '');
+        $tags = (string)($task['tags'] ?? '');
+        $isPersonal = str_contains($tags, 'personal_task') || str_contains($tags, 'ca_nhan');
+        if ($isPersonal && (int)($task['user_id'] ?? 0) !== $uid && (int)($task['created_by'] ?? 0) !== $uid && !in_array($role, ['admin', 'superadmin', 'super_admin'], true)) {
+            return false;
+        }
+        if (in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'manager'], true)) {
+            return true;
+        }
+        if ((int)($task['user_id'] ?? 0) === $uid || (int)($task['created_by'] ?? 0) === $uid || (int)($task['approver_id'] ?? 0) === $uid) {
+            return true;
+        }
+        $pids = array_filter(array_map('intval', explode(',', (string)($task['participant_ids'] ?? ''))));
+        if (in_array($uid, $pids, true)) {
+            return true;
+        }
+        if (($task['related_type'] ?? '') === 'project' && !empty($task['related_id'])) {
+            $chkPr = $this->db->prepare("SELECT 1 FROM project_roster WHERE project_id = ? AND user_id = ? LIMIT 1");
+            $chkPr->execute([(int)$task['related_id'], $uid]);
+            if ($chkPr->fetchColumn()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public function listAllTasks(array $auth): void {
-        $tid = $auth['tenant_id'];
+        $tid = (int)$auth['tenant_id'];
+        $uid = (int)($auth['user_id'] ?? 0);
+        $role = strtolower($auth['role'] ?? '');
+        $isBroadManager = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'manager'], true);
+
+        $where = "a.tenant_id = ? AND a.type = 'task' AND a.deleted_at IS NULL AND (NOT (IFNULL(a.tags,'') LIKE '%personal_task%' OR IFNULL(a.tags,'') LIKE '%ca_nhan%') OR a.user_id = ? OR a.created_by = ?)";
+        $params = [$tid, $uid, $uid];
+
+        if (!$isBroadManager) {
+            $where .= " AND (a.user_id = ? OR a.created_by = ? OR a.approver_id = ? OR FIND_IN_SET(?, IFNULL(a.participant_ids, '')) > 0 OR (a.related_type = 'project' AND a.related_id > 0 AND EXISTS (SELECT 1 FROM project_roster pr WHERE pr.project_id = a.related_id AND pr.user_id = ?)))";
+            $params[] = $uid;
+            $params[] = $uid;
+            $params[] = $uid;
+            $params[] = (string)$uid;
+            $params[] = $uid;
+        }
+
         $stmt = $this->db->prepare("
             SELECT a.id, a.subject as title, a.body as description, a.status, a.priority, 
                    a.due_date, a.user_id as assignee_id, a.created_by, a.created_at, a.updated_at,
@@ -1061,50 +1105,41 @@ class ProjectController {
             FROM activities a
             LEFT JOIN projects p ON (a.related_type = 'project' AND a.related_id = p.id)
             LEFT JOIN users u ON a.user_id = u.id
-            WHERE (a.tenant_id = ? OR a.tenant_id IS NULL) AND a.type = 'task' AND a.deleted_at IS NULL
+            WHERE $where
             ORDER BY a.id DESC
             LIMIT 100
         ");
-        $stmt->execute([$tid]);
+        $stmt->execute($params);
         $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
         respond(200, $tasks, 'Lấy danh sách công việc thành công');
     }
 
     public function createStandaloneTask(array $auth): void {
-        $tid = $auth['tenant_id'];
+        if (strtolower($auth['role'] ?? '') === 'viewer') respond(403, null, 'Bạn không có quyền tạo công việc', false);
+        $tid = (int)$auth['tenant_id'];
         $b = getBody();
         $title = trim($b['title'] ?? $b['subject'] ?? 'Công việc mới');
         $desc = trim($b['description'] ?? $b['body'] ?? '');
-        $status = in_array($b['status'] ?? '', ['planned', 'done', 'cancelled']) ? $b['status'] : 'planned';
-        $priority = in_array($b['priority'] ?? '', ['low', 'medium', 'high']) ? $b['priority'] : 'medium';
+        $status = in_array($b['status'] ?? '', ['planned', 'done', 'cancelled'], true) ? $b['status'] : 'planned';
+        $priority = in_array($b['priority'] ?? '', ['low', 'medium', 'high', 'urgent'], true) ? $b['priority'] : 'medium';
         $dueDate = !empty($b['due_date']) ? $b['due_date'] : null;
 
-        $assigneeId = !empty($b['assignee_id']) ? (int)$b['assignee_id'] : (!empty($b['user_id']) ? (int)$b['user_id'] : (int)($auth['user_id'] ?? 0));
-        if ($assigneeId > 0) {
-            $chk = $this->db->prepare("SELECT id FROM users WHERE id = ? LIMIT 1");
-            $chk->execute([$assigneeId]);
-            if (!$chk->fetchColumn()) {
-                $assigneeId = (int)$this->db->query("SELECT id FROM users LIMIT 1")->fetchColumn();
-            }
-        } else {
-            $assigneeId = (int)$this->db->query("SELECT id FROM users LIMIT 1")->fetchColumn();
-        }
-
         $creatorId = (int)($auth['user_id'] ?? 0);
-        if ($creatorId > 0) {
-            $chkC = $this->db->prepare("SELECT id FROM users WHERE id = ? LIMIT 1");
-            $chkC->execute([$creatorId]);
-            if (!$chkC->fetchColumn()) {
-                $creatorId = $assigneeId;
+        $assigneeId = !empty($b['assignee_id']) ? (int)$b['assignee_id'] : (!empty($b['user_id']) ? (int)$b['user_id'] : $creatorId);
+        if ($assigneeId > 0) {
+            $chk = $this->db->prepare("SELECT id FROM users WHERE id = ? AND tenant_id = ? LIMIT 1");
+            $chk->execute([$assigneeId, $tid]);
+            if (!$chk->fetchColumn()) {
+                $assigneeId = $creatorId;
             }
         } else {
-            $creatorId = $assigneeId;
+            $assigneeId = $creatorId;
         }
 
         $projectId = !empty($b['project_id']) ? (int)$b['project_id'] : null;
         if ($projectId) {
-            $pChk = $this->db->prepare("SELECT id FROM projects WHERE id = ? LIMIT 1");
-            $pChk->execute([$projectId]);
+            $pChk = $this->db->prepare("SELECT id FROM projects WHERE id = ? AND tenant_id = ? LIMIT 1");
+            $pChk->execute([$projectId, $tid]);
             if (!$pChk->fetchColumn()) {
                 $projectId = null;
             }
@@ -1121,25 +1156,49 @@ class ProjectController {
     }
 
     public function getTaskDetail(array $auth, int $id): void {
-        $tid = $auth['tenant_id'];
+        $tid = (int)$auth['tenant_id'];
         $stmt = $this->db->prepare("
             SELECT a.id, a.subject as title, a.body as description, a.status, a.priority, 
-                   a.due_date, a.user_id as assignee_id, a.created_by, a.created_at, a.updated_at,
+                   a.due_date, a.user_id, a.user_id as assignee_id, a.created_by, a.approver_id,
+                   a.participant_ids, a.tags, a.related_type, a.related_id, a.created_at, a.updated_at,
                    p.name as project_name, u.full_name as assignee_name, u.avatar_url as assignee_avatar
             FROM activities a
             LEFT JOIN projects p ON (a.related_type = 'project' AND a.related_id = p.id)
             LEFT JOIN users u ON a.user_id = u.id
-            WHERE a.id = ? AND (a.tenant_id = ? OR a.tenant_id IS NULL) AND a.type = 'task' AND a.deleted_at IS NULL
+            WHERE a.id = ? AND a.tenant_id = ? AND a.type = 'task' AND a.deleted_at IS NULL
             LIMIT 1
         ");
         $stmt->execute([$id, $tid]);
         $t = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$t) respond(404, null, 'Không tìm thấy công việc', false);
+        if (!$this->canAccessTaskRow($auth, $t)) {
+            respond(403, null, 'Bạn không có quyền truy cập công việc này', false);
+        }
+
+        $cStmt = $this->db->prepare("
+            SELECT c.*, c.content as body, u.full_name as user_name, u.avatar_url
+            FROM activity_comments c
+            LEFT JOIN users u ON c.user_id = u.id
+            WHERE c.tenant_id = ? AND c.activity_id = ? AND c.subtask_id IS NULL
+            ORDER BY c.created_at ASC
+        ");
+        $cStmt->execute([$tid, $id]);
+        $t['comments'] = $cStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
         respond(200, $t, 'Lấy chi tiết công việc thành công');
     }
 
     public function updateTaskDetail(array $auth, int $id): void {
-        $tid = $auth['tenant_id'];
+        if (strtolower($auth['role'] ?? '') === 'viewer') respond(403, null, 'Bạn không có quyền cập nhật công việc', false);
+        $tid = (int)$auth['tenant_id'];
+        $chk = $this->db->prepare("SELECT * FROM activities WHERE id = ? AND tenant_id = ? AND type = 'task' AND deleted_at IS NULL");
+        $chk->execute([$id, $tid]);
+        $task = $chk->fetch(PDO::FETCH_ASSOC);
+        if (!$task) respond(404, null, 'Không tìm thấy công việc', false);
+        if (!$this->canAccessTaskRow($auth, $task)) {
+            respond(403, null, 'Bạn không có quyền cập nhật công việc này', false);
+        }
+
         $b = getBody();
         $sets = []; $params = [];
         if (isset($b['title']) || isset($b['subject'])) {
@@ -1151,12 +1210,12 @@ class ProjectController {
             $params[] = trim($b['description'] ?? $b['body']);
         }
         if (isset($b['status'])) {
-            $status = in_array($b['status'], ['planned', 'done', 'cancelled']) ? $b['status'] : 'planned';
+            $status = in_array($b['status'], ['planned', 'done', 'cancelled'], true) ? $b['status'] : 'planned';
             $sets[] = "status = ?";
             $params[] = $status;
         }
         if (isset($b['priority'])) {
-            $priority = in_array($b['priority'], ['low', 'medium', 'high']) ? $b['priority'] : 'medium';
+            $priority = in_array($b['priority'], ['low', 'medium', 'high', 'urgent'], true) ? $b['priority'] : 'medium';
             $sets[] = "priority = ?";
             $params[] = $priority;
         }
@@ -1171,52 +1230,70 @@ class ProjectController {
         if (empty($sets)) respond(422, null, 'Không có dữ liệu cần cập nhật', false);
         $params[] = $id;
         $params[] = $tid;
-        $this->db->prepare("UPDATE activities SET " . implode(', ', $sets) . ", updated_at = NOW() WHERE id = ? AND (tenant_id = ? OR tenant_id IS NULL) AND type = 'task'")
+        $this->db->prepare("UPDATE activities SET " . implode(', ', $sets) . ", updated_at = NOW() WHERE id = ? AND tenant_id = ? AND type = 'task' AND deleted_at IS NULL")
             ->execute($params);
         respond(200, ['id' => $id], 'Cập nhật công việc thành công');
     }
 
     public function deleteTaskDetail(array $auth, int $id): void {
-        $tid = $auth['tenant_id'];
-        $this->db->prepare("UPDATE activities SET deleted_at = NOW() WHERE id = ? AND (tenant_id = ? OR tenant_id IS NULL) AND type = 'task'")
+        if (strtolower($auth['role'] ?? '') === 'viewer') respond(403, null, 'Bạn không có quyền xóa công việc', false);
+        $tid = (int)$auth['tenant_id'];
+        $chk = $this->db->prepare("SELECT * FROM activities WHERE id = ? AND tenant_id = ? AND type = 'task' AND deleted_at IS NULL");
+        $chk->execute([$id, $tid]);
+        $task = $chk->fetch(PDO::FETCH_ASSOC);
+        if (!$task) respond(404, null, 'Không tìm thấy công việc', false);
+        if (!$this->canAccessTaskRow($auth, $task)) {
+            respond(403, null, 'Bạn không có quyền xóa công việc này', false);
+        }
+
+        $this->db->prepare("UPDATE activities SET deleted_at = NOW() WHERE id = ? AND tenant_id = ? AND type = 'task' AND deleted_at IS NULL")
             ->execute([$id, $tid]);
         respond(200, null, 'Xóa công việc thành công');
     }
 
     public function updateTaskStatus(array $auth, int $id): void {
-        $tid = $auth['tenant_id'];
+        if (strtolower($auth['role'] ?? '') === 'viewer') respond(403, null, 'Bạn không có quyền cập nhật trạng thái công việc', false);
+        $tid = (int)$auth['tenant_id'];
+        $chk = $this->db->prepare("SELECT * FROM activities WHERE id = ? AND tenant_id = ? AND type = 'task' AND deleted_at IS NULL");
+        $chk->execute([$id, $tid]);
+        $task = $chk->fetch(PDO::FETCH_ASSOC);
+        if (!$task) respond(404, null, 'Không tìm thấy công việc', false);
+        if (!$this->canAccessTaskRow($auth, $task)) {
+            respond(403, null, 'Bạn không có quyền cập nhật trạng thái công việc này', false);
+        }
+
         $b = getBody();
         $rawStatus = trim($b['status'] ?? 'done');
-        $status = in_array($rawStatus, ['planned', 'done', 'cancelled']) ? $rawStatus : ($rawStatus === 'completed' ? 'done' : 'planned');
-        $this->db->prepare("UPDATE activities SET status = ?, done_at = IF(? = 'done', NOW(), NULL), updated_at = NOW() WHERE id = ? AND (tenant_id = ? OR tenant_id IS NULL) AND type = 'task'")
+        $status = in_array($rawStatus, ['planned', 'done', 'cancelled'], true) ? $rawStatus : ($rawStatus === 'completed' ? 'done' : 'planned');
+        $this->db->prepare("UPDATE activities SET status = ?, done_at = IF(? = 'done', NOW(), NULL), updated_at = NOW() WHERE id = ? AND tenant_id = ? AND type = 'task' AND deleted_at IS NULL")
             ->execute([$status, $status, $id, $tid]);
         respond(200, ['id' => $id, 'status' => $status], 'Cập nhật trạng thái công việc thành công');
     }
 
     public function addTaskComment(array $auth, int $id): void {
-        $tid = $auth['tenant_id'];
+        if (strtolower($auth['role'] ?? '') === 'viewer') respond(403, null, 'Bạn không có quyền bình luận công việc', false);
+        $tid = (int)$auth['tenant_id'];
+        $chk = $this->db->prepare("SELECT * FROM activities WHERE id = ? AND tenant_id = ? AND type = 'task' AND deleted_at IS NULL");
+        $chk->execute([$id, $tid]);
+        $task = $chk->fetch(PDO::FETCH_ASSOC);
+        if (!$task) respond(404, null, 'Không tìm thấy công việc', false);
+        if (!$this->canAccessTaskRow($auth, $task)) {
+            respond(403, null, 'Bạn không có quyền bình luận công việc này', false);
+        }
+
         $b = getBody();
         $content = trim($b['content'] ?? $b['body'] ?? $b['comment'] ?? '');
         if (!$content) respond(422, null, 'Nội dung bình luận không được để trống', false);
 
         $userId = (int)($auth['user_id'] ?? 0);
-        if ($userId > 0) {
-            $chk = $this->db->prepare("SELECT id FROM users WHERE id = ? LIMIT 1");
-            $chk->execute([$userId]);
-            if (!$chk->fetchColumn()) {
-                $userId = (int)$this->db->query("SELECT id FROM users LIMIT 1")->fetchColumn();
-            }
-        } else {
-            $userId = (int)$this->db->query("SELECT id FROM users LIMIT 1")->fetchColumn();
-        }
 
         $this->db->prepare("
-            INSERT INTO comments (tenant_id, entity_type, entity_id, user_id, body, created_at)
-            VALUES (?, 'activity', ?, ?, ?, NOW())
+            INSERT INTO activity_comments (tenant_id, activity_id, user_id, content, created_at)
+            VALUES (?, ?, ?, ?, NOW())
         ")->execute([$tid, $id, $userId, $content]);
         $commentId = (int)$this->db->lastInsertId();
 
-        respond(201, ['id' => $commentId, 'task_id' => $id, 'body' => $content], 'Bình luận công việc thành công');
+        respond(201, ['id' => $commentId, 'task_id' => $id, 'activity_id' => $id, 'content' => $content, 'body' => $content], 'Bình luận công việc thành công');
     }
 }
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Calendar, Clock, AlignLeft, Phone, Mail, Users, CheckSquare, Zap, PhoneOutgoing, PhoneIncoming, Camera, FileText, Loader2 } from 'lucide-react';
@@ -7,6 +7,7 @@ import { CustomSelect } from './CustomSelect';
 import { MentionInput } from './MentionInput';
 import api from '../../api/axios';
 import { compressToWebP } from '../../utils/imageCompress';
+import { pushOverlay } from '../../utils/overlayStack';
 
 interface ActivityModalProps {
   isOpen: boolean;
@@ -47,6 +48,7 @@ const PLACEHOLDERS: Record<string, string> = {
 export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, entityType, entityId, onSuccess, userId, activity, onSwitchToTask, zIndex }) => {
   const { addToast } = useUIStore();
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const submitInFlightRef = useRef(false);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
@@ -71,6 +73,30 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, e
   const [proofImageFile, setProofImageFile] = useState<File | null>(null);
   const [proofImagePreview, setProofImagePreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const updateProofPreview = (nextUrl: string | null) => {
+    setProofImagePreview(prev => {
+      if (prev && prev.startsWith('blob:')) {
+        URL.revokeObjectURL(prev);
+      }
+      return nextUrl;
+    });
+  };
+
+  useEffect(() => {
+    return () => {
+      if (proofImagePreview && proofImagePreview.startsWith('blob:')) {
+        URL.revokeObjectURL(proofImagePreview);
+      }
+    };
+  }, [proofImagePreview]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    return pushOverlay('activity-modal', () => {
+      if (!submitInFlightRef.current) onClose();
+    });
+  }, [isOpen, onClose]);
 
   const draftStorageKey = entityId ? `draft_activity_${entityType || 'contact'}_${entityId}` : null;
 
@@ -114,7 +140,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, e
         call_duration: 5
       });
       setProofImageFile(null);
-      setProofImagePreview(null);
+      updateProofPreview(null);
     }
   }, [isOpen, activity, draftStorageKey]);
 
@@ -137,8 +163,9 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, e
 
   if (!isOpen) return null;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    if (submitInFlightRef.current) return;
     
     let subject = formData.subject.trim();
     if (!subject && formData.type === 'note') {
@@ -167,6 +194,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, e
       return;
     }
 
+    submitInFlightRef.current = true;
     setLoading(true);
     
     try {
@@ -223,6 +251,8 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, e
         });
       }
 
+      window.dispatchEvent(new CustomEvent('task-updated', { detail: { id: activityId } }));
+
       if (draftStorageKey) {
         localStorage.removeItem(draftStorageKey);
       }
@@ -233,6 +263,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, e
       console.error(err);
       addToast(err.message || (activity?.id ? 'Lỗi khi cập nhật hoạt động' : 'Lỗi khi thêm hoạt động'), 'error');
     } finally {
+      submitInFlightRef.current = false;
       setLoading(false);
     }
   };
@@ -304,6 +335,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, e
           <form 
             onSubmit={handleSubmit} 
             onKeyDown={(e) => {
+              if (e.defaultPrevented) return;
               if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
                 e.preventDefault();
                 handleSubmit(e);
@@ -357,7 +389,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, e
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><AlignLeft size={13} /> Ghi chú chi tiết</span>
-                <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>💡 Phím tắt: <strong>Ctrl + Enter</strong> để lưu</span>
+                <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Zap size={12} /> Phím tắt: <strong>Ctrl + Enter</strong> để lưu</span>
               </label>
               <MentionInput 
                 className="form-input" 
@@ -366,7 +398,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, e
                 value={formData.body}
                 onChange={e => setFormData({ ...formData, body: e.target.value })}
                 onSubmitShortcut={() => {
-                  handleSubmit({ preventDefault: () => {} } as any);
+                  handleSubmit();
                 }}
                 onImagePaste={(file: File) => {
                   if (file.size > 5 * 1024 * 1024) {
@@ -375,7 +407,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, e
                   }
                   const previewUrl = URL.createObjectURL(file);
                   setProofImageFile(file);
-                  setProofImagePreview(previewUrl);
+                  updateProofPreview(previewUrl);
                   addToast('Đã dán ảnh minh chứng từ clipboard!', 'success');
                 }}
                 onFilePaste={(file: File) => {
@@ -385,7 +417,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, e
                   }
                   const previewUrl = URL.createObjectURL(file);
                   setProofImageFile(file);
-                  setProofImagePreview(previewUrl);
+                  updateProofPreview(previewUrl);
                   addToast('Đã dán tệp từ clipboard!', 'success');
                 }}
                 style={{ resize: 'none' }}
@@ -618,7 +650,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, e
                         type="button"
                         onClick={() => {
                           setProofImageFile(null);
-                          setProofImagePreview(null);
+                          updateProofPreview(null);
                         }}
                         style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', borderRadius: '50%', width: '26px', height: '26px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
                       >
@@ -641,7 +673,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, e
                           }
                           const previewUrl = URL.createObjectURL(file);
                           setProofImageFile(file);
-                          setProofImagePreview(previewUrl);
+                          updateProofPreview(previewUrl);
                         }}
                         style={{ display: 'none' }}
                       />

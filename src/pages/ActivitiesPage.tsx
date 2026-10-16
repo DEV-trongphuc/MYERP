@@ -16,6 +16,7 @@ import { LayoutList } from 'lucide-react';
 import { CustomModal } from '../components/ui/CustomModal';
 import { useAuth } from '../contexts/AuthContext';
 import { MentionInput } from '../components/ui/MentionInput';
+import { pushOverlay } from '../utils/overlayStack';
 
 const PAGE_SIZE = 10;
 
@@ -90,6 +91,7 @@ export const ActivitiesPage: React.FC = () => {
   const activitiesAbortRef = useRef<AbortController | null>(null);
   const contactDrawerAbortRef = useRef<AbortController | null>(null);
   const inFlightRef = useRef(false);
+  const actionInFlightRef = useRef<Set<number>>(new Set());
 
   const openContactDrawer = async (contactId: number) => {
     if (contactDrawerAbortRef.current) {
@@ -240,13 +242,10 @@ export const ActivitiesPage: React.FC = () => {
   }, [filterType, filterStatus]);
 
   useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && showModal && !saving) {
-        setShowModal(false);
-      }
-    };
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
+    if (!showModal) return;
+    return pushOverlay('activities-edit-modal', () => {
+      if (!saving) setShowModal(false);
+    }, 150);
   }, [showModal, saving]);
 
   const openCreate = () => { 
@@ -317,9 +316,10 @@ export const ActivitiesPage: React.FC = () => {
   };
 
   const toggleDone = async (item: any) => {
-    if (inFlightRef.current || actionLoadingId === item.id) return;
+    const id = Number(item.id);
+    if (actionInFlightRef.current.has(id) || actionLoadingId === item.id) return;
     const newStatus = item.status === 'done' ? 'planned' : 'done';
-    inFlightRef.current = true;
+    actionInFlightRef.current.add(id);
     setActionLoadingId(item.id);
     try {
       await api.put(`/activities/${item.id}`, { status: newStatus, done_at: newStatus === 'done' ? new Date().toISOString() : null });
@@ -327,28 +327,31 @@ export const ActivitiesPage: React.FC = () => {
     } catch (e: any) {
       addToast('Lỗi khi cập nhật trạng thái', 'error');
     } finally {
-      inFlightRef.current = false;
+      actionInFlightRef.current.delete(id);
       setActionLoadingId(null);
     }
   };
 
   const { closeConfirm } = useUIStore();
   const handleDelete = async (actItem: any) => {
+    const id = Number(actItem.id);
+    if (actionInFlightRef.current.has(id)) return;
     showConfirm({
       title: 'Xóa hoạt động?',
       message: `Bạn có chắc chắn muốn xóa vĩnh viễn "${actItem.subject}"?`,
       isDanger: true,
       onConfirm: async () => {
-        if (inFlightRef.current) return;
-        inFlightRef.current = true;
+        if (actionInFlightRef.current.has(id)) return;
+        actionInFlightRef.current.add(id);
         try {
           await api.delete(`/activities/${actItem.id}`);
           setItems(prev => prev.filter(a => a.id !== actItem.id));
+          setTotal(prev => Math.max(0, prev - 1));
           addToast('Đã xóa hoạt động thành công', 'success');
         } catch (e: any) {
           addToast(e.response?.data?.message || 'Lỗi khi xóa hoạt động', 'error');
         } finally {
-          inFlightRef.current = false;
+          actionInFlightRef.current.delete(id);
           closeConfirm();
         }
       }
@@ -368,10 +371,7 @@ export const ActivitiesPage: React.FC = () => {
 
   const doneCount = useMemo(() => items.filter(a => a.status === 'done').length, [items]);
   const counts = useMemo(() => TYPES.reduce((acc, t) => ({ ...acc, [t]: items.filter(a => a.type === t).length }), {} as Record<string, number>), [items]);
-  const filteredActivities = useMemo(
-    () => items.filter(act => !search || (act.subject || '').toLowerCase().includes(search.toLowerCase())),
-    [items, search]
-  );
+  const filteredActivities = items;
 
   return (
     <div>
@@ -541,9 +541,14 @@ export const ActivitiesPage: React.FC = () => {
                 const overdueItems = filtered.filter(a => a.status === 'planned' && a.due_date && new Date(a.due_date) < now);
                 const dedupedOverdue = overdueItems.reduce((acc: any[], curr) => {
                   const isDuplicate = acc.find(item => 
-                    item.subject === curr.subject && 
-                    item.type === curr.type && 
-                    new Date(item.due_date).getTime() === new Date(curr.due_date).getTime()
+                    (curr.id && item.id === curr.id) || (
+                      !curr.id &&
+                      item.subject === curr.subject && 
+                      item.type === curr.type && 
+                      item.related_type === curr.related_type &&
+                      item.related_id === curr.related_id &&
+                      new Date(item.due_date).getTime() === new Date(curr.due_date).getTime()
+                    )
                   );
                   if (!isDuplicate) acc.push(curr);
                   return acc;
@@ -619,7 +624,7 @@ export const ActivitiesPage: React.FC = () => {
 
                               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
                                 <button 
-                                  onClick={() => toggleDone(act)}
+                                  onClick={(e) => { e.stopPropagation(); toggleDone(act); }}
                                   disabled={actionLoadingId === act.id}
                                   className="hover-lift"
                                   title={act.status === 'done' ? 'Đánh dấu chưa xong' : 'Đánh dấu hoàn thành'}
@@ -640,8 +645,8 @@ export const ActivitiesPage: React.FC = () => {
                                 >
                                   {actionLoadingId === act.id ? <Loader2 size={13} className="spin" /> : <CheckCircle2 size={15} />}
                                 </button>
-                                <button className="btn ghost sm" onClick={() => openEdit(act)} style={{ padding: '6px' }}><Pencil size={13} /></button>
-                                <button className="btn ghost sm" style={{ color: 'var(--color-danger)', padding: '6px' }} onClick={() => handleDelete(act)}><Trash2 size={13} /></button>
+                                <button className="btn ghost sm" onClick={(e) => { e.stopPropagation(); openEdit(act); }} style={{ padding: '6px' }}><Pencil size={13} /></button>
+                                <button className="btn ghost sm" style={{ color: 'var(--color-danger)', padding: '6px' }} onClick={(e) => { e.stopPropagation(); handleDelete(act); }}><Trash2 size={13} /></button>
                               </div>
                             </motion.div>
                           ))}
@@ -674,7 +679,7 @@ export const ActivitiesPage: React.FC = () => {
           {/* Type selector */}
           <div className="form-group">
             <label className="form-label">Loại hoạt động</label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.625rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.625rem' }}>
               {TYPES.map(t => (
                 <button 
                   key={t} type="button"
@@ -873,12 +878,15 @@ export const ActivitiesPage: React.FC = () => {
             isOpen={!!selectedTaskForDrawer}
             onClose={() => setSelectedTaskForDrawer(null)}
             task={selectedTaskForDrawer}
-            onUpdate={() => {
+            onUpdate={(updatedTask?: any) => {
+              if (updatedTask && updatedTask.id) {
+                setSelectedTaskForDrawer((prev: any) => prev ? { ...prev, ...updatedTask } : prev);
+                setItems(prev => prev.map(it => Number(it.id) === Number(updatedTask.id) ? { ...it, ...updatedTask } : it));
+              }
               fetchActivities();
-              setSelectedTaskForDrawer(null);
             }}
             users={users}
-            onOpenContact={(contactId) => setProfileContact({ id: contactId })}
+            onOpenContact={(contactId) => openContactDrawer(contactId)}
           />
         </Suspense>
       )}

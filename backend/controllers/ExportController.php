@@ -2242,29 +2242,37 @@ class ExportController {
 
         $statusesParam    = trim((string)($_GET['status'] ?? $_GET['statuses'] ?? ''));
         $prioritiesParam  = trim((string)($_GET['priority'] ?? $_GET['priorities'] ?? ''));
-        $assigneesParam   = trim((string)($_GET['assignees'] ?? $_GET['assigned_to'] ?? ''));
+        $assigneesParam   = trim((string)($_GET['assignees'] ?? $_GET['assigned_to'] ?? $_GET['user_id'] ?? ''));
         $creatorsParam    = trim((string)($_GET['creators'] ?? $_GET['created_by'] ?? ''));
         $departmentsParam = trim((string)($_GET['departments'] ?? $_GET['department'] ?? ''));
         $relatedType      = strtolower(trim((string)($_GET['related_type'] ?? '')));
+        $relatedId        = (int)($_GET['related_id'] ?? $_GET['contact_id'] ?? 0);
+        $taskGroupId      = (int)($_GET['task_group_id'] ?? 0);
+        $teamId           = isset($_GET['team_id']) && $_GET['team_id'] !== '' && $_GET['team_id'] !== 'all' && $_GET['team_id'] !== 'all_teams_bypass' ? (int)$_GET['team_id'] : 0;
         $overdueOnly      = !empty($_GET['overdue_only']) && in_array(strtolower((string)$_GET['overdue_only']), ['1', 'true', 'yes'], true);
         $dateField        = strtolower(trim((string)($_GET['date_field'] ?? 'due_date')));
         $period           = strtolower(trim((string)($_GET['period'] ?? '')));
-        $fromDate         = trim((string)($_GET['from'] ?? $_GET['from_date'] ?? ''));
-        $toDate           = trim((string)($_GET['to'] ?? $_GET['to_date'] ?? ''));
+        $fromDate         = trim((string)($_GET['from'] ?? $_GET['from_date'] ?? $_GET['start_date'] ?? ''));
+        $toDate           = trim((string)($_GET['to'] ?? $_GET['to_date'] ?? $_GET['end_date'] ?? ''));
         $search           = trim((string)($_GET['search'] ?? $_GET['search_query'] ?? ''));
 
         $where = ['t.tenant_id = ?', 't.deleted_at IS NULL', "t.type = 'task'"];
         $params = [$tid];
 
+        // Always exclude other users' personal tasks
+        $where[] = "(NOT (IFNULL(t.tags, '') LIKE '%personal_task%' OR IFNULL(t.tags, '') LIKE '%ca_nhan%') OR t.user_id = ? OR t.created_by = ?)";
+        $params[] = $uid;
+        $params[] = $uid;
+
         $isTaskAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'hr', 'sale_admin', 'saleadmin'], true);
         $isManager   = in_array($role, ['manager', 'truong_phong', 'leader', 'team_lead'], true);
         if (!$isTaskAdmin) {
             if ($isManager) {
-                $where[] = "(t.user_id = ? OR t.created_by = ? OR t.user_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))) OR t.created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))))";
-                array_push($params, $uid, $uid, $uid, $uid);
+                $where[] = "(t.user_id = ? OR t.created_by = ? OR t.approver_id = ? OR FIND_IN_SET(?, IFNULL(t.participant_ids, '')) > 0 OR t.user_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))) OR t.created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))))";
+                array_push($params, $uid, $uid, $uid, (string)$uid, $uid, $uid);
             } else {
-                $where[] = "(t.user_id = ? OR t.created_by = ?)";
-                array_push($params, $uid, $uid);
+                $where[] = "(t.user_id = ? OR t.created_by = ? OR t.approver_id = ? OR FIND_IN_SET(?, IFNULL(t.participant_ids, '')) > 0)";
+                array_push($params, $uid, $uid, $uid, (string)$uid);
             }
         }
 
@@ -2273,12 +2281,14 @@ class ExportController {
             if (!empty($stList)) {
                 $stOrs = [];
                 foreach ($stList as $st) {
-                    if ($st === 'open_only') {
-                        $stOrs[] = "t.status NOT IN ('done', 'completed', 'cancelled')";
+                    if ($st === 'in_progress') {
+                        $stOrs[] = "(t.status = 'in_progress' OR (t.status = 'planned' AND t.progress > 0 AND t.progress < 100))";
+                    } elseif (in_array($st, ['planned', 'open', 'open_only', 'not_done', 'active', 'todo'], true)) {
+                        $stOrs[] = "(t.status NOT IN ('done', 'completed', 'cancelled') AND (t.progress < 100 OR t.progress IS NULL))";
                     } elseif ($st === 'done' || $st === 'completed') {
-                        $stOrs[] = "t.status IN ('done', 'completed')";
+                        $stOrs[] = "(t.status IN ('done', 'completed') OR t.progress >= 100)";
                     } elseif ($st === 'overdue') {
-                        $stOrs[] = "(t.due_date IS NOT NULL AND t.due_date < NOW() AND t.status NOT IN ('done', 'completed', 'cancelled'))";
+                        $stOrs[] = "(t.due_date IS NOT NULL AND t.due_date < NOW() AND t.status NOT IN ('done', 'completed', 'cancelled') AND (t.progress < 100 OR t.progress IS NULL))";
                     } else {
                         $stOrs[] = "t.status = ?";
                         $params[] = $st;
@@ -2310,8 +2320,7 @@ class ExportController {
                         $assOrs[] = "t.user_id = ?";
                         $params[] = (int)$a;
                     } else {
-                        $assOrs[] = "u_ass.full_name LIKE ?";
-                        $params[] = '%' . $a . '%';
+                        $assOrs[] = AgentToolRegistry::buildVietnameseFuzzyNameWhere('u_ass.full_name', $a, $params);
                     }
                 }
                 $where[] = "(" . implode(' OR ', $assOrs) . ")";
@@ -2327,8 +2336,7 @@ class ExportController {
                         $crOrs[] = "t.created_by = ?";
                         $params[] = (int)$cr;
                     } else {
-                        $crOrs[] = "u_cr.full_name LIKE ?";
-                        $params[] = '%' . $cr . '%';
+                        $crOrs[] = AgentToolRegistry::buildVietnameseFuzzyNameWhere('u_cr.full_name', $cr, $params);
                     }
                 }
                 $where[] = "(" . implode(' OR ', $crOrs) . ")";
@@ -2348,13 +2356,30 @@ class ExportController {
             }
         }
 
+        if ($taskGroupId > 0) {
+            $where[] = "t.task_group_id = ?";
+            $params[] = $taskGroupId;
+        }
+
+        if ($teamId > 0) {
+            $where[] = "(t.user_id IN (SELECT id FROM users WHERE team_id = ? AND tenant_id = ?))";
+            $params[] = $teamId;
+            $params[] = $tid;
+        }
+
         if ($relatedType !== '' && $relatedType !== 'all') {
             $where[] = "t.related_type = ?";
             $params[] = $relatedType;
         }
 
+        if ($relatedId > 0) {
+            $where[] = "(t.related_id = ? OR t.contact_id = ?)";
+            $params[] = $relatedId;
+            $params[] = $relatedId;
+        }
+
         if ($overdueOnly) {
-            $where[] = "t.due_date IS NOT NULL AND t.due_date < NOW() AND t.status NOT IN ('done', 'completed', 'cancelled')";
+            $where[] = "t.due_date IS NOT NULL AND t.due_date < NOW() AND t.status NOT IN ('done', 'completed', 'cancelled') AND (t.progress < 100 OR t.progress IS NULL)";
         }
 
         $colDateMap = [
@@ -2392,7 +2417,7 @@ class ExportController {
             array_push($params, $like, $like, $like, $like, $like);
         }
 
-        $sql = "SELECT t.id, t.subject as title, t.body as description, t.status, t.priority, t.due_date, t.done_at as completed_at, t.created_at,
+        $sql = "SELECT t.id, t.subject as title, t.body as description, t.status, t.priority, t.progress, t.due_date, t.done_at as completed_at, t.created_at,
                        COALESCE(u_ass.full_name, 'Chưa phân công') as assignee_name,
                        COALESCE(u_cr.full_name, 'Hệ thống') as creator_name,
                        COALESCE(p.name, c.full_name, '') as related_name
@@ -2414,11 +2439,34 @@ class ExportController {
             $compStr = !empty($r['completed_at']) ? date('d/m/Y H:i', strtotime($r['completed_at'])) : '';
             $createdStr = !empty($r['created_at']) ? date('d/m/Y H:i', strtotime($r['created_at'])) : '';
 
+            $rawDesc = (string)($r['description'] ?? '');
+            $cleanDesc = $rawDesc;
+            if (str_starts_with(trim($rawDesc), '{')) {
+                $json = json_decode(trim($rawDesc), true);
+                if (is_array($json) && isset($json['erp_task']) && is_array($json['erp_task'])) {
+                    $cleanDesc = (string)($json['erp_task']['description'] ?? '');
+                    if (!empty($json['erp_task']['checklist']) && is_array($json['erp_task']['checklist'])) {
+                        $clList = $json['erp_task']['checklist'];
+                        $totalCl = count($clList);
+                        if ($totalCl > 0) {
+                            $doneCl = 0;
+                            foreach ($clList as $clItem) {
+                                if (is_array($clItem) && (!empty($clItem['checked']) || !empty($clItem['done']) || !empty($clItem['completed']) || (($clItem['status'] ?? '') === 'done'))) {
+                                    $doneCl++;
+                                }
+                            }
+                            $cleanDesc .= " [Checklist: {$doneCl}/{$totalCl} hoàn thành]";
+                        }
+                    }
+                }
+            }
+            $cleanDesc = trim(preg_replace('/\s+/', ' ', html_entity_decode(strip_tags($cleanDesc), ENT_QUOTES | ENT_HTML5, 'UTF-8')));
+
             fputcsv($output, [
                 $stt++,
                 '#' . $r['id'],
                 $r['title'] ?: '',
-                trim(preg_replace('/\s+/', ' ', strip_tags((string)($r['description'] ?? '')))),
+                $cleanDesc,
                 $r['status'] ?: 'todo',
                 $r['priority'] ?: 'medium',
                 $r['assignee_name'],

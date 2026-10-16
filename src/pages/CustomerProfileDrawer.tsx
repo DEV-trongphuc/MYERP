@@ -2182,7 +2182,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       user_id: formData.owner_id || contact?.owner_id || currentUser?.id,
       created_by: currentUser?.id,
       type: 'task',
-      status: 'open',
+      status: 'planned',
       priority: 'medium',
       from_customer_drawer: true
     });
@@ -4830,11 +4830,20 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         }
       }
     };
+    const handleTaskUpdate = () => {
+      if (isOpen && effectiveContactId) {
+        fetchData('tasks');
+      }
+    };
     window.addEventListener('quote-updated', handleQuoteUpdate);
     window.addEventListener('deposit-created', handleDepositCreated);
+    window.addEventListener('task-updated', handleTaskUpdate);
+    window.addEventListener('task-local-updated', handleTaskUpdate);
     return () => {
       window.removeEventListener('quote-updated', handleQuoteUpdate);
       window.removeEventListener('deposit-created', handleDepositCreated);
+      window.removeEventListener('task-updated', handleTaskUpdate);
+      window.removeEventListener('task-local-updated', handleTaskUpdate);
     };
   }, [isOpen, effectiveContactId, fetchData, formData, currentUser, onUpdate]);
 
@@ -6761,9 +6770,13 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   };
 
   const handleTaskDrop = async (taskId: number, targetCol: 'todo' | 'in_progress' | 'done') => {
+    const task = tasks.find(x => x.id === taskId) || drawerActivities.find(x => x.id === taskId);
+    const needsApproval = targetCol === 'done' && task && Number(task.require_approval) === 1 && task.approval_status !== 'approved';
+
     let nextDone = false;
     let nextProgress = 0;
     let nextStatus = 'planned';
+    let nextApprovalStatus = task?.approval_status;
 
     if (targetCol === 'todo') {
       nextDone = false;
@@ -6774,25 +6787,40 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       nextProgress = 50;
       nextStatus = 'planned';
     } else if (targetCol === 'done') {
-      nextDone = true;
-      nextProgress = 100;
-      nextStatus = 'done';
+      if (needsApproval) {
+        nextDone = false;
+        nextProgress = 100;
+        nextStatus = 'planned';
+        nextApprovalStatus = 'pending';
+      } else {
+        nextDone = true;
+        nextProgress = 100;
+        nextStatus = 'done';
+      }
     }
 
     // Optimistic local state update
-    setTasks(prev => prev.map(x => x.id === taskId ? { ...x, done: nextDone, progress: nextProgress, status: nextStatus } : x));
+    setTasks(prev => prev.map(x => x.id === taskId ? { ...x, done: nextDone, progress: nextProgress, status: nextStatus, approval_status: nextApprovalStatus } : x));
     
     try {
-      await api.put(`/activities/${taskId}`, { 
+      const payload: any = { 
         progress: nextProgress,
         status: nextStatus
-      });
-      const colLabel = targetCol === 'todo' ? 'Cần làm' : targetCol === 'in_progress' ? 'Đang làm' : 'Đã xong';
-      addToast(`Đã chuyển công việc sang cột ${colLabel}`, 'success');
+      };
+      if (needsApproval) {
+        payload.approval_status = 'pending';
+      }
+      await api.put(`/activities/${taskId}`, payload);
+      if (needsApproval) {
+        addToast('Đã cập nhật tiến độ 100% và gửi yêu cầu phê duyệt', 'success');
+      } else {
+        const colLabel = targetCol === 'todo' ? 'Cần làm' : targetCol === 'in_progress' ? 'Đang làm' : 'Đã xong';
+        addToast(`Đã chuyển công việc sang cột ${colLabel}`, 'success');
+      }
       if (nextStatus === 'done') {
         triggerFullConfetti();
       }
-      setDrawerActivities(prev => prev.map(a => a.id === taskId ? { ...a, progress: nextProgress, status: nextStatus } : a));
+      setDrawerActivities(prev => prev.map(a => a.id === taskId ? { ...a, progress: nextProgress, status: nextStatus, approval_status: nextApprovalStatus } : a));
     } catch (err: any) {
       // Revert if error
       fetchData();
@@ -10973,7 +11001,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                       project_id: nextProjectId,
                                       program: nextProgramName
                                     }));
-                                    setContact((prev: any) => prev ? ({
+                                    setBaseData((prev: any) => prev ? ({
                                       ...prev,
                                       campaign_id: nextCampaign,
                                       project_id: nextProjectId,
@@ -14055,7 +14083,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                       onDragStart={() => setDraggedTaskId(t.id)}
                                       onDragEnd={() => setDraggedTaskId(null)}
                                       onClick={() => {
-                                        if (t.done) return;
                                         openTaskDetails(t);
                                       }}
                                       style={{
@@ -14063,7 +14090,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                         border: isOverdue && !t.done ? '1.5px solid var(--color-danger)' : '1px solid var(--color-border-light)',
                                         borderRadius: '12px',
                                         padding: '0.875rem',
-                                        cursor: 'grab',
+                                        cursor: 'pointer',
                                         opacity: t.done ? 0.7 : 1,
                                         boxShadow: 'var(--shadow-sm)',
                                         transition: 'all 0.2s',
@@ -14080,8 +14107,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                     >
                                       {/* Drag handle & header info */}
                                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px', marginBottom: '4px' }}>
-                                        <span className={`badge ${t.priority === 'high' ? 'danger' : 'warning'}`} style={{ fontSize: '0.625rem', padding: '1px 5px' }}>
-                                          {t.priority === 'high' ? 'Cao' : 'Trung bình'}
+                                        <span className={`badge ${t.priority === 'urgent' || t.priority === 'high' ? 'danger' : t.priority === 'low' ? 'info' : 'warning'}`} style={{ fontSize: '0.625rem', padding: '1px 5px', border: 'none' }}>
+                                          {t.priority === 'urgent' ? 'Khẩn cấp' : t.priority === 'high' ? 'Cao' : t.priority === 'low' ? 'Thấp' : 'Trung bình'}
                                         </span>
                                         <button
                                           className="btn-icon sm text-danger"
@@ -14236,7 +14263,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   return (
                                     <div 
                                       key={t.id}
-                                      onClick={() => { if (!t.done) openTaskDetails(t); }}
+                                      onClick={() => openTaskDetails(t)}
                                       style={{ 
                                         background: 'var(--color-surface)',
                                         borderRadius: '12px',
@@ -14246,7 +14273,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                         display: 'flex',
                                         flexDirection: 'column',
                                         gap: '6px',
-                                        position: 'relative'
+                                        position: 'relative',
+                                        cursor: 'pointer'
                                       }}
                                     >
                                       {/* Badges & Actions row */}
@@ -14255,8 +14283,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                           <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', color: statusColor, background: statusBg }}>
                                             {statusLabel}
                                           </span>
-                                          <span className={`badge ${t.priority === 'high' ? 'danger' : 'warning'}`} style={{ fontSize: '0.65rem', padding: '2px 6px' }}>
-                                            {t.priority === 'high' ? 'Cao' : 'Trung bình'}
+                                          <span className={`badge ${t.priority === 'urgent' || t.priority === 'high' ? 'danger' : t.priority === 'low' ? 'info' : 'warning'}`} style={{ fontSize: '0.65rem', padding: '2px 6px', border: 'none' }}>
+                                            {t.priority === 'urgent' ? 'Khẩn cấp' : t.priority === 'high' ? 'Cao' : t.priority === 'low' ? 'Thấp' : 'Trung bình'}
                                           </span>
                                         </div>
                                         
@@ -14378,13 +14406,13 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                     return (
                                       <tr 
                                         key={t.id}
-                                        onClick={() => { if (!t.done) openTaskDetails(t); }}
+                                        onClick={() => openTaskDetails(t)}
                                         style={{ 
                                           borderBottom: '1px solid var(--color-border-light)', 
-                                          cursor: t.done ? 'default' : 'pointer', 
+                                          cursor: 'pointer', 
                                           transition: 'background 0.15s'
                                         }}
-                                        onMouseEnter={e => { if (!t.done) e.currentTarget.style.backgroundColor = 'var(--color-bg)'; }}
+                                        onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'var(--color-bg)'; }}
                                         onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
                                       >
                                         <td style={{ padding: '14px 16px' }}>
@@ -14436,8 +14464,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                           </span>
                                         </td>
                                         <td style={{ padding: '14px 16px' }}>
-                                          <span className={`badge ${t.priority === 'high' ? 'danger' : 'warning'}`} style={{ fontSize: '0.65rem', padding: '2px 6px' }}>
-                                            {t.priority === 'high' ? 'Cao' : 'Trung bình'}
+                                          <span className={`badge ${t.priority === 'urgent' || t.priority === 'high' ? 'danger' : t.priority === 'low' ? 'info' : 'warning'}`} style={{ fontSize: '0.65rem', padding: '2px 6px', border: 'none' }}>
+                                            {t.priority === 'urgent' ? 'Khẩn cấp' : t.priority === 'high' ? 'Cao' : t.priority === 'low' ? 'Thấp' : 'Trung bình'}
                                           </span>
                                         </td>
                                         <td style={{ padding: '14px 16px', color: isOverdue ? 'var(--color-danger)' : 'var(--color-text-muted)', fontWeight: isOverdue ? 600 : 'normal' }}>

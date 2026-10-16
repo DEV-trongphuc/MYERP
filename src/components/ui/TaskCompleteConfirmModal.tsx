@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -9,6 +9,7 @@ import {
 import { Avatar } from './Avatar';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { parseTaskBody, formatVietnameseDescription } from '../../utils/taskBodyParser';
+import { pushOverlay } from '../../utils/overlayStack';
 
 export interface TaskCompleteConfirmModalProps {
   isOpen: boolean;
@@ -29,12 +30,31 @@ export const TaskCompleteConfirmModal: React.FC<TaskCompleteConfirmModalProps> =
 }) => {
   const { t } = useLanguage();
   const [isAgreed, setIsAgreed] = useState(true);
+  const confirmInFlightRef = useRef(false);
 
   useEffect(() => {
     if (isOpen) {
       setIsAgreed(true);
+      confirmInFlightRef.current = false;
     }
   }, [isOpen, task?.id]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    return pushOverlay('task-complete-confirm-modal', () => {
+      if (!confirmInFlightRef.current && !isSubmitting) onClose();
+    });
+  }, [isOpen, isSubmitting, onClose]);
+
+  const handleConfirmClick = async () => {
+    if (!task || !isAgreed || isSubmitting || confirmInFlightRef.current) return;
+    confirmInFlightRef.current = true;
+    try {
+      await onConfirm(task);
+    } finally {
+      confirmInFlightRef.current = false;
+    }
+  };
 
   // Parse task body safely & comprehensively
   const parsedBody = useMemo(() => {
@@ -165,7 +185,6 @@ export const TaskCompleteConfirmModal: React.FC<TaskCompleteConfirmModalProps> =
                 padding: '4px 12px',
                 borderRadius: '20px',
                 background: 'rgba(16, 185, 129, 0.12)',
-                border: '1px solid rgba(16, 185, 129, 0.28)',
                 color: '#10b981',
                 fontSize: '0.725rem',
                 fontWeight: 700
@@ -219,7 +238,6 @@ export const TaskCompleteConfirmModal: React.FC<TaskCompleteConfirmModalProps> =
                 borderRadius: '8px',
                 background: priorityBg,
                 color: priorityColor,
-                border: `1px solid ${priorityColor}30`,
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '4px'
@@ -577,7 +595,7 @@ export const TaskCompleteConfirmModal: React.FC<TaskCompleteConfirmModalProps> =
             <button
               type="button"
               disabled={!isAgreed || isSubmitting}
-              onClick={() => onConfirm(task)}
+              onClick={handleConfirmClick}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',

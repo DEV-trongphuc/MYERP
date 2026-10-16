@@ -340,6 +340,7 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
             created_by_id: currentUser?.id,
             created_by_name: currentUser?.full_name || 'Tôi',
             created_by_avatar: currentUser?.avatar_url,
+            participant_ids: p.participant_ids || (p.collaborator_ids ? (Array.isArray(p.collaborator_ids) ? p.collaborator_ids.join(',') : String(p.collaborator_ids)) : ''),
             collaborator_ids: Array.isArray(p.collaborator_ids) ? p.collaborator_ids : (p.collaborator_ids ? String(p.collaborator_ids).split(',') : []),
             team_id: p.team_id ? Number(p.team_id) : undefined,
             contact_id: targetContactId ? Number(targetContactId) : undefined,
@@ -626,6 +627,7 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
         setStatus('success');
       } else if (
         proposal.action_type === 'expense' ||
+        proposal.action_type === 'task' ||
         ((proposal.action_type === 'admission_document_request' || proposal.action_type === 'legal_contract') && (p.contact_id || p.id))
       ) {
         // Global Drawer — dock Chat instead of minimizing completely

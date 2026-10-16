@@ -2957,6 +2957,7 @@ export default function ProjectsPage() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                       {(() => {
                         const priorityWeight: Record<string, number> = {
+                          urgent: 4,
                           high: 3,
                           medium: 2,
                           low: 1
@@ -3050,7 +3051,7 @@ export default function ProjectsPage() {
                                     textTransform: 'uppercase',
                                     letterSpacing: '0.03em'
                                   }}>
-                                    {task.status === 'done' ? 'Đã xong' : 'Chưa xong'}
+                                    {task.status === 'done' ? 'Đã xong' : task.status === 'cancelled' ? 'Đã hủy' : 'Chưa xong'}
                                   </span>
                                 </div>
                               );
@@ -4984,7 +4985,7 @@ export default function ProjectsPage() {
                                     textTransform: 'uppercase',
                                     letterSpacing: '0.03em'
                                   }}>
-                                    {task.status === 'done' ? 'Đã xong' : 'Chưa xong'}
+                                    {task.status === 'done' ? 'Đã xong' : task.status === 'cancelled' ? 'Đã hủy' : 'Chưa xong'}
                                   </span>
                                 </div>
                               );
@@ -7154,7 +7155,7 @@ export default function ProjectsPage() {
                                     textTransform: 'uppercase',
                                     letterSpacing: '0.03em'
                                   }}>
-                                    {task.status === 'done' ? 'Đã xong' : 'Chưa xong'}
+                                    {task.status === 'done' ? 'Đã xong' : task.status === 'cancelled' ? 'Đã hủy' : 'Chưa xong'}
                                   </span>
                                 </div>
                               );
@@ -8854,7 +8855,7 @@ export default function ProjectsPage() {
                                     textTransform: 'uppercase',
                                     letterSpacing: '0.03em'
                                   }}>
-                                    {task.status === 'done' ? 'Đã xong' : 'Chưa xong'}
+                                    {task.status === 'done' ? 'Đã xong' : task.status === 'cancelled' ? 'Đã hủy' : 'Chưa xong'}
                                   </span>
                                 </div>
                               );
@@ -9667,6 +9668,11 @@ export default function ProjectsPage() {
                 setSelectedTaskForDrawer(null);
                 const params = new URLSearchParams(window.location.search);
                 params.delete('task_id');
+                params.delete('open_task_id');
+                params.delete('subtask_id');
+                params.delete('highlight_comment_id');
+                params.delete('comment_id');
+                params.delete('highlight_activity_id');
                 navigate(`${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}`, { replace: true });
               }}
               task={selectedTaskForDrawer}

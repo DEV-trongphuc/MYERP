@@ -131,6 +131,10 @@ class SearchController {
                      WHERE a.tenant_id = ? AND a.deleted_at IS NULL AND $taskWhere";
             $pT = array_merge([$tid], $taskParams);
 
+            $sqlT .= " AND (NOT (IFNULL(a.tags,'') LIKE '%personal_task%' OR IFNULL(a.tags,'') LIKE '%ca_nhan%') OR a.user_id = ? OR a.created_by = ?)";
+            $pT[] = $uid;
+            $pT[] = $uid;
+
             if (!$isGlobalAdmin) {
                 $sqlT .= " AND (
                     a.user_id = ? OR a.created_by = ? OR a.approver_id = ? 

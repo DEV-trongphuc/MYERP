@@ -2375,7 +2375,7 @@ class AgentToolRegistry {
                     } elseif (($scope === 'team' || $isManager) && ($isManager || $isGlobalAdmin)) {
                         // Manager or Global Admin viewing Team tasks
                         $where = "a.tenant_id = ? AND a.deleted_at IS NULL AND a.type IN ('task', 'meeting') AND (
-                            a.user_id = ? OR a.created_by = ? OR a.approver_id = ? OR FIND_IN_SET(?, IFNULL(a.participant_ids, ''))
+                            a.user_id = ? OR a.created_by = ? OR a.approver_id = ? OR FIND_IN_SET(?, IFNULL(a.participant_ids, '')) > 0
                             OR a.user_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ? OR FIND_IN_SET(?, COALESCE(co_leader_ids, ''))))
                             OR a.created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ? OR FIND_IN_SET(?, COALESCE(co_leader_ids, ''))))
                         )";
@@ -2389,12 +2389,17 @@ class AgentToolRegistry {
                         $params[] = (string)$uid;
                     } else {
                         // Personal tasks
-                        $where = "a.tenant_id = ? AND a.deleted_at IS NULL AND a.type IN ('task', 'meeting') AND (a.user_id = ? OR a.created_by = ? OR a.approver_id = ? OR FIND_IN_SET(?, IFNULL(a.participant_ids, '')))";
+                        $where = "a.tenant_id = ? AND a.deleted_at IS NULL AND a.type IN ('task', 'meeting') AND (a.user_id = ? OR a.created_by = ? OR a.approver_id = ? OR FIND_IN_SET(?, IFNULL(a.participant_ids, '')) > 0)";
                         $params[] = $uid;
                         $params[] = $uid;
                         $params[] = $uid;
                         $params[] = (string)$uid;
                     }
+
+                    // Always isolate personal tasks from other users
+                    $where .= " AND (NOT (IFNULL(a.tags, '') LIKE '%personal_task%' OR IFNULL(a.tags, '') LIKE '%ca_nhan%') OR a.user_id = ? OR a.created_by = ?)";
+                    $params[] = $uid;
+                    $params[] = $uid;
 
                     if (!empty($assigneeQuery)) {
                         $where .= " AND (a.user_id IN (SELECT id FROM users WHERE full_name LIKE ?))";
@@ -2406,7 +2411,7 @@ class AgentToolRegistry {
                                     COUNT(1) as total_undone,
                                     SUM(CASE WHEN a.due_date IS NOT NULL AND a.due_date < NOW() THEN 1 ELSE 0 END) as overdue_count,
                                     SUM(CASE WHEN a.priority IN ('urgent', 'high') THEN 1 ELSE 0 END) as urgent_count,
-                                    SUM(CASE WHEN a.due_date IS NOT NULL AND DATE(a.due_date) = CURDATE() THEN 1 ELSE 0 END) as today_count
+                                    SUM(CASE WHEN a.due_date IS NOT NULL AND a.due_date >= CURDATE() AND a.due_date < DATE_ADD(CURDATE(), INTERVAL 1 DAY) THEN 1 ELSE 0 END) as today_count
                                 FROM activities a
                                 WHERE $where AND (a.status IS NULL OR a.status NOT IN ('completed', 'cancelled', 'done', 'hoan_thanh', 'da_xong')) AND (a.progress < 100 OR a.progress IS NULL)";
                     $statStmt = $db->prepare($statSql);
@@ -2428,7 +2433,7 @@ class AgentToolRegistry {
                         if ($filter === 'overdue') {
                             $sliceWhere .= " AND a.due_date IS NOT NULL AND a.due_date < NOW()";
                         } elseif ($filter === 'today') {
-                            $sliceWhere .= " AND a.due_date IS NOT NULL AND DATE(a.due_date) = CURDATE()";
+                            $sliceWhere .= " AND a.due_date IS NOT NULL AND a.due_date < DATE_ADD(CURDATE(), INTERVAL 1 DAY)";
                         } elseif ($filter === 'urgent') {
                             $sliceWhere .= " AND a.priority IN ('urgent', 'high')";
                         }
@@ -2677,8 +2682,17 @@ class AgentToolRegistry {
                             LEFT JOIN users cr ON a.created_by = cr.id
                             LEFT JOIN users app ON a.approver_id = app.id
                             LEFT JOIN task_groups tg ON a.task_group_id = tg.id
-                            WHERE a.tenant_id = ? AND a.deleted_at IS NULL";
-                    $params = [$tid];
+                            WHERE a.tenant_id = ? AND a.deleted_at IS NULL
+                              AND (NOT (IFNULL(a.tags, '') LIKE '%personal_task%' OR IFNULL(a.tags, '') LIKE '%ca_nhan%') OR a.user_id = ? OR a.created_by = ?)";
+                    $params = [$tid, $uid, $uid];
+
+                    if (!$isGlobalAdmin && !$isManager) {
+                        $sql .= " AND (a.user_id = ? OR a.created_by = ? OR a.approver_id = ? OR FIND_IN_SET(?, IFNULL(a.participant_ids, '')) > 0)";
+                        $params[] = $uid;
+                        $params[] = $uid;
+                        $params[] = $uid;
+                        $params[] = (string)$uid;
+                    }
 
                     if ($taskId > 0) {
                         $sql .= " AND a.id = ?";
@@ -2689,14 +2703,6 @@ class AgentToolRegistry {
                         $params[] = '%' . $query . '%';
                     } else {
                         return ['success' => false, 'message' => 'Vui lòng cung cấp mã Task ID hoặc tên công việc cần xem.'];
-                    }
-
-                    if (!$isGlobalAdmin && !$isManager) {
-                        $sql .= " AND (a.user_id = ? OR a.created_by = ? OR a.approver_id = ? OR FIND_IN_SET(?, IFNULL(a.participant_ids, '')))";
-                        $params[] = $uid;
-                        $params[] = $uid;
-                        $params[] = $uid;
-                        $params[] = (string)$uid;
                     }
 
                     $stmt = $db->prepare($sql);
@@ -6062,7 +6068,7 @@ class AgentToolRegistry {
                             done_at, created_at, updated_at
                         ) VALUES (
                             ?, ?, ?, ?, ?, ?,
-                            'completed', 100, 'contact', ?, ?,
+                            'done', 100, 'contact', ?, ?,
                             NOW(), NOW(), NOW()
                         )
                     ");
@@ -6150,7 +6156,7 @@ class AgentToolRegistry {
                             done_at, created_at, updated_at
                         ) VALUES (
                             ?, ?, ?, 'task', ?, ?,
-                            'completed', 100, 'contact', ?, ?,
+                            'done', 100, 'contact', ?, ?,
                             NOW(), NOW(), NOW()
                         )
                     ");
@@ -11037,31 +11043,38 @@ class AgentToolRegistry {
                 case 'query_tasks_and_projects_multitier': {
                     $statusesParam    = trim((string)($args['statuses'] ?? $args['status'] ?? ''));
                     $prioritiesParam  = trim((string)($args['priorities'] ?? $args['priority'] ?? ''));
-                    $assigneesParam   = trim((string)($args['assignees'] ?? $args['assigned_to'] ?? ''));
+                    $assigneesParam   = trim((string)($args['assignees'] ?? $args['assigned_to'] ?? $args['user_id'] ?? ''));
                     $creatorsParam    = trim((string)($args['creators'] ?? $args['created_by'] ?? ''));
                     $departmentsParam = trim((string)($args['departments'] ?? $args['department'] ?? ''));
                     $relatedType      = strtolower(trim((string)($args['related_type'] ?? '')));
+                    $relatedId        = isset($args['related_id']) && $args['related_id'] !== '' ? (int)$args['related_id'] : (isset($args['contact_id']) && $args['contact_id'] !== '' ? (int)$args['contact_id'] : 0);
+                    $taskGroupId      = isset($args['task_group_id']) && $args['task_group_id'] !== '' && $args['task_group_id'] !== 'all' ? (int)$args['task_group_id'] : 0;
+                    $teamId           = isset($args['team_id']) && $args['team_id'] !== '' && $args['team_id'] !== 'all' && $args['team_id'] !== 'all_teams_bypass' ? (int)$args['team_id'] : 0;
                     $overdueOnly      = !empty($args['overdue_only']) && in_array(strtolower((string)$args['overdue_only']), ['1', 'true', 'yes'], true);
                     $dateField        = strtolower(trim((string)($args['date_field'] ?? 'due_date')));
                     $period           = strtolower(trim((string)($args['period'] ?? '')));
-                    $fromDate         = trim((string)($args['from_date'] ?? $args['from'] ?? ''));
-                    $toDate           = trim((string)($args['to_date'] ?? $args['to'] ?? ''));
+                    $fromDate         = trim((string)($args['from_date'] ?? $args['from'] ?? $args['start_date'] ?? ''));
+                    $toDate           = trim((string)($args['to_date'] ?? $args['to'] ?? $args['end_date'] ?? ''));
                     $search           = trim((string)($args['search'] ?? $args['search_query'] ?? ''));
                     $limit            = max(1, min(100, (int)($args['limit'] ?? 20)));
 
                     $where = ['t.tenant_id = ?', 't.deleted_at IS NULL', "t.type = 'task'"];
                     $params = [$tid];
 
+                    // Always isolate personal tasks from other users
+                    $where[] = "(NOT (IFNULL(t.tags, '') LIKE '%personal_task%' OR IFNULL(t.tags, '') LIKE '%ca_nhan%') OR t.user_id = ? OR t.created_by = ?)";
+                    array_push($params, $uid, $uid);
+
                     // Zero-Trust RBAC
                     $isTaskAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'hr', 'sale_admin', 'saleadmin'], true);
                     $isManager   = in_array($role, ['manager', 'truong_phong', 'leader', 'team_lead'], true);
                     if (!$isTaskAdmin) {
                         if ($isManager) {
-                            $where[] = "(t.user_id = ? OR t.created_by = ? OR t.user_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))) OR t.created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))))";
-                            array_push($params, $uid, $uid, $uid, $uid);
+                            $where[] = "(t.user_id = ? OR t.created_by = ? OR t.approver_id = ? OR FIND_IN_SET(?, IFNULL(t.participant_ids, '')) > 0 OR t.user_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))) OR t.created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))))";
+                            array_push($params, $uid, $uid, $uid, (string)$uid, $uid, $uid);
                         } else {
-                            $where[] = "(t.user_id = ? OR t.created_by = ?)";
-                            array_push($params, $uid, $uid);
+                            $where[] = "(t.user_id = ? OR t.created_by = ? OR t.approver_id = ? OR FIND_IN_SET(?, IFNULL(t.participant_ids, '')) > 0)";
+                            array_push($params, $uid, $uid, $uid, (string)$uid);
                         }
                     }
 
@@ -11071,12 +11084,14 @@ class AgentToolRegistry {
                         if (!empty($stList)) {
                             $stOrs = [];
                             foreach ($stList as $st) {
-                                if ($st === 'open_only') {
-                                    $stOrs[] = "t.status NOT IN ('done', 'completed', 'cancelled')";
+                                if ($st === 'in_progress') {
+                                    $stOrs[] = "(t.status = 'in_progress' OR (t.status = 'planned' AND t.progress > 0 AND t.progress < 100))";
+                                } elseif (in_array($st, ['planned', 'open', 'open_only', 'not_done', 'active', 'todo'], true)) {
+                                    $stOrs[] = "(t.status NOT IN ('done', 'completed', 'cancelled') AND (t.progress < 100 OR t.progress IS NULL))";
                                 } elseif ($st === 'done' || $st === 'completed') {
-                                    $stOrs[] = "t.status IN ('done', 'completed')";
+                                    $stOrs[] = "(t.status IN ('done', 'completed') OR t.progress >= 100)";
                                 } elseif ($st === 'overdue') {
-                                    $stOrs[] = "(t.due_date IS NOT NULL AND t.due_date < NOW() AND t.status NOT IN ('done', 'completed', 'cancelled'))";
+                                    $stOrs[] = "(t.due_date IS NOT NULL AND t.due_date < NOW() AND t.status NOT IN ('done', 'completed', 'cancelled') AND (t.progress < 100 OR t.progress IS NULL))";
                                 } else {
                                     $stOrs[] = "t.status = ?";
                                     $params[] = $st;
@@ -11148,15 +11163,32 @@ class AgentToolRegistry {
                         }
                     }
 
-                    // 5. Related Type Filter
+                    if ($taskGroupId > 0) {
+                        $where[] = "t.task_group_id = ?";
+                        $params[] = $taskGroupId;
+                    }
+
+                    if ($teamId > 0) {
+                        $where[] = "(t.user_id IN (SELECT id FROM users WHERE team_id = ? AND tenant_id = ?))";
+                        $params[] = $teamId;
+                        $params[] = $tid;
+                    }
+
+                    // 5. Related Type & Related ID Filter
                     if ($relatedType !== '' && $relatedType !== 'all') {
                         $where[] = "t.related_type = ?";
                         $params[] = $relatedType;
                     }
 
+                    if ($relatedId > 0) {
+                        $where[] = "(t.related_id = ? OR t.contact_id = ?)";
+                        $params[] = $relatedId;
+                        $params[] = $relatedId;
+                    }
+
                     // 6. Overdue Only Filter
                     if ($overdueOnly) {
-                        $where[] = "t.due_date IS NOT NULL AND t.due_date < NOW() AND t.status NOT IN ('done', 'completed', 'cancelled')";
+                        $where[] = "t.due_date IS NOT NULL AND t.due_date < NOW() AND t.status NOT IN ('done', 'completed', 'cancelled') AND (t.progress < 100 OR t.progress IS NULL)";
                     }
 
                     // 7. Date Range / Period Filter
@@ -11207,10 +11239,10 @@ class AgentToolRegistry {
                     // Aggregate Summary
                     $stmtAgg = $db->prepare("
                         SELECT COUNT(DISTINCT t.id) as total_count,
-                               SUM(CASE WHEN t.status IN ('done', 'completed') THEN 1 ELSE 0 END) as completed_count,
-                               SUM(CASE WHEN t.status = 'in_progress' THEN 1 ELSE 0 END) as in_progress_count,
-                               SUM(CASE WHEN t.status = 'todo' THEN 1 ELSE 0 END) as todo_count,
-                               SUM(CASE WHEN t.due_date IS NOT NULL AND t.due_date < NOW() AND t.status NOT IN ('done', 'completed', 'cancelled') THEN 1 ELSE 0 END) as overdue_count
+                               SUM(CASE WHEN (t.status IN ('done', 'completed') OR t.progress >= 100) THEN 1 ELSE 0 END) as completed_count,
+                               SUM(CASE WHEN (t.status = 'in_progress' OR (t.status = 'planned' AND t.progress > 0 AND t.progress < 100)) THEN 1 ELSE 0 END) as in_progress_count,
+                               SUM(CASE WHEN (t.status IN ('todo', 'planned') AND (t.progress IS NULL OR t.progress = 0)) THEN 1 ELSE 0 END) as todo_count,
+                               SUM(CASE WHEN t.due_date IS NOT NULL AND t.due_date < NOW() AND t.status NOT IN ('done', 'completed', 'cancelled') AND (t.progress < 100 OR t.progress IS NULL) THEN 1 ELSE 0 END) as overdue_count
                         {$baseJoins}
                         WHERE {$whereSql}
                     ");
@@ -11234,7 +11266,7 @@ class AgentToolRegistry {
                     $stmtAss = $db->prepare("
                         SELECT COALESCE(u_ass.full_name, 'Chưa phân công') as assignee_name,
                                COUNT(DISTINCT t.id) as total_tasks,
-                               SUM(CASE WHEN t.due_date IS NOT NULL AND t.due_date < NOW() AND t.status NOT IN ('done', 'completed', 'cancelled') THEN 1 ELSE 0 END) as overdue_tasks
+                               SUM(CASE WHEN t.due_date IS NOT NULL AND t.due_date < NOW() AND t.status NOT IN ('done', 'completed', 'cancelled') AND (t.progress < 100 OR t.progress IS NULL) THEN 1 ELSE 0 END) as overdue_tasks
                         {$baseJoins}
                         WHERE {$whereSql}
                         GROUP BY u_ass.id, u_ass.full_name
@@ -11246,14 +11278,14 @@ class AgentToolRegistry {
 
                     // Sample rows
                     $stmtRows = $db->prepare("
-                        SELECT t.id, t.subject as title, t.body as description, t.status, t.priority, t.due_date, t.done_at as completed_at, t.created_at,
+                        SELECT t.id, t.subject as title, t.body as description, t.status, t.priority, t.progress, t.due_date, t.done_at as completed_at, t.created_at,
                                t.related_type, t.related_id,
                                COALESCE(u_ass.full_name, 'Chưa phân công') as assignee_name,
                                COALESCE(u_cr.full_name, 'Hệ thống') as creator_name,
                                COALESCE(p.name, c.full_name, '') as related_name
                         {$baseJoins}
                         WHERE {$whereSql}
-                        ORDER BY CASE WHEN t.due_date IS NOT NULL AND t.due_date < NOW() AND t.status NOT IN ('done', 'completed', 'cancelled') THEN 0 ELSE 1 END ASC,
+                        ORDER BY CASE WHEN t.due_date IS NOT NULL AND t.due_date < NOW() AND t.status NOT IN ('done', 'completed', 'cancelled') AND (t.progress < 100 OR t.progress IS NULL) THEN 0 ELSE 1 END ASC,
                                  t.due_date ASC, t.id DESC
                         LIMIT {$limit}
                     ");
@@ -11261,7 +11293,7 @@ class AgentToolRegistry {
                     $rows = $stmtRows->fetchAll(PDO::FETCH_ASSOC);
 
                     $formattedTasks = array_map(function($r) {
-                        $isOverdue = !empty($r['due_date']) && strtotime($r['due_date']) < time() && !in_array($r['status'], ['done', 'completed', 'cancelled'], true);
+                        $isOverdue = !empty($r['due_date']) && strtotime($r['due_date']) < time() && !in_array($r['status'], ['done', 'completed', 'cancelled'], true) && (int)($r['progress'] ?? 0) < 100;
                         return [
                             'id' => (int)$r['id'],
                             'title' => $r['title'],
@@ -11272,7 +11304,7 @@ class AgentToolRegistry {
                             'due_date' => $r['due_date'],
                             'is_overdue' => $isOverdue,
                             'related_name' => $r['related_name'],
-                            'url' => '/tasks?id=' . $r['id']
+                            'url' => '/workspace?task_id=' . $r['id']
                         ];
                     }, $rows);
 
@@ -11292,7 +11324,10 @@ class AgentToolRegistry {
                     if ($assigneesParam !== '' && $assigneesParam !== 'all') $taskExportParams['assignees'] = $assigneesParam;
                     if ($creatorsParam !== '' && $creatorsParam !== 'all') $taskExportParams['creators'] = $creatorsParam;
                     if ($departmentsParam !== '' && $departmentsParam !== 'all') $taskExportParams['departments'] = $departmentsParam;
+                    if ($taskGroupId > 0) $taskExportParams['task_group_id'] = $taskGroupId;
+                    if ($teamId > 0) $taskExportParams['team_id'] = $teamId;
                     if ($relatedType !== '' && $relatedType !== 'all') $taskExportParams['related_type'] = $relatedType;
+                    if ($relatedId > 0) $taskExportParams['related_id'] = $relatedId;
                     if ($overdueOnly) $taskExportParams['overdue_only'] = '1';
                     if ($dateField !== 'due_date') $taskExportParams['date_field'] = $dateField;
                     if ($period !== '') $taskExportParams['period'] = $period;

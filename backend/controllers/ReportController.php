@@ -500,7 +500,7 @@ class ReportController
             SELECT u.full_name as user_name, a.type, COUNT(*) as total
             FROM activities a
             JOIN users u ON a.user_id = u.id
-            WHERE a.tenant_id=? AND a.created_at BETWEEN ? AND ?
+            WHERE a.tenant_id=? AND a.deleted_at IS NULL AND a.created_at BETWEEN ? AND ?
         ";
         $params = [$tid, $from . ' 00:00:00', $to . ' 23:59:59'];
         if ($isSale) {
@@ -518,7 +518,7 @@ class ReportController
         $byUserType = $stmt->fetchAll();
 
         // Global type breakdown
-        $sql2 = "SELECT type, COUNT(*) as total FROM activities WHERE tenant_id=? AND created_at BETWEEN ? AND ?";
+        $sql2 = "SELECT type, COUNT(*) as total FROM activities WHERE tenant_id=? AND deleted_at IS NULL AND created_at BETWEEN ? AND ?";
         $p2 = [$tid, $from . ' 00:00:00', $to . ' 23:59:59'];
         if ($isSale) {
             $sql2 .= " AND user_id=?";

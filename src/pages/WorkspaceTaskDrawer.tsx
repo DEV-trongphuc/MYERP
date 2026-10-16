@@ -318,6 +318,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     description: '',
     internal_type: 'task',
     scope: 'team',
+    team_id: String(task?.team_id || ''),
+    project_id: String(task?.project_id || ''),
     recurrence: {
       pattern: 'none',
       weekly_days: [],
@@ -372,13 +374,13 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     if (hasSubtaskForOthers) return false;
 
     if (taskUid > 0 && taskUid === taskCreatedBy) {
-      const pIds = getParticipantIds(formData.participant_ids).filter(id => Number(id) !== taskUid);
+      const pIds = getParticipantIds(formData.participant_ids || formData.collaborator_ids || '').filter(id => Number(id) !== taskUid);
       const hasOtherParticipants = pIds.length > 0;
       const hasApprover = Number(formData.approver_id || 0) > 0 && Number(formData.approver_id) !== taskUid;
       return !hasOtherParticipants && !hasApprover;
     }
     return false;
-  }, [formData.tags, formData.user_id, formData.created_by, task?.created_by, formData.participant_ids, formData.approver_id, taskUid, taskCreatedBy, erpMeta?.checklist]);
+  }, [formData.tags, formData.user_id, formData.created_by, task?.created_by, formData.participant_ids, formData.collaborator_ids, formData.approver_id, taskUid, taskCreatedBy, erpMeta?.checklist]);
 
   const personalUser = useMemo(() => {
     const pId = taskUid || taskCreatedBy || currentUid;
@@ -1044,6 +1046,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   const contactsAbortRef = useRef<AbortController | null>(null);
   const commentsAbortRef = useRef<AbortController | null>(null);
   const timelineAbortRef = useRef<AbortController | null>(null);
+  const subtaskCommentsAbortRef = useRef<AbortController | null>(null);
   const deleteCommentInFlightRef = useRef(false);
 
   const fetchContactsList = useCallback(async (preferredContactId?: number | string | null, forceFull: boolean = false) => {
@@ -1147,6 +1150,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       if (contactsAbortRef.current) contactsAbortRef.current.abort();
       if (commentsAbortRef.current) commentsAbortRef.current.abort();
       if (timelineAbortRef.current) timelineAbortRef.current.abort();
+      if (subtaskCommentsAbortRef.current) subtaskCommentsAbortRef.current.abort();
       return;
     }
     const hasCust = Boolean(
@@ -1236,16 +1240,21 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   }, [isOpen, activeTab, task?.id]);
 
   const loadSubtaskComments = async (taskId: number, subtaskId: string) => {
+    if (subtaskCommentsAbortRef.current) subtaskCommentsAbortRef.current.abort();
+    const abortController = new AbortController();
+    subtaskCommentsAbortRef.current = abortController;
     setLoadingSubtaskComments(true);
     try {
-      const res = await api.get(`/activities/${taskId}/comments?subtask_id=${subtaskId}`);
+      const res = await api.get(`/activities/${taskId}/comments?subtask_id=${subtaskId}`, { signal: abortController.signal });
+      if (abortController.signal.aborted) return;
       if (res.data && res.data.success) {
         setSubtaskComments(res.data.data || []);
       }
-    } catch (e) {
+    } catch (e: any) {
+      if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
       console.error(e);
     } finally {
-      setLoadingSubtaskComments(false);
+      if (!abortController.signal.aborted) setLoadingSubtaskComments(false);
     }
   };
 
@@ -1253,6 +1262,9 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     if (task && task.id !== 'new' && selectedSubtask) {
       loadSubtaskComments(Number(task.id), selectedSubtask.id);
     }
+    return () => {
+      if (subtaskCommentsAbortRef.current) subtaskCommentsAbortRef.current.abort();
+    };
   }, [selectedSubtask]);
 
   const lastHighlightedCommentRef = useRef<string>('');
@@ -1413,9 +1425,9 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         recurrence: parsedBody.recurrence || { pattern: 'none', weekly_days: [], monthly_day: 1, days_interval: 3, last_generated: '' },
         checklist: parsedBody.checklist || [],
         links: parsedBody.links || [],
-        project_id: normalizedTask.related_type === 'project' ? normalizedTask.related_id : (parsedBody.project_id || null),
-        campaign_id: normalizedTask.related_type === 'campaign' ? normalizedTask.related_id : (parsedBody.campaign_id || null),
-        team_id: normalizedTask.related_type === 'team' ? normalizedTask.related_id : (parsedBody.team_id || null),
+        project_id: normalizedTask.related_type === 'project' ? normalizedTask.related_id : (parsedBody.project_id || String(task.project_id || '') || null),
+        campaign_id: normalizedTask.related_type === 'campaign' ? normalizedTask.related_id : (parsedBody.campaign_id || String(task.campaign_id || '') || null),
+        team_id: normalizedTask.related_type === 'team' ? normalizedTask.related_id : (parsedBody.team_id || String(task.team_id || '') || null),
         due_sla_notified: parsedBody.due_sla_notified || Boolean(task.due_sla_notified),
         subtask_sla_notified: parsedBody.subtask_sla_notified || Boolean(task.subtask_sla_notified),
         related_contact_ids: Array.isArray(parsedBody.rawMeta?.related_contact_ids) 
@@ -1526,23 +1538,6 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     return { isValid: true };
   };
 
-  const linkifyHtml = (html: string) => {
-    if (!html) return '';
-    const cleanHtml = html
-      .replace(/&amp;nbsp;/gi, ' ')
-      .replace(/&nbsp;/gi, ' ')
-      .replace(/[\u00A0\u200B\u200C\u200D\uFEFF]/g, ' ');
-    return cleanHtml.replace(/<a\b[^>]*>([\s\S]*?)<\/a>|(<[^>]+>)|(https?:\/\/[^\s<]+|www\.[^\s<]+)/gi, (match, aContent, htmlTag, url) => {
-      if (aContent) return match;
-      if (htmlTag) return match;
-      if (url) {
-        const href = url.startsWith('www.') ? `https://${url}` : url;
-        return `<a href="${href}" target="_blank" rel="noopener noreferrer" style="color: var(--color-primary); text-decoration: underline; word-break: break-all;">${url}</a>`;
-      }
-      return match;
-    });
-  };
-
   const renderCommentContent = (text: string) => {
     if (!text) return '';
     const cleanText = text
@@ -1589,7 +1584,6 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
               gap: '4px',
               color: '#dc2626',
               background: 'rgba(239, 68, 68, 0.08)',
-              border: '1px solid rgba(239, 68, 68, 0.2)',
               padding: '2px 8px',
               borderRadius: '9999px',
               margin: '0 2px',
@@ -1862,6 +1856,24 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
           )
         );
         if (isSuccess) {
+          const createdTask = res.data?.data || res.data;
+          const newId = createdTask?.id;
+          const activePropId = (window as any).__activeErpProposalId;
+          if (activePropId) {
+            window.dispatchEvent(new CustomEvent('erp-action-completed', {
+              detail: {
+                actionType: 'CREATE_TASK',
+                entityId: newId,
+                proposalId: activePropId,
+                title: formData.subject || createdTask?.subject || 'Công việc mới'
+              }
+            }));
+            delete (window as any).__activeErpProposalId;
+          }
+          window.dispatchEvent(new CustomEvent('task-updated', { detail: { id: newId, ...(createdTask || payload) } }));
+          if (newId) {
+            window.dispatchEvent(new CustomEvent('task-local-updated', { detail: { id: newId, ...payload, ...(createdTask || {}) } }));
+          }
           const taskName = formData.subject || t('Không có tiêu đề');
           toast.success(t('Đã tạo công việc "{subject}" thành công!').replace('{subject}', taskName));
           setOriginalHash(currentHash);
@@ -2008,43 +2020,59 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   const isApprover = Number(currentUser?.id) === Number(formData.approver_id || task?.approver_id);
   const canDelete = task?.id && task.id !== 'new' && (isAdminOrManager || isAssignee || isCreator || isApprover);
 
-  const handleUpdateField = async (field: string, value: any) => {
+  const pendingFieldUpdatesRef = useRef<Record<string, any>>({});
+
+  const handleUpdateField = async (fieldOrPatch: string | Record<string, any>, value?: any) => {
     if (!task) return;
+    const incomingPatch: Record<string, any> = typeof fieldOrPatch === 'string'
+      ? { [fieldOrPatch]: value }
+      : { ...fieldOrPatch };
+
     if (task.id === 'new') {
-      setFormData((prev: any) => ({ ...prev, [field]: value }));
+      setFormData((prev: any) => ({ ...prev, ...incomingPatch }));
       return;
     }
+
+    pendingFieldUpdatesRef.current = {
+      ...pendingFieldUpdatesRef.current,
+      ...incomingPatch
+    };
+
     if (updateFieldInFlightRef.current) return;
     updateFieldInFlightRef.current = true;
     try {
-      const payload: any = { [field]: value };
-      const res = await api.put(`/activities/${task.id}`, payload);
-      if (res.data && res.data.success) {
-        setFormData((prev: any) => {
-          const nextData = { ...prev, [field]: value };
-          
-          const cleanObj = (obj: any) => {
-            const clean: any = {};
-            Object.keys(obj || {}).forEach(key => {
-              if (['created_at', 'updated_at', 'deleted_at', 'created_by_name', 'created_by_avatar', 'contact_name', 'contact_avatar', 'user_name'].includes(key)) {
-                return;
-              }
-              const val = obj[key];
-              clean[key] = (val === null || val === undefined) ? '' : val;
-            });
-            return clean;
-          };
-          setOriginalHash(JSON.stringify({
-            formData: cleanObj(nextData),
-            erpMeta: cleanObj(erpMeta)
-          }));
+      while (Object.keys(pendingFieldUpdatesRef.current).length > 0) {
+        const payload = { ...pendingFieldUpdatesRef.current };
+        pendingFieldUpdatesRef.current = {};
 
-          return nextData;
-        });
-        const nextDetail = { id: task.id, ...formData, [field]: value };
-        window.dispatchEvent(new CustomEvent('task-local-updated', { detail: nextDetail }));
-        if (onUpdate) onUpdate(nextDetail);
-        loadTimeline(task.id);
+        const res = await api.put(`/activities/${task.id}`, payload);
+        if (res.data && res.data.success) {
+          setFormData((prev: any) => {
+            const nextData = { ...prev, ...payload };
+
+            const cleanObj = (obj: any) => {
+              const clean: any = {};
+              Object.keys(obj || {}).forEach(key => {
+                if (['created_at', 'updated_at', 'deleted_at', 'created_by_name', 'created_by_avatar', 'contact_name', 'contact_avatar', 'user_name'].includes(key)) {
+                  return;
+                }
+                const val = obj[key];
+                clean[key] = (val === null || val === undefined) ? '' : val;
+              });
+              return clean;
+            };
+            setOriginalHash(JSON.stringify({
+              formData: cleanObj(nextData),
+              erpMeta: cleanObj(erpMeta)
+            }));
+
+            return nextData;
+          });
+          const nextDetail = { id: task.id, ...formData, ...payload };
+          window.dispatchEvent(new CustomEvent('task-local-updated', { detail: nextDetail }));
+          if (onUpdate) onUpdate(nextDetail);
+          loadTimeline(task.id);
+        }
       }
     } catch (e: any) {
       toast.error(t('Lỗi cập nhật: ') + e.message);
@@ -2088,11 +2116,11 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     const newProgress = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
     handleSaveMeta(updatedMeta, newProgress);
 
+    const fieldPatch: Record<string, any> = {};
     if (!isPersonalTask) {
       const nextString = currentParticipantIds.join(',');
       if (formData.participant_ids !== nextString) {
-        setFormData((prev: any) => ({ ...prev, participant_ids: nextString }));
-        handleUpdateField('participant_ids', nextString);
+        fieldPatch.participant_ids = nextString;
       }
     }
 
@@ -2109,9 +2137,13 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     setChecklistPage(newTotalPages);
 
     if (newSubDeadline && (!formData.due_date || newSubDeadline > formData.due_date)) {
-      setFormData((prev: any) => ({ ...prev, due_date: newSubDeadline }));
-      handleUpdateField('due_date', newSubDeadline);
+      fieldPatch.due_date = newSubDeadline;
       toast.success(t('Đã tự động cập nhật hạn chót nhiệm vụ chính theo việc con'));
+    }
+
+    if (Object.keys(fieldPatch).length > 0) {
+      setFormData((prev: any) => ({ ...prev, ...fieldPatch }));
+      handleUpdateField(fieldPatch);
     }
   };
 
@@ -2487,9 +2519,12 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     });
   };
 
+  const subtaskCommentInFlightRef = useRef(false);
   const handlePostSubtaskComment = async () => {
     if (!task || !selectedSubtask) return;
     if (!newSubtaskCommentText.trim() && subtaskCommentAttachments.length === 0) return;
+    if (subtaskCommentInFlightRef.current) return;
+    subtaskCommentInFlightRef.current = true;
     setIsSubmittingSubtaskComment(true);
     setUploadingFile(true);
 
@@ -2547,6 +2582,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     } catch (e: any) {
       toast.error(t('Không thể gửi bình luận: ') + e.message);
     } finally {
+      subtaskCommentInFlightRef.current = false;
       setIsSubmittingSubtaskComment(false);
       setUploadingFile(false);
     }
@@ -2616,7 +2652,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     setFormData((prev: any) => ({ ...prev, participant_ids: nextString }));
     handleUpdateField('participant_ids', nextString);
     if (remaining.length > 0) {
-      toast(t('Đã bỏ chọn (ngoại trừ nhân sự có việc con)'), { icon: 'ℹ️' });
+      toast.success(t('Đã bỏ chọn (ngoại trừ nhân sự có việc con)'));
     } else {
       toast.success(t('Đã bỏ chọn tất cả người liên quan'));
     }
@@ -3161,7 +3197,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     <button
                       type="button"
                       onClick={() => { navigate(`/projects?id=${erpMeta.project_id}`); onClose?.(); }}
-                      style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(59, 130, 246, 0.08)', color: 'var(--color-info)', border: '1px solid rgba(59, 130, 246, 0.2)', padding: '2px 8px', borderRadius: '6px', fontSize: '0.725rem', fontWeight: 700, cursor: 'pointer' }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(59, 130, 246, 0.08)', color: 'var(--color-info)', border: 'none', padding: '2px 8px', borderRadius: '6px', fontSize: '0.725rem', fontWeight: 700, cursor: 'pointer' }}
                       title={t('Mở Drawer xem chi tiết Dự án')}
                     >
                       <Building2 size={12} />
@@ -3172,7 +3208,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     <button
                       type="button"
                       onClick={() => { navigate(`/projects?tab=campaigns&id=${erpMeta.campaign_id}`); onClose?.(); }}
-                      style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(245, 158, 11, 0.08)', color: 'var(--color-warning)', border: '1px solid rgba(245, 158, 11, 0.2)', padding: '2px 8px', borderRadius: '6px', fontSize: '0.725rem', fontWeight: 700, cursor: 'pointer' }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(245, 158, 11, 0.08)', color: 'var(--color-warning)', border: 'none', padding: '2px 8px', borderRadius: '6px', fontSize: '0.725rem', fontWeight: 700, cursor: 'pointer' }}
                       title={t('Mở Drawer xem chi tiết Chiến dịch')}
                     >
                       <Megaphone size={12} />
@@ -4961,7 +4997,6 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                 borderRadius: '4px',
                                 background: formatBg,
                                 color: formatColor,
-                                border: `1px solid ${formatBorder}`,
                                 textTransform: 'uppercase',
                                 letterSpacing: '0.02em',
                                 flexShrink: 0
@@ -5624,7 +5659,6 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                         <span style={{ 
                                           color: '#15803d', 
                                           background: 'rgba(22, 163, 74, 0.08)', 
-                                          border: '1px solid rgba(22, 163, 74, 0.25)', 
                                           padding: '2px 8px', 
                                           borderRadius: '6px', 
                                           fontWeight: 600,
@@ -5639,7 +5673,6 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                         <span style={{ 
                                           color: '#b91c1c', 
                                           background: 'rgba(239, 68, 68, 0.08)', 
-                                          border: '1px solid rgba(239, 68, 68, 0.25)', 
                                           padding: '2px 8px', 
                                           borderRadius: '6px', 
                                           fontWeight: 600,
@@ -5671,7 +5704,6 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                         <span style={{ 
                                           color: '#15803d', 
                                           background: 'rgba(22, 163, 74, 0.08)', 
-                                          border: '1px solid rgba(22, 163, 74, 0.25)', 
                                           padding: '2px 8px', 
                                           borderRadius: '6px', 
                                           fontWeight: 600 
@@ -5683,7 +5715,6 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                         <span style={{ 
                                           color: '#b91c1c', 
                                           background: 'rgba(239, 68, 68, 0.08)', 
-                                          border: '1px solid rgba(239, 68, 68, 0.25)', 
                                           padding: '2px 8px', 
                                           borderRadius: '6px', 
                                           fontWeight: 600 
@@ -5968,6 +5999,11 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                             return next;
                           });
                         }}
+                        onBlur={() => {
+                          if (task?.id && task.id !== 'new') {
+                            handleUpdateField('progress', Number(formData.progress || 0));
+                          }
+                        }}
                         style={{
                           width: '45px',
                           height: '24px',
@@ -6000,6 +6036,21 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                         }
                         return next;
                       });
+                    }}
+                    onMouseUp={() => {
+                      if (task?.id && task.id !== 'new') {
+                        handleUpdateField('progress', Number(formData.progress || 0));
+                      }
+                    }}
+                    onTouchEnd={() => {
+                      if (task?.id && task.id !== 'new') {
+                        handleUpdateField('progress', Number(formData.progress || 0));
+                      }
+                    }}
+                    onKeyUp={() => {
+                      if (task?.id && task.id !== 'new') {
+                        handleUpdateField('progress', Number(formData.progress || 0));
+                      }
                     }}
                     className="progress-slider"
                     style={{
@@ -6386,7 +6437,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                           if (res.data && res.data.success) {
                             setFormData((prev: any) => ({ ...prev, approval_status: 'approved', status: 'done' }));
                             triggerLocalConfetti();
-                            toast.success(t('Đã phê duyệt hoàn thành công việc! 🎉'));
+                            toast.success(t('Đã phê duyệt hoàn thành công việc!'));
                             if (onUpdate) onUpdate({ ...task, ...formData, approval_status: 'approved', status: 'done' });
                           }
                         } catch (e: any) {
@@ -6705,16 +6756,17 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     value={String(formData.user_id || '')}
                     onChange={val => {
                       const newUserId = Number(val);
-                      handleUpdateField('user_id', newUserId);
+                      const patch: Record<string, any> = { user_id: newUserId };
                       if (newUserId) {
                         const currentP = getParticipantIds(formData.participant_ids);
                         if (currentP.includes(String(newUserId))) {
                           const nextP = currentP.filter(id => id !== String(newUserId));
                           const nextPString = nextP.join(',');
-                          setFormData((prev: any) => ({ ...prev, participant_ids: nextPString }));
-                          handleUpdateField('participant_ids', nextPString);
+                          patch.participant_ids = nextPString;
                         }
                       }
+                      setFormData((prev: any) => ({ ...prev, ...patch }));
+                      handleUpdateField(patch);
                     }}
                     searchable
                     showAvatars
@@ -6929,7 +6981,6 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     padding: '8px 12px',
                     borderRadius: '8px',
                     background: 'rgba(99, 102, 241, 0.08)',
-                    border: '1px solid rgba(99, 102, 241, 0.22)',
                     marginTop: '4px'
                   }}>
                     <Shield size={15} color="#4f46e5" style={{ flexShrink: 0 }} />
@@ -7273,8 +7324,11 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                               key={day.key}
                               type="button"
                               onClick={() => {
-                                const isSelected = (erpMeta.recurrence?.weekly_days || []).includes(day.key);
-                                const newDays = isSelected ? [] : [day.key];
+                                const currentDays = erpMeta.recurrence?.weekly_days || [];
+                                const isSelected = currentDays.includes(day.key);
+                                const newDays = isSelected
+                                  ? currentDays.filter((d: number) => d !== day.key)
+                                  : [...currentDays, day.key].sort((a, b) => a - b);
                                 const nextRecurrence = {
                                   ...(erpMeta.recurrence || { monthly_day: 1, days_interval: 3, last_generated: '' }),
                                   weekly_days: newDays

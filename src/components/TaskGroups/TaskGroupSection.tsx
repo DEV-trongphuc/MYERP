@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDroppable } from '@dnd-kit/core';
@@ -8,6 +8,7 @@ import {
   Shield, Plus, MoreVertical, Edit2, Trash2, X, Check, Inbox, GripVertical, Search, ArrowLeft, User
 } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { pushOverlay } from '../../utils/overlayStack';
 
 export interface TaskGroup {
   id: number;
@@ -398,13 +399,29 @@ export const TaskGroupSection: React.FC<TaskGroupSectionProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const saveInFlightRef = useRef(false);
+  const deleteInFlightRef = useRef(false);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (showCreateModal) {
       openCreateModal();
       if (setShowCreateModal) setShowCreateModal(false);
     }
   }, [showCreateModal]);
+
+  useEffect(() => {
+    if (!modalMode) return;
+    return pushOverlay('task-group-edit-modal', () => {
+      if (!saveInFlightRef.current) closeModal();
+    });
+  }, [modalMode]);
+
+  useEffect(() => {
+    if (deletingId === null) return;
+    return pushOverlay('task-group-delete-modal', () => {
+      if (!deleteInFlightRef.current) setDeletingId(null);
+    });
+  }, [deletingId]);
 
   const openCreateModal = () => {
     setGroupName('');
@@ -434,16 +451,14 @@ export const TaskGroupSection: React.FC<TaskGroupSectionProps> = ({
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedName = groupName.trim();
-    if (!trimmedName || isSubmitting) return;
+    if (!trimmedName || isSubmitting || saveInFlightRef.current) return;
 
+    saveInFlightRef.current = true;
     setIsSubmitting(true);
     const mode = modalMode;
     const editing = editingGroup;
     const color = groupColor;
     const icon = groupIcon;
-
-    // Immediately close modal and reset form for instant responsiveness
-    closeModal();
 
     try {
       if (mode === 'create') {
@@ -451,14 +466,18 @@ export const TaskGroupSection: React.FC<TaskGroupSectionProps> = ({
       } else if (mode === 'edit' && editing) {
         await onUpdateGroup(editing.id, { name: trimmedName, color, icon });
       }
+      closeModal();
     } catch (err) {
       console.error('Save task group error:', err);
     } finally {
+      saveInFlightRef.current = false;
       setIsSubmitting(false);
     }
   };
 
   const handleDeleteConfirm = async (id: number) => {
+    if (deleteInFlightRef.current) return;
+    deleteInFlightRef.current = true;
     try {
       await onDeleteGroup(id);
       setDeletingId(null);
@@ -467,6 +486,8 @@ export const TaskGroupSection: React.FC<TaskGroupSectionProps> = ({
       }
     } catch {
       // Handled by caller
+    } finally {
+      deleteInFlightRef.current = false;
     }
   };
 
@@ -1240,7 +1261,7 @@ export const TaskGroupSection: React.FC<TaskGroupSectionProps> = ({
                   {t('Biểu tượng (Icon)')}
                 </label>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                  {Object.keys(ICON_MAP).slice(0, 14).map(icKey => {
+                  {Object.keys(ICON_MAP).map(icKey => {
                     const Ic = ICON_MAP[icKey];
                     const isPicked = groupIcon === icKey;
                     return (
@@ -1468,6 +1489,7 @@ export const TaskGroupBadge: React.FC<TaskGroupBadgeProps> = ({
   const { t } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const assignInFlightRef = useRef(false);
 
   const currentGroupId = task.task_group_id ? Number(task.task_group_id) : null;
   const currentGroup = groups.find(g => g.id === currentGroupId);
@@ -1477,11 +1499,14 @@ export const TaskGroupBadge: React.FC<TaskGroupBadgeProps> = ({
   const IconComp = ICON_MAP[groupIcon] || Folder;
 
   const handleSelect = async (gId: number | null) => {
+    if (isUpdating || assignInFlightRef.current) return;
+    assignInFlightRef.current = true;
     setIsUpdating(true);
     try {
       await onAssignGroup(Number(task.id), gId);
       setIsOpen(false);
     } finally {
+      assignInFlightRef.current = false;
       setIsUpdating(false);
     }
   };
@@ -1499,7 +1524,7 @@ export const TaskGroupBadge: React.FC<TaskGroupBadgeProps> = ({
           padding: '2px 7px',
           borderRadius: '12px',
           background: groupName ? `${groupColor}18` : (isLightText ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'),
-          border: groupName ? `1px solid ${groupColor}40` : (isLightText ? '1px dashed rgba(255,255,255,0.3)' : '1px dashed var(--color-border)'),
+          border: groupName ? 'none' : (isLightText ? '1px dashed rgba(255,255,255,0.3)' : '1px dashed var(--color-border)'),
           color: groupName ? groupColor : (isLightText ? '#cbd5e1' : 'var(--color-text-muted)'),
           fontSize: '0.675rem',
           fontWeight: 700,

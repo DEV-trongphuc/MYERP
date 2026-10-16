@@ -214,6 +214,8 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
     }
   };
 
+  const [dealTasks, setDealTasks] = useState<any[]>([]);
+
   const fetchNotes = async () => {
     if (!deal?.id) return;
     if (notesAbortRef.current) notesAbortRef.current.abort();
@@ -221,12 +223,18 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
     notesAbortRef.current = abortController;
     setLoadingNotes(true);
     try {
-      const r = await api.get(`/notes?entity_type=deal&entity_id=${deal.id}`, { signal: abortController.signal });
+      const [rNotes, rTasks] = await Promise.all([
+        api.get(`/notes?entity_type=deal&entity_id=${deal.id}`, { signal: abortController.signal }),
+        api.get(`/activities?related_type=deal&related_id=${deal.id}`, { signal: abortController.signal }).catch(() => ({ data: { data: [] } }))
+      ]);
       if (abortController.signal.aborted) return;
-      setNotes(r.data.data || []);
+      setNotes(rNotes.data.data || []);
+      const tasksData = rTasks.data?.data;
+      setDealTasks(Array.isArray(tasksData) ? tasksData : (tasksData?.items || []));
     } catch (e: any) {
       if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
       setNotes([]);
+      setDealTasks([]);
     } finally {
       if (!abortController.signal.aborted) setLoadingNotes(false);
     }
@@ -283,6 +291,7 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
 
   useEffect(() => {
     setNotes([]);
+    setDealTasks([]);
     setNewNote('');
     setIsSwitchModalOpen(false);
     setNoteAttachmentFile(null);
@@ -306,6 +315,19 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
       if (detailsAbortRef.current) detailsAbortRef.current.abort();
     };
   }, [deal]);
+
+  useEffect(() => {
+    if (!isOpen || !deal?.id) return;
+    const handleTaskUpdated = () => {
+      fetchNotes();
+    };
+    window.addEventListener('task-updated', handleTaskUpdated);
+    window.addEventListener('task-local-updated', handleTaskUpdated);
+    return () => {
+      window.removeEventListener('task-updated', handleTaskUpdated);
+      window.removeEventListener('task-local-updated', handleTaskUpdated);
+    };
+  }, [isOpen, deal?.id]);
 
   useEffect(() => {
     if (isOpen && formData?.project_id && projects.length > 0) {
@@ -804,6 +826,44 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
                         <div className="p-4 text-center text-muted">Đang tải...</div>
                       ) : (
                         <>
+                          {dealTasks.map(act => {
+                            let displayBody = act.body || '';
+                            if (typeof act.body === 'string' && act.body.startsWith('{"erp_task":')) {
+                              try {
+                                const parsed = JSON.parse(act.body);
+                                displayBody = parsed?.erp_task?.description || '';
+                              } catch {}
+                            }
+                            return (
+                              <div
+                                key={`task-${act.id}`}
+                                className="timeline-item"
+                                onClick={() => useUIStore.getState().openTaskDrawer(act)}
+                                style={{ marginBottom: '1.5rem', position: 'relative', cursor: 'pointer' }}
+                              >
+                                <div className="timeline-icon bg-primary" style={{ position: 'absolute', left: '-2rem', top: '0', width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1, background: 'var(--color-primary-light)', color: 'var(--color-primary)' }}>
+                                  <CheckCircle2 size={14} />
+                                </div>
+                                <div className="timeline-content" style={{ padding: '0.75rem 1rem', background: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border-light)', borderLeft: '3px solid var(--color-primary)', textAlign: 'left' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                                    <strong style={{ fontSize: '0.875rem' }}>{act.subject}</strong>
+                                    <span className="text-xs text-muted">{act.created_at ? new Date(act.created_at).toLocaleString('vi-VN') : ''}</span>
+                                  </div>
+                                  {displayBody && (
+                                    <div style={{ fontSize: '0.825rem', color: 'var(--color-text-light)', marginBottom: '6px', whiteSpace: 'pre-wrap' }}>
+                                      {displayBody}
+                                    </div>
+                                  )}
+                                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                    <span className="badge info sm">{act.type || 'task'}</span>
+                                    <span className={`badge sm ${act.status === 'done' ? 'success' : act.status === 'cancelled' ? 'danger' : 'warning'}`}>
+                                      {act.status === 'done' ? 'Đã xong' : act.status === 'cancelled' ? 'Đã hủy' : 'Chưa xong'}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
                           {notes.map(n => (
                             <div key={n.id} className="timeline-item" style={{ marginBottom: '1.5rem', position: 'relative' }}>
                               <div className="timeline-icon bg-primary" style={{ position: 'absolute', left: '-2rem', top: '0', width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1, background: 'var(--color-primary-light)', color: 'var(--color-primary)' }}>

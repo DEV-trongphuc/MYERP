@@ -3016,6 +3016,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   const [newActivityBody, setNewActivityBody] = useState('');
   const [newActivityContactId, setNewActivityContactId] = useState<string>('');
   const [savingActivity, setSavingActivity] = useState(false);
+  const inFlightRef = useRef(false);
   const [contactsList, setContactsList] = useState<any[]>([]);
 
   // Meeting check-in proof states
@@ -3643,10 +3644,15 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     }
   };
 
+  const recurrenceInFlightIdsRef = useRef<Set<number>>(new Set());
+
   const triggerRecurrenceCheck = async (tasksList: any[]) => {
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = getLocalDateStr(new Date());
+    const myId = Number(currentUser?.id || 0);
     for (const t of tasksList) {
-      if (!t.body || !t.body.startsWith('{"erp_task":') || t.status !== 'done') continue;
+      if (!t?.id || !t.body || !t.body.startsWith('{"erp_task":') || t.status !== 'done') continue;
+      if (myId > 0 && Number(t.user_id) !== myId && Number(t.created_by) !== myId) continue;
+      if (recurrenceInFlightIdsRef.current.has(Number(t.id))) continue;
       
       try {
         const parsed = JSON.parse(t.body);
@@ -3688,48 +3694,53 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
           nextDueDate.setDate(nextDueDate.getDate() + daysInterval);
         }
 
-        const nextDueDateStr = nextDueDate.toISOString().slice(0, 10);
+        const nextDueDateStr = getLocalDateStr(nextDueDate);
         
         // Only generate if today >= nextDueDateStr
         if (todayStr >= nextDueDateStr) {
-          const newErp = {
-            ...erp,
-            recurrence: {
-              ...erp.recurrence,
-              last_generated: ''
-            },
-            checklist: (erp.checklist || []).map((c: any) => ({ ...c, done: false }))
-          };
+          recurrenceInFlightIdsRef.current.add(Number(t.id));
+          try {
+            const newErp = {
+              ...erp,
+              recurrence: {
+                ...erp.recurrence,
+                last_generated: ''
+              },
+              checklist: (erp.checklist || []).map((c: any) => ({ ...c, done: false }))
+            };
 
-          await api.post('/activities', {
-            subject: t.subject,
-            type: 'task',
-            priority: t.priority,
-            due_date: nextDueDateStr,
-            related_type: t.related_type,
-            related_id: t.related_id ? Number(t.related_id) : null,
-            user_id: t.user_id ? Number(t.user_id) : null,
-            body: JSON.stringify({ erp_task: newErp }),
-            status: 'planned',
-            progress: 0,
-            require_approval: t.require_approval,
-            approver_id: t.approver_id ? Number(t.approver_id) : null,
-            tags: t.tags
-          });
+            await api.post('/activities', {
+              subject: t.subject,
+              type: 'task',
+              priority: t.priority,
+              due_date: nextDueDateStr,
+              related_type: t.related_type,
+              related_id: t.related_id ? Number(t.related_id) : null,
+              user_id: t.user_id ? Number(t.user_id) : null,
+              body: JSON.stringify({ erp_task: newErp }),
+              status: 'planned',
+              progress: 0,
+              require_approval: t.require_approval,
+              approver_id: t.approver_id ? Number(t.approver_id) : null,
+              tags: t.tags
+            });
 
-          // Update the old task's last_generated to avoid duplicate generation
-          const updatedOldErp = {
-            ...erp,
-            recurrence: {
-              ...erp.recurrence,
-              last_generated: todayStr
-            }
-          };
-          await api.put(`/activities/${t.id}`, {
-            body: JSON.stringify({ erp_task: updatedOldErp })
-          });
+            // Update the old task's last_generated to avoid duplicate generation
+            const updatedOldErp = {
+              ...erp,
+              recurrence: {
+                ...erp.recurrence,
+                last_generated: todayStr
+              }
+            };
+            await api.put(`/activities/${t.id}`, {
+              body: JSON.stringify({ erp_task: updatedOldErp })
+            });
 
-          toast.success(`Tự động sinh nhiệm vụ định kỳ tiếp theo: ${t.subject}`);
+            toast.success(`Tự động sinh nhiệm vụ định kỳ tiếp theo: ${t.subject}`);
+          } finally {
+            recurrenceInFlightIdsRef.current.delete(Number(t.id));
+          }
         }
       } catch (err) {
         console.error('Error generating recurring task', err);
@@ -4170,13 +4181,29 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
   useEffect(() => {
     const handleTaskLocalUpdate = (e: any) => {
-      const updated = e.detail;
+      const updated = e?.detail;
       if (!updated?.id) return;
       setWsTasks(prev => prev.map(t => Number(t.id) === Number(updated.id) ? { ...t, ...updated } : t));
       setSelectedTaskForDetails((prev: any) => prev && Number(prev.id) === Number(updated.id) ? { ...prev, ...updated } : prev);
     };
+    const handleTaskUpdated = (e: any) => {
+      const updated = e?.detail;
+      if (updated?.id) {
+        setWsTasks(prev => {
+          const exists = prev.some(t => Number(t.id) === Number(updated.id));
+          return exists ? prev.map(t => Number(t.id) === Number(updated.id) ? { ...t, ...updated } : t) : prev;
+        });
+        setSelectedTaskForDetails((prev: any) => prev && Number(prev.id) === Number(updated.id) ? { ...prev, ...updated } : prev);
+      }
+      fetchWorkspaceTasks();
+      fetchPortalTasks();
+    };
     window.addEventListener('task-local-updated', handleTaskLocalUpdate);
-    return () => window.removeEventListener('task-local-updated', handleTaskLocalUpdate);
+    window.addEventListener('task-updated', handleTaskUpdated);
+    return () => {
+      window.removeEventListener('task-local-updated', handleTaskLocalUpdate);
+      window.removeEventListener('task-updated', handleTaskUpdated);
+    };
   }, []);
 
   const handleDropTaskOnGroup = useCallback(async (taskId: number, targetGroupId: number | null) => {
@@ -4190,7 +4217,6 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     // Case 1: Trùng nhóm
     if (currentGroupId === targetGroupId) {
       toast(t('Công việc đã nằm trong nhóm "{name}" rồi!').replace('{name}', targetGroupName), {
-        icon: 'ℹ️',
         duration: 3000
       });
       return;
@@ -4275,9 +4301,13 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   };
 
   const handleTaskDrop = useCallback(async (taskId: number, targetCol: 'todo' | 'in_progress' | 'done') => {
+    const task = wsTasks.find(x => Number(x.id) === Number(taskId));
+    const needsApproval = targetCol === 'done' && task && Number(task.require_approval) === 1 && Number(task.approver_id) !== Number(currentUser?.id) && task.approval_status !== 'approved';
+
     let nextDone = false;
     let nextProgress = 0;
     let nextStatus = 'planned';
+    let nextApprovalStatus = task?.approval_status;
 
     if (targetCol === 'todo') {
       nextDone = false;
@@ -4288,23 +4318,38 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       nextProgress = 50;
       nextStatus = 'planned';
     } else if (targetCol === 'done') {
-      nextDone = true;
-      nextProgress = 100;
-      nextStatus = 'done';
+      if (needsApproval) {
+        nextDone = false;
+        nextProgress = 100;
+        nextStatus = 'planned';
+        nextApprovalStatus = 'pending';
+      } else {
+        nextDone = true;
+        nextProgress = 100;
+        nextStatus = 'done';
+      }
     }
 
     // Optimistic local state update
     setWsTasks(prev => {
-      return prev.map(x => x.id === taskId ? { ...x, status: nextStatus, progress: nextProgress } : x);
+      return prev.map(x => x.id === taskId ? { ...x, status: nextStatus, progress: nextProgress, approval_status: nextApprovalStatus } : x);
     });
     
     try {
-      await api.put(`/activities/${taskId}`, { 
+      const payload: any = { 
         progress: nextProgress,
         status: nextStatus
-      });
-      const colLabel = targetCol === 'todo' ? 'Cần làm' : targetCol === 'in_progress' ? 'Đang làm' : 'Đã xong';
-      toast.success(`Đã chuyển công việc sang cột ${colLabel}`);
+      };
+      if (needsApproval) {
+        payload.approval_status = 'pending';
+      }
+      await api.put(`/activities/${taskId}`, payload);
+      if (needsApproval) {
+        toast.success('Đã cập nhật tiến độ 100% và gửi yêu cầu phê duyệt');
+      } else {
+        const colLabel = targetCol === 'todo' ? 'Cần làm' : targetCol === 'in_progress' ? 'Đang làm' : 'Đã xong';
+        toast.success(`Đã chuyển công việc sang cột ${colLabel}`);
+      }
       if (nextStatus === 'done') {
         setPinnedTaskIds(prev => {
           const next = prev.filter(id => id !== Number(taskId));
@@ -4319,7 +4364,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       fetchWorkspaceTasks();
       toast.error(err.response?.data?.message || 'Lỗi khi cập nhật tiến độ công việc');
     }
-  }, [currentUser?.id]);
+  }, [wsTasks, currentUser?.id]);
 
   useEffect(() => {
     if (activeTab === 'workspace') {
@@ -4379,12 +4424,12 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   };
 
   useEffect(() => {
-    if (selectedTaskForDetails?.id) {
+    if (selectedTaskForDetails?.id && wsViewMode === 'focus' && !schedulerModalOpen) {
       loadTaskComments(selectedTaskForDetails.id);
-    } else {
+    } else if (!selectedTaskForDetails?.id) {
       setTaskComments([]);
     }
-  }, [selectedTaskForDetails?.id]);
+  }, [selectedTaskForDetails?.id, wsViewMode, schedulerModalOpen]);
 
   const renderFormattedText = (text: string) => {
     if (!text) return '';
@@ -4806,65 +4851,82 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     }
   }, [wsTasks, selectedTaskForDetails, t]);
 
+  const confirmCompleteInFlightRef = useRef(false);
+
   const handleConfirmCompleteTask = async (task: any) => {
-    if (!task?.id) return;
+    if (!task?.id || confirmCompleteInFlightRef.current) return;
     const taskId = task.id;
-
-    // Kiểm tra ảnh minh chứng nếu là meeting
-    if (task.type === 'meeting') {
-      try {
-        const res = await api.get(`/activities/${taskId}/comments`);
-        const commentsList = res.data.data || [];
-        const hasImage = commentsList.some((c: any) => {
-          const atts = Array.isArray(c.attachments) ? c.attachments : JSON.parse(c.attachments || '[]');
-          return atts.some((att: string) => /\.(jpg|jpeg|png|gif|webp)$/i.test(att));
-        });
-
-        if (!hasImage) {
-          setTaskToConfirmComplete(null);
-          setMeetingToComplete(task);
-          setProofCommentText(t('Ảnh minh chứng hoàn thành gặp gỡ'));
-          setProofImageFile(null);
-          setProofImagePreview(null);
-          return;
-        }
-      } catch (e) {
-        toast.error(t('Lỗi khi kiểm tra minh chứng'));
-        return;
-      }
-    }
-
-    setIsConfirmingComplete(true);
-    setCompletingTaskId(taskId);
-    // Kích hoạt pháo hoa dopamine ăn mừng!
-    triggerFullConfetti();
-
-    // Optimistic local update so card moves to Done immediately with confetti
-    setWsTasks(prev => {
-      return prev.map(x => x.id === taskId ? { ...x, status: 'done', progress: 100 } : x);
-    });
-    if (selectedTaskForDetails?.id === taskId) {
-      setSelectedTaskForDetails((prev: any) => ({ ...prev, status: 'done', progress: 100 }));
-    }
-    setPinnedTaskIds(prev => {
-      const next = prev.filter(id => id !== Number(taskId));
-      if (currentUser?.id) {
-        try { localStorage.setItem(`pinned_tasks_${currentUser.id}`, JSON.stringify(next)); } catch (e) {}
-      }
-      return next;
-    });
+    confirmCompleteInFlightRef.current = true;
 
     try {
-      await api.put(`/activities/${taskId}`, { status: 'done', progress: 100 });
-      toast.success(t('Đã hoàn thành công việc! 🎉'));
-      setTaskToConfirmComplete(null);
-      fetchPortalTasks();
-    } catch (err: any) {
-      fetchWorkspaceTasks();
-      toast.error(err.response?.data?.message || t('Lỗi khi cập nhật trạng thái công việc'));
+      // Kiểm tra ảnh minh chứng nếu là meeting
+      if (task.type === 'meeting') {
+        try {
+          const res = await api.get(`/activities/${taskId}/comments`);
+          const commentsList = res.data.data || [];
+          const hasImage = commentsList.some((c: any) => {
+            const atts = Array.isArray(c.attachments) ? c.attachments : JSON.parse(c.attachments || '[]');
+            return atts.some((att: string) => /\.(jpg|jpeg|png|gif|webp)$/i.test(att));
+          });
+
+          if (!hasImage) {
+            setTaskToConfirmComplete(null);
+            setMeetingToComplete(task);
+            setProofCommentText(t('Ảnh minh chứng hoàn thành gặp gỡ'));
+            setProofImageFile(null);
+            setProofImagePreview(null);
+            return;
+          }
+        } catch (e) {
+          toast.error(t('Lỗi khi kiểm tra minh chứng'));
+          return;
+        }
+      }
+
+      const needsApproval = Number(task.require_approval) === 1 && Number(task.approver_id) !== Number(currentUser?.id) && task.approval_status !== 'approved';
+      const nextStatus = needsApproval ? 'planned' : 'done';
+      const nextApprovalStatus = needsApproval ? 'pending' : task.approval_status;
+
+      setIsConfirmingComplete(true);
+      setCompletingTaskId(taskId);
+      if (!needsApproval) {
+        triggerFullConfetti();
+      }
+
+      // Optimistic local update
+      setWsTasks(prev => {
+        return prev.map(x => x.id === taskId ? { ...x, status: nextStatus, progress: 100, approval_status: nextApprovalStatus } : x);
+      });
+      if (selectedTaskForDetails?.id === taskId) {
+        setSelectedTaskForDetails((prev: any) => ({ ...prev, status: nextStatus, progress: 100, approval_status: nextApprovalStatus }));
+      }
+      if (!needsApproval) {
+        setPinnedTaskIds(prev => {
+          const next = prev.filter(id => id !== Number(taskId));
+          if (currentUser?.id) {
+            try { localStorage.setItem(`pinned_tasks_${currentUser.id}`, JSON.stringify(next)); } catch (e) {}
+          }
+          return next;
+        });
+      }
+
+      try {
+        const payload = needsApproval
+          ? { status: 'planned', progress: 100, approval_status: 'pending' }
+          : { status: 'done', progress: 100 };
+        await api.put(`/activities/${taskId}`, payload);
+        toast.success(needsApproval ? t('Đã cập nhật tiến độ 100% và gửi yêu cầu phê duyệt') : t('Đã hoàn thành công việc!'));
+        setTaskToConfirmComplete(null);
+        fetchPortalTasks();
+      } catch (err: any) {
+        fetchWorkspaceTasks();
+        toast.error(err.response?.data?.message || t('Lỗi khi cập nhật trạng thái công việc'));
+      } finally {
+        setIsConfirmingComplete(false);
+        setCompletingTaskId(null);
+      }
     } finally {
-      setIsConfirmingComplete(false);
-      setCompletingTaskId(null);
+      confirmCompleteInFlightRef.current = false;
     }
   };
 
@@ -19919,7 +19981,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                           <button
                             type="button"
                             onClick={async () => {
-                              if (!newActivitySubject.trim()) return;
+                              if (!newActivitySubject.trim() || savingActivity || inFlightRef.current) return;
+                              inFlightRef.current = true;
                               setSavingActivity(true);
                               try {
                                 const payload = {
@@ -19929,6 +19992,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                                   due_date: `${selectedSchedulerDate} 09:00:00`,
                                   status: 'planned',
                                   priority: 'high',
+                                  contact_id: newActivityContactId ? Number(newActivityContactId) : null,
                                   related_type: newActivityContactId ? 'contact' : null,
                                   related_id: newActivityContactId ? Number(newActivityContactId) : null
                                 };
@@ -19940,10 +20004,13 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                                   setNewActivityContactId('');
                                   setShowTaskForm(false);
                                   fetchCalendarStats(); // reload
+                                  fetchWorkspaceTasks();
+                                  fetchPortalTasks();
                                 }
                               } catch (err: any) {
                                 toast.error(t('Lỗi khi tạo công việc'));
                               } finally {
+                                inFlightRef.current = false;
                                 setSavingActivity(false);
                               }
                             }}
@@ -20925,7 +20992,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       {selectedTaskForDetails && (
         <Suspense fallback={null}>
           <WorkspaceTaskDrawer
-            isOpen={!!selectedTaskForDetails && wsViewMode !== 'focus'}
+            isOpen={!!selectedTaskForDetails && (wsViewMode !== 'focus' || schedulerModalOpen)}
             onClose={() => {
               setSelectedTaskForDetails(null);
               setIsFocusSessionActive(false);

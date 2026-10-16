@@ -2042,10 +2042,12 @@ class ChatController {
                     LEFT JOIN users u ON a.user_id = u.id
                     LEFT JOIN users cr ON a.created_by = cr.id
                     WHERE a.tenant_id = ? AND a.deleted_at IS NULL AND a.type IN ('task', 'meeting')
+                      AND (NOT (IFNULL(a.tags, '') LIKE '%personal_task%' OR IFNULL(a.tags, '') LIKE '%ca_nhan%') OR a.user_id = ? OR a.created_by = ?)
                 ";
-                $taskParams = [$tid];
+                $taskParams = [$tid, $uid, $uid];
                 if (!$isGlobalAdmin && !$isManager) {
-                    $taskSql .= " AND (a.user_id = ? OR a.created_by = ? OR FIND_IN_SET(?, IFNULL(a.participant_ids, '')))";
+                    $taskSql .= " AND (a.user_id = ? OR a.created_by = ? OR a.approver_id = ? OR FIND_IN_SET(?, IFNULL(a.participant_ids, '')) > 0)";
+                    $taskParams[] = $uid;
                     $taskParams[] = $uid;
                     $taskParams[] = $uid;
                     $taskParams[] = (string)$uid;
@@ -3122,7 +3124,7 @@ class ChatController {
             $taskId = (int)$this->db->lastInsertId();
 
             // 2. Insert system_event message into chat_messages
-            $systemEventContent = "📋 {$creatorName} vừa tạo công việc: \"{$subject}\" (Người thực hiện: {$assigneeName})";
+            $systemEventContent = "{$creatorName} vừa tạo công việc từ tin nhắn: \"{$subject}\" (Người thực hiện: {$assigneeName})";
             $eventMetadata = [
                 'event_type' => 'task_created',
                 'task_id' => $taskId,
@@ -3156,6 +3158,37 @@ class ChatController {
                 SET last_read_message_id = ?, last_read_at = NOW() 
                 WHERE conversation_id = ? AND user_id = ?
             ")->execute([$sysMsgId, $conversationId, $uid]);
+
+            // 5. Insert notifications for assignee and collaborators (matching ActivityController::store)
+            $stmtNotif = $this->db->prepare("
+                INSERT INTO notifications (tenant_id, user_id, title, body, link, type, is_read, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, 0, NOW())
+            ");
+            $notifiedUserIds = [$uid];
+            if ($targetUserId > 0 && $targetUserId !== $uid) {
+                $notifiedUserIds[] = $targetUserId;
+                $stmtNotif->execute([
+                    $tid,
+                    $targetUserId,
+                    'Bạn có nhiệm vụ mới được giao',
+                    "{$creatorName} đã giao nhiệm vụ: \"{$subject}\" cho bạn.",
+                    "/workspace?task_id={$taskId}",
+                    'task_assignment'
+                ]);
+            }
+            foreach ($collabIds as $cId) {
+                $cId = (int)$cId;
+                if ($cId <= 0 || in_array($cId, $notifiedUserIds, true)) continue;
+                $notifiedUserIds[] = $cId;
+                $stmtNotif->execute([
+                    $tid,
+                    $cId,
+                    'Bạn được thêm vào danh sách người liên quan',
+                    "{$creatorName} đã thêm bạn làm người liên quan trong công việc \"{$subject}\".",
+                    "/workspace?task_id={$taskId}",
+                    'task_participant'
+                ]);
+            }
 
             $this->db->commit();
 
@@ -3192,12 +3225,23 @@ class ChatController {
     public function getConversationTasks(array $auth, int $conversationId): void {
         $tid = (int)($auth['tenant_id'] ?? 1);
         $uid = (int)($auth['user_id'] ?? 0);
+        $role = strtolower(trim((string)($auth['role'] ?? 'user')));
+        $isGlobalAdmin = in_array($role, ['admin', 'superadmin', 'super_admin'], true);
 
         if ($conversationId <= 0) {
             respond(400, null, 'ID cuộc trò chuyện không hợp lệ', false);
         }
 
         try {
+            if (!$isGlobalAdmin) {
+                $stmtPart = $this->db->prepare("SELECT 1 FROM chat_participants WHERE conversation_id = ? AND user_id = ? LIMIT 1");
+                $stmtPart->execute([$conversationId, $uid]);
+                if (!$stmtPart->fetchColumn()) {
+                    respond(403, null, 'Bạn không phải là thành viên của cuộc trò chuyện này', false);
+                    return;
+                }
+            }
+
             $stmt = $this->db->prepare("
                 SELECT a.id, a.tenant_id, a.subject, a.body, a.status, a.priority, a.progress, 
                        a.start_date, a.due_date, a.created_at, a.updated_at, a.user_id, a.created_by,
@@ -3208,9 +3252,10 @@ class ChatController {
                 LEFT JOIN users u ON a.user_id = u.id
                 LEFT JOIN users creator ON a.created_by = creator.id
                 WHERE a.conversation_id = ? AND a.tenant_id = ? AND a.deleted_at IS NULL
+                  AND (NOT (IFNULL(a.tags, '') LIKE '%personal_task%' OR IFNULL(a.tags, '') LIKE '%ca_nhan%') OR a.user_id = ? OR a.created_by = ?)
                 ORDER BY a.id DESC
             ");
-            $stmt->execute([$conversationId, $tid]);
+            $stmt->execute([$conversationId, $tid, $uid, $uid]);
             $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
             foreach ($tasks as &$t) {

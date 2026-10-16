@@ -13,10 +13,11 @@ class TaskGroupController {
     public function index(array $auth): void {
         $tid = (int)($auth['tenant_id'] ?? 1);
         $uid = (int)($auth['user_id'] ?? 0);
+        $canViewOthers = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager'], true);
 
-        // Allow viewing other user's groups if specified by admin/manager
-        $targetUserId = isset($_GET['user_id']) && (int)$_GET['user_id'] > 0 
-            ? (int)$_GET['user_id'] 
+        // Allow viewing other user's groups only if specified by admin/director/manager
+        $targetUserId = ($canViewOthers && isset($_GET['user_id']) && (int)$_GET['user_id'] > 0)
+            ? (int)$_GET['user_id']
             : $uid;
 
         // 1. Fetch user task groups with task statistics
@@ -241,26 +242,51 @@ class TaskGroupController {
     }
 
     public function moveTask(array $auth, int $taskId): void {
+        if (strtolower($auth['role'] ?? '') === 'viewer') {
+            respond(403, null, 'Bạn không có quyền chuyển nhóm công việc', false);
+            return;
+        }
         $tid = (int)($auth['tenant_id'] ?? 1);
+        $uid = (int)($auth['user_id'] ?? 0);
+        $isManagerOrAdmin = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager'], true);
+
+        $tChk = $this->db->prepare("SELECT id, user_id, created_by FROM activities WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
+        $tChk->execute([$taskId, $tid]);
+        $taskRow = $tChk->fetch(PDO::FETCH_ASSOC);
+        if (!$taskRow) {
+            respond(404, null, 'Không tìm thấy công việc', false);
+            return;
+        }
+        if (!$isManagerOrAdmin && (int)($taskRow['user_id'] ?? 0) !== $uid && (int)($taskRow['created_by'] ?? 0) !== $uid) {
+            respond(403, null, 'Bạn không có quyền chuyển nhóm công việc này', false);
+            return;
+        }
+
         $body = json_decode(file_get_contents('php://input'), true) ?: [];
         $groupId = isset($body['task_group_id']) && $body['task_group_id'] !== '' && $body['task_group_id'] !== null
             ? (int)$body['task_group_id']
             : null;
 
-        // If target group specified, verify group exists
+        // If target group specified, verify group exists and belongs to (user_id = ? OR is_shared = 1)
         if ($groupId !== null && $groupId > 0) {
-            $chk = $this->db->prepare("SELECT id, name, color, icon FROM task_groups WHERE id = ? AND tenant_id = ?");
-            $chk->execute([$groupId, $tid]);
-            $grp = $chk->fetch(PDO::FETCH_ASSOC);
+            try {
+                $chk = $this->db->prepare("SELECT id, user_id, name, color, icon FROM task_groups WHERE id = ? AND tenant_id = ? AND (user_id = ? OR is_shared = 1)");
+                $chk->execute([$groupId, $tid, $uid]);
+                $grp = $chk->fetch(PDO::FETCH_ASSOC);
+            } catch (\Throwable $e) {
+                $chk = $this->db->prepare("SELECT id, user_id, name, color, icon FROM task_groups WHERE id = ? AND tenant_id = ? AND user_id = ?");
+                $chk->execute([$groupId, $tid, $uid]);
+                $grp = $chk->fetch(PDO::FETCH_ASSOC);
+            }
             if (!$grp) {
-                respond(404, null, 'Nhóm công việc đích không tồn tại', false);
+                respond(403, null, 'Nhóm công việc đích không tồn tại hoặc bạn không có quyền sử dụng', false);
                 return;
             }
         } else {
             $groupId = null;
         }
 
-        $stmt = $this->db->prepare("UPDATE activities SET task_group_id = ?, updated_at = NOW() WHERE id = ? AND tenant_id = ?");
+        $stmt = $this->db->prepare("UPDATE activities SET task_group_id = ?, updated_at = NOW() WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
         $stmt->execute([$groupId, $taskId, $tid]);
 
         respond(200, [
@@ -270,9 +296,16 @@ class TaskGroupController {
     }
 
     public function bulkMove(array $auth): void {
+        if (strtolower($auth['role'] ?? '') === 'viewer') {
+            respond(403, null, 'Bạn không có quyền chuyển nhóm công việc', false);
+            return;
+        }
         $tid = (int)($auth['tenant_id'] ?? 1);
+        $uid = (int)($auth['user_id'] ?? 0);
+        $isManagerOrAdmin = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager'], true);
+
         $body = json_decode(file_get_contents('php://input'), true) ?: [];
-        $taskIds = array_filter(array_map('intval', $body['task_ids'] ?? []));
+        $taskIds = array_values(array_unique(array_filter(array_map('intval', $body['task_ids'] ?? []))));
         $groupId = isset($body['task_group_id']) && $body['task_group_id'] !== '' && $body['task_group_id'] !== null
             ? (int)$body['task_group_id']
             : null;
@@ -283,10 +316,17 @@ class TaskGroupController {
         }
 
         if ($groupId !== null && $groupId > 0) {
-            $chk = $this->db->prepare("SELECT id FROM task_groups WHERE id = ? AND tenant_id = ?");
-            $chk->execute([$groupId, $tid]);
-            if (!$chk->fetchColumn()) {
-                respond(404, null, 'Nhóm công việc đích không tồn tại', false);
+            try {
+                $chk = $this->db->prepare("SELECT id FROM task_groups WHERE id = ? AND tenant_id = ? AND (user_id = ? OR is_shared = 1)");
+                $chk->execute([$groupId, $tid, $uid]);
+                $grpExists = (bool)$chk->fetchColumn();
+            } catch (\Throwable $e) {
+                $chk = $this->db->prepare("SELECT id FROM task_groups WHERE id = ? AND tenant_id = ? AND user_id = ?");
+                $chk->execute([$groupId, $tid, $uid]);
+                $grpExists = (bool)$chk->fetchColumn();
+            }
+            if (!$grpExists) {
+                respond(403, null, 'Nhóm công việc đích không tồn tại hoặc bạn không có quyền sử dụng', false);
                 return;
             }
         } else {
@@ -294,9 +334,19 @@ class TaskGroupController {
         }
 
         $inClause = implode(',', array_fill(0, count($taskIds), '?'));
-        $params = array_merge([$groupId], $taskIds, [$tid]);
-
-        $sql = "UPDATE activities SET task_group_id = ?, updated_at = NOW() WHERE id IN ($inClause) AND tenant_id = ?";
+        if ($isManagerOrAdmin) {
+            $params = array_merge([$groupId], $taskIds, [$tid]);
+            $sql = "UPDATE activities SET task_group_id = ?, updated_at = NOW() WHERE id IN ($inClause) AND tenant_id = ? AND deleted_at IS NULL";
+        } else {
+            $permChk = $this->db->prepare("SELECT COUNT(*) FROM activities WHERE id IN ($inClause) AND tenant_id = ? AND deleted_at IS NULL AND NOT (user_id = ? OR created_by = ?)");
+            $permChk->execute(array_merge($taskIds, [$tid, $uid, $uid]));
+            if ((int)$permChk->fetchColumn() > 0) {
+                respond(403, null, 'Bạn không có quyền chuyển nhóm cho công việc của người khác', false);
+                return;
+            }
+            $params = array_merge([$groupId], $taskIds, [$tid, $uid, $uid]);
+            $sql = "UPDATE activities SET task_group_id = ?, updated_at = NOW() WHERE id IN ($inClause) AND tenant_id = ? AND deleted_at IS NULL AND (user_id = ? OR created_by = ?)";
+        }
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);
 

@@ -33,22 +33,35 @@ class ActivityController {
         $uids = [];
         // 1. data-user-id="123", data-user-id='123', data-user-id=123, data-user-id=\"123\", data-user-id=&quot;123&quot;
         if (preg_match_all('/data-user-id=(?:&quot;|["\']|\\\\+["\'])?(\d+)/i', $content, $m)) {
-            foreach ($m[1] as $id) {
-                $id = (int)$id;
-                if ($id > 0) $uids[$id] = true;
+            $rawIds = array_values(array_unique(array_filter(array_map('intval', $m[1]), fn($id) => $id > 0)));
+            if (!empty($rawIds)) {
+                $placeholders = implode(',', array_fill(0, count($rawIds), '?'));
+                $stmtIds = $this->db->prepare("SELECT id FROM users WHERE tenant_id = ? AND id IN ($placeholders)");
+                $stmtIds->execute(array_merge([$tenantId], $rawIds));
+                foreach ($stmtIds->fetchAll(PDO::FETCH_COLUMN) as $validId) {
+                    $uids[(int)$validId] = true;
+                }
             }
         }
         // 2. @Name mentions
         if (preg_match_all('/@([a-zA-Z0-9_\x{00C0}-\x{1EF9}()\s]+?)(?:<\/span>|<br|\n|$)/u', $content, $m)) {
+            $lookupNames = [];
             foreach ($m[1] as $name) {
                 $name = trim(strip_tags($name));
                 if (empty($name)) continue;
-                $fullName = str_replace('_', ' ', $name);
-                $stmtUser = $this->db->prepare("SELECT id FROM users WHERE (full_name=? OR REPLACE(full_name, ' ', '_')=?)");
-                $stmtUser->execute([$fullName, $name]);
-                $uid = (int)$stmtUser->fetchColumn();
-                if ($uid > 0) {
-                    $uids[$uid] = true;
+                $lookupNames[] = $name;
+                $lookupNames[] = str_replace('_', ' ', $name);
+            }
+            $lookupNames = array_values(array_unique($lookupNames));
+            if (!empty($lookupNames)) {
+                $placeholders = implode(',', array_fill(0, count($lookupNames), '?'));
+                $stmtUser = $this->db->prepare("SELECT id FROM users WHERE tenant_id = ? AND (full_name IN ($placeholders) OR REPLACE(full_name, ' ', '_') IN ($placeholders))");
+                $stmtUser->execute(array_merge([$tenantId], $lookupNames, $lookupNames));
+                foreach ($stmtUser->fetchAll(PDO::FETCH_COLUMN) as $uid) {
+                    $uid = (int)$uid;
+                    if ($uid > 0) {
+                        $uids[$uid] = true;
+                    }
                 }
             }
         }
@@ -374,7 +387,7 @@ class ActivityController {
         $where=['a.tenant_id=?', 'a.deleted_at IS NULL']; $params=[$tid];
 
         if ($search) {
-            $where[] = '(a.subject LIKE ? OR a.description LIKE ?)';
+            $where[] = '(a.subject LIKE ? OR a.body LIKE ?)';
             $params[] = "%$search%";
             $params[] = "%$search%";
         }
@@ -391,11 +404,6 @@ class ActivityController {
                 $params[] = (int)$tgFilter;
             }
         }
-
-        // Validating sort fields
-        $allowedSort = ['created_at', 'due_date', 'priority', 'status'];
-        if (!in_array($sortBy, $allowedSort)) $sortBy = 'due_date';
-        if (!in_array(strtoupper($order), ['ASC', 'DESC'])) $order = 'ASC';
 
         $managedTeamIds = [];
         $managedUserIds = [];
@@ -694,12 +702,16 @@ class ActivityController {
         $hasBroadOversight = in_array($role, ['super_admin', 'superadmin', 'admin'], true);
         $isSaleAdmin = in_array($role, ['sale_admin', 'saleadmin'], true);
 
-        $where = ["a.tenant_id = $tid", "a.deleted_at IS NULL"];
+        $where = ['a.tenant_id = ?', 'a.deleted_at IS NULL'];
+        $whereParams = [$tid];
 
         // Team filter if provided
         $teamId = isset($_GET['team_id']) && $_GET['team_id'] !== 'all_teams_bypass' ? (int)$_GET['team_id'] : null;
         if ($teamId) {
-            $where[] = "(a.user_id IN (SELECT id FROM users WHERE team_id = $teamId) OR (a.related_type = 'team' AND a.related_id = $teamId))";
+            $where[] = "(a.user_id IN (SELECT id FROM users WHERE tenant_id = ? AND team_id = ?) OR (a.related_type = 'team' AND a.related_id = ?))";
+            $whereParams[] = $tid;
+            $whereParams[] = $teamId;
+            $whereParams[] = $teamId;
         }
 
         // Subtab filter if provided
@@ -717,52 +729,68 @@ class ActivityController {
         if ($type === 'task') {
             $where[] = "(a.type = 'task' OR (a.type = 'meeting' AND a.status = 'planned'))";
         } elseif ($type && $type !== 'all') {
-            $where[] = "a.type = " . $this->db->quote($type);
+            $where[] = 'a.type = ?';
+            $whereParams[] = $type;
         }
 
         if ($hasBroadOversight) {
             // Admin broad visibility
         } elseif ($isSaleAdmin) {
-            $where[] = '(a.user_id IN (SELECT id FROM users WHERE tenant_id = ' . $tid . ' AND LOWER(role) IN (\'sale\', \'sales\', \'telesale\', \'consultant\', \'sale_admin\', \'saleadmin\')) OR a.user_id = ' . $uid . ' OR a.created_by = ' . $uid . ')';
+            $where[] = "(a.user_id IN (SELECT id FROM users WHERE tenant_id = ? AND LOWER(role) IN ('sale', 'sales', 'telesale', 'consultant', 'sale_admin', 'saleadmin')) OR a.user_id = ? OR a.created_by = ?)";
+            $whereParams[] = $tid;
+            $whereParams[] = $uid;
+            $whereParams[] = $uid;
         } else {
-            $where[] = '(
-                a.user_id = ' . $uid . ' 
-                OR a.created_by = ' . $uid . '
-                OR a.approver_id = ' . $uid . '
-                OR FIND_IN_SET(' . $uid . ', a.participant_ids)
-                OR (((a.related_type IN (\'contact\', \'lead\') AND a.related_id > 0) OR (a.contact_id IS NOT NULL AND a.contact_id > 0)) AND EXISTS (
+            $where[] = "(
+                a.user_id = ? 
+                OR a.created_by = ?
+                OR a.approver_id = ?
+                OR FIND_IN_SET(?, a.participant_ids)
+                OR (((a.related_type IN ('contact', 'lead') AND a.related_id > 0) OR (a.contact_id IS NOT NULL AND a.contact_id > 0)) AND EXISTS (
                     SELECT 1 FROM contacts ct WHERE (ct.id = a.related_id OR ct.id = a.contact_id) AND (
-                        ct.owner_id = ' . $uid . ' 
-                        OR FIND_IN_SET(' . $uid . ', ct.collaborator_ids)
+                        ct.owner_id = ? 
+                        OR FIND_IN_SET(?, ct.collaborator_ids)
                     )
                 )) 
-                OR (a.related_type = \'deal\' AND EXISTS (
+                OR (a.related_type = 'deal' AND EXISTS (
                     SELECT 1 FROM deals d LEFT JOIN contacts ct ON d.contact_id = ct.id WHERE d.id = a.related_id AND (
-                        d.owner_id = ' . $uid . ' 
-                        OR ct.owner_id = ' . $uid . ' 
-                        OR FIND_IN_SET(' . $uid . ', ct.collaborator_ids)
+                        d.owner_id = ? 
+                        OR ct.owner_id = ? 
+                        OR FIND_IN_SET(?, ct.collaborator_ids)
                     )
                 ))
-            )';
+            )";
+            $whereParams[] = $uid;
+            $whereParams[] = $uid;
+            $whereParams[] = $uid;
+            $whereParams[] = (string)$uid;
+            $whereParams[] = $uid;
+            $whereParams[] = (string)$uid;
+            $whereParams[] = $uid;
+            $whereParams[] = $uid;
+            $whereParams[] = (string)$uid;
         }
 
         // Exclude hidden tasks for this user
-        $where[] = "NOT EXISTS (SELECT 1 FROM task_hidden_users thu WHERE thu.task_id = a.id AND thu.user_id = $uid)";
+        $where[] = 'NOT EXISTS (SELECT 1 FROM task_hidden_users thu WHERE thu.task_id = a.id AND thu.user_id = ?)';
+        $whereParams[] = $uid;
 
         $wStr = implode(' AND ', $where);
 
         $sql = "
             SELECT 
-                COUNT(CASE WHEN a.status NOT IN ('done', 'completed') AND (a.progress < 100 OR a.progress IS NULL) AND a.user_id = $uid THEN 1 END) as assigned_to_me,
+                COUNT(CASE WHEN a.status NOT IN ('done', 'completed') AND (a.progress < 100 OR a.progress IS NULL) AND a.user_id = ? THEN 1 END) as assigned_to_me,
                 COUNT(CASE WHEN a.status NOT IN ('done', 'completed') AND (a.progress < 100 OR a.progress IS NULL) AND a.due_date IS NOT NULL AND a.due_date != '0000-00-00 00:00:00' AND a.due_date < CURDATE() THEN 1 END) as overdue,
                 COUNT(CASE WHEN a.status NOT IN ('done', 'completed') AND (a.progress < 100 OR a.progress IS NULL) AND a.due_date IS NOT NULL AND a.due_date != '0000-00-00 00:00:00' AND (a.due_date >= CURDATE() AND a.due_date < DATE_ADD(CURDATE(), INTERVAL 1 DAY)) THEN 1 END) as due_today,
-                COUNT(CASE WHEN a.require_approval = 1 AND a.approval_status = 'pending' AND a.approver_id = $uid THEN 1 END) as pending_approval,
-                COUNT(CASE WHEN a.status NOT IN ('done', 'completed') AND (a.progress < 100 OR a.progress IS NULL) AND a.participant_ids IS NOT NULL AND FIND_IN_SET($uid, a.participant_ids) THEN 1 END) as collaborator
+                COUNT(CASE WHEN a.require_approval = 1 AND a.approval_status = 'pending' AND a.approver_id = ? THEN 1 END) as pending_approval,
+                COUNT(CASE WHEN a.status NOT IN ('done', 'completed') AND (a.progress < 100 OR a.progress IS NULL) AND a.participant_ids IS NOT NULL AND FIND_IN_SET(?, a.participant_ids) THEN 1 END) as collaborator
             FROM activities a
             WHERE $wStr
         ";
 
-        $stmt = $this->db->query($sql);
+        $params = array_merge([$uid, $uid, (string)$uid], $whereParams);
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
         $stats = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
         respond(200, [
@@ -825,6 +853,7 @@ class ActivityController {
         $due_date = $this->normalizeDueDate($b['due_date'] ?? null);
         $start_date = empty($b['start_date']) ? null : $b['start_date'];
         $status = $b['status'] ?? 'planned';
+        $priority = in_array($b['priority'] ?? '', ['low', 'medium', 'high', 'urgent'], true) ? $b['priority'] : 'medium';
         $done_at = null;
         if ($status === 'done') {
             $done_at = empty($b['done_at']) ? date('Y-m-d H:i:s') : $b['done_at'];
@@ -837,7 +866,7 @@ class ActivityController {
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ")->execute([
             $auth['tenant_id'], $targetUserId, $taskGroupId, $auth['user_id'], $b['type'],
-            $b['subject'], $b['body']??null, $status, $b['priority']??'medium',
+            $b['subject'], $b['body']??null, $status, $priority,
             $start_date, $due_date, $done_at, $b['related_type']??null, $b['related_id']??null,
             $contactId,
             $b['tags']??null, $participantIdsStr,
@@ -1010,9 +1039,14 @@ class ActivityController {
             WHERE a.id=? AND a.tenant_id=? AND a.deleted_at IS NULL
         ");
         $stmt->execute([$id, $auth['tenant_id']]);
-        $row=$stmt->fetch(); if(!$row) respond(404,null,'Không tìm thấy',false);
+        $row=$stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            respond(404, null, 'Không tìm thấy công việc', false);
+        }
+        if (!$this->hasAccess($auth, $row)) {
+            respond(403, null, 'Bạn không có quyền truy cập công việc này', false);
+        }
 
-        // Allow read-only viewing for all users in the same tenant (e.g. when opening from WorkChat)
         $row['first_image_url'] = $this->getFirstImageUrl($row);
         respond(200,$row);
     }
@@ -1203,6 +1237,8 @@ class ActivityController {
                 $sets[]="$f=?";
                 if ($f === 'due_date') {
                     $params[] = $this->normalizeDueDate($b[$f]);
+                } elseif ($f === 'priority') {
+                    $params[] = in_array($b[$f] ?? '', ['low', 'medium', 'high', 'urgent'], true) ? $b[$f] : 'medium';
                 } elseif (in_array($f, ['done_at']) && $b[$f] === '') {
                     $params[] = null;
                 } elseif ($f === 'task_group_id') {
@@ -1259,27 +1295,8 @@ class ActivityController {
         }
         // 3. Mentions in the body (checklist items or description)
         if (isset($b['body']) && !empty($b['body'])) {
-            $mentions = [];
-            // Parse HTML data-user-id mentions
-            if (preg_match_all('/data-user-id="(\d+)"/i', $b['body'], $matches)) {
-                foreach ($matches[1] as $uid) {
-                    $mentions[(int)$uid] = true;
-                }
-            }
-            // Parse plaintext @mentions
-            if (preg_match_all('/@([a-zA-Z0-9_\x{00C0}-\x{1EF9}()]+)/u', $b['body'], $matches)) {
-                foreach ($matches[1] as $name) {
-                    $fullName = str_replace('_', ' ', $name);
-                    $stmtUser = $this->db->prepare("SELECT id FROM users WHERE tenant_id=? AND (full_name=? OR REPLACE(full_name, ' ', '_')=?)");
-                    $stmtUser->execute([$auth['tenant_id'], $fullName, $name]);
-                    $uid = $stmtUser->fetchColumn();
-                    if ($uid) {
-                        $mentions[(int)$uid] = true;
-                    }
-                }
-            }
-            if (!empty($mentions)) {
-                $pIds = array_keys($mentions);
+            $pIds = $this->extractMentionUserIds((string)$b['body'], (int)$auth['tenant_id']);
+            if (!empty($pIds)) {
                 $placeholders = implode(',', array_fill(0, count($pIds), '?'));
                 $stmtDel = $this->db->prepare("DELETE FROM task_hidden_users WHERE task_id = ? AND user_id IN ($placeholders)");
                 $stmtDel->execute(array_merge([$id], $pIds));
@@ -1595,10 +1612,16 @@ class ActivityController {
 
     public function getComments(array $auth, int $id): void {
         // Verify activity belongs to tenant and user has permission
-        $check = $this->db->prepare("SELECT * FROM activities WHERE id=? AND tenant_id=? AND deleted_at IS NULL");
+        $check = $this->db->prepare("SELECT * FROM activities WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
         $check->execute([$id, $auth['tenant_id']]);
-        $activity = $check->fetch();
-        // Allow reading comments for all users in the same tenant (e.g. when viewing from WorkChat drawer)
+        $activity = $check->fetch(PDO::FETCH_ASSOC);
+        if (!$activity) {
+            respond(404, null, 'Không tìm thấy công việc', false);
+        }
+        if (!$this->hasAccess($auth, $activity)) {
+            respond(403, null, 'Bạn không có quyền truy cập công việc này', false);
+        }
+
         $subtaskId = isset($_GET['subtask_id']) && $_GET['subtask_id'] !== '' ? $_GET['subtask_id'] : null;
 
         if ($subtaskId) {
@@ -1634,12 +1657,16 @@ class ActivityController {
 
     public function getSubtasksCommentCounts(array $auth, int $id): void {
         // Verify activity belongs to tenant and user has permission
-        $check = $this->db->prepare("SELECT * FROM activities WHERE id=? AND tenant_id=? AND deleted_at IS NULL");
+        $check = $this->db->prepare("SELECT * FROM activities WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
         $check->execute([$id, $auth['tenant_id']]);
-        $activity = $check->fetch();
-        if (!$activity) respond(404, null, 'Không tìm thấy hoạt động hoặc không có quyền truy cập', false);
+        $activity = $check->fetch(PDO::FETCH_ASSOC);
+        if (!$activity) {
+            respond(404, null, 'Không tìm thấy công việc', false);
+        }
+        if (!$this->hasAccess($auth, $activity)) {
+            respond(403, null, 'Bạn không có quyền truy cập công việc này', false);
+        }
 
-        // Allow reading comment counts for all users in the same tenant
         $stmt = $this->db->prepare("
             SELECT subtask_id, COUNT(*) as count 
             FROM activity_comments 
@@ -1714,15 +1741,13 @@ class ActivityController {
 
         // 1. First, parse by data-user-id (HTML editor mentions)
         if (preg_match_all('/data-user-id=(?:&quot;|["\']|\\\\+["\'])?(\d+)/i', (string)$content, $matches)) {
-            $uids = array_filter(array_map('intval', $matches[1]));
-            foreach ($uids as $uid) {
-                if ($uid !== (int)$auth['user_id']) {
-                    $stmtUser = $this->db->prepare("SELECT id, email, full_name, role FROM users WHERE id=?");
-                    $stmtUser->execute([$uid]);
-                    $userRow = $stmtUser->fetch(PDO::FETCH_ASSOC);
-                    if ($userRow) {
-                        $mentions[$uid] = $userRow;
-                    }
+            $uids = array_values(array_unique(array_filter(array_map('intval', $matches[1]), fn($u) => $u > 0 && $u !== (int)$auth['user_id'])));
+            if (!empty($uids)) {
+                $placeholders = implode(',', array_fill(0, count($uids), '?'));
+                $stmtUser = $this->db->prepare("SELECT id, email, full_name, role FROM users WHERE tenant_id = ? AND id IN ($placeholders)");
+                $stmtUser->execute(array_merge([(int)$auth['tenant_id']], $uids));
+                foreach ($stmtUser->fetchAll(PDO::FETCH_ASSOC) as $userRow) {
+                    $mentions[(int)$userRow['id']] = $userRow;
                 }
             }
         }
@@ -1732,14 +1757,19 @@ class ActivityController {
         preg_match_all('/@([a-zA-Z0-9_\x{00C0}-\x{1EF9}()\s]+?)(?:<\/span>|<br|\n|$)/u', (string)$content, $matches);
         $names = is_array($matches[1] ?? null) ? $matches[1] : [];
         if (!empty($names)) {
+            $lookupNames = [];
             foreach ($names as $nameWithUnderscores) {
                 $nameWithUnderscores = trim(strip_tags($nameWithUnderscores));
                 if (empty($nameWithUnderscores)) continue;
-                $fullName = str_replace('_', ' ', $nameWithUnderscores);
-                $stmtUser = $this->db->prepare("SELECT id, email, full_name, role FROM users WHERE (full_name=? OR REPLACE(full_name, ' ', '_')=?)");
-                $stmtUser->execute([$fullName, $nameWithUnderscores]);
-                $userRow = $stmtUser->fetch(PDO::FETCH_ASSOC);
-                if ($userRow) {
+                $lookupNames[] = $nameWithUnderscores;
+                $lookupNames[] = str_replace('_', ' ', $nameWithUnderscores);
+            }
+            $lookupNames = array_values(array_unique($lookupNames));
+            if (!empty($lookupNames)) {
+                $placeholders = implode(',', array_fill(0, count($lookupNames), '?'));
+                $stmtUser = $this->db->prepare("SELECT id, email, full_name, role FROM users WHERE tenant_id = ? AND (full_name IN ($placeholders) OR REPLACE(full_name, ' ', '_') IN ($placeholders))");
+                $stmtUser->execute(array_merge([(int)$auth['tenant_id']], $lookupNames, $lookupNames));
+                foreach ($stmtUser->fetchAll(PDO::FETCH_ASSOC) as $userRow) {
                     $uid = (int)$userRow['id'];
                     if ($uid !== (int)$auth['user_id']) {
                         $mentions[$uid] = $userRow;
@@ -2355,12 +2385,16 @@ class ActivityController {
     }
 
     public function getTimeline(array $auth, int $id): void {
-        $check = $this->db->prepare("SELECT * FROM activities WHERE id=? AND tenant_id=? AND deleted_at IS NULL");
+        $check = $this->db->prepare("SELECT * FROM activities WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
         $check->execute([$id, $auth['tenant_id']]);
         $activity = $check->fetch(PDO::FETCH_ASSOC);
-        if (!$activity) respond(404, null, 'Không tìm thấy hoạt động', false);
+        if (!$activity) {
+            respond(404, null, 'Không tìm thấy công việc', false);
+        }
+        if (!$this->hasAccess($auth, $activity)) {
+            respond(403, null, 'Bạn không có quyền truy cập công việc này', false);
+        }
 
-        // Allow reading timeline for all users in the same tenant
         $stmt = $this->db->prepare("
             SELECT l.*, u.full_name as user_name, u.avatar_url as user_avatar
             FROM audit_logs l
@@ -2433,7 +2467,7 @@ class ActivityController {
                     'Thay đổi lịch trình công việc',
                     "Công việc \"{$dep['subject']}\" đã được dời lịch (Ngày bắt đầu mới: " . date('d/m/Y H:i', $newStartTimestamp) . ") do ảnh hưởng trễ tiến độ từ công việc tiền nhiệm.",
                     'task_reschedule',
-                    "/activities/{$depId}"
+                    "/workspace?task_id={$depId}"
                 );
             }
 
@@ -2442,12 +2476,22 @@ class ActivityController {
     }
 
     public function getDependencies(array $auth, int $id): void {
+        $check = $this->db->prepare("SELECT * FROM activities WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
+        $check->execute([$id, $auth['tenant_id']]);
+        $activity = $check->fetch(PDO::FETCH_ASSOC);
+        if (!$activity) {
+            respond(404, null, 'Không tìm thấy công việc', false);
+        }
+        if (!$this->hasAccess($auth, $activity)) {
+            respond(403, null, 'Bạn không có quyền truy cập công việc này', false);
+        }
+
         $stmt = $this->db->prepare("
             SELECT d.predecessor_id, a.subject, a.start_date, a.due_date, d.dependency_type, d.lag_days
             FROM activity_dependencies d
             JOIN activities a ON d.predecessor_id = a.id
             JOIN activities cur ON d.activity_id = cur.id
-            WHERE d.activity_id = ? AND cur.tenant_id = ?
+            WHERE d.activity_id = ? AND cur.tenant_id = ? AND a.deleted_at IS NULL
         ");
         $stmt->execute([$id, $auth['tenant_id']]);
         respond(200, $stmt->fetchAll(PDO::FETCH_ASSOC));
@@ -2458,10 +2502,14 @@ class ActivityController {
         $b = getBody();
         $predecessors = $b['predecessors'] ?? [];
 
-        $check = $this->db->prepare("SELECT id FROM activities WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
+        $check = $this->db->prepare("SELECT * FROM activities WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
         $check->execute([$id, $auth['tenant_id']]);
-        if (!$check->fetch()) {
+        $activity = $check->fetch(PDO::FETCH_ASSOC);
+        if (!$activity) {
             respond(404, null, 'Không tìm thấy công việc', false);
+        }
+        if (!$this->hasAccess($auth, $activity)) {
+            respond(403, null, 'Bạn không có quyền truy cập công việc này', false);
         }
 
         $this->db->beginTransaction();
@@ -2528,10 +2576,14 @@ class ActivityController {
     }
 
     public function getFocusSummary(array $auth, int $id): void {
-        $check = $this->db->prepare("SELECT id FROM activities WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
+        $check = $this->db->prepare("SELECT * FROM activities WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
         $check->execute([$id, $auth['tenant_id']]);
-        if (!$check->fetch()) {
+        $activity = $check->fetch(PDO::FETCH_ASSOC);
+        if (!$activity) {
             respond(404, null, 'Không tìm thấy công việc', false);
+        }
+        if (!$this->hasAccess($auth, $activity)) {
+            respond(403, null, 'Bạn không có quyền truy cập công việc này', false);
         }
 
         $stmt = $this->db->prepare("
@@ -2569,11 +2621,14 @@ class ActivityController {
             respond(422, null, 'Thời lượng tập trung không hợp lệ', false);
         }
 
-        $check = $this->db->prepare("SELECT id, subject FROM activities WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
+        $check = $this->db->prepare("SELECT * FROM activities WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
         $check->execute([$id, $auth['tenant_id']]);
-        $task = $check->fetch();
-        if (!$task) {
+        $activity = $check->fetch(PDO::FETCH_ASSOC);
+        if (!$activity) {
             respond(404, null, 'Không tìm thấy công việc', false);
+        }
+        if (!$this->hasAccess($auth, $activity)) {
+            respond(403, null, 'Bạn không có quyền truy cập công việc này', false);
         }
 
         $stmt = $this->db->prepare("
@@ -2587,7 +2642,7 @@ class ActivityController {
             $duration
         ]);
 
-        logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'FOCUS', 'activity', $id, "Hoàn thành {$duration} phút tập trung cho: " . $task['subject']);
+        logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'FOCUS', 'activity', $id, "Hoàn thành {$duration} phút tập trung cho: " . $activity['subject']);
 
         respond(200, ['success' => true, 'message' => 'Lưu lượt tập trung thành công']);
     }

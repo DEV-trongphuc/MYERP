@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { CustomSelect, type SelectOption } from './CustomSelect';
+import { pushOverlay } from '../../utils/overlayStack';
 
 export interface WorkspaceTaskStatsModalProps {
   isOpen: boolean;
@@ -34,6 +35,11 @@ export const WorkspaceTaskStatsModal: React.FC<WorkspaceTaskStatsModalProps> = (
   currentUserTeamId,
   teamsList = []
 }) => {
+  useEffect(() => {
+    if (!isOpen) return;
+    return pushOverlay('workspace-task-stats-modal', onClose);
+  }, [isOpen, onClose]);
+
   // Role & Scope classification
   const roleLower = String(currentUserRole || '').toLowerCase();
   const isDirectorOrAdmin = ['admin', 'superadmin', 'super_admin', 'director', 'board'].includes(roleLower);
@@ -109,14 +115,10 @@ export const WorkspaceTaskStatsModal: React.FC<WorkspaceTaskStatsModalProps> = (
   const [isPeriodDropdownOpen, setIsPeriodDropdownOpen] = useState(false);
   const periodDropdownRef = useRef<HTMLDivElement | null>(null);
 
-  // Loading skeleton effect
-  const [isLoading, setIsLoading] = useState(false);
+  // Loading state (no artificial delay)
+  const [isLoading] = useState(false);
   const triggerWithLoading = (callback: () => void) => {
-    setIsLoading(true);
     callback();
-    setTimeout(() => {
-      setIsLoading(false);
-    }, 280);
   };
 
   const initialDateRange = useMemo(() => {
@@ -211,14 +213,30 @@ export const WorkspaceTaskStatsModal: React.FC<WorkspaceTaskStatsModalProps> = (
       }
 
       // Category / subTab filter
+      const isClientTask = Boolean(task.related_type && ['contact', 'deal', 'company'].includes(task.related_type));
+      const tagList = String(task.tags || '').split(',').map((s: string) => s.trim().toLowerCase()).filter(Boolean);
+      const hasPersonalTag = tagList.includes('ca_nhan') || tagList.includes('personal') || tagList.includes('personal_task');
+      const otherParticipants = String(task.participant_ids || task.collaborator_ids || '')
+        .split(',')
+        .map((s: string) => s.trim())
+        .filter((id: string) => id !== '' && Number(id) !== Number(task.user_id));
+      const isSelfOnly = Boolean(
+        task.user_id &&
+        task.created_by &&
+        Number(task.user_id) === Number(task.created_by) &&
+        otherParticipants.length === 0 &&
+        !task.approver_id &&
+        !task.team_id &&
+        !task.project_id
+      );
+      const isPersonal = !isClientTask && (hasPersonalTag || isSelfOnly);
+
       if (selectedCategory === 'customer') {
-        if (!task.related_type || !['contact', 'deal', 'company'].includes(task.related_type)) return false;
+        if (!isClientTask) return false;
       } else if (selectedCategory === 'personal') {
-        if (!task.tags || !task.tags.includes('personal_task')) return false;
+        if (!isPersonal) return false;
       } else if (selectedCategory === 'team') {
-        const isClient = task.related_type && ['contact', 'deal', 'company'].includes(task.related_type);
-        const isPersonal = task.tags && task.tags.includes('personal_task');
-        if (isClient || isPersonal) return false;
+        if (isClientTask || isPersonal) return false;
       }
 
       // Assignee filter
@@ -1145,7 +1163,7 @@ export const WorkspaceTaskStatsModal: React.FC<WorkspaceTaskStatsModalProps> = (
                                    task.progress === 100 || 
                                    (task.status && task.status.toLowerCase().includes('hoàn thành')) || 
                                    (task.status && task.status.toLowerCase().includes('xong'));
-                    const isOverdue = task.due_date && new Date(task.due_date) < new Date(new Date().setHours(0,0,0,0));
+                    const isOverdue = !isDone && Boolean(task.due_date && new Date(task.due_date) < new Date(new Date().setHours(0,0,0,0)));
                     const assignee = users.find((u: any) => String(u.id) === String(task.user_id));
 
                     return (

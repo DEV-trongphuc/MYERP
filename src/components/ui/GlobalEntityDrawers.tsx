@@ -60,7 +60,8 @@ export const GlobalEntityDrawers: React.FC = () => {
     // 3. Tasks: SalePortal (/workspace, /sale-portal, /) and ProjectsPage (/projects) handle their own local WorkspaceTaskDrawer
     const isLocalTaskPage = path === '/' || path.startsWith('/workspace') || path.startsWith('/sale-portal') || path.startsWith('/projects');
     if (isLocalTaskPage) {
-      if (taskDrawer.isOpen && (params.get('task_id') || params.get('open_task_id') || params.get('id'))) {
+      const localUrlTaskId = params.get('task_id') || params.get('open_task_id');
+      if (taskDrawer.isOpen && localUrlTaskId && String(taskDrawer.task?.id) === String(localUrlTaskId)) {
         closeTaskDrawer();
       }
     } else {
@@ -100,10 +101,6 @@ export const GlobalEntityDrawers: React.FC = () => {
   }, [
     location.pathname,
     location.search,
-    customerDrawer.isOpen,
-    taskDrawer.isOpen,
-    approvalDrawer.isOpen,
-    depositDrawer.isOpen,
     openCustomerDrawer,
     closeCustomerDrawer,
     openExpenseDrawer,
@@ -146,9 +143,9 @@ export const GlobalEntityDrawers: React.FC = () => {
     const controller = new AbortController();
     if (taskDrawer.isOpen && taskDrawer.task) {
       const t = taskDrawer.task;
-      if (t.subject || t.body || t.status) {
+      if (t.subject || t.body || t.status || t.id === 'new') {
         setFullTask(t);
-      } else if (t.id) {
+      } else if (t.id && t.id !== 'new') {
         setFullTask({ ...t, subject: 'Đang tải công việc...' });
         api.get(`/activities/${t.id}`, { signal: controller.signal }).then(res => {
           if (controller.signal.aborted) return;
@@ -373,9 +370,13 @@ export const GlobalEntityDrawers: React.FC = () => {
             onClose={handleCloseTaskDrawer}
             task={fullTask}
             zIndex={2147483640}
-            onUpdate={() => {
-              // Trigger refresh on window event if someone is listening
-              window.dispatchEvent(new CustomEvent('task-updated', { detail: fullTask }));
+            onUpdate={(updatedTask?: any) => {
+              if (updatedTask) {
+                setFullTask((prev: any) => prev ? { ...prev, ...updatedTask } : updatedTask);
+              }
+              const detail = updatedTask || fullTask;
+              window.dispatchEvent(new CustomEvent('task-updated', { detail }));
+              window.dispatchEvent(new CustomEvent('task-local-updated', { detail }));
             }}
             onOpenContact={(contactId: number | string) => {
               if (contactId) {

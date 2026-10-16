@@ -11,6 +11,7 @@ import { useUIStore } from '../../store/uiStore';
 import { Avatar } from '../ui/Avatar';
 import { CustomSelect } from '../ui/CustomSelect';
 import toast from 'react-hot-toast';
+import { pushOverlay } from '../../utils/overlayStack';
 import type { ChatConversation, ChatMessage } from '../../types/chat';
 
 interface Props {
@@ -58,11 +59,20 @@ export const CreateTaskFromChatModal: React.FC<Props> = ({
   const [priority, setPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>('medium');
   const [dueDate, setDueDate] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitInFlightRef = useRef(false);
 
   // Collaborator dropdown & search state
   const [showCollabDropdown, setShowCollabDropdown] = useState(false);
   const [collabSearch, setCollabSearch] = useState('');
   const collabDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const unregister = pushOverlay('create-task-from-chat-modal', () => {
+      onClose();
+    }, 2200);
+    return () => unregister();
+  }, [isOpen, onClose]);
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -264,6 +274,7 @@ export const CreateTaskFromChatModal: React.FC<Props> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitInFlightRef.current) return;
     if (!subject.trim()) {
       toast.error('Vui lòng nhập tên công việc');
       return;
@@ -273,6 +284,7 @@ export const CreateTaskFromChatModal: React.FC<Props> = ({
       return;
     }
 
+    submitInFlightRef.current = true;
     setIsSubmitting(true);
     try {
       const res = await api.post(`/chat/conversations/${conversation.id}/tasks`, {
@@ -287,6 +299,9 @@ export const CreateTaskFromChatModal: React.FC<Props> = ({
 
       const data = res.data?.data || res.data;
       const taskId = Number(data?.task_id || 0);
+
+      window.dispatchEvent(new CustomEvent('task-updated', { detail: res.data?.data }));
+      window.dispatchEvent(new CustomEvent('task-local-updated', { detail: res.data?.data }));
 
       toast.success('Đã tạo công việc thành công!');
       onClose();
@@ -304,6 +319,7 @@ export const CreateTaskFromChatModal: React.FC<Props> = ({
       console.error('Create task error:', err);
       toast.error(err.response?.data?.message || 'Không thể tạo công việc');
     } finally {
+      submitInFlightRef.current = false;
       setIsSubmitting(false);
     }
   };

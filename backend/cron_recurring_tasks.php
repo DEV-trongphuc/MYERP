@@ -207,7 +207,7 @@ if (!function_exists('runRecurringTasksCron')) {
                         $titleNotify = "Bạn có nhiệm vụ định kỳ mới: " . $subject;
                         $bodyNotify = "Nhiệm vụ định kỳ \"" . $subject . "\" đã tự động được tạo cho ngày hôm nay.";
                         $typeNotify = "task_assignment";
-                        $linkNotify = "/activities/" . $newTaskId;
+                        $linkNotify = '/workspace?task_id=' . $newTaskId;
                         
                         $stmtNotify = $conn->prepare("
                             INSERT INTO notifications (user_id, tenant_id, title, body, type, link)

@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 320;
+$targetVersion = 321;
 $currentVersion = 186;
 
 // Query current DB version
@@ -3598,11 +3598,6 @@ try {
                 }
             };
 
-            // 1. Tasks & Workspace Subtasks
-            $safeAddIndex('workspace_tasks', 'idx_wtasks_proj_status_due', '`project_id`, `status`, `due_date`');
-            $safeAddIndex('workspace_tasks', 'idx_wtasks_parent_order', '`parent_id`, `sort_order`');
-            $safeAddIndex('workspace_tasks', 'idx_wtasks_assignee_status', '`assigned_to`, `status`, `priority`');
-
             // 2. HR Leave & Overtime Requests
             $safeAddIndex('hrm_leave_requests', 'idx_leave_user_status_date', '`user_id`, `status`, `start_date`, `end_date`');
             $safeAddIndex('overtime_requests', 'idx_ot_user_status_date', '`user_id`, `status`, `date`');
@@ -4619,10 +4614,22 @@ try {
         $logMsg("Nâng cấp lên phiên bản 320 hoàn tất.", "success");
     }
 
-    // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '320') ON DUPLICATE KEY UPDATE setting_value = '320'");
+    // --- PHIÊN BẢN 321: TỐI ƯU CẤU TRÚC TASKS SCHEMA (STATUS/PRIORITY VARCHAR) & COMPOSITE INDEXES ---
+    if ($currentVersion < 321 || $isForce) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 321: Tối ưu cấu trúc bảng activities/task_groups và Composite Indexes cho Tasks/Comments...", "info");
+        try {
+            require_once __DIR__ . '/migrations/321_optimize_tasks_schema_and_indexes.php';
+            $logMsg("Tối ưu cấu trúc Tasks và Composite Indexes phiên bản 321 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi chạy migration 321: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 321 hoàn tất.", "success");
+    }
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 320", "success");
+    // Update DB version in system_settings
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '321') ON DUPLICATE KEY UPDATE setting_value = '321'");
+
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 321", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");

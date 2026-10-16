@@ -16,6 +16,7 @@ import { Avatar } from '../components/ui/Avatar';
 import { PeriodFilter, getDateRange } from '../components/ui/PeriodFilter';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import { useUIStore } from '../store/uiStore';
 import type { Period, DateRange } from '../components/ui/PeriodFilter';
 import { Skeleton } from '../components/ui/Skeleton';
 
@@ -122,7 +123,14 @@ export const DashboardPage: React.FC = () => {
   useEffect(() => {
     fetchAll();
     const intervalId = setInterval(fetchAll, 60000);
-    return () => clearInterval(intervalId);
+    const handleTaskUpdated = () => fetchAll();
+    window.addEventListener('task-updated', handleTaskUpdated);
+    window.addEventListener('task-local-updated', handleTaskUpdated);
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener('task-updated', handleTaskUpdated);
+      window.removeEventListener('task-local-updated', handleTaskUpdated);
+    };
   }, [fetchAll]);
   useEffect(() => { setActivityIndex(0); }, [dateRange]);
 
@@ -290,7 +298,7 @@ export const DashboardPage: React.FC = () => {
                   <motion.div
                     key={task.id}
                     whileHover={{ y: -4, boxShadow: 'var(--shadow-lg)' }}
-                    onClick={() => navigate('/activities')}
+                    onClick={() => useUIStore.getState().openTaskDrawer(task)}
                     style={{
                       minWidth: 280,
                       padding: '1.25rem',
@@ -460,7 +468,7 @@ export const DashboardPage: React.FC = () => {
                   <div style={{ position: 'relative', flexShrink: 0 }}>
                     <Avatar name={sale.full_name} src={sale.avatar_url} size={38} />
                     <div style={{ position: 'absolute', top: -5, right: -5, width: 20, height: 20, background: i === 0 ? 'var(--color-primary)' : i === 1 ? '#BD1D2D' : 'var(--color-border)', color: i < 2 ? 'white' : 'var(--color-text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.65rem', borderRadius: '50%', border: '2px solid white', boxShadow: 'var(--shadow-sm)', zIndex: 1 }}>
-                      {i < 3 ? ['🥇', '🥈', '🥉'][i] : i + 1}
+                      {i + 1}
                     </div>
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>

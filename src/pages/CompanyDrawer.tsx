@@ -525,6 +525,19 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
     if (activeTab === 'sales_orders') fetchSalesOrders();
     if (activeTab === 'purchase_orders') fetchPurchaseOrders();
   }, [activeTab]);
+
+  useEffect(() => {
+    if (!isOpen || !entity?.id) return;
+    const handleTaskUpdated = () => {
+      fetchActivities();
+    };
+    window.addEventListener('task-updated', handleTaskUpdated);
+    window.addEventListener('task-local-updated', handleTaskUpdated);
+    return () => {
+      window.removeEventListener('task-updated', handleTaskUpdated);
+      window.removeEventListener('task-local-updated', handleTaskUpdated);
+    };
+  }, [isOpen, entity?.id]);
   
   const [prevEntityId, setPrevEntityId] = useState<number | null>(null);
 
@@ -2379,21 +2392,35 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                       />
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                        {activities.map(act => (
-                          <div key={act.id} className="card-panel" style={{ padding: '1rem', borderLeft: `3px solid var(--color-primary)` }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                              <h5 style={{ fontWeight: 600 }}>{act.subject}</h5>
-                              <span className="text-xs text-light">{new Date(act.created_at).toLocaleDateString('vi-VN')}</span>
+                        {activities.map(act => {
+                          let displayBody = act.body || 'Không có mô tả chi tiết';
+                          if (typeof act.body === 'string' && act.body.startsWith('{"erp_task":')) {
+                            try {
+                              const parsed = JSON.parse(act.body);
+                              displayBody = parsed?.erp_task?.description || 'Không có mô tả chi tiết';
+                            } catch {}
+                          }
+                          return (
+                            <div
+                              key={act.id}
+                              className="card-panel"
+                              onClick={() => useUIStore.getState().openTaskDrawer(act)}
+                              style={{ padding: '1rem', borderLeft: `3px solid var(--color-primary)`, cursor: 'pointer' }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <h5 style={{ fontWeight: 600 }}>{act.subject}</h5>
+                                <span className="text-xs text-light">{new Date(act.created_at).toLocaleDateString('vi-VN')}</span>
+                              </div>
+                              <p className="text-sm text-light mt-1">{displayBody}</p>
+                              <div className="mt-2 flex gap-2">
+                                <span className="badge info sm">{act.type}</span>
+                                <span className={`badge sm ${act.status === 'done' ? 'success' : act.status === 'cancelled' ? 'danger' : 'warning'}`}>
+                                  {act.status === 'done' ? 'Đã xong' : act.status === 'cancelled' ? 'Đã hủy' : 'Chờ xử lý'}
+                                </span>
+                              </div>
                             </div>
-                            <p className="text-sm text-light mt-1">{act.body || 'Không có mô tả chi tiết'}</p>
-                            <div className="mt-2 flex gap-2">
-                              <span className="badge info sm">{act.type}</span>
-                              <span className={`badge sm ${act.status === 'done' ? 'success' : 'warning'}`}>
-                                {act.status === 'done' ? 'Đã xong' : 'Chờ xử lý'}
-                              </span>
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>

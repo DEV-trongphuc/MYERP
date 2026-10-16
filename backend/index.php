@@ -1065,6 +1065,7 @@ switch ($resource) {
         elseif ($resourceId && $subResource === 'mute-status' && $method === 'GET') $ctrl->getMuteStatus($auth, (int)$resourceId);
         elseif ($resourceId && $subResource === 'toggle-mute' && $method === 'POST') $ctrl->toggleMute($auth, (int)$resourceId);
         elseif ($resourceId && $subResource === 'hide-status' && $method === 'GET')  $ctrl->getHideStatus($auth, (int)$resourceId);
+        elseif ($resourceId && $subResource === 'toggle-hide' && $method === 'POST') $ctrl->toggleHide($auth, (int)$resourceId);
         elseif ($resourceId === 'bulk-move-group' && $method === 'POST') {
             $tgCtrl = new TaskGroupController($db);
             $tgCtrl->bulkMove($auth);

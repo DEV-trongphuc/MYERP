@@ -101,7 +101,6 @@ export const useUIStore = create<UIStore>((set) => ({
       : { id: Number(contactOrId) };
     set({ 
       customerDrawer: { isOpen: true, contact: contactObj, initialTab },
-      taskDrawer: { isOpen: false, task: null },
       expenseDrawer: { isOpen: false, expenseId: null },
       approvalDrawer: { isOpen: false, item: null },
       depositDrawer: { isOpen: false, deposit: null }
@@ -115,7 +114,6 @@ export const useUIStore = create<UIStore>((set) => ({
       : { id: Number(taskOrId) };
     set({ 
       taskDrawer: { isOpen: true, task: taskObj },
-      customerDrawer: { isOpen: false, contact: null, initialTab: 'info' },
       expenseDrawer: { isOpen: false, expenseId: null },
       approvalDrawer: { isOpen: false, item: null },
       depositDrawer: { isOpen: false, deposit: null }

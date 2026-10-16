@@ -3616,7 +3616,11 @@ export const WorkChatModal: React.FC = () => {
                                 type="button"
                                 whileHover={{ scale: 1.02 }}
                                 whileTap={{ scale: 0.98 }}
-                                onClick={() => openTaskDrawer(taskId)}
+                                onClick={() => {
+                                  if (isMobile) closeChat();
+                                  else dockChatForPeek();
+                                  openTaskDrawer(taskId);
+                                }}
                                 style={{
                                   display: 'inline-flex',
                                   alignItems: 'center',
